@@ -34,7 +34,10 @@ curl -X POST http://localhost:8545 \
   }'
 ```
 
-### Filter by contract address
+### All filters in one
+
+* Address can be single, when multiple it is OR
+* 
 ```bash
 curl -X POST http://localhost:8545 \
   -H "Content-Type: application/json" \
@@ -43,90 +46,15 @@ curl -X POST http://localhost:8545 \
     "method": "eth_getLogs",
     "params": [{
       "fromBlock": "0x0",
-      "toBlock": "latest",
-      "address": "0x1234567890abcdef1234567890abcdef12345678"
-    }],
-    "id": 1
-  }'
-```
-
-### Filter by multiple addresses (OR)
-```bash
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "eth_getLogs",
-    "params": [{
-      "fromBlock": "earliest",
       "toBlock": "latest",
       "address": [
         "0x1111111111111111111111111111111111111111",
         "0x2222222222222222222222222222222222222222"
-      ]
-    }],
-    "id": 1
-  }'
-```
-
-### Filter by event signature (topic0)
-```bash
-# Example: Transfer(address,address,uint256) event signature
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "eth_getLogs",
-    "params": [{
-      "fromBlock": "0x0",
-      "toBlock": "latest",
-      "topics": [
-        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
-      ]
-    }],
-    "id": 1
-  }'
-```
-
-### Filter with null wildcard (any value in position)
-```bash
-# Match any "from" address, specific "to" address
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "eth_getLogs",
-    "params": [{
-      "fromBlock": "0x0",
-      "toBlock": "latest",
+      ],
       "topics": [
         "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
         null,
         "0x000000000000000000000000a94f5374fce5edbc8e2a8697c15331677e6ebf0b"
-      ]
-    }],
-    "id": 1
-  }'
-```
-
-### Filter with topic OR (multiple values in one position)
-```bash
-# Match transfers TO address A OR address B
-curl -X POST http://localhost:8545 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "eth_getLogs",
-    "params": [{
-      "fromBlock": "0x0",
-      "toBlock": "latest",
-      "topics": [
-        "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
-        null,
-        [
-          "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "0x000000000000000000000000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        ]
       ]
     }],
     "id": 1

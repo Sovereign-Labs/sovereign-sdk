@@ -6,6 +6,10 @@
 - Scope: tests + test harness only; do not fix production bugs here.
 - Out of scope: invalid-param / error-shape conformance tests.
 
+## Prioritization criteria (context)
+- Based on common call patterns from wallets, dapp SDKs, explorers, and dev tooling (no telemetry).
+- Ranked by UX impact, dapp dependency, block-tag sensitivity, and test ROI.
+
 ## Inputs
 - Implemented endpoint list and notes: [docs/rpc_inventory.md]
 - Implementations: [crates/module-system/module-implementations/sov-evm], [crates/full-node/sov-ethereum]
@@ -62,6 +66,9 @@
 ### P3 - Unsupported methods
 - Methods listed as "Method not supported" in [docs/rpc_inventory.md].
 
+## Quick-start (top 10)
+- Use P0 items 1-10 in order; ensure `eth_getBlockByNumber` covers both transaction hashes and full objects.
+
 ## Block selector coverage (apply to P0/P1 state methods)
 - Tags: `earliest`, `latest`, `pending`, `safe`, `finalized`, `Number(n)`.
 - EIP-1898 `blockHash` object with `requireCanonical` true/false for:
@@ -70,6 +77,9 @@
   `eth_getBlockTransactionCountByNumber`, and `eth_getLogs` with `filter.blockHash`.
 - Scenarios: empty state, after 1 block, after several blocks, with pending txs,
   and unknown blockHash (assert error/null only, not error shape).
+- For canonical hashes, expect `requireCanonical` true/false to return identical results.
+- Minimal blockHash fixture: record N0/H0, deploy (N1/H1), set value (N2/H2),
+  emit logs (N3/H3), transfer (N4/H4), then pause sequencer for assertions.
 
 ## Invariants to assert (semantic > schema)
 1. `eth_blockNumber` never decreases within a session.
@@ -79,11 +89,20 @@
 5. Receipts/logs/transactions agree on block hash/number once sealed.
 
 ## Likely L1 divergences to capture via tests (do not fix here)
-1. `latest` is treated as `pending` in block resolution [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:253], and existing tests assert `latest == pending` [examples/demo-rollup/tests/evm/evm_tx.rs:47] with `hash == 0x0` [examples/demo-rollup/tests/evm/evm_tx.rs:48].  
+1. `latest` is treated as `pending` in block resolution [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:242], and existing tests assert `latest == pending` [examples/demo-rollup/tests/evm/evm_tx.rs:47] with `hash == 0x0` [examples/demo-rollup/tests/evm/evm_tx.rs:48].  
    Minimal repro: pause sequencer, call `eth_getBlockByNumber("latest")` and `eth_getBlockByNumber("pending")`; expect different blocks per L1, but current behavior returns the same pending block.
 2. `eth_getTransactionCount` includes pending txs for `latest` [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:168].  
    Minimal repro: pause sequencer, send tx, compare nonce for `latest` vs `pending`; L1 expects `latest` to ignore pending.
 3. `eth_getTransactionReceipt` and `eth_getTransactionByHash` return objects with `blockNumber` set before sealing [examples/demo-rollup/tests/evm/evm_soft_conf.rs:40].  
    Minimal repro: pause sequencer, send tx, query receipt/tx; L1 expects `null` until mined.
-4. `safe`/`finalized` tags map to head block [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:255].  
+4. `safe`/`finalized` tags map to head block [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:244].  
    Minimal repro: run with `finalization_blocks > 0`, produce blocks, and assert `finalized` < `latest`.
+5. `eth_gasPrice` and `eth_maxPriorityFeePerGas` always return 0 [crates/full-node/sov-ethereum/src/lib.rs:122] [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:414].  
+   Minimal repro: call both endpoints; L1 typically returns non-zero.
+6. `eth_call` ignores `state_overrides` and `block_overrides` [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:268].  
+   Minimal repro: pass overrides that would change state; expect no effect.
+
+## Anti-flakiness
+- Use explicit block production controls (pause/resume).
+- Avoid wall-clock timing assertions; prefer invariants.
+- Use deterministic transaction ordering.
