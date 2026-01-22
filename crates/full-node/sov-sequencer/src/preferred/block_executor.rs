@@ -768,20 +768,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .expect("Error while shutting down in-progress rollup block, nothing to do. This is a bug, please report it");
 
         let mut forced_txs = Vec::new();
-        let mut saw_non_preferred_batch = false;
         for batch_receipt in batch_receipts {
             // We already increment the event number for our own transactions
             // inside `apply_tx_to_in_progress_batch`.
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
-            saw_non_preferred_batch = true;
             for tx_receipt in batch_receipt.tx_receipts {
                 let accepted_tx = self.process_tx_receipt(&tx_receipt);
                 forced_txs.push(accepted_tx);
             }
         }
-        if saw_non_preferred_batch {
+        if !forced_txs.is_empty() {
             let _ = self
                 .forced_tx_batch_notifier
                 .send(ForcedTxBatchNotification { rollup_height });
