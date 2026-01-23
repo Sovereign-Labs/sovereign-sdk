@@ -74,14 +74,14 @@ async fn forced_sequencer_registration_test_case(
     let key = key_and_address.private_key;
 
     let tx = build_register_sequencer_tx(&key, 0);
-    let blob = transaction_into_blob(tx);
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
-    let _receipt = da_service
-        .send_transaction(&blob)
-        .await
-        .await?
-        .expect("Failed to submit forced sequencer registration to DA");
+    submit_forced_tx(
+        da_service.as_ref(),
+        ForcedTx::Runtime(tx),
+        "Failed to submit forced sequencer registration to DA",
+    )
+    .await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
     let allowed_sequencer = poll_until("sequencer registration to be visible", || async {
@@ -129,6 +129,52 @@ fn transaction_into_blob(transaction: Transaction<Runtime<TestSpec>, TestSpec>) 
         }),
     )
     .unwrap()
+}
+
+async fn submit_preferred_tx(
+    client: &NodeClient,
+    tx: &Transaction<Runtime<TestSpec>, TestSpec>,
+) -> anyhow::Result<()> {
+    client
+        .client
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&borsh::to_vec(tx).unwrap()),
+        })
+        .await?;
+    Ok(())
+}
+
+enum ForcedTx<'a> {
+    Runtime(Transaction<Runtime<TestSpec>, TestSpec>),
+    Evm { account: &'a EvmAccount, tx: TxEip1559 },
+}
+
+async fn submit_forced_tx(
+    da_service: &impl DaService,
+    tx: ForcedTx<'_>,
+    description: &str,
+) -> anyhow::Result<()> {
+    let blob = match tx {
+        ForcedTx::Runtime(tx) => transaction_into_blob(tx),
+        ForcedTx::Evm { account, tx } => evm_transaction_into_blob(account, tx),
+    };
+    let _receipt = da_service
+        .send_transaction(&blob)
+        .await
+        .await?
+        .expect(description);
+    Ok(())
+}
+
+async fn produce_block_and_wait_slot(
+    rollup: &TestRollup<MockDemoRollup<Native>>,
+    slot_subscription: &mut BoxStream<'static, anyhow::Result<api_types::Slot>>,
+) -> anyhow::Result<api_types::Slot> {
+    rollup.da_service.produce_block_now().await?;
+    slot_subscription
+        .next()
+        .await
+        .context("Slot subscription ended")?
 }
 
 async fn subscribe_forced_tx_batches(
@@ -370,12 +416,15 @@ async fn evm_tx_unregistered_test_case(
     let transfer_amount = U256::from(1u64);
     let nonce = provider.get_transaction_count(sender.address()).await?;
     let forced_tx = build_evm_transfer_tx(receiver_address, transfer_amount, nonce);
-    let blob = evm_transaction_into_blob(&sender, forced_tx);
-    let _receipt = da_service
-        .send_transaction(&blob)
-        .await
-        .await?
-        .expect("Failed to submit EVM tx blob to DA");
+    submit_forced_tx(
+        da_service.as_ref(),
+        ForcedTx::Evm {
+            account: &sender,
+            tx: forced_tx,
+        },
+        "Failed to submit EVM tx blob to DA",
+    )
+    .await?;
 
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
@@ -409,14 +458,14 @@ async fn bank_transfer_unregistered_test_case(
 
     let transfer_tx =
         build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 0);
-    let blob = transaction_into_blob(transfer_tx);
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
-    let _receipt = da_service
-        .send_transaction(&blob)
-        .await
-        .await?
-        .expect("Failed to submit bank transfer blob to DA");
+    submit_forced_tx(
+        da_service.as_ref(),
+        ForcedTx::Runtime(transfer_tx),
+        "Failed to submit bank transfer blob to DA",
+    )
+    .await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
     wait_for_bank_balance(&client, transfer_amount, token_id, recipient_address).await?;
@@ -472,12 +521,7 @@ async fn forced_txs_resync_test_case(
     // Setup - create two tokens and transfer gas to the second key we've generated for sending valid txs.
     {
         let create_token_tx = build_create_token_tx(&key, 0, initial_balance);
-        client
-            .client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&borsh::to_vec(&create_token_tx).unwrap()),
-            })
-            .await?;
+        submit_preferred_tx(client, &create_token_tx).await?;
 
         // Transfer gas to the second key we've generated for sending valid txs.
         let preferred_tx = build_transfer_token_tx::<TestSpec>(
@@ -487,23 +531,12 @@ async fn forced_txs_resync_test_case(
             GAS_FUNDING_AMOUNT,
             1,
         );
-        client
-            .client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&borsh::to_vec(&preferred_tx).unwrap()),
-            })
-            .await?;
+        submit_preferred_tx(client, &preferred_tx).await?;
 
         // Create a second token for valid txs which don't affect the balances or nonces of the main token/accounts
         let create_second_token_tx = build_create_token_tx(&valid_tx_key, 0, initial_balance);
-        client
-            .client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&borsh::to_vec(&create_second_token_tx).unwrap()),
-            })
-            .await?;
-        rollup.da_service.produce_block_now().await?;
-        let _ = slot_subscription.next().await.unwrap()?;
+        submit_preferred_tx(client, &create_second_token_tx).await?;
+        produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
         assert_balance(client, initial_balance, token_id, user_address, None).await?;
     }
 
@@ -518,12 +551,12 @@ async fn forced_txs_resync_test_case(
             forced_transfer,
             forced_start_nonce + i as u64,
         );
-        let blob = transaction_into_blob(tx);
-        let _receipt = forced_da_service
-            .send_transaction(&blob)
-            .await
-            .await?
-            .expect("Failed to submit forced bank transfer blob to DA");
+        submit_forced_tx(
+            forced_da_service.as_ref(),
+            ForcedTx::Runtime(tx),
+            "Failed to submit forced bank transfer blob to DA",
+        )
+        .await?;
         rollup.da_service.produce_block_now().await?;
     }
     rollup.resume_preferred_batches().await;
@@ -563,23 +596,25 @@ async fn forced_txs_resync_test_case(
                 forced_transfer,
                 nonce_of_first_possibly_skipped_tx + (i / 2) as u64,
             );
-            let blob = transaction_into_blob(tx);
-            let _receipt = forced_da_service
-                .send_transaction(&blob)
-                .await
-                .await?
-                .expect("Failed to submit forced bank transfer blob to DA");
+            submit_forced_tx(
+                forced_da_service.as_ref(),
+                ForcedTx::Runtime(tx),
+                "Failed to submit forced bank transfer blob to DA",
+            )
+            .await?;
         }
 
         // The important part - produce a block to give the sequencer a chance to increment the visible slot number.
         // Wait for the slot update notification and the state update notification to be sure we're not racing.
-        rollup.da_service.produce_block_now().await?;
-        let _slot = slot_subscription.next().await.unwrap()?;
+        let _slot = produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
     }
 
     // Now that we've produced batches to increment the visible slot number, wait for the state update notification that we've processed all of the forced txs.
     for _ in 0..RESYNC_FORCED_BLOCKS + RESYNC_EXTRA_BLOCKS {
-        let update = state_update_subscription.next().await.unwrap()?;
+        let update = state_update_subscription
+            .next()
+            .await
+            .context("State update subscription ended")??;
         if update.slot_number.get() >= slot_num_of_last_forced_tx {
             break;
         }
@@ -612,12 +647,7 @@ async fn forced_txs_resync_test_case(
         preferred_transfer,
         forced_start_nonce + RESYNC_FORCED_BLOCKS as u64,
     );
-    client
-        .client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&borsh::to_vec(&preferred_tx).unwrap()),
-        })
-        .await?;
+    submit_preferred_tx(client, &preferred_tx).await?;
 
     assert_balance(
         client,
@@ -694,14 +724,17 @@ async fn evm_contract_call_unregistered_test_case(
     let calldata = Bytes::from(contract_for_calldata.set(set_value).to_vec());
 
     let call_tx = build_evm_contract_call_tx(contract_address, calldata, 1);
-    let blob = evm_transaction_into_blob(&sender, call_tx);
 
     // Submit via unregistered DA service
-    let _receipt = da_service
-        .send_transaction(&blob)
-        .await
-        .await?
-        .expect("Failed to submit contract call blob to DA");
+    submit_forced_tx(
+        da_service.as_ref(),
+        ForcedTx::Evm {
+            account: &sender,
+            tx: call_tx,
+        },
+        "Failed to submit contract call blob to DA",
+    )
+    .await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
     let provider = alloy_client(http_addr);
 
