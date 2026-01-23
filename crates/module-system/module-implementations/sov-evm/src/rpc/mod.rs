@@ -261,7 +261,8 @@ where
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
-        let mut evm_db: EvmDb<_, S> = self.db(state);
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
         verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
@@ -366,6 +367,7 @@ where
                     },
                 }
             }
+            // TODO: Handle synthetic blocks
             BlockId::Hash(hash) => self
                 .block_hash_to_number
                 .get(&hash.block_hash, state)
@@ -472,6 +474,7 @@ where
         state: &'a mut ApiStateAccessor<S>,
     ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
+        // TODO: Handle synthetic blocks
         let pending_or_block_nr = self.block_id_to_pending_or_block(block_id, state)?;
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
