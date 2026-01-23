@@ -25,9 +25,7 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
 
     let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
     let pending_block_first = latest_block_context(&client).await;
-    let pending_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending);
+    let pending_filter = filter_for_tag(BlockNumberOrTag::Pending);
     let logs_after_first = client.get_logs(&pending_filter).await;
 
     let expected_first = vec![
@@ -128,11 +126,7 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     let nb_of_txs = 3;
     let nb_of_logs_per_tx: u32 = 2;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -145,12 +139,8 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     let pending_block = latest_block_context(&rollup_and_client.client).await;
     let sender = rollup_and_client.client.address();
 
-    let pending_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending);
-    let latest_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Latest)
-        .to_block(BlockNumberOrTag::Latest);
+    let pending_filter = filter_for_tag(BlockNumberOrTag::Pending);
+    let latest_filter = filter_for_tag(BlockNumberOrTag::Latest);
 
     let pending_logs = rollup_and_client.client.get_logs(&pending_filter).await;
     let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
@@ -190,11 +180,7 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
     let nb_of_txs = 5;
     let nb_of_logs_per_tx: u32 = 5;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -208,10 +194,7 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
     let sender = rollup_and_client.client.address();
 
     let topic: B256 = U256::from(3).into();
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
-        .topic3(topic);
+    let filter = filter_for_tag(BlockNumberOrTag::Pending).topic3(topic);
 
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len() as u32, nb_of_txs);
@@ -248,11 +231,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     let nb_of_txs = 2;
     let nb_of_logs_per_tx: u32 = 3;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -266,9 +245,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     let sender = rollup_and_client.client.address();
 
     let default_filter = Filter::new();
-    let latest_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Latest)
-        .to_block(BlockNumberOrTag::Latest);
+    let latest_filter = filter_for_tag(BlockNumberOrTag::Latest);
 
     let default_logs = rollup_and_client.client.get_logs(&default_filter).await;
     let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
@@ -307,11 +284,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -338,11 +311,7 @@ async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
 async fn get_logs_single_block_range() -> anyhow::Result<()> {
     let nb_of_logs_per_tx: u32 = 4;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hashes = rollup_and_client
         .produce_logs(2, nb_of_logs_per_tx, Some(1))
@@ -410,10 +379,7 @@ async fn get_logs_address_filter_single() -> anyhow::Result<()> {
     let _tx_b = client.alloy_emit_logs(contract_b, 2, 3).await;
     let pending_block = latest_block_context(&client).await;
 
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
-        .address(contract_a);
+    let filter = filter_for_tag(BlockNumberOrTag::Pending).address(contract_a);
     let logs = client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 2);
@@ -451,10 +417,7 @@ async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
     let tx_b = client.alloy_emit_logs(contract_b, 2, 3).await;
     let pending_block = latest_block_context(&client).await;
 
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
-        .address(vec![contract_a, contract_b]);
+    let filter = filter_for_tag(BlockNumberOrTag::Pending).address(vec![contract_a, contract_b]);
     let logs = client.get_logs(&filter).await;
 
     assert_eq!(logs.len(), 5);
@@ -494,11 +457,7 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let nb_of_txs = 2;
     let nb_of_logs_per_tx: u32 = 5;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -512,10 +471,7 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let sender = rollup_and_client.client.address();
 
     let topics = vec![U256::from(1).into(), U256::from(3).into()];
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
-        .topic3(topics);
+    let filter = filter_for_tag(BlockNumberOrTag::Pending).topic3(topics);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     assert_eq!(logs.len() as u32, nb_of_txs * 2);
@@ -558,11 +514,7 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
 async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
     let nb_of_logs_per_tx: u32 = 5;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -576,9 +528,7 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
     let pending_block = latest_block_context(&rollup_and_client.client).await;
 
     let sender = rollup_and_client.client.address();
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
+    let filter = filter_for_tag(BlockNumberOrTag::Pending)
         .topic0(simple_log_topic0())
         .topic1(sender)
         .topic3(U256::from(4));
@@ -620,9 +570,7 @@ async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
     let _tx_b = client.alloy_emit_logs(contract_b, 7, 3).await;
     let pending_block = latest_block_context(&client).await;
 
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
+    let filter = filter_for_tag(BlockNumberOrTag::Pending)
         .address(contract_a)
         .topic3(U256::from(1));
     let logs = client.get_logs(&filter).await;
@@ -653,11 +601,7 @@ async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let sealed_tx = rollup_and_client
         .client
@@ -719,15 +663,11 @@ async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
         );
     }
 
-    let safe_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Safe)
-        .to_block(BlockNumberOrTag::Safe);
+    let safe_filter = filter_for_tag(BlockNumberOrTag::Safe);
     let safe_logs = rollup_and_client.client.get_logs(&safe_filter).await;
     assert_eq!(safe_logs, sealed_logs);
 
-    let finalized_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Finalized)
-        .to_block(BlockNumberOrTag::Finalized);
+    let finalized_filter = filter_for_tag(BlockNumberOrTag::Finalized);
     let finalized_logs = rollup_and_client.client.get_logs(&finalized_filter).await;
     assert_eq!(finalized_logs, sealed_logs);
 
@@ -743,11 +683,7 @@ async fn get_logs_ordered_and_not_removed() -> anyhow::Result<()> {
     let nb_of_txs = 4;
     let nb_of_logs_per_tx: u32 = 3;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, Some(1))
@@ -832,11 +768,7 @@ async fn get_logs_time_executed_ms_per_tx() -> anyhow::Result<()> {
 async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
     let nb_of_logs_per_tx: u32 = 3;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let sender = rollup_and_client.client.address();
     let topic1_base = U256::from(7);
@@ -904,11 +836,7 @@ async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_full_topic_log() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let t0 = U256::from_be_slice(&[0x11u8; 32]);
     let t1 = U256::from_be_slice(&[0x22u8; 32]);
@@ -963,11 +891,7 @@ async fn get_logs_full_topic_log() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_data_only_log() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let v1 = U256::from_be_slice(&[0x55u8; 32]);
     let v2 = U256::from_be_slice(&[0x66u8; 32]);
@@ -1019,11 +943,7 @@ async fn get_logs_data_only_log() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let value = U256::from(42);
     let tx_hash = rollup_and_client
@@ -1091,11 +1011,7 @@ async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
         .test_rollup
@@ -1117,9 +1033,7 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
     let pending_block = latest_block_context(&rollup_and_client.client).await;
     let sender = rollup_and_client.client.address();
 
-    let simple_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
+    let simple_filter = filter_for_tag(BlockNumberOrTag::Pending)
         .address(rollup_and_client.contract_address)
         .topic0(simple_log_topic0());
     let simple_logs = rollup_and_client.client.get_logs(&simple_filter).await;
@@ -1144,9 +1058,7 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
         );
     }
 
-    let data_filter = Filter::new()
-        .from_block(BlockNumberOrTag::Pending)
-        .to_block(BlockNumberOrTag::Pending)
+    let data_filter = filter_for_tag(BlockNumberOrTag::Pending)
         .address(rollup_and_client.contract_address)
         .topic0(data_only_log_topic0());
     let data_logs = rollup_and_client.client.get_logs(&data_filter).await;
@@ -1172,11 +1084,7 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_earliest_tag() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hashes = rollup_and_client.produce_logs(3, 2, Some(1)).await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -1209,11 +1117,7 @@ async fn get_logs_earliest_tag() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_schema_correctness() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hashes = rollup_and_client.produce_logs(2, 3, Some(1)).await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -1247,11 +1151,7 @@ async fn get_logs_schema_correctness() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_eip1898_blockhash_object() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hash = rollup_and_client
         .client
@@ -1302,11 +1202,7 @@ async fn get_logs_eip1898_blockhash_object() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_empty_result() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client.produce_logs(1, 2, None).await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -1323,11 +1219,7 @@ async fn get_logs_empty_result() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_empty_topics_matches_all() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hashes = rollup_and_client.produce_logs(2, 2, Some(1)).await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -1366,11 +1258,7 @@ async fn get_logs_empty_topics_matches_all() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic0_only_matches_any_indexed() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hash = rollup_and_client
         .client
@@ -1434,11 +1322,7 @@ async fn get_logs_topic0_only_matches_any_indexed() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic1_without_topic0() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let sender = rollup_and_client.client.address();
     let simple_tx = rollup_and_client
@@ -1522,11 +1406,7 @@ async fn get_logs_topic1_without_topic0() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let simple_tx = rollup_and_client
         .client
@@ -1636,11 +1516,7 @@ async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let sender = rollup_and_client.client.address();
     let full_topic_value = U256::from(777);
@@ -1756,11 +1632,7 @@ async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_trailing_null_topics_ignored() -> anyhow::Result<()> {
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hashes = rollup_and_client.produce_logs(2, 2, Some(1)).await;
     rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
@@ -1806,11 +1678,7 @@ async fn evm_test_get_logs() {
     let nb_of_txs = 10;
     let nb_of_logs_per_tx = 5;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     // Make sure all the txs are in the same blcok.
     rollup_and_client
@@ -1861,11 +1729,7 @@ async fn evm_test_get_logs_range() {
     let nb_of_txs = 10;
     let nb_of_logs_per_tx = 5;
 
-    let rollup_and_client = RollupAndClient::new(
-        EVM_EXTENSION.max_log_limit,
-        EVM_EXTENSION.response_size_limit,
-    )
-    .await;
+    let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let start_block = rollup_and_client
         .client
@@ -2699,6 +2563,10 @@ fn nb_of_logs_according_to_cursor(cursor: Cursor, nb_of_logs_per_tx: u32) -> u32
     (cursor.tx_index_absolute as u32) * nb_of_logs_per_tx + cursor.log_index_in_tx
 }
 
+fn filter_for_tag(tag: BlockNumberOrTag) -> Filter {
+    Filter::new().from_block(tag).to_block(tag)
+}
+
 fn new_filter_for_all_logs() -> Filter {
     Filter::new()
         .from_block(0)
@@ -2724,6 +2592,14 @@ struct RollupAndClient {
 }
 
 impl RollupAndClient {
+    async fn new_with_default_limits() -> RollupAndClient {
+        RollupAndClient::new(
+            EVM_EXTENSION.max_log_limit,
+            EVM_EXTENSION.response_size_limit,
+        )
+        .await
+    }
+
     async fn new(max_log_limit: usize, response_size_limit: usize) -> RollupAndClient {
         let ext = SeqConfigExtension {
             max_log_limit,

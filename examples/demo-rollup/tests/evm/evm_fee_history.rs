@@ -1,3 +1,4 @@
+#![allow(clippy::float_arithmetic)]
 //! eth_feeHistory RPC endpoint tests
 //!
 //! Coverage notes:
@@ -11,8 +12,11 @@ use serde::Deserialize;
 use std::path::PathBuf;
 
 use sov_cli::NodeClient;
+use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
+use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{GasPrice, GasUnit};
+use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
@@ -113,10 +117,6 @@ fn compute_next_base_fee(
     }
 }
 
-fn gas_unit_dim0(gas: &GasUnit<2>) -> u64 {
-    gas.as_ref()[0]
-}
-
 fn gas_price_dim0(price: &GasPrice<2>) -> u128 {
     price.as_ref()[0].0
 }
@@ -211,12 +211,115 @@ async fn send_high_fee_set_value(
         .map_err(|err| anyhow::anyhow!(err.to_string()))
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_eth_fee_history_basic() -> anyhow::Result<()> {
+// ==================== Test Setup Helpers ====================
+
+async fn setup_fee_history_test(
+    wait_blocks: u64,
+) -> (TestRollup<MockDemoRollup<Native>>, DynProvider) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
+    rollup.wait_for_next_blocks(wait_blocks).await;
     rollup.pause_preferred_batches().await;
+    (rollup, client)
+}
+
+fn assert_float_eq(actual: f64, expected: f64, context: &str) {
+    let delta = (actual - expected).abs();
+    assert!(
+        delta < 1e-12,
+        "{context}: expected {expected}, got {actual}"
+    );
+}
+
+fn assert_gas_ratios_valid(ratios: &[f64]) {
+    for (i, ratio) in ratios.iter().enumerate() {
+        assert!(
+            (0.0..=1.0).contains(ratio),
+            "gas_used_ratio[{i}] = {ratio} should be in [0, 1]"
+        );
+    }
+}
+
+async fn get_block_base_fee(client: &DynProvider, block_num: u64) -> anyhow::Result<u128> {
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(block_num))
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("block {block_num} should exist"))?;
+    let base_fee = block
+        .header
+        .base_fee_per_gas
+        .ok_or_else(|| anyhow::anyhow!("block {block_num} should include base_fee_per_gas"))?;
+    Ok(u128::from(base_fee))
+}
+
+/// Shared validation logic for finalized/safe block tags.
+/// Both tags map to the latest sealed block in this rollup.
+async fn verify_fee_history_for_sealed_tag(
+    client: &DynProvider,
+    tag: BlockNumberOrTag,
+    block_count: u64,
+) -> anyhow::Result<()> {
+    let fee_history = client.get_fee_history(block_count, tag, &[]).await?;
+
+    assert_eq!(
+        fee_history.base_fee_per_gas.len(),
+        (block_count + 1) as usize
+    );
+    assert_eq!(fee_history.gas_used_ratio.len(), block_count as usize);
+    assert!(fee_history.reward.is_none(), "reward should be omitted");
+
+    let latest = client.get_block_number().await?;
+    let expected_oldest = latest.saturating_sub(block_count - 1);
+    assert_eq!(
+        fee_history.oldest_block, expected_oldest,
+        "{tag:?} range should end at latest sealed block"
+    );
+
+    let oldest = fee_history.oldest_block;
+    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(client, end_block, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+
+    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
+        let block_number = oldest + i as u64;
+        let receipts_gas_used = total_gas_used_from_receipts(client, block_number).await?;
+        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+        assert_float_eq(
+            *ratio,
+            expected_ratio,
+            &format!("gas_used_ratio for block {block_number}"),
+        );
+
+        let expected_base_fee = base_fees[block_number as usize];
+        assert_eq!(
+            fee_history.base_fee_per_gas[i], expected_base_fee,
+            "baseFeePerGas mismatch for block {block_number}"
+        );
+    }
+
+    let predicted_base_fee = base_fees[end_block as usize];
+    assert_eq!(
+        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
+        predicted_base_fee,
+        "predicted next base fee mismatch for block {end_block}"
+    );
+
+    let latest_base_fee = get_block_base_fee(client, latest).await?;
+    assert_eq!(
+        fee_history.base_fee_per_gas[(block_count - 1) as usize],
+        latest_base_fee,
+        "baseFeePerGas should match latest sealed block header"
+    );
+
+    assert_gas_ratios_valid(&fee_history.gas_used_ratio);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_eth_fee_history_basic() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     let fee_history = client
         .get_fee_history(3, BlockNumberOrTag::Latest, &[])
@@ -224,20 +327,14 @@ async fn test_eth_fee_history_basic() -> anyhow::Result<()> {
 
     assert_eq!(fee_history.base_fee_per_gas.len(), 4);
     assert_eq!(fee_history.gas_used_ratio.len(), 3);
-    assert!(fee_history
-        .gas_used_ratio
-        .iter()
-        .all(|&r| (0.0..=1.0).contains(&r)));
+    assert_gas_ratios_valid(&fee_history.gas_used_ratio);
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eth_fee_history_single_block() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(2).await;
 
     let fee_history = client
         .get_fee_history(1, BlockNumberOrTag::Latest, &[])
@@ -251,10 +348,7 @@ async fn test_eth_fee_history_single_block() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eth_fee_history_with_reward_percentiles() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(2).await;
 
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[25.0, 50.0, 75.0])
@@ -284,10 +378,7 @@ async fn test_eth_fee_history_zero_blocks() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_eth_fee_history_specific_block() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(5).await;
 
     let fee_history = client
         .get_fee_history(3, BlockNumberOrTag::Number(3), &[])
@@ -307,10 +398,10 @@ async fn test_eth_fee_history_specific_block() -> anyhow::Result<()> {
         let block_number = oldest + i as u64;
         let receipts_gas_used = total_gas_used_from_receipts(&client, block_number).await?;
         let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-        let delta = (ratio - expected_ratio).abs();
-        assert!(
-            delta < 1e-12,
-            "gas_used_ratio mismatch for block {block_number}: expected {expected_ratio}, got {ratio}"
+        assert_float_eq(
+            *ratio,
+            expected_ratio,
+            &format!("gas_used_ratio for block {block_number}"),
         );
 
         let expected_base_fee = base_fees[block_number as usize];
@@ -405,10 +496,7 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Pending, &[])
@@ -438,33 +526,18 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
         fee_history.base_fee_per_gas[0], expected_base_fee,
         "baseFeePerGas[0] should match receipt-derived base fee"
     );
-    let delta = (fee_history.gas_used_ratio[0] - expected_ratio).abs();
-    assert!(
-        delta < 1e-12,
-        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
-        fee_history.gas_used_ratio[0]
+    assert_float_eq(
+        fee_history.gas_used_ratio[0],
+        expected_ratio,
+        "gas_used_ratio",
     );
 
-    let latest_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(latest))
-        .await?
-        .expect("latest block should exist");
-    let latest_base_fee = u128::from(
-        latest_block
-            .header
-            .base_fee_per_gas
-            .expect("latest block should include base_fee_per_gas"),
-    );
+    let latest_base_fee = get_block_base_fee(&client, latest).await?;
     assert_eq!(
         fee_history.base_fee_per_gas[0], latest_base_fee,
         "baseFeePerGas[0] should match latest sealed block header"
     );
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        assert!(
-            (0.0..=1.0).contains(ratio),
-            "gas_used_ratio[{i}] = {ratio} should be in [0, 1]"
-        );
-    }
+    assert_gas_ratios_valid(&fee_history.gas_used_ratio);
 
     Ok(())
 }
@@ -519,162 +592,19 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_tag() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
-
-    let fee_history = client
-        .get_fee_history(2, BlockNumberOrTag::Finalized, &[])
-        .await?;
-
-    // Finalized tag should work and return valid data
-    assert_eq!(fee_history.base_fee_per_gas.len(), 3);
-    assert_eq!(fee_history.gas_used_ratio.len(), 2);
-    assert!(fee_history.reward.is_none(), "reward should be omitted");
-    let latest = client.get_block_number().await?;
-    let expected_oldest = latest.saturating_sub(1);
-    assert_eq!(
-        fee_history.oldest_block, expected_oldest,
-        "finalized range should end at latest sealed block"
-    );
-
-    let oldest = fee_history.oldest_block;
-    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
-    let genesis = load_evm_genesis_config();
-    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
-    let gas_limit = genesis.chain_spec.block_gas_limit;
-
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        let block_number = oldest + i as u64;
-        let receipts_gas_used = total_gas_used_from_receipts(&client, block_number).await?;
-        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-        let delta = (*ratio - expected_ratio).abs();
-        assert!(
-            delta < 1e-12,
-            "gas_used_ratio mismatch for block {block_number}: expected {expected_ratio}, got {ratio}"
-        );
-
-        let expected_base_fee = base_fees[block_number as usize];
-        assert_eq!(
-            fee_history.base_fee_per_gas[i], expected_base_fee,
-            "baseFeePerGas mismatch for block {block_number}"
-        );
-    }
-
-    let predicted_base_fee = base_fees[end_block as usize];
-    assert_eq!(
-        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
-        predicted_base_fee,
-        "predicted next base fee mismatch for block {end_block}"
-    );
-
-    let latest_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(latest))
-        .await?
-        .expect("latest block should exist");
-    let latest_base_fee = u128::from(
-        latest_block
-            .header
-            .base_fee_per_gas
-            .expect("latest block should include base_fee_per_gas"),
-    );
-    assert_eq!(
-        fee_history.base_fee_per_gas[1], latest_base_fee,
-        "baseFeePerGas[1] should match latest sealed block header"
-    );
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        assert!(
-            (0.0..=1.0).contains(ratio),
-            "gas_used_ratio[{i}] = {ratio} should be in [0, 1]"
-        );
-    }
-
-    Ok(())
+    let (_rollup, client) = setup_fee_history_test(3).await;
+    verify_fee_history_for_sealed_tag(&client, BlockNumberOrTag::Finalized, 2).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_safe_tag() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
-
-    let fee_history = client
-        .get_fee_history(2, BlockNumberOrTag::Safe, &[])
-        .await?;
-
-    // Safe tag should work and return valid data
-    assert_eq!(fee_history.base_fee_per_gas.len(), 3);
-    assert_eq!(fee_history.gas_used_ratio.len(), 2);
-    assert!(fee_history.reward.is_none(), "reward should be omitted");
-    let latest = client.get_block_number().await?;
-    let expected_oldest = latest.saturating_sub(1);
-    assert_eq!(
-        fee_history.oldest_block, expected_oldest,
-        "safe range should end at latest sealed block"
-    );
-
-    let oldest = fee_history.oldest_block;
-    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
-    let genesis = load_evm_genesis_config();
-    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
-    let gas_limit = genesis.chain_spec.block_gas_limit;
-
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        let block_number = oldest + i as u64;
-        let receipts_gas_used = total_gas_used_from_receipts(&client, block_number).await?;
-        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-        let delta = (*ratio - expected_ratio).abs();
-        assert!(
-            delta < 1e-12,
-            "gas_used_ratio mismatch for block {block_number}: expected {expected_ratio}, got {ratio}"
-        );
-
-        let expected_base_fee = base_fees[block_number as usize];
-        assert_eq!(
-            fee_history.base_fee_per_gas[i], expected_base_fee,
-            "baseFeePerGas mismatch for block {block_number}"
-        );
-    }
-
-    let predicted_base_fee = base_fees[end_block as usize];
-    assert_eq!(
-        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
-        predicted_base_fee,
-        "predicted next base fee mismatch for block {end_block}"
-    );
-
-    let latest_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(latest))
-        .await?
-        .expect("latest block should exist");
-    let latest_base_fee = u128::from(
-        latest_block
-            .header
-            .base_fee_per_gas
-            .expect("latest block should include base_fee_per_gas"),
-    );
-    assert_eq!(
-        fee_history.base_fee_per_gas[1], latest_base_fee,
-        "baseFeePerGas[1] should match latest sealed block header"
-    );
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        assert!(
-            (0.0..=1.0).contains(ratio),
-            "gas_used_ratio[{i}] = {ratio} should be in [0, 1]"
-        );
-    }
-
-    Ok(())
+    let (_rollup, client) = setup_fee_history_test(3).await;
+    verify_fee_history_for_sealed_tag(&client, BlockNumberOrTag::Safe, 2).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_earliest_tag() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     // Request 2 blocks ending at earliest - should gracefully handle limited range
     let fee_history = client
@@ -682,9 +612,7 @@ async fn test_fee_history_earliest_tag() -> anyhow::Result<()> {
         .await?;
 
     // Earliest points to block 0, so we can only get 1 block (0 to 0)
-    // oldest_block should be 0
     assert_eq!(fee_history.oldest_block, 0);
-    // base_fee_per_gas should have at least 1 entry
     assert!(!fee_history.base_fee_per_gas.is_empty());
 
     let genesis = load_evm_genesis_config();
@@ -693,11 +621,10 @@ async fn test_fee_history_earliest_tag() -> anyhow::Result<()> {
     let gas_limit = genesis.chain_spec.block_gas_limit;
     let receipts_gas_used = total_gas_used_from_receipts(&client, 0).await?;
     let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-    let delta = (fee_history.gas_used_ratio[0] - expected_ratio).abs();
-    assert!(
-        delta < 1e-12,
-        "gas_used_ratio mismatch for block 0: expected {expected_ratio}, got {}",
-        fee_history.gas_used_ratio[0]
+    assert_float_eq(
+        fee_history.gas_used_ratio[0],
+        expected_ratio,
+        "gas_used_ratio for block 0",
     );
     assert_eq!(
         fee_history.base_fee_per_gas[0], base_fees[0],
@@ -714,10 +641,7 @@ async fn test_fee_history_earliest_tag() -> anyhow::Result<()> {
 /// Rollup semantics: `latest` resolves to `pending`.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     let latest_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[])
@@ -756,39 +680,33 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
     let gas_limit = genesis.chain_spec.block_gas_limit;
     let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
     let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-    let delta = (latest_history.gas_used_ratio[0] - expected_ratio).abs();
-    assert!(
-        delta < 1e-12,
-        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
-        latest_history.gas_used_ratio[0]
+    assert_float_eq(
+        latest_history.gas_used_ratio[0],
+        expected_ratio,
+        "gas_used_ratio",
     );
     assert_eq!(
         latest_history.base_fee_per_gas[0], expected_base_fee,
         "baseFeePerGas[0] should match receipt-derived base fee"
     );
 
-    let latest_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(latest))
-        .await?
-        .expect("latest block should exist");
-    let latest_base_fee = u128::from(
-        latest_block
-            .header
-            .base_fee_per_gas
-            .expect("latest block should include base_fee_per_gas"),
-    );
+    let latest_base_fee = get_block_base_fee(&client, latest).await?;
     assert_eq!(
         latest_history.base_fee_per_gas[0], latest_base_fee,
         "baseFeePerGas[0] should match latest sealed block header"
     );
-    let gas_limit = latest_block.header.gas_limit;
-    assert!(gas_limit > 0, "block gas_limit should be non-zero");
-    let expected_ratio = latest_block.header.gas_used as f64 / gas_limit as f64;
-    let delta = (latest_history.gas_used_ratio[0] - expected_ratio).abs();
-    assert!(
-        delta < 1e-12,
-        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
-        latest_history.gas_used_ratio[0]
+
+    let latest_block = client
+        .get_block_by_number(BlockNumberOrTag::Number(latest))
+        .await?
+        .expect("latest block should exist");
+    let header_gas_limit = latest_block.header.gas_limit;
+    assert!(header_gas_limit > 0, "block gas_limit should be non-zero");
+    let expected_ratio = latest_block.header.gas_used as f64 / header_gas_limit as f64;
+    assert_float_eq(
+        latest_history.gas_used_ratio[0],
+        expected_ratio,
+        "gas_used_ratio from block header",
     );
 
     Ok(())
@@ -798,10 +716,7 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_percentile_out_of_range_over_100() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(2).await;
 
     // Percentile > 100 should fail
     let result = client
@@ -809,17 +724,13 @@ async fn test_fee_history_percentile_out_of_range_over_100() -> anyhow::Result<(
         .await;
 
     assert!(result.is_err(), "Percentile > 100 should return error");
-    // Error code/shape conformance is out of scope for this PR.
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_percentiles_not_monotonic() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(2).await;
 
     // Non-monotonic percentiles should fail
     let result = client
@@ -830,7 +741,6 @@ async fn test_fee_history_percentiles_not_monotonic() -> anyhow::Result<()> {
         result.is_err(),
         "Non-monotonic percentiles should return error"
     );
-    // Error code/shape conformance is out of scope for this PR.
 
     Ok(())
 }
@@ -839,24 +749,14 @@ async fn test_fee_history_percentiles_not_monotonic() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_array_length_invariants() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    let total_blocks = 10;
-    rollup.wait_for_next_blocks(total_blocks).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(10).await;
 
     for block_count in 1..8 {
         let fee_history = client
             .get_fee_history(block_count, BlockNumberOrTag::Latest, &[25.0, 75.0])
             .await?;
 
-        // Value-level checks live in dedicated tests; here we focus on schema invariants.
-        for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-            assert!(
-                (0.0..=1.0).contains(ratio),
-                "gas_used_ratio[{i}] = {ratio} should be in [0, 1]"
-            );
-        }
+        assert_gas_ratios_valid(&fee_history.gas_used_ratio);
 
         // Key invariant: base_fee_per_gas has block_count + 1 entries
         assert_eq!(
@@ -890,10 +790,7 @@ async fn test_fee_history_array_length_invariants() -> anyhow::Result<()> {
 /// KNOWN BUG: reward rows are sized to requested blockCount even when fewer blocks exist.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_reward_len_matches_available_blocks() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(2).await;
 
     let latest = client.get_block_number().await?;
     let block_count = latest + 5;
@@ -913,10 +810,7 @@ async fn test_fee_history_reward_len_matches_available_blocks() -> anyhow::Resul
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_oldest_block_correctness() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(10).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(10).await;
 
     // Request 3 blocks ending at block 7
     let fee_history = client
@@ -928,8 +822,6 @@ async fn test_fee_history_oldest_block_correctness() -> anyhow::Result<()> {
         fee_history.oldest_block, 5,
         "oldest_block should be newest_block - block_count + 1"
     );
-
-    // Verify array lengths match expected block count
     assert_eq!(fee_history.gas_used_ratio.len(), 3);
 
     Ok(())
@@ -939,24 +831,13 @@ async fn test_fee_history_oldest_block_correctness() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_gas_ratio_valid_range() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(5).await;
 
     let fee_history = client
         .get_fee_history(5, BlockNumberOrTag::Finalized, &[])
         .await?;
 
-    // Gas ratios must always be in valid range [0, 1]
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        assert!(
-            (0.0..=1.0).contains(ratio),
-            "gas_used_ratio[{i}] = {ratio} should be in [0, 1]",
-        );
-    }
-
-    // Base fee values should be non-negative (implicit in u128, but verify structure)
+    assert_gas_ratios_valid(&fee_history.gas_used_ratio);
     assert!(
         !fee_history.base_fee_per_gas.is_empty(),
         "base_fee_per_gas should not be empty"
@@ -970,10 +851,7 @@ async fn test_fee_history_gas_ratio_valid_range() -> anyhow::Result<()> {
 /// KNOWN BUG: baseFeePerGas can drop to 0 after genesis (violates EIP-1559 min base fee).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_base_fee_nonzero_after_genesis() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(4).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(4).await;
 
     let latest = client.get_block_number().await?;
     let block_count = 3u64;
@@ -1005,10 +883,7 @@ async fn test_fee_history_base_fee_nonzero_after_genesis() -> anyhow::Result<()>
 /// KNOWN BUG: genesis baseFeePerGas in feeHistory does not match the block header.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_earliest_values_match_block_header() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(2).await;
 
     let fee_history = client
         .get_fee_history(1, BlockNumberOrTag::Earliest, &[])
@@ -1023,11 +898,10 @@ async fn test_fee_history_earliest_values_match_block_header() -> anyhow::Result
     let gas_limit0 = genesis.chain_spec.block_gas_limit;
     let receipts_gas_used0 = total_gas_used_from_receipts(&client, 0).await?;
     let expected_ratio0 = receipts_gas_used0 as f64 / gas_limit0 as f64;
-    let delta0 = (fee_history.gas_used_ratio[0] - expected_ratio0).abs();
-    assert!(
-        delta0 < 1e-12,
-        "genesis gas_used_ratio mismatch: expected {expected_ratio0}, got {}",
-        fee_history.gas_used_ratio[0]
+    assert_float_eq(
+        fee_history.gas_used_ratio[0],
+        expected_ratio0,
+        "genesis gas_used_ratio",
     );
     assert_eq!(
         fee_history.base_fee_per_gas[0], base_fees[0],
@@ -1038,41 +912,26 @@ async fn test_fee_history_earliest_values_match_block_header() -> anyhow::Result
         "predicted next base fee should match receipt-derived value"
     );
 
-    let block0 = client
-        .get_block_by_number(BlockNumberOrTag::Number(0))
-        .await?
-        .expect("genesis block should exist");
-    let base_fee0 = u128::from(
-        block0
-            .header
-            .base_fee_per_gas
-            .expect("genesis block should include base_fee_per_gas"),
-    );
+    let base_fee0 = get_block_base_fee(&client, 0).await?;
     assert_eq!(
         fee_history.base_fee_per_gas[0], base_fee0,
         "genesis baseFeePerGas should match the block header"
     );
 
-    let gas_limit0 = block0.header.gas_limit;
-    assert!(gas_limit0 > 0, "genesis gas_limit should be non-zero");
-    let expected_ratio0 = block0.header.gas_used as f64 / gas_limit0 as f64;
-    let delta0 = (fee_history.gas_used_ratio[0] - expected_ratio0).abs();
-    assert!(
-        delta0 < 1e-12,
-        "genesis gas_used_ratio mismatch: expected {expected_ratio0}, got {}",
-        fee_history.gas_used_ratio[0]
+    let block0 = client
+        .get_block_by_number(BlockNumberOrTag::Number(0))
+        .await?
+        .expect("genesis block should exist");
+    let header_gas_limit = block0.header.gas_limit;
+    assert!(header_gas_limit > 0, "genesis gas_limit should be non-zero");
+    let expected_ratio0 = block0.header.gas_used as f64 / header_gas_limit as f64;
+    assert_float_eq(
+        fee_history.gas_used_ratio[0],
+        expected_ratio0,
+        "genesis gas_used_ratio from header",
     );
 
-    let block1 = client
-        .get_block_by_number(BlockNumberOrTag::Number(1))
-        .await?
-        .expect("block 1 should exist");
-    let base_fee1 = u128::from(
-        block1
-            .header
-            .base_fee_per_gas
-            .expect("block 1 should include base_fee_per_gas"),
-    );
+    let base_fee1 = get_block_base_fee(&client, 1).await?;
     assert_eq!(
         fee_history.base_fee_per_gas[1], base_fee1,
         "predicted next base fee should match block 1 header"
@@ -1120,11 +979,7 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
         let block_num = oldest_block + i as u64;
         let receipts_gas_used = total_gas_used_from_receipts(&client, block_num).await?;
         let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-        let delta = (*ratio - expected_ratio).abs();
-        assert!(
-            delta < 1e-12,
-            "gas_used_ratio mismatch: expected {expected_ratio}, got {ratio}"
-        );
+        assert_float_eq(*ratio, expected_ratio, "gas_used_ratio");
 
         let expected_base_fee = base_fees[block_num as usize];
         assert_eq!(
@@ -1132,28 +987,20 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
             "baseFeePerGas should match receipt-derived value"
         );
 
+        let header_base_fee = get_block_base_fee(&client, block_num).await?;
+        assert_eq!(
+            fee_history.base_fee_per_gas[i], header_base_fee,
+            "baseFeePerGas should match the block header"
+        );
+
         let block = client
             .get_block_by_number(BlockNumberOrTag::Number(block_num))
             .await?
             .expect("block should exist");
-        let header = block.header;
-        let base_fee = header
-            .base_fee_per_gas
-            .expect("block should include base_fee_per_gas");
-        let base_fee = u128::from(base_fee);
-        assert_eq!(
-            fee_history.base_fee_per_gas[i], base_fee,
-            "baseFeePerGas should match the block header"
-        );
-
-        let gas_limit = header.gas_limit;
-        assert!(gas_limit > 0, "block gas_limit should be non-zero");
-        let expected_ratio = header.gas_used as f64 / gas_limit as f64;
-        let delta = (*ratio - expected_ratio).abs();
-        assert!(
-            delta < 1e-12,
-            "gas_used_ratio mismatch: expected {expected_ratio}, got {ratio}"
-        );
+        let header_gas_limit = block.header.gas_limit;
+        assert!(header_gas_limit > 0, "block gas_limit should be non-zero");
+        let expected_ratio = block.header.gas_used as f64 / header_gas_limit as f64;
+        assert_float_eq(*ratio, expected_ratio, "gas_used_ratio from header");
     }
 
     let predicted_base_fee = base_fees[end_block as usize];
@@ -1163,15 +1010,7 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
         "predicted next base fee should follow EIP-1559"
     );
 
-    let next_block_data = client
-        .get_block_by_number(BlockNumberOrTag::Number(newest_block + 1))
-        .await?
-        .expect("next block should exist");
-    let next_base_fee = next_block_data
-        .header
-        .base_fee_per_gas
-        .expect("next block should include base_fee_per_gas");
-    let next_base_fee = u128::from(next_base_fee);
+    let next_base_fee = get_block_base_fee(&client, newest_block + 1).await?;
     assert_eq!(
         fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
         next_base_fee,
@@ -1186,12 +1025,7 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
 /// TC28: Empty blocks have gas_used_ratio = 0.0
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_empty_blocks_zero_ratio() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-
-    // Produce multiple consecutive empty blocks
-    rollup.wait_for_next_blocks(5).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(5).await;
 
     let fee_history = client
         .get_fee_history(5, BlockNumberOrTag::Finalized, &[])
@@ -1247,7 +1081,7 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
         "chain-state base fee should match receipt-derived base fee"
     );
     let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;
-    let chain_gas_used = gas_unit_dim0(&gas_info.gas_used);
+    let chain_gas_used = gas_info.gas_used.as_ref()[0];
     assert!(
         chain_gas_used >= receipts_gas_used,
         "chain-state gas_used should be >= receipts gas_used"
@@ -1273,11 +1107,10 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     );
 
     let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
-    let delta = (fee_history.gas_used_ratio[0] - expected_ratio).abs();
-    assert!(
-        delta < 1e-12,
-        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
-        fee_history.gas_used_ratio[0]
+    assert_float_eq(
+        fee_history.gas_used_ratio[0],
+        expected_ratio,
+        "gas_used_ratio",
     );
 
     assert_eq!(
@@ -1285,26 +1118,18 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
         "predicted next base fee should follow EIP-1559"
     );
 
-    let block = client
-        .get_block_by_number(BlockNumberOrTag::Number(tx_block))
-        .await?
-        .expect("tx block should exist");
-    let header_base_fee = u128::from(
-        block
-            .header
-            .base_fee_per_gas
-            .expect("tx block should include base_fee_per_gas"),
-    );
+    let header_base_fee = get_block_base_fee(&client, tx_block).await?;
     assert_eq!(
         header_base_fee, expected_base_fee,
         "block header base fee should match receipt-derived base fee"
     );
+
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(tx_block))
+        .await?
+        .expect("tx block should exist");
     let header_ratio = block.header.gas_used as f64 / block.header.gas_limit as f64;
-    let header_delta = (header_ratio - expected_ratio).abs();
-    assert!(
-        header_delta < 1e-12,
-        "block header gas_used_ratio mismatch: expected {expected_ratio}, got {header_ratio}"
-    );
+    assert_float_eq(header_ratio, expected_ratio, "block header gas_used_ratio");
 
     Ok(())
 }
@@ -1393,16 +1218,13 @@ async fn test_fee_history_progression() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(5).await;
 
-    // Query fee history at current state
     let history1 = client
         .get_fee_history(3, BlockNumberOrTag::Latest, &[])
         .await?;
     let oldest1 = history1.oldest_block;
 
-    // Produce more blocks
     rollup.wait_for_next_blocks(3).await;
 
-    // Query again - oldest_block should advance
     let history2 = client
         .get_fee_history(3, BlockNumberOrTag::Latest, &[])
         .await?;
@@ -1413,7 +1235,6 @@ async fn test_fee_history_progression() -> anyhow::Result<()> {
         "After producing blocks, oldest_block should advance: was {oldest1}, now {oldest2}"
     );
 
-    // The difference should be approximately equal to blocks produced
     let block_diff = oldest2 - oldest1;
     assert!(
         (2..=4).contains(&block_diff),
@@ -1565,12 +1386,7 @@ async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
 // #[ignore = "Known bug: base_fee can drop to 0 due to saturating_sub (violates EIP-1559)"]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-
-    // Produce several blocks
-    rollup.wait_for_next_blocks(10).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(10).await;
 
     let fee_history = client
         .get_fee_history(8, BlockNumberOrTag::Finalized, &[])
@@ -1609,10 +1425,7 @@ async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
 /// TC06: finalized and safe return identical results
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(5).await;
 
     let finalized = client
         .get_fee_history(3, BlockNumberOrTag::Finalized, &[25.0, 75.0])
@@ -1646,23 +1459,18 @@ async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
 /// TC09: blockCount = 1024 exactly works (boundary case)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_block_count_1024_boundary() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(5).await;
 
     // Request exactly 1024 blocks - should work without error
     let fee_history = client
         .get_fee_history(1024, BlockNumberOrTag::Latest, &[])
         .await?;
 
-    // Should return data (may be less than 1024 if chain is shorter)
     assert!(!fee_history.base_fee_per_gas.is_empty());
     assert_eq!(
         fee_history.oldest_block, 0,
         "short chains should underflow to genesis"
     );
-    // base_fee_per_gas.len() should be at most 1025 (1024 + 1)
     assert!(
         fee_history.base_fee_per_gas.len() <= 1025,
         "base_fee_per_gas should have at most 1025 entries for blockCount=1024"
@@ -1674,10 +1482,7 @@ async fn test_fee_history_block_count_1024_boundary() -> anyhow::Result<()> {
 /// TC13: Duplicate percentiles - verify behavior (spec allows <=)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_duplicate_percentiles() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     // Duplicate percentiles [25, 25, 75] - should be accepted (monotonically non-decreasing)
     let fee_history = client
@@ -1711,10 +1516,7 @@ async fn test_fee_history_duplicate_percentiles() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 // #[ignore = "Known bug: empty percentiles returns Some([[], []]) instead of None"]
 async fn test_fee_history_empty_percentiles_no_reward() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[])
@@ -1733,16 +1535,12 @@ async fn test_fee_history_empty_percentiles_no_reward() -> anyhow::Result<()> {
 /// TC19: Blob gas fields are empty arrays (rollup-specific, EIP-4844 not implemented)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_blob_gas_fields_empty() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     let fee_history = client
         .get_fee_history(3, BlockNumberOrTag::Latest, &[])
         .await?;
 
-    // EIP-4844 blob gas fields should be empty in this rollup
     assert!(
         fee_history.base_fee_per_blob_gas.is_empty(),
         "base_fee_per_blob_gas should be empty (EIP-4844 not implemented), got {:?}",
@@ -1760,10 +1558,7 @@ async fn test_fee_history_blob_gas_fields_empty() -> anyhow::Result<()> {
 /// TC24: baseFeePerGas[last] is the predicted next block fee
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(5).await;
 
     let latest = client.get_block_number().await?;
     let newest_block = latest.saturating_sub(1);
@@ -1771,8 +1566,6 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
         .get_fee_history(1, BlockNumberOrTag::Number(newest_block), &[])
         .await?;
 
-    // baseFeePerGas should have block_count + 1 entries
-    // The last entry is the predicted fee for the NEXT block
     assert_eq!(
         fee_history.base_fee_per_gas.len(),
         2,
@@ -1803,19 +1596,9 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
         "predicted next base fee should follow EIP-1559"
     );
 
-    // Compare against the next sealed block header to validate the prediction.
-    let predicted_fee = fee_history.base_fee_per_gas[1];
-    let next_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(newest_block + 1))
-        .await?
-        .expect("next block should exist");
-    let next_base_fee = next_block
-        .header
-        .base_fee_per_gas
-        .expect("next block should include base_fee_per_gas");
-    let next_base_fee = u128::from(next_base_fee);
+    let next_base_fee = get_block_base_fee(&client, newest_block + 1).await?;
     assert_eq!(
-        predicted_fee, next_base_fee,
+        fee_history.base_fee_per_gas[1], next_base_fee,
         "predicted next base fee should match the next block header"
     );
 
@@ -1832,25 +1615,17 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 // #[ignore = "Known bug: future block returns fabricated data instead of error/bounded result"]
 async fn test_fee_history_future_block() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
     let current_block = client.get_block_number().await?;
-    let future_block = current_block + 1000; // Way in the future
+    let future_block = current_block + 1000;
 
-    // Request fee history for a future block
     let result = client
         .get_fee_history(3, BlockNumberOrTag::Number(future_block), &[])
         .await;
 
-    // Should either error OR return empty/partial data gracefully
-    // The exact behavior depends on implementation
     match result {
         Ok(fee_history) => {
-            // If it succeeds, it should return empty or partial data
-            // oldest_block should not be beyond current chain
             assert!(
                 fee_history.oldest_block <= current_block + 1,
                 "oldest_block {} should not be beyond current block {}",
@@ -1860,7 +1635,6 @@ async fn test_fee_history_future_block() -> anyhow::Result<()> {
         }
         Err(_) => {
             // Error is also acceptable for future block
-            // Error code/shape conformance is out of scope for this PR.
         }
     }
 
@@ -1870,12 +1644,8 @@ async fn test_fee_history_future_block() -> anyhow::Result<()> {
 /// TC28: Fractional percentiles work correctly
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_fractional_percentiles() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
-    // Fractional percentiles like [10.5, 50.0, 90.5]
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[10.5, 50.0, 90.5])
         .await?;
@@ -1896,12 +1666,8 @@ async fn test_fee_history_fractional_percentiles() -> anyhow::Result<()> {
 /// TC22: Percentile boundary values 0 and 100
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_percentile_boundaries() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
-    rollup.pause_preferred_batches().await;
+    let (_rollup, client) = setup_fee_history_test(3).await;
 
-    // Test boundary percentiles [0, 50, 100]
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[0.0, 50.0, 100.0])
         .await?;
@@ -1914,7 +1680,6 @@ async fn test_fee_history_percentile_boundaries() -> anyhow::Result<()> {
             3,
             "Block {i} reward should have 3 percentile values"
         );
-        // 0th percentile should be <= 100th percentile (monotonic)
         assert!(
             row[0] <= row[2],
             "Block {i}: 0th percentile {} should be <= 100th percentile {}",
@@ -1933,10 +1698,8 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    // Wait for initial blocks
     rollup.wait_for_next_blocks(2).await;
 
-    // Deploy contract
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
@@ -1945,7 +1708,6 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     let block_before = client.get_block_number().await?;
 
     // Burn a lot of gas with keccak256 loops
-    // Use a high iteration count to consume significant gas
     let tx_hash = simple_storage.alloy_burn_gas(contract_address, 10000).await;
     simple_storage.wait_for_finalized_receipt(tx_hash).await;
 
@@ -1953,35 +1715,27 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
 
     let block_after = client.get_block_number().await?;
 
-    // Query fee history for the block containing the heavy tx
     let fee_history = client
         .get_fee_history(
-            (block_after - block_before + 1) as u64,
+            block_after - block_before + 1,
             BlockNumberOrTag::Finalized,
             &[],
         )
         .await?;
 
-    // Find the highest gas_used_ratio
     let max_ratio = fee_history
         .gas_used_ratio
         .iter()
         .cloned()
         .fold(0.0_f64, f64::max);
 
-    // The heavy tx should produce a non-trivial gas ratio
     assert!(
         max_ratio > 0.0,
         "Heavy gas tx should produce non-zero gas_used_ratio, got {max_ratio}",
     );
 
     // Critical invariant: ratio should never exceed 1.0
-    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
-        assert!(
-            *ratio <= 1.0,
-            "Block {i} gas_used_ratio {ratio} exceeds 1.0",
-        );
-    }
+    assert_gas_ratios_valid(&fee_history.gas_used_ratio);
 
     Ok(())
 }
