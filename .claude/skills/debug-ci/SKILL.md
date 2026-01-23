@@ -7,6 +7,10 @@ description: Debug failed CI tests by fetching workflow logs from GitHub Actions
 
 Debug failed CI tests by fetching workflow logs and analyzing failures.
 
+## Prerequisites
+
+- `gh` CLI installed and authenticated (`gh auth login`)
+
 ## Instructions
 
 ### Step 1: Identify Current PR
@@ -40,7 +44,7 @@ Create directory and download all job logs, stripping ANSI color codes:
 mkdir -p ci-logs/pr-<PR_NUMBER>/
 # or: mkdir -p ci-logs/branch-<BRANCH_NAME>/
 
-gh run view --job <job-id> --log | sed 's/\x1b\[[0-9;]*m//g' > ci-logs/pr-<PR_NUMBER>/<job_name>_<job_id>.log
+gh run view --job <job-id> --log | perl -pe 's/\e\[[0-9;]*m//g' > ci-logs/pr-<PR_NUMBER>/<job_name>_<job_id>.log
 ```
 
 Sanitize job names for filenames (replace spaces/special chars with underscores).
