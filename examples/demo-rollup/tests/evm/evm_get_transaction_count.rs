@@ -535,3 +535,236 @@ async fn eth_get_transaction_count_sealed_receipts_nonce_delta() -> anyhow::Resu
 
     Ok(())
 }
+
+// ===========================================================================
+// DIVERGENCE TESTS - Verify different selectors return DIFFERENT values
+// ===========================================================================
+
+/// Verify "earliest" returns genesis nonce, which MUST DIFFER from "latest" after transactions.
+/// This catches bugs where "earliest" incorrectly returns current state.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_earliest_diverges_from_latest() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Send a transaction so sender has nonce > 0
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x4321)).await;
+    client.wait_for_receipt(tx_hash).await;
+
+    let earliest_nonce = nonce_at_tag(&client, address, "earliest").await;
+    let latest_nonce = nonce_at_tag(&client, address, "latest").await;
+
+    // The sender started with nonce 0 at genesis
+    assert_eq!(
+        earliest_nonce, 0,
+        "Sender's nonce at 'earliest' (genesis) should be 0"
+    );
+
+    // After transaction, latest should be > 0
+    assert!(
+        latest_nonce > 0,
+        "Sender's nonce at 'latest' should be > 0 after transaction"
+    );
+
+    // KEY: earliest and latest MUST be different
+    assert_ne!(
+        earliest_nonce, latest_nonce,
+        "BUG: 'earliest' and 'latest' return same value - earliest should be genesis state"
+    );
+
+    Ok(())
+}
+
+/// Verify historical block query returns state AT that block, not current state.
+/// This catches bugs where historical queries return current/latest state.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_historical_block_diverges_from_current() -> anyhow::Result<()> {
+    let (rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Record state at block H0
+    let h0_number = client.block_number().await;
+    let nonce_at_h0_before = nonce_at_number(&client, address, h0_number).await;
+
+    // Send transaction and wait for finalization in a new block
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x5432)).await;
+    client.wait_for_finalized_receipt(tx_hash).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let h1_number = client.block_number().await;
+    assert!(h1_number > h0_number, "New block should be produced");
+
+    // Query nonce at old block H0 - should still be the old value
+    let nonce_at_h0_after = nonce_at_number(&client, address, h0_number).await;
+
+    // Query nonce at new block H1 - should be incremented
+    let nonce_at_h1 = nonce_at_number(&client, address, h1_number).await;
+
+    assert_eq!(
+        nonce_at_h0_after, nonce_at_h0_before,
+        "Nonce at historical block H0 should not change"
+    );
+
+    assert_eq!(
+        nonce_at_h1,
+        nonce_at_h0_before + 1,
+        "Nonce at H1 should be H0 nonce + 1"
+    );
+
+    // KEY: Historical and current MUST be different
+    assert_ne!(
+        nonce_at_h0_after, nonce_at_h1,
+        "BUG: nonce(H0) == nonce(H1) - historical query returns current state"
+    );
+
+    Ok(())
+}
+
+/// Verify block hash queries return correct historical values that DIFFER across blocks.
+/// This catches bugs where block hash queries return current state.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_block_hash_returns_correct_historical() -> anyhow::Result<()> {
+    let (rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Get block H0 info
+    let h0_number = client.block_number().await;
+    let h0_block = client
+        .eth_get_block_by_number(Some(format!("0x{:x}", h0_number)))
+        .await;
+    let h0_hash = h0_block.header.hash;
+    let nonce_at_h0 = nonce_at_hash(&client, address, h0_hash, true).await;
+
+    // Send transaction and finalize
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x6543)).await;
+    client.wait_for_finalized_receipt(tx_hash).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    // Get block H1 info
+    let h1_number = client.block_number().await;
+    assert!(h1_number > h0_number, "New block should be produced");
+    let h1_block = client
+        .eth_get_block_by_number(Some(format!("0x{:x}", h1_number)))
+        .await;
+    let h1_hash = h1_block.header.hash;
+
+    // Query by both hashes
+    let nonce_by_h0_hash = nonce_at_hash(&client, address, h0_hash, true).await;
+    let nonce_by_h1_hash = nonce_at_hash(&client, address, h1_hash, true).await;
+
+    assert_eq!(
+        nonce_by_h0_hash, nonce_at_h0,
+        "Nonce by H0 hash should match original H0 nonce"
+    );
+
+    assert_eq!(
+        nonce_by_h1_hash,
+        nonce_at_h0 + 1,
+        "Nonce by H1 hash should be H0 nonce + 1"
+    );
+
+    // KEY: Hash queries for different blocks MUST return different values
+    assert_ne!(
+        nonce_by_h0_hash, nonce_by_h1_hash,
+        "BUG: nonce(hash_H0) == nonce(hash_H1) - block hash query returns current state"
+    );
+
+    Ok(())
+}
+
+/// Verify "safe" and "finalized" exclude pending transactions (unlike "pending"/"latest").
+/// This catches bugs where safe/finalized incorrectly include pending state.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_safe_finalized_exclude_pending() -> anyhow::Result<()> {
+    let (rollup, client) = setup_rollup().await;
+    rollup.pause_preferred_batches().await;
+
+    let address = client.address();
+
+    // Record sealed state
+    let sealed_block = client.block_number().await;
+    let nonce_at_sealed_block = nonce_at_number(&client, address, sealed_block).await;
+
+    // Send pending transaction (batches paused, won't be sealed)
+    let _tx_hash = client.send_eth(Address::ZERO, U256::from(0x7654)).await;
+
+    // Verify block number hasn't changed
+    let current_block = client.block_number().await;
+    assert_eq!(
+        current_block, sealed_block,
+        "Block should not advance while batches paused"
+    );
+
+    // Query all selectors
+    let nonce_safe = nonce_at_tag(&client, address, "safe").await;
+    let nonce_finalized = nonce_at_tag(&client, address, "finalized").await;
+    let nonce_pending = nonce_at_tag(&client, address, "pending").await;
+
+    // safe and finalized should return sealed state (before pending tx)
+    assert_eq!(
+        nonce_safe, nonce_at_sealed_block,
+        "'safe' should return sealed block nonce"
+    );
+    assert_eq!(
+        nonce_finalized, nonce_at_sealed_block,
+        "'finalized' should return sealed block nonce"
+    );
+
+    // pending should include the pending tx
+    assert_eq!(
+        nonce_pending,
+        nonce_at_sealed_block + 1,
+        "'pending' should include pending transaction"
+    );
+
+    // KEY: safe/finalized MUST differ from pending when there are pending txs
+    assert_ne!(
+        nonce_safe, nonce_pending,
+        "BUG: 'safe' == 'pending' - safe includes pending transactions"
+    );
+    assert_ne!(
+        nonce_finalized, nonce_pending,
+        "BUG: 'finalized' == 'pending' - finalized includes pending transactions"
+    );
+
+    Ok(())
+}
+
+/// Verify querying at block 0 (genesis) returns nonce 0 for sender.
+/// This catches bugs where genesis block query is broken.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_genesis_block_nonce() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Send a transaction so current nonce > 0
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x8765)).await;
+    client.wait_for_receipt(tx_hash).await;
+
+    // Query at block 0 (genesis)
+    let nonce_at_genesis = nonce_at_number(&client, address, 0).await;
+
+    // Query at latest
+    let nonce_at_latest = nonce_at_tag(&client, address, "latest").await;
+
+    // At genesis, sender should have nonce 0
+    assert_eq!(nonce_at_genesis, 0, "Nonce at genesis block should be 0");
+
+    // Current should be > 0
+    assert!(
+        nonce_at_latest > 0,
+        "Latest nonce should be > 0 after transaction"
+    );
+
+    // KEY: genesis and latest MUST differ
+    assert_ne!(
+        nonce_at_genesis, nonce_at_latest,
+        "BUG: nonce(block_0) == nonce(latest) - genesis query returns current state"
+    );
+
+    Ok(())
+}

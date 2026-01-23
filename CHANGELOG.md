@@ -19,6 +19,7 @@
 
 # 2026-01-24
 - #2397: ***Breaking Change*** adds `Sync` bound on module event types. Major rework of "pending" block handling. Now we treat each new EVM transaction as creating a new head block (rather than a pending block) and then getting reorged when the next tx is added. 
+- #2395: Adds tests for `eth_getTransactionCount`
 
 # 2026-01-20
 - #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
