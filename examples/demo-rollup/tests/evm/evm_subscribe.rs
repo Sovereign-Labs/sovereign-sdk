@@ -132,8 +132,10 @@ async fn evm_test_log_subscription_with_block_range_returns_an_error() -> anyhow
     let RpcError::ErrorResp(payload) = err else {
         panic!("Expected subscription error")
     };
-    let data = payload.data.unwrap();
-    assert_eq!(data.get(), "\"Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor\"");
+    assert_eq!(
+        payload.message.as_ref(),
+        "Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor"
+    );
 
     Ok(())
 }

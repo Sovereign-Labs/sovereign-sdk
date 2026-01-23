@@ -1,11 +1,10 @@
 use super::cursor::Cursor;
-use crate::handlers::ETH_RPC_ERROR;
-use crate::to_jsonrpsee_error_object;
 use crate::EthereumAddress;
 use crate::EthereumAuthenticator;
 use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
+use crate::{rpc_invalid_params, rpc_limit_exceeded, rpc_resource_not_found};
 use alloy_consensus::BlockHeader;
 use alloy_consensus::TxReceipt;
 use alloy_eips::eip1898::ParseBlockNumberError;
@@ -21,6 +20,7 @@ use sov_evm::{Evm, MaybeSealedBlock, Receipt};
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::rpc_error_with_code;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 use std::marker::PhantomData;
@@ -60,7 +60,19 @@ type Result<T> = std::result::Result<T, Error>;
 
 impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> ErrorObjectOwned {
-        to_jsonrpsee_error_object(err.to_string(), ETH_RPC_ERROR)
+        match err {
+            Error::ReceiptPruned(_) | Error::BlockPruned(_) => {
+                rpc_error_with_code(4444, err.to_string())
+            }
+            Error::BlockHashNotFound(_)
+            | Error::InvalidCursorBlockNumber { .. }
+            | Error::InvalidCursorTxIdx { .. }
+            | Error::InvalidCursorLogIdx { .. } => rpc_resource_not_found(err.to_string()),
+            Error::TooManyLogsInBlock(_, _) => rpc_limit_exceeded(err.to_string()),
+            Error::PendingBlock | Error::InvalidBlock(_) | Error::ParseBlockNumber(_) => {
+                rpc_invalid_params(err.to_string())
+            }
+        }
     }
 }
 
