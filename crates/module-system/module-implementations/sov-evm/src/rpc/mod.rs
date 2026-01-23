@@ -285,7 +285,9 @@ where
 
         let block_env = self.block_env(state).unwrap_infallible();
         if block_env.number == block_number {
-            let pending = self.pending_block(Some(block_env), state);
+            let Some(pending) = self.pending_block(Some(block_env), state) else {
+                return Some(MaybeSealedBlock::Sealed(self.latest_block(state)));
+            };
             return Some(MaybeSealedBlock::PartialSynthetic(pending));
         }
 
@@ -356,9 +358,12 @@ where
                 let pending_or_block = self.block_tag_to_pending_or_block(tag, state);
                 match pending_or_block {
                     PendingOrBlock::Number(number) => self.get_maybe_sealed_block(number, state),
-                    PendingOrBlock::Pending => {
-                        Some(MaybeSealedBlock::PartialSynthetic(self.pending_block(None, state)))
-                    }
+                    PendingOrBlock::Pending => match self.pending_block(None, state) {
+                        Some(pending) => Some(MaybeSealedBlock::PartialSynthetic(pending)),
+                        None => {
+                            return Ok(Some(MaybeSealedBlock::Sealed(self.latest_block(state))))
+                        }
+                    },
                 }
             }
             BlockId::Hash(hash) => self
@@ -379,16 +384,25 @@ where
     }
 
     /// Retrieves the pending block. We maintain the invariant that the pending block always has number
-    /// latest_sealed_block.number + 1. (Both are updated during the finalize_hook, so they're atomic).
+    /// latest_sealed_block.number + 1. (Both are updated during the finalize_hook, so they're atomic). Returns None if there are no txs in the pending block.
+    /// In that case, we should use the latest sealed block instead.
     ///
     /// Note that values in the block_env (including the block number there!) are updated during the begin_rollup_block_hook, so the values here may be stale
     /// if this function is called while no rollup block is in progress. In that case, the number of transactions will be zero.
-    // TODO: Have this function return None if no block is pending!
     pub fn pending_block(
         &self,
         block_env: Option<BlockEnv>,
         state: &mut ApiStateAccessor<S>,
-    ) -> SyntheticBlockWithoutRootsAndBloom {
+    ) -> Option<SyntheticBlockWithoutRootsAndBloom> {
+        self.maybe_pending_block(false, block_env, state)
+    }
+
+    fn maybe_pending_block(
+        &self,
+        allow_empty: bool,
+        block_env: Option<BlockEnv>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<SyntheticBlockWithoutRootsAndBloom> {
         let block_numbers = self.block_numbers(state);
 
         let head_block = self
@@ -402,6 +416,9 @@ where
         assert_eq!(&head_block.header.number, block_numbers.end());
 
         let pending_transactions_len = self.pending_transactions.len(state).unwrap_infallible();
+        if pending_transactions_len == 0 && !allow_empty {
+            return None;
+        }
 
         let start = head_block.transactions.end;
         let end = start + pending_transactions_len;
@@ -437,7 +454,16 @@ where
             requests_hash: None,
         };
 
-        SyntheticBlockWithoutRootsAndBloom::new(header, start..end)
+        Some(SyntheticBlockWithoutRootsAndBloom::new(header, start..end))
+    }
+
+    /// Returns the header of the newest synthetic block, even if it's empty.
+    pub fn get_newest_synthetic_header(
+        &self,
+        state: &mut ApiStateAccessor<S>,
+    ) -> SyntheticBlockWithoutRootsAndBloom {
+        self.maybe_pending_block(true, None, state)
+            .expect("Maybe pending block should never return None if allow_empty is true")
     }
 
     fn resolve_state_for_block_id<'a>(

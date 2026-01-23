@@ -163,7 +163,7 @@ where
     /// Stream new logs matching the provided filter to the subscriber.
     pub async fn logs(&self, filter: Box<Filter>) -> Result<(), Error> {
         let mut state = self.ethereum.api_state_accessor();
-        let pending_block = self.evm.pending_block(None, &mut state);
+        let pending_block = self.evm.get_newest_synthetic_header(&mut state);
         let mut tx_watermark = Watermark::new(..pending_block.transactions.end);
 
         // Fetch the initial block. If it's stale, it will be replaced below.
@@ -181,7 +181,7 @@ where
                     }
 
                     let mut state = self.ethereum.api_state_accessor();
-                    let pending_block = self.evm.pending_block(None, &mut state);
+                    let pending_block = self.evm.get_newest_synthetic_header(&mut state);
 
                     for tx_idx in tx_watermark.advance(..pending_block.transactions.end) {
                         let (receipt, time) = self.get_receipt(tx_idx, &mut state)?;
@@ -225,7 +225,7 @@ where
 
         let mut state = self.ethereum.api_state_accessor();
         let mut watermark = SyntheticBlockWatermark::from_synthetic_block(
-            &self.evm.pending_block(None, &mut state),
+            &self.evm.get_newest_synthetic_header(&mut state),
         );
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
@@ -242,7 +242,7 @@ where
                     }
 
                     let mut state = self.ethereum.api_state_accessor();
-                    let pending_block = self.evm.pending_block(None, &mut state);
+                    let pending_block = self.evm.get_newest_synthetic_header(&mut state);
                     let mut sent = false;
 
                     // Send all of the notifications for new real blocks.
@@ -283,7 +283,7 @@ where
                     // If we've sent a notification too recently, ignore the wakeup. Either we've sent all notifications already or - we'll get woken up again in no more than 200ms
                     if last_send_time.elapsed() >= Duration::from_millis(SYNTHETIC_NEW_HEADS_MAX_FREQUENCY_MS) {
                         let mut state = self.ethereum.api_state_accessor();
-                        let pending_block = self.evm.pending_block(None, &mut state);
+                        let pending_block = self.evm.get_newest_synthetic_header(&mut state);
                         // Only send the notification if it's for a synthetic block. Real blocks are guaranteed to be handeld by the main state_change watcher.
                         if let SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock = watermark.peek(&pending_block) {
                             watermark.advance(&pending_block);
