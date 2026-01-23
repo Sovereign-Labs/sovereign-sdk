@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::Duration;
 
 use axum::extract::ws::WebSocket;
 use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
@@ -31,6 +32,11 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
+
+/// ping interval in seconds for websocket keepalive
+const WS_PING_INTERVAL_SECS: u64 = 30;
+/// pong timeout in seconds - disconnect if no pong received within this time
+const WS_PONG_TIMEOUT_SECS: u64 = 30;
 
 /// [`StartFrom`] is used as a query parameter for the txs subscription
 #[derive(
@@ -149,6 +155,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         Ok(ws.on_upgrade(move |mut socket| async move {
             let mut shutdown_receiver = state.shutdown_receiver.clone();
             let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
+
+            // track last pong time for timeout detection using monotonic clock
+            let mut last_pong = tokio::time::Instant::now();
+            let mut ping_interval = tokio::time::interval(Duration::from_secs(WS_PING_INTERVAL_SECS));
+            ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
             loop {
                 tokio::select! {
                     // The client sent us a message
@@ -203,6 +215,17 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                     }
                                 }
                             }
+                            // handle ping/pong for connection keepalive
+                            Some(Ok(ws::Message::Ping(ping))) => {
+                                if let Err(err) = socket.send(ws::Message::Pong(ping)).await {
+                                    tracing::warn!(?err, ip_addr=%ip_addr, "Error sending pong response");
+                                    break;
+                                }
+                            }
+                            Some(Ok(ws::Message::Pong(_))) => {
+                                // pong received, update last pong time
+                                last_pong = tokio::time::Instant::now();
+                            }
                             // If the client disconnected
                             None => break,
                             Some(Err(error)) => {
@@ -237,6 +260,19 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                 }
                             }
                             None => break,
+                        }
+                    }
+                    // send periodic ping and check for pong timeout
+                    _ = ping_interval.tick() => {
+                        let now = tokio::time::Instant::now();
+                        if now.duration_since(last_pong) > Duration::from_secs(WS_PONG_TIMEOUT_SECS) {
+                            tracing::warn!(ip_addr=%ip_addr, "No pong received within {}s, disconnecting client", WS_PONG_TIMEOUT_SECS);
+                            break;
+                        }
+                        // send ping to client
+                        if let Err(err) = socket.send(ws::Message::Ping(vec![])).await {
+                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ping to client");
+                            break;
                         }
                     }
                     _ = shutdown_receiver.changed() => break,
