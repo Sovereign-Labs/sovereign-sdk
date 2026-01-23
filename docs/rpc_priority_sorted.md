@@ -29,7 +29,7 @@
 1. `eth_getBlockByNumber` + `eth_getBlockByHash` - authoritative latest/pending semantics; tx hashes vs objects; EIP-1898 blockHash.
 2. `eth_blockNumber` - head monotonicity and alignment with `eth_getBlockByNumber("latest")`.
 3. `eth_getTransactionCount` - pending vs latest nonce; EIP-1898 blockHash.
-4. `eth_getLogs` - range/tag semantics; `blockHash` filter; consistency with receipts.
+4. ✅ `eth_getLogs` - range/tag semantics; `blockHash` filter; consistency with receipts.
 5. `eth_getTransactionReceipt` - null while pending; stable once sealed.
 6. `eth_getTransactionByHash` - pending vs mined fields (`blockNumber`, `blockHash`).
 7. `eth_call` - block-tagged state reads; no pending bleed into latest.
@@ -45,7 +45,7 @@
 1. `eth_chainId`
 2. `net_version`
 3. `eth_gasPrice`
-4. `eth_maxPriorityFeePerGas`
+4. ✅ `eth_maxPriorityFeePerGas`
 5. `eth_feeHistory`
 6. `eth_getCode`
 7. `eth_getStorageAt`

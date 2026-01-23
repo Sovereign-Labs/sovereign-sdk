@@ -24,45 +24,99 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
-    let pending_block = latest_block_context(&client).await;
+    let pending_block_first = latest_block_context(&client).await;
     let pending_filter = Filter::new()
         .from_block(BlockNumberOrTag::Pending)
         .to_block(BlockNumberOrTag::Pending);
     let logs_after_first = client.get_logs(&pending_filter).await;
-    assert_eq!(logs_after_first.len(), 2);
 
-    for (idx, log) in logs_after_first.iter().enumerate() {
-        let expected = ExpectedLogMeta {
-            address: contract_address,
-            tx_hash: first_tx,
-            tx_index: 0,
-            log_index: idx as u64,
-            block_hash: pending_block.hash,
-            block_number: pending_block.number,
-            block_timestamp: Some(pending_block.timestamp),
-        };
-        assert_simple_log(
-            log,
-            &expected,
-            client.address(),
-            U256::ZERO,
-            U256::from(idx as u64),
-            U256::ZERO,
-        );
-    }
+    let expected_first = vec![
+        ExpectedSimpleLog {
+            meta: ExpectedLogMeta {
+                address: contract_address,
+                tx_hash: first_tx,
+                tx_index: 0,
+                log_index: 0,
+                block_hash: pending_block_first.hash,
+                block_number: pending_block_first.number,
+                block_timestamp: Some(pending_block_first.timestamp),
+            },
+            topic1: U256::ZERO,
+            topic2: U256::ZERO,
+            data: U256::ZERO,
+        },
+        ExpectedSimpleLog {
+            meta: ExpectedLogMeta {
+                address: contract_address,
+                tx_hash: first_tx,
+                tx_index: 0,
+                log_index: 1,
+                block_hash: pending_block_first.hash,
+                block_number: pending_block_first.number,
+                block_timestamp: Some(pending_block_first.timestamp),
+            },
+            topic1: U256::ZERO,
+            topic2: U256::from(1),
+            data: U256::ZERO,
+        },
+    ];
+    assert_expected_simple_logs(&logs_after_first, &expected_first, client.address());
 
-    let _second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
-    let _third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
+    let second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
+    let pending_block_second = latest_block_context(&client).await;
+    let third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
+    let pending_block_third = latest_block_context(&client).await;
 
     let logs_after_all = client.get_logs(&pending_filter).await;
-    let hash_filter = Filter::new().at_block_hash(pending_block.hash);
-    let logs_by_hash = client.get_logs(&hash_filter).await;
+    let expected_second = vec![ExpectedSimpleLog {
+        meta: ExpectedLogMeta {
+            address: contract_address,
+            tx_hash: second_tx,
+            tx_index: 0,
+            log_index: 0,
+            block_hash: pending_block_second.hash,
+            block_number: pending_block_second.number,
+            block_timestamp: Some(pending_block_second.timestamp),
+        },
+        topic1: U256::from(1),
+        topic2: U256::ZERO,
+        data: U256::ZERO,
+    }];
+    let expected_third = vec![ExpectedSimpleLog {
+        meta: ExpectedLogMeta {
+            address: contract_address,
+            tx_hash: third_tx,
+            tx_index: 0,
+            log_index: 0,
+            block_hash: pending_block_third.hash,
+            block_number: pending_block_third.number,
+            block_timestamp: Some(pending_block_third.timestamp),
+        },
+        topic1: U256::from(2),
+        topic2: U256::ZERO,
+        data: U256::ZERO,
+    }];
 
-    assert!(!logs_by_hash.is_empty());
-    assert_eq!(logs_by_hash, logs_after_first);
-    assert!(logs_after_all.starts_with(&logs_by_hash));
+    let expected_all: Vec<ExpectedSimpleLog> = expected_first
+        .iter()
+        .chain(expected_second.iter())
+        .chain(expected_third.iter())
+        .cloned()
+        .collect();
+    assert_expected_simple_logs(&logs_after_all, &expected_all, client.address());
 
-    // TODO: extend checks to include validating data from second and third tx
+    let logs_by_hash_first = client
+        .get_logs(&Filter::new().at_block_hash(pending_block_first.hash))
+        .await;
+    let logs_by_hash_second = client
+        .get_logs(&Filter::new().at_block_hash(pending_block_second.hash))
+        .await;
+    let logs_by_hash_third = client
+        .get_logs(&Filter::new().at_block_hash(pending_block_third.hash))
+        .await;
+    assert_expected_simple_logs(&logs_by_hash_first, &expected_first, client.address());
+    assert_expected_simple_logs(&logs_by_hash_second, &expected_second, client.address());
+    assert_expected_simple_logs(&logs_by_hash_third, &expected_third, client.address());
 
     rollup.resume_preferred_batches().await;
 
@@ -243,6 +297,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     assert_expected_simple_logs(&default_logs, &expected, sender);
     assert_eq!(default_logs, latest_logs);
 
+    // TODO: What is the point of doing that at the end of the test?
     rollup_and_client
         .test_rollup
         .resume_preferred_batches()
@@ -271,6 +326,7 @@ async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert!(logs.is_empty());
 
+    // TODO: What is the point of doing that at the end of the test?
     rollup_and_client
         .test_rollup
         .resume_preferred_batches()
@@ -1106,6 +1162,7 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
     };
     assert_data_only_log(&data_logs[0], &expected, U256::from(1), U256::from(2));
 
+    // TODO: What is the point of doing that at the end of the test?
     rollup_and_client
         .test_rollup
         .resume_preferred_batches()

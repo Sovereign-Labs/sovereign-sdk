@@ -4,10 +4,15 @@
 //! - TC11 (percentile < 0): Skipped - alloy client validates percentiles client-side,
 //!   negative values would require raw JSON-RPC to test server-side validation.
 
-use alloy_provider::Provider;
-use alloy_rpc_types_eth::BlockNumberOrTag;
+use alloy_primitives::{Address, B256};
+use alloy_provider::{DynProvider, Provider};
+use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactions, TransactionReceipt};
 use serde::Deserialize;
 use std::path::PathBuf;
+
+use sov_cli::NodeClient;
+use sov_eth_client::SimpleStorageClient;
+use sov_modules_api::{GasPrice, GasUnit};
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
@@ -30,6 +35,24 @@ struct ChainSpecFixture {
 struct EvmGenesisConfigFixture {
     initial_base_fee: u64,
     chain_spec: ChainSpecFixture,
+}
+
+const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
+const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
+
+#[derive(Debug, Deserialize)]
+struct MapResponse<T> {
+    #[allow(dead_code)]
+    key: u64,
+    value: T,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChainStateGasInfo {
+    #[allow(dead_code)]
+    gas_limit: GasUnit<2>,
+    gas_used: GasUnit<2>,
+    base_fee_per_gas: GasPrice<2>,
 }
 
 fn load_evm_genesis_config() -> EvmGenesisConfigFixture {
@@ -66,11 +89,7 @@ fn compute_next_base_fee(
         return base_fee;
     }
 
-    let gas_used_delta = if gas_used > gas_target {
-        gas_used - gas_target
-    } else {
-        gas_target - gas_used
-    };
+    let gas_used_delta = gas_used.abs_diff(gas_target);
 
     let mut base_fee_delta = base_fee
         .saturating_mul(gas_used_delta as u128)
@@ -85,29 +104,111 @@ fn compute_next_base_fee(
         }
         base_fee.saturating_add(base_fee_delta)
     } else {
-        base_fee.saturating_sub(base_fee_delta)
+        let updated = base_fee.saturating_sub(base_fee_delta);
+        if updated < 1 {
+            1
+        } else {
+            updated
+        }
     }
 }
 
-fn compute_base_fee_for_block(
-    initial_base_fee: u128,
+fn gas_unit_dim0(gas: &GasUnit<2>) -> u64 {
+    gas.as_ref()[0]
+}
+
+fn gas_price_dim0(price: &GasPrice<2>) -> u128 {
+    price.as_ref()[0].0
+}
+
+async fn fetch_chain_state_gas_info(
+    client: &NodeClient,
+    height: u64,
+) -> anyhow::Result<ChainStateGasInfo> {
+    let url = format!("/modules/chain-state/state/gas-info/items/{height}");
+    let response: MapResponse<ChainStateGasInfo> = client.query_rest_endpoint(&url).await?;
+    Ok(response.value)
+}
+
+async fn block_tx_hashes(client: &DynProvider, block_number: u64) -> anyhow::Result<Vec<B256>> {
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(block_number))
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("block {block_number} should exist"))?;
+    let hashes = match block.transactions {
+        BlockTransactions::Hashes(hashes) => hashes,
+        BlockTransactions::Full(txs) => txs.into_iter().map(|tx| *tx.inner.hash()).collect(),
+        BlockTransactions::Uncle => Vec::new(),
+    };
+    Ok(hashes)
+}
+
+async fn total_gas_used_from_receipts(
+    client: &DynProvider,
     block_number: u64,
-    gas_limit: u64,
-    max_change_denominator: u64,
-    elasticity_multiplier: u64,
-) -> u128 {
-    // Assumes no EVM transactions in prior blocks.
-    let mut base_fee = initial_base_fee;
-    for _ in 0..block_number {
+) -> anyhow::Result<u64> {
+    let tx_hashes = block_tx_hashes(client, block_number).await?;
+    let mut total = 0u64;
+    for tx_hash in tx_hashes {
+        let receipt = client
+            .get_transaction_receipt(tx_hash)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("receipt missing for tx {tx_hash:?}"))?;
+        total = total.saturating_add(receipt.gas_used);
+    }
+    Ok(total)
+}
+
+fn base_fee_from_receipt(receipt: &TransactionReceipt, priority_fee_per_gas: u128) -> u128 {
+    assert!(
+        receipt.effective_gas_price >= priority_fee_per_gas,
+        "effective_gas_price {} < priority_fee_per_gas {}",
+        receipt.effective_gas_price,
+        priority_fee_per_gas
+    );
+    receipt.effective_gas_price - priority_fee_per_gas
+}
+
+async fn base_fee_series_from_genesis(
+    rpc_client: &DynProvider,
+    end_block: u64,
+    genesis: &EvmGenesisConfigFixture,
+) -> anyhow::Result<Vec<u128>> {
+    let mut base_fees = Vec::with_capacity((end_block + 1) as usize);
+    let mut base_fee = genesis.initial_base_fee as u128;
+    let params = &genesis.chain_spec.base_fee_params;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    assert!(gas_limit > 0, "block gas limit should be non-zero");
+
+    base_fees.push(base_fee);
+    for block_number in 0..end_block {
+        let receipts_gas_used = total_gas_used_from_receipts(rpc_client, block_number).await?;
+
         base_fee = compute_next_base_fee(
             base_fee,
-            0,
+            receipts_gas_used,
             gas_limit,
-            max_change_denominator,
-            elasticity_multiplier,
+            params.max_change_denominator,
+            params.elasticity_multiplier,
         );
+        base_fees.push(base_fee);
     }
-    base_fee
+    Ok(base_fees)
+}
+
+async fn send_high_fee_set_value(
+    client: &SimpleStorageClient,
+    contract_address: Address,
+    value: u32,
+) -> anyhow::Result<TransactionReceipt> {
+    let mut tx = client.make_tx(Some(contract_address), Some(client.contract.set(value)));
+    tx = tx
+        .max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
+        .max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
+    client
+        .send_tx_and_wait_finalized(tx)
+        .await
+        .map_err(|err| anyhow::anyhow!(err.to_string()))
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -196,6 +297,36 @@ async fn test_eth_fee_history_specific_block() -> anyhow::Result<()> {
     assert_eq!(fee_history.base_fee_per_gas.len(), 4);
     assert_eq!(fee_history.gas_used_ratio.len(), 3);
 
+    let oldest = fee_history.oldest_block;
+    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+
+    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
+        let block_number = oldest + i as u64;
+        let receipts_gas_used = total_gas_used_from_receipts(&client, block_number).await?;
+        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+        let delta = (ratio - expected_ratio).abs();
+        assert!(
+            delta < 1e-12,
+            "gas_used_ratio mismatch for block {block_number}: expected {expected_ratio}, got {ratio}"
+        );
+
+        let expected_base_fee = base_fees[block_number as usize];
+        assert_eq!(
+            fee_history.base_fee_per_gas[i], expected_base_fee,
+            "baseFeePerGas mismatch for block {block_number}"
+        );
+    }
+
+    let predicted_base_fee = base_fees[end_block as usize];
+    assert_eq!(
+        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
+        predicted_base_fee,
+        "predicted next base fee mismatch for block {end_block}"
+    );
+
     Ok(())
 }
 
@@ -203,15 +334,69 @@ async fn test_eth_fee_history_specific_block() -> anyhow::Result<()> {
 async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
+    rollup.wait_for_next_blocks(2).await;
+
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&simple_storage)
+        .await
+        .expect("deploy should succeed");
+    rollup.wait_for_next_blocks(1).await;
+    let receipt = send_high_fee_set_value(&simple_storage, contract_address, 10).await?;
     rollup.pause_preferred_batches().await;
+    let newest_block = receipt
+        .block_number
+        .expect("receipt should include block number");
 
     let fee_history = client
-        .get_fee_history(2000, BlockNumberOrTag::Latest, &[])
+        .get_fee_history(2000, BlockNumberOrTag::Number(newest_block), &[])
         .await?;
 
     assert!(!fee_history.base_fee_per_gas.is_empty());
     assert!(fee_history.base_fee_per_gas.len() <= 1025);
+
+    let base_fee = base_fee_from_receipt(&receipt, HIGH_PRIORITY_FEE_PER_GAS);
+    assert!(base_fee > 0, "baseFeePerGas should be non-zero");
+
+    let genesis = load_evm_genesis_config();
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    let gas_info = fetch_chain_state_gas_info(&rollup.client, newest_block).await?;
+    let chain_base_fee = gas_price_dim0(&gas_info.base_fee_per_gas);
+    assert_eq!(
+        chain_base_fee, base_fee,
+        "chain-state base fee should match receipt-derived base fee"
+    );
+    let receipts_gas_used = total_gas_used_from_receipts(&client, newest_block).await?;
+    assert!(
+        receipts_gas_used >= receipt.gas_used,
+        "block gas_used should cover receipt gas_used"
+    );
+    let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+
+    let idx = (newest_block - fee_history.oldest_block) as usize;
+    assert_eq!(
+        fee_history.base_fee_per_gas[idx], base_fee,
+        "baseFeePerGas should match receipt-derived base fee"
+    );
+    let delta = (fee_history.gas_used_ratio[idx] - expected_ratio).abs();
+    assert!(
+        delta < 1e-12,
+        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
+        fee_history.gas_used_ratio[idx]
+    );
+
+    let params = &genesis.chain_spec.base_fee_params;
+    let expected_next_base_fee = compute_next_base_fee(
+        base_fee,
+        receipts_gas_used,
+        gas_limit,
+        params.max_change_denominator,
+        params.elasticity_multiplier,
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[idx + 1],
+        expected_next_base_fee,
+        "predicted next base fee should follow EIP-1559"
+    );
 
     Ok(())
 }
@@ -239,6 +424,26 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
         "pending range should start at latest sealed block"
     );
     assert!(fee_history.reward.is_none(), "reward should be omitted");
+
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, latest, &genesis).await?;
+    let expected_base_fee = base_fees[latest as usize];
+    assert!(expected_base_fee > 0, "baseFeePerGas should be non-zero");
+
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
+    let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+
+    assert_eq!(
+        fee_history.base_fee_per_gas[0], expected_base_fee,
+        "baseFeePerGas[0] should match receipt-derived base fee"
+    );
+    let delta = (fee_history.gas_used_ratio[0] - expected_ratio).abs();
+    assert!(
+        delta < 1e-12,
+        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
+        fee_history.gas_used_ratio[0]
+    );
 
     let latest_block = client
         .get_block_by_number(BlockNumberOrTag::Number(latest))
@@ -272,6 +477,20 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
     rollup.wait_for_next_blocks(2).await;
     rollup.pause_preferred_batches().await;
 
+    let latest = client.get_block_number().await?;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, latest, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
+    let params = &genesis.chain_spec.base_fee_params;
+    let expected_pending_base_fee = compute_next_base_fee(
+        base_fees[latest as usize],
+        receipts_gas_used,
+        gas_limit,
+        params.max_change_denominator,
+        params.elasticity_multiplier,
+    );
+
     let pending_block = client
         .get_block_by_number(BlockNumberOrTag::Pending)
         .await?
@@ -286,6 +505,10 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
         .await?;
 
     assert_eq!(fee_history.base_fee_per_gas.len(), 2);
+    assert_eq!(
+        fee_history.base_fee_per_gas[0], expected_pending_base_fee,
+        "feeHistory pending base fee should match receipt-derived next base fee"
+    );
     assert_eq!(
         fee_history.base_fee_per_gas[0], pending_base_fee as u128,
         "feeHistory pending base fee should match pending block header"
@@ -315,6 +538,37 @@ async fn test_fee_history_finalized_tag() -> anyhow::Result<()> {
         fee_history.oldest_block, expected_oldest,
         "finalized range should end at latest sealed block"
     );
+
+    let oldest = fee_history.oldest_block;
+    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+
+    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
+        let block_number = oldest + i as u64;
+        let receipts_gas_used = total_gas_used_from_receipts(&client, block_number).await?;
+        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+        let delta = (*ratio - expected_ratio).abs();
+        assert!(
+            delta < 1e-12,
+            "gas_used_ratio mismatch for block {block_number}: expected {expected_ratio}, got {ratio}"
+        );
+
+        let expected_base_fee = base_fees[block_number as usize];
+        assert_eq!(
+            fee_history.base_fee_per_gas[i], expected_base_fee,
+            "baseFeePerGas mismatch for block {block_number}"
+        );
+    }
+
+    let predicted_base_fee = base_fees[end_block as usize];
+    assert_eq!(
+        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
+        predicted_base_fee,
+        "predicted next base fee mismatch for block {end_block}"
+    );
+
     let latest_block = client
         .get_block_by_number(BlockNumberOrTag::Number(latest))
         .await?
@@ -360,6 +614,37 @@ async fn test_fee_history_safe_tag() -> anyhow::Result<()> {
         fee_history.oldest_block, expected_oldest,
         "safe range should end at latest sealed block"
     );
+
+    let oldest = fee_history.oldest_block;
+    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+
+    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
+        let block_number = oldest + i as u64;
+        let receipts_gas_used = total_gas_used_from_receipts(&client, block_number).await?;
+        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+        let delta = (*ratio - expected_ratio).abs();
+        assert!(
+            delta < 1e-12,
+            "gas_used_ratio mismatch for block {block_number}: expected {expected_ratio}, got {ratio}"
+        );
+
+        let expected_base_fee = base_fees[block_number as usize];
+        assert_eq!(
+            fee_history.base_fee_per_gas[i], expected_base_fee,
+            "baseFeePerGas mismatch for block {block_number}"
+        );
+    }
+
+    let predicted_base_fee = base_fees[end_block as usize];
+    assert_eq!(
+        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
+        predicted_base_fee,
+        "predicted next base fee mismatch for block {end_block}"
+    );
+
     let latest_block = client
         .get_block_by_number(BlockNumberOrTag::Number(latest))
         .await?
@@ -402,6 +687,27 @@ async fn test_fee_history_earliest_tag() -> anyhow::Result<()> {
     // base_fee_per_gas should have at least 1 entry
     assert!(!fee_history.base_fee_per_gas.is_empty());
 
+    let genesis = load_evm_genesis_config();
+    let end_block = fee_history.oldest_block + fee_history.gas_used_ratio.len() as u64;
+    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, 0).await?;
+    let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+    let delta = (fee_history.gas_used_ratio[0] - expected_ratio).abs();
+    assert!(
+        delta < 1e-12,
+        "gas_used_ratio mismatch for block 0: expected {expected_ratio}, got {}",
+        fee_history.gas_used_ratio[0]
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[0], base_fees[0],
+        "baseFeePerGas mismatch for block 0"
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[1], base_fees[1],
+        "predicted next base fee mismatch for block 1"
+    );
+
     Ok(())
 }
 
@@ -442,6 +748,25 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
     );
 
     let latest = client.get_block_number().await?;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, latest, &genesis).await?;
+    let expected_base_fee = base_fees[latest as usize];
+    assert!(expected_base_fee > 0, "baseFeePerGas should be non-zero");
+
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
+    let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+    let delta = (latest_history.gas_used_ratio[0] - expected_ratio).abs();
+    assert!(
+        delta < 1e-12,
+        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
+        latest_history.gas_used_ratio[0]
+    );
+    assert_eq!(
+        latest_history.base_fee_per_gas[0], expected_base_fee,
+        "baseFeePerGas[0] should match receipt-derived base fee"
+    );
+
     let latest_block = client
         .get_block_by_number(BlockNumberOrTag::Number(latest))
         .await?
@@ -693,6 +1018,26 @@ async fn test_fee_history_earliest_values_match_block_header() -> anyhow::Result
     assert_eq!(fee_history.base_fee_per_gas.len(), 2);
     assert_eq!(fee_history.gas_used_ratio.len(), 1);
 
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, 1, &genesis).await?;
+    let gas_limit0 = genesis.chain_spec.block_gas_limit;
+    let receipts_gas_used0 = total_gas_used_from_receipts(&client, 0).await?;
+    let expected_ratio0 = receipts_gas_used0 as f64 / gas_limit0 as f64;
+    let delta0 = (fee_history.gas_used_ratio[0] - expected_ratio0).abs();
+    assert!(
+        delta0 < 1e-12,
+        "genesis gas_used_ratio mismatch: expected {expected_ratio0}, got {}",
+        fee_history.gas_used_ratio[0]
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[0], base_fees[0],
+        "genesis baseFeePerGas should match receipt-derived value"
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[1], base_fees[1],
+        "predicted next base fee should match receipt-derived value"
+    );
+
     let block0 = client
         .get_block_by_number(BlockNumberOrTag::Number(0))
         .await?
@@ -766,8 +1111,27 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
     let oldest_block = fee_history.oldest_block;
     assert_eq!(oldest_block + 2, newest_block);
 
+    let end_block = oldest_block + fee_history.gas_used_ratio.len() as u64;
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, end_block, &genesis).await?;
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+
     for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
         let block_num = oldest_block + i as u64;
+        let receipts_gas_used = total_gas_used_from_receipts(&client, block_num).await?;
+        let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
+        let delta = (*ratio - expected_ratio).abs();
+        assert!(
+            delta < 1e-12,
+            "gas_used_ratio mismatch: expected {expected_ratio}, got {ratio}"
+        );
+
+        let expected_base_fee = base_fees[block_num as usize];
+        assert_eq!(
+            fee_history.base_fee_per_gas[i], expected_base_fee,
+            "baseFeePerGas should match receipt-derived value"
+        );
+
         let block = client
             .get_block_by_number(BlockNumberOrTag::Number(block_num))
             .await?
@@ -792,6 +1156,13 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
         );
     }
 
+    let predicted_base_fee = base_fees[end_block as usize];
+    assert_eq!(
+        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
+        predicted_base_fee,
+        "predicted next base fee should follow EIP-1559"
+    );
+
     let next_block_data = client
         .get_block_by_number(BlockNumberOrTag::Number(newest_block + 1))
         .await?
@@ -802,7 +1173,8 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
         .expect("next block should include base_fee_per_gas");
     let next_base_fee = u128::from(next_base_fee);
     assert_eq!(
-        fee_history.base_fee_per_gas[3], next_base_fee,
+        fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
+        next_base_fee,
         "predicted next base fee should match the next block header"
     );
 
@@ -846,11 +1218,11 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
 
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let tx_hash = simple_storage
-        .deploy_contract()
+    let contract_address = deploy_contract_check(&simple_storage)
         .await
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    let receipt = simple_storage.wait_for_finalized_receipt(tx_hash).await;
+        .expect("deploy should succeed");
+    rollup.wait_for_next_blocks(1).await;
+    let receipt = send_high_fee_set_value(&simple_storage, contract_address, 100).await?;
     rollup.pause_preferred_batches().await;
 
     let tx_block = receipt
@@ -862,20 +1234,27 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     );
 
     let genesis = load_evm_genesis_config();
+    let params = &genesis.chain_spec.base_fee_params;
     let gas_limit = genesis.chain_spec.block_gas_limit;
     assert!(gas_limit > 0, "block gas limit should be non-zero");
-    let params = &genesis.chain_spec.base_fee_params;
 
-    let expected_base_fee = compute_base_fee_for_block(
-        genesis.initial_base_fee as u128,
-        tx_block,
-        gas_limit,
-        params.max_change_denominator,
-        params.elasticity_multiplier,
+    let expected_base_fee = base_fee_from_receipt(&receipt, HIGH_PRIORITY_FEE_PER_GAS);
+    assert!(expected_base_fee > 0, "baseFeePerGas should be non-zero");
+    let gas_info = fetch_chain_state_gas_info(&rollup.client, tx_block).await?;
+    let chain_base_fee = gas_price_dim0(&gas_info.base_fee_per_gas);
+    assert_eq!(
+        chain_base_fee, expected_base_fee,
+        "chain-state base fee should match receipt-derived base fee"
+    );
+    let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;
+    let chain_gas_used = gas_unit_dim0(&gas_info.gas_used);
+    assert!(
+        chain_gas_used >= receipts_gas_used,
+        "chain-state gas_used should be >= receipts gas_used"
     );
     let expected_next_base_fee = compute_next_base_fee(
         expected_base_fee,
-        receipt.gas_used,
+        receipts_gas_used,
         gas_limit,
         params.max_change_denominator,
         params.elasticity_multiplier,
@@ -890,10 +1269,10 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     assert_eq!(fee_history.gas_used_ratio.len(), 1);
     assert_eq!(
         fee_history.base_fee_per_gas[0], expected_base_fee,
-        "baseFeePerGas should match EVM genesis config and empty-block base fee progression"
+        "baseFeePerGas should match receipt-derived base fee"
     );
 
-    let expected_ratio = receipt.gas_used as f64 / gas_limit as f64;
+    let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
     let delta = (fee_history.gas_used_ratio[0] - expected_ratio).abs();
     assert!(
         delta < 1e-12,
@@ -904,6 +1283,27 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     assert_eq!(
         fee_history.base_fee_per_gas[1], expected_next_base_fee,
         "predicted next base fee should follow EIP-1559"
+    );
+
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(tx_block))
+        .await?
+        .expect("tx block should exist");
+    let header_base_fee = u128::from(
+        block
+            .header
+            .base_fee_per_gas
+            .expect("tx block should include base_fee_per_gas"),
+    );
+    assert_eq!(
+        header_base_fee, expected_base_fee,
+        "block header base fee should match receipt-derived base fee"
+    );
+    let header_ratio = block.header.gas_used as f64 / block.header.gas_limit as f64;
+    let header_delta = (header_ratio - expected_ratio).abs();
+    assert!(
+        header_delta < 1e-12,
+        "block header gas_used_ratio mismatch: expected {expected_ratio}, got {header_ratio}"
     );
 
     Ok(())
@@ -1377,6 +1777,30 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
         fee_history.base_fee_per_gas.len(),
         2,
         "Should have block_count + 1 base fees"
+    );
+
+    let genesis = load_evm_genesis_config();
+    let base_fees = base_fee_series_from_genesis(&client, newest_block, &genesis).await?;
+    let base_fee = base_fees[newest_block as usize];
+    assert!(base_fee > 0, "baseFeePerGas should be non-zero");
+    assert_eq!(
+        fee_history.base_fee_per_gas[0], base_fee,
+        "baseFeePerGas should match receipt-derived value"
+    );
+
+    let gas_limit = genesis.chain_spec.block_gas_limit;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, newest_block).await?;
+    let params = &genesis.chain_spec.base_fee_params;
+    let expected_predicted = compute_next_base_fee(
+        base_fee,
+        receipts_gas_used,
+        gas_limit,
+        params.max_change_denominator,
+        params.elasticity_multiplier,
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas[1], expected_predicted,
+        "predicted next base fee should follow EIP-1559"
     );
 
     // Compare against the next sealed block header to validate the prediction.
