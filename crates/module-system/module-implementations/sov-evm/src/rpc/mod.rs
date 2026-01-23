@@ -96,7 +96,7 @@ where
         };
         Ok(txs)
     }
-  
+
     fn get_block(
         &self,
         block_number: Option<String>,
@@ -107,10 +107,14 @@ where
             return Ok(None);
         };
         match block {
-            MaybeSealedBlock::Sealed(sealed) =>  {
+            MaybeSealedBlock::Sealed(sealed) => {
                 let block_size = sealed.rlp_size;
                 let transactions = self.get_block_transactions(&sealed, kind, state)?;
-                let header = Header::from_consensus(sealed.header.into(), None, Some(U256::from(block_size)));
+                let header = Header::from_consensus(
+                    sealed.header.into(),
+                    None,
+                    Some(U256::from(block_size)),
+                );
                 Ok(Some(Block {
                     header,
                     transactions,
@@ -119,11 +123,27 @@ where
                 }))
             }
             // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
-            MaybeSealedBlock::PartialSynthetic(block) =>  {
+            MaybeSealedBlock::PartialSynthetic(block) => {
                 let (header, txs) = self.get_synthetic_block_contents_slow(block, state)?;
                 let txs = match kind {
-                    BlockTransactionsKind::Full => BlockTransactions::Full(txs.into_iter().enumerate().map(|(tx_idx, tx)| from_recovered_with_block_context(tx.into(), Some(header.hash), header.number, tx_idx as u64)).collect()),
-                    BlockTransactionsKind::Hashes => BlockTransactions::Hashes(txs.into_iter().map(|tx| *tx.signed_transaction.hash()).collect()),
+                    BlockTransactionsKind::Full => BlockTransactions::Full(
+                        txs.into_iter()
+                            .enumerate()
+                            .map(|(tx_idx, tx)| {
+                                from_recovered_with_block_context(
+                                    tx.into(),
+                                    Some(header.hash),
+                                    header.number,
+                                    tx_idx as u64,
+                                )
+                            })
+                            .collect(),
+                    ),
+                    BlockTransactionsKind::Hashes => BlockTransactions::Hashes(
+                        txs.into_iter()
+                            .map(|tx| *tx.signed_transaction.hash())
+                            .collect(),
+                    ),
                 };
                 Ok(Some(Block {
                     header,
@@ -136,27 +156,30 @@ where
     }
 
     /// Populates the header of a partial synthetic block and returns the transactions.
-    /// 
+    ///
     /// This function has to fetch all the transactions and receipts, so it's relatively slow - avoid when possible.
     pub fn get_synthetic_block_contents_slow(
         &self,
         block: SyntheticBlockWithoutRootsAndBloom,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<(Header, Vec<TxSignedAndRecovered>), EthApiError> {
-            let len = block.transactions.end - block.transactions.start;
-                let mut txs = Vec::with_capacity(len as usize);
-                let mut receipts = Vec::with_capacity(len as usize);
-                for tx_idx in block.transactions.clone() {
-                    let tx = self.tx(tx_idx, state)?;
-                    txs.push(tx);
-                    let receipt = self.receipt(tx_idx, state).unwrap_or_else(|| panic!("Tx {tx_idx} exists but has no corresponding receipt. This is a bug, please report it."));
-                    let receipt = receipt.0.receipt;
-                    receipts.push(receipt);
-                }
-                let (synthetic_block, txs) = block.finish_and_seal(txs, &receipts);
-                let header = Header::from_consensus(synthetic_block.header, None, Some(U256::from(synthetic_block.rlp_size)));
-            Ok((header, txs))
-       
+        let len = block.transactions.end - block.transactions.start;
+        let mut txs = Vec::with_capacity(len as usize);
+        let mut receipts = Vec::with_capacity(len as usize);
+        for tx_idx in block.transactions.clone() {
+            let tx = self.tx(tx_idx, state)?;
+            txs.push(tx);
+            let receipt = self.receipt(tx_idx, state).unwrap_or_else(|| panic!("Tx {tx_idx} exists but has no corresponding receipt. This is a bug, please report it."));
+            let receipt = receipt.0.receipt;
+            receipts.push(receipt);
+        }
+        let (synthetic_block, txs) = block.finish_and_seal(txs, &receipts);
+        let header = Header::from_consensus(
+            synthetic_block.header,
+            None,
+            Some(U256::from(synthetic_block.rlp_size)),
+        );
+        Ok((header, txs))
     }
 
     fn get_contract_code(
@@ -332,11 +355,15 @@ where
 
     /// Retrieves the pending block. We maintain the invariant that the pending block always has number
     /// latest_sealed_block.number + 1. (Both are updated during the finalize_hook, so they're atomic).
-    /// 
+    ///
     /// Note that values in the block_env (including the block number there!) are updated during the begin_rollup_block_hook, so the values here may be stale
     /// if this function is called while no rollup block is in progress. In that case, the number of transactions will be zero.
     // TODO: Have this function return None if no block is pending!
-    pub fn pending_block(&self, block_env: Option<BlockEnv>, state: &mut ApiStateAccessor<S>) -> SyntheticBlockWithoutRootsAndBloom {
+    pub fn pending_block(
+        &self,
+        block_env: Option<BlockEnv>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> SyntheticBlockWithoutRootsAndBloom {
         let block_numbers = self.block_numbers(state);
 
         let head_block = self
@@ -344,7 +371,8 @@ where
             .get(block_numbers.end(), state)
             .unwrap_infallible()
             .expect("Block should exist as index is inside block_numbers");
-        let current_block_env = block_env.unwrap_or_else(|| self.block_env(state).unwrap_infallible());
+        let current_block_env =
+            block_env.unwrap_or_else(|| self.block_env(state).unwrap_infallible());
 
         assert_eq!(&head_block.header.number, block_numbers.end());
 

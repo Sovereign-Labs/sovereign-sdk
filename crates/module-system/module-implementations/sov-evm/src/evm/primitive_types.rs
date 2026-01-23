@@ -1,16 +1,16 @@
 use std::ops::Range;
 
+use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::{
     serde_bincode_compat::Header as HeaderBincodeCompat,
     transaction::serde_bincode_compat::EthereumTxEnvelope as EthereumTxEnvelopeBincodeCompat,
     transaction::Recovered, Header,
 };
-use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844, TxReceipt, EMPTY_ROOT_HASH};
 use alloy_eips::{Encodable2718, Typed2718};
-use alloy_primitives::{Bloom, TxHash};
-use alloy_primitives::{Address, Sealable, Sealed, B256};
 use alloy_primitives::private::alloy_rlp::Encodable;
+use alloy_primitives::{Address, Sealable, Sealed, B256};
+use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
 use derive_more::{Deref, DerefMut, From};
 use derive_new::new;
@@ -19,7 +19,8 @@ use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 use sov_rollup_interface::da::Time;
 
-const SYNTHETIC_BLOCK_HASH_PLACEHOLDER: &[u8;32] = b"synthetic_block_hash\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+const SYNTHETIC_BLOCK_HASH_PLACEHOLDER: &[u8; 32] =
+    b"synthetic_block_hash\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
 
 pub fn synthetic_block_hash_for(block_number: u64, num_txs: u32) -> B256 {
     let mut hash = *SYNTHETIC_BLOCK_HASH_PLACEHOLDER;
@@ -153,7 +154,6 @@ impl Block {
     }
 }
 
-
 /// A synthetic block header without the roots (txs, receipts) and bloom, and gas used.
 /// "synthetic" here means that the header has a fake hash which we can reverse engineer to identify which transaction are in the block.
 #[derive(Debug, PartialEq, Default, Clone, serde::Serialize, serde::Deserialize)]
@@ -175,7 +175,6 @@ fn xor_hashes(a: B256, b: B256) -> B256 {
     result
 }
 
-
 impl SyntheticBlockWithoutRootsAndBloom {
     /// Creates a new synthetic block header.
     pub fn new(mut header: Header, transactions: Range<u64>) -> Self {
@@ -195,7 +194,12 @@ impl SyntheticBlockWithoutRootsAndBloom {
 
     /// Returns the synthetic block hash.
     pub fn hash(&self) -> B256 {
-        synthetic_block_hash_for(self.header_without_roots_bloom_and_gas_used.number, (self.transactions.end - self.transactions.start).try_into().expect("Transactions range should be less than u32::MAX"))
+        synthetic_block_hash_for(
+            self.header_without_roots_bloom_and_gas_used.number,
+            (self.transactions.end - self.transactions.start)
+                .try_into()
+                .expect("Transactions range should be less than u32::MAX"),
+        )
     }
 
     /// Returns the number of transactions in the synthetic block.
@@ -218,22 +222,33 @@ impl SyntheticBlockWithoutRootsAndBloom {
         &self.header_without_roots_bloom_and_gas_used
     }
 
-    /// Finishes the synthetic block and seals it. Returns the sealed synthetic block and the transactions that were added to the block. 
+    /// Finishes the synthetic block and seals it. Returns the sealed synthetic block and the transactions that were added to the block.
     /// This function is relatively heavy, since it computes the tx and receipts roots.
-    /// 
+    ///
     /// We pass the transactions as an owned type and return it rather than using a referene since some reth helpers requrie constructing types
-    /// with Vec<Tx>. 
-    pub fn finish_and_seal(mut self, transactions: Vec<TxSignedAndRecovered>, receipts: &[reth_primitives::Receipt]) -> (SealedSynthetic, Vec<TxSignedAndRecovered>) {
-        assert_eq!(transactions.len(), receipts.len(), "Transactions and receipts must have the same length");
+    /// with Vec<Tx>.
+    pub fn finish_and_seal(
+        mut self,
+        transactions: Vec<TxSignedAndRecovered>,
+        receipts: &[reth_primitives::Receipt],
+    ) -> (SealedSynthetic, Vec<TxSignedAndRecovered>) {
+        assert_eq!(
+            transactions.len(),
+            receipts.len(),
+            "Transactions and receipts must have the same length"
+        );
         let gas_used = receipts.last().map_or(0, |r| r.cumulative_gas_used);
 
         let hash = self.hash();
         let tx_root = calculate_transaction_root(transactions.as_slice());
         let receipts_root = calculate_receipt_root(receipts);
-        let bloom = receipts.iter().fold(Bloom::ZERO, |bloom, r| bloom | r.bloom());
+        let bloom = receipts
+            .iter()
+            .fold(Bloom::ZERO, |bloom, r| bloom | r.bloom());
         self.header_without_roots_bloom_and_gas_used.logs_bloom = bloom;
         self.header_without_roots_bloom_and_gas_used.gas_used = gas_used;
-        self.header_without_roots_bloom_and_gas_used.transactions_root = tx_root;
+        self.header_without_roots_bloom_and_gas_used
+            .transactions_root = tx_root;
         self.header_without_roots_bloom_and_gas_used.receipts_root = receipts_root;
 
         let body = reth_primitives::BlockBody {
@@ -241,14 +256,20 @@ impl SyntheticBlockWithoutRootsAndBloom {
             ommers: vec![],
             withdrawals: None,
         };
-        let rlp_size = alloy_consensus::Block::rlp_length_for(&self.header_without_roots_bloom_and_gas_used, &body);
+        let rlp_size = alloy_consensus::Block::rlp_length_for(
+            &self.header_without_roots_bloom_and_gas_used,
+            &body,
+        );
         let txs = body.transactions;
-        
-        (SealedSynthetic {
-            header: Sealed::new_unchecked(self.header_without_roots_bloom_and_gas_used, hash),
-            transactions: self.transactions,
-            rlp_size,
-        }, txs)
+
+        (
+            SealedSynthetic {
+                header: Sealed::new_unchecked(self.header_without_roots_bloom_and_gas_used, hash),
+                transactions: self.transactions,
+                rlp_size,
+            },
+            txs,
+        )
     }
 }
 
@@ -262,7 +283,6 @@ pub struct SealedSynthetic {
     /// The RLP encoded size of the block (header + body).
     pub rlp_size: usize,
 }
-
 
 /// Block with sealed header.
 #[derive(Debug, PartialEq, Clone, Deref, DerefMut)]
@@ -357,7 +377,6 @@ pub enum MaybeSealedBlock {
     PartialSynthetic(SyntheticBlockWithoutRootsAndBloom),
 }
 
-
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
     /// Hash of the block.
@@ -401,7 +420,9 @@ impl MaybeSealedBlock {
     pub fn timestamp(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.timestamp,
-            Self::PartialSynthetic(block) => block.header_without_roots_bloom_and_gas_used.timestamp,
+            Self::PartialSynthetic(block) => {
+                block.header_without_roots_bloom_and_gas_used.timestamp
+            }
         }
     }
 
@@ -418,6 +439,14 @@ impl MaybeSealedBlock {
         match self {
             Self::Sealed(block) => block.header.into_inner(),
             Self::PartialSynthetic(block) => block.header_without_roots_bloom_and_gas_used,
+        }
+    }
+
+    /// Returns the header if the block has been sealed. Returns None for synthetic blocks.
+    pub fn header_if_sealed(&self) -> Option<&Header> {
+        match self {
+            Self::Sealed(block) => Some(block.header.inner()),
+            Self::PartialSynthetic(_) => None,
         }
     }
 }

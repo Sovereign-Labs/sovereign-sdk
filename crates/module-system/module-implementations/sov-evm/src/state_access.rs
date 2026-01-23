@@ -100,7 +100,7 @@ impl<S: Spec> Evm<S> {
         self.account_storage.get(&(address, index), state)
     }
 
-    /// Get the current block env. This corresponds to the pending block (i.e. the one that's currently being built). 
+    /// Get the current block env. This corresponds to the pending block (i.e. the one that's currently being built).
     /// It is set in the begin_rollup_block_hook.
     pub fn block_env<Accessor: StateReader<User>>(
         &self,

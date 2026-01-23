@@ -14,15 +14,15 @@ use sov_evm::Receipt;
 use sov_evm::SyntheticBlockWithoutRootsAndBloom;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::da::Time;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
-use sov_modules_api::prelude::UnwrapInfallible;
 use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
-use std::time::Duration;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 
 /// Don't send new heads notifcations for synthetic blocks more frequently than this.
@@ -74,12 +74,14 @@ impl SyntheticBlockWatermark {
         }
     }
 
-    fn advance_and_emit_synthetic_block_notification(&mut self, synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> SyntheticBlockWatermarkAdvanceResult {
+    fn advance_and_emit_synthetic_block_notification(
+        &mut self,
+        synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
+    ) -> SyntheticBlockWatermarkAdvanceResult {
         self.block_number_of_last_notification = synthetic_block.header().number;
         self.tx_index_of_last_notification_if_known = Some(synthetic_block.last_tx_index());
         SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
     }
-
 
     fn advance_and_emit_real_block_notification(&mut self) -> SyntheticBlockWatermarkAdvanceResult {
         // Per https://www.quicknode.com/docs/ethereum/eth_subscribe - we should send a notification each time a new header is appended
@@ -91,37 +93,55 @@ impl SyntheticBlockWatermark {
         self.tx_index_of_last_notification_if_known = None;
         SyntheticBlockWatermarkAdvanceResult::NewRealBlock(self.block_number_of_last_notification)
     }
-    
 
     // We want to send a notification if...
     // There's been a new real block
     // There's been a new synthetic block *and* it's been more than 200ms since the last notification
-    fn advance(&mut self, synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> SyntheticBlockWatermarkAdvanceResult {
-        if self.block_number_of_last_notification < synthetic_block.header().number.saturating_sub(1) {
+    fn advance(
+        &mut self,
+        synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
+    ) -> SyntheticBlockWatermarkAdvanceResult {
+        if self.block_number_of_last_notification
+            < synthetic_block.header().number.saturating_sub(1)
+        {
             return self.advance_and_emit_real_block_notification();
         }
 
         // If the synthetic block is empty, don't notify.
         // Similarly if we've already sent a notification for this synthetic block, don't notify again.
-        if synthetic_block.num_transactions() != 0 && self.tx_index_of_last_notification_if_known.map_or(true, |idx| idx < synthetic_block.last_tx_index()) {
+        if synthetic_block.num_transactions() != 0
+            && self
+                .tx_index_of_last_notification_if_known
+                .map_or(true, |idx| idx < synthetic_block.last_tx_index())
+        {
             return self.advance_and_emit_synthetic_block_notification(synthetic_block);
         }
 
         SyntheticBlockWatermarkAdvanceResult::NoChange
     }
 
-    fn peek(&self, synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> SyntheticBlockWatermarkAdvanceResult {
-        if self.block_number_of_last_notification < synthetic_block.header().number.saturating_sub(1) {
-            return SyntheticBlockWatermarkAdvanceResult::NewRealBlock(self.block_number_of_last_notification + 1)
+    fn peek(
+        &self,
+        synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
+    ) -> SyntheticBlockWatermarkAdvanceResult {
+        if self.block_number_of_last_notification
+            < synthetic_block.header().number.saturating_sub(1)
+        {
+            return SyntheticBlockWatermarkAdvanceResult::NewRealBlock(
+                self.block_number_of_last_notification + 1,
+            );
         }
 
-        if synthetic_block.num_transactions() != 0 && self.tx_index_of_last_notification_if_known.map_or(true, |idx| idx < synthetic_block.last_tx_index()) {
-            return SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
+        if synthetic_block.num_transactions() != 0
+            && self
+                .tx_index_of_last_notification_if_known
+                .map_or(true, |idx| idx < synthetic_block.last_tx_index())
+        {
+            return SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock;
         }
 
         SyntheticBlockWatermarkAdvanceResult::NoChange
     }
-        
 }
 
 // TODO: Refactor this into a long-running background task to reduce overhead. Right now, we do duplicate fetching for each subscription.
@@ -183,28 +203,30 @@ where
     }
 
     /// Stream new block headers to the subscriber.
-    /// 
-    /// This method streams every real block as it comes in (i.e. each time a "slot" is computed on the DA layer). 
+    ///
+    /// This method streams every real block as it comes in (i.e. each time a "slot" is computed on the DA layer).
     /// We also manufacture "synthetic" blocks with which to notify the subscriber each time a new transaction is added,
-    /// but we only notify for synthetic blocks at most once every few hundred milliseconds. 
-    /// 
+    /// but we only notify for synthetic blocks at most once every few hundred milliseconds.
+    ///
     /// We use synthetic blocks because...
-    /// - Rollup transactions are instantly confirmed 
+    /// - Rollup transactions are instantly confirmed
     /// - Most wallet software and tooling waits for the tx to be included in the "latest" (i.e. non-pending)
-    /// - We want tooling to recognize that transactions are confirmed instantly. 
-    /// 
+    /// - We want tooling to recognize that transactions are confirmed instantly.
+    ///
     /// By making up these sythetic blocks, we can simulate behavior where the tx is accepted instantly and then the chain experiences a reorg of depth 1.
     /// Tooling that *doesn't* handle reorgs works fine, because the "reorg" simply appends new transactions - so previous tx results are unchanged.
     /// Tolling that *does* handle reorgs will see breif instability at the chain head, but the block will settle after the next DA block is computed (i.e in about 6 seconds)
-    /// 
+    ///
     /// Unfortunately, this approach means that we have a *lot* of new_heads notifications (one per tx, plus one per DA block. We expect that receivers will not be able
-    /// to cope with notifications at a pace of several hundred per second, so we impose a throttle - we never notify more than once per 200ms. 
+    /// to cope with notifications at a pace of several hundred per second, so we impose a throttle - we never notify more than once per 200ms.
     pub async fn new_heads(&self) -> Result<(), Error> {
         // Pick up here
-        // Long term todo: Refactor this into a long-running background task 
+        // Long term todo: Refactor this into a long-running background task
 
         let mut state = self.ethereum.api_state_accessor();
-        let mut watermark = SyntheticBlockWatermark::from_synthetic_block(&self.evm.pending_block(None, &mut state));
+        let mut watermark = SyntheticBlockWatermark::from_synthetic_block(
+            &self.evm.pending_block(None, &mut state),
+        );
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
         let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
@@ -241,7 +263,7 @@ where
                             sent = true;
                         } else {
                             // If we don't send the notification now, scheudle a wakeup to try again later. This handles the edge case
-                            // where we have a bunch of new synethitic blocks in rapid succession followed by a gap; in that case, 
+                            // where we have a bunch of new synethitic blocks in rapid succession followed by a gap; in that case,
                             // we'd never notify for the newer txs.
                             // Spawn a wakeup for later to handle the edge case. Note that we don't try to dedup wakeups; duplicates are handled in the wakeup_receiver case.
                             let wakeup_sender = wakeup_sender.clone();
@@ -251,7 +273,7 @@ where
                             });
                         }
                     }
-                    
+
                     if sent {
                         last_send_time = std::time::Instant::now();
                     }
@@ -268,7 +290,7 @@ where
                             let (rpc_header, _txs) = self.evm.get_synthetic_block_contents_slow(pending_block, &mut state)?;
                             self.send(&rpc_header).await?;
                             last_send_time = std::time::Instant::now();
-                        } 
+                        }
                     }
                 }
                 _ = shutdown_receiver.changed() => {
@@ -279,7 +301,6 @@ where
         }
         Ok(())
     }
-    
 }
 
 // Helper methods
@@ -356,7 +377,11 @@ mod tests {
     use super::*;
     use alloy_consensus::Header;
 
-    fn make_synthetic_block(block_number: u64, tx_start: u64, tx_end: u64) -> SyntheticBlockWithoutRootsAndBloom {
+    fn make_synthetic_block(
+        block_number: u64,
+        tx_start: u64,
+        tx_end: u64,
+    ) -> SyntheticBlockWithoutRootsAndBloom {
         let mut header = Header::default();
         header.number = block_number;
         SyntheticBlockWithoutRootsAndBloom::new(header, tx_start..tx_end)
@@ -375,7 +400,6 @@ mod tests {
         );
         peek_result
     }
-    
 
     #[test]
     fn peek_and_advance_match_for_new_real_block() {
@@ -388,10 +412,22 @@ mod tests {
         };
         let block = make_synthetic_block(7, 100, 150);
 
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NewRealBlock(5)));
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NewRealBlock(6)));
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock));
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NoChange));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NewRealBlock(5)
+        ));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NewRealBlock(6)
+        ));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
+        ));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NoChange
+        ));
     }
 
     #[test]
@@ -403,8 +439,14 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 100); // last_tx_index is 99, > 50
 
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock));
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NoChange));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
+        ));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NoChange
+        ));
     }
 
     #[test]
@@ -416,7 +458,10 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 100); // last_tx_index is 99, matches watermark
 
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NoChange));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NoChange
+        ));
     }
 
     #[test]
@@ -428,7 +473,10 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 0); // empty block
 
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NoChange));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NoChange
+        ));
     }
 
     #[test]
@@ -441,7 +489,10 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 50);
 
-        assert!(matches!(assert_peek_equals_and_advance(&mut watermark, &block), SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock));
+        assert!(matches!(
+            assert_peek_equals_and_advance(&mut watermark, &block),
+            SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
+        ));
     }
     #[test]
     fn from_synthetic_block_initializes_correctly() {

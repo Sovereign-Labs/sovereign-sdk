@@ -165,8 +165,10 @@ where
         let range = self.apply_block_level_cursor(range)?;
         for block_number in range {
             let block = self.get_block(block_number)?;
-            if !self.filter.matches_bloom(block.header().logs_bloom()) {
-                continue;
+            if let Some(header) = block.header_if_sealed() {
+                if !self.filter.matches_bloom(header.logs_bloom()) {
+                    continue;
+                }
             }
             if let Some(cursor) = self.scan_block(block)? {
                 return Ok(Some(cursor));
@@ -248,18 +250,17 @@ where
         block: &MaybeSealedBlock,
         time: Time,
     ) -> Result<Option<Cursor>> {
-        let header = block.header();
         let logs = receipt.receipt.logs;
         let log_range = 0_u32..(logs.len() as u32);
         let logs_iter = logs.into_iter().enumerate();
         let skipped_logs =
-            self.apply_log_level_cursor(log_range, tx_index_absolute, header.number())?;
+            self.apply_log_level_cursor(log_range, tx_index_absolute, block.number())?;
 
         // As logs iter is pre-enumerated - we keep correct indices
         for (idx, log) in logs_iter.skip(skipped_logs as usize) {
             if self.logs.len() >= *self.max_logs {
                 return Ok(Some(Cursor {
-                    block_height: header.number(),
+                    block_height: block.number(),
                     tx_index_absolute,
                     log_index_in_tx: idx as u32,
                 }));
@@ -283,7 +284,7 @@ where
             let log_size = serialized_size(&rpc_log);
             if self.logs_serialized_size + log_size >= *self.response_size_limit {
                 return Ok(Some(Cursor {
-                    block_height: header.number(),
+                    block_height: block.number(),
                     tx_index_absolute,
                     log_index_in_tx: idx as u32,
                 }));
