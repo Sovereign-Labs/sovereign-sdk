@@ -1,3 +1,6 @@
+# 2026-01-23
+- #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
+
 # 2026-01-20
 - #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
 - #2380 EVM: Validate `eth_feeHistory` input parameters.
