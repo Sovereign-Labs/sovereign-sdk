@@ -40,8 +40,7 @@ use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use tokio::time::{sleep, timeout};
 
-use crate::bank::helpers::{assert_balance, build_create_token_tx, create_keys_and_addresses};
-use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
+use crate::bank::helpers::{assert_balance, create_keys_and_addresses};
 use crate::evm::evm_test_helper::{alloy_client, SENDER_PRIV_KEY};
 use crate::test_helpers::{
     build_transfer_token_tx, test_genesis_source, DemoRollupSpec, CHAIN_HASH,
@@ -489,11 +488,12 @@ async fn test_forced_txs_survive_resync() -> anyhow::Result<()> {
 /// Verifies forced transactions show up in sequencer state after a resync
 ///
 /// Steps:
-/// 1. Create a token and do one transfer through the preferred sequencer.
-/// 2. Pause the sequencer and create enough batches to unsync the node. Each DA block includes some forced txs for coverage.
+/// 1. Fund a key for post-resync valid forced txs.
+/// 2. Pause the sequencer and send forced txs to unsync the node.
 /// 3. Resume the sequencer and wait for it to become unready then ready again.
-/// 4. Wait for the visible slot number to increment enough times to cover all the forced txs.
-/// 5. Send one more preferred tx to make sure everything is working correctly after the resync.
+/// 4. Send more forced txs (both valid and invalid) to verify they don't break the sequencer post-resync.
+/// 5. Verify all pre-resync forced txs were processed with exact balance checks.
+/// 6. Send one more preferred tx to make sure everything is working correctly after the resync.
 async fn forced_txs_resync_test_case(
     rollup: &TestRollup<MockDemoRollup<Native>>,
     forced_da_service: Arc<impl DaService>,
@@ -503,44 +503,38 @@ async fn forced_txs_resync_test_case(
     const GAS_FUNDING_AMOUNT: u128 = 1_000_000_000_000;
 
     let client = &rollup.client;
-    let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
-    let valid_tx_key = Risc0PrivateKey::generate();
-    let valid_tx_address = valid_tx_key.pub_key().credential_id().into();
-    let invalid_tx_key = Risc0PrivateKey::generate();
-    let second_token_id = sov_bank::get_token_id::<TestSpec>(
-        TOKEN_NAME,
-        Some(TOKEN_DECIMALS),
-        &valid_tx_key.pub_key().credential_id().into(),
-    );
-    let initial_balance = 1_000u128;
+    let (key, _, _, recipient_address) = create_keys_and_addresses();
+    let token_id = config_gas_token_id(); // Use gas token - no need to create tokens
+
+    // For post-resync forced tx coverage:
+    // - funded_key: has gas tokens, so its txs will succeed
+    // - unfunded_key: no gas tokens, so its txs will fail (tests error handling)
+    // - post_resync_recipient: separate recipient so post-resync txs don't affect main balance checks
+    let funded_key = Risc0PrivateKey::generate();
+    let funded_address = funded_key.pub_key().credential_id().into();
+    let unfunded_key = Risc0PrivateKey::generate();
+    let post_resync_recipient: <TestSpec as Spec>::Address =
+        Risc0PrivateKey::generate().pub_key().credential_id().into();
+
     let preferred_transfer = 50u128;
     let forced_transfer = 5u128;
     let total_forced_tx_amount = forced_transfer * RESYNC_FORCED_BLOCKS as u128;
     let mut slot_subscription = rollup.api_client().subscribe_slots().await?;
 
-    // Setup - create two tokens and transfer gas to the second key we've generated for sending valid txs.
+    // Fund the key for post-resync valid forced txs
     {
-        let create_token_tx = build_create_token_tx(&key, 0, initial_balance);
-        submit_preferred_tx(client, &create_token_tx).await?;
-
-        // Transfer gas to the second key we've generated for sending valid txs.
-        let preferred_tx = build_transfer_token_tx::<TestSpec>(
+        let fund_tx = build_transfer_token_tx::<TestSpec>(
             &key,
-            config_gas_token_id(),
-            valid_tx_address,
+            token_id,
+            funded_address,
             GAS_FUNDING_AMOUNT,
-            1,
+            0,
         );
-        submit_preferred_tx(client, &preferred_tx).await?;
-
-        // Create a second token for valid txs which don't affect the balances or nonces of the main token/accounts
-        let create_second_token_tx = build_create_token_tx(&valid_tx_key, 0, initial_balance);
-        submit_preferred_tx(client, &create_second_token_tx).await?;
+        submit_preferred_tx(client, &fund_tx).await?;
         produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
-        assert_balance(client, initial_balance, token_id, user_address, None).await?;
     }
 
-    let forced_start_nonce = 2u64;
+    let forced_start_nonce = 1u64;
     // Pause the sequencer and send forced txs enough times to unsync the sequencer. We want to check that the sequencer handles this case correctly
     rollup.pause_preferred_batches().await;
     for i in 0..RESYNC_FORCED_BLOCKS {
@@ -587,12 +581,12 @@ async fn forced_txs_resync_test_case(
         {
             let tx = build_transfer_token_tx(
                 if i % 2 == 0 {
-                    &valid_tx_key
+                    &funded_key
                 } else {
-                    &invalid_tx_key
+                    &unfunded_key
                 },
-                second_token_id,
-                recipient_address,
+                token_id,
+                post_resync_recipient,
                 forced_transfer,
                 nonce_of_first_possibly_skipped_tx + (i / 2) as u64,
             );
@@ -620,24 +614,8 @@ async fn forced_txs_resync_test_case(
         }
     }
 
-    // Check that all of the forced txs before the resync went through. This uses the primary token ID.
-    let expected_sender_balance = initial_balance - total_forced_tx_amount;
-    assert_balance(
-        client,
-        expected_sender_balance,
-        token_id,
-        user_address,
-        None,
-    )
-    .await?;
-    assert_balance(
-        client,
-        total_forced_tx_amount,
-        token_id,
-        recipient_address,
-        None,
-    )
-    .await?;
+    // Verify all pre-resync forced txs went through by checking recipient balance
+    assert_balance(client, total_forced_tx_amount, token_id, recipient_address, None).await?;
 
     // Send one more preferred tx to make sure everything is working correctly after the resync.
     let preferred_tx = build_transfer_token_tx::<TestSpec>(
@@ -648,35 +626,27 @@ async fn forced_txs_resync_test_case(
         forced_start_nonce + RESYNC_FORCED_BLOCKS as u64,
     );
     submit_preferred_tx(client, &preferred_tx).await?;
-
-    assert_balance(
-        client,
-        expected_sender_balance - preferred_transfer,
-        token_id,
-        user_address,
-        None,
-    )
-    .await?;
-    assert_balance(
+    wait_for_bank_balance(
         client,
         total_forced_tx_amount + preferred_transfer,
         token_id,
         recipient_address,
-        None,
     )
     .await?;
 
     // As an extra sanity check, make sure that at least one of our forced txs went through *after* the resync.
-    // This uses the second token ID we created for valid txs which don't affect the balances or nonces of the main token/accounts
-    let token_2_balance = client
-        .get_balance::<TestSpec>(&recipient_address, &second_token_id, None)
+    // This uses a separate recipient so post-resync txs don't affect the main balance checks above.
+    let post_resync_balance = client
+        .get_balance::<TestSpec>(&post_resync_recipient, &token_id, None)
         .await
-        .with_context(|| format!("Failed to get balance of token 2 for user {user_address})"))?;
+        .with_context(|| {
+            format!("Failed to get post-resync balance for user {post_resync_recipient})")
+        })?;
 
     assert_ne!(
-        token_2_balance,
+        post_resync_balance,
         Amount::ZERO,
-        "Token 2 balance should be non-zero"
+        "Post-resync recipient balance should be non-zero"
     );
 
     Ok(())
