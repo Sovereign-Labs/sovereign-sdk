@@ -156,8 +156,9 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let mut shutdown_receiver = state.shutdown_receiver.clone();
             let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
 
-            // track last pong time for timeout detection using monotonic clock
-            let mut last_pong = tokio::time::Instant::now();
+            // track last ping/pong time for timeout detection using monotonic clock
+            let mut last_pong: Option<tokio::time::Instant> = None;
+            let mut last_ping: Option<tokio::time::Instant> = None;
             let mut ping_interval = tokio::time::interval(Duration::from_secs(WS_PING_INTERVAL_SECS));
             ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -224,7 +225,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                             }
                             Some(Ok(ws::Message::Pong(_))) => {
                                 // pong received, update last pong time
-                                last_pong = tokio::time::Instant::now();
+                                last_pong = Some(tokio::time::Instant::now());
                             }
                             // If the client disconnected
                             None => break,
@@ -265,15 +266,23 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     // send periodic ping and check for pong timeout
                     _ = ping_interval.tick() => {
                         let now = tokio::time::Instant::now();
-                        if now.duration_since(last_pong) > Duration::from_secs(WS_PONG_TIMEOUT_SECS) {
-                            tracing::warn!(ip_addr=%ip_addr, "No pong received within {}s, disconnecting client", WS_PONG_TIMEOUT_SECS);
-                            break;
+                        if let Some(last_ping) = last_ping {
+                            // wait for pong or timeout before sending another ping
+                            let pong_after_ping = last_pong.is_some_and(|pong| pong >= last_ping);
+                            if !pong_after_ping { // we didn't get pong yet, check if timeout has been exceeded
+                                if now.duration_since(last_ping) >= Duration::from_secs(WS_PONG_TIMEOUT_SECS) {
+                                    tracing::warn!(ip_addr=%ip_addr, "No pong received within {}s, disconnecting client", WS_PONG_TIMEOUT_SECS);
+                                    break;
+                                }
+                                continue;
+                            }
                         }
-                        // send ping to client
+                        // send ping to client after last pong
                         if let Err(err) = socket.send(ws::Message::Ping(vec![])).await {
                             tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ping to client");
                             break;
                         }
+                        last_ping = Some(now);
                     }
                     _ = shutdown_receiver.changed() => break,
                 }
