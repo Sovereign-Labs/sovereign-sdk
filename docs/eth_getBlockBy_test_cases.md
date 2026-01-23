@@ -554,6 +554,167 @@ Record these for cross-checks:
 - Use `pause_preferred_batches()` / `resume_preferred_batches()` for determinism
 - For EIP-1898 tests, may need raw JSON-RPC via `jsonrpsee`
 
+---
+
+## Existing Test Coverage Analysis
+
+### Files with relevant tests
+
+| File | Tests | Coverage |
+|------|-------|----------|
+| `evm_rpc.rs` | `eth_get_block_by_number`, `eth_get_block_by_hash`, `block_size` | Basic tags, parent hash |
+| `evm_block_number.rs` | `pending_block_number` | Pending header fields |
+| `evm_block_hash.rs` | `block_hash` | BLOCKHASH opcode, not RPC |
+| `evm_tx.rs` | `sanity_checks`, `execute_evm_tests` | Basic tags, parent hash |
+| `evm_soft_conf.rs` | `evm_test_soft_confirmations` | Pending txs, block hash nullity |
+
+### Detailed coverage by test case
+
+#### Block tag semantics (TC01-TC11)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC01 | Partial | `evm_rpc:32`, `evm_tx:35` | Only checks number==0, not parentHash |
+| TC02 | Partial | `evm_rpc:32` | No explicit assertion comparing to TC01 |
+| TC03 | Covered | `evm_rpc:33`, `evm_tx:40-47` | Documents latest==pending |
+| TC04 | Covered | `evm_rpc:34`, `evm_tx:43` | |
+| TC05 | Missing | - | `safe` tag not tested |
+| TC06 | Missing | - | `finalized` tag not tested |
+| TC07 | Covered | `evm_tx:47` | `assert_eq!(latest_block, pending_block)` |
+| TC08 | Missing | - | No safe/finalized comparison |
+| TC09 | Covered | `evm_rpc:35,46-47` | |
+| TC10 | Covered | `evm_rpc:36,48` | Returns None for future block |
+| TC11 | Partial | `evm_rpc:50-53` | Parent hash checked but not genesis->1 |
+
+#### Sealed vs pending differences (TC12-TC21)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC12 | Partial | `evm_block_hash:47-48` | Via contract call, not direct assertion |
+| TC13 | Covered | `evm_rpc:79`, `evm_tx:48` | `assert_eq!(pending_hash, BlockHash::ZERO)` |
+| TC14 | Partial | `evm_soft_conf:36,56` | Implicitly via `expected_block_nr + 1` |
+| TC15 | Partial | `evm_rpc:73` | Gets parentHash but doesn't assert == sealed.hash |
+| TC16 | Covered | `evm_rpc:125-126` | Only for genesis, not sealed with txs |
+| TC17 | Missing | - | Pending size not tested |
+| TC18 | Missing | - | Sealed gasUsed not tested |
+| TC19 | Covered | `evm_block_number:22` | `assert_eq!(pending_header.gas_used, 0)` |
+| TC20 | Missing | - | logsBloom not tested |
+| TC21 | Missing | - | Pending logsBloom not tested |
+
+#### Transaction serialization (TC22-TC31)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC22 | Partial | `evm_soft_conf:57-60` | Uses `.hashes()` but doesn't verify format |
+| TC23 | Missing | - | `details=true` never tested |
+| TC24 | Missing | - | No comparison of counts in both modes |
+| TC25 | Missing | - | Full tx object fields not validated |
+| TC26 | Missing | - | tx.blockHash not checked against block.hash |
+| TC27 | Missing | - | tx.blockNumber not checked |
+| TC28 | Missing | - | transactionIndex not validated |
+| TC29 | Missing | - | Hash mode vs full mode hash match not tested |
+| TC30 | Partial | `evm_soft_conf:30` | Only checks `is_empty()` |
+| TC31 | Missing | - | Contract creation `to == null` not tested |
+
+#### eth_getBlockByHash (TC32-TC36)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC32 | Covered | `evm_rpc:73-76` | Valid hash returns correct block |
+| TC33 | Missing | - | Random hash test missing |
+| TC34 | Covered | `evm_rpc:81` | Zero hash returns None |
+| TC35 | Missing | - | details param not tested for by_hash |
+| TC36 | Partial | `evm_rpc:73-76` | Round-trip but doesn't compare all fields |
+
+#### Parent hash chain (TC37-TC39)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC37 | Covered | `evm_rpc:50-53`, `evm_tx:114-117` | |
+| TC38 | Missing | - | Genesis parentHash not explicitly tested |
+| TC39 | Missing | - | 5+ block chain not tested |
+
+#### Cross-endpoint consistency (TC40-TC45)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC40 | Missing | - | eth_blockNumber vs safe not tested |
+| TC41 | Missing | - | eth_blockNumber vs finalized not tested |
+| TC42 | Partial | `evm_rpc:73-76` | By number vs by hash tested |
+| TC43 | Partial | `evm_soft_conf:36` | Implicit check only |
+| TC44 | Missing | - | Timestamp vs current time not tested |
+| TC45 | Missing | - | Timestamp monotonicity not tested |
+
+#### EIP-1898 (TC46-TC49)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC46 | Missing | - | blockHash object syntax not tested |
+| TC47 | Missing | - | requireCanonical=true not tested |
+| TC48 | Missing | - | requireCanonical=false not tested |
+| TC49 | Missing | - | Non-existent hash in object not tested |
+
+#### State-dependent scenarios (TC50-TC107)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC50-52 | Partial | `evm_rpc:96-97` | Empty receipts checked, not empty txs |
+| TC53-58 | Missing | - | Single tx block validation missing |
+| TC59-63 | Missing | - | Multi-tx block validation missing |
+| TC64-66 | Missing | - | Contract deployment in block missing |
+| TC67-68 | Missing | - | Mixed tx types missing |
+| TC85-87 | Missing | - | Long chain scenarios missing |
+| TC88-90 | Missing | - | High gas usage missing |
+| TC91-93 | Missing | - | Reverted tx in block missing |
+| TC94-97 | Partial | `evm_soft_conf:52-62` | Pending txs partially tested |
+| TC98-100 | Missing | - | Multiple txs same sender missing |
+| TC101-103 | Missing | - | Blocks with events missing |
+| TC104-107 | Missing | - | Transaction type variations missing |
+
+#### Value cross-checks (TC108-TC143)
+
+| TC | Status | Covered by | Missing |
+|----|--------|------------|---------|
+| TC108-112 | Partial | `evm_rpc:96-113` | Receipt count checked, not all fields |
+| TC113-116 | Missing | - | tx by hash vs block tx matching missing |
+| TC117-121 | Missing | - | Receipt fields vs block missing |
+| TC122-124 | Missing | - | logsBloom validation missing |
+| TC125-128 | Missing | - | eth_getLogs vs block missing |
+| TC129-130 | Partial | `evm_fee_history.rs` | baseFee checked in fee_history tests |
+| TC131-133 | Missing | - | eth_blockNumber consistency missing |
+| TC134-140 | Missing | - | Transaction field validation missing |
+| TC141-143 | Missing | - | Timestamp consistency missing |
+
+### Summary: Coverage gaps
+
+**Critical gaps (P0):**
+- `safe` and `finalized` tags (TC05, TC06)
+- `details=true` (full transactions) mode (TC23-TC29)
+- Cross-check eth_blockNumber vs safe/finalized (TC40-TC41)
+- Pending block shows submitted txs correctly (TC94-TC96)
+- Receipt fields match block (TC108-TC112 partial, TC117-TC121 missing)
+
+**High-value gaps (P1):**
+- EIP-1898 blockHash parameter (TC46-TC49)
+- Random non-existent hash test (TC33)
+- Long chain scenarios (TC85-TC87)
+- Transaction field validation (TC134-TC140)
+- Timestamp monotonicity (TC45)
+- logsBloom validation (TC122-TC124)
+
+**Medium gaps (P2):**
+- Mixed transaction types in block (TC104-TC107)
+- Reverted transaction in block (TC91-TC93)
+- Genesis parentHash assertion (TC38)
+
+### Validation issues in existing tests
+
+1. **`evm_rpc.rs:by_number` helper only returns Header** - discards transactions, cannot test TC22-TC31
+2. **No `details=true` calls anywhere** - full transaction mode untested
+3. **No cross-checks between endpoints** - block data not verified against receipts/logs
+4. **No safe/finalized tag usage** - these tags completely untested
+5. **No value assertions on header fields** - gas_limit, baseFeePerGas, timestamp not validated
+
 ## References
 
 - [Ethereum JSON-RPC Specification](https://ethereum.org/developers/docs/apis/json-rpc/)
