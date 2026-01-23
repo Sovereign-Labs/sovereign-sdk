@@ -120,18 +120,7 @@ where
             }
             // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
             MaybeSealedBlock::PartialSynthetic(block) =>  {
-                let len = block.transactions.end - block.transactions.start;
-                let mut txs = Vec::with_capacity(len as usize);
-                let mut receipts = Vec::with_capacity(len as usize);
-                for tx_idx in block.transactions.clone() {
-                    let tx = self.tx(tx_idx, state)?;
-                    txs.push(tx);
-                    let receipt = self.receipt(tx_idx, state).unwrap_or_else(|| panic!("Tx {tx_idx} exists but has no corresponding receipt. This is a bug, please report it."));
-                    let receipt = receipt.0.receipt;
-                    receipts.push(receipt);
-                }
-                let (synthetic_block, txs) = block.finish_and_seal(txs, &receipts);
-                let header = Header::from_consensus(synthetic_block.header, None, Some(U256::from(synthetic_block.rlp_size)));
+                let (header, txs) = self.get_synthetic_block_contents_slow(block, state)?;
                 let txs = match kind {
                     BlockTransactionsKind::Full => BlockTransactions::Full(txs.into_iter().enumerate().map(|(tx_idx, tx)| from_recovered_with_block_context(tx.into(), Some(header.hash), header.number, tx_idx as u64)).collect()),
                     BlockTransactionsKind::Hashes => BlockTransactions::Hashes(txs.into_iter().map(|tx| *tx.signed_transaction.hash()).collect()),
@@ -144,6 +133,29 @@ where
                 }))
             }
         }
+    }
+
+    /// Populates the header of a partial synthetic block and returns the transactions.
+    /// 
+    /// This function has to fetch all the transactions and receipts, so it's relatively slow - avoid when possible.
+    pub fn get_synthetic_block_contents_slow(
+        &self,
+        block: SyntheticBlockWithoutRootsAndBloom,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<(Header, Vec<TxSignedAndRecovered>), EthApiError> {
+            let len = block.transactions.end - block.transactions.start;
+                let mut txs = Vec::with_capacity(len as usize);
+                let mut receipts = Vec::with_capacity(len as usize);
+                for tx_idx in block.transactions.clone() {
+                    let tx = self.tx(tx_idx, state)?;
+                    txs.push(tx);
+                    let receipt = self.receipt(tx_idx, state).unwrap_or_else(|| panic!("Tx {tx_idx} exists but has no corresponding receipt. This is a bug, please report it."));
+                    let receipt = receipt.0.receipt;
+                    receipts.push(receipt);
+                }
+                let (synthetic_block, txs) = block.finish_and_seal(txs, &receipts);
+                let header = Header::from_consensus(synthetic_block.header, None, Some(U256::from(synthetic_block.rlp_size)));
+            Ok((header, txs))
        
     }
 

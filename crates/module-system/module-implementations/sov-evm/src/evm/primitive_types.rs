@@ -154,6 +154,8 @@ impl Block {
 }
 
 
+/// A synthetic block header without the roots (txs, receipts) and bloom, and gas used.
+/// "synthetic" here means that the header has a fake hash which we can reverse engineer to identify which transaction are in the block.
 #[derive(Debug, PartialEq, Default, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SyntheticBlockWithoutRootsAndBloom {
     /// The synthetic block header. All fields are set except for the roots (txs, receipts) and bloom, and gas used.
@@ -175,6 +177,7 @@ fn xor_hashes(a: B256, b: B256) -> B256 {
 
 
 impl SyntheticBlockWithoutRootsAndBloom {
+    /// Creates a new synthetic block header.
     pub fn new(mut header: Header, transactions: Range<u64>) -> Self {
         if header.state_root == EMPTY_ROOT_HASH {
             header.state_root = xor_hashes(header.parent_hash, header.transactions_root);
@@ -185,18 +188,35 @@ impl SyntheticBlockWithoutRootsAndBloom {
         }
     }
 
+    /// Returns the block number of the synthetic block.
+    pub fn block_number(&self) -> u64 {
+        self.header_without_roots_bloom_and_gas_used.number
+    }
+
+    /// Returns the synthetic block hash.
     pub fn hash(&self) -> B256 {
         synthetic_block_hash_for(self.header_without_roots_bloom_and_gas_used.number, (self.transactions.end - self.transactions.start).try_into().expect("Transactions range should be less than u32::MAX"))
     }
 
+    /// Returns the number of transactions in the synthetic block.
     pub fn num_transactions(&self) -> u64 {
         self.transactions.end - self.transactions.start
     }
 
+    /// Returns the index of the first transaction in the synthetic block.
     pub fn first_tx_index(&self) -> u64 {
         self.transactions.start
     }
 
+    /// Returns the index of the last transaction in the synthetic block. If the block is empty, returns the index of the last tx in the previous block.
+    pub fn last_tx_index(&self) -> u64 {
+        self.transactions.end.saturating_sub(1)
+    }
+
+    /// Returns the header of the synthetic block.
+    pub fn header(&self) -> &Header {
+        &self.header_without_roots_bloom_and_gas_used
+    }
 
     /// Finishes the synthetic block and seals it. Returns the sealed synthetic block and the transactions that were added to the block. 
     /// This function is relatively heavy, since it computes the tx and receipts roots.
