@@ -59,5 +59,5 @@ where
             token_id,
         },
     });
-    default_test_signed_transaction(key, &msg, nonce, &CHAIN_HASH)
+    test_signed_transaction(key, &msg, UniquenessData::Nonce(nonce), &CHAIN_HASH)
 }
