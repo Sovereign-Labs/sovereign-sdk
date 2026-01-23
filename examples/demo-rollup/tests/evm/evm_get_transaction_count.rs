@@ -23,7 +23,7 @@ async fn nonce_at_tag(client: &SimpleStorageClient, address: Address, tag: &str)
 }
 
 async fn nonce_at_number(client: &SimpleStorageClient, address: Address, number: u64) -> u64 {
-    get_tx_count(client, address, format!("0x{:x}", number)).await
+    get_tx_count(client, address, format!("0x{number:x}")).await
 }
 
 async fn nonce_at_hash(
@@ -215,7 +215,7 @@ async fn eth_get_transaction_count_block_number_and_hash() -> anyhow::Result<()>
 
     let head_number = client.block_number().await;
     let head_block = client
-        .eth_get_block_by_number(Some(format!("0x{:x}", head_number)))
+        .eth_get_block_by_number(Some(format!("0x{head_number:x}")))
         .await;
     let head_hash = head_block.header.hash;
     assert_ne!(head_hash, B256::ZERO);
@@ -283,7 +283,7 @@ async fn eth_get_transaction_count_future_block_errors() -> anyhow::Result<()> {
 
     // Request nonce at a block far in the future
     let future_block = current_block + 1000;
-    let result = try_get_tx_count(&client, address, format!("0x{:x}", future_block)).await;
+    let result = try_get_tx_count(&client, address, format!("0x{future_block:x}")).await;
 
     assert!(
         result.is_err(),
@@ -633,7 +633,7 @@ async fn eth_get_transaction_count_block_hash_returns_correct_historical() -> an
     // Get block H0 info
     let h0_number = client.block_number().await;
     let h0_block = client
-        .eth_get_block_by_number(Some(format!("0x{:x}", h0_number)))
+        .eth_get_block_by_number(Some(format!("0x{h0_number:x}")))
         .await;
     let h0_hash = h0_block.header.hash;
     let nonce_at_h0 = nonce_at_hash(&client, address, h0_hash, true).await;
@@ -647,7 +647,7 @@ async fn eth_get_transaction_count_block_hash_returns_correct_historical() -> an
     let h1_number = client.block_number().await;
     assert!(h1_number > h0_number, "New block should be produced");
     let h1_block = client
-        .eth_get_block_by_number(Some(format!("0x{:x}", h1_number)))
+        .eth_get_block_by_number(Some(format!("0x{h1_number:x}")))
         .await;
     let h1_hash = h1_block.header.hash;
 
