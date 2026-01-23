@@ -35,12 +35,12 @@ gh run view <run-id> --json jobs --jq '.jobs[] | {id: .databaseId, name: .name, 
 
 ### Step 4: Download Logs
 
-Create directory and download all job logs:
+Create directory and download all job logs, stripping ANSI color codes:
 ```bash
 mkdir -p ci-logs/pr-<PR_NUMBER>/
 # or: mkdir -p ci-logs/branch-<BRANCH_NAME>/
 
-gh run view --job <job-id> --log > ci-logs/pr-<PR_NUMBER>/<job_name>_<job_id>.log
+gh run view --job <job-id> --log | sed 's/\x1b\[[0-9;]*m//g' > ci-logs/pr-<PR_NUMBER>/<job_name>_<job_id>.log
 ```
 
 Sanitize job names for filenames (replace spaces/special chars with underscores).
