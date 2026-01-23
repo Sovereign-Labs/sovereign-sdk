@@ -18,137 +18,100 @@ Priority: Semantic correctness > schema correctness. Error-shape tests are out o
 - Use `wait_for_next_blocks(1)` to advance head deterministically.
 - Use `SimpleStorageClient` to send txs and query RPCs.
 
-## Test cases (comprehensive)
+## Test cases (quality-first, state-driven)
 
-### 1) Baseline nonce at head (no pending)
+### Core fixture (deterministic, reused)
+Goal:
+- Establish a precise, reproducible nonce timeline for two accounts.
 Setup:
-- Start rollup, wait for at least 1 block, pause batches.
+- Two signers: A (primary), B (secondary).
+- Produce one sealed block, then pause batches to hold a pending block.
+Sequence:
+1) Seal block H0 with no A/B txs (record nonce A0, B0 at H0).
+2) Pause batches (pending exists).
+3) Submit txs in order: A1, B1, B2, A2 (all pending).
+4) Resume batches and seal block H1 containing those txs.
+5) Pause batches again for pending-state assertions.
+Derived expectations:
+- Pending/latest nonce after step 3: A = A0 + 2, B = B0 + 2.
+- Sealed nonce at H1: A = A0 + 2, B = B0 + 2.
+
+### 1) Default selector and rollup tag semantics
 Steps:
-- Query `eth_getTransactionCount` for sender at block `latest`.
+- Query `eth_getTransactionCount(A)` with no block selector.
+- Query `eth_getTransactionCount(A, "latest")` and `eth_getTransactionCount(A, "pending")`.
 Expected:
-- Nonce is a concrete value (typically 0 for a fresh account).
-- Nonce is stable across repeated calls without txs.
+- Default equals `latest`.
+- `latest` equals `pending` for A and B at all times in this rollup.
 
-### 2) Pending vs latest nonce (rollup behavior)
-Setup:
-- Start rollup, wait for at least 1 block, pause batches.
+### 2) Sealed history is immutable
 Steps:
-Expected (rollup):
-- `latest` nonce equals `pending` nonce at all times.
-- After sending one tx, both tags return N0 + 1.
-
-### 3) Block number selector (sealed block)
-Setup:
-- Start rollup, wait for at least 1 block, pause batches.
-Steps:
-- Capture head block number H (sealed).
-- Read nonce at block number H.
-- Send a tx while paused (no new sealed block).
-- Read nonce again at block number H.
+- Read nonce at H0.
+- While paused, submit pending txs (A1, B1, B2, A2).
+- Read nonce again at H0.
 Expected:
-- Nonce for block H is stable and unchanged by pending txs.
+- Nonce at H0 is unchanged by pending txs.
 
-### 4) EIP-1898 blockHash selector (canonical block)
-Setup:
-- Start rollup, wait for at least 1 block, pause batches.
+### 3) Per-address isolation with interleaved submissions
 Steps:
-- Fetch block H by number and extract its hash HH.
-- Query `eth_getTransactionCount` with block selector:
-  `{"blockHash": HH, "requireCanonical": true}`.
-- Query again with `{"blockHash": HH, "requireCanonical": false}`.
+- Use the core fixture sequence (A1, B1, B2, A2).
+- Query nonces at pending/latest and at sealed H1.
 Expected:
-- Both queries return the same nonce as the block-number query for H.
+- A nonce increases by 2, B nonce increases by 2.
+- Ordering does not leak across accounts.
 
-### 5) Unknown blockHash selector
-Setup:
-- Start rollup, pause batches.
+### 4) Pending block contents ↔ nonce consistency
 Steps:
-- Query `eth_getTransactionCount` with a random block hash.
+- While paused after step 3, fetch `eth_getBlockByNumber("pending")`.
+- Count pending txs from A and from B in the pending block.
 Expected:
-- L1 returns an error for unknown block hash; do not assert error shape.
+- For each address: nonce == sealed_nonce(H0) + pending_tx_count_for_address.
+
+### 5) Sealed block receipts ↔ nonce delta
+Steps:
+- After sealing H1, collect receipts for txs in H1.
+- Count txs from A and B included in H1.
+- Query nonce at H1 and H0 for A and B.
+Expected:
+- nonce(H1) == nonce(H0) + count_in_H1 for each address.
+
+### 6) Reverted tx still consumes nonce (sealed)
+Steps:
+- Deploy a contract with a reverting method.
+- Submit a reverting tx from A and seal a block.
+- Query nonce at H_before and H_after.
+Expected:
+- Nonce increases by 1 despite revert; receipt status indicates failure.
+
+### 7) Sequential submission monotonicity (single sender)
+Steps:
+- With batches paused, submit three txs from A in order.
+- Query nonce after each submission.
+Expected:
+- Nonce increases by exactly 1 per submission (no gaps).
+
+### 8) EIP-1898 blockHash selector (canonical)
+Steps:
+- Fetch sealed block H1 and hash HH1.
+- Query with `{"blockHash": HH1, "requireCanonical": true}` and false.
+Expected:
+- Both results equal `eth_getTransactionCount(..., H1)` for A and B.
+
+### 9) Unknown blockHash selector
+Steps:
+- Query with a random block hash.
+Expected:
+- Error or null is acceptable; do not assert error shape.
 Notes:
-- If current behavior returns `null` or error, document the observed behavior.
+- Record observed behavior for stability across releases.
 
-### 6) Multiple senders, independent nonces
-Setup:
-- Start rollup, wait for at least 1 block, pause batches.
+### 10) Tags: `earliest`, `safe`, `finalized`
 Steps:
-- Use two signers (primary and secondary).
-- Send one tx from primary, two txs from secondary (paused).
-- Read `latest`/`pending` for both addresses.
+- For finalization_blocks = 0: query `earliest`, `safe`, `finalized`, `latest`.
+- For finalization_blocks > 0: produce multiple blocks and query those tags again.
 Expected:
-- Primary nonce increments by 1, secondary nonce increments by 2.
-- Nonces are independent and do not affect each other.
-
-### 7) Nonce monotonicity across sequential tx submissions
-Setup:
-- Start rollup, pause batches.
-Steps:
-- Read nonce N0 at `latest`.
-- Send three txs in order from the same sender.
-- Read nonce after each submission (paused).
-Expected:
-- Nonce increments by exactly 1 per submitted tx.
-- No gaps or duplicate values in the sequence.
-
-### 8) Reverted tx still consumes nonce (mined)
-Setup:
-- Deploy a contract with a method that reverts.
-- Resume batches to mine a block.
-Steps:
-- Read nonce N0 at sealed head.
-- Send a tx that will revert (then resume and mine).
-- Read nonce at the new sealed head.
-Expected:
-- Nonce at the sealed head increases by 1 despite revert.
-- Receipt status indicates failure, but nonce still advanced.
-
-### 9) Pending block contents vs nonce
-Setup:
-- Pause batches and submit multiple txs from the same sender.
-Steps:
-- Fetch `eth_getBlockByNumber("pending")` and count sender txs.
-- Query `eth_getTransactionCount` for sender.
-Expected:
-- Nonce equals sealed nonce + count of pending sender txs.
-- Count matches the number of sender txs in the pending block.
-
-### 10) Cross-endpoint consistency with receipts
-Setup:
-- Resume batches to mine a block containing N txs from sender.
-Steps:
-- Get receipts for those txs and collect block number H.
-- Query `eth_getTransactionCount(address, H)` and `H-1`.
-Expected:
-- Nonce at H equals nonce at H-1 plus N.
-- Receipts for block H are consistent with the nonce increment.
-
-### 11) Safe/finalized tags with finalization enabled
-Setup:
-- Start rollup with finalization_blocks > 0.
-- Produce multiple blocks.
-Steps:
-- Query nonce at `safe`, `finalized`, and `latest`.
-Expected:
-- Nonce at `safe`/`finalized` reflects the corresponding sealed block.
-- Nonces should be <= `latest` nonce.
-
-### 12) Earliest tag
-Setup:
-- Start rollup, pause batches.
-Steps:
-- Query nonce at `earliest`.
-Expected:
-- Nonce matches the genesis state for that account (typically 0).
-
-### 13) Explicit block number boundary
-Setup:
-- Produce blocks up to height H and pause.
-Steps:
-- Query nonce at H and H-1.
-Expected:
-- Nonce at H is >= nonce at H-1.
-- If no txs from sender were mined in H, the values are equal.
+- `earliest` reflects genesis nonce.
+- `safe`/`finalized` map to their corresponding sealed blocks and are <= `latest`.
 
 ## Cross-endpoint invariants (optional)
 - If `eth_getBlockByNumber(H)` returns a sealed block, then
