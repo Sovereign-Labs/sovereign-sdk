@@ -167,17 +167,6 @@ impl<S: Spec> Evm<S> {
             .unwrap_infallible()
     }
 
-    /// Lookup the height of an Ethereum block based on the supplied hash.
-    pub fn block_height<Accessor: AccessoryStateReader>(
-        &self,
-        block_hash: &B256,
-        state: &mut Accessor,
-    ) -> Option<u64> {
-        self.block_hash_to_number
-            .get(block_hash, state)
-            .unwrap_infallible()
-    }
-
     /// Get the currently pending head block.
     pub fn pending_head<Accessor: AccessoryStateReader>(
         &self,

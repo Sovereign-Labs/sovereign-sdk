@@ -130,8 +130,13 @@ where
     }
 
     fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor> {
-        let block_height = self.resolve_block_hash(block_hash)?;
-        let maybe_cursor = self.scan_block_range(block_height..=block_height)?;
+        let block = self
+            .evm
+            .get_maybe_sealed_block_by_id(block_hash.into(), &mut self.state)
+            .map_err(|_| Error::BlockHashNotFound(block_hash))?
+            .ok_or(Error::BlockHashNotFound(block_hash))?;
+        let maybe_cursor = self.scan_block(block)?;
+
         Ok(LogsWithMaybeCursor::new(
             self.logs,
             maybe_cursor.map(|c| c.pack()),
@@ -326,14 +331,6 @@ where
             return Err(Error::BlockPruned(number));
         };
         Ok(block)
-    }
-
-    fn resolve_block_hash(&mut self, block_hash: BlockHash) -> Result<u64> {
-        let Some(block_height) = self.evm.block_height(&block_hash, &mut self.state) else {
-            tracing::warn!(block_hash = %block_hash, "Block with hash not found");
-            return Err(Error::BlockHashNotFound(block_hash));
-        };
-        Ok(block_height)
     }
 
     fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<BlockNumber> {
