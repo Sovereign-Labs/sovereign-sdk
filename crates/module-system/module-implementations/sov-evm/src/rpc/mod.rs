@@ -40,6 +40,12 @@ use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransa
 // Prune synthetic blocks more than this number of blocks away from the latest block.
 const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
 
+/// Cache of synthetic block states by hash.
+/// 
+/// Currently, there's no way to recreate the state of a synthetic block once it's gone. This is because
+/// EVM state is shared with the sov-modles system, so any sov txs can impact the state of the synthetic block - but only
+/// EVM tx bodies are stored in the EVM module. This cache saves a copy of the API state accessor for each synthetic block we make,
+/// pruning them after some interval.
 #[cfg(feature = "native")]
 pub(crate) static SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH: OnceLock<RwLock<SyntheticBlocksCache>> =
     OnceLock::new();
@@ -511,6 +517,9 @@ where
     ///
     /// Note that values in the block_env (including the block number there!) are updated during the begin_rollup_block_hook, so the values here may be stale
     /// if this function is called while no rollup block is in progress. In that case, the number of transactions will be zero.
+    /// 
+    /// This function also caches the API state at the time this pending block was created in `SYNTHETIC_BLOCKS_CACHE_BY_HASH`. This allows recreate the state
+    /// as of the synthetic block as long as it remains in cache, which would otherwise be impossible. See the docs on `SYNTHETIC_BLOCKS_CACHE_BY_HASH` for more details
     pub fn pending_block(
         &self,
         block_env: Option<BlockEnv>,

@@ -40,8 +40,8 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
             let rec = evm_client.receipt(tx_hash).await.unwrap();
             let tx = evm_client.transaction(tx_hash).await.unwrap();
 
-            assert!(rec.block_hash.is_none());
-            assert!(tx.block_hash.is_none());
+            assert!(rec.block_hash.is_some());
+            assert!(tx.block_hash.is_some());
 
             assert_eq!(rec.block_number.unwrap(), expected_block_nr);
             assert_eq!(tx.block_number.unwrap(), expected_block_nr);
