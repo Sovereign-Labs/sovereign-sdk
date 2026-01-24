@@ -436,7 +436,8 @@ where
         block_number
     }
 
-    fn get_maybe_sealed_block_by_id(
+    /// Retrieve a block by its id.
+    pub fn get_maybe_sealed_block_by_id(
         &self,
         block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
