@@ -874,7 +874,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             temp_cache: TempCache::new(),
             checkpoint_and_read_txn: self.checkpoint_and_read_txn.clone(),
             kernel: self.kernel.clone(),
-            state_to_access: self.state_to_access.clone(),
+            state_to_access: self.state_to_access,
             visible_slot_number: self.visible_slot_number,
             safe_true_slot_number_to_use: self.safe_true_slot_number_to_use,
             encountered_pruning_error: None,
