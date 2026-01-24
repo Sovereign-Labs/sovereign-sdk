@@ -21,6 +21,8 @@ use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_sequencer::Sequencer;
 use std::fmt::Debug;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
@@ -50,11 +52,12 @@ where
     evm: Evm<S>,
 }
 
+/// Tracks what we've already notified subscribers about, so we don't send duplicate notifications
 #[derive(Debug, Clone)]
 struct SyntheticBlockWatermark {
     block_number_of_last_notification: u64,
     // The tx index of the last notification, if known.
-    // It's not known to use when we send a notification for a *real* block,
+    // It's not known to us when we send a notification for a *real* block,
     // so we have special handling in that case
     tx_index_of_last_notification_if_known: Option<u64>,
 }
@@ -70,7 +73,9 @@ impl SyntheticBlockWatermark {
     fn from_synthetic_block(synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> Self {
         Self {
             block_number_of_last_notification: synthetic_block.partial_header().number,
-            tx_index_of_last_notification_if_known: Some(synthetic_block.last_tx_index()),
+            // The last tx index is the index of the last transaction in the synthetic block. If the end item is zero (at genesis) then
+            // we want to notify, so set this to None
+            tx_index_of_last_notification_if_known: synthetic_block.transactions.end.checked_sub(1),
         }
     }
 
@@ -101,6 +106,9 @@ impl SyntheticBlockWatermark {
         &mut self,
         synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
     ) -> SyntheticBlockWatermarkAdvanceResult {
+        // The synthetic block number is always one greater than the sealed block number,
+        // so if the last notified block number is less than the synthetic block number - 1,
+        // we need to advance and emit real block notification.
         if self.block_number_of_last_notification
             < synthetic_block.partial_header().number.saturating_sub(1)
         {
@@ -231,6 +239,7 @@ where
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
         let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
         let mut last_send_time = std::time::Instant::now();
+        let has_waker_task = Arc::new(AtomicBool::new(false));
         let (wakeup_sender, mut wakeup_receiver) = tokio::sync::watch::channel(());
         loop {
             tokio::select! {
@@ -247,11 +256,15 @@ where
 
                     // Send all of the notifications for new real blocks.
                     while let SyntheticBlockWatermarkAdvanceResult::NewRealBlock(block_number) = watermark.peek(&pending_block) {
-                        watermark.advance(&pending_block);
                         let sealed = self.evm.blocks.get(&block_number, &mut state).unwrap_infallible().expect("Block was notified but did not exist. This is a bug!");
                         let rpc_header = Header::from_consensus(sealed.header.into(), None, Some(U256::from(sealed.rlp_size)));
                         self.send(&rpc_header).await?;
+                        watermark.advance(&pending_block);
                         sent = true;
+                    }
+
+                    if sent {
+                        last_send_time = std::time::Instant::now();
                     }
 
                     // If the state change only created a synthetic block, send it only if we haven't sent one too recently
@@ -260,23 +273,24 @@ where
                             watermark.advance(&pending_block);
                             let (rpc_header, _txs) = self.evm.get_synthetic_block_contents_slow(pending_block, &mut state)?;
                             self.send(&rpc_header).await?;
-                            sent = true;
+                            last_send_time = std::time::Instant::now();
                         } else {
-                            // If we don't send the notification now, scheudle a wakeup to try again later. This handles the edge case
-                            // where we have a bunch of new synethitic blocks in rapid succession followed by a gap; in that case,
+                            // If we don't send the notification now, schedule a wakeup to try again later. This handles the edge case
+                            // where we have a bunch of new synthetic blocks in rapid succession followed by a gap; in that case,
                             // we'd never notify for the newer txs.
-                            // Spawn a wakeup for later to handle the edge case. Note that we don't try to dedup wakeups; duplicates are handled in the wakeup_receiver case.
-                            let wakeup_sender = wakeup_sender.clone();
-                            tokio::spawn(async move {
-                                tokio::time::sleep(Duration::from_millis(SYNTHETIC_NEW_HEADS_MAX_FREQUENCY_MS) ).await;
-                                let _ = wakeup_sender.send(());
-                            });
+                            // Spawn a wakeup for later to handle the edge case. Note that we schedule at most one wakeup every 200ms
+                            if !has_waker_task.swap(true, Ordering::SeqCst) {
+                                let has_waker_task = has_waker_task.clone();
+                                let wakeup_sender = wakeup_sender.clone();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(Duration::from_millis(SYNTHETIC_NEW_HEADS_MAX_FREQUENCY_MS) ).await;
+                                    has_waker_task.store(false, Ordering::SeqCst);
+                                    let _ = wakeup_sender.send(());
+                                });
+                            }
                         }
                     }
 
-                    if sent {
-                        last_send_time = std::time::Instant::now();
-                    }
                     // In the SyntheticBlockWatermarkAdvanceResult::None case, do nothing.
                 }
                 _ = wakeup_receiver.changed() => {

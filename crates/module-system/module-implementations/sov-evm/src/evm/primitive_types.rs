@@ -29,12 +29,14 @@ pub fn synthetic_block_hash_for(block_number: u64, num_txs: u32) -> B256 {
     hash.into()
 }
 
+#[cfg(feature = "native")]
 pub fn is_synthetic_block_hash(hash: &B256) -> bool {
     hash.iter()
         .take(20)
         .eq(SYNTHETIC_BLOCK_HASH_PLACEHOLDER.iter().take(20))
 }
 
+#[cfg(feature = "native")]
 pub fn parse_synthetic_block_hash(hash: &B256) -> Option<(u64, u32)> {
     if !is_synthetic_block_hash(hash) {
         return None;
@@ -82,7 +84,7 @@ pub struct TxSignedAndRecovered {
 
 impl Encodable2718 for TxSignedAndRecovered {
     fn encode_2718(&self, out: &mut dyn BufMut) {
-        self.signed_transaction.encode_2718(out)
+        self.signed_transaction.encode_2718(out);
     }
 
     fn encode_2718_len(&self) -> usize {
@@ -98,7 +100,7 @@ impl Typed2718 for TxSignedAndRecovered {
 
 impl Encodable for TxSignedAndRecovered {
     fn encode(&self, out: &mut dyn BufMut) {
-        self.signed_transaction.encode(out)
+        self.signed_transaction.encode(out);
     }
 }
 

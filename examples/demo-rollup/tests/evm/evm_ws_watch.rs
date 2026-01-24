@@ -2,7 +2,6 @@ use alloy::network::TransactionBuilder;
 use alloy::providers::Provider;
 use alloy::rpc::types::TransactionRequest;
 use alloy_primitives::{Address, B256};
-use alloy_rpc_types_eth::BlockNumberOrTag;
 use futures::StreamExt;
 use std::time::Duration;
 use tokio::time::timeout;

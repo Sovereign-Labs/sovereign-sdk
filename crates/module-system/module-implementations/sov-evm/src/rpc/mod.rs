@@ -71,7 +71,7 @@ impl SyntheticBlocksCache {
             entry.insert(state);
             self.hashes_by_block_number
                 .entry(block.block_number())
-                .or_insert(Vec::new())
+                .or_default()
                 .push(block.hash());
             if block.block_number()
                 > self.oldest_block_number + SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL
@@ -188,11 +188,8 @@ where
             MaybeSealedBlock::Sealed(sealed) => {
                 let block_size = sealed.rlp_size;
                 let transactions = self.get_block_transactions(&sealed, kind, state)?;
-                let header = Header::from_consensus(
-                    sealed.header.into(),
-                    None,
-                    Some(U256::from(block_size)),
-                );
+                let header =
+                    Header::from_consensus(sealed.header, None, Some(U256::from(block_size)));
                 Ok(Some(Block {
                     header,
                     transactions,
@@ -467,13 +464,13 @@ where
                     // This ensures that any calls to "getBlockByHash" will succeed only if "eth_call" would succeed given the same hash.
                     {
                         let Some(cache) = SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH.get() else {
-                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         };
                         let lock = cache
                             .read()
                             .expect("Failed to read from synthetic blocks cache");
                         if lock.get_state_by_hash::<S>(hash.into()).is_none() {
-                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         }
                     }
 
@@ -483,11 +480,11 @@ where
                         let Some(mut newest_pending_block) =
                             self.pending_block(Some(block_env), state)
                         else {
-                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         };
                         // Check that the number of txs requested is no more than the number of txs in the pending block. If not, this block doesn't exist - return early
                         if num_txs as u64 > newest_pending_block.num_transactions() {
-                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         }
                         // Check if the number of txs requested is exactly the same as the number of txs in the pending block. If so, this is the pending block! return it
                         if num_txs as u64 == newest_pending_block.num_transactions() {
@@ -715,7 +712,7 @@ where
                 else {
                     return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
                 };
-                Ok(MaybeArchivalState::Synthetic(state))
+                Ok(MaybeArchivalState::Synthetic(Box::new(state)))
             }
         }
     }

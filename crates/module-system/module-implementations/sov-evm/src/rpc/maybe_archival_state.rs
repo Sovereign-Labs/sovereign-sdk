@@ -1,12 +1,10 @@
-use derive_more::From;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use std::ops::{Deref, DerefMut};
 
-#[derive(From)]
 pub(crate) enum MaybeArchivalState<'a, S: Spec> {
     Current(&'a mut ApiStateAccessor<S>),
     Archival(Box<ApiStateAccessor<S>>),
-    Synthetic(ApiStateAccessor<S>),
+    Synthetic(Box<ApiStateAccessor<S>>),
 }
 
 impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
