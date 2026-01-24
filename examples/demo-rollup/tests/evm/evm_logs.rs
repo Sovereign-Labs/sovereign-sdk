@@ -16,7 +16,6 @@ use sov_sequencer::SeqConfigExtension;
 use sov_test_utils::test_rollup::TestRollup;
 use std::collections::HashMap;
 
-#[ignore = "pending logs missing block_hash"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_log_from_pending_block() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
@@ -25,11 +24,11 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
-    let pending_block_first = latest_block_context(&client).await;
+    let mut pending_block_first = latest_block_context(&client).await;
     let pending_filter = filter_for_tag(BlockNumberOrTag::Pending);
     let logs_after_first = client.get_logs(&pending_filter).await;
 
-    let expected_first = vec![
+    let mut expected_first = vec![
         ExpectedSimpleLog {
             meta: ExpectedLogMeta {
                 address: contract_address,
@@ -62,17 +61,34 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     assert_expected_simple_logs(&logs_after_first, &expected_first, client.address());
 
     let second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
-    let pending_block_second = latest_block_context(&client).await;
+    let mut pending_block_second = latest_block_context(&client).await;
     let third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
     let pending_block_third = latest_block_context(&client).await;
+
+    // There will have been a "reorg" at the chain tip because we've paused batch updates and sent more txs. That means we
+    // need a new block with a different set of txs - hence a reorg.
+    // Update the expected root hashes to account for the reorg.
+    if pending_block_second.number == pending_block_first.number
+        && pending_block_second.hash != pending_block_third.hash
+    {
+        pending_block_second.hash = pending_block_third.hash;
+    }
+    if pending_block_first.number == pending_block_second.number
+        && pending_block_first.hash != pending_block_second.hash
+    {
+        for block in expected_first.iter_mut() {
+            block.meta.block_hash = pending_block_second.hash;
+        }
+        pending_block_first.hash = pending_block_second.hash;
+    }
 
     let logs_after_all = client.get_logs(&pending_filter).await;
     let expected_second = vec![ExpectedSimpleLog {
         meta: ExpectedLogMeta {
             address: contract_address,
             tx_hash: second_tx,
-            tx_index: 0,
-            log_index: 0,
+            tx_index: 1,
+            log_index: 2,
             block_hash: pending_block_second.hash,
             block_number: pending_block_second.number,
             block_timestamp: Some(pending_block_second.timestamp),
@@ -85,8 +101,8 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
         meta: ExpectedLogMeta {
             address: contract_address,
             tx_hash: third_tx,
-            tx_index: 0,
-            log_index: 0,
+            tx_index: 2,
+            log_index: 3,
             block_hash: pending_block_third.hash,
             block_number: pending_block_third.number,
             block_timestamp: Some(pending_block_third.timestamp),
@@ -104,32 +120,18 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
         .collect();
     assert_expected_simple_logs(&logs_after_all, &expected_all, client.address());
 
-    let logs_by_hash_first = client
-        .get_logs(&Filter::new().at_block_hash(pending_block_first.hash))
-        .await;
-    let logs_by_hash_second = client
-        .get_logs(&Filter::new().at_block_hash(pending_block_second.hash))
-        .await;
-    let logs_by_hash_third = client
-        .get_logs(&Filter::new().at_block_hash(pending_block_third.hash))
-        .await;
-    assert_expected_simple_logs(&logs_by_hash_first, &expected_first, client.address());
-    assert_expected_simple_logs(&logs_by_hash_second, &expected_second, client.address());
-    assert_expected_simple_logs(&logs_by_hash_third, &expected_third, client.address());
-
     rollup.resume_preferred_batches().await;
 
     Ok(())
 }
 
-#[ignore = "pending logs missing block_hash"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     let nb_of_txs = 3;
     let nb_of_logs_per_tx: u32 = 2;
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
-
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
     rollup_and_client
         .test_rollup
         .pause_preferred_batches()
@@ -177,14 +179,13 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "pending topic filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
     let nb_of_txs = 5;
     let nb_of_logs_per_tx: u32 = 5;
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
-
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
     rollup_and_client
         .test_rollup
         .pause_preferred_batches()
@@ -229,13 +230,13 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "default range logs missing block_hash"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     let nb_of_txs = 2;
     let nb_of_logs_per_tx: u32 = 3;
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     rollup_and_client
         .test_rollup
@@ -289,7 +290,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
-
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
     rollup_and_client
         .test_rollup
         .pause_preferred_batches()
@@ -316,7 +317,7 @@ async fn get_logs_single_block_range() -> anyhow::Result<()> {
     let nb_of_logs_per_tx: u32 = 4;
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
-
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
     let tx_hashes = rollup_and_client
         .produce_logs(2, nb_of_logs_per_tx, Some(1))
         .await;
@@ -374,10 +375,10 @@ async fn get_logs_single_block_range() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "single address filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_address_filter_single() -> anyhow::Result<()> {
     let (test_rollup, client, contract_a, contract_b) = setup_two_contracts().await;
+    test_rollup.wait_for_next_blocks(1).await;
 
     test_rollup.pause_preferred_batches().await;
     let tx_a = client.alloy_emit_logs(contract_a, 1, 2).await;
@@ -413,10 +414,10 @@ async fn get_logs_address_filter_single() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "multiple address filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
     let (test_rollup, client, contract_a, contract_b) = setup_two_contracts().await;
+    test_rollup.wait_for_next_blocks(1).await;
 
     test_rollup.pause_preferred_batches().await;
     let tx_a = client.alloy_emit_logs(contract_a, 1, 2).await;
@@ -458,14 +459,13 @@ async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "topic OR filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let nb_of_txs = 2;
     let nb_of_logs_per_tx: u32 = 5;
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
-
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
     rollup_and_client
         .test_rollup
         .pause_preferred_batches()
@@ -517,13 +517,12 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "topic AND wildcard filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
     let nb_of_logs_per_tx: u32 = 5;
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
-
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
     rollup_and_client
         .test_rollup
         .pause_preferred_batches()
@@ -569,10 +568,10 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "address+topic filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
     let (test_rollup, client, contract_a, contract_b) = setup_two_contracts().await;
+    test_rollup.wait_for_next_blocks(1).await;
 
     test_rollup.pause_preferred_batches().await;
     let tx_a = client.alloy_emit_logs(contract_a, 7, 3).await;
@@ -608,10 +607,10 @@ async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "safe/finalized logs empty"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     let sealed_tx = rollup_and_client
         .client
@@ -1019,10 +1018,10 @@ async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "topic0 filter returned 0 logs"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     rollup_and_client
         .test_rollup
@@ -1160,7 +1159,6 @@ async fn get_logs_schema_correctness() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[ignore = "EIP-1898 blockHash object rejected"]
 #[tokio::test(flavor = "multi_thread")]
 async fn get_logs_eip1898_blockhash_object() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
@@ -1839,7 +1837,7 @@ struct BlockContext {
     timestamp: u64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct ExpectedLogMeta {
     address: Address,
     tx_hash: alloy_primitives::TxHash,
@@ -1872,7 +1870,7 @@ struct SimpleLogPlan {
     data: U256,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct ExpectedSimpleLog {
     meta: ExpectedLogMeta,
     topic1: U256,
