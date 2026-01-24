@@ -9,7 +9,6 @@ use alloy_consensus::BlockHeader;
 use alloy_consensus::TxReceipt;
 use alloy_eips::eip1898::ParseBlockNumberError;
 use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::BlockHash;
 use alloy_primitives::BlockNumber;
 use alloy_primitives::B256;
 use alloy_rpc_types::eth::Filter;
