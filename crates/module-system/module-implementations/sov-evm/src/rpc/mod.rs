@@ -408,7 +408,13 @@ where
             BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
             BlockNumberOrTag::Number(nr) => nr,
             // We treat latest and pending the same to avoid foundry issues
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
+                if self.has_pending_block(state) {
+                    *block_numbers.end() + 1
+                } else {
+                    *block_numbers.end()
+                }
+            }
         };
         block_number
     }

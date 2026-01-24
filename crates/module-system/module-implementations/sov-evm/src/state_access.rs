@@ -198,6 +198,15 @@ impl<S: Spec> Evm<S> {
         block_numbers.expect("Block numbers must be set in genesis")
     }
 
+    /// Check if there are pending transactions.
+    #[cfg(feature = "native")]
+    pub fn has_pending_block(
+        &self,
+        state: &mut ApiStateAccessor<S>,
+    ) -> bool {
+        self.pending_transactions.len(state).unwrap_infallible() != 0
+    }
+
     /// Get the Evm chain config.
     pub fn cfg_infallible<Accessor: InfallibleStateAccessor>(
         &self,
