@@ -69,7 +69,7 @@ enum SyntheticBlockWatermarkAdvanceResult {
 impl SyntheticBlockWatermark {
     fn from_synthetic_block(synthetic_block: &SyntheticBlockWithoutRootsAndBloom) -> Self {
         Self {
-            block_number_of_last_notification: synthetic_block.header().number,
+            block_number_of_last_notification: synthetic_block.partial_header().number,
             tx_index_of_last_notification_if_known: Some(synthetic_block.last_tx_index()),
         }
     }
@@ -78,7 +78,7 @@ impl SyntheticBlockWatermark {
         &mut self,
         synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
     ) -> SyntheticBlockWatermarkAdvanceResult {
-        self.block_number_of_last_notification = synthetic_block.header().number;
+        self.block_number_of_last_notification = synthetic_block.partial_header().number;
         self.tx_index_of_last_notification_if_known = Some(synthetic_block.last_tx_index());
         SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
     }
@@ -102,7 +102,7 @@ impl SyntheticBlockWatermark {
         synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
     ) -> SyntheticBlockWatermarkAdvanceResult {
         if self.block_number_of_last_notification
-            < synthetic_block.header().number.saturating_sub(1)
+            < synthetic_block.partial_header().number.saturating_sub(1)
         {
             return self.advance_and_emit_real_block_notification();
         }
@@ -125,7 +125,7 @@ impl SyntheticBlockWatermark {
         synthetic_block: &SyntheticBlockWithoutRootsAndBloom,
     ) -> SyntheticBlockWatermarkAdvanceResult {
         if self.block_number_of_last_notification
-            < synthetic_block.header().number.saturating_sub(1)
+            < synthetic_block.partial_header().number.saturating_sub(1)
         {
             return SyntheticBlockWatermarkAdvanceResult::NewRealBlock(
                 self.block_number_of_last_notification + 1,
@@ -144,7 +144,7 @@ impl SyntheticBlockWatermark {
     }
 }
 
-// TODO: Refactor this into a long-running background task to reduce overhead. Right now, we do duplicate fetching for each subscription.
+// TODO(long term, not an immediate issue): Refactor this into a long-running background task to reduce overhead. Right now, we do duplicate fetching for each subscription.
 impl<S, Seq> Streamer<S, Seq>
 where
     S: Spec,

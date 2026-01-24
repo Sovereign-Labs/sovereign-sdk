@@ -65,20 +65,11 @@ where
             method = "eth_getBlockByHash",
             "EVM module JSON-RPC request"
         );
-
-        let block_number = self
-            .block_hash_to_number
-            .get(&block_hash, state)
-            .unwrap_infallible();
-        let kind = details.unwrap_or_default().into();
-        Ok(match block_number {
-            Some(number) => self.get_block(
-                Some(BlockId::Number(BlockNumberOrTag::Number(number))),
-                kind,
-                state,
-            )?,
-            None => None,
-        })
+        Ok(self.get_maybe_synthetic_block_for_rpc(
+            Some(BlockId::Hash(block_hash.into())),
+            details.unwrap_or_default().into(),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getBlockByNumber`
@@ -95,7 +86,7 @@ where
             "EVM module JSON-RPC request"
         );
         let kind = details.unwrap_or_default().into();
-        Ok(self.get_block(block_id, kind, state)?)
+        Ok(self.get_maybe_synthetic_block_for_rpc(block_id, kind, state)?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -437,7 +428,7 @@ where
             method = "eth_getBlockTransactionCountByNumber",
             "EVM module JSON-RPC request"
         );
-        let block = self.get_block(block_id, false.into(), state)?;
+        let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
         Ok(block.map(|b| U64::from(b.transactions.len())))
     }
 
@@ -460,7 +451,7 @@ where
             .unwrap_infallible();
         match block_number {
             Some(number) => {
-                let block = self.get_block(
+                let block = self.get_maybe_synthetic_block_for_rpc(
                     Some(BlockId::Number(BlockNumberOrTag::Number(number))),
                     false.into(),
                     state,

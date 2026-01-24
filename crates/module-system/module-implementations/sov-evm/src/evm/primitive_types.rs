@@ -29,6 +29,19 @@ pub fn synthetic_block_hash_for(block_number: u64, num_txs: u32) -> B256 {
     hash.into()
 }
 
+pub fn is_synthetic_block_hash(hash: &B256) -> bool {
+    hash.iter().take(20).eq(SYNTHETIC_BLOCK_HASH_PLACEHOLDER.iter().take(20))
+}
+
+pub fn parse_synthetic_block_hash(hash: &B256) -> Option<(u64, u32)> {
+    if !is_synthetic_block_hash(hash) {
+        return None;
+    }
+    let block_number = u64::from_be_bytes(hash[20..28].try_into().unwrap());
+    let num_txs = u32::from_be_bytes(hash[28..32].try_into().unwrap());
+    Some((block_number, num_txs))
+}
+
 /// Signed ethereum transaction
 pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
 
@@ -218,7 +231,7 @@ impl SyntheticBlockWithoutRootsAndBloom {
     }
 
     /// Returns the header of the synthetic block.
-    pub fn header(&self) -> &Header {
+    pub fn partial_header(&self) -> &Header {
         &self.header_without_roots_bloom_and_gas_used
     }
 
@@ -369,12 +382,15 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 
 #[cfg(feature = "native")]
 /// Sealed or pending block.
-#[derive(From, Debug)]
+#[derive(Debug)]
 pub enum MaybeSealedBlock {
     /// SealedBlock
     Sealed(SealedBlock),
-    /// Pending
-    PartialSynthetic(SyntheticBlockWithoutRootsAndBloom),
+    /// A synthetic block whose number matches the pending block number. It may be slightly older than the newest pending block 
+    PendingSynthetic(SyntheticBlockWithoutRootsAndBloom),
+    /// A synthetic block whose number is different from the pending block number.
+    /// This block is either in the past, or it doesn't exist yet
+    PastSynthetic(SyntheticBlockWithoutRootsAndBloom)
 }
 
 #[cfg(feature = "native")]
@@ -383,7 +399,8 @@ impl MaybeSealedBlock {
     pub fn hash(&self) -> Option<B256> {
         match self {
             Self::Sealed(block) => Some(block.header.hash()),
-            Self::PartialSynthetic(block) => Some(block.hash()),
+            Self::PendingSynthetic(block) => Some(block.hash()),
+            Self::PastSynthetic(block) => Some(block.hash()),
         }
     }
 
@@ -391,7 +408,8 @@ impl MaybeSealedBlock {
     pub fn number(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.number,
-            Self::PartialSynthetic(block) => block.header_without_roots_bloom_and_gas_used.number,
+            Self::PendingSynthetic(block) => block.header_without_roots_bloom_and_gas_used.number,
+            Self::PastSynthetic(block) => block.header_without_roots_bloom_and_gas_used.number,
         }
     }
 
@@ -404,7 +422,8 @@ impl MaybeSealedBlock {
     pub fn transactions_start(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.transactions.start,
-            Self::PartialSynthetic(block) => block.transactions.start,
+            Self::PendingSynthetic(block) => block.transactions.start,
+            Self::PastSynthetic(block) => block.transactions.start,
         }
     }
 
@@ -412,7 +431,8 @@ impl MaybeSealedBlock {
     pub fn transactions_end(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.transactions.end,
-            Self::PartialSynthetic(block) => block.transactions.end,
+            Self::PendingSynthetic(block) => block.transactions.end,
+            Self::PastSynthetic(block) => block.transactions.end,
         }
     }
 
@@ -420,9 +440,10 @@ impl MaybeSealedBlock {
     pub fn timestamp(&self) -> u64 {
         match self {
             Self::Sealed(block) => block.header.timestamp,
-            Self::PartialSynthetic(block) => {
+            Self::PendingSynthetic(block) => {
                 block.header_without_roots_bloom_and_gas_used.timestamp
             }
+            Self::PastSynthetic(block) => block.header_without_roots_bloom_and_gas_used.timestamp,
         }
     }
 
@@ -430,7 +451,8 @@ impl MaybeSealedBlock {
     pub fn maybe_partial_header(&self) -> &Header {
         match self {
             Self::Sealed(block) => block.header.inner(),
-            Self::PartialSynthetic(block) => &block.header_without_roots_bloom_and_gas_used,
+            Self::PendingSynthetic(block) => &block.header_without_roots_bloom_and_gas_used,
+            Self::PastSynthetic(block) => &block.header_without_roots_bloom_and_gas_used,
         }
     }
 
@@ -438,7 +460,8 @@ impl MaybeSealedBlock {
     pub fn into_maybe_partial_header(self) -> Header {
         match self {
             Self::Sealed(block) => block.header.into_inner(),
-            Self::PartialSynthetic(block) => block.header_without_roots_bloom_and_gas_used,
+            Self::PendingSynthetic(block) => block.header_without_roots_bloom_and_gas_used,
+            Self::PastSynthetic(block) => block.header_without_roots_bloom_and_gas_used,
         }
     }
 
@@ -446,19 +469,12 @@ impl MaybeSealedBlock {
     pub fn header_if_sealed(&self) -> Option<&Header> {
         match self {
             Self::Sealed(block) => Some(block.header.inner()),
-            Self::PartialSynthetic(_) => None,
+            Self::PendingSynthetic(_) => None,
+            Self::PastSynthetic(_) => None,
         }
     }
 }
 
-// #[cfg(feature = "native")]
-// impl From<MaybeSealedBlock> for Sealed<Header> {
-//     fn from(block: MaybeSealedBlock) -> Sealed<Header> {
-//         let hash = block.hash().unwrap_or_default();
-//         let header = block.into_header();
-//         Sealed::new_unchecked(header, hash)
-//     }
-// }
 
 /// TODO: Can we replace this with Reth type?
 #[serde_as]
@@ -511,5 +527,13 @@ mod tests {
         let reth_tx: Recovered<TransactionSigned> = tx.into();
 
         assert_eq!(signer, reth_tx.signer());
+    }
+
+    #[test]
+    fn test_synthetic_block_hash() {
+        let hash = synthetic_block_hash_for(100, 10);
+        assert!(is_synthetic_block_hash(&hash));
+        assert_eq!(parse_synthetic_block_hash(&hash), Some((100, 10)));
+        assert!(!is_synthetic_block_hash(&B256::ZERO));
     }
 }

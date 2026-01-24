@@ -65,7 +65,7 @@ where
         // Pre-load transactions to avoid borrow conflicts
         let transactions = self.preload_block_transactions(&maybe_block, state)?;
 
-        let is_pending = matches!(maybe_block, MaybeSealedBlock::PartialSynthetic(_));
+        let is_pending = matches!(maybe_block, MaybeSealedBlock::PendingSynthetic(_));
 
         let mut maybe_archival_state: MaybeArchivalState<'a, S> = if is_pending {
             state.into()

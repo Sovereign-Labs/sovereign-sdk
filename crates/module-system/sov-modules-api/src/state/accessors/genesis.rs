@@ -116,7 +116,7 @@ impl<S: Spec> GenesisStateAccessor<'_, S> {
 }
 
 impl<S: Spec> EventContainer for GenesisStateAccessor<'_, S> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(&mut self, event_key: &str, event: E) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 
