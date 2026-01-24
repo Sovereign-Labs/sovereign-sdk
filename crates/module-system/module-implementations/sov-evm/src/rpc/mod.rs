@@ -461,10 +461,24 @@ where
                 }
             }
             BlockId::Hash(hash) => {
-                // If the hash matches a synthetic block, handle that special case
+                // If the hash is synthetic, handle that special case
                 if let Some((block_number, num_txs)) = parse_synthetic_block_hash(&hash.into()) {
-                    let block_env = self.block_env(state).unwrap_infallible();
+                    // Prerequisite: Check that the synthetic block exists and is recent enough to still be saved.
+                    // This ensures that any calls to "getBlockByHash" will succeed only if "eth_call" would succeed given the same hash.
+                    {
+                        let Some(cache) = SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH.get() else {
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                        };
+                        let lock = cache
+                            .read()
+                            .expect("Failed to read from synthetic blocks cache");
+                        if lock.get_state_by_hash::<S>(hash.into()).is_none() {
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                        }
+                    }
+
                     // Case 1: The synthetic block has the same block number as the pending block; that's a harder special case where we need to populate its fields from the pending block
+                    let block_env = self.block_env(state).unwrap_infallible();
                     if block_env.number == block_number {
                         let Some(mut newest_pending_block) =
                             self.pending_block(Some(block_env), state)
@@ -489,7 +503,7 @@ where
                         )));
                     }
 
-                    // Case 2: The synthetic block has a different block number. Then we can just populate the fields from the sealed block at that height.
+                    // Case 2: The synthetic block is not pending. We can just populate the fields from the sealed block at that height if one exists
                     return Ok(Some(MaybeSealedBlock::PastSynthetic(
                         self.past_synthetic_block(block_number, num_txs, state)?,
                     )));
