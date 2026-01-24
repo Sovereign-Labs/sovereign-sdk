@@ -12,7 +12,8 @@ use super::primitive_types::SealedBlock;
 #[cfg(feature = "native")]
 use crate::primitive_types::TxSignedAndRecovered;
 use crate::{
-    BLOB_GAS_PRICE, EXCESS_BLOB_GAS, RlpEvmTransaction, SyntheticBlockWithoutRootsAndBloom, evm::primitive_types::TransactionSigned
+    evm::primitive_types::TransactionSigned, RlpEvmTransaction, SyntheticBlockWithoutRootsAndBloom,
+    BLOB_GAS_PRICE, EXCESS_BLOB_GAS,
 };
 
 // BlockEnv from SealedBlock
@@ -33,7 +34,9 @@ impl From<SyntheticBlockWithoutRootsAndBloom> for BlockEnv {
     fn from(block: SyntheticBlockWithoutRootsAndBloom) -> Self {
         let header = block.partial_header();
         create_block_env(
-            header.base_fee_per_gas.expect("Synthetic blocks have their base fee set"),
+            header
+                .base_fee_per_gas
+                .expect("Synthetic blocks have their base fee set"),
             header.gas_limit,
             header.timestamp,
             header.beneficiary,

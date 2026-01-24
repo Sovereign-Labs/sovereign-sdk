@@ -30,7 +30,9 @@ pub fn synthetic_block_hash_for(block_number: u64, num_txs: u32) -> B256 {
 }
 
 pub fn is_synthetic_block_hash(hash: &B256) -> bool {
-    hash.iter().take(20).eq(SYNTHETIC_BLOCK_HASH_PLACEHOLDER.iter().take(20))
+    hash.iter()
+        .take(20)
+        .eq(SYNTHETIC_BLOCK_HASH_PLACEHOLDER.iter().take(20))
 }
 
 pub fn parse_synthetic_block_hash(hash: &B256) -> Option<(u64, u32)> {
@@ -386,11 +388,11 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
 pub enum MaybeSealedBlock {
     /// SealedBlock
     Sealed(SealedBlock),
-    /// A synthetic block whose number matches the pending block number. It may be slightly older than the newest pending block 
+    /// A synthetic block whose number matches the pending block number. It may be slightly older than the newest pending block
     PendingSynthetic(SyntheticBlockWithoutRootsAndBloom),
     /// A synthetic block whose number is different from the pending block number.
     /// This block is either in the past, or it doesn't exist yet
-    PastSynthetic(SyntheticBlockWithoutRootsAndBloom)
+    PastSynthetic(SyntheticBlockWithoutRootsAndBloom),
 }
 
 #[cfg(feature = "native")]
@@ -474,7 +476,6 @@ impl MaybeSealedBlock {
         }
     }
 }
-
 
 /// TODO: Can we replace this with Reth type?
 #[serde_as]

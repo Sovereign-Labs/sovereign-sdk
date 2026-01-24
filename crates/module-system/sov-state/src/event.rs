@@ -18,7 +18,10 @@ pub struct TypeErasedEvent {
 
 impl TypeErasedEvent {
     /// Created a Typed Event
-    pub fn new<E: 'static + core::marker::Send + core::marker::Sync>(event_key: &str, event: E) -> Self {
+    pub fn new<E: 'static + core::marker::Send + core::marker::Sync>(
+        event_key: &str,
+        event: E,
+    ) -> Self {
         TypeErasedEvent {
             event_key: event_key.as_bytes().to_vec(),
             type_id: event.type_id(),

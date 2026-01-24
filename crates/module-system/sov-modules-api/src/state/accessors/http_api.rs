@@ -381,7 +381,11 @@ impl<S: Spec> GetGasPrice for ApiStateAccessor<S> {
 }
 
 impl<S: Spec> EventContainer for ApiStateAccessor<S> {
-    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 

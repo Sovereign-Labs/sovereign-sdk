@@ -200,10 +200,7 @@ impl<S: Spec> Evm<S> {
 
     /// Check if there are pending transactions.
     #[cfg(feature = "native")]
-    pub fn has_pending_block(
-        &self,
-        state: &mut ApiStateAccessor<S>,
-    ) -> bool {
+    pub fn has_pending_block(&self, state: &mut ApiStateAccessor<S>) -> bool {
         self.pending_transactions.len(state).unwrap_infallible() != 0
     }
 
