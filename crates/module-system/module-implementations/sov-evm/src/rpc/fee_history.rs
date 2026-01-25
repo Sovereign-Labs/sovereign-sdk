@@ -158,7 +158,7 @@ where
 
         // If we're estimating based on the pending block, some transactions might still be added later. To make sure our estimate is close,
         // Assume at least two thirds of the gas limit is used.
-        let conservative_parent_gas_usage = if !used_pending_block {
+        let conservative_parent_gas_usage = if used_pending_block {
             let two_thirds_gas_limit = gas_limit.saturating_mul(2) / 3;
             std::cmp::max(*actual_parent_gas_usage, two_thirds_gas_limit)
         } else {
