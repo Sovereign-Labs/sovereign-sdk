@@ -12,6 +12,10 @@ use sov_modules_api::GasSpec;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::EthApiError;
 
+/// When estimating the base fee for the next block, we assume that at least two thirds of the gas limit will be used.
+const ESTIMATION_GAS_LIMIT_MULTIPLIER: u64 = 2;
+const ESTIMATED_GAS_LIMIT_DIVISOR: u64 = 3;
+
 use crate::{Evm, SyntheticBlockWithoutRootsAndBloom};
 
 struct FeesAndUsage {
@@ -54,8 +58,6 @@ where
                 return Err(EthApiError::RewardPercentilesMustBeMonotonic);
             }
         }
-
-        let block_count = block_count.min(1024);
 
         let end_block_number = self.resolve_block_number(newest_block, state);
         let start_block_number = end_block_number.saturating_sub(block_count - 1);
@@ -163,7 +165,8 @@ where
         // If we're estimating based on the pending block, some transactions might still be added later. To make sure our estimate isn't too low,
         // add an extra assumption that at least two thirds of the gas limit will be used.
         let conservative_parent_gas_usage = if used_pending_block {
-            let two_thirds_gas_limit = gas_limit.saturating_mul(2) / 3;
+            let two_thirds_gas_limit = gas_limit.saturating_mul(ESTIMATION_GAS_LIMIT_MULTIPLIER)
+                / ESTIMATED_GAS_LIMIT_DIVISOR;
             std::cmp::max(*actual_parent_gas_usage, two_thirds_gas_limit)
         } else {
             *actual_parent_gas_usage

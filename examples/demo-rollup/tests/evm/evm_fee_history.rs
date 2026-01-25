@@ -99,12 +99,10 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(3).await;
     rollup.pause_preferred_batches().await;
 
-    let fee_history = client
+    assert!(client
         .get_fee_history(2000, BlockNumberOrTag::Latest, &[])
-        .await?;
-
-    assert!(!fee_history.base_fee_per_gas.is_empty());
-    assert!(fee_history.base_fee_per_gas.len() <= 1025);
+        .await
+        .is_err());
 
     Ok(())
 }

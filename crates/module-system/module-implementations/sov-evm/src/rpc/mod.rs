@@ -43,7 +43,7 @@ const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
 /// Cache of synthetic block states by hash.
 ///
 /// Currently, there's no way to recreate the state of a synthetic block once it's gone. This is because
-/// EVM state is shared with the sov-modles system, so any sov txs can impact the state of the synthetic block - but only
+/// EVM state is shared with the sov-modules system, so any sov txs can impact the state of the synthetic block - but only
 /// EVM tx bodies are stored in the EVM module. This cache saves a copy of the API state accessor for each synthetic block we make,
 /// pruning them after some interval.
 #[cfg(feature = "native")]
@@ -450,7 +450,8 @@ where
                     PendingOrBlock::Pending => match self.pending_block(None, state) {
                         Some(pending) => Some(MaybeSealedBlock::PendingSynthetic(pending)),
                         None => {
-                            return Ok(Some(MaybeSealedBlock::Sealed(self.latest_block(state))))
+                            // pending_block() returns None when there are no pending txs, and so fall back to the latest sealed block in those cases
+                            return Ok(Some(MaybeSealedBlock::Sealed(self.latest_block(state))));
                         }
                     },
                     PendingOrBlock::PastSynthetic { .. } => {
