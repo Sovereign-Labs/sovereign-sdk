@@ -1,8 +1,6 @@
 mod handlers;
 
-use std::convert::Infallible;
-
-use alloy_primitives::{B256, U256};
+use alloy_primitives::B256;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
