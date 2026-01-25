@@ -13,12 +13,15 @@ use std::any::Any;
 pub struct TypeErasedEvent {
     event_key: Vec<u8>,
     type_id: core::any::TypeId,
-    boxed_event: Box<dyn core::any::Any + core::marker::Send>,
+    boxed_event: Box<dyn core::any::Any + core::marker::Send + core::marker::Sync>,
 }
 
 impl TypeErasedEvent {
     /// Created a Typed Event
-    pub fn new<E: 'static + core::marker::Send>(event_key: &str, event: E) -> Self {
+    pub fn new<E: 'static + core::marker::Send + core::marker::Sync>(
+        event_key: &str,
+        event: E,
+    ) -> Self {
         TypeErasedEvent {
             event_key: event_key.as_bytes().to_vec(),
             type_id: event.type_id(),
