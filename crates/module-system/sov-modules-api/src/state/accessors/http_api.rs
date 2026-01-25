@@ -861,7 +861,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         Ok(state)
     }
 
-    /// Clones the accessor for use in RPC contexts, rese
+    /// Clones the accessor for use in RPC contexts, dropping any local writes that were made to the accessor.
     pub fn clone_without_local_writes(&self) -> ApiStateAccessor<S> {
         ApiStateAccessor {
             witness: Default::default(),

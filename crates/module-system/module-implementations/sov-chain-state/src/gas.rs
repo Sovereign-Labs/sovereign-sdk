@@ -107,7 +107,7 @@ impl<S: Spec> ChainState<S> {
     /// Computes the updated gas price following a block execution for a single dimension.
     /// This reproduces the logic of the EIP-1559 specification to compute the updated `base_fee_per_gas` (`<https://eips.ethereum.org/EIPS/eip-1559>`).
     /// Note that here we drop the `parent` prefix and call the state variables `gas_limit`, `gas_used` and `base_fee_per_gas`.
-    pub(crate) fn compute_base_fee_per_gas_unidimensional(
+    pub fn compute_base_fee_per_gas_unidimensional(
         gas_limit: u64,
         gas_used: u64,
         mut base_fee_per_gas: Amount,

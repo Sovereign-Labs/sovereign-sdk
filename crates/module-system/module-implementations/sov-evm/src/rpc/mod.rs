@@ -43,7 +43,7 @@ const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
 /// Cache of synthetic block states by hash.
 ///
 /// Currently, there's no way to recreate the state of a synthetic block once it's gone. This is because
-/// EVM state is shared with the sov-modles system, so any sov txs can impact the state of the synthetic block - but only
+/// EVM state is shared with the sov-modules system, so any sov txs can impact the state of the synthetic block - but only
 /// EVM tx bodies are stored in the EVM module. This cache saves a copy of the API state accessor for each synthetic block we make,
 /// pruning them after some interval.
 #[cfg(feature = "native")]
@@ -450,7 +450,8 @@ where
                     PendingOrBlock::Pending => match self.pending_block(None, state) {
                         Some(pending) => Some(MaybeSealedBlock::PendingSynthetic(pending)),
                         None => {
-                            return Ok(Some(MaybeSealedBlock::Sealed(self.latest_block(state))))
+                            // pending_block() returns None when there are no pending txs, and so fall back to the latest sealed block in those cases
+                            return Ok(Some(MaybeSealedBlock::Sealed(self.latest_block(state))));
                         }
                     },
                     PendingOrBlock::PastSynthetic { .. } => {
@@ -810,7 +811,7 @@ pub(crate) fn build_rpc_receipt(
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
-        effective_gas_price: 0,
+        effective_gas_price: block.maybe_partial_header().base_fee_per_gas.unwrap_or(0) as u128,
         blob_gas_used: None,
         blob_gas_price: None,
         from,
