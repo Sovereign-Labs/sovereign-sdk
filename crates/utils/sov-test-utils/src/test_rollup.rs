@@ -322,20 +322,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             }
         });
 
-        let rest_addr = match rest_addr_rx.await {
-            Ok(addr) => addr,
-            Err(_) => {
-                let err = match rollup_task.await {
-                    Ok(Ok(())) => {
-                        anyhow::anyhow!("Rollup exited before reporting its HTTP address")
-                    }
-                    Ok(Err(error)) => error,
-                    Err(error) => error.into(),
-                };
-                return Err(err);
-            }
-        };
-
         let rest_url = format!("http://{}:{}", rest_addr.ip(), rest_addr.port());
         let client = match NodeClient::new(&rest_url).await {
             Ok(client) => client,
