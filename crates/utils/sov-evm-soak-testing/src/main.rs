@@ -123,7 +123,10 @@ fn http_to_ws_url(url: &Url) -> Result<Url> {
 }
 
 /// Creates an Alloy WS client connected to the specified RPC server.
-pub(crate) async fn alloy_ws_client(rpc_url: &Url, signer: PrivateKeySigner) -> Result<DynProvider> {
+pub(crate) async fn alloy_ws_client(
+    rpc_url: &Url,
+    signer: PrivateKeySigner,
+) -> Result<DynProvider> {
     let ws_url = http_to_ws_url(rpc_url)?;
     let ws = WsConnect::new(ws_url);
     let client = ProviderBuilder::new()
