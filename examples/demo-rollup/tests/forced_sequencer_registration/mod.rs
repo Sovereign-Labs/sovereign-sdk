@@ -603,9 +603,9 @@ async fn max_blobs_per_slot_test_case(
     let mut blobs_subscription = rollup.subscribe_to_blobs_from_blob_sender().await?;
 
     // Wait for all of the blobs to processed. We need to keep producing blocks so the hte visible slot number is incremented.
-    for i in 0..20 {
+    for _ in 0..20 {
         produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
-        let next = state_update_subscription.next().await.unwrap()?;
+        let _ = state_update_subscription.next().await.unwrap()?;
         while let Ok(Some(Ok(next))) =
             tokio::time::timeout(Duration::from_secs(10), blobs_subscription.next()).await
         {
