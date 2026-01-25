@@ -171,6 +171,13 @@ where
         Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
+    /// Handler for: `eth_gasPrice`
+    #[rpc_method(name = "eth_gasPrice")]
+    pub fn gas_price(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+        trace!(method = "eth_gasPrice", "EVM module JSON-RPC request");
+        Ok(U256::from(self.block_env(state)?.basefee))
+    }
+
     /// Handler for: `eth_feeHistory`
     /// Returns historical gas price and usage data for recent blocks.
     ///
