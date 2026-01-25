@@ -120,7 +120,7 @@ impl SyntheticBlockWatermark {
         if synthetic_block.num_transactions() != 0
             && self
                 .tx_index_of_last_notification_if_known
-                .map_or(true, |idx| idx < synthetic_block.last_tx_index())
+                .is_none_or(|idx| idx < synthetic_block.last_tx_index())
         {
             return self.advance_and_emit_synthetic_block_notification(synthetic_block);
         }
@@ -143,7 +143,7 @@ impl SyntheticBlockWatermark {
         if synthetic_block.num_transactions() != 0
             && self
                 .tx_index_of_last_notification_if_known
-                .map_or(true, |idx| idx < synthetic_block.last_tx_index())
+                .is_none_or(|idx| idx < synthetic_block.last_tx_index())
         {
             return SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock;
         }
@@ -257,7 +257,7 @@ where
                     // Send all of the notifications for new real blocks.
                     while let SyntheticBlockWatermarkAdvanceResult::NewRealBlock(block_number) = watermark.peek(&pending_block) {
                         let sealed = self.evm.blocks.get(&block_number, &mut state).unwrap_infallible().expect("Block was notified but did not exist. This is a bug!");
-                        let rpc_header = Header::from_consensus(sealed.header.into(), None, Some(U256::from(sealed.rlp_size)));
+                        let rpc_header = Header::from_consensus(sealed.header, None, Some(U256::from(sealed.rlp_size)));
                         self.send(&rpc_header).await?;
                         watermark.advance(&pending_block);
                         sent = true;
@@ -396,8 +396,10 @@ mod tests {
         tx_start: u64,
         tx_end: u64,
     ) -> SyntheticBlockWithoutRootsAndBloom {
-        let mut header = Header::default();
-        header.number = block_number;
+        let header = Header {
+            number: block_number,
+            ..Default::default()
+        };
         SyntheticBlockWithoutRootsAndBloom::new(header, tx_start..tx_end)
     }
 
