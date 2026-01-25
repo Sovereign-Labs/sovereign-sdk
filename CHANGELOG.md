@@ -1,3 +1,5 @@
+# 2026-01-17
+- #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
 # 2026-01-25
 - #2398 makes fixes to the eth_feeHistory endpoint
 

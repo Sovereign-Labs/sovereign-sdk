@@ -12,7 +12,7 @@ use axum::http::StatusCode;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{BlobExecutionStatus, BlobInternalId, BlobSenderHooks};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::capabilities::{AuthenticationOutput, TransactionAuthenticator};
+use sov_modules_api::capabilities::{AuthenticationOutput, RollupHeight, TransactionAuthenticator};
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::*;
@@ -189,6 +189,14 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
         None
     }
 
+    /// Subscribe to forced transaction batch notifications. Note that notifications may be delivered out of order.
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_forced_tx_batches_unstable(
+        &self,
+    ) -> Option<tokio::sync::broadcast::Receiver<ForcedTxBatchNotification>> {
+        None
+    }
+
     /// Returns the current sequencer role.
     async fn sequencer_role(&self) -> crate::SequencerRole;
 }
@@ -213,6 +221,13 @@ pub struct StateUpdateNotification {
     pub slot_number: SlotNumber,
     /// The finalized slot number.
     pub finalized_slot_number: SlotNumber,
+}
+
+/// A notification that the sequencer has processed a forced (non-preferred) batch.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForcedTxBatchNotification {
+    /// The rollup height at which the forced batch was executed.
+    pub rollup_height: RollupHeight,
 }
 
 impl<C> AcceptedTx<C> {

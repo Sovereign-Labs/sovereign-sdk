@@ -51,8 +51,8 @@ use sov_sequencer::preferred::{
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{
-    SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole, SovRateLimiterConfig,
-    StateUpdateNotification,
+    ForcedTxBatchNotification, SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole,
+    SovRateLimiterConfig, StateUpdateNotification,
 };
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
@@ -799,6 +799,16 @@ where
         self.client
             .client
             .subscribe_to_ws::<StateUpdateNotification>("/sequencer/test-utils/state-updates/ws")
+            .await
+    }
+
+    /// Subscribe to forced batch notifications.
+    pub async fn subscribe_forced_tx_batches(&self) -> WsSubscription<ForcedTxBatchNotification> {
+        self.client
+            .client
+            .subscribe_to_ws::<ForcedTxBatchNotification>(
+                "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+            )
             .await
     }
 
