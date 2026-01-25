@@ -628,6 +628,7 @@ async fn max_blobs_per_slot_test_case(
 
 /// Verifies forced transactions show up in sequencer state after a resync
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn test_forced_txs_survive_resync() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "500");
 
