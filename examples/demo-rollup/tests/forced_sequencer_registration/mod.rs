@@ -473,34 +473,50 @@ async fn bank_transfer_unregistered_test_case(
     Ok(())
 }
 
-/// Builds a transaction that runs a CPU-heavy operation (many hash iterations).
-fn build_cpu_heavy_tx(
+/// Builds a transaction that writes a large state value, consuming metered gas.
+/// Gas is charged based on the size of data written.
+fn build_state_heavy_tx(
     key: &TestPrivateKey,
-    iterations: u64,
+    data_size: u64,
     nonce: u64,
 ) -> Transaction<Runtime<TestSpec>, TestSpec> {
-    let msg = RuntimeCall::<TestSpec>::SyntheticLoad(SyntheticLoadCall::RunCPUHeavyOperation {
-        iterations,
-    });
+    let msg =
+        RuntimeCall::<TestSpec>::SyntheticLoad(SyntheticLoadCall::ReadAndSetHeavyState {
+            number_of_new_values: data_size,
+            max_heavy_state_size: data_size,
+            salt: 42,
+        });
     let chain_id = config_value!("CHAIN_ID");
     let max_priority_fee_bips = PriorityFeeBips::ZERO;
     let max_fee = MAX_TX_FEE;
     Transaction::<Runtime<TestSpec>, TestSpec>::new_signed_tx(
         key,
         &CHAIN_HASH,
-        UnsignedTransaction::new(msg, chain_id, max_priority_fee_bips, max_fee, UniquenessData::Nonce(nonce), None),
+        UnsignedTransaction::new(
+            msg,
+            chain_id,
+            max_priority_fee_bips,
+            max_fee,
+            UniquenessData::Nonce(nonce),
+            None,
+        ),
     )
 }
 
 /// Verifies that forced transactions exceeding the gas limit are rejected.
-/// The unregistered sequencer gas limit is 500k per dimension (set in constants.toml).
-/// Each hash iteration costs ~30 gas, so 20k iterations should exceed the limit.
-// TODO: This test uses different uniqueness buckets (Nonce vs Generation) for the two txs,
-// so we can't be certain the gas-heavy tx was actually rejected. Fix by using the same bucket.
-#[ignore]
+/// Uses state-heavy operations (writes large data) which are metered.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_forced_tx_exceeding_gas_limit_rejected() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
+    // Set explicit gas parameters so production changes don't break this test.
+    // Gas limit for forced txs: 50k per dimension.
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX",
+        "[50000,50000]",
+    );
+    // Per-byte storage update cost: 100 gas/byte (default is 1).
+    // Writing 1000 u64s = 8000 bytes * 100 gas/byte = 800k gas > 50k limit.
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_GAS_TO_CHARGE_PER_BYTE_STORAGE_UPDATE", "[100,100]");
     let (rollup, da_service) = setup().await;
     run_forced_tx_test(rollup, da_service, forced_tx_gas_limit_test_case).await
 }
@@ -514,23 +530,70 @@ async fn forced_tx_gas_limit_test_case(
     let token_id = config_gas_token_id();
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
-    // Submit a tx that exceeds the gas limit (20k hash iterations * ~30 gas each = ~600k gas > 500k limit)
-    let excessive_iterations = 20_000;
-    let gas_heavy_tx = build_cpu_heavy_tx(&key, excessive_iterations, 0);
-
+    // Submit a forced tx that exceeds the gas limit by writing large state data.
+    // 1000 u64s = 8000 bytes * 100 gas/byte = 800k gas > 50k limit.
+    let excessive_data_size = 1000;
+    let gas_heavy_tx = build_state_heavy_tx(&key, excessive_data_size, 0);
     submit_forced_tx(da_service.as_ref(), ForcedTx::Runtime(gas_heavy_tx), "Failed to submit gas-heavy tx").await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    // The gas-heavy tx should have been rejected. Verify by sending a valid tx with the same nonce (0).
+    // The gas-heavy tx should have been rejected. Submit a preferred tx with the same nonce (0).
     // If the gas-heavy tx was processed, this would fail due to nonce reuse.
     let transfer_amount = 100u128;
     let valid_tx = build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 0);
+    submit_preferred_tx(&client, &valid_tx).await?;
 
-    submit_forced_tx(da_service.as_ref(), ForcedTx::Runtime(valid_tx), "Failed to submit valid tx").await?;
+    // Verify the transfer succeeded, confirming the gas-heavy tx was rejected.
+    wait_for_bank_balance(&client, transfer_amount, token_id, recipient_address).await?;
+
+    Ok(())
+}
+
+/// Verifies that only UNREGISTERED_BLOBS_PER_SLOT (5) forced blobs are processed per slot.
+/// Blobs beyond this limit should be ignored.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_max_forced_blobs_per_slot() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
+    // Use manual block production to ensure all forced txs land in one DA block
+    let (rollup, da_service) = setup_with_block_producing(BlockProducingConfig::Manual).await;
+
+    let res = max_blobs_per_slot_test_case(&rollup, da_service).await;
+    let shutdown_res = rollup.shutdown().await;
+    shutdown_res?;
+    res
+}
+
+async fn max_blobs_per_slot_test_case(
+    rollup: &TestRollup<MockDemoRollup<Native>>,
+    da_service: Arc<impl DaService>,
+) -> anyhow::Result<()> {
+    const MAX_BLOBS_PER_SLOT: usize = 5; // From constants.toml: UNREGISTERED_BLOBS_PER_SLOT
+    const BLOBS_TO_SEND: usize = 7; // Send more than the limit
+
+    let client = &rollup.client;
+    let (key, _, _, recipient_address) = create_keys_and_addresses();
+    let token_id = config_gas_token_id();
+    let transfer_amount = 10u128;
+
+    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
+    let mut slot_subscription = rollup.api_client().subscribe_slots().await?;
+
+    // Submit 7 forced txs with nonces 0-6 without producing a DA block.
+    // They will all queue up to be included in the next DA block.
+    for i in 0..BLOBS_TO_SEND {
+        let tx = build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, i as u64);
+        submit_forced_tx(da_service.as_ref(), ForcedTx::Runtime(tx), "Failed to submit forced tx").await?;
+    }
+
+    // Produce a single DA block containing all 7 forced txs.
+    // Due to the per-slot limit (5), only the first 5 should be processed.
+    produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    // If the balance updates, the gas-heavy tx was correctly rejected and the valid tx succeeded
-    wait_for_bank_balance(&client, transfer_amount, token_id, recipient_address).await?;
+    // Verify that exactly MAX_BLOBS_PER_SLOT (5) transactions were processed.
+    // Balance should be 5 * 10 = 50, not 7 * 10 = 70.
+    let expected_balance = transfer_amount * MAX_BLOBS_PER_SLOT as u128;
+    wait_for_bank_balance(client, expected_balance, token_id, recipient_address).await?;
 
     Ok(())
 }
