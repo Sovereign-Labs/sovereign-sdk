@@ -153,7 +153,9 @@ where
     }
 
     fn authenticate_unregistered<
-        Accessor: ProvableStateReader<User, Spec = S> + sov_modules_api::GetGasPrice<Spec = S>,
+        Accessor: ProvableStateReader<User, Spec = S>
+            + sov_modules_api::GetGasPrice<Spec = S>
+            + sov_modules_api::VersionReader,
     >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
