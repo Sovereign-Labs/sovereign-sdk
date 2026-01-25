@@ -91,6 +91,7 @@ where
         })
     }
 
+    // Collects the base fees and gas used for the blocks in the pre-validated block range
     fn collect_fees_and_usage(
         &self,
         start_block: u64,
@@ -99,6 +100,12 @@ where
         sealed_block_numbers: &RangeInclusive<u64>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<FeesAndUsage, EthApiError> {
+        // Safety: This precondition should have been checked above
+        assert!(
+            end_block >= start_block,
+            "End block must be greater than or equal to start block"
+        );
+
         let block_count = (end_block - start_block + 1)
             .try_into()
             .expect("Block count should fit in a usize");
@@ -106,7 +113,7 @@ where
         let mut gas_used = Vec::with_capacity(block_count.saturating_sub(1));
         let mut used_pending_block = false;
         for n in start_block..=end_block {
-            // For all the blocks in the range that are sealed, we can just use the base fee and gas used from the block.
+            // For all the blocks in the requested range that are already sealed, we can just take the base fee and gas used from the block.
             if sealed_block_numbers.contains(&n) {
                 let block = self
                     .blocks
@@ -117,8 +124,7 @@ where
                 continue;
             }
 
-            // The last block in the range might be the pending block. If we haven't covered all the blocks using sealed blocks,
-            // then we must have a pending block available to use (because we already validated the input before calling this function)
+            // The last block in the requested range might be the pending block. Check if that's the case...
             let Some(pending_block) = partial_last_header else {
                 panic!("Pending block should be present if not all blocks are covered by sealed blocks since range was already validated. This is a bug.");
             };
@@ -128,7 +134,7 @@ where
                 "Pending block should be the last block in the range."
             );
 
-            // If the pending block has some gas usage, take it. Otherwise
+            // If so, take the base fee and gas used from the pending block.
             used_pending_block = true;
             base_fees.push(
                 pending_block
@@ -138,26 +144,24 @@ where
             );
             let pending_gas_used = if pending_block.num_transactions() != 0 {
                 let last_tx_index = pending_block.last_tx_index();
-                let gas_used = self
-                    .receipt(last_tx_index, state)
+                self.receipt(last_tx_index, state)
                     .expect("Receipt should be present for pending block. This is a bug.")
                     .0
-                    .cumulative_gas_used;
-                gas_used
+                    .cumulative_gas_used
             } else {
                 0
             };
             gas_used.push(pending_gas_used);
         }
 
-        // Finally, eth_feeHistory always returns info for one block after the last one requested. We need to compute the base fee for the next block.
+        // Finally, eth_feeHistory always returns info for one block after the last one requested, so we need to compute the base fee for the next block.
         let gas_limit: u64 = S::initial_gas_limit().as_ref()[0];
         let actual_parent_gas_usage = gas_used
             .last()
             .expect("At least one gas used must have been collected");
 
-        // If we're estimating based on the pending block, some transactions might still be added later. To make sure our estimate is close,
-        // Assume at least two thirds of the gas limit is used.
+        // If we're estimating based on the pending block, some transactions might still be added later. To make sure our estimate isn't too low,
+        // add an extra assumption that at least two thirds of the gas limit will be used.
         let conservative_parent_gas_usage = if used_pending_block {
             let two_thirds_gas_limit = gas_limit.saturating_mul(2) / 3;
             std::cmp::max(*actual_parent_gas_usage, two_thirds_gas_limit)
@@ -175,8 +179,9 @@ where
             Amount::from(*last_base_fee),
         );
         base_fees.push(next_gas_price.0.try_into().unwrap_or(u64::MAX));
-        // Float arithmetic is safe here - RPC only, not consensus-critical; and it's required by the spec
+
         #[allow(clippy::float_arithmetic)]
+        // Float arithmetic is safe here. This method is RPC only, not consensus-critical; and it's required by the spec
         let gas_used_ratios = gas_used
             .into_iter()
             .map(|gas| gas as f64 / gas_limit as f64)
