@@ -54,7 +54,7 @@ const MAX_TX_FEE: Amount = Amount::new(100_000_000);
 const UNREGISTERED_SENDER: MockAddress = MockAddress::new([121; 32]);
 const MINIMUM_BOND: Amount = Amount::new(100_000_000);
 const FINALIZATION_BLOCKS: u32 = 1;
-const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(60);
+const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(3);
 const FORCED_TX_BATCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
@@ -146,7 +146,10 @@ async fn submit_preferred_tx(
 
 enum ForcedTx<'a> {
     Runtime(Transaction<Runtime<TestSpec>, TestSpec>),
-    Evm { account: &'a EvmAccount, tx: TxEip1559 },
+    Evm {
+        account: &'a EvmAccount,
+        tx: TxEip1559,
+    },
 }
 
 async fn submit_forced_tx(
@@ -480,12 +483,11 @@ fn build_state_heavy_tx(
     data_size: u64,
     nonce: u64,
 ) -> Transaction<Runtime<TestSpec>, TestSpec> {
-    let msg =
-        RuntimeCall::<TestSpec>::SyntheticLoad(SyntheticLoadCall::ReadAndSetHeavyState {
-            number_of_new_values: data_size,
-            max_heavy_state_size: data_size,
-            salt: 42,
-        });
+    let msg = RuntimeCall::<TestSpec>::SyntheticLoad(SyntheticLoadCall::ReadAndSetHeavyState {
+        number_of_new_values: data_size,
+        max_heavy_state_size: data_size,
+        salt: 42,
+    });
     let chain_id = config_value!("CHAIN_ID");
     let max_priority_fee_bips = PriorityFeeBips::ZERO;
     let max_fee = MAX_TX_FEE;
@@ -516,7 +518,10 @@ async fn test_forced_tx_exceeding_gas_limit_rejected() -> anyhow::Result<()> {
     );
     // Per-byte storage update cost: 100 gas/byte (default is 1).
     // Writing 1000 u64s = 8000 bytes * 100 gas/byte = 800k gas > 50k limit.
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_GAS_TO_CHARGE_PER_BYTE_STORAGE_UPDATE", "[100,100]");
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_GAS_TO_CHARGE_PER_BYTE_STORAGE_UPDATE",
+        "[100,100]",
+    );
     let (rollup, da_service) = setup().await;
     run_forced_tx_test(rollup, da_service, forced_tx_gas_limit_test_case).await
 }
@@ -534,7 +539,12 @@ async fn forced_tx_gas_limit_test_case(
     // 1000 u64s = 8000 bytes * 100 gas/byte = 800k gas > 50k limit.
     let excessive_data_size = 1000;
     let gas_heavy_tx = build_state_heavy_tx(&key, excessive_data_size, 0);
-    submit_forced_tx(da_service.as_ref(), ForcedTx::Runtime(gas_heavy_tx), "Failed to submit gas-heavy tx").await?;
+    submit_forced_tx(
+        da_service.as_ref(),
+        ForcedTx::Runtime(gas_heavy_tx),
+        "Failed to submit gas-heavy tx",
+    )
+    .await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
     // The gas-heavy tx should have been rejected. Submit a preferred tx with the same nonce (0).
@@ -575,20 +585,36 @@ async fn max_blobs_per_slot_test_case(
     let token_id = config_gas_token_id();
     let transfer_amount = 10u128;
 
-    let mut forced_tx_batches = subscribe_forced_tx_batches(client).await?;
     let mut slot_subscription = rollup.api_client().subscribe_slots().await?;
 
     // Submit 7 forced txs with nonces 0-6 without producing a DA block.
     // They will all queue up to be included in the next DA block.
     for i in 0..BLOBS_TO_SEND {
-        let tx = build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, i as u64);
-        submit_forced_tx(da_service.as_ref(), ForcedTx::Runtime(tx), "Failed to submit forced tx").await?;
+        let tx =
+            build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, i as u64);
+        submit_forced_tx(
+            da_service.as_ref(),
+            ForcedTx::Runtime(tx),
+            "Failed to submit forced tx",
+        )
+        .await?;
     }
+    let mut state_update_subscription = rollup.subscribe_state_updates().await?;
+    let mut blobs_subscription = rollup.subscribe_to_blobs_from_blob_sender().await?;
 
-    // Produce a single DA block containing all 7 forced txs.
-    // Due to the per-slot limit (5), only the first 5 should be processed.
-    produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
-    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
+    // Wait for all of the blobs to processed. We need to keep producing blocks so the hte visible slot number is incremented.
+    for i in 0..20 {
+        produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
+        let next = state_update_subscription.next().await.unwrap()?;
+        while let Ok(Some(Ok(next))) =
+            tokio::time::timeout(Duration::from_secs(10), blobs_subscription.next()).await
+        {
+            let next_str = serde_json::to_string(&next).unwrap();
+            if next_str.contains("Published") {
+                break;
+            }
+        }
+    }
 
     // Verify that exactly MAX_BLOBS_PER_SLOT (5) transactions were processed.
     // Balance should be 5 * 10 = 50, not 7 * 10 = 70.
@@ -741,7 +767,14 @@ async fn forced_txs_resync_test_case(
     }
 
     // Verify all pre-resync forced txs went through by checking recipient balance
-    assert_balance(client, total_forced_tx_amount, token_id, recipient_address, None).await?;
+    assert_balance(
+        client,
+        total_forced_tx_amount,
+        token_id,
+        recipient_address,
+        None,
+    )
+    .await?;
 
     // Send one more preferred tx to make sure everything is working correctly after the resync.
     let preferred_tx = build_transfer_token_tx::<TestSpec>(
