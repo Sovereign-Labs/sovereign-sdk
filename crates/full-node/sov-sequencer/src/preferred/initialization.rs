@@ -6,6 +6,7 @@ use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::rest::StateUpdateReceiver;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -53,6 +54,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_addr: SocketAddr,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
@@ -87,6 +89,7 @@ where
             shutdown_sender.clone(),
             storage_path,
             &preferred_config.postgres_config,
+            bind_addr,
         )
         .await?;
 
@@ -208,6 +211,7 @@ where
         handles.push(nonce_buffer_task);
 
         let seq = PreferredSequencer(Arc::new(PreferredSequencerFields {
+            seq_role,
             synchronized_state_updator: synchronized_state_updator.clone(),
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
@@ -239,8 +243,12 @@ where
         // Launch leadership task for DbElected nodes
         if let Some(postgres_config) = &preferred_config.postgres_config {
             if postgres_config.node_role == NodeRole::DbElected {
-                let election_task =
-                    LeadershipElectionTask::new(postgres_config, shutdown_sender.clone()).await?;
+                let election_task = LeadershipElectionTask::new(
+                    postgres_config,
+                    shutdown_sender.clone(),
+                    bind_addr,
+                )
+                .await?;
 
                 let leadership_handle = match seq_role {
                     SequencerRole::Leader => election_task.spawn_leader_heartbeat_task(),

@@ -6,8 +6,6 @@ mod finalized_headers_cache;
 pub use bulk_finalized_blocks_fetcher::FinalizedBlocksBulkFetcher;
 pub use finalized_headers_cache::DaServiceWithCachedFinalizedHeaders;
 
-use std::time::Duration;
-
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 
@@ -59,13 +57,8 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
     da_service: &Da,
     sync_state: &DaSyncState,
     height: u64,
-    da_total_timeout: Duration,
 ) -> anyhow::Result<Da::FilteredBlock> {
-    tracing::trace!(
-        height,
-        total_timeout = ?da_total_timeout,
-        "Fetch polling for a block"
-    );
+    tracing::trace!(height, "Fetch polling for a block");
 
     let mut requested_height = height;
 
@@ -75,19 +68,10 @@ pub(crate) async fn fetch_block_reorg_aware<Da: DaService>(
         let rolled_back_head_future =
             get_new_head_height_if_roll_back(sync_state, requested_height);
         // DaService handles its own retries for transient failures.
-        // We only enforce a total timeout per attempt.
-        let get_block_future =
-            tokio::time::timeout(da_total_timeout, da_service.get_block_at(requested_height));
+        let get_block_future = da_service.get_block_at(requested_height);
         tokio::select! {
             get_block_result = get_block_future => {
-                match get_block_result {
-                    Ok(inner_result) => {
-                        return inner_result.map_err(|error| anyhow::anyhow!("Error from DaService: {error:?}"));
-                    }
-                    Err(_) => {
-                        anyhow::bail!("Timeout getting block from DaService after {da_total_timeout:?}");
-                    }
-                }
+                return get_block_result.map_err(|error| anyhow::anyhow!("Error from DaService: {error:?}"));
             }
             rolled_back_height = rolled_back_head_future => {
                 tracing::warn!(

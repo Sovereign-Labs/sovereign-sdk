@@ -21,7 +21,7 @@ use crate::GetGasPrice;
 use crate::{
     capabilities, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, GasMeteringError,
     MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, ProvableStateReader,
-    RawTx, Runtime, Spec,
+    RawTx, Runtime, Spec, VersionReader,
 };
 
 /// The chain ID of the rollup.
@@ -56,7 +56,10 @@ pub trait TransactionAuthenticator<S: Spec> {
     /// checks during native execution, and the preferred sequencer will attempt to pre-populate this
     /// cache to parallelise signature checks.
     fn authenticate<
-        Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + crate::StateMetricsProvider,
+        Accessor: ProvableStateReader<User, Spec = S>
+            + GetGasPrice<Spec = S>
+            + crate::StateMetricsProvider
+            + VersionReader,
     >(
         tx: &FullyBakedTx,
         state: &mut Accessor,

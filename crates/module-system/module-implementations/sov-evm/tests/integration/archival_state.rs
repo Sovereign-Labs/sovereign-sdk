@@ -1,3 +1,4 @@
+use alloy_eips::BlockId;
 use sov_evm::Evm;
 
 use crate::helpers::{create_transfer_tx, setup};
@@ -14,8 +15,12 @@ fn test_state_at_different_depth_is_accessible() {
     }
     runner.query_visible_state(|state| {
         let mut balance = |block: Option<&str>| {
-            evm.get_balance(to.address(), block.map(Into::into), state)
-                .unwrap()
+            evm.get_balance(
+                to.address(),
+                block.map(|s| s.parse::<BlockId>().unwrap()),
+                state,
+            )
+            .unwrap()
         };
         assert_eq!(balance(None), 2);
         assert_eq!(balance(Some("latest")), 2);

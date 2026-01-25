@@ -7,7 +7,9 @@ use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec};
+use sov_modules_api::{
+    DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader,
+};
 
 /// Indicates that a runtime supports the `SolanaOffchain` transaction authenticator
 /// and provides suitable methods for encoding and decoding solana offchain message transactions.
@@ -68,7 +70,7 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<sov_state::User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<sov_state::User, Spec = S> + VersionReader>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<

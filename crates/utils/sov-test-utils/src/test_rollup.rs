@@ -299,7 +299,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             }
         };
 
-        let (rest_addr_tx, rest_addr_rx) = tokio::sync::oneshot::channel();
         let shutdown_sender = rollup.shutdown_sender.clone();
 
         let mut other_handles = Vec::new();
@@ -309,8 +308,9 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             other_handles.push(handle);
         }
 
+        let rest_addr = rollup.runner.axum_socket_address()?;
         let rollup_task = tokio::spawn(async move {
-            match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
+            match rollup.run().await {
                 Ok(()) => {
                     tracing::info!("Completed running a rollup");
                     Ok(())
@@ -370,7 +370,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             storage: rollup_db_config,
             runner: RunnerConfig {
                 da_polling_interval_ms: TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
-                da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
                     &self.config.axum_host,
                     self.config.axum_port,
@@ -461,6 +460,11 @@ impl PostgresData {
             connection_string: connection_string_from_postgres_container(&pg).await?,
             postgres: pg,
         }))
+    }
+
+    /// Returns the PostgreSQL connection string.
+    pub fn connection_string(&self) -> &str {
+        &self.connection_string
     }
 }
 
@@ -562,6 +566,7 @@ where
             block_producing,
             da_layer: None,
             randomization: None,
+            failure_behavior: Default::default(),
         };
 
         Self {

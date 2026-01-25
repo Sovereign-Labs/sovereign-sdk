@@ -3,9 +3,6 @@ pub mod logging;
 pub mod proof_sender;
 mod telemetry;
 mod wallet;
-use std::net::SocketAddr;
-use std::sync::Arc;
-
 use anyhow::Context;
 use async_trait::async_trait;
 pub use endpoints::*;
@@ -41,8 +38,11 @@ use sov_stf_runner::{
     StateTransitionRunner,
 };
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::info;
 pub use wallet::*;
@@ -204,6 +204,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         shutdown_receiver: watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
         match &rollup_config.sequencer.sequencer_kind_config {
             SequencerKindConfig::Standard(seq_config) => {
@@ -256,6 +257,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
                         stop_at_rollup_height,
+                        bind_addr,
                     )
                     .await?;
 
@@ -469,8 +471,13 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             MaximumProvableHeight::new(state_update_sender.subscribe(), Self::Runtime::default()),
         );
 
+        let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
+        let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
+        let axum_socket_addr = axum_tcp.local_addr()?;
+
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
+            axum_tcp,
             if prover_config.is_some() {
                 Some(rollup_config.proof_manager)
             } else {
@@ -503,6 +510,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 main_shutdown_receiver.clone(),
                 main_shutdown_sender.clone(),
                 stop_at_rollup_height,
+                axum_socket_addr,
             )
             .await?;
 
@@ -652,17 +660,9 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
     pub async fn run(self) -> anyhow::Result<()> {
-        self.run_and_report_addr(None).await
-    }
-
-    /// Runs the rollup. Reports REST and RPC ports to the caller using the provided channel.
-    pub async fn run_and_report_addr(
-        self,
-        axum_addr_channel: Option<oneshot::Sender<SocketAddr>>,
-    ) -> anyhow::Result<()> {
         let mut runner = self.runner;
 
-        let axum_addr = runner
+        runner
             .start_http_server(
                 self.endpoints.inner.axum_router,
                 self.endpoints.inner.jsonrpsee_module,
@@ -670,11 +670,6 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
             )
             .await
             .context("Failed to start Axum Server")?;
-        if let Some(sender) = axum_addr_channel {
-            sender
-                .send(axum_addr)
-                .map_err(|_| anyhow::anyhow!("Failed to send Axum address"))?;
-        }
 
         let monitoring_task =
             spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);

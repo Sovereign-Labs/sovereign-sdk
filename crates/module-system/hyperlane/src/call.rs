@@ -205,6 +205,10 @@ where
         if delivery.is_some() {
             return Err(anyhow::anyhow!("Message {} already processed", message_id));
         }
+
+        let mut count = self.deliveries_count.get(state)?.unwrap_or_default();
+        count += 1;
+        self.deliveries_count.set(&count, state)?;
         self.deliveries.set(
             &message_id,
             &Delivery {

@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_FILE_PATH\" == *.rs ]]; then cargo fmt --all --quiet 2>/dev/null || true; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

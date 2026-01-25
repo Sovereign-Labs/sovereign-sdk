@@ -7,5 +7,6 @@ expression: config
   "sender_address": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
   "finalization_blocks": 0,
   "block_producing": "manual",
-  "randomization": null
+  "randomization": null,
+  "failure_behavior": "none"
 }

@@ -63,7 +63,7 @@ use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
 use std::marker::PhantomData;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::num::NonZero;
 use std::path::Path;
 use std::pin::Pin;
@@ -114,6 +114,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    seq_role: SequencerRole,
     synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
@@ -152,6 +153,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         Builder::new(da, config)
             .build(
@@ -161,6 +163,7 @@ where
                 api_ledger_db,
                 shutdown_sender,
                 stop_at_rollup_height,
+                bind_addr,
             )
             .await
     }

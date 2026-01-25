@@ -3,6 +3,7 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::sync_sequencer_state::Message;
+use crate::preferred::update_state::SequenceNumberMismatchError;
 use crate::preferred::AcceptTxError;
 use crate::preferred::AcceptedTx;
 use crate::preferred::Confirmation;
@@ -155,8 +156,13 @@ where
         node_state_root: <S::Storage as Storage>::Root,
         data: ProcessFinalCatchupData,
         reason: &'static str,
-    ) -> Result<(anyhow::Result<ProcessFinalCatchupData>, Duration), SequencerStateUpdatorError>
-    {
+    ) -> Result<
+        (
+            Result<ProcessFinalCatchupData, SequenceNumberMismatchError>,
+            Duration,
+        ),
+        SequencerStateUpdatorError,
+    > {
         let start_time = std::time::Instant::now();
         let (resp, recv) = oneshot::channel();
         self.send(Message::FinalCatchup {

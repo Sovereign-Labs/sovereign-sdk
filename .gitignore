@@ -15,6 +15,8 @@ demo_data_1/
 demo_data_2/
 demo_data_replica/
 
+ci-logs/
+
 docker/observability
 
 .vscode/settings.json

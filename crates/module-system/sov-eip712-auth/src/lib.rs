@@ -13,7 +13,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Runtime, Spec, TxHash,
+    ProvableStateReader, RawTx, Runtime, Spec, TxHash, VersionReader,
 };
 use sov_state::User;
 
@@ -112,7 +112,7 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + VersionReader>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<

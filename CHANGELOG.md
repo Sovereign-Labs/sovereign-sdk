@@ -1,8 +1,19 @@
 # 2026-01-17
 - #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
+# 2026-01-25
+- #2398 makes fixes to the eth_feeHistory endpoint
+
+# 2026-01-24
+- #2397: ***Breaking Change*** adds `Sync` bound on module event types. Major rework of "pending" block handling. Now we treat each new EVM transaction as creating a new head block (rather than a pending block) and then getting reorged when the next tx is added. 
+
+# 2026-01-20
+- #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
+- #2380 EVM: Validate `eth_feeHistory` input parameters.
 
 # 2026-01-16
 - #2342 EVM: Populate the `gas_limit` for pending block.
+- #2338 **Infra only breaking change**: Removes `da_total_timeout_secs` from runner section in `rollup_config.toml`
+- #2349 Adds optional celestia params: `api_request_timeout_secs`, `tx_status_polling_millis` and `background_stat_polling_interval_secs`
 
 # 2026-01-14
 - #2326 Add `max_fee` validation to the EVM authenticator. Introduce `EVM_MAX_FEE_CHECK_HEIGHT` in `constants.toml` to specify the block height after which the max-fee check becomes active.

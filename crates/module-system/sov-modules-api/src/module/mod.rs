@@ -42,7 +42,8 @@ pub trait Module: Clone {
         + schemars::JsonSchema
         + 'static
         + core::marker::Send
-        + PartialEq;
+        + PartialEq
+        + core::marker::Sync;
 
     /// Error type returned by [`Module::call`].
     type Error: Debug + std::fmt::Display + Send + Sync + 'static;
@@ -169,7 +170,12 @@ pub trait EventEmitter: ModuleInfo {
     /// Execution context.
     type Spec: Spec;
     /// Module defined event resulting from a call method.
-    type Event: Debug + BorshSerialize + BorshDeserialize + 'static + core::marker::Send;
+    type Event: Debug
+        + BorshSerialize
+        + BorshDeserialize
+        + 'static
+        + core::marker::Send
+        + core::marker::Sync;
 
     /// Emits an event with an auto-generated event key composed by the module
     /// of origin's name and the `enum` variant's name of the event.

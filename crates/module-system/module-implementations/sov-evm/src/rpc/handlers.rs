@@ -1,6 +1,7 @@
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_consensus::ReceiptEnvelope;
+use alloy_eips::BlockId;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
@@ -64,34 +65,28 @@ where
             method = "eth_getBlockByHash",
             "EVM module JSON-RPC request"
         );
-
-        let block_number_hex = self
-            .block_hash_to_number
-            .get(&block_hash, state)
-            .unwrap_infallible()
-            .map(|number| hex::encode(number.to_be_bytes()));
-        let kind = details.unwrap_or_default().into();
-        Ok(match block_number_hex {
-            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state)?,
-            None => None,
-        })
+        Ok(self.get_maybe_synthetic_block_for_rpc(
+            Some(BlockId::Hash(block_hash.into())),
+            details.unwrap_or_default().into(),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getBlockByNumber`
     #[rpc_method(name = "eth_getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Block>> {
         trace!(
-            block_number,
+            ?block_id,
             method = "eth_getBlockByNumber",
             "EVM module JSON-RPC request"
         );
         let kind = details.unwrap_or_default().into();
-        Ok(self.get_block(block_number, kind, state)?)
+        Ok(self.get_maybe_synthetic_block_for_rpc(block_id, kind, state)?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -99,10 +94,10 @@ where
     pub fn get_balance(
         &self,
         address: Address,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        let mut state = self.resolve_state(block_number, state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
         let balance = self
             .db(state.deref_mut())
             .basic(address)
@@ -126,12 +121,12 @@ where
         &self,
         address: Address,
         index: U256,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        trace!(method = "eth_getStorageAt", ?block_number, %address, %index, "EVM module JSON-RPC request");
+        trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
-        let mut state = self.resolve_state(block_number, state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
         let storage_slot = self
             .account_storage
             .get(&(&address, &index), state.deref_mut())
@@ -146,10 +141,10 @@ where
     pub fn get_transaction_count(
         &self,
         address: Address,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        let mut state = self.resolve_state(block_number, state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
 
         let ethereum_address: EthereumAddress = address.into();
         let credential_id = ethereum_address.as_credential_id();
@@ -168,11 +163,11 @@ where
     pub fn get_code(
         &self,
         address: Address,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
-        trace!(method = "eth_getCode", %address, ?block_number, "EVM module JSON-RPC request");
-        let state = self.resolve_state(block_number, state)?;
+        trace!(method = "eth_getCode", %address, ?block_id, "EVM module JSON-RPC request");
+        let state = self.resolve_state_for_block_id(block_id, state)?;
         Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
@@ -227,16 +222,16 @@ where
     #[rpc_method(name = "eth_getBlockReceipts")]
     pub fn get_block_receipts(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
     {
         trace!(
-            block_number,
+            ?block_id,
             method = "eth_getBlockReceipts",
             "EVM module JSON-RPC request"
         );
-        Ok(self.get_receipts(block_number, state)?)
+        Ok(self.get_receipts(block_id, state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`
@@ -260,17 +255,17 @@ where
     pub fn eth_call(
         &self,
         request: TransactionRequest,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         _state_overrides: Option<StateOverride>,
         _block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         trace!(
             method = "eth_call",
-            ?block_number,
+            ?block_id,
             "EVM module JSON-RPC request"
         );
-        let result = self.call(request, block_number, state)?.result;
+        let result = self.call(request, block_id, state)?.result;
         Ok(ensure_success(result)?)
     }
 
@@ -288,10 +283,14 @@ where
     pub fn eth_estimate_gas(
         &self,
         request: TransactionRequest,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        trace!(method = "eth_estimateGas", "EVM module JSON-RPC request");
+        trace!(
+            ?block_id,
+            method = "eth_estimateGas",
+            "EVM module JSON-RPC request"
+        );
 
         // Add 1,000 bytes to account for all other data in the Transaction structure, apart from call data.
         let tx_size = request.input.input().as_ref().map(|i| i.len()).unwrap_or(0) + 1000;
@@ -299,7 +298,7 @@ where
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_number, state)?;
+        } = self.call(request, block_id, state)?;
         self.db(state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");
@@ -367,5 +366,99 @@ where
     ) -> RpcResult<GethTrace> {
         trace!(method = "debug_traceTransaction", %tx_hash, "EVM module JSON-RPC request");
         Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
+    }
+
+    // ========== web3 namespace ==========
+
+    /// Handler for: `web3_clientVersion`
+    /// Returns the current client version.
+    #[rpc_method(name = "web3_clientVersion")]
+    pub fn web3_client_version(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<String> {
+        trace!(method = "web3_clientVersion", "EVM module JSON-RPC request");
+        Ok(format!(
+            "sov-evm/{}",
+            option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
+        ))
+    }
+
+    /// Handler for: `web3_sha3`
+    /// Returns Keccak-256 hash of the given data.
+    #[rpc_method(name = "web3_sha3")]
+    pub fn web3_sha3(&self, data: Bytes, _state: &mut ApiStateAccessor<S>) -> RpcResult<B256> {
+        trace!(method = "web3_sha3", "EVM module JSON-RPC request");
+        Ok(alloy_primitives::keccak256(&data))
+    }
+
+    // ========== net namespace ==========
+
+    /// Handler for: `net_listening`
+    /// Returns true if client is actively listening for network connections.
+    #[rpc_method(name = "net_listening")]
+    pub fn net_listening(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<bool> {
+        trace!(method = "net_listening", "EVM module JSON-RPC request");
+        // Rollup is always accepting connections via RPC
+        Ok(true)
+    }
+
+    /// Handler for: `eth_maxPriorityFeePerGas`
+    /// Returns the current max priority fee per gas.
+    #[rpc_method(name = "eth_maxPriorityFeePerGas")]
+    pub fn eth_max_priority_fee_per_gas(
+        &self,
+        _state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<U256> {
+        trace!(
+            method = "eth_maxPriorityFeePerGas",
+            "EVM module JSON-RPC request"
+        );
+        // Rollup uses preferred sequencer model, no priority fees
+        Ok(U256::ZERO)
+    }
+
+    /// Handler for: `eth_getBlockTransactionCountByNumber`
+    /// Returns the number of transactions in a block by block number.
+    #[rpc_method(name = "eth_getBlockTransactionCountByNumber")]
+    pub fn get_block_transaction_count_by_number(
+        &self,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<U64>> {
+        trace!(
+            ?block_id,
+            method = "eth_getBlockTransactionCountByNumber",
+            "EVM module JSON-RPC request"
+        );
+        let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
+        Ok(block.map(|b| U64::from(b.transactions.len())))
+    }
+
+    /// Handler for: `eth_getBlockTransactionCountByHash`
+    /// Returns the number of transactions in a block by block hash.
+    #[rpc_method(name = "eth_getBlockTransactionCountByHash")]
+    pub fn get_block_transaction_count_by_hash(
+        &self,
+        block_hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<U64>> {
+        trace!(
+            %block_hash,
+            method = "eth_getBlockTransactionCountByHash",
+            "EVM module JSON-RPC request"
+        );
+        let block_number = self
+            .block_hash_to_number
+            .get(&block_hash, state)
+            .unwrap_infallible();
+        match block_number {
+            Some(number) => {
+                let block = self.get_maybe_synthetic_block_for_rpc(
+                    Some(BlockId::Number(BlockNumberOrTag::Number(number))),
+                    false.into(),
+                    state,
+                )?;
+                Ok(block.map(|b| U64::from(b.transactions.len())))
+            }
+            None => Ok(None),
+        }
     }
 }

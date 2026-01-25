@@ -205,11 +205,11 @@ pub(crate) enum StateToAccess {
     ),
 }
 
-#[derive(derive_more::Debug)]
+#[derive(derive_more::Debug, Clone)]
 struct CheckpointAndReadTxn<S: Spec> {
     // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
     #[debug(skip)]
-    read_txn: HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>>,
+    read_txn: Arc<HashMapReadTxn<'static, (SlotKey, Namespace), Option<SlotValue>>>,
     // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
     // This is undefined behavior
     state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>,
@@ -218,7 +218,7 @@ struct CheckpointAndReadTxn<S: Spec> {
 impl<S: Spec> CheckpointAndReadTxn<S> {
     pub fn new(state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>) -> Self {
         Self {
-            read_txn: unsafe { Self::lengthen_lifetime(state_checkpoint.writes.read()) },
+            read_txn: Arc::new(unsafe { Self::lengthen_lifetime(state_checkpoint.writes.read()) }),
             state_checkpoint,
         }
     }
@@ -381,7 +381,11 @@ impl<S: Spec> GetGasPrice for ApiStateAccessor<S> {
 }
 
 impl<S: Spec> EventContainer for ApiStateAccessor<S> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 
@@ -857,6 +861,27 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         Ok(state)
     }
 
+    /// Clones the accessor for use in RPC contexts, dropping any local writes that were made to the accessor.
+    pub fn clone_without_local_writes(&self) -> ApiStateAccessor<S> {
+        ApiStateAccessor {
+            witness: Default::default(),
+            events: Vec::new(),
+            gas_meter: self.gas_meter.clone(),
+            local_kernel_writes: HashMap::new(),
+            local_user_writes: HashMap::new(),
+            local_accessory_writes: HashMap::new(),
+            uncomitted_changes: self.uncomitted_changes.as_ref().map(|c| c.box_clone()),
+            temp_cache: TempCache::new(),
+            checkpoint_and_read_txn: self.checkpoint_and_read_txn.clone(),
+            kernel: self.kernel.clone(),
+            state_to_access: self.state_to_access,
+            visible_slot_number: self.visible_slot_number,
+            safe_true_slot_number_to_use: self.safe_true_slot_number_to_use,
+            encountered_pruning_error: None,
+            metrics: StateMetrics::default(),
+        }
+    }
+
     /// Returns a new accessor which accesses the rollup at the specified `height`.
     /// The gas price contained in the accessor is set to the base fee per gas at the specified height.
     pub fn get_archival_state(
@@ -914,6 +939,20 @@ impl<S: Spec> GasMeter for MeteredApiStateAccessor<S> {
     type Spec = S;
     fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         self.api_state_accessor.gas_meter.charge_gas(amount)
+    }
+}
+
+impl<S: Spec> VersionReader for MeteredApiStateAccessor<S> {
+    fn max_allowed_slot_number_to_access(&self) -> SlotNumber {
+        self.api_state_accessor.max_allowed_slot_number_to_access()
+    }
+
+    fn current_visible_slot_number(&self) -> VisibleSlotNumber {
+        self.api_state_accessor.current_visible_slot_number()
+    }
+
+    fn rollup_height_to_access(&self) -> RollupHeight {
+        self.api_state_accessor.rollup_height_to_access()
     }
 }
 
