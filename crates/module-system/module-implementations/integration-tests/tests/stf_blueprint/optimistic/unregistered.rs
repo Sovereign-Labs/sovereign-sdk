@@ -81,8 +81,7 @@ fn check_unreg_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBip
             end.potential_seq_bank_balance
                 .checked_add(end.potential_seq_bond)
                 .unwrap(),
-            start
-                .potential_seq_bank_balance
+            start.potential_seq_bank_balance
         );
 
         assert_eq!(end.total_balance(), start.total_balance());
