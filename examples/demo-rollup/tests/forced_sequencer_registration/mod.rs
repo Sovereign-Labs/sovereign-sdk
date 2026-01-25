@@ -138,12 +138,14 @@ async fn submit_preferred_tx(
     client
         .client
         .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&borsh::to_vec(tx).unwrap()),
+            body: BASE64_STANDARD.encode(borsh::to_vec(tx).unwrap()),
         })
         .await?;
     Ok(())
 }
 
+// Since this is test-only code, we're fine with the large enum variant.
+#[allow(clippy::large_enum_variant)]
 enum ForcedTx<'a> {
     Runtime(Transaction<Runtime<TestSpec>, TestSpec>),
     Evm {
@@ -230,7 +232,7 @@ async fn wait_for_bank_balance(
     user_address: <TestSpec as Spec>::Address,
 ) -> anyhow::Result<()> {
     poll_until(
-        &format!("bank balance {} for {}", expected_amount, user_address),
+        &format!("bank balance {expected_amount} for {user_address}"),
         || async {
             let success = assert_balance(client, expected_amount, token_id, user_address, None)
                 .await
@@ -432,7 +434,7 @@ async fn evm_tx_unregistered_test_case(
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
     poll_until(
-        &format!("EVM balance {} for {}", transfer_amount, receiver_address),
+        &format!("EVM balance {transfer_amount} for {receiver_address}"),
         || async {
             let balance = provider.get_balance(receiver_address).await?;
             Ok((balance == transfer_amount).then_some(()))
