@@ -810,7 +810,7 @@ pub(crate) fn build_rpc_receipt(
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
-        effective_gas_price: 0,
+        effective_gas_price: block.maybe_partial_header().base_fee_per_gas.unwrap_or(0) as u128,
         blob_gas_used: None,
         blob_gas_price: None,
         from,
