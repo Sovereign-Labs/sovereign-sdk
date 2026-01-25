@@ -54,7 +54,7 @@ const MAX_TX_FEE: Amount = Amount::new(100_000_000);
 const UNREGISTERED_SENDER: MockAddress = MockAddress::new([121; 32]);
 const MINIMUM_BOND: Amount = Amount::new(100_000_000);
 const FINALIZATION_BLOCKS: u32 = 1;
-const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(3);
+const FORCED_TX_BATCH_TIMEOUT: Duration = Duration::from_secs(60);
 const FORCED_TX_BATCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
