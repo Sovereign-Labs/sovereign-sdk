@@ -315,6 +315,10 @@ impl Iterator for NamespaceDataIterator<'_> {
                     // Capture start when adding the first data share.
                     // total_offset was already incremented, so subtract 1.
                     if start.is_none() {
+                        assert!(
+                            current_shares.is_empty(),
+                            "start must be set before any shares are added"
+                        );
                         start = Some(self.total_offset - 1);
                     }
                     current_shares.push(share.clone());
