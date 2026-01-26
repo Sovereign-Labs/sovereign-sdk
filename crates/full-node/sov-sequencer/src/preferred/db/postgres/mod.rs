@@ -1,12 +1,13 @@
 use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
+use anyhow::Context;
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
@@ -643,7 +644,43 @@ impl DbBackend for PostgresBackend {
 fn node_address(bind_addr: SocketAddr) -> Result<String> {
     let bind_port = bind_addr.port();
     let ip = bind_addr.ip();
-    Ok(format!("{ip}:{bind_port}"))
+
+    let effective_ip = if ip.is_unspecified() {
+        get_local_ip(ip)?
+    } else {
+        ip
+    };
+
+    let effective_addr = SocketAddr::new(effective_ip, bind_port);
+    Ok(effective_addr.to_string())
+}
+
+/// Gets the local IP address by creating a UDP socket and checking its local address.
+fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
+    // This is a classic networking trick to figure out your machine’s local IP address,
+    // without actually sending any data.
+    let addr = if ip.is_ipv6() {
+        let socket = std::net::UdpSocket::bind("[::]:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv6 address discovery: {ip}")
+        })?;
+        socket
+            .connect("[2001:4860:4860::8888]:80")
+            .context("Failed to connect UDP socket for local IPv6 address discovery")?;
+        socket
+    } else {
+        let socket = std::net::UdpSocket::bind("0.0.0.0:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv4 address discovery: {ip}")
+        })?;
+        socket
+            .connect("8.8.8.8:80")
+            .context("Failed to connect UDP socket for local IPv4 address discovery.")?;
+
+        socket
+    }
+    .local_addr()
+    .context("Failed to retrieve local address from UDP socket.")?;
+
+    Ok(addr.ip())
 }
 
 #[cfg(test)]

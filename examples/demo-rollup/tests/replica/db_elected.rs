@@ -1,7 +1,7 @@
 use super::*;
-
 use sov_proxy_utils::NodeDiscovery;
 use sov_sequencer::SequencerRole;
+use std::path::Path;
 use tokio::time::Duration;
 
 type Rollup = ExternalMockDemoRollup<Native>;
@@ -117,7 +117,7 @@ async fn test_db_elected_leader_failover() {
         da_shutdown,
     } = setup;
 
-    let node_discovery = NodeDiscovery::new(postgres.connection_string())
+    let (node_discovery, _file_watcher) = NodeDiscovery::new(postgres.connection_string())
         .await
         .expect("Failed to create proxy");
 
@@ -206,4 +206,97 @@ async fn test_db_elected_leader_failover() {
 
     let _ = restarted_rollup.shutdown().await;
     let _ = da_shutdown.send(());
+}
+
+/// Test that `subscribe_cluster_info_loop` receives PostgreSQL notifications
+/// and writes updated cluster info to file when nodes register and leadership changes.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_subscribe_cluster_info_receives_notifications() {
+    let postgres = match PostgresData::create_postgres().await {
+        Ok(pg) => pg,
+        Err(CreatePostgresError::DockerNotSupported) => return,
+        Err(CreatePostgresError::DockerError(e)) => {
+            panic!("Failed to create Postgres container: {e}");
+        }
+    };
+
+    // Create NodeDiscovery and spawn subscribe_cluster_info_loop
+    let (node_discovery, mut file_watcher) = NodeDiscovery::new(postgres.connection_string())
+        .await
+        .expect("Failed to create NodeDiscovery");
+
+    // Create temp file for cluster info output
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cluster_info_path = temp_dir.path().join("cluster_info.txt");
+    let cluster_info_path_clone = cluster_info_path.clone();
+    let subscription_handle = tokio::spawn(async move {
+        node_discovery
+            .subscribe_cluster_info_loop(cluster_info_path_clone)
+            .await
+            .unwrap();
+    });
+
+    let (_, da_shutdown, addr) = create_da_service_periodic().await;
+
+    // Start first node - it will become leader and trigger notifications
+    let node1 = Some((postgres.clone(), "node1".into(), NodeRole::DbElected));
+    let rollup1 = start_rollup(addr, node1).await;
+    rollup1.wait_for_sequencer_ready().await.unwrap();
+
+    // Wait for file to be updated with leader info.
+    let file_content1 = wait_for_file_change(&cluster_info_path, &mut file_watcher).await;
+
+    // Start second node - it will become follower and trigger another notification
+    let node2 = Some((postgres.clone(), "node2".into(), NodeRole::DbElected));
+    let rollup2 = start_rollup(addr, node2).await;
+    rollup2.wait_for_sequencer_ready().await.unwrap();
+
+    // Wait for file to be updated with follower info.
+    let file_content2 = wait_for_file_change(&cluster_info_path, &mut file_watcher).await;
+
+    // After replica joined, the leader didn't change.
+    assert_eq!(
+        file_content1.leader.as_ref().unwrap(),
+        file_content2.leader.as_ref().unwrap()
+    );
+
+    // The followers are updated.
+    assert!(file_content1.followers[0] != file_content2.followers[0]);
+
+    // Cleanup
+    subscription_handle.abort();
+    let _ = rollup1.shutdown().await;
+    let _ = rollup2.shutdown().await;
+    let _ = da_shutdown.send(());
+}
+
+async fn wait_for_file_change(path: &Path, file_watcher: &mut watch::Receiver<()>) -> FileContent {
+    tokio::time::timeout(Duration::from_secs(2), file_watcher.changed())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let content = std::fs::read_to_string(path).expect("Failed to read file content");
+    FileContent::parse(&content)
+}
+
+struct FileContent {
+    leader: Option<String>,
+    followers: Vec<String>,
+}
+
+impl FileContent {
+    fn parse(content: &str) -> FileContent {
+        let mut leader = None;
+        let mut followers = Vec::new();
+
+        for line in content.lines() {
+            if let Some(addr) = line.strip_prefix("leader=") {
+                leader = Some(addr.parse().expect("Invalid leader address"));
+            } else if let Some(addr) = line.strip_prefix("follower=") {
+                followers.push(addr.parse().expect("Invalid follower address"));
+            }
+        }
+        FileContent { leader, followers }
+    }
 }

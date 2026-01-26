@@ -8,11 +8,13 @@ homepage.workspace = true
 publish = false
 repository.workspace = true
 
+
 [dependencies]
 anyhow = { workspace = true }
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
-tokio = { workspace = true }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "derive"], default-features = false }
+tokio = { workspace = true, features = ["time", "sync"], default-features = false }
 tracing = { workspace = true }
+
 
 [lints]
 workspace = true
