@@ -628,7 +628,6 @@ async fn max_blobs_per_slot_test_case(
 
 /// Verifies forced transactions show up in sequencer state after a resync
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
 async fn test_forced_txs_survive_resync() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "500");
 
@@ -654,7 +653,7 @@ async fn forced_txs_resync_test_case(
     forced_da_service: Arc<impl DaService>,
 ) -> anyhow::Result<()> {
     const RESYNC_FORCED_BLOCKS: usize = 15;
-    const RESYNC_EXTRA_BLOCKS: usize = 15;
+    const RESYNC_EXTRA_BLOCKS: usize = 150;
     const GAS_FUNDING_AMOUNT: u128 = 1_000_000_000_000;
 
     let client = &rollup.client;
@@ -710,17 +709,17 @@ async fn forced_txs_resync_test_case(
     }
     rollup.resume_preferred_batches().await;
 
-    // Make sure the sequencer becomes unready. Then, let it get back to ready.
-    rollup.wait_for_sequencer_not_ready().await?;
+    // Wait for sequencer to stabilize after processing the backlog
     rollup.wait_for_sequencer_ready().await?;
 
-    // Wait for all forced blocks to be processed
+    // Subscribe to state updates and wait for forced blocks slot notifications
     let mut state_update_subscription = rollup.subscribe_state_updates().await?;
     let mut slot_num_of_last_forced_tx = 0;
     for _ in 0..RESYNC_FORCED_BLOCKS {
         let slot = slot_subscription.next().await.unwrap()?;
         slot_num_of_last_forced_tx = slot.number;
     }
+
     // This part is sensitive to numbers; we need to produce more blocks than we had forced blocks *plus* in flight batches. This gives time for the blob sender
     // to actually send all of the original blobs on chain and then the preferred sequencer to create new batches that increment the visible slot number.
     // This is necessary because the preferred sequencer tries not to produce batches when there are more than a few blobs in flight, and the blob sender
