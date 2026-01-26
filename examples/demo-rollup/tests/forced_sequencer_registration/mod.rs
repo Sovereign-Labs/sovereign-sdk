@@ -653,7 +653,7 @@ async fn forced_txs_resync_test_case(
     forced_da_service: Arc<impl DaService>,
 ) -> anyhow::Result<()> {
     const RESYNC_FORCED_BLOCKS: usize = 15;
-    const RESYNC_EXTRA_BLOCKS: usize = 15;
+    const RESYNC_EXTRA_BLOCKS: usize = 30;
     const GAS_FUNDING_AMOUNT: u128 = 1_000_000_000_000;
 
     let client = &rollup.client;
