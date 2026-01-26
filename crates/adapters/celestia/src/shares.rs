@@ -280,7 +280,9 @@ impl Iterator for NamespaceDataIterator<'_> {
         }
         let mut relative_share_idx = self.relative_share_idx.unwrap_or(0);
 
-        let start = self.total_offset;
+        // Track when the first data share is added, not when iteration starts.
+        // This excludes namespace padding shares from the range.
+        let mut start: Option<usize> = None;
         let mut current_shares: Vec<celestia_types::Share> = Vec::new();
 
         while row_idx < self.rows.len() {
@@ -298,7 +300,8 @@ impl Iterator for NamespaceDataIterator<'_> {
                 let is_tail_padding = is_tail_padding(share);
                 // Found the new start. Stop and return all existing
                 if is_start && !current_shares.is_empty() {
-                    let range = start..self.total_offset;
+                    let range = start.expect("start must be set if current_shares is not empty")
+                        ..self.total_offset;
                     self.current_row_idx = Some(row_idx);
                     return Some(ShareSequence {
                         shares: current_shares,
@@ -309,6 +312,11 @@ impl Iterator for NamespaceDataIterator<'_> {
                 relative_share_idx += 1;
                 self.relative_share_idx = Some(relative_share_idx);
                 if !is_tail_padding && !share.is_parity() {
+                    // Capture start when adding the first data share.
+                    // total_offset was already incremented, so subtract 1.
+                    if start.is_none() {
+                        start = Some(self.total_offset - 1);
+                    }
                     current_shares.push(share.clone());
                 }
             }
@@ -321,7 +329,8 @@ impl Iterator for NamespaceDataIterator<'_> {
         self.current_row_idx = Some(self.rows.len());
         if !current_shares.is_empty() {
             // Return remaining
-            let range = start..self.total_offset;
+            let range =
+                start.expect("start must be set if current_shares is not empty")..self.total_offset;
             Some(ShareSequence {
                 shares: current_shares,
                 range_in_ns: range,
