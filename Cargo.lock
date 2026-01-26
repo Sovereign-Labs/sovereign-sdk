@@ -12119,7 +12119,6 @@ dependencies = [
  "jsonrpsee",
  "mini-moka",
  "openapiv3",
- "pin-project",
  "proptest",
  "proptest-derive 0.5.1",
  "reltester",

@@ -210,7 +210,9 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
     let mut chunked_subscription = subscription.ready_chunks(MAX_BATCH_SIZE);
 
     // Ping/pong state for keepalive
-    let mut ping_interval = tokio::time::interval(PING_INTERVAL);
+    // Use interval_at to delay the first ping until after a full interval of inactivity
+    let mut ping_interval =
+        tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
     ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut awaiting_pong: Option<[u8; 8]> = None;
     let mut last_pong_time = Instant::now();
