@@ -65,7 +65,7 @@ const CHECK_TRANSACTION_VALUE: u64 = 13;
 const DA_SLOTS_TO_GENERATE: u64 = 100;
 const FINALIZATION_SLOTS: u32 = 5;
 
-fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, nonce: u64) -> RawTx {
+fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, generation: u64) -> RawTx {
     let msg: RuntimeCall<DemoRollupSpec> =
         RuntimeCall::SyntheticLoad(sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
             number_of_new_values: value,
@@ -75,7 +75,7 @@ fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, nonce: u64) -> RawTx
     let tx = default_test_signed_transaction::<DemoRuntime<DemoRollupSpec>, DemoRollupSpec>(
         &key,
         &msg,
-        nonce,
+        generation,
         &<DemoRuntime<DemoRollupSpec> as Runtime<DemoRollupSpec>>::CHAIN_HASH,
     );
     RawTx::new(borsh::to_vec(&tx).unwrap())
@@ -353,7 +353,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 // 5. Shuts down the rollup
 async fn sync_rollup_with_path(
     rollup_storage_path: Arc<TempDir>,
-    nonce_to_use: u64,
+    generation_to_use: u64,
 ) -> anyhow::Result<()> {
     let test_rollup = start_rollup(rollup_storage_path).await?;
 
@@ -407,7 +407,11 @@ async fn sync_rollup_with_path(
     // Ensure the rollup can still accept transactions
     let tx_signer_key =
         read_private_key::<DemoRollupSpec>("tx_signer_private_key.json").private_key;
-    let tx = tx_set_value_for_check(tx_signer_key.clone(), CHECK_TRANSACTION_VALUE, nonce_to_use);
+    let tx = tx_set_value_for_check(
+        tx_signer_key.clone(),
+        CHECK_TRANSACTION_VALUE,
+        generation_to_use,
+    );
     let accept_tx = test_rollup
         .api_client()
         .send_raw_tx_to_sequencer(&tx)

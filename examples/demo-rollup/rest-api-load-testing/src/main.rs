@@ -115,7 +115,7 @@ mod helpers {
     use sov_modules_api::{
         Address, Amount, CryptoSpec, PrivateKey, PublicKey, Runtime as RuntimeTrait, SafeVec, Spec,
     };
-    use sov_test_utils::default_test_signed_transaction;
+    use sov_test_utils::default_test_signed_transaction_with_nonce;
 
     use crate::TestSpec;
     const TOKEN_NAME: &str = "TestToken";
@@ -166,7 +166,7 @@ mod helpers {
             supply_cap: None,
         });
 
-        default_test_signed_transaction::<Runtime<TestSpec>, TestSpec>(
+        default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
             key,
             &msg,
             nonce,
