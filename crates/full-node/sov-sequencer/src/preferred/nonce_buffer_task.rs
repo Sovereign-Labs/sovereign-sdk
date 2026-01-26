@@ -478,13 +478,6 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 
     async fn reject_all_queued_on_shutdown(&mut self) {
         tracing::info!("Nonce buffer task shutting down. Rejecting queued transactions.");
-        let buffers = std::mem::take(&mut self.buffers);
-        for (_credential_id, queue) in buffers {
-            for (_nonce, tx) in queue.txs {
-                let _ = tx.result_sender.send(shutdown_reject_error::<S, Rt>());
-            }
-        }
-
         while let Ok(input) = self.buffer_input.try_recv() {
             match input {
                 NonceBufferInput::NewTx { result_sender, .. } => {
@@ -501,27 +494,58 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     credential_id,
                     tx_nonce,
                     tx_hash,
-                } => {
-                    let user_nonce_for_prerequisites = self
-                        .execution_backend
-                        .get_current_nonce_for_user(&credential_id);
-                    let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
-                        tx_hash,
-                        tx_nonce,
-                        user_nonce_for_prerequisites,
-                        user_nonce_for_prerequisites,
-                        Instant::now(),
-                        credential_id,
-                        InvalidNonceReason::Timeout,
-                    ));
-                }
+                } => self.handle_tx_timed_out(credential_id, tx_nonce, tx_hash),
                 NonceBufferInput::TxPersisted { .. } => (),
+            }
+        }
+
+        let buffers = std::mem::take(&mut self.buffers);
+        for (_credential_id, queue) in buffers {
+            for (_nonce, tx) in queue.txs {
+                let _ = tx.result_sender.send(shutdown_reject_error::<S, Rt>());
             }
         }
 
         // Flush metrics on shutdown since we might not get another chance.
         self.timeout_metrics_batcher.flush();
         self.main_queue_depth_batcher.flush();
+    }
+
+    fn handle_tx_timed_out(&mut self, credential_id: CredentialId, tx_nonce: u64, tx_hash: TxHash) {
+        let queue = self.buffers.entry(credential_id).or_default();
+        let user_nonce_for_prerequisites = queue
+            .non_persisted
+            .user_nonce_to_use_as_prerequisite_start()
+            .unwrap_or_else(|| {
+                self.execution_backend
+                    .get_current_nonce_for_user(&credential_id)
+            });
+        // Pre-requisite checks have been disabled to simplify.
+        // See the comments in the methods on NonPersisted for extra improvements on
+        // transactions with identical nonces that will make pre-requisite checks work
+        // reliably; additionally a time bound on execution would be needed (e.g. retry
+        // limit).
+        //
+        // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
+        //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
+        // }
+        match queue.txs.entry(tx_nonce) {
+            // If the hash doesn't match, it means the tx has been replaced. The
+            // `result_sender` is for the new tx and we shouldn't notify it.
+            btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
+                let tx = entry.remove();
+                let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
+                    tx_hash,
+                    tx_nonce,
+                    user_nonce_for_prerequisites,
+                    tx.nonce_when_queued,
+                    tx.queued_at,
+                    credential_id,
+                    InvalidNonceReason::Timeout,
+                ));
+            }
+            _ => (),
+        }
     }
 
     async fn run(&mut self, shutdown_receiver: &mut watch::Receiver<()>) {
@@ -650,16 +674,17 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                         result_sender,
                                                     })
                                                     .await;
-                                                if let Err(err) = send_result {
-                                                    let mpsc::error::SendError(input) = err;
-                                                    if let NonceBufferInput::TxExecuted {
+                                                // If the main loop has already exited (e.g., shutdown),
+                                                // return the execution result directly to the caller.
+                                                if let Err(mpsc::error::SendError(
+                                                    NonceBufferInput::TxExecuted {
                                                         tx_result,
                                                         result_sender,
                                                         ..
-                                                    } = input
-                                                    {
-                                                        let _ = result_sender.send(tx_result);
-                                                    }
+                                                    },
+                                                )) = send_result
+                                                {
+                                                    let _ = result_sender.send(tx_result);
                                                 }
                                             });
                                         }
@@ -768,42 +793,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     credential_id,
                                     tx_nonce,
                                     tx_hash,
-                                } => {
-                                    let queue = self.buffers.entry(credential_id).or_default();
-                                    let user_nonce_for_prerequisites = queue
-                                        .non_persisted
-                                        .user_nonce_to_use_as_prerequisite_start()
-                                        .unwrap_or_else(|| {
-                                            self.execution_backend
-                                                .get_current_nonce_for_user(&credential_id)
-                                        });
-                                    // Pre-requisite checks have been disabled to simplify.
-                                    // See the comments in the methods on NonPersisted for extra improvements on
-                                    // transactions with identical nonces that will make pre-requisite checks work
-                                    // reliably; additionally a time bound on execution would be needed (e.g. retry
-                                    // limit).
-                                    //
-                                    // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
-                                    //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
-                                    // }
-                                    match queue.txs.entry(tx_nonce) {
-                                        // If the hash doesn't match, it means the tx has been replaced. The
-                                        // `result_sender` is for the new tx and we shouldn't notify it.
-                                        btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
-                                            let tx = entry.remove();
-                                            let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                                tx_hash,
-                                                tx_nonce,
-                                                user_nonce_for_prerequisites,
-                                                tx.nonce_when_queued,
-                                                tx.queued_at,
-                                                credential_id,
-                                                InvalidNonceReason::Timeout,
-                                            ));
-                                        }
-                                        _ => (),
-                                    }
-                                }
+                                } => self.handle_tx_timed_out(credential_id, tx_nonce, tx_hash),
                             }
                         }
                         None => {
