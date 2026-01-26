@@ -78,6 +78,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
         );
     }
 
+    // Note that this is currently set to zero! We leave the logic in place in case we add non-zero price cases in future.
     let gas_price = pre_exec_working_set.gas_price();
     // After this check, we are confident that the transaction sender can cover the costs of transaction processing.
     if let Err(err) =
@@ -98,8 +99,9 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
 
     // The transaction will execute until one of the following conditions is met:
     // 1. It consumes more funds than `tx.max_fee`.
-    // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas)` is exhausted.
-    let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, *slot_gas);
+    // 2. The `Gas::calculate_min(tx.gas_limit, slot_gas, S::max_unregistered_tx_gas())` is exhausted.
+    let gas_limit = <S::Gas as GasArray>::calculate_min(*slot_gas, S::max_unregistered_tx_gas());
+    let working_set_gas_meter = tx.gas_meter(gas_info.gas_price, gas_limit);
 
     let mut working_set = WorkingSet::create_working_set(scratchpad, tx, working_set_gas_meter);
 
@@ -217,8 +219,8 @@ where
         };
 
     // Check: The slot gas is higher than the gas needed to validate the transaction.
-    let max_unregistered_tx_check_costs = <S as GasSpec>::max_unregistered_tx_check_costs();
-    if slot_gas.dim_is_less_or_eq(max_unregistered_tx_check_costs) {
+    let max_unregistered_tx_gas = <S as GasSpec>::max_unregistered_tx_gas();
+    if slot_gas.dim_is_less_or_eq(max_unregistered_tx_gas) {
         // We don't consume gas for failed authentication of unregistered sequencer.
         let gas_used = S::Gas::zero();
 
@@ -236,7 +238,8 @@ where
     // A malicious actor could exploit this mechanism to attack the rollup, for instance, by sending large transactions that are costly to deserialize from an address with no funds on the rollup.
     // To mitigate this, we initialize the gas meter with just enough gas to process a valid transaction. If the transaction is too big, we quickly run out of gas.
     // Additionally, we rate-limit (during blob selection) the number of forced registrations to further reduce the effectiveness of such attacks.
-    let meter = BasicGasMeter::new_with_gas(max_unregistered_tx_check_costs, *gas_price);
+    let meter =
+        BasicGasMeter::new_with_gas(max_unregistered_tx_gas, <S::Gas as Gas>::Price::ZEROED);
 
     let mut pre_exec_working_set = scratchpad.to_pre_exec_working_set(meter);
     let authentication_result =

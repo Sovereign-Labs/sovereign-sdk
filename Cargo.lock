@@ -11176,6 +11176,7 @@ dependencies = [
  "sov-cli",
  "sov-db",
  "sov-eth-client",
+ "sov-eth-dev-signer",
  "sov-ethereum",
  "sov-evm",
  "sov-evm-test-utils",

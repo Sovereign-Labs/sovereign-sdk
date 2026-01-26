@@ -440,12 +440,10 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
         .block_number
         .expect("receipt should include block number");
 
-    let fee_history = client
+    assert!(client
         .get_fee_history(2000, BlockNumberOrTag::Number(newest_block), &[])
-        .await?;
-
-    assert!(!fee_history.base_fee_per_gas.is_empty());
-    assert!(fee_history.base_fee_per_gas.len() <= 1025);
+        .await
+        .is_err());
 
     let base_fee = base_fee_from_receipt(&receipt, HIGH_PRIORITY_FEE_PER_GAS);
     assert!(base_fee > 0, "baseFeePerGas should be non-zero");

@@ -22,6 +22,7 @@ use sov_rest_utils::{json_obj, ErrorObject};
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
+use tokio::sync::broadcast;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{oneshot, watch};
@@ -34,6 +35,7 @@ use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
 use crate::common::AcceptedTx;
+use crate::common::ForcedTxBatchNotification;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -132,6 +134,7 @@ pub struct RollupBlockExecutorConfig<S: Spec> {
     pub shutdown_receiver: watch::Receiver<()>,
     pub shutdown_sender: watch::Sender<()>,
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
+    pub forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
 }
 
 type Hasher<S> = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
@@ -160,6 +163,9 @@ where
     id: Uuid,
     startup_transaction_cache_writer: Option<TxResultWriter<S, Rt>>,
     pub(super) uncommitted_changes: SequencerStateChanges<Hasher<S>>,
+    /// The nonce buffer task can get out of sync with state when non-preferred batches are executed.
+    /// We communicate that via this channel, which is also exposed to test utils.
+    forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
     phantom: PhantomData<Rt>,
 }
 
@@ -230,6 +236,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             state_root_request_sender,
             shutdown_receiver,
             shutdown_sender,
+            forced_tx_batch_notifier,
         } = rollup_exec_config;
 
         Self {
@@ -248,6 +255,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             shutdown_sender,
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
+            forced_tx_batch_notifier,
             phantom: PhantomData,
         }
     }
@@ -418,7 +426,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Done replaying txs");
 
         if !batch.is_in_progress {
-            self.end_rollup_block().await;
+            let _ = self.end_rollup_block().await;
         } else {
             trace!("The batch is still in progress; will keep the background task running");
         }
@@ -745,7 +753,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    pub async fn end_rollup_block(&mut self) {
+    #[must_use]
+    /// Closes the current batch and returns confirmations for all of the non-preferred txs included in the batch.
+    pub async fn end_rollup_block(&mut self) -> Vec<AcceptedTx<Confirmation<S, Rt>>> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
@@ -757,19 +767,22 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .await
             .expect("Error while shutting down in-progress rollup block, nothing to do. This is a bug, please report it");
 
-        let mut accepted_txs_by_batch = Vec::with_capacity(batch_receipts.len());
+        let mut forced_txs = Vec::new();
         for batch_receipt in batch_receipts {
             // We already increment the event number for our own transactions
             // inside `apply_tx_to_in_progress_batch`.
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
-            let mut accepted_txs = Vec::with_capacity(batch_receipt.tx_receipts.len());
             for tx_receipt in batch_receipt.tx_receipts {
                 let accepted_tx = self.process_tx_receipt(&tx_receipt);
-                accepted_txs.push(accepted_tx);
+                forced_txs.push(accepted_tx);
             }
-            accepted_txs_by_batch.push(accepted_txs);
+        }
+        if !forced_txs.is_empty() {
+            let _ = self
+                .forced_tx_batch_notifier
+                .send(ForcedTxBatchNotification { rollup_height });
         }
 
         trace!(
@@ -808,6 +821,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         trace!(%rollup_height, "Successfully ended rollup block");
+        forced_txs
     }
 }
 

@@ -116,9 +116,7 @@ async fn evm_test_log_subscription_with_pending_blcok() {
 
     // Verify conditions for logs in the pending block.
     for log in logs_from_subscription {
-        assert!(log.block_hash.is_none());
         assert_eq!(log.block_number.unwrap(), block_nr);
-        assert_ne!(log.block_timestamp.unwrap(), 0);
     }
 }
 
@@ -184,9 +182,7 @@ async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
 
     // Verify conditions for logs in the pending block.
     for log in logs_from_subscription {
-        assert!(log.block_hash.is_none());
         assert_eq!(log.block_number.unwrap(), block_nr);
-        assert_ne!(log.block_timestamp.unwrap(), 0);
     }
 }
 

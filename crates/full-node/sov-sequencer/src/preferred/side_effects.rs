@@ -151,7 +151,11 @@ where
                     let _ = oneshot.send(tx);
                 }
             }
-            ExecutorEvent::CloseBatch(batch, checkpoint) => {
+            ExecutorEvent::CloseBatch {
+                batch,
+                checkpoint,
+                forced_txs,
+            } => {
                 let info_to_store = BatchToStore {
                     blob_id: batch.blob_id,
                     sequence_number: batch.sequence_number,
@@ -160,6 +164,9 @@ where
                 };
                 self.close_and_publish_current_batch(checkpoint, batch, info_to_store)
                     .await?;
+                for tx in forced_txs {
+                    self.transaction_cache.insert(tx).await;
+                }
             }
             ExecutorEvent::StartBatch {
                 visible_slot_number_after_increase,

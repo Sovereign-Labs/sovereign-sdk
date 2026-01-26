@@ -79,8 +79,9 @@ use transaction_subscriptions::TransactionCache;
 
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
-    pre_exec_err_to_accept_tx_err, AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError,
-    StateUpdateNotification, SubscriptionStreamError, WithCachedTxHashes,
+    pre_exec_err_to_accept_tx_err, AcceptedTx, ForcedTxBatchNotification, Sequencer,
+    SequencerEventStream, StateUpdateError, StateUpdateNotification, SubscriptionStreamError,
+    WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
@@ -130,6 +131,8 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_state_update_notification_receiver: broadcast::Receiver<StateUpdateNotification>,
+    #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
+    test_only_forced_tx_batch_notification_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
     runtime: Rt,
 }
 
@@ -763,6 +766,16 @@ where
     ) -> Option<broadcast::Receiver<StateUpdateNotification>> {
         Some(
             self.test_only_state_update_notification_receiver
+                .resubscribe(),
+        )
+    }
+
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_forced_tx_batches_unstable(
+        &self,
+    ) -> Option<broadcast::Receiver<ForcedTxBatchNotification>> {
+        Some(
+            self.test_only_forced_tx_batch_notification_receiver
                 .resubscribe(),
         )
     }

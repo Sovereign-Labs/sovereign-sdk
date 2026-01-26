@@ -161,10 +161,18 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         .await;
     }
 
-    pub(crate) async fn close_batch(&mut self, checkpoint: StateCheckpoint<S>) {
+    pub(crate) async fn close_batch(
+        &mut self,
+        checkpoint: StateCheckpoint<S>,
+        forced_txs: Vec<AcceptedTx<Confirmation<S, Rt>>>,
+    ) {
         let batch = self.cache.terminate_batch().await;
-        self.send(ExecutorEvent::CloseBatch(batch, checkpoint))
-            .await;
+        self.send(ExecutorEvent::CloseBatch {
+            batch,
+            checkpoint,
+            forced_txs,
+        })
+        .await;
     }
 
     pub(crate) async fn prune(&mut self, prune_up_to_including: SequenceNumber) {
@@ -306,7 +314,11 @@ where
         blob_id: BlobInternalId,
     },
     /// Close the current batch.
-    CloseBatch(ReadBatch, StateCheckpoint<S>),
+    CloseBatch {
+        batch: ReadBatch,
+        checkpoint: StateCheckpoint<S>,
+        forced_txs: Vec<AcceptedTx<Confirmation<S, Rt>>>,
+    },
     /// Publish a proof blob.
     PublishProofBlob(BlobInternalId, Arc<[u8]>, SequenceNumber),
     /// Insert an accepted transaction into the database and send out the confirmation

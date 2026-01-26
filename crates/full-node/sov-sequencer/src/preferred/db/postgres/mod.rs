@@ -293,7 +293,11 @@ impl PostgresBackend {
                 ON CONFLICT (singleton) DO UPDATE
                     SET
                         node_id = EXCLUDED.node_id,
-                        last_updated = EXCLUDED.last_updated
+                        last_updated = EXCLUDED.last_updated,
+                        leader_acquired_at = CASE
+                            WHEN sequencer_leader.node_id != EXCLUDED.node_id THEN EXCLUDED.last_updated
+                            ELSE sequencer_leader.leader_acquired_at
+                        END
                     WHERE
                         sequencer_leader.node_id = EXCLUDED.node_id
                         OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
@@ -891,7 +895,7 @@ mod tests {
             let backend = PostgresBackend::connect_with_leader_timeout(
                 &postgres_config,
                 leader_timeout,
-                "node_address".to_string(),
+                format!("{node_id}_address"),
             )
             .await
             .unwrap();
@@ -925,5 +929,105 @@ mod tests {
             visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
             visible_slots_to_advance: NonZero::new(1).unwrap(),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_nodes_table_notifications() {
+        let postgres = create_postgres_container().await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let db = DB::new(&postgres, String::from("node_1"), NodeRole::Leader).await;
+
+        let mut listener = sqlx::postgres::PgListener::connect_with(&db.backend.pool)
+            .await
+            .unwrap();
+
+        listener.listen("nodes_changes").await.unwrap();
+
+        // Test INSERT notification via try_update_leader_and_register_node
+        db.maybe_update_leader().await.unwrap();
+
+        let notification = tokio::time::timeout(Duration::from_secs(5), listener.recv())
+            .await
+            .expect("Timed out waiting for INSERT notification")
+            .unwrap();
+
+        assert_eq!(notification.channel(), "nodes_changes");
+        let parts: Vec<&str> = notification.payload().split(',').collect();
+        assert_eq!(parts, vec!["node_1", "node_1_address", "INSERT"]);
+
+        // Test UPDATE notification via try_update_leader_and_register_node
+        db.maybe_update_leader().await.unwrap();
+
+        let notification = tokio::time::timeout(Duration::from_secs(5), listener.recv())
+            .await
+            .expect("Timed out waiting for UPDATE notification")
+            .unwrap();
+
+        assert_eq!(notification.channel(), "nodes_changes");
+        let parts: Vec<&str> = notification.payload().split(',').collect();
+        assert_eq!(parts, vec!["node_1", "node_1_address", "UPDATE"]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_leader_acquired_at() {
+        let postgres = create_postgres_container().await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let db_1 = &mut DB::new(&postgres, String::from("node_1"), NodeRole::Leader).await;
+        let db_2 = &mut DB::new(&postgres, String::from("node_2"), NodeRole::Replica).await;
+
+        // Node 1 becomes leader
+        db_1.maybe_update_leader().await.unwrap();
+
+        let (initial_leader_acquired_at,): (OffsetDateTime,) =
+            sqlx::query_as("SELECT leader_acquired_at FROM sequencer_leader WHERE singleton = 1")
+                .fetch_one(&db_1.backend.pool)
+                .await
+                .unwrap();
+
+        // Small delay to ensure time difference
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // Same node refreshes leadership (heartbeat)
+        db_1.maybe_update_leader().await.unwrap();
+
+        let (after_refresh_leader_acquired_at,): (OffsetDateTime,) =
+            sqlx::query_as("SELECT leader_acquired_at FROM sequencer_leader WHERE singleton = 1")
+                .fetch_one(&db_1.backend.pool)
+                .await
+                .unwrap();
+
+        assert_eq!(
+            initial_leader_acquired_at, after_refresh_leader_acquired_at,
+            "leader_acquired_at should not change when same node refreshes leadership"
+        );
+
+        // Different node takes over leadership after timeout
+        db_2.override_leader_timeout(Duration::ZERO);
+        db_2.maybe_update_leader().await.unwrap();
+
+        let (after_takeover_leader_acquired_at,): (OffsetDateTime,) =
+            sqlx::query_as("SELECT leader_acquired_at FROM sequencer_leader WHERE singleton = 1")
+                .fetch_one(&db_2.backend.pool)
+                .await
+                .unwrap();
+
+        assert!(
+            after_takeover_leader_acquired_at > initial_leader_acquired_at,
+            "leader_acquired_at should be updated when a different node takes over leadership"
+        );
     }
 }

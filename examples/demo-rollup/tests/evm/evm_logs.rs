@@ -1692,6 +1692,8 @@ async fn evm_test_get_logs() {
 
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
+
     // Make sure all the txs are in the same blcok.
     rollup_and_client
         .test_rollup
@@ -2525,6 +2527,7 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
 
     let rollup_and_client =
         RollupAndClient::new(max_log_limit, EVM_EXTENSION.response_size_limit).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
