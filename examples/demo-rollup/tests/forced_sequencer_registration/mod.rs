@@ -533,8 +533,7 @@ async fn forced_tx_gas_limit_test_case(
     client: NodeClient,
     _http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
-    let (key, _, _, recipient_address) = create_keys_and_addresses();
-    let token_id = config_gas_token_id();
+    let (key, _, _, _recipient_address) = create_keys_and_addresses();
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
     // Submit a forced tx that exceeds the gas limit by writing large state data.
@@ -547,16 +546,44 @@ async fn forced_tx_gas_limit_test_case(
         "Failed to submit gas-heavy tx",
     )
     .await?;
-    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
+    let batch_notification = wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
+    let rollup_height = batch_notification.rollup_height.get();
 
-    // The gas-heavy tx should have been rejected. Submit a preferred tx with the same nonce (0).
-    // If the gas-heavy tx was processed, this would fail due to nonce reuse.
-    let transfer_amount = 100u128;
-    let valid_tx = build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 0);
-    submit_preferred_tx(&client, &valid_tx).await?;
+    // Poll until the batch is available in the ledger DB.
+    // Note: Reverted txs still consume the nonce, but the state changes are rolled back.
+    let batch = poll_until(
+        &format!("batch {rollup_height} to be available in ledger"),
+        || {
+            let client = &client;
+            async move {
+                match client
+                    .client
+                    .get_batch_by_id(
+                        &api_types::IntOrHash::Integer(rollup_height),
+                        Some(api_types::GetBatchByIdChildren::_1),
+                    )
+                    .await
+                {
+                    Ok(resp) => Ok(Some(resp.into_inner())),
+                    Err(_) => Ok(None), // Batch not available yet, keep polling
+                }
+            }
+        },
+    )
+    .await?;
 
-    // Verify the transfer succeeded, confirming the gas-heavy tx was rejected.
-    wait_for_bank_balance(&client, transfer_amount, token_id, recipient_address).await?;
+    anyhow::ensure!(
+        batch.txs.len() == 1,
+        "Expected exactly 1 transaction in batch, got {}",
+        batch.txs.len()
+    );
+
+    let tx_receipt = &batch.txs[0].receipt;
+    anyhow::ensure!(
+        tx_receipt.result == api_types::TxReceiptResult::Reverted,
+        "Expected gas-heavy tx to be Reverted due to out-of-gas, but got {:?}",
+        tx_receipt.result
+    );
 
     Ok(())
 }
