@@ -3,7 +3,6 @@ use std::str::FromStr;
 use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::state::{AccAddress, AddressKind, AddressTrait};
-// use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::reexports::schemars::{self};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
