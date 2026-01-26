@@ -5,6 +5,7 @@
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -229,10 +230,11 @@ impl NodeDiscovery {
     }
 }
 
-async fn write_to_file(path: impl AsRef<std::path::Path>, content: String) -> anyhow::Result<()> {
+async fn write_to_file(path: &Path, content: String) -> anyhow::Result<()> {
     tokio::fs::write(path, content)
         .await
-        .context("Failed to write cluster info to file")?;
+        .with_context(|| format!("Failed to write cluster info to file at {path:?}"))?;
+
     Ok(())
 }
 
