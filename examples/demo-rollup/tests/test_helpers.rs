@@ -43,12 +43,12 @@ pub fn test_genesis_paths(operating_mode: OperatingMode) -> GenesisPaths {
 }
 
 /// Creates token transfer tx.
-pub fn build_transfer_token_tx<S>(
+pub fn build_transfer_token_tx_uniqueness_data<S>(
     key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
     token_id: TokenId,
     recipient: <S as Spec>::Address,
     amount: u128,
-    nonce: u64,
+    uniqueness_data: UniquenessData,
 ) -> Transaction<Runtime<S>, S>
 where
     S: Spec,
@@ -64,8 +64,48 @@ where
     test_signed_transaction(
         key,
         &msg,
-        UniquenessData::Nonce(nonce),
+        uniqueness_data,
         &CHAIN_HASH,
         default_test_tx_details(),
+    )
+}
+
+pub fn build_transfer_token_tx_with_generation<S>(
+    key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    token_id: TokenId,
+    recipient: <S as Spec>::Address,
+    amount: u128,
+    generation: u64,
+) -> Transaction<Runtime<S>, S>
+where
+    S: Spec,
+    <S as Spec>::Address: FromVmAddress<EthereumAddress>,
+{
+    build_transfer_token_tx_uniqueness_data(
+        key,
+        token_id,
+        recipient,
+        amount,
+        UniquenessData::Generation(generation),
+    )
+}
+
+pub fn build_transfer_token_tx<S>(
+    key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    token_id: TokenId,
+    recipient: <S as Spec>::Address,
+    amount: u128,
+    nonce: u64,
+) -> Transaction<Runtime<S>, S>
+where
+    S: Spec,
+    <S as Spec>::Address: FromVmAddress<EthereumAddress>,
+{
+    build_transfer_token_tx_uniqueness_data(
+        key,
+        token_id,
+        recipient,
+        amount,
+        UniquenessData::Nonce(nonce),
     )
 }
