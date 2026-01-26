@@ -8,9 +8,10 @@ homepage.workspace = true
 publish = false
 repository.workspace = true
 
+
 [dependencies]
 anyhow = { workspace = true }
-sqlx = { version = "0.8", features = ["runtime-tokio", "postgres"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "migrate", "time"] }
 tokio = { workspace = true, features = ["time"] }
 tracing = { workspace = true }
 

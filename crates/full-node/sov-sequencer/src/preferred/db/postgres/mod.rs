@@ -639,7 +639,22 @@ impl DbBackend for PostgresBackend {
 fn node_address(bind_addr: SocketAddr) -> Result<String> {
     let bind_port = bind_addr.port();
     let ip = bind_addr.ip();
-    Ok(format!("{ip}:{bind_port}"))
+
+    let effective_ip = if ip.is_unspecified() {
+        get_local_ip()?
+    } else {
+        ip
+    };
+
+    Ok(format!("{effective_ip}:{bind_port}"))
+}
+
+/// Gets the local IP address by creating a UDP socket and checking its local address.
+fn get_local_ip() -> Result<std::net::IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0")?;
+    socket.connect("8.8.8.8:80")?;
+    let local_addr = socket.local_addr()?;
+    Ok(local_addr.ip())
 }
 
 #[cfg(test)]
