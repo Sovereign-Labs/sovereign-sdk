@@ -1416,6 +1416,98 @@ mod tests {
         (backend, sender, shutdown_sender)
     }
 
+    fn build_task_with_channels(
+        backend: MockTxExecutionBackend,
+    ) -> (
+        NonceBufferTask<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
+        watch::Sender<()>,
+        watch::Receiver<()>,
+    ) {
+        let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
+        let (timeout_sender, _timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
+        let (shutdown_sender, shutdown_receiver) = watch::channel(());
+        let (_forced_tx_batch_notifier, forced_tx_batch_receiver) = broadcast::channel(1);
+        let input_sender = NonceBufferInputSender {
+            buffer_sender_channel: buffer_sender_channel.clone(),
+            execution_backend: backend.clone(),
+            shutdown_receiver: shutdown_sender.subscribe(),
+        };
+        let task = NonceBufferTask {
+            buffers: Default::default(),
+            buffer_input,
+            forced_tx_batch_receiver,
+            input_sender,
+            execution_backend: backend,
+            maximum_future_nonce_delta: DEFAULT_TEST_MAX_QUEUE_SIZE,
+            timeout_sender,
+            timeout_metrics_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
+            main_queue_depth_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
+        };
+        (task, buffer_sender_channel, shutdown_sender, shutdown_receiver)
+    }
+
+    async fn push_new_tx_input(
+        input_sender: &mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
+        nonce: u8,
+        hash: [u8; 32],
+    ) -> oneshot::Receiver<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        let queued = create_mock_queued_tx_with_hash(nonce, hash);
+        let (result_sender, result_receiver) = oneshot::channel();
+        input_sender
+            .send(NonceBufferInput::NewTx {
+                baked_tx: queued.baked_tx,
+                tx_hash: queued.tx_hash,
+                ip_addr_and_credential: queued.ip_addr_and_credential,
+                tx_nonce: nonce.into(),
+                original_tx_queue_id: queued.original_tx_queue_id,
+                result_sender,
+            })
+            .await
+            .unwrap();
+        result_receiver
+    }
+
+    async fn push_tx_executed_input(
+        input_sender: &mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
+        credential_id: CredentialId,
+        tx_nonce: u64,
+        tx_result: TransactionReceiverResult<TestSpec, TestRuntime>,
+    ) -> oneshot::Receiver<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        input_sender
+            .send(NonceBufferInput::TxExecuted {
+                credential_id,
+                tx_nonce,
+                tx_result,
+                result_sender,
+            })
+            .await
+            .unwrap();
+        result_receiver
+    }
+
+    fn insert_timed_out_tx(
+        task: &mut NonceBufferTask<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        nonce: u8,
+        hash: [u8; 32],
+    ) -> (
+        oneshot::Receiver<TransactionReceiverResult<TestSpec, TestRuntime>>,
+        CredentialId,
+        TxHash,
+    ) {
+        let mut queued = create_mock_queued_tx_with_hash(nonce, hash);
+        let (result_sender, result_receiver) = oneshot::channel();
+        queued.result_sender = result_sender;
+        let credential_id = queued.ip_addr_and_credential.credential_id;
+        task.buffers
+            .entry(credential_id)
+            .or_default()
+            .txs
+            .insert(nonce.into(), queued);
+        (result_receiver, credential_id, TxHash::from(hash))
+    }
+
     /// Spawns a transaction submission as a concurrent task.
     /// Includes a short sleep to allow the task to enter the buffer, ensuring transactions are
     /// submitted to the buffer in the order submit_single_transaction is called.
@@ -1476,6 +1568,7 @@ mod tests {
         Revert,
         Invalidate503,
         NotFullySynced,
+        Shutdown,
         StfNonceReject(u8, u8),
     }
 
@@ -1581,6 +1674,12 @@ mod tests {
                     assert!(
                         matches!(err, AcceptTxError::NotFullySynced(_)),
                         "Tx {i}: Expected NotFullySynced rejection, got: {err:?}"
+                    );
+                }
+                Outcome::Shutdown => {
+                    assert!(
+                        matches!(result, Err(SequencerStateUpdatorError::Shutdown)),
+                        "Tx {i}: Expected shutdown error, got: {result:?}"
                     );
                 }
                 Outcome::StfNonceReject(expected, tx) => {
@@ -1999,5 +2098,162 @@ mod tests {
         .await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_invalidates_buffer() {
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let (sender, shutdown_sender) = test_buffer_task(&backend, Some(2000)); // Long timeout
+
+        let handles = submit_transactions(sender.clone(), (0..5).collect()).await;
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        let _ = shutdown_sender.send(());
+        let results = collect_results(handles).await;
+        let executed = backend.get_executed_nonces().len();
+        assert!(
+            executed > 0 && executed < 5,
+            "Shutdown should interrupt queued transactions; executed={executed}"
+        );
+        let mut expected = Vec::with_capacity(5);
+        expected.extend(std::iter::repeat(Outcome::Ok).take(executed));
+        expected.extend(std::iter::repeat(Outcome::Shutdown).take(5 - executed));
+        assert_on_results(results, expected).await;
+        let expected_nonces: Vec<u64> = (0..executed as u64).collect();
+        assert_eq!(backend.get_executed_nonces(), expected_nonces);
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_drains_pending_messages() {
+        let backend = MockTxExecutionBackend::new();
+        let (mut task, input_sender, shutdown_sender, mut shutdown_receiver) =
+            build_task_with_channels(backend);
+
+        let new_tx_receiver = push_new_tx_input(&input_sender, 1, [1; 32]).await;
+        let (timed_out_receiver, credential_id, timed_out_hash) =
+            insert_timed_out_tx(&mut task, 2, [9; 32]);
+        input_sender
+            .send(NonceBufferInput::TxTimedOut {
+                credential_id,
+                tx_nonce: 2,
+                tx_hash: timed_out_hash,
+            })
+            .await
+            .unwrap();
+        let tx_result = Ok(Err(AcceptTxError::NotFullySynced(
+            SequencerNotReadyDetails::Syncing {
+                target_da_height: 100,
+                synced_da_height: 50,
+            },
+        )));
+        let executed_receiver = push_tx_executed_input(
+            &input_sender,
+            CredentialId::from([1u8; 32]),
+            7,
+            tx_result,
+        )
+        .await;
+        input_sender
+            .send(NonceBufferInput::TxPersisted {
+                credential_id: CredentialId::from([1u8; 32]),
+                tx_nonce: 7,
+            })
+            .await
+            .unwrap();
+        drop(input_sender);
+        let _ = shutdown_sender.send(());
+
+        let run_handle = tokio::spawn(async move {
+            task.run(&mut shutdown_receiver).await;
+        });
+        run_handle.await.unwrap();
+
+        let new_tx_result = new_tx_receiver.await.unwrap();
+        let timed_out_result = timed_out_receiver.await.unwrap();
+        let executed_result = executed_receiver.await.unwrap();
+        assert_on_results(
+            vec![new_tx_result, timed_out_result, executed_result],
+            vec![
+                Outcome::Shutdown,
+                Outcome::Err(InvalidNonceReason::Timeout),
+                Outcome::NotFullySynced,
+            ],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_wipe_drains_pending_messages() {
+        let backend = MockTxExecutionBackend::new().with_tx_queue_id(1);
+        let (mut task, input_sender, shutdown_sender, mut shutdown_receiver) =
+            build_task_with_channels(backend);
+
+        let trigger_new_tx_receiver = push_new_tx_input(&input_sender, 0, [1; 32]).await;
+        let queued_new_tx_receiver = push_new_tx_input(&input_sender, 1, [2; 32]).await;
+        let (timed_out_receiver, credential_id, timed_out_hash) =
+            insert_timed_out_tx(&mut task, 2, [7; 32]);
+        input_sender
+            .send(NonceBufferInput::TxTimedOut {
+                credential_id,
+                tx_nonce: 2,
+                tx_hash: timed_out_hash,
+            })
+            .await
+            .unwrap();
+        let tx_result = Ok(Err(AcceptTxError::NotFullySynced(
+            SequencerNotReadyDetails::Syncing {
+                target_da_height: 100,
+                synced_da_height: 50,
+            },
+        )));
+        let executed_receiver = push_tx_executed_input(
+            &input_sender,
+            CredentialId::from([1u8; 32]),
+            9,
+            tx_result,
+        )
+        .await;
+        input_sender
+            .send(NonceBufferInput::TxPersisted {
+                credential_id: CredentialId::from([1u8; 32]),
+                tx_nonce: 9,
+            })
+            .await
+            .unwrap();
+
+        let run_handle = tokio::spawn(async move {
+            task.run(&mut shutdown_receiver).await;
+        });
+
+        let trigger_result = tokio::time::timeout(Duration::from_secs(2), trigger_new_tx_receiver)
+            .await
+            .expect("Timed out waiting for trigger_result")
+            .unwrap();
+        let queued_result = tokio::time::timeout(Duration::from_secs(2), queued_new_tx_receiver)
+            .await
+            .expect("Timed out waiting for queued_result")
+            .unwrap();
+        let timed_out_result = tokio::time::timeout(Duration::from_secs(2), timed_out_receiver)
+            .await
+            .expect("Timed out waiting for timed_out_result")
+            .unwrap();
+        let executed_result = tokio::time::timeout(Duration::from_secs(2), executed_receiver)
+            .await
+            .expect("Timed out waiting for executed_result")
+            .unwrap();
+
+        assert_on_results(
+            vec![trigger_result, queued_result, timed_out_result, executed_result],
+            vec![
+                Outcome::Invalidate503,
+                Outcome::Invalidate503,
+                Outcome::Err(InvalidNonceReason::Timeout),
+                Outcome::NotFullySynced,
+            ],
+        )
+        .await;
+
+        let _ = shutdown_sender.send(());
+        run_handle.await.unwrap();
     }
 }
