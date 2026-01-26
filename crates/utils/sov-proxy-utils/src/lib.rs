@@ -199,7 +199,7 @@ impl NodeDiscovery {
         listener.recv().await?;
 
         // Drain any additional pending notifications.
-        while let Some(_) = listener.next_buffered() {}
+        while listener.next_buffered().is_some() {}
 
         let info = self.get_cluster_info().await?;
         write_to_file(path, info.to_file_content()).await?;
