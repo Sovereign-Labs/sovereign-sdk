@@ -32,6 +32,9 @@ pub mod errors;
 #[doc(hidden)]
 #[cfg(test)]
 pub mod test_utils;
+
+#[cfg(test)]
+mod ws_tests;
 use axum::body::Body;
 use axum::extract::ws::WebSocket;
 use axum::extract::Request;
@@ -177,8 +180,20 @@ pub fn cors_layer_opt(
 
 const MAX_BATCH_SIZE: usize = 128;
 
+/// Interval between ping frames sent to the client for keepalive.
+const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Maximum time to wait for a pong response before considering the connection dead.
+const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// A utility function for serving some data inside a [`futures::Stream`] over a
 /// WebSocket connection.
+///
+/// This function handles:
+/// - Sending data from the subscription stream to the client
+/// - Periodic ping/pong keepalive to detect dead connections
+/// - Graceful shutdown on server shutdown signal
+/// - Proper handling of client disconnection and half-closed connections
 pub async fn serve_generic_ws_subscription<S, M, E>(
     mut socket: WebSocket,
     subscription: S,
@@ -188,11 +203,24 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
     E: ReportableWsError,
     M: Clone + serde::Serialize + Send + Sync + 'static,
 {
+    use axum::extract::ws::Message;
+    use std::time::Instant;
+
     // Use ready_chunks to automatically batch items that are immediately available
     let mut chunked_subscription = subscription.ready_chunks(MAX_BATCH_SIZE);
 
+    // Ping/pong state for keepalive
+    let mut ping_interval = tokio::time::interval(PING_INTERVAL);
+    ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut awaiting_pong: Option<[u8; 8]> = None;
+    let mut last_pong_time = Instant::now();
+    let mut ping_counter: u64 = 0;
+
     'outer: loop {
         tokio::select! {
+            // Biased ensures we check recv first to handle Close frames promptly
+            biased;
+
             msg = socket.recv() => {
                 match msg {
                     Some(Err(error)) => {
@@ -200,12 +228,43 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
                         break;
                     },
                     None => {
-                        // The client disconnected.
+                        // The client disconnected (received Close frame or connection closed).
+                        trace!("WebSocket connection closed by client");
+                        break;
+                    },
+                    Some(Ok(Message::Pong(data))) => {
+                        // Client responded to our ping - verify it matches what we sent
+                        if awaiting_pong.is_some_and(|expected| data == expected) {
+                            awaiting_pong = None;
+                            last_pong_time = Instant::now();
+                            trace!("Received valid pong from client");
+                        } else {
+                            trace!("Received pong with unexpected data; ignoring");
+                        }
+                    },
+                    Some(Ok(Message::Ping(data))) => {
+                        // Respond to client pings (though clients typically don't send pings)
+                        if let Err(err) = socket.send(Message::Pong(data)).await {
+                            warn!(?err, "Failed to send pong - disconnecting client");
+                            break;
+                        }
+                    },
+                    Some(Ok(Message::Close(_))) => {
+                        // Client initiated close - acknowledge and exit
+                        trace!("Received close frame from client");
                         break;
                     },
                     Some(Ok(_)) => {
-                        // Ignore incoming messages.
-                        trace!("Incoming WebSocket message but none was expected; ignoring");
+                        // Client sent an unexpected message - notify them it was ignored
+                        trace!("Incoming WebSocket message but none was expected; notifying client");
+                        if let Err(err) = send_json(&mut socket, &ErrorObject {
+                            status: StatusCode::BAD_REQUEST,
+                            message: "This subscription does not accept incoming messages".to_string(),
+                            details: JsonObject::new(),
+                        }).await {
+                            warn!(?err, "Failed to send error response - disconnecting client");
+                            break;
+                        }
                     },
                 }
             },
@@ -223,16 +282,18 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
                                         }
                                     };
                                     if let Err(err) = socket.feed(serialized.into()).await {
-                                        warn!(?err, "WebSocket error while sending data");
-                                        // Keep the loop going.
+                                        warn!(?err, "WebSocket send error - disconnecting client");
+                                        break 'outer;
                                     }
                                 }
                                 Err(err) => {
-                                    // Convert error to ErrorObject and send it to the client
-                                     if let Err(send_err) = socket.send(err.to_json().into()).await {
-                                        warn!(err=?send_err, "WebSocket error while sending error");
-                                        // keep the loop going.
+                                    // Send error notification to the client
+                                    if let Err(send_err) = socket.send(err.to_json().into()).await {
+                                        warn!(err=?send_err, "WebSocket send error - disconnecting client");
+                                        break 'outer;
                                     }
+                                    // For recoverable errors (e.g., lag), continue streaming
+                                    // For non-recoverable errors, disconnect
                                     if !err.is_recoverable() {
                                         break 'outer;
                                     }
@@ -240,15 +301,38 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
                             }
                         }
                         if let Err(err) = socket.flush().await {
-                            trace!(?err, "Failed to flush the socket");
+                            warn!(?err, "WebSocket flush error - disconnecting client");
+                            break 'outer;
                         }
+                        // Successfully sent data proves connection is alive; reset ping timer
+                        ping_interval.reset();
                     },
                     None => {
                         // No more data to send.
                         break;
                     },
                 }
-            }
+            },
+            _ = ping_interval.tick() => {
+                // Check if we're still waiting for a pong from a previous ping
+                if awaiting_pong.is_some() {
+                    let elapsed = last_pong_time.elapsed();
+                    if elapsed > PONG_TIMEOUT {
+                        warn!("No pong received within timeout ({:?}) - disconnecting client", PONG_TIMEOUT);
+                        break;
+                    }
+                }
+
+                // Send a ping to check if the client is still alive
+                ping_counter = ping_counter.wrapping_add(1);
+                let ping_data = ping_counter.to_le_bytes();
+                if let Err(err) = socket.send(Message::Ping(ping_data.to_vec())).await {
+                    warn!(?err, "Failed to send ping - disconnecting client");
+                    break;
+                }
+                awaiting_pong = Some(ping_data);
+                trace!("Sent ping to client");
+            },
             _ = shutdown_receiver.changed() => break,
         }
     }

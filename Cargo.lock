@@ -11945,10 +11945,13 @@ dependencies = [
  "test-strategy",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
+ "tokio-tungstenite 0.28.0",
  "tower",
  "tower-http 0.5.2",
  "tower-request-id",
  "tracing",
+ "tungstenite 0.28.0",
 ]
 
 [[package]]
@@ -12116,6 +12119,7 @@ dependencies = [
  "jsonrpsee",
  "mini-moka",
  "openapiv3",
+ "pin-project",
  "proptest",
  "proptest-derive 0.5.1",
  "reltester",
