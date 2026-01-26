@@ -33,13 +33,6 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     let receipt_logs = receipt.inner.into_logs();
     assert_eq!(receipt_logs, logs);
     assert_eq!(receipt_logs.len(), 1);
-    assert_eq!(receipt_logs[0].block_hash, None);
-    assert_ne!(
-        receipt_logs[0]
-            .block_timestamp
-            .expect("block timestamp should be present"),
-        0
-    );
 
     Ok(())
 }
@@ -54,6 +47,8 @@ async fn evm_test_get_logs() {
         EVM_EXTENSION.response_size_limit,
     )
     .await;
+
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     // Make sure all the txs are in the same blcok.
     rollup_and_client
@@ -352,6 +347,7 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
 
     let rollup_and_client =
         RollupAndClient::new(max_log_limit, EVM_EXTENSION.response_size_limit).await;
+    rollup_and_client.test_rollup.wait_for_next_blocks(1).await;
 
     rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)

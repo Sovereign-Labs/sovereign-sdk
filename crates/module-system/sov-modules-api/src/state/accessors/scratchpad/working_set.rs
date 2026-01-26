@@ -267,7 +267,11 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for WorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> EventContainer for WorkingSet<S, I> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 

@@ -109,7 +109,7 @@ pub trait GasSpec:
     fn max_tx_check_costs() -> Self::Gas;
 
     /// Maximum amount of gas that can be charged for sequencer registration.
-    fn max_unregistered_tx_check_costs() -> Self::Gas;
+    fn max_unregistered_tx_gas() -> Self::Gas;
 
     /// The gas used for the transaction pre-execution checks.
     /// For example nonce checks, context resolution etc..
@@ -258,7 +258,7 @@ impl<S: Spec> GasSpec for S {
         new_constant!("MAX_SEQUENCER_EXEC_GAS_PER_TX", Self::Gas)
     }
 
-    fn max_unregistered_tx_check_costs() -> Self::Gas {
+    fn max_unregistered_tx_gas() -> Self::Gas {
         new_constant!("MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX", Self::Gas)
     }
 

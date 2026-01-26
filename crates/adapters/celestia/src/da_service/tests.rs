@@ -214,6 +214,7 @@ where
         from_testnet_no_shares::test_case(),
         with_mixed_v0_and_v1_blobs::test_case(),
         from_testnet_with_tail_padding::test_case(),
+        from_mocha_shares_mismatch::test_case(),
     ];
 
     for (block, rollup_params, signers) in blocks {
@@ -595,5 +596,22 @@ async fn generate_mocha_testnet_blocks() -> anyhow::Result<()> {
 
     from_testnet_no_shares::update_test_data(&client).await;
     from_testnet_with_tail_padding::update_test_data(&client).await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "should be run manually if need to regenerate data"]
+async fn mocha_shares_panic() -> anyhow::Result<()> {
+    // Install the ring crypto provider for rustls (required for TLS connections)
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
+        .build()
+        .await?;
+
+    from_mocha_shares_mismatch::update_test_data(&client).await;
+
     Ok(())
 }

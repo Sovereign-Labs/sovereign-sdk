@@ -1,3 +1,11 @@
+# 2026-01-17
+- #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
+# 2026-01-25
+- #2398 makes fixes to the eth_feeHistory endpoint
+
+# 2026-01-24
+- #2397: ***Breaking Change*** adds `Sync` bound on module event types. Major rework of "pending" block handling. Now we treat each new EVM transaction as creating a new head block (rather than a pending block) and then getting reorged when the next tx is added. 
+
 # 2026-01-20
 - #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
 - #2380 EVM: Validate `eth_feeHistory` input parameters.

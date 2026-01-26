@@ -605,6 +605,7 @@ where
         reason: &'static str,
     ) -> Result<ProcessFinalCatchupData, SequenceNumberMismatchError> {
         let mut inner = self.get_inner_with_timing(reason).await;
+        let tx_cache_writer = inner.tx_cache_writer.clone();
 
         let mut rt = Rt::default();
         let next_sequence_number_according_to_node =
@@ -622,6 +623,7 @@ where
                 inner.seq_role,
                 next_sequence_number_according_to_node,
                 &mut executor,
+                &tx_cache_writer,
                 event,
                 &mut data.batches_count,
                 &mut data.transactions_count,
