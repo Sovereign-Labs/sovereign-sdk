@@ -65,9 +65,17 @@ async fn test_start_at_immediate_finality() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_start_at() {
+async fn test_start_at_before_test_finalized_blocks() {
     check_start_at(TEST_FINALIZATION_BLOCKS - 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_at_test_finalized_blocks() {
     check_start_at(TEST_FINALIZATION_BLOCKS).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_at_after_test_finalized_blocks() {
     check_start_at(TEST_FINALIZATION_BLOCKS + 1).await;
 }
 
