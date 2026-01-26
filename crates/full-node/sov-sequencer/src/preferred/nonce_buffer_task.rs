@@ -465,10 +465,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         }
     }
 
-    fn drain_and_reject_all_txs(
-        &mut self,
-        reject_error: fn() -> TransactionReceiverResult<S, Rt>,
-    ) {
+    fn drain_and_reject_all_txs(&mut self, reject_error: fn() -> TransactionReceiverResult<S, Rt>) {
         while let Ok(input) = self.buffer_input.try_recv() {
             match input {
                 NonceBufferInput::NewTx { result_sender, .. } => {
@@ -1416,14 +1413,14 @@ mod tests {
         (backend, sender, shutdown_sender)
     }
 
-    fn build_task_with_channels(
-        backend: MockTxExecutionBackend,
-    ) -> (
+    type DrainTaskParts = (
         NonceBufferTask<MockTxExecutionBackend, TestSpec, TestRuntime>,
         mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
         watch::Sender<()>,
         watch::Receiver<()>,
-    ) {
+    );
+
+    fn build_task_with_channels(backend: MockTxExecutionBackend) -> DrainTaskParts {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
         let (timeout_sender, _timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
         let (shutdown_sender, shutdown_receiver) = watch::channel(());
@@ -1444,7 +1441,12 @@ mod tests {
             timeout_metrics_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
             main_queue_depth_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
         };
-        (task, buffer_sender_channel, shutdown_sender, shutdown_receiver)
+        (
+            task,
+            buffer_sender_channel,
+            shutdown_sender,
+            shutdown_receiver,
+        )
     }
 
     async fn push_new_tx_input(
@@ -2116,8 +2118,8 @@ mod tests {
             "Shutdown should interrupt queued transactions; executed={executed}"
         );
         let mut expected = Vec::with_capacity(5);
-        expected.extend(std::iter::repeat(Outcome::Ok).take(executed));
-        expected.extend(std::iter::repeat(Outcome::Shutdown).take(5 - executed));
+        expected.extend(std::iter::repeat_n(Outcome::Ok, executed));
+        expected.extend(std::iter::repeat_n(Outcome::Shutdown, 5 - executed));
         assert_on_results(results, expected).await;
         let expected_nonces: Vec<u64> = (0..executed as u64).collect();
         assert_eq!(backend.get_executed_nonces(), expected_nonces);
@@ -2146,13 +2148,9 @@ mod tests {
                 synced_da_height: 50,
             },
         )));
-        let executed_receiver = push_tx_executed_input(
-            &input_sender,
-            CredentialId::from([1u8; 32]),
-            7,
-            tx_result,
-        )
-        .await;
+        let executed_receiver =
+            push_tx_executed_input(&input_sender, CredentialId::from([1u8; 32]), 7, tx_result)
+                .await;
         input_sender
             .send(NonceBufferInput::TxPersisted {
                 credential_id: CredentialId::from([1u8; 32]),
@@ -2206,13 +2204,9 @@ mod tests {
                 synced_da_height: 50,
             },
         )));
-        let executed_receiver = push_tx_executed_input(
-            &input_sender,
-            CredentialId::from([1u8; 32]),
-            9,
-            tx_result,
-        )
-        .await;
+        let executed_receiver =
+            push_tx_executed_input(&input_sender, CredentialId::from([1u8; 32]), 9, tx_result)
+                .await;
         input_sender
             .send(NonceBufferInput::TxPersisted {
                 credential_id: CredentialId::from([1u8; 32]),
@@ -2243,7 +2237,12 @@ mod tests {
             .unwrap();
 
         assert_on_results(
-            vec![trigger_result, queued_result, timed_out_result, executed_result],
+            vec![
+                trigger_result,
+                queued_result,
+                timed_out_result,
+                executed_result,
+            ],
             vec![
                 Outcome::Invalidate503,
                 Outcome::Invalidate503,
