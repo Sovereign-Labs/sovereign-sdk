@@ -369,6 +369,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
 pub struct NonceBufferInputSender<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffer_sender_channel: mpsc::Sender<NonceBufferInput<S, Rt>>,
     execution_backend: E,
+    shutdown_receiver: watch::Receiver<()>,
 }
 
 pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
@@ -475,7 +476,55 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         }
     }
 
-    async fn run(&mut self) {
+    async fn reject_all_queued_on_shutdown(&mut self) {
+        tracing::info!("Nonce buffer task shutting down. Rejecting queued transactions.");
+        let buffers = std::mem::take(&mut self.buffers);
+        for (_credential_id, queue) in buffers {
+            for (_nonce, tx) in queue.txs {
+                let _ = tx.result_sender.send(shutdown_reject_error::<S, Rt>());
+            }
+        }
+
+        while let Ok(input) = self.buffer_input.try_recv() {
+            match input {
+                NonceBufferInput::NewTx { result_sender, .. } => {
+                    let _ = result_sender.send(shutdown_reject_error::<S, Rt>());
+                }
+                NonceBufferInput::TxExecuted {
+                    tx_result,
+                    result_sender,
+                    ..
+                } => {
+                    let _ = result_sender.send(tx_result);
+                }
+                NonceBufferInput::TxTimedOut {
+                    credential_id,
+                    tx_nonce,
+                    tx_hash,
+                } => {
+                    let user_nonce_for_prerequisites = self
+                        .execution_backend
+                        .get_current_nonce_for_user(&credential_id);
+                    let _ = result_sender.send(err_invalid_nonce::<S, Rt>(
+                        tx_hash,
+                        tx_nonce,
+                        user_nonce_for_prerequisites,
+                        user_nonce_for_prerequisites,
+                        Instant::now(),
+                        credential_id,
+                        InvalidNonceReason::Timeout,
+                    ));
+                }
+                NonceBufferInput::TxPersisted { .. } => (),
+            }
+        }
+
+        // Flush metrics on shutdown since we might not get another chance.
+        self.timeout_metrics_batcher.flush();
+        self.main_queue_depth_batcher.flush();
+    }
+
+    async fn run(&mut self, shutdown_receiver: &mut watch::Receiver<()>) {
         let mut input_closed = false;
         let mut wipe_closed = false;
         loop {
@@ -483,6 +532,10 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                 return;
             }
             tokio::select! {
+                _ = shutdown_receiver.changed() => {
+                    self.reject_all_queued_on_shutdown().await;
+                    return;
+                }
                 input = self.buffer_input.recv(), if !input_closed => {
                     match input {
                         Some(input) => {
@@ -589,7 +642,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                         "nonce_queue_immediate",
                                                     )
                                                     .await;
-                                                let _ = input_sender
+                                                let send_result = input_sender
                                                     .send_to_main_queue(NonceBufferInput::TxExecuted {
                                                         credential_id: ip_addr_and_credential.credential_id,
                                                         tx_nonce,
@@ -597,6 +650,17 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                         result_sender,
                                                     })
                                                     .await;
+                                                if let Err(err) = send_result {
+                                                    let mpsc::error::SendError(input) = err;
+                                                    if let NonceBufferInput::TxExecuted {
+                                                        tx_result,
+                                                        result_sender,
+                                                        ..
+                                                    } = input
+                                                    {
+                                                        let _ = result_sender.send(tx_result);
+                                                    }
+                                                }
                                             });
                                         }
                                         Action::Reject => {
@@ -785,6 +849,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel,
             execution_backend: execution_backend.clone(),
+            shutdown_receiver: shutdown_receiver.clone(),
         };
 
         let mut main_task = NonceBufferTask {
@@ -801,9 +866,8 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 
         let handle = tokio::spawn(async move {
             tokio::select! {
-                _ = main_task.run() => {}
+                _ = main_task.run(&mut shutdown_receiver) => {}
                 _ = timeout_task.run() => {}
-                _ = shutdown_receiver.changed() => {}
             }
         });
         (handle, input_sender)
@@ -813,6 +877,10 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
     NonceBufferInputSender<E, S, Rt>
 {
+    fn is_shutting_down(&self) -> bool {
+        self.shutdown_receiver.has_changed().unwrap_or(true)
+    }
+
     /// Send a message to the main input queue with metrics tracking.
     /// Uses try_send first, falling back to blocking send if the channel is full.
     /// Returns Err if the channel is closed (shutdown in progress).
@@ -867,6 +935,9 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         queue_receiver.await.unwrap_or_else(|_| {
             // The oneshot sender was dropped. This should normally only happen
             // on shutdown, or if there's a bug.
+            if self.is_shutting_down() {
+                return shutdown_reject_error::<S, Rt>();
+            }
             let current_nonce = self
                 .execution_backend
                 .get_current_nonce_for_user(&ip_addr_and_credential.credential_id);
@@ -951,6 +1022,10 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
 
 fn wipe_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
     Ok(Err(AcceptTxError::SequencerOverloaded503))
+}
+
+fn shutdown_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
+    Err(SequencerStateUpdatorError::Shutdown)
 }
 
 fn is_notready_error<S: Spec, Rt: Runtime<S>>(result: &TransactionReceiverResult<S, Rt>) -> bool {
