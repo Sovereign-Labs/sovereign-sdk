@@ -156,7 +156,7 @@ impl NodeDiscovery {
         match self.get_cluster_info().await {
             Ok(info) => {
                 if let Err(error) = write_to_file(path, info.to_file_content()).await {
-                    tracing::warn!(?error, "Failed to update the cluster info file.");
+                    tracing::warn!(?error, ?path, "Failed to update the cluster info file.");
                 } else {
                     // Notify watchers that the file was saved successfully.
                     let _ = self.file_saved_sender.send(());
