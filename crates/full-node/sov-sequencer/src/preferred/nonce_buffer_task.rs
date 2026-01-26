@@ -264,17 +264,33 @@ struct TimeoutQueueTask<S: Spec, Rt: Runtime<S>> {
     output: mpsc::Sender<NonceBufferInput<S, Rt>>,
     /// The timeout duration for all transactions.
     timeout_duration: Duration,
+    /// Shutdown notification.
+    shutdown_receiver: watch::Receiver<()>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> TimeoutQueueTask<S, Rt> {
     async fn run(mut self) {
-        while let Some(req) = self.input.recv().await {
+        loop {
+            let req = tokio::select! {
+                _ = self.shutdown_receiver.changed() => {
+                    return;
+                }
+                req = self.input.recv() => req,
+            };
+            let Some(req) = req else {
+                return;
+            };
             let elapsed = req.queued_at.elapsed();
             let remaining = self.timeout_duration.saturating_sub(elapsed);
 
             // Sleep until timeout is due
             if !remaining.is_zero() {
-                tokio::time::sleep(remaining).await;
+                tokio::select! {
+                    _ = self.shutdown_receiver.changed() => {
+                        return;
+                    }
+                    _ = tokio::time::sleep(remaining) => {}
+                }
             }
 
             // Send timeout notification to main task
@@ -810,6 +826,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             input: timeout_receiver,
             output: buffer_sender_channel.clone(),
             timeout_duration: Duration::from_millis(future_nonce_transaction_timeout_millis),
+            shutdown_receiver: shutdown_receiver.clone(),
         };
 
         let input_sender = NonceBufferInputSender {
