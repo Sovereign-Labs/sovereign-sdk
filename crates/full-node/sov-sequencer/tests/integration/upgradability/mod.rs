@@ -65,7 +65,7 @@ async fn test_start_at_immediate_finality() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_start_below_finalization_threshold() {
+async fn test_start_at_finalization_minus_one() {
     check_start_at(TEST_FINALIZATION_BLOCKS - 1).await;
 }
 
@@ -75,7 +75,7 @@ async fn test_start_at_finalization_threshold() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_start_above_finalization_threshold() {
+async fn test_start_at_finalization_plus_one() {
     check_start_at(TEST_FINALIZATION_BLOCKS + 1).await;
 }
 
