@@ -1,8 +1,6 @@
 mod handlers;
 
-use std::convert::Infallible;
-
-use alloy_primitives::{B256, U256};
+use alloy_primitives::B256;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -119,12 +117,6 @@ where
         })?;
     }
 
-    rpc.register_async_method("eth_gasPrice", |_, _, _| {
-        // We don't use EVM gas price mechanism and rely on sov gas/gas price.
-        // Therefore - we can safely return zero here as it's used by wallets to set gas price when sending transactions.
-        // When we receive transactions - we override the gas price with 0 and disable charging the sender account for gas in handler.
-        ready(Ok::<_, Infallible>(U256::ZERO))
-    })?;
     rpc.register_async_method("eth_sendRawTransaction", Handlers::eth_send_raw_transaction)?;
     rpc.register_async_method(
         "eth_sendRawTransactionSync",
