@@ -1,6 +1,6 @@
 use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -643,7 +643,30 @@ impl DbBackend for PostgresBackend {
 fn node_address(bind_addr: SocketAddr) -> Result<String> {
     let bind_port = bind_addr.port();
     let ip = bind_addr.ip();
-    Ok(format!("{ip}:{bind_port}"))
+
+    let effective_ip = if ip.is_unspecified() {
+        get_local_ip(ip)?
+    } else {
+        ip
+    };
+
+    let effective_addr = SocketAddr::new(effective_ip, bind_port);
+    Ok(effective_addr.to_string())
+}
+
+/// Gets the local IP address by creating a UDP socket and checking its local address.
+fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
+    // This is a classic networking trick to figure out your machine’s local IP address,
+    // without actually sending any data.
+    if ip.is_ipv6() {
+        let socket = std::net::UdpSocket::bind("[::]:0")?;
+        socket.connect("[2001:4860:4860::8888]:80")?;
+        Ok(socket.local_addr()?.ip())
+    } else {
+        let socket = std::net::UdpSocket::bind("0.0.0.0:0")?;
+        socket.connect("8.8.8.8:80")?;
+        Ok(socket.local_addr()?.ip())
+    }
 }
 
 #[cfg(test)]
