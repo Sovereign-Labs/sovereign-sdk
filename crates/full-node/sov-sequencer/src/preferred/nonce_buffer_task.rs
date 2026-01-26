@@ -449,39 +449,14 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         }
     }
 
-    /// Wipe the entire queue, e.g. because the sequencer had to resync so the queued transactions
-    /// are no longer valid/relevant.
-    /// We explicitly reject all queued transactions with SequencerOverloaded503.
-    async fn wipe(&mut self) {
-        // Consume all buffers, explicitly rejecting all queued transactions
-        let buffers = std::mem::take(&mut self.buffers);
-        for (_credential_id, queue) in buffers {
-            for (_nonce, tx) in queue.txs {
-                let _ = tx.result_sender.send(wipe_reject_error());
-            }
-        }
-        let mut keep_messages = Vec::new();
-        while let Ok(m) = self.buffer_input.try_recv() {
-            match m {
-                exec @ NonceBufferInput::TxExecuted { .. } => keep_messages.push(exec),
-                NonceBufferInput::NewTx { .. }
-                | NonceBufferInput::TxPersisted { .. }
-                | NonceBufferInput::TxTimedOut { .. } => (),
-            }
-        }
-        for m in keep_messages {
-            // Try to keep and process all Executed messages.
-            // If the receiver has been dropped the sequencer is likely shutting down.
-            let _ = self.input_sender.send_to_main_queue(m).await;
-        }
-    }
-
-    async fn reject_all_queued_on_shutdown(&mut self) {
-        tracing::info!("Nonce buffer task shutting down. Rejecting queued transactions.");
+    fn drain_and_reject_all_txs(
+        &mut self,
+        reject_error: fn() -> TransactionReceiverResult<S, Rt>,
+    ) {
         while let Ok(input) = self.buffer_input.try_recv() {
             match input {
                 NonceBufferInput::NewTx { result_sender, .. } => {
-                    let _ = result_sender.send(shutdown_reject_error::<S, Rt>());
+                    let _ = result_sender.send(reject_error());
                 }
                 NonceBufferInput::TxExecuted {
                     tx_result,
@@ -502,11 +477,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         let buffers = std::mem::take(&mut self.buffers);
         for (_credential_id, queue) in buffers {
             for (_nonce, tx) in queue.txs {
-                let _ = tx.result_sender.send(shutdown_reject_error::<S, Rt>());
+                let _ = tx.result_sender.send(reject_error());
             }
         }
 
-        // Flush metrics on shutdown since we might not get another chance.
+        // Flush metrics since we might not get another chance to report them.
         self.timeout_metrics_batcher.flush();
         self.main_queue_depth_batcher.flush();
     }
@@ -557,7 +532,8 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             }
             tokio::select! {
                 _ = shutdown_receiver.changed() => {
-                    self.reject_all_queued_on_shutdown().await;
+                    tracing::info!("Nonce buffer task shutting down. Rejecting queued transactions.");
+                    self.drain_and_reject_all_txs(shutdown_reject_error::<S, Rt>);
                     return;
                 }
                 input = self.buffer_input.recv(), if !input_closed => {
@@ -650,7 +626,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                 > original_tx_queue_id
                                             {
                                                 let _ = result_sender.send(wipe_reject_error());
-                                                self.wipe().await;
+                                                self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                                                 continue;
                                             }
                                             queue.non_persisted.mark_inflight(tx_nonce);
@@ -714,7 +690,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     // sequencer anyway so we wipe everything.
                                     if is_notready_error(&tx_result) {
                                         let _ = result_sender.send(tx_result);
-                                        self.wipe().await;
+                                        self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                                         continue;
                                     }
 
@@ -805,11 +781,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     match forced_tx_batch {
                         Ok(notification) => {
                             tracing::info!(?notification, "Wiping nonce buffer after forced batch execution");
-                            self.wipe().await;
+                            self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                         }
                         Err(broadcast::error::RecvError::Lagged(skipped)) => {
                             tracing::warn!(skipped, "Forced batch notifications lagged; wiping nonce buffer");
-                            self.wipe().await;
+                            self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             wipe_closed = true;
