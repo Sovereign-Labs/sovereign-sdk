@@ -7,6 +7,7 @@ use std::time::Duration;
 use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
+use anyhow::Context;
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
@@ -658,15 +659,28 @@ fn node_address(bind_addr: SocketAddr) -> Result<String> {
 fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
     // This is a classic networking trick to figure out your machine’s local IP address,
     // without actually sending any data.
-    if ip.is_ipv6() {
-        let socket = std::net::UdpSocket::bind("[::]:0")?;
-        socket.connect("[2001:4860:4860::8888]:80")?;
-        Ok(socket.local_addr()?.ip())
+    let addr = if ip.is_ipv6() {
+        let socket = std::net::UdpSocket::bind("[::]:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv6 address discovery: {ip}")
+        })?;
+        socket
+            .connect("[2001:4860:4860::8888]:80")
+            .context("Failed to connect UDP socket for local IPv6 address discovery")?;
+        socket
     } else {
-        let socket = std::net::UdpSocket::bind("0.0.0.0:0")?;
-        socket.connect("8.8.8.8:80")?;
-        Ok(socket.local_addr()?.ip())
+        let socket = std::net::UdpSocket::bind("0.0.0.0:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv4 address discovery: {ip}")
+        })?;
+        socket
+            .connect("8.8.8.8:80")
+            .context("Failed to connect UDP socket for local IPv4 address discovery.")?;
+
+        socket
     }
+    .local_addr()
+    .context("Failed to retrieve local address from UDP socket.")?;
+
+    Ok(addr.ip())
 }
 
 #[cfg(test)]
