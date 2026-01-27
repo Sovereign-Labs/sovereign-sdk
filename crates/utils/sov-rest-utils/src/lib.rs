@@ -180,6 +180,13 @@ pub fn cors_layer_opt(
 
 const MAX_BATCH_SIZE: usize = 128;
 
+/// Configuration for WebSocket subscription behavior.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WsSubscriptionConfig {
+    /// When true, messages are batched into arrays and gzip-compressed before sending.
+    pub compress: bool,
+}
+
 /// Interval between ping frames sent to the client for keepalive.
 const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -195,9 +202,42 @@ const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 /// - Graceful shutdown on server shutdown signal
 /// - Proper handling of client disconnection and half-closed connections
 pub async fn serve_generic_ws_subscription<S, M, E>(
+    socket: WebSocket,
+    subscription: S,
+    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+) where
+    S: futures::Stream<Item = Result<M, E>> + Unpin,
+    E: ReportableWsError,
+    M: Clone + serde::Serialize + Send + Sync + 'static,
+{
+    serve_generic_ws_subscription_with_config(
+        socket,
+        subscription,
+        shutdown_receiver,
+        WsSubscriptionConfig::default(),
+    )
+    .await
+}
+
+/// A utility function for serving some data inside a [`futures::Stream`] over a
+/// WebSocket connection, with configurable behavior.
+///
+/// This function handles:
+/// - Sending data from the subscription stream to the client
+/// - Periodic ping/pong keepalive to detect dead connections
+/// - Graceful shutdown on server shutdown signal
+/// - Proper handling of client disconnection and half-closed connections
+/// - Optional gzip compression of batched messages (when `config.compress` is true)
+///
+/// When compression is enabled:
+/// - Data messages are batched into JSON arrays, gzip-compressed, and sent as binary frames
+/// - Error messages are also gzip-compressed and sent as binary frames
+/// - Clients can uniformly decompress all binary frames (gzip magic bytes: `0x1f 0x8b`)
+pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
     mut socket: WebSocket,
     subscription: S,
     mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    config: WsSubscriptionConfig,
 ) where
     S: futures::Stream<Item = Result<M, E>> + Unpin,
     E: ReportableWsError,
@@ -272,31 +312,67 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
             chunk_opt = chunked_subscription.next() => {
                 match chunk_opt {
                     Some(chunk) => {
-                        for item in chunk {
-                            match item {
-                                Ok(data) => {
-                                    let serialized = match serde_json::to_string(&data) {
-                                        Ok(serialized) => serialized,
-                                        Err(err) => {
-                                            error!(?err, "Failed to serialize data for WebSocket; this is a bug, please report it");
+                        if config.compress {
+                            // Compressed mode: batch successful items, compress, send as binary
+                            let mut batch: Vec<M> = Vec::with_capacity(chunk.len());
+                            for item in chunk {
+                                match item {
+                                    Ok(data) => {
+                                        batch.push(data);
+                                    }
+                                    Err(err) => {
+                                        // Flush any accumulated batch before sending error
+                                        if !batch.is_empty() {
+                                            if send_compressed_batch(&mut socket, &batch).await.is_err() {
+                                                break 'outer;
+                                            }
+                                            batch.clear();
+                                        }
+
+                                        // Send compressed error
+                                        if send_compressed_bytes(&mut socket, err.to_json().as_bytes()).await.is_err() {
                                             break 'outer;
                                         }
-                                    };
-                                    if let Err(err) = socket.feed(serialized.into()).await {
-                                        warn!(?err, "WebSocket send error - disconnecting client");
-                                        break 'outer;
+
+                                        if !err.is_recoverable() {
+                                            break 'outer;
+                                        }
                                     }
                                 }
-                                Err(err) => {
-                                    // Send error notification to the client
-                                    if let Err(send_err) = socket.send(err.to_json().into()).await {
-                                        warn!(err=?send_err, "WebSocket send error - disconnecting client");
-                                        break 'outer;
+                            }
+
+                            // Send remaining batch
+                            if !batch.is_empty() && send_compressed_batch(&mut socket, &batch).await.is_err() {
+                                break 'outer;
+                            }
+                        } else {
+                            // Uncompressed mode: send individual text messages (original behavior)
+                            for item in chunk {
+                                match item {
+                                    Ok(data) => {
+                                        let serialized = match serde_json::to_string(&data) {
+                                            Ok(serialized) => serialized,
+                                            Err(err) => {
+                                                error!(?err, "Failed to serialize data for WebSocket; this is a bug, please report it");
+                                                break 'outer;
+                                            }
+                                        };
+                                        if let Err(err) = socket.feed(serialized.into()).await {
+                                            warn!(?err, "WebSocket send error - disconnecting client");
+                                            break 'outer;
+                                        }
                                     }
-                                    // For recoverable errors (e.g., lag), continue streaming
-                                    // For non-recoverable errors, disconnect
-                                    if !err.is_recoverable() {
-                                        break 'outer;
+                                    Err(err) => {
+                                        // Send error notification to the client
+                                        if let Err(send_err) = socket.send(err.to_json().into()).await {
+                                            warn!(err=?send_err, "WebSocket send error - disconnecting client");
+                                            break 'outer;
+                                        }
+                                        // For recoverable errors (e.g., lag), continue streaming
+                                        // For non-recoverable errors, disconnect
+                                        if !err.is_recoverable() {
+                                            break 'outer;
+                                        }
                                     }
                                 }
                             }
@@ -341,6 +417,67 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
 
     tracing::trace!("Closing websocket subscription");
     socket.close().await.ok();
+}
+
+/// Compresses bytes with gzip.
+fn compress_bytes(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+    encoder.write_all(data)?;
+    encoder.finish()
+}
+
+/// Serializes the value as JSON and compresses it with gzip.
+fn compress_json<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, std::io::Error> {
+    let json = serde_json::to_vec(value)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    compress_bytes(&json)
+}
+
+/// Compresses and sends a batch of items as a binary WebSocket message.
+/// Returns Err(()) if the send fails or compression fails.
+async fn send_compressed_batch<T: Serialize>(
+    socket: &mut WebSocket,
+    batch: &[T],
+) -> Result<(), ()> {
+    use axum::extract::ws::Message;
+
+    match compress_json(batch) {
+        Ok(compressed) => {
+            if let Err(err) = socket.feed(Message::Binary(compressed)).await {
+                warn!(?err, "WebSocket send error - disconnecting client");
+                return Err(());
+            }
+            Ok(())
+        }
+        Err(err) => {
+            error!(?err, "Failed to serialize/compress data for WebSocket; this is a bug, please report it");
+            Err(())
+        }
+    }
+}
+
+/// Compresses and sends raw bytes as a binary WebSocket message.
+/// Returns Err(()) if the send fails or compression fails.
+async fn send_compressed_bytes(socket: &mut WebSocket, data: &[u8]) -> Result<(), ()> {
+    use axum::extract::ws::Message;
+
+    match compress_bytes(data) {
+        Ok(compressed) => {
+            if let Err(err) = socket.feed(Message::Binary(compressed)).await {
+                warn!(?err, "WebSocket send error - disconnecting client");
+                return Err(());
+            }
+            Ok(())
+        }
+        Err(err) => {
+            error!(?err, "Failed to compress data for WebSocket; this is a bug, please report it");
+            Err(())
+        }
+    }
 }
 
 /// A message that can be received via websocket.
