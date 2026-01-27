@@ -130,7 +130,7 @@ pub enum RecoveryStrategy {
 }
 
 #[derive(Debug, Copy, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub enum NodeStartingRole {
+pub enum ConfiguredNodeRole {
     /// This node runs as the leader. The leader is responsible for producing new batches.
     Leader,
     /// This node runs as a replica, syncing its state from the leader.
@@ -157,7 +157,7 @@ pub struct PostgresConfig {
     /// Id of the node.
     pub node_id: String,
     #[allow(missing_docs)]
-    pub node_role: NodeStartingRole,
+    pub node_role: ConfiguredNodeRole,
 }
 
 /// Configuration for [`PreferredSequencer`].

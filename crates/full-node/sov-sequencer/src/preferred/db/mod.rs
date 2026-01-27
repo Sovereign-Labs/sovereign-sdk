@@ -19,7 +19,7 @@ use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
-use sov_full_node_configs::sequencer::NodeStartingRole;
+use sov_full_node_configs::sequencer::ConfiguredNodeRole;
 use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
@@ -445,24 +445,24 @@ impl PreferredSequencerDb {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
                 match postgres_config.node_role {
-                    NodeStartingRole::ReplicaNoLeaderSync => {
+                    ConfiguredNodeRole::ReplicaNoLeaderSync => {
                         // Connect and register the node without attempting leader election.
                         // The backend is dropped after registration since replicas don't need it.
                         PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
                         (None, SequencerRole::DaOnlyReplica)
                     }
-                    NodeStartingRole::Replica => {
+                    ConfiguredNodeRole::Replica => {
                         // Connect and register the node without attempting leader election.
                         // The backend is dropped after registration since replicas don't need it.
                         PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
                         (None, SequencerRole::PgSyncReplica)
                     }
-                    NodeStartingRole::Leader => {
+                    ConfiguredNodeRole::Leader => {
                         let (backend, _) =
                             PostgresBackend::connect(postgres_config, bind_addr).await?;
                         (Some(Box::new(backend)), SequencerRole::BatchProducer)
                     }
-                    NodeStartingRole::DbElected => {
+                    ConfiguredNodeRole::DbElected => {
                         // Connect and attempt to acquire leadership
                         let (backend, maybe_leader) =
                             PostgresBackend::connect(postgres_config, bind_addr).await?;

@@ -17,12 +17,12 @@ async fn test_replica_receives_txs_from_da() {
 
     let replica = postgres
         .clone()
-        .map(|pg| (pg, "replica".into(), NodeStartingRole::ReplicaNoLeaderSync));
+        .map(|pg| (pg, "replica".into(), ConfiguredNodeRole::ReplicaNoLeaderSync));
     let replica_test_rollup = start_rollup(addr, replica).await;
 
     let primary = postgres
         .clone()
-        .map(|pg| (pg, "primary".into(), NodeStartingRole::Leader));
+        .map(|pg| (pg, "primary".into(), ConfiguredNodeRole::Leader));
     let test_rollup = start_rollup(addr, primary).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -73,12 +73,12 @@ async fn test_replica_receives_txs_from_postgres() {
 
     let replica = postgres
         .clone()
-        .map(|pg| (pg, "replica".into(), NodeStartingRole::Replica));
+        .map(|pg| (pg, "replica".into(), ConfiguredNodeRole::Replica));
     let replica_test_rollup = start_rollup(addr, replica).await;
 
     let primary = postgres
         .clone()
-        .map(|pg| (pg, "primary".into(), NodeStartingRole::Leader));
+        .map(|pg| (pg, "primary".into(), ConfiguredNodeRole::Leader));
     let test_rollup = start_rollup(addr, primary).await;
 
     for _ in 0..20 {

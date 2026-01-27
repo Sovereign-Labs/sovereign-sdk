@@ -442,7 +442,7 @@
         }
       }
     },
-    "NodeStartingRole": {
+    "ConfiguredNodeRole": {
       "oneOf": [
         {
           "description": "This node runs as the leader. The leader is responsible for producing new batches.",
@@ -488,7 +488,7 @@
           "type": "string"
         },
         "node_role": {
-          "$ref": "#/definitions/NodeStartingRole"
+          "$ref": "#/definitions/ConfiguredNodeRole"
         },
         "postgres_connection_string": {
           "description": "Connection string.",

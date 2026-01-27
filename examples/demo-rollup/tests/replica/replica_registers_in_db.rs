@@ -43,7 +43,7 @@ impl ReplicaRegistrationTestSetup {
     }
 
     /// Starts a replica node with the given node_id and role.
-    async fn start_replica(&self, node_id: &str, role: NodeStartingRole) -> TestRollup<Rollup> {
+    async fn start_replica(&self, node_id: &str, role: ConfiguredNodeRole) -> TestRollup<Rollup> {
         let replica = Some((self.postgres.clone(), node_id.into(), role));
         let replica_rollup = start_rollup(self.da_addr, replica).await;
         replica_rollup
@@ -86,11 +86,11 @@ async fn test_multiple_replicas_register_in_nodes_table() {
     };
 
     let replica_then_leader = setup
-        .start_replica("replica_then_leader", NodeStartingRole::Replica)
+        .start_replica("replica_then_leader", ConfiguredNodeRole::Replica)
         .await;
 
     let replica_rollup = setup
-        .start_replica("replica", NodeStartingRole::Replica)
+        .start_replica("replica", ConfiguredNodeRole::Replica)
         .await;
 
     // Verify both replicas are present in followers

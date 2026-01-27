@@ -32,14 +32,14 @@ impl DbElectedTestSetup {
         let node1 = Some((
             postgres.clone(),
             "node1".into(),
-            NodeStartingRole::DbElected,
+            ConfiguredNodeRole::DbElected,
         ));
         let rollup1 = start_rollup(addr, node1).await;
 
         let node2 = Some((
             postgres.clone(),
             "node2".into(),
-            NodeStartingRole::DbElected,
+            ConfiguredNodeRole::DbElected,
         ));
         let rollup2 = start_rollup(addr, node2).await;
 
@@ -252,7 +252,7 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let node1 = Some((
         postgres.clone(),
         "node1".into(),
-        NodeStartingRole::DbElected,
+        ConfiguredNodeRole::DbElected,
     ));
     let rollup1 = start_rollup(addr, node1).await;
     rollup1.wait_for_sequencer_ready().await.unwrap();
@@ -264,7 +264,7 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let node2 = Some((
         postgres.clone(),
         "node2".into(),
-        NodeStartingRole::DbElected,
+        ConfiguredNodeRole::DbElected,
     ));
     let rollup2 = start_rollup(addr, node2).await;
     rollup2.wait_for_sequencer_ready().await.unwrap();
