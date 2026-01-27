@@ -912,11 +912,6 @@ where
     }
 }
 
-#[serde_with::serde_as]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-#[allow(dead_code)]
-struct TxBody(#[serde_as(as = "serde_with::base64::Base64")] Vec<u8>);
-
 /// Transaction confirmation data of [`PreferredSequencer`].
 #[derive(derivative::Derivative, serde::Serialize, serde::Deserialize)]
 #[derivative(Clone(bound = ""), Debug(bound = "S: Spec, Rt: Runtime<S>"))]

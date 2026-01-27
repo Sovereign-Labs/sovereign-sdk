@@ -19,7 +19,6 @@ use sov_rollup_interface::node::{
 };
 use sov_rollup_interface::stf::{
     ExecutionContext, ProofOutcome, ProofReceipt, ProofReceiptContents, StateTransitionFunction,
-    StoredEvent,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -64,16 +63,6 @@ where
     save_tx_bodies: bool,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
     axum_tcp: Option<TcpListener>,
-}
-
-#[allow(dead_code)]
-struct DiscardEvents;
-impl TryFrom<(u64, &StoredEvent)> for DiscardEvents {
-    type Error = anyhow::Error;
-
-    fn try_from(_value: (u64, &StoredEvent)) -> Result<Self, Self::Error> {
-        Ok(Self)
-    }
 }
 
 /// Initializes rollup genesis.
