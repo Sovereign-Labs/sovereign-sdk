@@ -45,9 +45,11 @@ impl DbElectedTestSetup {
 
         // Determine which node is the leader and which is the replica
         let (leader, replica) = match (role1, role2) {
-            (SequencerRole::Leader, SequencerRole::Replica) => (rollup1, rollup2),
-            (SequencerRole::Replica, SequencerRole::Leader) => (rollup2, rollup1),
-            _ => panic!("Expected one Leader and one Replica, got {role1:?} and {role2:?}"),
+            (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (rollup1, rollup2),
+            (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (rollup2, rollup1),
+            _ => panic!(
+                "Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}"
+            ),
         };
 
         Some(Self {
@@ -127,7 +129,7 @@ async fn test_db_elected_leader_failover() {
         .expect("Failed to get cluster info");
 
     tracing::info!(
-        "Initial cluster state - Leader: {:?}, Followers: {:?}",
+        "Initial cluster state - BatchProducer: {:?}, Followers: {:?}",
         cluster_info.leader,
         cluster_info.followers
     );
@@ -149,12 +151,12 @@ async fn test_db_elected_leader_failover() {
 
     assert_ne!(
         initial_leader.node_id, initial_follower.node_id,
-        "Leader and follower should have different node_ids"
+        "BatchProducer and follower should have different node_ids"
     );
 
     assert_ne!(
         initial_leader.address, initial_follower.address,
-        "Leader and follower should have different addresses"
+        "BatchProducer and follower should have different addresses"
     );
 
     // Remember the follower's node_id - this should become the new leader after failover
@@ -186,8 +188,8 @@ async fn test_db_elected_leader_failover() {
 
     assert_eq!(
         new_role,
-        SequencerRole::Leader,
-        "Expected restarted node to be Leader, got {new_role:?}",
+        SequencerRole::BatchProducer,
+        "Expected restarted node to be BatchProducer, got {new_role:?}",
     );
 
     // Check final cluster state after failover

@@ -879,7 +879,7 @@ where
         self.synchronized_state_updator
             .sequencer_role_msg("get_sequencer_role")
             .await
-            .unwrap_or(SequencerRole::Leader)
+            .unwrap_or(SequencerRole::BatchProducer)
     }
 }
 

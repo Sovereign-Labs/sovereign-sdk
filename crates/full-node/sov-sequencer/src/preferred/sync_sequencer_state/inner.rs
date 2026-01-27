@@ -449,7 +449,7 @@ where
     }
 
     pub(crate) fn is_replica_role(&self) -> bool {
-        self.seq_role == SequencerRole::Replica
+        self.seq_role == SequencerRole::PgSyncReplica
     }
 
     pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
