@@ -242,7 +242,7 @@ where
 
         // Launch leadership task for DbElected nodes
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            if postgres_config.node_role == NodeRole::DbElected {
+            if postgres_config.node_role == NodeStartingRole::DbElected {
                 let election_task = LeadershipElectionTask::new(
                     postgres_config,
                     shutdown_sender.clone(),
