@@ -270,7 +270,7 @@ impl Client {
         let without_scheme = base
             .strip_prefix("http://")
             .or_else(|| base.strip_prefix("https://"))
-            .unwrap_or(&base);
+            .unwrap_or(base);
         let addr = without_scheme
             .to_socket_addrs()
             .map_err(WsError::Io)?

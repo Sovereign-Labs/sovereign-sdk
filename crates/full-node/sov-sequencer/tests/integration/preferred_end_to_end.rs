@@ -1483,16 +1483,15 @@ async fn test_sequencer_event_stream_lag_message() {
                 if err_str.contains("lagged") {
                     received_lagged = true;
                     assert!(
-                        err_str.contains(
-                            format!("\"disconnected_at\":{}", event_count - 1 as u64).as_str()
-                        ),
+                        err_str
+                            .contains(format!("\"disconnected_at\":{}", event_count - 1).as_str()),
                         "Expected \"disconnected_at\": {} in error message: {}",
-                        event_count + 1 as u64,
+                        event_count + 1,
                         err_str
                     );
                     break;
                 } else {
-                    panic!("Unexpected error: {:?}", e);
+                    panic!("Unexpected error: {e:?}");
                 }
             }
         }
@@ -1500,8 +1499,7 @@ async fn test_sequencer_event_stream_lag_message() {
 
     assert!(
         received_lagged,
-        "Expected to receive a LAGGED notification, but received {} events without lagging",
-        event_count
+        "Expected to receive a LAGGED notification, but received {event_count} events without lagging",
     );
 }
 

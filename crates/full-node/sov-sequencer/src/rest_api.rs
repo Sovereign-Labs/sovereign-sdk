@@ -247,7 +247,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                 }
                             }
                             // If the client disconnected
-                            None => {
+                            None  | Some(Ok(ws::Message::Close(_)))=> {
                                 should_drain = false;
                                 break;
                             }
@@ -270,10 +270,6 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                     should_drain = false;
                                     break;
                                 }
-                            }
-                            Some(Ok(ws::Message::Close(_))) => {
-                                should_drain = false;
-                                break;
                             }
                             Some(_) => {
                                 if handle_bad_ws_request(&mut socket, ip_addr, "Invalid websocket message: only text messages are supported").await.is_err() {
