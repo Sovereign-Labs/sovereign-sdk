@@ -229,7 +229,12 @@ impl MidRowBatchCase {
             self.seed,
         );
         let signer = signer_for_index(self.seed, 0);
-        shares.extend(make_blob_shares(NS_BATCH, batch_total, Some(signer), self.seed));
+        shares.extend(make_blob_shares(
+            NS_BATCH,
+            batch_total,
+            Some(signer),
+            self.seed,
+        ));
         append_segmented_blobs(
             &mut shares,
             &[suffix_total],
@@ -315,9 +320,7 @@ fn payload_len_for_share_count(share_count: usize, _has_signer: bool) -> usize {
     if share_count <= 1 {
         return first_share_content.saturating_sub(1).max(1);
     }
-    first_share_content
-        + (share_count - 2) * appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
-        + 1
+    first_share_content + (share_count - 2) * appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE + 1
 }
 
 fn signer_for_index(seed: u8, idx: usize) -> AccAddress {
@@ -513,13 +516,7 @@ fn test_mid_row_full_verification_manual() {
     assert_eq!(prefix_total + batch_total + suffix_total, total_shares);
 
     let mut shares = Vec::with_capacity(total_shares);
-    append_segmented_blobs(
-        &mut shares,
-        &[prefix_total],
-        &PREFIX_NAMESPACES,
-        None,
-        seed,
-    );
+    append_segmented_blobs(&mut shares, &[prefix_total], &PREFIX_NAMESPACES, None, seed);
     let signer = signer_for_index(seed, 0);
     shares.extend(make_blob_shares(NS_BATCH, batch_total, Some(signer), seed));
     append_segmented_blobs(
