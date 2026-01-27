@@ -445,20 +445,28 @@ impl PreferredSequencerDb {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
                 match postgres_config.node_role {
-                    NodeRole::ReplicaNoLeaderSync => (None, SequencerRole::ReplicaNoLeaderSync),
-                    NodeRole::Replica => (None, SequencerRole::Replica),
-                    NodeRole::Leader => (
-                        Some(Box::new(
-                            PostgresBackend::connect(postgres_config, bind_addr).await?,
-                        )),
-                        SequencerRole::Leader,
-                    ),
+                    NodeRole::ReplicaNoLeaderSync => {
+                        // Connect and register the node without attempting leader election.
+                        // The backend is dropped after registration since replicas don't need it.
+                        PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
+                        (None, SequencerRole::ReplicaNoLeaderSync)
+                    }
+                    NodeRole::Replica => {
+                        // Connect and register the node without attempting leader election.
+                        // The backend is dropped after registration since replicas don't need it.
+                        PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
+                        (None, SequencerRole::Replica)
+                    }
+                    NodeRole::Leader => {
+                        let (backend, _) =
+                            PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        (Some(Box::new(backend)), SequencerRole::Leader)
+                    }
                     NodeRole::DbElected => {
-                        // Connect without claiming leadership, then try to acquire it
-                        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        // Connect and attempt to acquire leadership
+                        let (backend, maybe_leader) =
+                            PostgresBackend::connect(postgres_config, bind_addr).await?;
 
-                        // Try to become leader and register node
-                        let maybe_leader = backend.try_update_leader_and_register_node().await?;
                         let is_leader = maybe_leader
                             .map(|leader| leader.node_id == postgres_config.node_id)
                             .unwrap_or(false);
