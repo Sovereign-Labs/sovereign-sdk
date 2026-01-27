@@ -739,7 +739,7 @@ where
     }
 
     async fn sequencer_role(&self) -> crate::SequencerRole {
-        crate::SequencerRole::Leader
+        crate::SequencerRole::BatchProducer
     }
 }
 

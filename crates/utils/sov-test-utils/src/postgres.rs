@@ -1,4 +1,4 @@
-use sov_sequencer::preferred::{NodeRole, PostgresConfig};
+use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig};
 use testcontainers::runners::AsyncRunner;
 pub use testcontainers::{ContainerAsync, ImageExt};
 pub use testcontainers_modules::postgres::Postgres;
@@ -66,7 +66,7 @@ pub async fn connection_string_from_postgres_container(
 pub async fn config_from_postgres_container(
     container: &ContainerAsync<Postgres>,
     node_id: String,
-    node_role: NodeRole,
+    node_role: ConfiguredNodeRole,
 ) -> anyhow::Result<PostgresConfig> {
     let postgres_connection_string = connection_string_from_postgres_container(container).await?;
     Ok(PostgresConfig {

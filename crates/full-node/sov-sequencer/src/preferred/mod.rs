@@ -41,7 +41,8 @@ use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    NodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
+    TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -879,7 +880,7 @@ where
         self.synchronized_state_updator
             .sequencer_role_msg("get_sequencer_role")
             .await
-            .unwrap_or(SequencerRole::Leader)
+            .unwrap_or(SequencerRole::BatchProducer)
     }
 }
 

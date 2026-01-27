@@ -723,7 +723,7 @@ fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sov_full_node_configs::sequencer::NodeRole;
+    use sov_full_node_configs::sequencer::ConfiguredNodeRole;
     use sov_modules_api::VisibleSlotNumber;
     use sov_test_utils::postgres::{
         config_from_postgres_container, create_postgres_container, CreatePostgresError,
@@ -741,8 +741,18 @@ mod tests {
             }
         };
 
-        let db_1 = &mut DB::new(&postgres, String::from("node_id_1"), NodeRole::Leader).await;
-        let db_2 = &mut DB::new(&postgres, String::from("node_id_2"), NodeRole::Replica).await;
+        let db_1 = &mut DB::new(
+            &postgres,
+            String::from("node_id_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
+        let db_2 = &mut DB::new(
+            &postgres,
+            String::from("node_id_2"),
+            ConfiguredNodeRole::Replica,
+        )
+        .await;
 
         {
             // Updating the same node_id should change the last updated time in the db.
@@ -791,7 +801,12 @@ mod tests {
             }
         };
 
-        let db = &mut DB::new(&postgres, String::from("node_id_1"), NodeRole::Leader).await;
+        let db = &mut DB::new(
+            &postgres,
+            String::from("node_id_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
         db.maybe_update_leader().await.unwrap();
 
         let sequence_number = 1;
@@ -848,9 +863,18 @@ mod tests {
                 panic!("Failed to create Postgres container: {e}");
             }
         };
-        let db_leader = &mut DB::new(&postgres, String::from("node_id_1"), NodeRole::Leader).await;
-        let db_replica =
-            &mut DB::new(&postgres, String::from("node_id_2"), NodeRole::Replica).await;
+        let db_leader = &mut DB::new(
+            &postgres,
+            String::from("node_id_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
+        let db_replica = &mut DB::new(
+            &postgres,
+            String::from("node_id_2"),
+            ConfiguredNodeRole::Replica,
+        )
+        .await;
 
         let sequence_number = 1;
         let batch_to_store = batch_to_store(sequence_number);
@@ -960,7 +984,7 @@ mod tests {
         async fn new(
             postgres: &sov_test_utils::postgres::ContainerAsync<sov_test_utils::postgres::Postgres>,
             node_id: String,
-            node_role: NodeRole,
+            node_role: ConfiguredNodeRole,
         ) -> Self {
             let leader_timeout = Duration::from_millis(100_000);
             let postgres_config =
@@ -1018,7 +1042,12 @@ mod tests {
             }
         };
 
-        let db = DB::new(&postgres, String::from("node_1"), NodeRole::Leader).await;
+        let db = DB::new(
+            &postgres,
+            String::from("node_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
 
         let mut listener = sqlx::postgres::PgListener::connect_with(&db.backend.pool)
             .await
@@ -1062,8 +1091,18 @@ mod tests {
             }
         };
 
-        let db_1 = &mut DB::new(&postgres, String::from("node_1"), NodeRole::Leader).await;
-        let db_2 = &mut DB::new(&postgres, String::from("node_2"), NodeRole::Replica).await;
+        let db_1 = &mut DB::new(
+            &postgres,
+            String::from("node_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
+        let db_2 = &mut DB::new(
+            &postgres,
+            String::from("node_2"),
+            ConfiguredNodeRole::Replica,
+        )
+        .await;
 
         // Node 1 becomes leader
         db_1.maybe_update_leader().await.unwrap();

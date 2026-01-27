@@ -264,7 +264,7 @@ fn validate_seq_nr_from_node(
 ) -> Result<(), SequenceNumberMismatchError> {
     if seq_nr_of_in_progress_batch < next_sequence_number_according_to_node {
         match seq_role {
-            SequencerRole::Replica => {
+            SequencerRole::PgSyncReplica => {
                 // If this occurs on replicas, we log the error and skip `update_state` for the batch received from the node.
                 // If the database slowdown is temporary, the issue will be resolved when the next `update_state` call succeeds.
                 // If the situation persists, the replica will eventually enter sync mode in that case that the database setup needs to be examined.
@@ -273,8 +273,8 @@ fn validate_seq_nr_from_node(
                     If this error occurs repeatedly, investigate the database stack in the deployment.");
                 return Err(SequenceNumberMismatchError::SkipStateUpdate);
             }
-            SequencerRole::Leader | SequencerRole::ReplicaNoLeaderSync => {
-                // For roles other than replicas, we should never observe in-progress batches with sequence numbers lower than what the node expects (ReplicaNoLeaderSync don't create batches).
+            SequencerRole::BatchProducer | SequencerRole::DaOnlyReplica => {
+                // For roles other than PgSyncReplica, we should never observe in-progress batches with sequence numbers lower than what the node expects (DaOnlyReplica doesn't create batches).
                 let err = anyhow::anyhow!(
                     "sequencer_role: {seq_role:?},
                     seq_nr_of_in_progress_batch: {seq_nr_of_in_progress_batch}, 

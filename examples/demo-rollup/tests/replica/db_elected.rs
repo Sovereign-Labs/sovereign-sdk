@@ -29,10 +29,18 @@ impl DbElectedTestSetup {
         let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
         // Start both DbElected nodes
-        let node1 = Some((postgres.clone(), "node1".into(), NodeRole::DbElected));
+        let node1 = Some((
+            postgres.clone(),
+            "node1".into(),
+            ConfiguredNodeRole::DbElected,
+        ));
         let rollup1 = start_rollup(addr, node1).await;
 
-        let node2 = Some((postgres.clone(), "node2".into(), NodeRole::DbElected));
+        let node2 = Some((
+            postgres.clone(),
+            "node2".into(),
+            ConfiguredNodeRole::DbElected,
+        ));
         let rollup2 = start_rollup(addr, node2).await;
 
         // Wait for both nodes to be ready
@@ -45,9 +53,11 @@ impl DbElectedTestSetup {
 
         // Determine which node is the leader and which is the replica
         let (leader, replica) = match (role1, role2) {
-            (SequencerRole::Leader, SequencerRole::Replica) => (rollup1, rollup2),
-            (SequencerRole::Replica, SequencerRole::Leader) => (rollup2, rollup1),
-            _ => panic!("Expected one Leader and one Replica, got {role1:?} and {role2:?}"),
+            (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (rollup1, rollup2),
+            (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (rollup2, rollup1),
+            _ => panic!(
+                "Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}"
+            ),
         };
 
         Some(Self {
@@ -127,7 +137,7 @@ async fn test_db_elected_leader_failover() {
         .expect("Failed to get cluster info");
 
     tracing::info!(
-        "Initial cluster state - Leader: {:?}, Followers: {:?}",
+        "Initial cluster state - BatchProducer: {:?}, Followers: {:?}",
         cluster_info.leader,
         cluster_info.followers
     );
@@ -149,12 +159,12 @@ async fn test_db_elected_leader_failover() {
 
     assert_ne!(
         initial_leader.node_id, initial_follower.node_id,
-        "Leader and follower should have different node_ids"
+        "BatchProducer and follower should have different node_ids"
     );
 
     assert_ne!(
         initial_leader.address, initial_follower.address,
-        "Leader and follower should have different addresses"
+        "BatchProducer and follower should have different addresses"
     );
 
     // Remember the follower's node_id - this should become the new leader after failover
@@ -186,8 +196,8 @@ async fn test_db_elected_leader_failover() {
 
     assert_eq!(
         new_role,
-        SequencerRole::Leader,
-        "Expected restarted node to be Leader, got {new_role:?}",
+        SequencerRole::BatchProducer,
+        "Expected restarted node to be BatchProducer, got {new_role:?}",
     );
 
     // Check final cluster state after failover
@@ -239,7 +249,11 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
     // Start first node - it will become leader and trigger notifications
-    let node1 = Some((postgres.clone(), "node1".into(), NodeRole::DbElected));
+    let node1 = Some((
+        postgres.clone(),
+        "node1".into(),
+        ConfiguredNodeRole::DbElected,
+    ));
     let rollup1 = start_rollup(addr, node1).await;
     rollup1.wait_for_sequencer_ready().await.unwrap();
 
@@ -247,7 +261,11 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let file_content1 = wait_for_file_change(&cluster_info_path, &mut file_watcher).await;
 
     // Start second node - it will become follower and trigger another notification
-    let node2 = Some((postgres.clone(), "node2".into(), NodeRole::DbElected));
+    let node2 = Some((
+        postgres.clone(),
+        "node2".into(),
+        ConfiguredNodeRole::DbElected,
+    ));
     let rollup2 = start_rollup(addr, node2).await;
     rollup2.wait_for_sequencer_ready().await.unwrap();
 
