@@ -15,9 +15,13 @@ async fn test_replica_receives_txs_from_da() {
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
-    let replica = postgres
-        .clone()
-        .map(|pg| (pg, "replica".into(), ConfiguredNodeRole::ReplicaNoLeaderSync));
+    let replica = postgres.clone().map(|pg| {
+        (
+            pg,
+            "replica".into(),
+            ConfiguredNodeRole::ReplicaNoLeaderSync,
+        )
+    });
     let replica_test_rollup = start_rollup(addr, replica).await;
 
     let primary = postgres

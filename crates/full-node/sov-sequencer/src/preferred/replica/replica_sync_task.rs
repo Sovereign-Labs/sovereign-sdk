@@ -386,10 +386,13 @@ mod tests {
             }
         };
 
-        let postgres_config =
-            config_from_postgres_container(&postgres, "Replica".into(), ConfiguredNodeRole::Replica)
-                .await
-                .unwrap();
+        let postgres_config = config_from_postgres_container(
+            &postgres,
+            "Replica".into(),
+            ConfiguredNodeRole::Replica,
+        )
+        .await
+        .unwrap();
 
         let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
         let (db, _) = PostgresBackend::connect(&postgres_config, addr)

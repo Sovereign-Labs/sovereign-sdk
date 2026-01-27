@@ -1042,7 +1042,12 @@ mod tests {
             }
         };
 
-        let db = DB::new(&postgres, String::from("node_1"), ConfiguredNodeRole::Leader).await;
+        let db = DB::new(
+            &postgres,
+            String::from("node_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
 
         let mut listener = sqlx::postgres::PgListener::connect_with(&db.backend.pool)
             .await
@@ -1086,8 +1091,18 @@ mod tests {
             }
         };
 
-        let db_1 = &mut DB::new(&postgres, String::from("node_1"), ConfiguredNodeRole::Leader).await;
-        let db_2 = &mut DB::new(&postgres, String::from("node_2"), ConfiguredNodeRole::Replica).await;
+        let db_1 = &mut DB::new(
+            &postgres,
+            String::from("node_1"),
+            ConfiguredNodeRole::Leader,
+        )
+        .await;
+        let db_2 = &mut DB::new(
+            &postgres,
+            String::from("node_2"),
+            ConfiguredNodeRole::Replica,
+        )
+        .await;
 
         // Node 1 becomes leader
         db_1.maybe_update_leader().await.unwrap();
