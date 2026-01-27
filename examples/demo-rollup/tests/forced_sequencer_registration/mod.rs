@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -540,45 +541,42 @@ async fn forced_tx_gas_limit_test_case(
     // 1000 u64s = 8000 bytes * 100 gas/byte = 800k gas > 50k limit.
     let excessive_data_size = 1000;
     let gas_heavy_tx = build_state_heavy_tx(&key, excessive_data_size, 0);
+
+    // Calculate the tx hash before submission so we can query for it later.
+    let tx_hash = gas_heavy_tx.hash();
+    let api_hash = api_types::Hash::from_str(&tx_hash.to_string())
+        .expect("TxHash should be a valid hex string");
+
     submit_forced_tx(
         da_service.as_ref(),
         ForcedTx::Runtime(gas_heavy_tx),
         "Failed to submit gas-heavy tx",
     )
     .await?;
-    let batch_notification = wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
-    let rollup_height = batch_notification.rollup_height.get();
+    wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    // Poll until the batch is available in the ledger DB.
+    // Poll until the transaction is available in the ledger DB by its hash.
     // Note: Reverted txs still consume the nonce, but the state changes are rolled back.
-    let batch = poll_until(
-        &format!("batch {rollup_height} to be available in ledger"),
+    let tx = poll_until(
+        &format!("tx {tx_hash} to be available in ledger"),
         || {
             let client = &client;
+            let api_hash = api_hash.clone();
             async move {
                 match client
                     .client
-                    .get_batch_by_id(
-                        &api_types::IntOrHash::Integer(rollup_height),
-                        Some(api_types::GetBatchByIdChildren::_1),
-                    )
+                    .get_tx_by_id(&api_types::IntOrHash::Hash(api_hash), None)
                     .await
                 {
                     Ok(resp) => Ok(Some(resp.into_inner())),
-                    Err(_) => Ok(None), // Batch not available yet, keep polling
+                    Err(_) => Ok(None), // Tx not available yet, keep polling
                 }
             }
         },
     )
     .await?;
 
-    anyhow::ensure!(
-        batch.txs.len() == 1,
-        "Expected exactly 1 transaction in batch, got {}",
-        batch.txs.len()
-    );
-
-    let tx_receipt = &batch.txs[0].receipt;
+    let tx_receipt = &tx.receipt;
     anyhow::ensure!(
         tx_receipt.result == api_types::TxReceiptResult::Reverted,
         "Expected gas-heavy tx to be Reverted due to out-of-gas, but got {:?}",
