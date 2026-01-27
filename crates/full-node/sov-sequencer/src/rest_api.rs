@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::Instant;
 
 use axum::extract::ws::WebSocket;
 use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
@@ -31,6 +32,12 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
+
+/// Interval between ping frames sent to the client for keepalive.
+const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Maximum time to wait for a pong response before considering the connection dead.
+const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 /// [`StartFrom`] is used as a query parameter for the txs subscription
 #[derive(
@@ -153,13 +160,25 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         Ok(ws.on_upgrade(move |mut socket| async move {
             let mut shutdown_receiver = state.shutdown_receiver.clone();
             let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
-            loop {
+            // Use interval_at to delay the first ping until after a full interval of inactivity
+            let mut ping_interval =
+                tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
+            ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut awaiting_pong: Option<[u8; 8]> = None;
+            let mut ping_sent_time = Instant::now();
+            let mut ping_counter: u64 = 0;
+            let mut should_drain = true;
+
+            'outer: loop {
                 tokio::select! {
+                    // Biased ensures we check recv first to handle Close frames promptly
+                    biased;
                     // The client sent us a message
                     inbound_msg = socket.recv() => {
                         match inbound_msg {
                             // Try to deserialize the message as a WsMessage<AcceptTx>. On success, spawn a task to handle it.
                             Some(Ok(ws::Message::Text(text))) => {
+                                ping_interval.reset();
                                 match serde_json::from_str::<WsMessage<AcceptTx>>(&text) {
                                     Ok(WsMessage { id, contents }) => {
                                         let sender = outbound_tx.clone();
@@ -202,20 +221,44 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                     }
                                     Err(e) => {
                                         if handle_bad_ws_request(&mut socket, ip_addr, e).await.is_err() {
+                                            should_drain = false;
                                             break;
                                         }
                                     }
                                 }
                             }
                             // If the client disconnected
-                            None => break,
+                            None => {
+                                should_drain = false;
+                                break;
+                            }
                             Some(Err(error)) => {
-                                if handle_bad_ws_request(&mut socket, ip_addr, error).await.is_err() {
+                                tracing::warn!(?error, "WebSocket error");
+                                should_drain = false;
+                                break;
+                            }
+                            Some(Ok(ws::Message::Pong(data))) => {
+                                if awaiting_pong.is_some_and(|expected| data == expected) {
+                                    awaiting_pong = None;
+                                    tracing::trace!("Received valid pong from client");
+                                } else {
+                                    tracing::trace!("Received pong with unexpected data; ignoring");
+                                }
+                            }
+                            Some(Ok(ws::Message::Ping(data))) => {
+                                if let Err(err) = socket.send(ws::Message::Pong(data)).await {
+                                    tracing::warn!(?err, "Failed to send pong - disconnecting client");
+                                    should_drain = false;
                                     break;
                                 }
                             }
+                            Some(Ok(ws::Message::Close(_))) => {
+                                should_drain = false;
+                                break;
+                            }
                             Some(_) => {
                                 if handle_bad_ws_request(&mut socket, ip_addr, "Invalid websocket message: only text messages are supported").await.is_err() {
+                                    should_drain = false;
                                     break;
                                 }
                             }
@@ -229,19 +272,43 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                     Ok(msg) => {
                                         if let Err(err) = send_json(&mut socket, msg).await {
                                             tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                                            should_drain = false;
                                             break;
                                         }
                                     }
                                     Err(msg) => {
                                         if let Err(err) = send_json(&mut socket, msg).await {
                                             tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                                            should_drain = false;
                                             break;
                                         }
                                     }
                                 }
+                                ping_interval.reset();
                             }
                             None => break,
                         }
+                    }
+                    _ = ping_interval.tick() => {
+                        if awaiting_pong.is_some() {
+                            let elapsed = ping_sent_time.elapsed();
+                            if elapsed > PONG_TIMEOUT {
+                                tracing::warn!("No pong received within timeout ({:?}) - disconnecting client", PONG_TIMEOUT);
+                                should_drain = false;
+                                break 'outer;
+                            }
+                        }
+
+                        ping_counter = ping_counter.wrapping_add(1);
+                        let ping_data = ping_counter.to_le_bytes();
+                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec())).await {
+                            tracing::warn!(?err, "Failed to send ping - disconnecting client");
+                            should_drain = false;
+                            break 'outer;
+                        }
+                        ping_sent_time = Instant::now();
+                        awaiting_pong = Some(ping_data);
+                        tracing::trace!("Sent ping to client");
                     }
                     _ = shutdown_receiver.changed() => break,
                 }
@@ -251,12 +318,15 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // This guarantees that the channel will be closed as soon as all in-flight tasks have resolved.
             drop(outbound_tx);
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
-            while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                if let Err(err) = send_json(&mut socket, msg).await {
-                    tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
-                    break;
+            if should_drain {
+                while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
+                    if let Err(err) = send_json(&mut socket, msg).await {
+                        tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                        break;
+                    }
                 }
             }
+            socket.close().await.ok();
         }) )
     }
 
