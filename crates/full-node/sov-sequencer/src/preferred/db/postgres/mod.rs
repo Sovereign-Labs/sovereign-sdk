@@ -348,7 +348,7 @@ impl PostgresBackend {
 
     /// Registers this node in the nodes table with the maximum possible timestamp.
     /// Used by Replica nodes that need to be visible in the cluster but don't participate in leader election.
-    /// The infinity timestamp ensures that the replica nodes won't be pruned form the nodes table.
+    /// The infinity timestamp ensures that the replica nodes won't be pruned from the nodes table.
     async fn upsert_node_registration_max_timestamp(&self) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO nodes (node_id, address, last_updated)
