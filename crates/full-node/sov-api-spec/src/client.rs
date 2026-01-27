@@ -196,8 +196,12 @@ impl Client {
         self.subscribe_to_ws("/sequencer/events/ws").await
     }
 
-    pub async fn subscribe_to_events_with_config(&self, config: WebSocketConfig) -> WsSubscription<types::LedgerEvent> {
-        self.subscribe_to_ws_with_config("/sequencer/events/ws", Some(config)).await
+    pub async fn subscribe_to_events_with_config(
+        &self,
+        config: WebSocketConfig,
+    ) -> WsSubscription<types::LedgerEvent> {
+        self.subscribe_to_ws_with_config("/sequencer/events/ws", Some(config))
+            .await
     }
 
     /// Subscribe to events with custom WebSocket and TCP socket configuration.
@@ -209,8 +213,12 @@ impl Client {
         ws_config: Option<WebSocketConfig>,
         recv_buffer_size: Option<u32>,
     ) -> WsSubscription<types::LedgerEvent> {
-        self.subscribe_to_ws_with_socket_options("/sequencer/events/ws", ws_config, recv_buffer_size)
-            .await
+        self.subscribe_to_ws_with_socket_options(
+            "/sequencer/events/ws",
+            ws_config,
+            recv_buffer_size,
+        )
+        .await
     }
 
     pub async fn subscribe_to_events_with_filter(

@@ -1,7 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
-use crate::utils::{EventEmitterModule, encode_call};
+use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
     generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
     tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
@@ -363,7 +363,7 @@ pub(crate) enum InvalidGeneration {
     TooOld,
 }
 
-fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<TestSpec> ){
+fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<TestSpec>) {
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let admin = genesis_config.additional_accounts()[0].clone();
@@ -380,10 +380,12 @@ fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<
             (),
         );
 
-    (GenesisParams {
-        runtime: rt_genesis_config.clone(),
-    }, admin)
-
+    (
+        GenesisParams {
+            runtime: rt_genesis_config.clone(),
+        },
+        admin,
+    )
 }
 
 async fn create_test_rollup(
@@ -395,7 +397,6 @@ async fn create_test_rollup(
     block_producing_config: BlockProducingConfig,
 ) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let (genesis_params, admin) = create_genesis_params();
-    
 
     let dir = tempdir_inside_codebase_dir();
 
@@ -1397,17 +1398,16 @@ async fn test_sequencer_event_stream_filtering() {
     );
 }
 
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_sequencer_event_stream_lag_message() {
     let events_channel_size = 5;
 
     let (genesis_params, admin) = create_genesis_params();
     let seq_da_address = genesis_params
-            .runtime
-            .sequencer_registry
-            .sequencer_config
-            .seq_da_address;
+        .runtime
+        .sequencer_registry
+        .sequencer_config
+        .seq_da_address;
     let dir = tempdir_inside_codebase_dir();
     let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>>::new(
         GenesisSource::CustomParams(genesis_params),
@@ -1429,8 +1429,6 @@ async fn test_sequencer_event_stream_lag_message() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-
-
     // Set a small TCP receive buffer (SO_RCVBUF) to cause actual TCP backpressure,
     // which should cause the server to block on send, leading to broadcast channel lag.
     // Note: The OS enforces a minimum buffer size (check /proc/sys/net/core/rmem_min).
@@ -1440,8 +1438,8 @@ async fn test_sequencer_event_stream_lag_message() {
         .await
         .unwrap();
 
-    let events_per_tx = 40;
-    let num_txs = 505;
+    let events_per_tx = 1000;
+    let num_txs = 15;
     let emit_pattern: Vec<bool> = (0..events_per_tx).map(|i| i % 2 == 0).collect();
 
     for i in 0..num_txs {
@@ -1468,34 +1466,34 @@ async fn test_sequencer_event_stream_lag_message() {
     // server's WebSocket send to block, which causes the broadcast channel
     // to overflow.
     let mut received_lagged = false;
-    let mut event_count = 0;
     let first_remaining_event = 2 * events_per_tx as u64;
+    let mut event_count = first_remaining_event;
 
-    loop {
-        match events.next().await {
-            Some(Ok(event)) => {
+    while let Some(result) = events.next().await {
+        match result {
+            Ok(event) => {
                 assert_eq!(
-                    event.number,
-                    first_remaining_event + event_count as u64,
+                    event.number, event_count,
                     "Event numbers should be sequential"
                 );
                 event_count += 1;
             }
-            Some(Err(e)) => {
+            Err(e) => {
                 let err_str = e.to_string();
-                if err_str.contains("LAGGED") {
+                if err_str.contains("lagged") {
                     received_lagged = true;
-                    // TODO: Remove
-                    panic!("Received LAGGED error {}. Event count: {}", err_str, event_count);
-                    // After LAGGED, the server closes the connection (is_recoverable = false)
+                    assert!(
+                        err_str.contains(
+                            format!("\"disconnected_at\":{}", event_count - 1 as u64).as_str()
+                        ),
+                        "Expected \"disconnected_at\": {} in error message: {}",
+                        event_count + 1 as u64,
+                        err_str
+                    );
                     break;
                 } else {
                     panic!("Unexpected error: {:?}", e);
                 }
-            }
-            None => {
-                // Stream ended
-                break;
             }
         }
     }
@@ -2871,7 +2869,7 @@ async fn flaky_test_hooks_state_is_visible() {
             },
             (),
             PaymasterConfig::default(),
-            (), 
+            (),
             (),
         );
     let genesis_params = GenesisParams {
@@ -3224,7 +3222,7 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
             (),
             PaymasterConfig::default(),
             (),
-        (),
+            (),
         );
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config.clone(),
@@ -3511,7 +3509,6 @@ pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_se
         sov_test_utils::TEST_DEFAULT_MAX_FEE,
     )
 }
-
 
 fn tx_event_emitter(key: &Ed25519PrivateKey, events: Vec<bool>, generation: u64) -> RawTx {
     let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::EventEmitter(

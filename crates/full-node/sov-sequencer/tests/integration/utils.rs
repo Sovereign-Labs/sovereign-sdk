@@ -11,10 +11,10 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
-use sov_modules_api::{EventEmitter, prelude::*};
 use sov_modules_api::rest::HasRestApi;
 use sov_modules_api::transaction::TransactionCallable;
 use sov_modules_api::transaction::{Transaction, TxDetails};
+use sov_modules_api::{prelude::*, EventEmitter};
 use sov_modules_api::{
     Amount, BlockHooks, CryptoSpec, DispatchCall, FullyBakedTx, GasUnit, Module, ModuleId,
     ModuleInfo, RawTx, StateCheckpoint, TxState,
@@ -168,16 +168,36 @@ pub fn valid_tx_bytes<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>
     build_tx(setup, generation, &msg)
 }
 
-
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, JsonSchema, UniversalWallet)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+    UniversalWallet,
+)]
 pub enum EventEmitterCallMessage {
-    EmitEvents{events: Vec<bool>},
+    EmitEvents { events: Vec<bool> },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+)]
 pub enum EventEmitterEvent {
-    Event1{}, // Our rust client requires that events have bodies
-    Event2{},
+    Event1 {}, // Our rust client requires that events have bodies
+    Event2 {},
 }
 
 #[derive(ModuleInfo, Clone)]
@@ -201,14 +221,13 @@ impl<S: Spec> Module for EventEmitterModule<S> {
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Self::Error> {
-        
         match msg {
-            EventEmitterCallMessage::EmitEvents{events} => {
+            EventEmitterCallMessage::EmitEvents { events } => {
                 for event in events {
                     if event {
-                        self.emit_event(state, EventEmitterEvent::Event1{});
+                        self.emit_event(state, EventEmitterEvent::Event1 {});
                     } else {
-                        self.emit_event(state, EventEmitterEvent::Event2{});
+                        self.emit_event(state, EventEmitterEvent::Event2 {});
                     }
                 }
                 Ok(())
