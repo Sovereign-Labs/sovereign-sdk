@@ -13,7 +13,7 @@ use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::{
-    default_test_signed_transaction, TestSpec, TestUser, TEST_BLOB_PROCESSING_TIMEOUT,
+    default_test_signed_transaction_with_nonce, TestSpec, TestUser, TEST_BLOB_PROCESSING_TIMEOUT,
     TEST_MAX_BATCH_SIZE,
 };
 use sov_value_setter::ValueSetterConfig;
@@ -156,7 +156,7 @@ fn encode_call(
     nonce: u64,
     call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
 ) -> RawTx {
-    let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
+    let tx = default_test_signed_transaction_with_nonce::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
         nonce,
