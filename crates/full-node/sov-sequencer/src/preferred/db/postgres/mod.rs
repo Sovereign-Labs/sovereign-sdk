@@ -741,8 +741,18 @@ mod tests {
             }
         };
 
-        let db_1 = &mut DB::new(&postgres, String::from("node_id_1"), NodeStartingRole::Leader).await;
-        let db_2 = &mut DB::new(&postgres, String::from("node_id_2"), NodeStartingRole::Replica).await;
+        let db_1 = &mut DB::new(
+            &postgres,
+            String::from("node_id_1"),
+            NodeStartingRole::Leader,
+        )
+        .await;
+        let db_2 = &mut DB::new(
+            &postgres,
+            String::from("node_id_2"),
+            NodeStartingRole::Replica,
+        )
+        .await;
 
         {
             // Updating the same node_id should change the last updated time in the db.
@@ -791,7 +801,12 @@ mod tests {
             }
         };
 
-        let db = &mut DB::new(&postgres, String::from("node_id_1"), NodeStartingRole::Leader).await;
+        let db = &mut DB::new(
+            &postgres,
+            String::from("node_id_1"),
+            NodeStartingRole::Leader,
+        )
+        .await;
         db.maybe_update_leader().await.unwrap();
 
         let sequence_number = 1;
@@ -848,9 +863,18 @@ mod tests {
                 panic!("Failed to create Postgres container: {e}");
             }
         };
-        let db_leader = &mut DB::new(&postgres, String::from("node_id_1"), NodeStartingRole::Leader).await;
-        let db_replica =
-            &mut DB::new(&postgres, String::from("node_id_2"), NodeStartingRole::Replica).await;
+        let db_leader = &mut DB::new(
+            &postgres,
+            String::from("node_id_1"),
+            NodeStartingRole::Leader,
+        )
+        .await;
+        let db_replica = &mut DB::new(
+            &postgres,
+            String::from("node_id_2"),
+            NodeStartingRole::Replica,
+        )
+        .await;
 
         let sequence_number = 1;
         let batch_to_store = batch_to_store(sequence_number);

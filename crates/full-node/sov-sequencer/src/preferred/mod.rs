@@ -41,7 +41,8 @@ use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    NodeStartingRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    NodeStartingRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
+    TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,

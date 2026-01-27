@@ -29,10 +29,18 @@ impl DbElectedTestSetup {
         let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
         // Start both DbElected nodes
-        let node1 = Some((postgres.clone(), "node1".into(), NodeStartingRole::DbElected));
+        let node1 = Some((
+            postgres.clone(),
+            "node1".into(),
+            NodeStartingRole::DbElected,
+        ));
         let rollup1 = start_rollup(addr, node1).await;
 
-        let node2 = Some((postgres.clone(), "node2".into(), NodeStartingRole::DbElected));
+        let node2 = Some((
+            postgres.clone(),
+            "node2".into(),
+            NodeStartingRole::DbElected,
+        ));
         let rollup2 = start_rollup(addr, node2).await;
 
         // Wait for both nodes to be ready
@@ -241,7 +249,11 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let (_, da_shutdown, addr) = create_da_service_periodic().await;
 
     // Start first node - it will become leader and trigger notifications
-    let node1 = Some((postgres.clone(), "node1".into(), NodeStartingRole::DbElected));
+    let node1 = Some((
+        postgres.clone(),
+        "node1".into(),
+        NodeStartingRole::DbElected,
+    ));
     let rollup1 = start_rollup(addr, node1).await;
     rollup1.wait_for_sequencer_ready().await.unwrap();
 
@@ -249,7 +261,11 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let file_content1 = wait_for_file_change(&cluster_info_path, &mut file_watcher).await;
 
     // Start second node - it will become follower and trigger another notification
-    let node2 = Some((postgres.clone(), "node2".into(), NodeStartingRole::DbElected));
+    let node2 = Some((
+        postgres.clone(),
+        "node2".into(),
+        NodeStartingRole::DbElected,
+    ));
     let rollup2 = start_rollup(addr, node2).await;
     rollup2.wait_for_sequencer_ready().await.unwrap();
 

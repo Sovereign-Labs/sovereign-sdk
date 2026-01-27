@@ -89,7 +89,9 @@ async fn test_multiple_replicas_register_in_nodes_table() {
         .start_replica("replica_then_leader", NodeStartingRole::Replica)
         .await;
 
-    let replica_rollup = setup.start_replica("replica", NodeStartingRole::Replica).await;
+    let replica_rollup = setup
+        .start_replica("replica", NodeStartingRole::Replica)
+        .await;
 
     // Verify both replicas are present in followers
     let follower_ids = setup.get_follower_ids().await;
