@@ -557,23 +557,20 @@ async fn forced_tx_gas_limit_test_case(
 
     // Poll until the transaction is available in the ledger DB by its hash.
     // Note: Reverted txs still consume the nonce, but the state changes are rolled back.
-    let tx = poll_until(
-        &format!("tx {tx_hash} to be available in ledger"),
-        || {
-            let client = &client;
-            let api_hash = api_hash.clone();
-            async move {
-                match client
-                    .client
-                    .get_tx_by_id(&api_types::IntOrHash::Hash(api_hash), None)
-                    .await
-                {
-                    Ok(resp) => Ok(Some(resp.into_inner())),
-                    Err(_) => Ok(None), // Tx not available yet, keep polling
-                }
+    let tx = poll_until(&format!("tx {tx_hash} to be available in ledger"), || {
+        let client = &client;
+        let api_hash = api_hash.clone();
+        async move {
+            match client
+                .client
+                .get_tx_by_id(&api_types::IntOrHash::Hash(api_hash), None)
+                .await
+            {
+                Ok(resp) => Ok(Some(resp.into_inner())),
+                Err(_) => Ok(None), // Tx not available yet, keep polling
             }
-        },
-    )
+        }
+    })
     .await?;
 
     let tx_receipt = &tx.receipt;
