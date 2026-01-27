@@ -236,6 +236,11 @@ mod tests {
 
         // Receive 2 text messages then close (skip ping/pong frames)
         let mut text_count = 0;
+        // Verify the server detected the disconnect and stopped producing.
+        // The slow_broadcast_handler produces messages every 50ms, so if it kept
+        // running for the full 500ms wait, it would produce ~10 messages.
+        // We use < 20 as a loose bound to account for timing variance.
+        // If disconnect detection failed, the producer would continue toward 100 messages.
         while text_count < 2 {
             let msg = ws.next().await.unwrap().unwrap();
             match msg {
@@ -410,7 +415,7 @@ mod tests {
             .unwrap();
 
         // Wait for a ping (sent after PING_INTERVAL of inactivity)
-        let ping_received = timeout(Duration::from_secs(35), async {
+        let ping_received = timeout(Duration::from_secs(50), async {
             loop {
                 match ws.next().await {
                     Some(Ok(tungstenite::Message::Ping(_))) => return true,

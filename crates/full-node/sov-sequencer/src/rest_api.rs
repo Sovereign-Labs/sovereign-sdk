@@ -264,7 +264,11 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             drop(outbound_tx);
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
             while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                if let Err(err) = send_json(&mut socket, msg).await {
+                let send_result = match msg {
+                    Ok(m) => send_json(&mut socket, m).await,
+                    Err(m) => send_json(&mut socket, m).await,
+                };
+                if let Err(err) = send_result {
                     tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                     break;
                 }

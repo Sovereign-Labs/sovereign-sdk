@@ -215,7 +215,7 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
         tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
     ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut awaiting_pong: Option<[u8; 8]> = None;
-    let mut last_pong_time = Instant::now();
+    let mut ping_sent_time = Instant::now();
     let mut ping_counter: u64 = 0;
 
     'outer: loop {
@@ -238,7 +238,6 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
                         // Client responded to our ping - verify it matches what we sent
                         if awaiting_pong.is_some_and(|expected| data == expected) {
                             awaiting_pong = None;
-                            last_pong_time = Instant::now();
                             trace!("Received valid pong from client");
                         } else {
                             trace!("Received pong with unexpected data; ignoring");
@@ -318,7 +317,7 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
             _ = ping_interval.tick() => {
                 // Check if we're still waiting for a pong from a previous ping
                 if awaiting_pong.is_some() {
-                    let elapsed = last_pong_time.elapsed();
+                    let elapsed = ping_sent_time.elapsed();
                     if elapsed > PONG_TIMEOUT {
                         warn!("No pong received within timeout ({:?}) - disconnecting client", PONG_TIMEOUT);
                         break;
@@ -332,6 +331,7 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
                     warn!(?err, "Failed to send ping - disconnecting client");
                     break;
                 }
+                ping_sent_time = Instant::now();
                 awaiting_pong = Some(ping_data);
                 trace!("Sent ping to client");
             },

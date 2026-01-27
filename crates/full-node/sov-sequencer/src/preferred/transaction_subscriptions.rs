@@ -264,7 +264,8 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         }))
     }
 
-    pub fn subscribe(&self) -> SequencerTxStream<Confirmation<S, Rt>> {
+    /// Subscribe to transactions with tx number tracking for lag notifications.  
+    pub fn subscribe_txs(&self) -> SequencerTxStream<Confirmation<S, Rt>> {
         let broadcast_stream = BroadcastStream::new(self.tx_response_receiver.resubscribe());
 
         let mut last_tx_number: Option<u64> = None;
@@ -278,7 +279,11 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                     Err(SubscriptionStreamError::Lagged {
                         skipped,
                         disconnected_at: last_tx_number,
-                        resumed_at: last_tx_number.map(|id| id + skipped + 1),
+                        resumed_at: last_tx_number.map(|id| {
+                            id.checked_add(skipped)
+                                .and_then(|id| id.checked_add(1))
+                                .expect("Overflow when adding tx number and skipped count")
+                        }),
                     })
                 }
             })
@@ -298,15 +303,8 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                 match result {
                     Ok(tx) => {
                         // Update last_event_number for each event as we collect them
-                        let events: Vec<_> = tx
-                            .confirmation
-                            .events
-                            .into_iter()
-                            .map(|e| {
-                                last_event_number = Some(e.number);
-                                Ok(e)
-                            })
-                            .collect();
+                        last_event_number = tx.confirmation.events.last().map(|e| e.number);
+                        let events = tx.confirmation.events.into_iter().map(|e| Ok(e));
                         futures::stream::iter(events).left_stream()
                     }
                     Err(BroadcastStreamRecvError::Lagged(skipped)) => {
@@ -330,7 +328,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         starting_from: Option<u64>,
     ) -> Result<SequencerTxStream<Confirmation<S, Rt>>, SubscriptionStreamError> {
         let Some(starting_from) = starting_from else {
-            return Ok(self.subscribe());
+            return Ok(self.subscribe_txs());
         };
         let transaction_cache = self.inner.read().await;
         let next_tx_number = transaction_cache.next_tx_number;
@@ -342,7 +340,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
 
         // If the caller is starting from the next tx number, we can just return the broadcast stream
         if starting_from == transaction_cache.next_tx_number {
-            return Ok(self.subscribe());
+            return Ok(self.subscribe_txs());
         }
 
         let stream = AcceptedTxStream {
@@ -491,7 +489,11 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                             SubscriptionStreamError::Lagged {
                                 skipped: n,
                                 disconnected_at: last_sent_id,
-                                resumed_at: last_sent_id.map(|id| id + n + 1),
+                                resumed_at: last_sent_id.map(|id| {
+                                    id.checked_add(n)
+                                        .and_then(|id| id.checked_add(1))
+                                        .expect("Overflow when adding tx number and skipped count")
+                                }),
                             }
                         })
                 })
@@ -510,18 +512,21 @@ impl<S: Spec, Rt: Runtime<S>> Stream for AcceptedTxStream<S, Rt> {
         mut self: Pin<&mut Self>,
         cx: &mut futures::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // Serve cached transactions first
+        // Step 1: Drain any buffered historical transactions from the last fetch.
+        // These come from cache/DB and must be served before switching to live data.
         if let Some(tx) = self.next_chunk.pop_front() {
             self.last_sent_id = Some(tx.confirmation.tx_number);
             return Poll::Ready(Some(Ok(tx)));
         }
 
-        // If backfill cache is drained, use the subscription
+        // Step 2: Check if we have alreaady have a live subscription from the previous iteration of this function.
+        // If so, that means we're done with backfill. Simply poll the subscription for the next transaction.
         if self.maybe_subscription.is_some() {
             return self.poll_subscription(cx);
         }
 
-        // Need to fetch the next chunk from cache/db
+        // Step 3: If we don't have a live subscription (checked above) we need to fetch the next chunk of historical
+        // transactions from cache/DB. This call will return a subscription if this chunk brings us up to date.
         let mut pending = self.pending_get_next_chunk.take().unwrap_or_else(|| {
             Box::pin(Self::get_next_chunk(
                 self.starting_from,
@@ -532,6 +537,8 @@ impl<S: Spec, Rt: Runtime<S>> Stream for AcceptedTxStream<S, Rt> {
 
         match pending.poll_unpin(cx) {
             Poll::Ready(Ok((txs, maybe_subscription))) => {
+                // Store results. If maybe_subscription is Some, the next poll will send these transaction first
+                // (Step 1) before serving data from the subscription (Step 2).
                 self.starting_from += txs.len() as u64;
                 self.next_chunk = txs.into();
                 self.maybe_subscription = maybe_subscription;
@@ -697,7 +704,7 @@ mod tests {
         let writer = cache.write_handle();
 
         // Subscribe first (broadcast channel only sends new messages to subscribers)
-        let mut stream = cache.subscribe();
+        let mut stream = cache.subscribe_txs();
 
         // Insert transactions and receive them to update the tracked identifier
         for i in 0..3 {
