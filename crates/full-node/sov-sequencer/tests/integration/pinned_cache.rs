@@ -178,8 +178,6 @@ async fn test_nomt_basic_pinning_with_writes() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
     let client = test_rollup.api_client().clone();
-    let mut off_by_one_address = PINNED_ADDRESS;
-    off_by_one_address.0[31] += 1;
 
     for i in 0..8 {
         let tx = tx_write_pinned_cache(

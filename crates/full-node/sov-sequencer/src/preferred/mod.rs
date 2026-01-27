@@ -36,7 +36,6 @@ use futures::Stream;
 pub use initialization::Builder;
 use nonce_buffer_task::{NonceBufferInputSender, NonceBufferTask, SequencerTxExecutionBackend};
 use preferred_blob_sender::PreferredBlobSender;
-use serde_with::serde_as;
 use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
@@ -912,10 +911,6 @@ where
         Ok(())
     }
 }
-
-#[serde_with::serde_as]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct TxBody(#[serde_as(as = "serde_with::base64::Base64")] Vec<u8>);
 
 /// Transaction confirmation data of [`PreferredSequencer`].
 #[derive(derivative::Derivative, serde::Serialize, serde::Deserialize)]

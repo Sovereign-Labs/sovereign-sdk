@@ -382,7 +382,7 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    async fn get_inner_with_timing(&mut self, reason: &'static str) -> InnerGuard<S, Rt> {
+    async fn get_inner_with_timing(&mut self, reason: &'static str) -> InnerGuard<'_, S, Rt> {
         let channel_size = self.channel_size.fetch_sub(1, Ordering::Relaxed);
         InnerGuard::new(&mut self.inner, reason, channel_size)
     }
