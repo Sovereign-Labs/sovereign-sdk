@@ -32,6 +32,7 @@ generate_runtime! {
 }
 /// The input for the runtime's authenticator functionality.
 #[derive(std::fmt::Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[allow(dead_code)]
 pub struct AuthenticatorInput(sov_modules_api::RawTx);
 
 pub const CONFIGURED_DOMAIN: u32 = 1;

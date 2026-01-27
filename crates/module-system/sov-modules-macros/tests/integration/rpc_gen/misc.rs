@@ -109,6 +109,7 @@ where
 
 #[derive(Default, DispatchCall)]
 #[expose_rpc]
+#[allow(dead_code)]
 pub struct TestRuntime<S: Spec> {
     module: MyModule<S, u32>,
 }

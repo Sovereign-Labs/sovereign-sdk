@@ -66,6 +66,7 @@ where
     axum_tcp: Option<TcpListener>,
 }
 
+#[allow(dead_code)]
 struct DiscardEvents;
 impl TryFrom<(u64, &StoredEvent)> for DiscardEvents {
     type Error = anyhow::Error;

@@ -362,7 +362,7 @@ where
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
         strict_with_witness: bool,
-        pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
+        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
     ) -> Self {
         let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
         Self::create(
@@ -607,7 +607,7 @@ where
         )
         .expect("accessory db materialization must succeed");
         // Erase the type of the pinned cache since the storage manager isn't aware of it.
-        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<(dyn Any + Send + Sync)>);
+        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
         NomtChangeSet {
             state: StateFinishedSession::new(user, kernel),
             historical_state: historical_schema_batch,

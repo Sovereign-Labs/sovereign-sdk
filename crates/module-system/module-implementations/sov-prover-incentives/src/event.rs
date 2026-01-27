@@ -38,6 +38,7 @@ pub enum SlashingReason {
 #[derive(Debug, PartialEq, Clone)]
 #[serialize(Borsh, Serde)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 /// The reasons for penalizing a prover
 pub enum PenalizationReason {
     /// We penalize the prover for submitting a proof for transitions that have already been processed

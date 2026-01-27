@@ -12,6 +12,7 @@ pub struct HttpStorageAccessClient {
 }
 
 #[derive(serde::Deserialize, serde::Serialize)]
+#[allow(dead_code)]
 struct LenResponse {
     length: u64,
 }

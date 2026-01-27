@@ -38,7 +38,7 @@ use thiserror::Error;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, trace, warn};
 
 struct Inner<S, Rt, Da>
 where
