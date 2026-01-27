@@ -392,7 +392,7 @@ mod tests {
                 .unwrap();
 
         let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
-        let db = PostgresBackend::connect(&postgres_config, addr)
+        let (db, _) = PostgresBackend::connect(&postgres_config, addr)
             .await
             .unwrap();
 

@@ -32,6 +32,7 @@ use tokio::time::Duration;
 
 mod db_elected;
 mod replica_gets_txs_from_master;
+mod replica_registers_in_db;
 mod start_stop;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
