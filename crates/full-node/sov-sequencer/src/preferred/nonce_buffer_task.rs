@@ -4,7 +4,11 @@ use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
     FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt, TxProcessingError,
 };
-use sov_rollup_interface::{crypto::CredentialId, TxHash};
+use sov_rollup_interface::{
+    crypto::CredentialId,
+    node::{future_or_shutdown, FutureOrShutdownOutput},
+    TxHash,
+};
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::btree_map;
 use std::collections::hash_map;
@@ -271,25 +275,20 @@ struct TimeoutQueueTask<S: Spec, Rt: Runtime<S>> {
 impl<S: Spec, Rt: Runtime<S>> TimeoutQueueTask<S, Rt> {
     async fn run(mut self) {
         loop {
-            let req = tokio::select! {
-                _ = self.shutdown_receiver.changed() => {
-                    return;
-                }
-                req = self.input.recv() => req,
-            };
-            let Some(req) = req else {
-                return;
+            let req = match future_or_shutdown(self.input.recv(), &self.shutdown_receiver).await {
+                FutureOrShutdownOutput::Shutdown | FutureOrShutdownOutput::Output(None) => return,
+                FutureOrShutdownOutput::Output(Some(req)) => req,
             };
             let elapsed = req.queued_at.elapsed();
             let remaining = self.timeout_duration.saturating_sub(elapsed);
 
             // Sleep until timeout is due
             if !remaining.is_zero() {
-                tokio::select! {
-                    _ = self.shutdown_receiver.changed() => {
-                        return;
-                    }
-                    _ = tokio::time::sleep(remaining) => {}
+                match future_or_shutdown(tokio::time::sleep(remaining), &self.shutdown_receiver)
+                    .await
+                {
+                    FutureOrShutdownOutput::Shutdown => return,
+                    FutureOrShutdownOutput::Output(()) => {}
                 }
             }
 
