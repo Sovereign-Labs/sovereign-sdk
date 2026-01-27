@@ -304,7 +304,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                     Ok(tx) => {
                         // Update last_event_number for each event as we collect them
                         last_event_number = tx.confirmation.events.last().map(|e| e.number);
-                        let events = tx.confirmation.events.into_iter().map(|e| Ok(e));
+                        let events = tx.confirmation.events.into_iter().map(Ok);
                         futures::stream::iter(events).left_stream()
                     }
                     Err(BroadcastStreamRecvError::Lagged(skipped)) => {
