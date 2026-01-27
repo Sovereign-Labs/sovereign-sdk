@@ -133,88 +133,88 @@ Create in `da_service/tests.rs`:
 ```rust
 // S1: Reject blob order modifications
 #[test]
-fn verification_fails_if_blob_order_swapped()
+fn verification_fails_if_blob_order_swapped() {}
 
 // S4: Reject blob duplication
 #[test]
-fn verification_fails_if_blob_duplicated()
+fn verification_fails_if_blob_duplicated() {}
 
 // S6: Reject fake blob insertion
 #[test]
-fn verification_fails_if_fake_blob_inserted()
+fn verification_fails_if_fake_blob_inserted() {}
 
 // S10: Left boundary attack
 #[test]
-fn verification_fails_if_left_boundary_missing()
+fn verification_fails_if_left_boundary_missing() {}
 
 // S11: Right boundary attack
 #[test]
-fn verification_fails_if_right_boundary_missing()
+fn verification_fails_if_right_boundary_missing() {}
 
 // S12: Gap attack
 #[test]
-fn verification_fails_if_gap_between_blobs()
+fn verification_fails_if_gap_between_blobs() {}
 
 // S7: Index manipulation
 #[test]
-fn verification_fails_if_start_index_manipulated()
+fn verification_fails_if_start_index_manipulated() {}
 
 // S8: Namespace confusion
 #[test]
-fn verification_fails_for_wrong_namespace_proof()
+fn verification_fails_for_wrong_namespace_proof() {}
 
 // S9: Proof reordering
 #[test]
-fn verification_fails_if_proofs_reordered()
+fn verification_fails_if_proofs_reordered() {}
 ```
 
 ### 3.2 Edge Case Tests (HIGH)
 
 ```rust
 #[test]
-fn test_empty_namespace_with_presence_in_row_root()
+fn test_empty_namespace_with_presence_in_row_root() {}
 
 #[test]
-fn test_blob_exactly_fills_row()
+fn test_blob_exactly_fills_row() {}
 
 #[test]
-fn test_blob_spans_multiple_rows()  // 3+ rows
+fn test_blob_spans_multiple_rows() {} // 3+ rows
 
 #[test]
-fn test_max_square_size_blob()
+fn test_max_square_size_blob() {}
 
 #[test]
-fn test_single_byte_blob()
+fn test_single_byte_blob() {}
 
 #[test]
-fn test_blob_with_all_zeros()
+fn test_blob_with_all_zeros() {}
 
 #[test]
-fn test_v0_blob_correctly_skipped()
+fn test_v0_blob_correctly_skipped() {}
 
 #[test]
-fn test_mixed_v0_v1_blobs_ordering()
+fn test_mixed_v0_v1_blobs_ordering() {}
 
 #[test]
-fn test_unsupported_version_handling()  // V2+ future-proofing
+fn test_unsupported_version_handling() {} // V2+ future-proofing
 
 #[test]
-fn test_row_root_index_out_of_bounds_is_error()
+fn test_row_root_index_out_of_bounds_is_error() {}
 
 #[test]
-fn test_proof_start_index_out_of_bounds_is_error()
+fn test_proof_start_index_out_of_bounds_is_error() {}
 
 #[test]
-fn test_tail_padding_non_zero_rejected()
+fn test_tail_padding_non_zero_rejected() {}
 
 #[test]
-fn test_missing_sequence_length_in_v1_share()
+fn test_missing_sequence_length_in_v1_share() {}
 
 #[test]
-fn test_sequence_length_overflow_rejected()
+fn test_sequence_length_overflow_rejected() {}
 
 #[test]
-fn test_blob_iterator_oob_rejected()
+fn test_blob_iterator_oob_rejected() {}
 ```
 
 ### 3.3 Property-Based Tests (Proptests) - Priority
