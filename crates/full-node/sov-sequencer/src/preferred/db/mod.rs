@@ -424,7 +424,7 @@ impl From<BatchToStore> for StoredBlob {
 pub enum SequencerRole {
     /// Node that does not sync with the `BatchProducer` and relies on DA for updates.
     DaOnlyReplica,
-    /// Node that syncs with the `BatchProducer`` via PostgreSQL.
+    /// Node that syncs with the `BatchProducer` via PostgreSQL.
     PgSyncReplica,
     /// Node that accepts transactions and produces batches.
     BatchProducer,
