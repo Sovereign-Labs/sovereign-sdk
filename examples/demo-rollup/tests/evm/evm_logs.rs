@@ -16,6 +16,23 @@ use sov_sequencer::SeqConfigExtension;
 use sov_test_utils::test_rollup::TestRollup;
 use std::collections::HashMap;
 
+/// Tests that logs can be retrieved from pending block snapshots.
+///
+/// Each transaction in the pending block creates a synthetic block hash that represents
+/// a snapshot of the pending state at that point. This test verifies:
+///
+/// 1. **Snapshot creation**: After each tx, a unique synthetic block hash is generated
+/// 2. **Query by hash**: Querying by a snapshot's hash returns all logs up to that point
+/// 3. **Query by Pending**: Querying with `Pending` tag returns the current (latest) state
+/// 4. **Hash and Pending match**: After each tx submission, querying by current block hash of the latest tx equals querying by Pending
+/// 5. **Snapshot preservation**: Earlier snapshots remain queryable even after new txs are added, by older hash
+/// 6. **Cumulative logs**: Each snapshot contains all logs in the pending block up to that point
+///
+/// Test flow:
+/// - first_tx emits 2 logs → snapshot has 2 logs
+/// - second_tx emits 1 log → snapshot has 3 logs (cumulative)
+/// - third_tx emits 1 log → snapshot has 4 logs (cumulative)
+/// - Final verification: all 3 snapshots are still independently queryable
 #[tokio::test(flavor = "multi_thread")]
 async fn get_log_from_pending_block() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
@@ -23,98 +40,131 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
+    let sender = client.address();
+    let pending_filter = filter_for_tag(BlockNumberOrTag::Pending);
+
+    // Helper to build expected logs for a snapshot
+    let build_expected_at_snapshot = |block: &BlockContext,
+                                       first_tx: TxHash,
+                                       second_tx: Option<TxHash>,
+                                       third_tx: Option<TxHash>|
+     -> Vec<ExpectedSimpleLog> {
+        let mut logs = vec![
+            ExpectedSimpleLog {
+                meta: ExpectedLogMeta {
+                    address: contract_address,
+                    tx_hash: first_tx,
+                    tx_index: 0,
+                    log_index: 0,
+                    block_hash: block.hash,
+                    block_number: block.number,
+                    block_timestamp: Some(block.timestamp),
+                },
+                topic1: U256::ZERO,
+                topic2: U256::ZERO,
+                data: U256::ZERO,
+            },
+            ExpectedSimpleLog {
+                meta: ExpectedLogMeta {
+                    address: contract_address,
+                    tx_hash: first_tx,
+                    tx_index: 0,
+                    log_index: 1,
+                    block_hash: block.hash,
+                    block_number: block.number,
+                    block_timestamp: Some(block.timestamp),
+                },
+                topic1: U256::ZERO,
+                topic2: U256::from(1),
+                data: U256::ZERO,
+            },
+        ];
+        if let Some(tx) = second_tx {
+            logs.push(ExpectedSimpleLog {
+                meta: ExpectedLogMeta {
+                    address: contract_address,
+                    tx_hash: tx,
+                    tx_index: 1,
+                    log_index: 2,
+                    block_hash: block.hash,
+                    block_number: block.number,
+                    block_timestamp: Some(block.timestamp),
+                },
+                topic1: U256::from(1),
+                topic2: U256::ZERO,
+                data: U256::ZERO,
+            });
+        }
+        if let Some(tx) = third_tx {
+            logs.push(ExpectedSimpleLog {
+                meta: ExpectedLogMeta {
+                    address: contract_address,
+                    tx_hash: tx,
+                    tx_index: 2,
+                    log_index: 3,
+                    block_hash: block.hash,
+                    block_number: block.number,
+                    block_timestamp: Some(block.timestamp),
+                },
+                topic1: U256::from(2),
+                topic2: U256::ZERO,
+                data: U256::ZERO,
+            });
+        }
+        logs
+    };
+
+    // After first_tx: 2 logs
     let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
     let pending_block_first = latest_block_context(&client).await;
-    let pending_filter = filter_for_tag(BlockNumberOrTag::Pending);
-    let logs_after_first = client.get_logs(&pending_filter).await;
-
-    let expected_first = vec![
-        ExpectedSimpleLog {
-            meta: ExpectedLogMeta {
-                address: contract_address,
-                tx_hash: first_tx,
-                tx_index: 0,
-                log_index: 0,
-                block_hash: pending_block_first.hash,
-                block_number: pending_block_first.number,
-                block_timestamp: Some(pending_block_first.timestamp),
-            },
-            topic1: U256::ZERO,
-            topic2: U256::ZERO,
-            data: U256::ZERO,
-        },
-        ExpectedSimpleLog {
-            meta: ExpectedLogMeta {
-                address: contract_address,
-                tx_hash: first_tx,
-                tx_index: 0,
-                log_index: 1,
-                block_hash: pending_block_first.hash,
-                block_number: pending_block_first.number,
-                block_timestamp: Some(pending_block_first.timestamp),
-            },
-            topic1: U256::ZERO,
-            topic2: U256::from(1),
-            data: U256::ZERO,
-        },
-    ];
-    assert_expected_simple_logs(&logs_after_first, &expected_first, client.address());
-
-    let second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
-    let pending_block_second = latest_block_context(&client).await;
-    let third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
-    let pending_block_third = latest_block_context(&client).await;
-
-    let logs_after_all = client.get_logs(&pending_filter).await;
-    let expected_second = vec![ExpectedSimpleLog {
-        meta: ExpectedLogMeta {
-            address: contract_address,
-            tx_hash: second_tx,
-            tx_index: 0,
-            log_index: 0,
-            block_hash: pending_block_second.hash,
-            block_number: pending_block_second.number,
-            block_timestamp: Some(pending_block_second.timestamp),
-        },
-        topic1: U256::from(1),
-        topic2: U256::ZERO,
-        data: U256::ZERO,
-    }];
-    let expected_third = vec![ExpectedSimpleLog {
-        meta: ExpectedLogMeta {
-            address: contract_address,
-            tx_hash: third_tx,
-            tx_index: 0,
-            log_index: 0,
-            block_hash: pending_block_third.hash,
-            block_number: pending_block_third.number,
-            block_timestamp: Some(pending_block_third.timestamp),
-        },
-        topic1: U256::from(2),
-        topic2: U256::ZERO,
-        data: U256::ZERO,
-    }];
-
-    let expected_all: Vec<ExpectedSimpleLog> = expected_first
-        .iter()
-        .chain(expected_second.iter())
-        .chain(expected_third.iter())
-        .cloned()
-        .collect();
-    assert_expected_simple_logs(&logs_after_all, &expected_all, client.address());
+    let expected_at_first = build_expected_at_snapshot(&pending_block_first, first_tx, None, None);
 
     let logs_by_hash_first = client
         .get_logs(&Filter::new().at_block_hash(pending_block_first.hash))
         .await;
+    let logs_by_pending_first = client.get_logs(&pending_filter).await;
+    assert_expected_simple_logs(&logs_by_hash_first, &expected_at_first, sender);
+    assert_expected_simple_logs(&logs_by_pending_first, &expected_at_first, sender);
+
+    // After second_tx: 3 logs (cumulative)
+    let second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
+    let pending_block_second = latest_block_context(&client).await;
+    let expected_at_second =
+        build_expected_at_snapshot(&pending_block_second, first_tx, Some(second_tx), None);
+
     let logs_by_hash_second = client
         .get_logs(&Filter::new().at_block_hash(pending_block_second.hash))
         .await;
+    let logs_by_pending_second = client.get_logs(&pending_filter).await;
+    assert_expected_simple_logs(&logs_by_hash_second, &expected_at_second, sender);
+    assert_expected_simple_logs(&logs_by_pending_second, &expected_at_second, sender);
+
+    // After third_tx: 4 logs (cumulative)
+    let third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
+    let pending_block_third = latest_block_context(&client).await;
+    let expected_at_third =
+        build_expected_at_snapshot(&pending_block_third, first_tx, Some(second_tx), Some(third_tx));
+
     let logs_by_hash_third = client
         .get_logs(&Filter::new().at_block_hash(pending_block_third.hash))
         .await;
-    assert_expected_simple_logs(&logs_by_hash_first, &expected_first, client.address());
-    assert_expected_simple_logs(&logs_by_hash_second, &expected_second, client.address());
-    assert_expected_simple_logs(&logs_by_hash_third, &expected_third, client.address());
+    let logs_by_pending_third = client.get_logs(&pending_filter).await;
+    assert_expected_simple_logs(&logs_by_hash_third, &expected_at_third, sender);
+    assert_expected_simple_logs(&logs_by_pending_third, &expected_at_third, sender);
+
+    // Final snapshot queries: verify each hash still returns its snapshot
+    let final_logs_first = client
+        .get_logs(&Filter::new().at_block_hash(pending_block_first.hash))
+        .await;
+    let final_logs_second = client
+        .get_logs(&Filter::new().at_block_hash(pending_block_second.hash))
+        .await;
+    let final_logs_third = client
+        .get_logs(&Filter::new().at_block_hash(pending_block_third.hash))
+        .await;
+    assert_expected_simple_logs(&final_logs_first, &expected_at_first, sender);
+    assert_expected_simple_logs(&final_logs_second, &expected_at_second, sender);
+    assert_expected_simple_logs(&final_logs_third, &expected_at_third, sender);
 
     rollup.resume_preferred_batches().await;
 
