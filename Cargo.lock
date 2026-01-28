@@ -11936,6 +11936,7 @@ dependencies = [
  "axum 0.7.9",
  "client-ip",
  "derive_more 1.0.0",
+ "flate2",
  "futures",
  "proptest",
  "proptest-derive 0.5.1",
