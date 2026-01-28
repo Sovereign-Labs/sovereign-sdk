@@ -180,10 +180,18 @@ async fn base_fee_series_from_genesis(
     let gas_limit = genesis.chain_spec.block_gas_limit;
     assert!(gas_limit > 0, "block gas limit should be non-zero");
 
+    // Block 0: initial base fee
     base_fees.push(base_fee);
-    for block_number in 0..end_block {
-        let receipts_gas_used = total_gas_used_from_receipts(rpc_client, block_number).await?;
 
+    for block_number in 0..end_block {
+        // Block 1 also uses initial base fee (chain-state special case)
+        if block_number == 0 {
+            base_fees.push(base_fee);
+            continue;
+        }
+
+        // Block 2+: compute based on previous block's gas usage
+        let receipts_gas_used = total_gas_used_from_receipts(rpc_client, block_number).await?;
         base_fee = compute_next_base_fee(
             base_fee,
             receipts_gas_used,
@@ -1725,6 +1733,8 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     // Burn a lot of gas with keccak256 loops
     let tx_hash = simple_storage.alloy_burn_gas(contract_address, 10000).await;
     simple_storage.wait_for_finalized_receipt(tx_hash).await;
+    // Ensure the block containing the tx is sealed before pausing.
+    rollup.wait_for_next_blocks(1).await;
 
     rollup.pause_preferred_batches().await;
 

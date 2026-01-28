@@ -81,7 +81,10 @@ where
             &sealed_block_numbers,
             state,
         )?;
-        let reward = Self::build_reward_percentiles(reward_percentiles, block_count);
+        let reward = Self::build_reward_percentiles(
+            reward_percentiles,
+            fees_and_usage.gas_used_ratios.len() as u64,
+        );
 
         Ok(FeeHistory {
             base_fee_per_gas: fees_and_usage.fees,
@@ -200,6 +203,8 @@ where
         percentiles: Option<&[f64]>,
         block_count: u64,
     ) -> Option<Vec<Vec<u128>>> {
-        percentiles.map(|p| vec![vec![0u128; p.len()]; block_count as usize])
+        percentiles
+            .filter(|p| !p.is_empty())
+            .map(|p| vec![vec![0u128; p.len()]; block_count as usize])
     }
 }

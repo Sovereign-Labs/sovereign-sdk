@@ -11838,6 +11838,7 @@ dependencies = [
  "futures",
  "reqwest",
  "serde",
+ "serde_json",
  "sov-api-spec",
  "sov-bank",
  "sov-modules-api",
