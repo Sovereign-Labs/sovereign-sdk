@@ -43,10 +43,9 @@ impl DB {
         node_role: ConfiguredNodeRole,
     ) -> Self {
         let leader_timeout = Duration::from_millis(100_000);
-        let postgres_config =
-            config_from_postgres_container(postgres, node_id.clone(), node_role)
-                .await
-                .unwrap();
+        let postgres_config = config_from_postgres_container(postgres, node_id.clone(), node_role)
+            .await
+            .unwrap();
         let backend =
             PostgresBackend::connect_internal(&postgres_config, format!("{node_id}_address"))
                 .await

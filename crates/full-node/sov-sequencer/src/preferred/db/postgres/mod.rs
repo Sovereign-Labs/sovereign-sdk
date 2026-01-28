@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
 use std::net::{IpAddr, SocketAddr};
@@ -719,6 +722,3 @@ fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
 
     Ok(addr.ip())
 }
-
-#[cfg(test)]
-mod tests;
