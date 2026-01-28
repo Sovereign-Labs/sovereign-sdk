@@ -33,7 +33,7 @@ impl HashStf {
     }
 
     fn kernel_key() -> SlotKey {
-        let prefix = Prefix::new(0, 0);
+        let prefix = Prefix::new(1, 0);
         SlotKey::singleton(&prefix)
     }
 
