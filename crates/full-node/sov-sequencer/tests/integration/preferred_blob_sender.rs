@@ -40,6 +40,7 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
 
     let genesis_params = GenesisParams {
