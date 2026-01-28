@@ -1439,7 +1439,7 @@ async fn test_sequencer_event_stream_lag_message() {
         .unwrap();
 
     let events_per_tx = 1000;
-    let num_txs = 15;
+    let num_txs = 25;
     let emit_pattern: Vec<bool> = (0..events_per_tx).map(|i| i % 2 == 0).collect();
 
     for i in 0..num_txs {
@@ -1486,7 +1486,7 @@ async fn test_sequencer_event_stream_lag_message() {
                         err_str
                             .contains(format!("\"disconnected_at\":{}", event_count - 1).as_str()),
                         "Expected \"disconnected_at\": {} in error message: {}",
-                        event_count + 1,
+                        event_count - 1,
                         err_str
                     );
                     break;

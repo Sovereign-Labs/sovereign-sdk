@@ -217,7 +217,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let mut ping_counter: u64 = 0;
             let mut should_drain = true;
 
-            'outer: loop {
+            loop {
                 tokio::select! {
                     // Biased ensures we check recv first to handle Close frames promptly
                     biased;
@@ -288,6 +288,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                             Some(Ok(ws::Message::Pong(data))) => {
                                 if awaiting_pong.is_some_and(|expected| data == expected) {
                                     awaiting_pong = None;
+                                    ping_interval.reset();
                                     tracing::trace!("Received valid pong from client");
                                 } else {
                                     tracing::trace!("Received pong with unexpected data; ignoring");
@@ -329,7 +330,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                             if elapsed > PONG_TIMEOUT {
                                 tracing::warn!("No pong received within timeout ({:?}) - disconnecting client", PONG_TIMEOUT);
                                 should_drain = false;
-                                break 'outer;
+                                break;
                             }
                         }
 
@@ -338,7 +339,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                         if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec())).await {
                             tracing::warn!(?err, "Failed to send ping - disconnecting client");
                             should_drain = false;
-                            break 'outer;
+                            break;
                         }
                         ping_sent_time = Instant::now();
                         awaiting_pong = Some(ping_data);
