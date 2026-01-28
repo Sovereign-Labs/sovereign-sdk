@@ -454,7 +454,10 @@ async fn send_compressed_batch<T: Serialize>(
             Ok(())
         }
         Err(err) => {
-            error!(?err, "Failed to serialize/compress data for WebSocket; this is a bug, please report it");
+            error!(
+                ?err,
+                "Failed to serialize/compress data for WebSocket; this is a bug, please report it"
+            );
             Err(())
         }
     }
@@ -474,7 +477,10 @@ async fn send_compressed_bytes(socket: &mut WebSocket, data: &[u8]) -> Result<()
             Ok(())
         }
         Err(err) => {
-            error!(?err, "Failed to compress data for WebSocket; this is a bug, please report it");
+            error!(
+                ?err,
+                "Failed to compress data for WebSocket; this is a bug, please report it"
+            );
             Err(())
         }
     }

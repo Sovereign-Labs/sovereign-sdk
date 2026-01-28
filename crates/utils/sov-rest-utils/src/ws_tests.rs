@@ -26,7 +26,10 @@ mod tests {
     use tokio_stream::wrappers::BroadcastStream;
 
     use crate::errors::ReportableWsError;
-    use crate::{serve_generic_ws_subscription, serve_generic_ws_subscription_with_config, WsSubscriptionConfig};
+    use crate::{
+        serve_generic_ws_subscription, serve_generic_ws_subscription_with_config,
+        WsSubscriptionConfig,
+    };
 
     /// Error type matching the real SubscriptionStreamError pattern.
     #[derive(Debug, Clone)]
@@ -591,11 +594,7 @@ mod tests {
 
         // Verify message ordering is preserved
         for (i, msg) in all_messages.iter().enumerate() {
-            assert_eq!(
-                msg,
-                &format!("message-{i}"),
-                "Messages should be in order"
-            );
+            assert_eq!(msg, &format!("message-{i}"), "Messages should be in order");
         }
 
         state.shutdown_tx.send(()).ok();
@@ -629,7 +628,8 @@ mod tests {
                     Some(Ok(tungstenite::Message::Binary(_))) => {
                         panic!("Uncompressed mode should not send binary frames for data");
                     }
-                    Some(Ok(tungstenite::Message::Ping(_))) | Some(Ok(tungstenite::Message::Pong(_))) => continue,
+                    Some(Ok(tungstenite::Message::Ping(_)))
+                    | Some(Ok(tungstenite::Message::Pong(_))) => continue,
                     Some(Ok(tungstenite::Message::Close(_))) | None | Some(Err(_)) => break,
                     _ => {}
                 }
