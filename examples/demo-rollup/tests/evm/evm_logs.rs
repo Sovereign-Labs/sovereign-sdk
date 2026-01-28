@@ -170,8 +170,6 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     assert_expected_simple_logs(&final_logs_second, &expected_at_second, sender);
     assert_expected_simple_logs(&final_logs_third, &expected_at_third, sender);
 
-    rollup.resume_preferred_batches().await;
-
     Ok(())
 }
 
@@ -222,10 +220,7 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
 
     assert_expected_simple_logs(&pending_logs, &expected, sender);
     assert_eq!(pending_logs, latest_logs);
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
+
     Ok(())
 }
 
@@ -273,10 +268,7 @@ async fn get_logs_pending_with_topic_filter() -> anyhow::Result<()> {
         );
         assert!(filter.matches(log.inner.as_ref()));
     }
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
+
     Ok(())
 }
 
@@ -328,11 +320,6 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     assert_expected_simple_logs(&default_logs, &expected, sender);
     assert_eq!(default_logs, latest_logs);
 
-    // TODO: What is the point of doing that at the end of the test?
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
     Ok(())
 }
 
@@ -353,11 +340,6 @@ async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert!(logs.is_empty());
 
-    // TODO: What is the point of doing that at the end of the test?
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
     Ok(())
 }
 
@@ -458,7 +440,6 @@ async fn get_logs_address_filter_single() -> anyhow::Result<()> {
         assert!(filter.matches(log.inner.as_ref()));
     }
 
-    test_rollup.resume_preferred_batches().await;
     Ok(())
 }
 
@@ -502,7 +483,6 @@ async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
         assert!(filter.matches(log.inner.as_ref()));
     }
 
-    test_rollup.resume_preferred_batches().await;
     Ok(())
 }
 
@@ -557,10 +537,6 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
         assert!(filter.matches(log.inner.as_ref()));
     }
 
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
     Ok(())
 }
 
@@ -608,10 +584,6 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
     );
     assert!(filter.matches(logs[0].inner.as_ref()));
 
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
     Ok(())
 }
 
@@ -649,7 +621,6 @@ async fn get_logs_address_and_topic_intersection() -> anyhow::Result<()> {
     );
     assert!(filter.matches(logs[0].inner.as_ref()));
 
-    test_rollup.resume_preferred_batches().await;
     Ok(())
 }
 
@@ -763,10 +734,6 @@ async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
         "Pending should include sealed (2) + pending (1) logs"
     );
 
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
     Ok(())
 }
 
@@ -1166,11 +1133,6 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
     };
     assert_data_only_log(&data_logs[0], &expected, U256::from(1), U256::from(2));
 
-    // TODO: What is the point of doing that at the end of the test?
-    rollup_and_client
-        .test_rollup
-        .resume_preferred_batches()
-        .await;
     Ok(())
 }
 
