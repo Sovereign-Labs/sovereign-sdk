@@ -81,6 +81,7 @@ where
             &sealed_block_numbers,
             state,
         )?;
+        // Use actual block count (not requested) since fewer blocks may exist if chain is young
         let reward = Self::build_reward_percentiles(
             reward_percentiles,
             fees_and_usage.gas_used_ratios.len() as u64,
