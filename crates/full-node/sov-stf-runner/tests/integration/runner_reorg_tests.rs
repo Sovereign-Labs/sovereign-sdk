@@ -23,7 +23,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
-use sov_test_utils::storage::SimpleNomtStorageManager;
+use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::{TestStorage, TestStorageManager, TEST_MOCK_DA_POLLING_INTERVAL};
 use tempfile::TempDir;
 use tokio::net::TcpListener;
@@ -435,7 +435,7 @@ fn get_result_from_blocks(
     genesis_params: &[u8],
     blocks: &[MockBlock],
 ) -> (StorageRoot<S>, <TestStorage as Storage>::Root) {
-    let mut storage_manager = SimpleNomtStorageManager::new();
+    let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
 
     let stf = HashStf::new();

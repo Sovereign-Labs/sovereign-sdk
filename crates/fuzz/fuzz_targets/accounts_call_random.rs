@@ -5,14 +5,14 @@ use libfuzzer_sys::fuzz_target;
 use sov_accounts::{Accounts, CallMessage};
 use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::{Context, Module, StateCheckpoint, WorkingSet};
-use sov_test_utils::storage::SimpleNomtStorageManager;
+use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::TestStorageSpec;
 
 type S = sov_test_utils::TestSpec;
 
 // Check arbitrary, random calls
 fuzz_target!(|input: (&[u8], Vec<(Context<S>, CallMessage)>)| {
-    let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
+    let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default(), None);
 

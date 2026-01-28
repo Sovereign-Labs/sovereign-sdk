@@ -353,7 +353,7 @@ mod tests {
     use sov_state::SlotKey;
     use sov_state::StateUpdate;
     use sov_test_utils::storage::{
-        ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
+        ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
     };
     use sov_test_utils::{
         generate_optimistic_runtime, TestHasher, TestJmtSpec, TestSpec, TestStorageSpec,
@@ -366,7 +366,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
+        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
         new_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
             storage_manager,
         )
@@ -375,7 +375,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
+        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
         known_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
             storage_manager,
         )
@@ -384,7 +384,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
+        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
         new_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
             storage_manager,
         )
@@ -393,7 +393,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_known_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
+        let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
         known_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
             storage_manager,
         )

@@ -7,13 +7,13 @@ use sov_state::{
 };
 use sov_test_utils::storage::{
     ForklessStorageManager, NativeStorageManager, NomtStorageManager, NonCommitingStorageManager,
-    SimpleNomtStorageManager, SimpleStorageManager,
+    SimpleJmtStorageManager, SimpleStorageManager,
 };
 use sov_test_utils::{TestHasher, TestJmtSpec, TestSpec};
 
 #[test]
 fn jmt_concurrent_prover_storages() {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleJmtStorageManager::new();
     concurrent_prover_storages::<TestJmtSpec, _>(storage_manager);
 }
 
@@ -26,7 +26,7 @@ fn jmt_concurrent_prover_in_memory_storages() {
 
 #[test]
 fn nomt_concurrent_prover_storages() {
-    let mut storage_manager = SimpleNomtStorageManager::new();
+    let mut storage_manager = SimpleStorageManager::new();
     storage_manager.set_strict_mode(false);
     concurrent_prover_storages::<TestSpec, _>(storage_manager);
 }
@@ -40,7 +40,7 @@ fn nomt_concurrent_prover_in_memory_storages() {
 
 #[test]
 fn jmt_node_sequencer_concurrent_state_update() {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleJmtStorageManager::new();
     node_sequencer_compute_state_update_concurrency::<TestJmtSpec, _>(storage_manager);
 }
 
@@ -53,7 +53,7 @@ fn jmt_node_sequencer_concurrent_state_update_in_memory() {
 
 #[test]
 fn nomt_node_sequencer_concurrent_state_update() {
-    let mut storage_manager = SimpleNomtStorageManager::new();
+    let mut storage_manager = SimpleStorageManager::new();
     storage_manager.set_strict_mode(false);
     node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
 }

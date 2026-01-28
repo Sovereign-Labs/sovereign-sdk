@@ -52,7 +52,7 @@ pub use {
     sov_value_setter,
 };
 
-use crate::storage::{ForklessStorageManager, SimpleNomtStorageManager};
+use crate::storage::{ForklessStorageManager, SimpleStorageManager};
 use crate::{
     generate_optimistic_runtime, validate_and_materialize, Arc, BatchAssertContext, BatchReceipt,
     BatchTestCase, BatchType, ProofAssertContext, ProofTestCase, SequencerInfo, SlotInput,
@@ -165,7 +165,7 @@ pub struct RunnerConfig<Da: DaSpec> {
 pub struct TestRunner<
     RT: Runtime<S>,
     S: Spec,
-    Sm: ForklessStorageManager = SimpleNomtStorageManager<
+    Sm: ForklessStorageManager = SimpleStorageManager<
         DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
     >,
 > {
@@ -1002,7 +1002,7 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
 }
 
 // This replicate logic from `AsyncBatchResponder`.
-// And all modifications mede there shold be replicated.
+// And all modifications mede there should be replicated.
 #[derive(Clone)]
 struct SeqControlFlow;
 
