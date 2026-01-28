@@ -1802,7 +1802,14 @@ async fn sequencer_back_pressure() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
+    let (slot_tx, mut slot_rx) = tokio::sync::mpsc::channel(100);
+    // Keep receiving from the slot subscription in the background to avoid timeouts
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
+    tokio::spawn(async move {
+        while let Some(slot) = slot_subscription.next().await {
+            slot_tx.send(slot).await.unwrap();
+        }
+    });
     let client = test_rollup.api_client().clone();
 
     let mut generation = 0;
@@ -1863,7 +1870,7 @@ async fn sequencer_back_pressure() {
     }
 
     for _ in 0..(end_padding_blocks - 10) {
-        let _slot = slot_subscription.next().await.unwrap().unwrap();
+        let _slot = slot_rx.recv().await.unwrap().unwrap();
     }
 
     test_rollup.wait_for_node_synced().await.unwrap();

@@ -74,6 +74,15 @@ pub enum EthApiError {
     /// Error encountered when converting a transaction type
     #[error("Transaction conversion error")]
     TransactionConversionError,
+    /// Invalid reward percentile value (must be between 0 and 100)
+    #[error("invalid reward percentile: {0} not in [0, 100]")]
+    InvalidRewardPercentile(f64),
+    /// Reward percentiles must be monotonically increasing
+    #[error("reward percentiles must be monotonically increasing")]
+    RewardPercentilesMustBeMonotonic,
+    /// Invalid block count
+    #[error("invalid block count: {0}")]
+    InvalidBlockCount(u64),
     /// Any other error
     #[error("{0}")]
     Other(Box<dyn ToRpcError>),
@@ -96,11 +105,16 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             | EthApiError::InvalidTracerConfig
             | EthApiError::ApiStateAccess(_)
             | EthApiError::InvalidBlockNumber(_, _)
-            | EthApiError::TransactionConversionError => invalid_params_rpc_err(error.to_string()),
+            | EthApiError::TransactionConversionError
+            | EthApiError::InvalidRewardPercentile(_)
+            | EthApiError::RewardPercentilesMustBeMonotonic => {
+                invalid_params_rpc_err(error.to_string())
+            }
             EthApiError::InvalidTransaction(err) => err.into(),
             EthApiError::InvalidHeader(_) | EthApiError::EvmCustom(_) => {
                 internal_rpc_err(error.to_string())
             }
+            EthApiError::InvalidBlockCount(_) => invalid_params_rpc_err(error.to_string()),
             EthApiError::UnknownBlock | EthApiError::UnknownTxIndex(_) => {
                 rpc_error_with_code(EthRpcErrorCode::ResourceNotFound.code(), error.to_string())
             }

@@ -55,7 +55,7 @@ impl EventReceiverStartNotifier {
     /// This method only has an effect when called on a replica sequencer, since the leader produces
     /// the DB events rather than consuming them.
     pub(crate) fn notify(&self) {
-        if self.seq_role == SequencerRole::Leader {
+        if self.seq_role == SequencerRole::BatchProducer {
             return;
         }
 
@@ -68,7 +68,7 @@ impl EventReceiverStartNotifier {
     pub(crate) fn check_replica_status_or_ok_for_leader(
         &self,
     ) -> Result<(), SequencerNotReadyDetails> {
-        if self.seq_role == SequencerRole::Leader {
+        if self.seq_role == SequencerRole::BatchProducer {
             return Ok(());
         }
 
@@ -82,12 +82,12 @@ impl EventReceiverStartNotifier {
     /// Marks that the replica has successfully processed its first batch of events.
     ///
     /// # Panics
-    /// Panics if this method is called on a leader sequencer.
+    /// Panics if this method is called on a batch-producing sequencer.
     pub(crate) fn set_replica_processed_first_batch(&mut self) {
         assert_eq!(
             self.seq_role,
-            SequencerRole::Replica,
-            "set_replica_processed_first_batch can only be called on a Replica sequencer"
+            SequencerRole::PgSyncReplica,
+            "set_replica_processed_first_batch can only be called on a PgSyncReplica sequencer"
         );
         self.replica_processed_first_batch = true;
     }

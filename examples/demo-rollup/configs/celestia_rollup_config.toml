@@ -30,9 +30,23 @@ grpc_url = "http://127.0.0.1:9090"
 # This one is from ../../docker/credentials/bridge-0.key
 signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
 
-# The maximum time to wait for a response to an RPC query against Celestia node.
-# Default: 37 seconds
-#request_timeout_secs = 37
+# High-level timeout for Celestia RPC operations that may include multiple requests (in seconds).
+# Default: 38 (6 blocks × 6 seconds + 2 seconds polling buffer)
+#request_timeout_secs = 38
+
+# Timeout for individual API requests to the Celestia node (in seconds).
+# This is passed to the underlying celestia-client for each API call.
+# Default: 8 (one block time plus 2 seconds of wiggle room)
+#api_request_timeout_secs = 8
+
+# Interval for polling transaction status confirmation (in milliseconds).
+# Default: 2000
+#tx_status_polling_millis = 2000
+
+# Interval for background statistics collection (in seconds).
+# Set to 0 to disable the background stat collection task.
+# Default: 30
+#background_stat_polling_interval_secs = 30
 
 # Options are "Low", "Medium" and "High"
 # Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.

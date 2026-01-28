@@ -31,6 +31,10 @@ tracing = { workspace = true }
 sov-rest-utils = { path = ".", features = ["arbitrary"] }
 serde_urlencoded = "0.7"
 test-strategy = { workspace = true }
+tokio-tungstenite = { version = "0.28.0", default-features = false, features = ["connect"] }
+tokio-stream = { workspace = true }
+tungstenite = "0.28.0"
+axum = { workspace = true, features = ["query", "ws", "json", "original-uri", "tokio", "http1"] }
 
 [features]
 arbitrary = ["proptest", "proptest-derive", "sov-rest-utils/arbitrary"]

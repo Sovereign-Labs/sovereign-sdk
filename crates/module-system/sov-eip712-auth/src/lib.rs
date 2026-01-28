@@ -152,20 +152,33 @@ where
         }
     }
 
-    fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<User, Spec = S>
+            + sov_modules_api::GetGasPrice<Spec = S>
+            + sov_modules_api::VersionReader,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
     ) -> Result<
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::UnregisteredAuthenticationError,
     > {
-        let Self::Input::Standard(input) = borsh::from_slice(&batch.tx.data)
+        match borsh::from_slice(&batch.tx.data)
             .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?
-        else {
-            return Err(UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant);
-        };
-
-        sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(&input.data, state)
+        {
+            Self::Input::Eip712(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    authenticate::<_, S, Rt, SP>(&tx.data, state)?;
+                Ok((tx_and_raw_hash, auth_data, runtime_call))
+            }
+            Self::Input::Standard(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
+                        &tx.data, state,
+                    )?;
+                Ok((tx_and_raw_hash, auth_data, runtime_call))
+            }
+        }
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {

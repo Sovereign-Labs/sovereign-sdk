@@ -3,7 +3,8 @@
 use std::fmt::Display;
 
 use alloy_primitives::Bytes;
-use jsonrpsee::types::{ErrorObject, ErrorObjectOwned};
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::ErrorObjectOwned;
 use revm::context::result::{ExecutionResult, HaltReason};
 use sov_modules_api::StateAccessor;
 use sov_rpc_eth_types::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
@@ -44,5 +45,5 @@ impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
 
 /// Converts internal error into rpc error
 pub fn into_rpc_error(err: impl Display) -> ErrorObjectOwned {
-    ErrorObject::owned(500, format!("{err}"), None::<()>)
+    ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, err.to_string(), None::<()>)
 }

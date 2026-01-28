@@ -107,7 +107,7 @@ DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS = [1, 0]
 MAX_SEQUENCER_EXEC_GAS_PER_TX = [1_000_000_000, 1_000_000_000]
 
 # Maximum amount of gas the unregistered sequencer can pay for the tx execution ---
-MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX = [50000, 50000]
+MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX = [500_000, 500_000]
 # Gas parameters to specify tx pre execution costs ---
 PROCESS_TX_PRE_EXEC_GAS = [1, 1]
 # Gas parameter to specify tx pre execution costs per tx byte

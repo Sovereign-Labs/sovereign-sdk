@@ -1,6 +1,7 @@
 use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
+use alloy_eips::BlockId;
 use alloy_primitives::FixedBytes;
 use alloy_primitives::Log;
 use alloy_primitives::U256;
@@ -182,7 +183,7 @@ fn test_executing_eth_transactions_several_blocks() {
             assert: Box::new(move |_result, state| {
                 assert_eq!(block.nr, evm.block_number(state).unwrap().to::<u64>());
                 let block_from_evm = evm
-                    .get_block_by_number(Some(format!("{:x}", block.nr)), None, state)
+                    .get_block_by_number(Some(BlockId::number(block.nr)), None, state)
                     .unwrap()
                     .unwrap();
 

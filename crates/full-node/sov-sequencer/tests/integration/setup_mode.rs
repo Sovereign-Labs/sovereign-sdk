@@ -329,7 +329,7 @@ fn mint_gas_token_call(
 
 fn encode_zero_gas_tx(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
 ) -> RawTx {
     let details = TxDetails {
@@ -341,7 +341,7 @@ fn encode_zero_gas_tx(
     let tx = test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        UniquenessData::Generation(nonce),
+        UniquenessData::Generation(generation),
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
         details,
     );
@@ -351,13 +351,13 @@ fn encode_zero_gas_tx(
 
 fn encode_call(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
 ) -> RawTx {
     let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce,
+        generation,
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
     );
 

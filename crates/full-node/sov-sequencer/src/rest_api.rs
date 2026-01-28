@@ -32,6 +32,26 @@ use tokio_stream::wrappers::BroadcastStream;
 use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
 
+/// Converts an optional broadcast receiver into a subscription stream.
+/// Returns an empty stream if the receiver is None.
+#[cfg(feature = "test-utils")]
+fn broadcast_to_subscription_stream<T>(
+    receiver: Option<tokio::sync::broadcast::Receiver<T>>,
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = Result<T, SubscriptionStreamError>> + Send>>
+where
+    T: Clone + Send + 'static,
+{
+    receiver
+        .map(|rx| {
+            BroadcastStream::new(rx)
+                .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                    SubscriptionStreamError::lagged_without_identifiers(n)
+                })
+                .boxed()
+        })
+        .unwrap_or_else(|| futures::stream::empty().boxed())
+}
+
 /// [`StartFrom`] is used as a query parameter for the txs subscription
 #[derive(
     Debug,
@@ -115,6 +135,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .route(
                 "/sequencer/test-utils/state-updates/ws",
                 axum::routing::get(Self::subscribe_to_state_updates_unstable),
+            )
+            .route(
+                "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+                axum::routing::get(Self::subscribe_to_forced_tx_batches_unstable),
             );
 
         preconfigured_router_layers(router).with_state(state)
@@ -219,24 +243,16 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     }
                     // We have an outbound message ready to send
                     outbound_msg = outbound_rx.recv() => {
-                        match outbound_msg {
-                            Some(msg) => {
-                                match msg {
-                                    Ok(msg) => {
-                                        if let Err(err) = send_json(&mut socket, msg).await {
-                                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
-                                            break;
-                                        }
-                                    }
-                                    Err(msg) => {
-                                        if let Err(err) = send_json(&mut socket, msg).await {
-                                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            None => break,
+                        let Some(msg) = outbound_msg else {
+                            break;
+                        };
+                        let send_result = match msg {
+                            Ok(m) => send_json(&mut socket, m).await,
+                            Err(m) => send_json(&mut socket, m).await,
+                        };
+                        if let Err(err) = send_result {
+                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                            break;
                         }
                     }
                     _ = shutdown_receiver.changed() => break,
@@ -248,7 +264,11 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             drop(outbound_tx);
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
             while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                if let Err(err) = send_json(&mut socket, msg).await {
+                let send_result = match msg {
+                    Ok(m) => send_json(&mut socket, m).await,
+                    Err(m) => send_json(&mut socket, m).await,
+                };
+                if let Err(err) = send_result {
                     tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                     break;
                 }
@@ -297,8 +317,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     id: tx_hash.0,
                     status,
                 })
-                // Put an explicit type check to ensure we catch this if the set of errors expands.
-                .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged)
+                // Tx status subscriptions don't have sequential identifiers
+                .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                    SubscriptionStreamError::lagged_without_identifiers(n)
+                })
             })
             .boxed();
 
@@ -450,16 +472,9 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let stream = state
-                .sequencer
-                .subscribe_blobs_from_blob_sender()
-                .await
-                .map(|receiver| {
-                    BroadcastStream::new(receiver)
-                        .map_err(|_| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
-                        .boxed()
-                })
-                .unwrap_or_else(|| futures::stream::empty().boxed());
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_blobs_from_blob_sender().await,
+            );
             serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
         })
     }
@@ -479,23 +494,28 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         Ok(().into())
     }
 
-    /// Subscribe to state updates. Note that notifications may be delivered out of order.
     #[cfg(feature = "test-utils")]
     async fn subscribe_to_state_updates_unstable(
         State(state): State<Self>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let stream = state
-                .sequencer
-                .subscribe_state_updates_unstable()
-                .await
-                .map(|receiver| {
-                    BroadcastStream::new(receiver)
-                        .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
-                        .boxed()
-                })
-                .unwrap_or_else(|| futures::stream::empty().boxed());
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_state_updates_unstable().await,
+            );
+            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+        })
+    }
+
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_to_forced_tx_batches_unstable(
+        State(state): State<Self>,
+        ws: WebSocketUpgrade,
+    ) -> impl IntoResponse {
+        ws.on_upgrade(|socket| async move {
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_forced_tx_batches_unstable().await,
+            );
             serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
         })
     }

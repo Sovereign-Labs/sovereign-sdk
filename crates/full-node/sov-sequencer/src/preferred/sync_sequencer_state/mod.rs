@@ -9,6 +9,7 @@ use crate::preferred::rate_limiter::ResourceLimitExceededError;
 use crate::preferred::rate_limiter::SovRateLimiter;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
+use crate::preferred::update_state::SequenceNumberMismatchError;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchCreationError;
 use crate::preferred::Confirmation;
@@ -75,7 +76,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     },
 
     FinalCatchup {
-        resp: oneshot::Sender<anyhow::Result<ProcessFinalCatchupData>>,
+        resp: oneshot::Sender<Result<ProcessFinalCatchupData, SequenceNumberMismatchError>>,
         info: StateUpdateInfo<S::Storage>,
         db_event_subscription: mpsc::Receiver<DbEvent>,
         executor: Box<RollupBlockExecutor<S, Rt>>,

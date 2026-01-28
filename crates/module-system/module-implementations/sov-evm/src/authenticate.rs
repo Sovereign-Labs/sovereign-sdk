@@ -374,30 +374,39 @@ where
         }
     }
 
-    fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
     ) -> Result<
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::UnregisteredAuthenticationError,
     > {
-        let Self::Input::Standard(input) = borsh::from_slice(&batch.tx.data)
+        match borsh::from_slice(&batch.tx.data)
             .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?
-        else {
-            return Err(UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant);
-        };
-
-        let (tx_and_raw_hash, auth_data, runtime_call) =
-            sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
-                &input.data,
-                state,
-            )?;
-
-        Ok((
-            tx_and_raw_hash,
-            auth_data,
-            EvmAuthenticatorInput::Standard(runtime_call),
-        ))
+        {
+            Self::Input::Evm(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    authenticate::<_, _>(&tx.data, state)?;
+                Ok((
+                    tx_and_raw_hash,
+                    auth_data,
+                    EvmAuthenticatorInput::Evm(runtime_call),
+                ))
+            }
+            Self::Input::Standard(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
+                        &tx.data, state,
+                    )?;
+                Ok((
+                    tx_and_raw_hash,
+                    auth_data,
+                    EvmAuthenticatorInput::Standard(runtime_call),
+                ))
+            }
+        }
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {

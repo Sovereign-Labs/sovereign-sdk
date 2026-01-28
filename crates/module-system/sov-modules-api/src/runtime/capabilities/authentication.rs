@@ -83,7 +83,12 @@ pub trait TransactionAuthenticator<S: Spec> {
     /// This is *not*  a significant DOS vector as long as gas consumption *during authentication* is reasonably low because (1)
     /// the blob storage capability bounds the number of unregistered blobs that can be submitted,
     /// and (2) if authentication succeeds then the gas for the blob is paid by the submitter.
-    fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<User, Spec = S>
+            + GetGasPrice<Spec = S>
+            + crate::StateMetricsProvider
+            + VersionReader,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, UnregisteredAuthenticationError>;
@@ -198,7 +203,12 @@ where
         Ok(calculate_hash::<S>(&input.data))
     }
 
-    fn authenticate_unregistered<Accessor: ProvableStateReader<sov_state::User, Spec = S>>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<sov_state::User, Spec = S>
+            + crate::GetGasPrice<Spec = S>
+            + crate::StateMetricsProvider
+            + VersionReader,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         pre_exec_ws: &mut Accessor,
     ) -> Result<AuthenticationOutput<S, Self::Decodable>, UnregisteredAuthenticationError> {
@@ -470,17 +480,7 @@ pub fn authenticate_unregistered<
             }
             AuthenticationError::OutOfGas(err) => UnregisteredAuthenticationError::OutOfGas(err),
         })?;
-
-    if Rt::allow_unregistered_tx(&runtime_call) {
-        Ok((tx_and_raw_hash, auth_data, runtime_call))
-    } else {
-        Err(UnregisteredAuthenticationError::FatalError(
-            FatalError::Other(
-                "The runtime call included in the transaction was invalid.".to_string(),
-            ),
-            tx_and_raw_hash.raw_tx_hash,
-        ))?
-    }
+    Ok((tx_and_raw_hash, auth_data, runtime_call))
 }
 
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
