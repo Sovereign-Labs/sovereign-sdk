@@ -180,12 +180,27 @@ where
         let last_base_fee = base_fees
             .last()
             .expect("At least one base fee must have been collected");
-        let next_gas_price = ChainState::<S>::compute_base_fee_per_gas_unidimensional(
-            gas_limit,
-            conservative_parent_gas_usage,
-            Amount::from(*last_base_fee),
-        );
-        base_fees.push(next_gas_price.0.try_into().unwrap_or(u64::MAX));
+
+        // Compute the predicted base fee for the next block.
+        // Chain-state has a special case: blocks 0 and 1 use initial_base_fee_per_gas.
+        // We must respect this to stay consistent with chain-state as the source of truth.
+        let next_block_number = end_block + 1;
+        let next_gas_price: u64 = if next_block_number <= 1 {
+            S::initial_base_fee_per_gas().as_ref()[0]
+                .0
+                .try_into()
+                .unwrap_or(u64::MAX)
+        } else {
+            ChainState::<S>::compute_base_fee_per_gas_unidimensional(
+                gas_limit,
+                conservative_parent_gas_usage,
+                Amount::from(*last_base_fee),
+            )
+            .0
+            .try_into()
+            .unwrap_or(u64::MAX)
+        };
+        base_fees.push(next_gas_price);
 
         #[allow(clippy::float_arithmetic)]
         // Float arithmetic is safe here. This method is RPC only, not consensus-critical; and it's required by the spec
