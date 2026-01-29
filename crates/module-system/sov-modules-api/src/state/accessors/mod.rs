@@ -8,6 +8,8 @@ use sov_state::Namespace;
 
 mod access_controls;
 mod checkpoints;
+#[cfg(feature = "native")]
+mod concurrent_state_checkpoint;
 mod genesis;
 mod internals;
 
@@ -34,15 +36,18 @@ mod temp_cache;
 #[cfg(feature = "native")]
 pub use checkpoints::native::AccessoryStateCheckpoint;
 pub use checkpoints::{ChangeSet, StateCheckpoint};
+#[cfg(feature = "native")]
+pub use concurrent_state_checkpoint::ConcurrentStateCheckpoint;
 pub use genesis::GenesisStateAccessor;
 pub use internals::AccessoryDelta;
 pub use kernel::{BootstrapWorkingSet, KernelStateAccessor};
-pub use scratchpad::{PreExecWorkingSet, RevertableTxState, TxChangeSet, TxScratchpad, WorkingSet};
+pub use scratchpad::{LayeredRevertableTxState, PreExecWorkingSet, RevertableTxState, TxChangeSet, TxScratchpad, WorkingSet};
 pub use temp_cache::BorshSerializedSize;
 
 use self::seal::UniversalStateAccessor;
 use super::traits::PerBlockCache;
 use super::{StateReaderAndWriter, VersionReader};
+use crate::state::traits::PinnedCacheAccessor;
 use crate::Spec;
 
 pub(super) mod seal {
@@ -85,6 +90,7 @@ pub trait StateProvider<S: Spec>:
     + VersionReader
     + PerBlockCache
     + StateMetricsProvider
+    + PinnedCacheAccessor<S>
 {
     /// Transforms this [`StateProvider`] into a [`TxScratchpad`].
     fn to_tx_scratchpad(self) -> TxScratchpad<S, Self>;

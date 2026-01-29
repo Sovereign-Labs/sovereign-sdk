@@ -95,11 +95,7 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
         &CHAIN_HASH,
     );
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
-    test_rollup
-        .client
-        .client
-        .send_txs_to_sequencer(&[tx])
-        .await?;
+    test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
     slot_subscription.next().await;
 
     test_rollup.da_service.produce_n_blocks_now(3).await?;

@@ -30,6 +30,7 @@ sha2 = { workspace = true }
 tokio = { workspace = true, optional = true, features = [
     "test-util",
     "macros",
+    "signal",
 ] }
 futures = { workspace = true, optional = true, features = ["std"] }
 tracing = { workspace = true }
@@ -38,6 +39,7 @@ sov-rollup-interface = { workspace = true }
 # For storable service
 sea-orm = { version = "1.1", features = [
     "sqlx-sqlite",
+    "sqlx-postgres",
     "runtime-tokio-rustls",
     "macros",
     "with-chrono",
@@ -50,6 +52,9 @@ rand_chacha = { workspace = true, optional = true }
 axum = { workspace = true, optional = true, default-features = true }
 reqwest = { workspace = true, features = ["json"], optional = true }
 url = "2"
+
+clap = { workspace = true, optional = true, features = ["derive"] }
+tracing-subscriber = { workspace = true, optional = true, features = ["env-filter"] }
 
 [dev-dependencies]
 bincode = { workspace = true }
@@ -74,13 +79,13 @@ testcontainers-modules = { workspace = true, features = ["postgres"] }
 [features]
 default = []
 arbitrary = [
-    "dep:arbitrary",
-    "chrono?/arbitrary",
-    "dep:proptest",
-    "dep:proptest-derive",
-    "sov-mock-da/arbitrary",
-    "sov-rollup-interface/arbitrary",
-    "sov-test-utils/arbitrary"
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"sov-mock-da/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-test-utils/arbitrary",
+	"chrono?/arbitrary"
 ]
 native = [
     "dep:chrono",
@@ -92,9 +97,16 @@ native = [
     "dep:rand",
     "dep:rand_chacha",
     "dep:axum",
-    "dep:reqwest"
+    "dep:reqwest",
+    "dep:clap",
+    "dep:tracing-subscriber",
 ]
 postgres = ["native", "sea-orm/sqlx-postgres"]
+
+[[bin]]
+name = "mock-da-server"
+path = "src/bin/mock-da-server.rs"
+required-features = ["native"]
 
 [[bench]]
 name = "concurrent_access"

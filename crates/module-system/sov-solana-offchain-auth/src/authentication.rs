@@ -4,17 +4,25 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, extract_authorization_data, verify_chain_id, AuthenticationError,
-    AuthenticationOutput, FatalError, UniquenessData,
+    calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput, FatalError,
+    UniquenessData,
 };
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::transaction::{
     self, AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
 };
 use sov_modules_api::{
-    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, MeteredSignature,
-    ProvableStateReader, SafeString, Spec, TxHash,
+    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter,
+    MeteredSigVerificationError, MeteredSignature, ProvableStateReader, SafeString, Signature,
+    Spec, TxHash,
 };
+
+#[cfg(feature = "native")]
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// The payload for a solana offchain message.
 /// Essentially a wrapper around `sov_modules_api::transaction::UnsignedTransaction` that also
@@ -154,21 +162,36 @@ fn verify_solana_signature<S: Spec>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
+    // Charge gas first, before checking the cache
     MeteredSignature::new::<S>(signature.clone())
-        .verify(pub_key, signed_bytes, meter)
+        .charge_gas(meter, signed_bytes.len())
         .map_err(|e| match e {
-            sov_modules_api::MeteredSigVerificationError::BadSignature(err) => {
-                AuthenticationError::FatalError(
-                    FatalError::SigVerificationFailed(err.to_string()),
-                    raw_tx_hash,
-                )
+            MeteredSigVerificationError::GasError(e) => {
+                AuthenticationError::OutOfGas(format!("Signature verification ran out of gas: {e}"))
             }
-            sov_modules_api::MeteredSigVerificationError::GasError(err) => {
-                AuthenticationError::OutOfGas(format!(
-                    "Signature verification ran out of gas: {err}"
-                ))
-            }
-        })
+            MeteredSigVerificationError::BadSignature(e) => AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(e.to_string()),
+                raw_tx_hash,
+            ),
+        })?;
+
+    #[cfg(feature = "native")]
+    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+        return known_result;
+    }
+
+    // Now perform the verification (unmetered)
+    let res = signature.verify(pub_key, signed_bytes).map_err(|err| {
+        AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(err.to_string()),
+            raw_tx_hash,
+        )
+    });
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+
+    res
 }
 
 fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage<S>, FatalError> {
@@ -279,7 +302,7 @@ where
 
     // This is useful to be able to reuse some of the standard authenticator's logic
     let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
-    let reconstructed_tx_v0 = transaction::Version0 {
+    let reconstructed_tx_v0 = transaction::Version0::<_, S, S::CryptoSpec> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -317,11 +340,7 @@ where
         state,
     )?;
 
-    let authorization_data = extract_authorization_data::<S, D, S::CryptoSpec>(
-        &reconstructed_tx_v0,
-        raw_tx_hash,
-        state,
-    )?;
+    let authorization_data = reconstructed_tx_v0.auth_data(raw_tx_hash, state)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,

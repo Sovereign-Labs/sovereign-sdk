@@ -11,7 +11,7 @@ use sov_modules_api::{
     FullyBakedTx, Gas, GasArray, GasSpec, HexString, InjectedControlFlow, IterableBatchWithId,
     KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, SelectedBlob, Spec,
 };
-use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::common::{HexHash, SlotNumber};
 use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_rollup_interface::stf::DiscardedBlob;
@@ -803,7 +803,10 @@ impl<S: Spec> BlobStorage<S> {
             }
         }
 
-        tracing::warn!("Unable to pay pre-execution costs out of reserved gas balance for batch {}. Dropping it. {} will have their remaining reserved balance refunded.", hex::encode(batch.blob.id()), refund_recipient);
+        tracing::warn!(
+            bash_id = %HexHash::new(batch.blob.id()),
+            %refund_recipient,
+            "Unable to pay pre-execution costs out of reserved gas balance for batch Dropping it. Recipient will have their remaining reserved balance refunded.");
         self.sequencer_registry
             .refund_all_reserved_gas(escrow, refund_recipient, state);
         anyhow::bail!("Unable to reserve all needed gas.");
@@ -824,14 +827,14 @@ impl<S: Spec> BlobStorage<S> {
             let blob_id = blob.id;
             let data = match blob.inner {
                 PreferredBlobData::Batch(batch) => {
-                    BlobData::Batch((batch.data, preferred_sequencer.clone()))
+                    BlobData::Batch((batch.data, *preferred_sequencer))
                 }
                 PreferredBlobData::EncryptedBatch(_) => {
                     // This should never happen since process_batch_from_blob always returns Batch
                     unreachable!("EncryptedBatch should not reach add_preferred_blobs_to_selection")
                 }
                 PreferredBlobData::Proof(proof) => {
-                    BlobData::Proof((proof.data, preferred_sequencer.clone()))
+                    BlobData::Proof((proof.data, *preferred_sequencer))
                 }
             };
             let blob_with_id = data.with_id(blob_id);
@@ -859,7 +862,7 @@ impl<S: Spec> BlobStorage<S> {
 
             let Some(validated_blob) = self.validate_preferred_blob(
                 blob_with_id,
-                preferred_sender.clone(),
+                *preferred_sender,
                 available_balance,
                 visible_height_increase,
                 state,

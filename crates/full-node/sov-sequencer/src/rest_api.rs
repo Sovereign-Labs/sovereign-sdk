@@ -1,11 +1,10 @@
 //! Utilities and definitions for the sequencer's REST APIs.
 
+use std::net::SocketAddr;
 use std::pin::Pin;
-use std::sync::Arc;
 
-use anyhow::Context;
 use axum::extract::ws::WebSocket;
-use axum::extract::{ws, State, WebSocketUpgrade};
+use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::Json;
 use futures::StreamExt;
@@ -15,19 +14,20 @@ use serde_with::base64::Base64;
 use serde_with::serde_as;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_rest_utils::get_client_ip;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
     PageSelection, PaginatedResponse, Pagination, Path, Query,
 };
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
 use tokio::sync::watch::Receiver;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer};
+use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
 
 /// [`StartFrom`] is used as a query parameter for the txs subscription
@@ -51,15 +51,15 @@ pub struct StartFrom {
 #[derive(derivative::Derivative)]
 #[derivative(Clone(bound = ""))]
 pub struct SequencerApis<Seq: Sequencer> {
-    sequencer: Arc<Seq>,
+    sequencer: Seq,
     shutdown_receiver: Receiver<()>,
 }
 
 impl<Seq: Sequencer> SequencerApis<Seq> {
     /// Creates a new Axum router for this sequencer.
-    pub fn rest_api_server(seq: Arc<Seq>, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
+    pub fn rest_api_server(sequencer: Seq, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
         let state = Self {
-            sequencer: seq,
+            sequencer,
             shutdown_receiver,
         };
 
@@ -167,11 +167,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // Finally, convert the data into the type that we want to
             // serialize over the WS connection.
             .map(|data| {
-                data.context("Failed to subscribe to tx status updates")
-                    .map(|status| TxInfo {
-                        id: tx_hash.0,
-                        status,
-                    })
+                data.map(|status| TxInfo {
+                    id: tx_hash.0,
+                    status,
+                })
+                // Put an explicit type check to ensure we catch this if the set of errors expands.
+                .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged)
             })
             .boxed();
 
@@ -226,24 +227,25 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     async fn axum_accept_tx(
+        connect_info: ConnectInfo<SocketAddr>,
+        headers: axum::http::HeaderMap,
         state: State<Self>,
         tx: Json<AcceptTx>,
     ) -> ApiResult<
         TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>,
     > {
+        let ip_addr = get_client_ip(headers, Some(&connect_info))
+            .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
         let raw_tx = RawTx::new(tx.0.body.blob);
         let baked_tx = <<Seq::Rt as Runtime<Seq::Spec>>::Auth as TransactionAuthenticator<
             Seq::Spec,
         >>::encode_with_standard_auth(raw_tx);
 
-        let tx_with_hash = tokio::spawn(async move { state.sequencer.accept_tx(baked_tx).await })
+        let tx_with_hash = state
+            .sequencer
+            .accept_tx(baked_tx, ip_addr)
             .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "A panic occurred while accepting a transaction");
-                sov_rest_utils::errors::internal_server_error_response_500(
-                    "An internal error occurred while processing the transaction",
-                )
-            })?
             .map_err(|e| {
                 if e.status.is_server_error() {
                     tracing::error!(error = ?e, "Error accepting transaction");
@@ -295,9 +297,14 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
     async fn subscribe_txs_starting_from(
         start_from: Option<u64>,
-        sequencer: Arc<Seq>,
-    ) -> Pin<Box<dyn futures::Stream<Item = anyhow::Result<ApiAcceptedTx<Seq::Confirmation>>> + Send>>
-    {
+        sequencer: Seq,
+    ) -> Pin<
+        Box<
+            dyn futures::Stream<
+                    Item = Result<ApiAcceptedTx<Seq::Confirmation>, SubscriptionStreamError>,
+                > + Send,
+        >,
+    > {
         let Some(stream) = sequencer.subscribe_transactions(start_from).await else {
             return futures::stream::empty().boxed();
         };
@@ -319,7 +326,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 .await
                 .map(|receiver| {
                     BroadcastStream::new(receiver)
-                        .map_err(|err| anyhow::anyhow!("Error creating broadcast stream: {err}"))
+                        .map_err(|_| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
                         .boxed()
                 })
                 .unwrap_or_else(|| futures::stream::empty().boxed());
@@ -355,7 +362,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 .await
                 .map(|receiver| {
                     BroadcastStream::new(receiver)
-                        .map_err(|err| anyhow::anyhow!("Error creating broadcast stream: {err}"))
+                        .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
                         .boxed()
                 })
                 .unwrap_or_else(|| futures::stream::empty().boxed());
@@ -457,15 +464,12 @@ pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
 }
 
 /// An accepted transaction, with the transaction body and confirmation data.
-#[serde_with::serde_as]
 #[derive(Clone, serde::Serialize)]
 pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,
-    /// The base64 encoded transaction body
-    #[serde_as(as = "serde_with::base64::Base64")]
-    #[serde(skip_serializing_if = "Bytes::is_empty")]
-    pub tx: Bytes,
+    /// Transaction body
+    pub tx: FullyBakedTx,
     /// The confirmation data
     #[serde(flatten)]
     pub confirmation: Confirmation,
@@ -475,7 +479,7 @@ impl<C> From<AcceptedTx<C>> for ApiAcceptedTx<C> {
     fn from(tx: AcceptedTx<C>) -> Self {
         Self {
             id: tx.tx_hash,
-            tx: tx.tx.data,
+            tx: tx.tx,
             confirmation: tx.confirmation,
         }
     }

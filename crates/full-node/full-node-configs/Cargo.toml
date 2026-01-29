@@ -1,5 +1,5 @@
 [package]
-name = "full-node-configs"
+name = "sov-full-node-configs"
 description = "Configs only for sov-sequencer and sov-stf-runner"
 version.workspace = true
 edition.workspace = true

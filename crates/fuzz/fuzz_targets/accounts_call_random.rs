@@ -13,7 +13,7 @@ type S = sov_test_utils::TestSpec;
 fuzz_target!(|input: (&[u8], Vec<(Context<S>, CallMessage)>)| {
     let storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default());
+    let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default(), None);
 
     let (seed, msgs) = input;
     let u = &mut Unstructured::new(seed);

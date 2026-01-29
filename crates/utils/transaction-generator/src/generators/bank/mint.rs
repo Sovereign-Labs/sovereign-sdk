@@ -145,7 +145,7 @@ impl<S: Spec> BankMessageGenerator<S> {
                 token_id,
                 amount: amount_to_mint,
             },
-            mint_to_address: recipient_addr.clone(),
+            mint_to_address: recipient_addr,
         };
         let mint_change =
             Self::update_state_with_mint(generator_state, token_id, token_info, amount_to_mint, u)?;
@@ -158,7 +158,7 @@ impl<S: Spec> BankMessageGenerator<S> {
             MessageOutcome::Successful {
                 changes: vec![
                     BankChangeLogEntry::BalanceChanged {
-                        address: recipient_addr.clone(),
+                        address: recipient_addr,
                         coins: Coins {
                             token_id,
                             amount: Amount::new(recipient_balance),

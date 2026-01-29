@@ -34,7 +34,22 @@ name = "halo2"
 expression = "LicenseRef-Proprietary"
 license-files = [{ path = "COPYING", hash = 0x106164e0 }]
 
+[[licenses.clarify]]
+name = "sov-hyperlane-register-module"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
 # Sovereign SDK packages use a custom community license
+[[licenses.clarify]]
+name = "py_sovereign_web3"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sovereign-web3"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
 [[licenses.clarify]]
 name = "sov-evm-soak-testing"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
@@ -57,6 +72,11 @@ license-files = []
 
 [[licenses.clarify]]
 name = "sov-db"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-db-types"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
@@ -97,11 +117,6 @@ license-files = []
 
 [[licenses.clarify]]
 name = "demo-stf"
-expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
-license-files = []
-
-[[licenses.clarify]]
-name = "sov-eip-712"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
@@ -296,6 +311,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-evm-test-utils"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "rest-api-load-testing"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
@@ -411,7 +431,7 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
-name = "full-node-configs"
+name = "sov-full-node-configs"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

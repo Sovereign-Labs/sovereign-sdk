@@ -34,6 +34,20 @@ use sov_transaction_generator::interface::MessageValidity;
 use sov_transaction_generator::{Distribution, GeneratedMessage, Percent, State};
 use tokio::sync::watch::Receiver;
 
+/// The message substring that indicates the sequencer has reached its configured stop height.
+const STOP_HEIGHT_ERROR_MARKER: &str = "The preferred sequencer has reached the stop height ";
+
+/// Checks if an API error indicates the sequencer has reached its configured stop height.
+/// When a rollup is configured with a stop height, transactions are rejected once that height
+/// is reached. This is not a real error condition for soak tests.
+fn is_stop_height_error(err: &sov_api_spec::Error<sov_api_spec::types::ApiError>) -> bool {
+    if let sov_api_spec::Error::ErrorResponse(response) = err {
+        // ResponseValue<T> implements Deref<Target = T>, so we can access ApiError fields directly
+        return response.message.contains(STOP_HEIGHT_ERROR_MARKER);
+    }
+    false
+}
+
 pub const DEFAULT_BLOCK_TIME_MS: u64 = 200;
 pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
     block_time_ms: DEFAULT_BLOCK_TIME_MS,
@@ -107,6 +121,7 @@ impl ValidityProfile {
 #[derive(Default)]
 pub struct SoakTestRunner<R, S: Spec> {
     modules: Vec<BasicModuleRef<S, R>>,
+    use_retries: bool,
 }
 
 impl<R, S> SoakTestRunner<R, S>
@@ -118,7 +133,17 @@ where
     pub fn new() -> Self {
         Self {
             modules: Vec::new(),
+            use_retries: true,
         }
+    }
+
+    /// By default, all transactions that are intended to succeed are submitted with retries using
+    /// exponential backoff.
+    /// When opted out, transactions are sent using a single request and fail-fast if they're not
+    /// successful on the first try.
+    pub fn without_retries(mut self) -> Self {
+        self.use_retries = false;
+        self
     }
 
     /// Add Bank module to the soak test.
@@ -184,15 +209,55 @@ where
     /// - `worker_id`: Unique identifier for this worker
     /// - `num_workers`: Total number of parallel workers
     /// - `validity`: Distribution of valid vs invalid messages
+    /// - `restart_after`: Optional duration after which to restart the worker
     pub async fn run(
         self,
         client: sov_api_spec::Client,
         rx: Receiver<bool>,
-        worker_id: u128,
+        mut worker_id: u128,
         num_workers: u32,
         validity: Distribution<MessageValidity>,
+        restart_after: Option<std::time::Duration>,
     ) -> anyhow::Result<()> {
-        prepare_and_send_txs(self.modules, client, rx, worker_id, num_workers, validity).await
+        loop {
+            tracing::info!(worker_id, ?restart_after, "Starting worker");
+            let result = if let Some(duration) = restart_after {
+                tokio::select! {
+                    result = prepare_and_send_txs(
+                        self.modules.clone(),
+                        &client,
+                        rx.clone(),
+                        worker_id,
+                        num_workers,
+                        validity.clone(),
+                        self.use_retries
+                    ) => {
+                        // If prepare_and_send_txs completes (likely an error), return immediately
+                        return result;
+                    }
+                    _ = tokio::time::sleep(duration) => {
+                        // Timer expired, restart with incremented worker_id
+                        tracing::info!("Timer expired for worker {worker_id}, restarting with new worker_id");
+                        worker_id += num_workers as u128;
+                        continue;
+                    }
+                }
+            } else {
+                // No restart timer, just run until completion
+                prepare_and_send_txs(
+                    self.modules.clone(),
+                    &client,
+                    rx.clone(),
+                    worker_id,
+                    num_workers,
+                    validity.clone(),
+                    self.use_retries,
+                )
+                .await
+            };
+
+            return result;
+        }
     }
 }
 
@@ -271,11 +336,12 @@ pub fn setup_harness<R: Runtime<S> + Clone, S: Spec>(rng_salt: u128) -> TestGene
 
 async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     modules: Vec<BasicModuleRef<S, R>>,
-    client: sov_api_spec::Client,
+    client: &sov_api_spec::Client,
     rx: Receiver<bool>,
     worker_id: u128,
     num_workers: u32,
     validity: Distribution<MessageValidity>,
+    use_retries: bool,
 ) -> anyhow::Result<()> {
     let mut nonces: HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64> =
         Default::default();
@@ -359,12 +425,27 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
         let start = std::time::Instant::now();
         for (tx, is_invalid) in &txns {
             if *is_invalid {
-                client
-                    .send_tx_to_sequencer(tx)
-                    .await
-                    .expect_err("Outdated transaction should have failed");
+                if client.send_tx_to_sequencer(tx).await.is_ok() {
+                    anyhow::bail!("Outdated transaction should have failed");
+                }
             } else {
-                client.send_tx_to_sequencer_with_retry(tx).await?;
+                // Always try a fail-fast call first to check for stop height error
+                match client.send_tx_to_sequencer(tx).await {
+                    Ok(_) => {}
+                    Err(err) if is_stop_height_error(&err) => {
+                        tracing::info!(
+                            "Sequencer reached stop height, gracefully stopping soak worker"
+                        );
+                        return Ok(());
+                    }
+                    Err(_) if use_retries => {
+                        // First attempt failed with a non-stop-height error, kick off retries
+                        client.send_tx_to_sequencer_with_retry(tx).await?;
+                    }
+                    Err(err) => {
+                        return Err(err.into());
+                    }
+                }
             }
             total_txns += 1;
         }

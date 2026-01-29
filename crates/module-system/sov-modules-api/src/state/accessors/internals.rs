@@ -45,13 +45,12 @@ impl<S: Storage> Delta<S> {
             inner: self.inner.clone(),
             witness: Default::default(),
             uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
-            kernel_cache: self.kernel_cache.clone(),
-            user_cache: self.user_cache.clone(),
+            kernel_cache: self.kernel_cache.clone_without_pinned_cache(),
+            user_cache: self.user_cache.clone_without_pinned_cache(),
             accessory_writes: self.accessory_writes.clone(),
         }
     }
 
-    #[cfg(feature = "native")]
     pub(super) fn inner(&self) -> &S {
         &self.inner
     }

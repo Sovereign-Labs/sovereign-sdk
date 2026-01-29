@@ -18,7 +18,7 @@ use axum::async_trait;
 #[cfg(feature = "test-utils")]
 pub use common::StateUpdateNotification;
 pub use common::{react_to_state_updates, Sequencer};
-pub use config::{SeqConfigExtension, SequencerConfig, SequencerKindConfig};
+pub use config::{SeqConfigExtension, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig};
 pub use rest_api::SequencerApis;
 use serde::Serialize;
 use sov_modules_api::capabilities::RollupHeight;
@@ -65,10 +65,11 @@ pub enum SequencerNotReadyDetails {
         height_to_stop_at: RollupHeight,
         current_height: RollupHeight,
     },
-    /// The sequencer is running in replica mode and cannot accept transactions.
-    ReplicaMode,
     /// The sequencer is shutting down and cannot accept transactions.
     Shutdown,
+
+    /// The replica is waiting for the first batch from master.
+    ReplicaNotReady,
 }
 /// An object-safe interface to the sequencer, which can be used to
 /// publish a proof blob to DA.

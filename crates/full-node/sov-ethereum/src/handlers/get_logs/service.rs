@@ -18,8 +18,10 @@ use alloy_rpc_types::{FilterBlockOption, Log};
 use derive_more::{Deref, From};
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_evm::{Evm, MaybeSealedBlock, Receipt};
+use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -71,8 +73,10 @@ pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     cursor: Immutable<Option<Cursor>>,
     max_logs: Immutable<usize>,
     evm: Evm<S>,
-    logs: Vec<Log>,
+    logs: Vec<LogWithExecutionTimestamp>,
+    logs_serialized_size: usize,
     state: ApiStateAccessor<S>,
+    response_size_limit: Immutable<usize>,
     _phantom: PhantomData<(S, Seq)>,
 }
 
@@ -88,6 +92,7 @@ where
         cursor: Option<Cursor>,
         max_logs: usize,
         state: ApiStateAccessor<S>,
+        response_size_limit: usize,
     ) -> Self {
         Self {
             filter: filter.into(),
@@ -96,6 +101,8 @@ where
             state,
             evm: Evm::<S>::default(),
             logs: vec![],
+            logs_serialized_size: 0,
+            response_size_limit: response_size_limit.into(),
             _phantom: PhantomData,
         }
     }
@@ -196,11 +203,11 @@ where
         let mut tx_range_absolut = block.tx_range();
         tx_range_absolut = self.apply_tx_level_cursor(tx_range_absolut, block.number())?;
         for tx_idx_absolute in tx_range_absolut {
-            let receipt = self.get_receipt(tx_idx_absolute)?;
+            let (receipt, time) = self.get_receipt(tx_idx_absolute)?;
             if !self.filter.matches_bloom(receipt.bloom()) {
                 continue;
             }
-            if let Some(cursor) = self.scan_tx(tx_idx_absolute, receipt, &block)? {
+            if let Some(cursor) = self.scan_tx(tx_idx_absolute, receipt, &block, time)? {
                 return Ok(Some(cursor));
             }
         }
@@ -239,6 +246,7 @@ where
         tx_index_absolute: u64,
         receipt: Receipt,
         block: &MaybeSealedBlock,
+        time: Time,
     ) -> Result<Option<Cursor>> {
         let header = block.header();
         let logs = receipt.receipt.logs;
@@ -259,22 +267,34 @@ where
             if !self.filter.matches(&log) {
                 continue;
             }
-            let rpc_log = Log {
-                inner: log,
-                block_hash: block.hash(),
-                block_number: Some(receipt.block_number),
-                block_timestamp: Some(header.timestamp),
-                transaction_hash: Some(receipt.transaction_hash),
-                transaction_index: Some(receipt.transaction_index),
-                log_index: Some(receipt.log_index_start + idx as u64),
-                removed: false,
+            let rpc_log = LogWithExecutionTimestamp {
+                log: Log {
+                    inner: log,
+                    block_hash: block.hash(),
+                    block_number: Some(receipt.block_number),
+                    block_timestamp: Some(block.timestamp()),
+                    transaction_hash: Some(receipt.transaction_hash),
+                    transaction_index: Some(receipt.transaction_index),
+                    log_index: Some(receipt.log_index_start + idx as u64),
+                    removed: false,
+                },
+                time_executed_ms: time.as_millis().try_into().unwrap_or_default(),
             };
+            let log_size = serialized_size(&rpc_log);
+            if self.logs_serialized_size + log_size >= *self.response_size_limit {
+                return Ok(Some(Cursor {
+                    block_height: header.number(),
+                    tx_index_absolute,
+                    log_index_in_tx: idx as u32,
+                }));
+            }
+            self.logs_serialized_size += log_size;
             self.logs.push(rpc_log);
         }
         Ok(None)
     }
 
-    fn get_receipt(&mut self, tx_idx: u64) -> Result<Receipt> {
+    fn get_receipt(&mut self, tx_idx: u64) -> Result<(Receipt, Time)> {
         self.evm.receipt(tx_idx, &mut self.state).ok_or_else(|| {
             tracing::error!(
                 tx_idx,
@@ -307,4 +327,20 @@ where
         let block_number = block_nr_or_tag.unwrap_or_default();
         Ok(self.evm.resolve_block_number(block_number, &mut self.state))
     }
+}
+
+fn serialized_size(log: &LogWithExecutionTimestamp) -> usize {
+    b"\"{address\":".len() + 44 // 20 byte address, hex-encoded + open/close quotes and 0x
+        + b",\"data\":".len() + 4 + log.log.inner.data.data.len() * 2 // 32 byte data, hex-encoded + open/close quotes and 0x + quotation marks
+        + b",\"topics\":[]".len() + log.log.inner.topics().len() * 68 // 32 byte topic, hex-encoded + open/close quotes and 0x
+        + b",\"blockHash\":".len() + 68 // Block hash (0x-prefixed + 32 data bytes) + quotation marks
+        + b",\"transactionHash\":".len() + 68 // Transaction hash (0x-prefixed + 32 data bytes) + quotation mark
+        + b",\"blockNumber\":".len() + 14 // Assume a billion blocks (plus open/close quotes and 0x prefix)
+        + b",\"blockTimestamp\":".len() + 16 // Conservatively assume a long time (current unix timestamp is only 8 hex digits, this assumes 12)
+        + b",\"timeExecutedMs\":".len() + 19 // Time executed in milliseconds
+        + b",\"transactionIndex\":".len() + 12 // Conservatively assume millions of txs per block (plus open/close quotes and 0x prefix)    
+        + b",\"logIndex\":".len() + 14 // Conservatively assume 256 logs per tx
+        + b",\"removed\":false}".len() // false is longer than true
+                                       // See example serialized log below:
+                                       // r#"{"address":"0x0000000000000000000000000000000000000069","topics":["0x0000000000000000000000000000000000000000000000000000000000000069"],"data":"0x69","blockHash":"0x0000000000000000000000000000000000000000000000000000000000000069","blockNumber":"0x69","blockTimestamp":"0x69","transactionHash":"0x0000000000000000000000000000000000000000000000000000000000000069","transactionIndex":"0x69","logIndex":"0x69","removed":false}"#
 }

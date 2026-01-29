@@ -26,6 +26,10 @@
 //!    In general, the point of a call is to change the module state, but if the call throws an error,
 //!    no module-specific state is updated (the transaction is reverted).
 #[cfg(feature = "native")]
+use sov_evm::execution_config::EvmExecutionConfig;
+#[cfg(feature = "native")]
+use sov_state::pinned_cache::PinnedCache;
+#[cfg(feature = "native")]
 use std::sync::Arc;
 
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -40,6 +44,7 @@ use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, Transacti
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::prelude::*;
+use sov_modules_api::TxState;
 use sov_modules_api::{DispatchCall, Event, Genesis, Hooks, MessageCodec, RawTx, Spec};
 
 #[cfg(feature = "native")]
@@ -97,6 +102,9 @@ where
     #[cfg(feature = "native")]
     type GenesisInput = GenesisPaths;
 
+    #[cfg(feature = "native")]
+    type ModuleExecutionConfig = EvmExecutionConfig;
+
     type Auth = sov_evm::EvmAuthenticator<S, Self>;
 
     #[cfg(feature = "native")]
@@ -127,6 +135,17 @@ where
             jsonrpsee_module: get_rpc_methods::<S>(api_state),
             background_handles: Vec::new(),
         }
+    }
+
+    #[cfg(feature = "native")]
+    fn resolve_address<ST: sov_modules_api::StateReader<sov_modules_api::User>>(
+        &self,
+        default_address: &S::Address,
+        credential_id: &sov_modules_api::CredentialId,
+        state: &mut ST,
+    ) -> Result<S::Address, ST::Error> {
+        self.accounts
+            .resolve_sender_address_read_only(default_address, credential_id, state)
     }
 
     #[cfg(feature = "native")]
@@ -164,6 +183,63 @@ where
             ) => 100,
             _ => 0,
         }
+    }
+
+    fn is_unauthorized_system_tx(
+        &self,
+        call: &Self::Decodable,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> bool {
+        match call {
+            Self::Decodable::ChainState(sov_chain_state::CallMessage::SetOracleTime { .. }) => {
+                // Reject tx conservatively if a preferred sequencer is not registered
+                let Ok(Some((_, preferred_sequencer_address))) =
+                    self.sequencer_registry.get_preferred_sequencer(state)
+                else {
+                    return true;
+                };
+                // The tx is unauthorized if it's not from the preferred sequencer
+                context.sequencer() != &preferred_sequencer_address
+            }
+            // All non oracle calls are allowed
+            _ => false,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn maybe_set_oracle_timestamp(
+        &self,
+        millis_since_epoch: i64,
+    ) -> Option<<Self as sov_modules_api::DispatchCall>::Decodable> {
+        Some(Self::Decodable::ChainState(
+            sov_chain_state::CallMessage::SetOracleTime {
+                milliseconds_since_epoch: millis_since_epoch,
+            },
+        ))
+    }
+
+    #[cfg(feature = "native")]
+    fn populate_pinned_cache(storage: &S::Storage) -> Option<PinnedCache> {
+        let buckets_and_limits =
+            sov_evm::Evm::<S>::default().get_pinned_cache_buckets_and_limits()?;
+        let mut pinned_cache = PinnedCache::default();
+        for (bucket_id, limit) in buckets_and_limits {
+            use sov_state::pinned_cache::LoadBucketOutcome;
+
+            match pinned_cache.try_load_bucket_if_absent(bucket_id.clone(), storage, limit) {
+                Err(e) => {
+                    tracing::warn!(bucket_id = ?bucket_id, limit = ?limit, error = ?e, "EVM Failed to load bucket into pinned cache");
+                }
+                Ok(LoadBucketOutcome::NotSupportedByStorage) => {
+                    panic!("EVM Failed to load bucket into pinned cache because the storage doesn't support iteration. This means that pinning is configured but the rollup doesnt support it. Adjust your config or switch to NOMT");
+                }
+                Ok(LoadBucketOutcome::AlreadyPresent)
+                | Ok(LoadBucketOutcome::Loaded)
+                | Ok(LoadBucketOutcome::OverSizeLimit) => {} // Explicitly handle each case to force adjustment if other options are added.
+            }
+        }
+        Some(pinned_cache)
     }
 }
 

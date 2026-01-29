@@ -72,6 +72,7 @@
       ]
     }
   },
+  "additionalProperties": false,
   "definitions": {
     "Address": {
       "description": "Address",
@@ -301,6 +302,27 @@
         }
       ]
     },
+    "Limits": {
+      "type": "object",
+      "required": [
+        "refill_rate",
+        "resources_per_bucket"
+      ],
+      "properties": {
+        "refill_rate": {
+          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch. Values between 1 and 20 are recommended starting points.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "resources_per_bucket": {
+          "description": "Determines the threshold for rate-limiting requests. The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "MockAddress": {
       "description": "Mock address; 32 bytes in hex-encoded format",
       "type": "string",
@@ -391,10 +413,35 @@
               "$ref": "#/definitions/TelegrafSocketConfig"
             }
           ]
+        },
+        "tokio_runtime_metrics_interval_millis": {
+          "description": "How often to collect tokio runtime metrics. Defaults to 500ms.",
+          "default": 500,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         }
       }
     },
-    "PreferredSequencerConfig": {
+    "PostgresConfig": {
+      "description": "Postgres DB config.",
+      "type": "object",
+      "required": [
+        "node_id",
+        "postgres_connection_string"
+      ],
+      "properties": {
+        "node_id": {
+          "description": "Id of the node.",
+          "type": "string"
+        },
+        "postgres_connection_string": {
+          "description": "Connection string.",
+          "type": "string"
+        }
+      }
+    },
+    "PreferredSequencerConfig_for_Address": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
       "required": [
@@ -427,6 +474,13 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "future_nonce_transaction_timeout_millis": {
+          "description": "The timeout after which a transaction with a near-future nonce (bounded by `maximum_future_nonce_delta`) will be dropped and forgotten by the sequencer. Increasing this value increases the leniency with which out-of-order transactions are considered a \"simultaneous batch\" which should be reordered, but can increase memory usage and queue lock contention.",
+          "default": 2000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "ideal_lag_behind_finalized_slot": {
           "description": "The ideal lag behind the finalized slot number.",
           "default": 10,
@@ -436,8 +490,18 @@
         },
         "is_replica": {
           "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
-          "default": false,
-          "type": "boolean"
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "maximum_future_nonce_delta": {
+          "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly impacts the maximum \"batch\" of transactions that can be simultaneously sent to the sequencer out of order.",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "minimum_profit_per_tx": {
           "description": "The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero. Sequencers should set this to a non-zero value if they wish to cover their DA costs.",
@@ -453,12 +517,27 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "postgres_connection_string": {
+        "postgres_config": {
           "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
           "default": null,
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PostgresConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rate_limiter": {
+          "description": "Configuration for rate-limiting the sequencer.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SovRateLimiterConfig_for_Address"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "recovery_strategy": {
@@ -468,8 +547,21 @@
               "$ref": "#/definitions/RecoveryStrategy"
             }
           ]
+        },
+        "timing_oracle": {
+          "description": "Configuration for the timing oracle.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TimingOracleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ProofManagerConfig_for_Address": {
       "description": "Prover service configuration.",
@@ -732,6 +824,11 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "separate_archival_state": {
+          "description": "Whether to use a separate db for archival state.",
+          "default": false,
+          "type": "boolean"
+        },
         "state_cache_size": {
           "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB. A larger cache size can improve execution speed at the cost of more memory usage.",
           "type": [
@@ -795,11 +892,9 @@
       ],
       "properties": {
         "concurrent_sync_tasks": {
-          "description": "How many concurrent tasks to get block from DA service",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "description": "How many concurrent tasks to prefetch DA block during sync.",
+          "default": 5,
+          "type": "integer",
           "format": "uint8",
           "minimum": 0.0
         },
@@ -824,12 +919,20 @@
             }
           ]
         },
+        "pre_fetched_blocks_capacity": {
+          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service. It should be larger than `concurrent_sync_tasks`.",
+          "default": 20,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1.0
+        },
         "save_tx_bodies": {
           "description": "Whether to save transaction bodies to the database.",
           "default": false,
           "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SeqConfigExtension": {
       "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
@@ -839,6 +942,13 @@
       ],
       "properties": {
         "max_log_limit": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "response_size_limit": {
+          "description": "The maximum size of the response to the eth_getLogs RPC endpoint. Use 1MB - 30KB for a safe default.",
+          "default": 1017856,
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
@@ -870,7 +980,7 @@
           ],
           "properties": {
             "preferred": {
-              "$ref": "#/definitions/PreferredSequencerConfig"
+              "$ref": "#/definitions/PreferredSequencerConfig_for_Address"
             }
           },
           "additionalProperties": false
@@ -958,6 +1068,72 @@
             }
           ]
         }
+      },
+      "additionalProperties": false
+    },
+    "SovRateLimiterConfig_for_Address": {
+      "type": "object",
+      "required": [
+        "address_custom_limits",
+        "default_limits",
+        "ip_custom_limits",
+        "max_nb_of_concurrent_users_in_rate_limiter",
+        "max_requests_per_second"
+      ],
+      "properties": {
+        "address_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Address"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "default_limits": {
+          "description": "Default limits.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Limits"
+            }
+          ]
+        },
+        "ip_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string",
+                "format": "ip"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "max_nb_of_concurrent_users_in_rate_limiter": {
+          "description": "The cache size for the rate limiter.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_requests_per_second": {
+          "description": "The maximum number of requests allowed per second.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
       }
     },
     "StdSequencerConfig": {
@@ -982,7 +1158,8 @@
           "format": "uint",
           "minimum": 1.0
         }
-      }
+      },
+      "additionalProperties": false
     },
     "StfConfig": {
       "description": "STF configuration.",
@@ -1020,6 +1197,41 @@
             {
               "$ref": "#/definitions/Transport"
             }
+          ]
+        }
+      }
+    },
+    "TimingOracleConfig": {
+      "type": "object",
+      "required": [
+        "interval_millis",
+        "max_fee",
+        "priority_fee_percentage"
+      ],
+      "properties": {
+        "interval_millis": {
+          "description": "The interval in milliseconds at which the timestamp oracle update tx is submitted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_fee": {
+          "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "priority_fee_percentage": {
+          "description": "The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "private_key_hex": {
+          "description": "The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.",
+          "type": [
+            "string",
+            "null"
           ]
         }
       }

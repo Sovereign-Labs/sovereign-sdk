@@ -2,7 +2,7 @@ use crate::EthereumAddress;
 use borsh::{BorshDeserialize, BorshSerialize};
 use k256::EncodedPoint;
 use schemars::JsonSchema;
-use sov_modules_api::macros::UniversalWallet;
+use sov_modules_api::sov_universal_wallet::schema::OverrideSchema;
 use sov_rollup_interface::crypto::PublicKeyHex;
 
 const PUBLIC_KEY_SIZE: usize = 33;
@@ -72,10 +72,9 @@ mod serde_array {
 }
 
 /// The public key of a secp256k1 keypair.
-#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, UniversalWallet, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, PartialOrd, Ord)]
 pub struct EthereumPublicKey {
     #[schemars(flatten, with = "String", length(equal = "PUBLIC_KEY_SIZE * 2"))]
-    #[sov_wallet(as_ty = "[u8; PUBLIC_KEY_SIZE]")]
     pub(crate) pub_key: k256::PublicKey,
     pub(crate) key_bytes: Vec<u8>,
 }
@@ -119,6 +118,10 @@ impl sov_rollup_interface::crypto::PublicKey for EthereumPublicKey {
         let eth_address = EthereumAddress::from(self);
         eth_address.as_credential_id()
     }
+}
+
+impl OverrideSchema for EthereumPublicKey {
+    type Output = [u8; PUBLIC_KEY_SIZE];
 }
 
 impl BorshDeserialize for EthereumPublicKey {

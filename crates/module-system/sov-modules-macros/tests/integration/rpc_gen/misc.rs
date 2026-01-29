@@ -47,6 +47,8 @@ where
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<S::Da as DaSpec>::BlockHeader,

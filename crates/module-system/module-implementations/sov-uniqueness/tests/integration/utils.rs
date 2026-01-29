@@ -11,6 +11,7 @@ use sov_eth_dev_signer::Signer;
 use sov_evm::{
     AccountData, EthereumAuthenticator, EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
 };
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::capabilities::{config_chain_id, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -18,8 +19,8 @@ use sov_modules_api::{EncodeCall, RawTx};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{Runtime, TestRunner, ValueSetter, ValueSetterConfig};
 use sov_test_utils::{
-    LegacySimpleStorage, TestUser, TransactionType, TEST_DEFAULT_MAX_FEE,
-    TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_USER_BALANCE,
+    TestUser, TransactionType, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
+    TEST_DEFAULT_USER_BALANCE,
 };
 
 use crate::runtime::{GenesisConfig, TestNonceRuntime, RT, S};

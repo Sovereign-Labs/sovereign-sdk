@@ -35,7 +35,7 @@ MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT = 10
 UNREGISTERED_BLOBS_PER_SLOT = 5
 # How many past transaction generations into the past to keep per-account buckets for
 # Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
-PAST_TRANSACTION_GENERATIONS = 5
+PAST_TRANSACTION_GENERATIONS = 5_000
 # The maximum number of transactions hashes we remember per credential. 
 # Higher numbers allow accounts to send more transactions without updating their generation number. 
 # This is more user friendly for power users, but increases the worst case cost of the uniqueness check.
@@ -256,6 +256,8 @@ REVENUE_SHARE_DISCRIMINANT = 17
 
 
 # Test modules
+SEQUENCING_DATA_TESTER_DISCRIMINANT = 229
+PINNED_CACHE_TESTER_DISCRIMINANT = 230
 STATE_CONSISTENCY_DISCRIMINANT = 231
 MODULE_WITH_VERSIONED_STATE_ACCESS_IN_SLOT_HOOK_DISCRIMINANT = 232
 GAS_TESTER_DISCRIMINANT = 233

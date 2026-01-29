@@ -127,6 +127,7 @@ delegate_version_reader!(PreExecWorkingSet<S, I> where [S: Spec, I: StateProvide
 mod tests {
     use sov_state::codec::BcsCodec;
     use sov_state::namespaces::User;
+    use sov_state::SlotValueFromCodec;
     use sov_state::{SlotKey, SlotValue};
     use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};
@@ -155,7 +156,7 @@ mod tests {
         let storage = storage_manager.create_storage();
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
 
-        let checkpoint = StateCheckpoint::<TestSpec>::new(storage, &kernel);
+        let checkpoint = StateCheckpoint::<TestSpec>::new(storage, &kernel, None);
         let mut scratchpad = checkpoint.to_tx_scratchpad();
 
         // Save some values in the scratchpad.

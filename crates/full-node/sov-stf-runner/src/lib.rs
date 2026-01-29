@@ -2,10 +2,9 @@
 #![doc = include_str!("../README.md")]
 
 mod config;
-mod da_pre_fetcher;
 pub mod processes;
 
-pub(crate) mod da_utils;
+mod da;
 mod http;
 mod runner;
 mod state_manager;
@@ -16,3 +15,4 @@ pub use crate::config::{
 };
 pub use crate::http::rpc_module_to_router;
 pub use crate::runner::*;
+pub use da::DaServiceWithCachedFinalizedHeaders;

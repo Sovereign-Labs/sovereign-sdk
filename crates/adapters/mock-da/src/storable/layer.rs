@@ -6,7 +6,7 @@ use rand::prelude::{SliceRandom, SmallRng};
 use rand::{Rng, SeedableRng};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder,
+    QueryOrder, QuerySelect,
 };
 use sha2::Digest;
 use sov_rollup_interface::common::{HexHash, HexString};
@@ -54,6 +54,7 @@ impl StorableMockDaLayer {
 
         entity::setup_db(&conn).await?;
         let last_seen_block = entity::query_last_saved_block(&conn).await?;
+        tracing::trace!(?last_seen_block, "Initializing StorableMockDaLayer from DB");
         let next_height = (last_seen_block.height as u32)
             .checked_add(1)
             .expect("next_height overflow");
@@ -100,10 +101,11 @@ impl StorableMockDaLayer {
         &mut self,
         timestamp: sov_rollup_interface::da::Time,
     ) -> anyhow::Result<()> {
+        let start = std::time::Instant::now();
         tracing::trace!(
             next_height = self.next_height,
             ?timestamp,
-            "Start producing a new block at"
+            "Start producing a new block"
         );
         if self.next_height >= i32::MAX as u32 {
             anyhow::bail!("Due to database limitation cannot produce anymore blocks: {} is more than max supported height {}", self.next_height, i32::MAX);
@@ -126,18 +128,25 @@ impl StorableMockDaLayer {
             GENESIS_HEADER.hash.0
         };
 
-        let blobs = Blobs::find()
+        let blobs_for_hash = Blobs::find()
             .filter(blobs::Column::BlockHeight.eq(self.next_height + self.delay_blobs_by))
+            .select_only()
+            .column(blobs::Column::Id)
+            .column(blobs::Column::Hash)
+            .column(blobs::Column::Sender)
+            .column(blobs::Column::Namespace)
+            .into_model::<blobs::BlobHashData>()
             .all(&self.conn)
             .await?;
-        let blobs_count = blobs.len();
+        let blobs_count = blobs_for_hash.len();
         tracing::trace!(
             blobs_count,
             height = self.next_height,
             "Extracted blobs for this block"
         );
 
-        let this_block_hash = self.calculate_block_hash(self.next_height, &prev_block_hash, &blobs);
+        let this_block_hash =
+            self.calculate_block_hash(self.next_height, &prev_block_hash, &blobs_for_hash);
 
         let new_head = MockBlockHeader {
             height: self.next_height as u64,
@@ -149,11 +158,12 @@ impl StorableMockDaLayer {
         let block_model = block_headers::ActiveModel::from(new_head.clone());
         block_model.insert(&self.conn).await?;
         let _ = self.head_header_sender.send_replace(new_head);
-        tracing::trace!(
+        tracing::debug!(
             blobs_count,
             height = self.next_height,
             prev_hash = %HexHash::new(prev_block_hash),
             hash = %HexHash::new(this_block_hash),
+            producing_time = ?start.elapsed(),
             "New block has been produced"
         );
 
@@ -193,11 +203,12 @@ impl StorableMockDaLayer {
 
     /// Saves new block header into a database.
     pub async fn produce_block(&mut self) -> anyhow::Result<()> {
+        let timestamp = sov_rollup_interface::da::Time::now();
         tracing::trace!(
             next_height = self.next_height,
+            ?timestamp,
             "Produce block has been called"
         );
-        let timestamp = sov_rollup_interface::da::Time::now();
 
         // Temporarily remove the randomizer from `self` so it won't collide
         // with the &mut borrow needed in `produce_block`:
@@ -239,20 +250,24 @@ impl StorableMockDaLayer {
         batch_data: &[u8],
         sender: &MockAddress,
     ) -> anyhow::Result<MockHash> {
+        let bytes = batch_data.len();
         tracing::trace!(
-            batch_bytes = batch_data.len(),
+            bytes,
             %sender,
             next_da_height = self.next_height,
             "Submitting batch is received"
         );
+        let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_batch_blob(self.next_height as i32, batch_data, sender);
         blob.insert(&self.conn).await?;
         let include_at = self.next_height + self.delay_blobs_by;
-        tracing::trace!(
+        tracing::debug!(
             %hash,
             %sender,
             next_da_height = self.next_height,
             include_at = %include_at,
+            bytes,
+            time = ?start.elapsed(),
             "Submitted batch is saved"
         );
         Ok(hash)
@@ -263,18 +278,22 @@ impl StorableMockDaLayer {
         proof_data: &[u8],
         sender: &MockAddress,
     ) -> anyhow::Result<MockHash> {
+        let bytes = proof_data.len();
         tracing::trace!(
-            proof_bytes = proof_data.len(),
+            bytes,
             %sender,
             next_da_height = self.next_height,
             "Submitting proof is received"
         );
+        let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_proof_blob(self.next_height as i32, proof_data, sender);
         blob.insert(&self.conn).await?;
         tracing::trace!(
             %hash,
             %sender,
             next_da_height = self.next_height,
+            bytes,
+            time = ?start.elapsed(),
             "Submitted proof is saved"
         );
         Ok(hash)
@@ -418,9 +437,15 @@ impl StorableMockDaLayer {
         );
 
         let start_reading = std::time::Instant::now();
-        // Query 1: Read a lot: all blobs data.
+        // Query 1: Read blob metadata (excluding large data field).
         let non_finalized_blobs = Blobs::find()
             .filter(blobs::Column::BlockHeight.gt(last_finalized_height))
+            .select_only()
+            .column(blobs::Column::Id)
+            .column(blobs::Column::Hash)
+            .column(blobs::Column::Sender)
+            .column(blobs::Column::Namespace)
+            .into_model::<blobs::BlobHashData>()
             .all(&self.conn)
             .await?;
         tracing::trace!(
@@ -448,7 +473,7 @@ impl StorableMockDaLayer {
 
         let updating_start = std::time::Instant::now();
         // This is going to be layout of new non-finalized blocks.
-        let mut new_non_finalised_order: Vec<Vec<blobs::Model>> = (last_finalized_height
+        let mut new_non_finalised_order: Vec<Vec<blobs::BlobHashData>> = (last_finalized_height
             ..self.next_height)
             .map(|_height| Vec::new())
             .collect();
@@ -558,7 +583,7 @@ impl StorableMockDaLayer {
         &self,
         height: u32,
         prev_block_hash: &[u8; 32],
-        blobs: &[blobs::Model],
+        blobs: &[blobs::BlobHashData],
     ) -> [u8; 32] {
         let mut hasher = sha2::Sha256::new();
 

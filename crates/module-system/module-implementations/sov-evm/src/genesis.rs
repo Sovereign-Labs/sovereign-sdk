@@ -46,10 +46,6 @@ where
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
-        for acc in config.accounts.clone() {
-            self.init_account(acc, state)?;
-        }
-
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
 
@@ -67,6 +63,9 @@ where
             None,
         );
         self.block_env.set(&block_env, state)?;
+        for acc in config.accounts.clone() {
+            self.init_account(acc, state)?;
+        }
 
         #[cfg(feature = "native")]
         {
@@ -152,5 +151,6 @@ fn evm_chain_config(cfg: &EvmGenesisConfig, spec: Vec<(BlockNumber, SpecId)>) ->
     EvmRuntimeConfig {
         chain_spec: cfg.chain_spec.clone(),
         hardforks: spec,
+        contract_creation_policy: cfg.contract_creation_policy.clone(),
     }
 }

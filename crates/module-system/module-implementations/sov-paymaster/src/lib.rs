@@ -146,12 +146,14 @@ impl<S: Spec> Module for Paymaster<S> {
 
     type Event = Event<S>;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         // The initialization logic
         self.init_module(config, state)
     }
@@ -161,7 +163,7 @@ impl<S: Spec> Module for Paymaster<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::RegisterPaymaster { policy } => {
                 self.register_paymaster(policy, context, state)?;
@@ -226,7 +228,7 @@ impl<S: Spec> Paymaster<S> {
         tracing::trace!("Falling back to user balance to reserve gas");
         self.bank
             .reserve_gas(tx, gas_price, context.sender(), state)?;
-        context.set_gas_refund_recipient(context.sender().clone());
+        context.set_gas_refund_recipient(*context.sender());
         Ok(())
     }
 

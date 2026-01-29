@@ -2,13 +2,13 @@
 
 #![deny(missing_docs)]
 
-mod bytes;
 pub(crate) mod cache;
 pub mod codec;
 pub mod config;
 mod event;
 pub mod namespaces;
 pub mod nomt;
+pub mod pinned_cache;
 #[cfg(feature = "native")]
 mod prover_storage;
 #[cfg(feature = "native")]
@@ -32,7 +32,6 @@ use sov_rollup_interface::reexports::digest::Digest;
 pub use storage_internals::{SparseMerkleProof, StorageRoot};
 pub use zk_storage::ZkStorage;
 
-pub use crate::bytes::*;
 pub use crate::cache::*;
 pub use crate::codec::*;
 pub use crate::namespaces::*;

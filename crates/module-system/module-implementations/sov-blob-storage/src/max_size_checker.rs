@@ -159,7 +159,8 @@ mod tests {
         let mut batches_of_txs = Vec::new();
 
         for size in sizes {
-            let tx = FullyBakedTx::new(vec![0; size]);
+            let tx = FullyBakedTx::new(vec![0; size - 5 /* Borsh overhead */]);
+            assert_eq!(tx.len(), size);
             batches_of_txs.push(vec![tx]);
         }
 
@@ -216,13 +217,13 @@ mod tests {
             assert_eq!(inner, expected_addresses);
         }
 
-        test_helper_correct_blob_selection_outputs(vec![1, 2, 3], vec![0, 1, 2], 300);
-        test_helper_correct_blob_selection_outputs(vec![1, 14, 11], vec![0], 80);
-        test_helper_correct_blob_selection_outputs(vec![111, 2, 3], vec![1, 2], 140);
-        test_helper_correct_blob_selection_outputs(vec![10, 2, 3], vec![0], 100);
-        test_helper_correct_blob_selection_outputs(vec![3, 220, 1, 880, 70], vec![0, 2], 140);
+        test_helper_correct_blob_selection_outputs(vec![5, 6, 7], vec![0, 1, 2], 300);
+        test_helper_correct_blob_selection_outputs(vec![5, 14, 11], vec![0], 80);
+        test_helper_correct_blob_selection_outputs(vec![111, 5, 6], vec![1, 2], 150);
+        test_helper_correct_blob_selection_outputs(vec![10, 6, 7], vec![0], 100);
+        test_helper_correct_blob_selection_outputs(vec![7, 220, 5, 880, 70], vec![0, 2], 150);
         test_helper_correct_blob_selection_outputs(vec![10], vec![0], 100000);
-        test_helper_correct_blob_selection_outputs(vec![0], vec![0], 80);
+        test_helper_correct_blob_selection_outputs(vec![5], vec![0], 80);
     }
 
     #[test]

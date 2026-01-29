@@ -66,8 +66,8 @@ where
 
     let simulate_v2 = SovereignSimulate::<B::Spec, B::Runtime>::new(
         state_update_receiver.clone(),
-        config.sequencer.rollup_address.clone(),
-        sequencer.da_address.clone(),
+        config.sequencer.rollup_address,
+        sequencer.da_address,
     );
     endpoints.axum_router = endpoints.axum_router.merge(simulate_v2.into_router());
     // Rollup endpoint
@@ -231,6 +231,7 @@ mod tests {
     use openapiv3::{
         IntegerType, OpenAPI, Operation, PathItem, ReferenceOr, Schema, SchemaKind, Type,
     };
+    use std::num::NonZero;
 
     use super::*;
 
@@ -345,7 +346,7 @@ mod tests {
         public_address: Option<&str>,
     ) -> RunnerConfig {
         RunnerConfig {
-            da_polling_interval_ms: 0,
+            da_polling_interval_ms: 30,
             da_total_timeout_secs: 0,
             http_config: sov_stf_runner::HttpServerConfig {
                 bind_host: bind_host.to_string(),
@@ -354,7 +355,8 @@ mod tests {
                 cors: sov_stf_runner::CorsConfiguration::Permissive,
             },
             save_tx_bodies: false,
-            concurrent_sync_tasks: None,
+            concurrent_sync_tasks: 1,
+            pre_fetched_blocks_capacity: NonZero::new(1).unwrap(),
         }
     }
 

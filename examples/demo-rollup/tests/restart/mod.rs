@@ -4,12 +4,13 @@ use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::test_helpers::test_genesis_source;
 use anyhow::Context;
 use futures::StreamExt;
 use rand::Rng;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
-use sov_mock_da::BlockProducingConfig;
+use sov_mock_da::{BlockProducingConfig, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
@@ -17,6 +18,7 @@ use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
+use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::logging::LogCollector;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
@@ -24,7 +26,10 @@ use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, registry, EnvFilter, Layer};
 
-use crate::test_helpers::test_genesis_source;
+generate_operator_runtime_with_kernel!(
+    kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
+    TestRuntime <=
+);
 
 const ROLLUP_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 const ROLLUP_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -186,6 +191,8 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
     let second_chunk = 4;
     let jump_size = first_chunk + second_chunk;
 
+    let mock_da_dir = tempfile::tempdir()?;
+
     let rollup_builder = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
         BlockProducingConfig::Periodic {
@@ -203,9 +210,10 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
             sequencer_conf.disable_state_root_consistency_checks = true;
         }
         c.aggregated_proof_block_jump = jump_size;
+    })
+    .set_da_config(|da_config| {
+        da_config.connection_string = MockDaConfig::sqlite_in_dir(mock_da_dir.path()).unwrap();
     });
-
-    let mock_da_dir = &rollup_storage_dir;
 
     {
         let mut storable_mock_da_layer =

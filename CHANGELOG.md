@@ -1,4 +1,114 @@
+# 2025-12-22
+- #2265 Adds a config to the EVM to allow accepting invalid transactions.
+
+# 2025-12-17
+- #2250 Moves address resolution for rate limiting off the critical path
+
+# 2025-12-16
+- #2239 Updates the internals of the API state for improved performance. 
+
+# 2025-12-15
+- #2167 Updates the internals of the nonce queue. 
+- #2188 **DB Breaking change**: Adds sequencer-provided metadata (timestamps, etc.) to transaction context accessible via `context.sequencing_data()`. Database schema changed - requires state wipe or resync.
+
+# 2025-12-14 
+- #2229 Now, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+ow, BasicAddress is required to implement Copy, ensuring that duplicating an address is a cheap operation.
+- #2232 **Not breaking, but important**: rollup_config.toml now will panic if there's an unknown field, preventing accidental misconfiguration.
+
+# 2025-12-09
+- #2203 Code breaking change. CelestiaService now require `shutdown_sender` on constructor. Rollup.rs needs update
+- #2214 EVM related test utils are extracted into separate crate: `sov-evm-test-utils`. Please update if you use them.
+- #2219 Dependency tree shaking.
+- #2224 `alloy-sol-types` is behind `evm` feature in sov-modules-api. Add this feature if there's compilation errors.
+
+# 2025-12-08
+- #2197 **Breaking DB change**: Restructures the internals of the database for NOMT to eliminate most allocations. This gives a 10-40% performance boost depending on the workload. Updating to this version requires a wipe or a resync.
+
+# 2025-12-03
+ - #2148 Disables tokio console unless the `TOKIO_CONSOLE` environment variable is set to `1` or `true`. This significantly improves performance.
+
+# 2025-11-25
+- #2124 Allows configuring EVM contracts to pin their storage in RAM.
+
+# 2025-11-24
+- #2135 Add hex-formatted subscription IDs for Ethereum compatibility (e.g., `0x0000000000000001`).
+- #2105 **DB Breaking change** changes the serialization of state keys on disk. Updating to this branch requires a wipe or a resync. Also adds support for pinning certain state items in RAM.
+- #2109 Configuration changes in `sov-celestia-adapter`. Default values for `request_timeout_secs` and `tx_priority` has changed.
+  **It is recommended to remove those values and use defaults** unless there's a reason.
+  Here is minimal functioning celestia config:
+  ```toml
+  [da]
+  rpc_url = "ws://127.0.0.1:26658"
+  grpc_url = "http://127.0.0.1:9090"
+  signer_private_key = "0000000000000000000000000000000000000000000000000000000000000000"
+  ```
+# 2025-11-22
+- #2102 Adds `ModuleExecutionConfig` associated type to the `Runtime` trait, allowing modules to customize their offchain environment.
+
+# 2025-11-17
+- #2082 **Breaking change**: Increase the granularity of EVM log timestamps. Logs within the same block can now have different timestamps.
+# 2025-11-14
+- #2076 Adds `TimingOracle` functionality. The feature is disabled by default, so it does not introduce any breaking changes.
+- #2077 **Breaking change**: The `Sequencer` implementations have been made cheaply cloneable, and the `accept_tx()` method has been made cancellation-safe. This has two effects:
+  * *Breaking*: any API handler definitions that currently use `Arc<Seq: Sequencer>` need to be modified to use `Seq: Sequencer` directly instead. This is likely to affect rollup definitions, especially ones implementing `sequencer_additional_apis()`.
+  * *Advisory*: any custom transaction APIs invoking `Sequencer::accept_tx()` in their handlers previously had to make the call inside a tokio task. This is no longer necessary, and handlers *should* remove any `tokio::spawn()` wrapping the `accept_tx()` call to avoid the unnecessary overhead and reduce tokio runtime contention.
+- #2079 Blocks subscriptions now yield only as soon as the block is confirmed.
+- #2079 Added size field on the block header in RPC requests/subscriptions.
+- #2081 Switched jmt and utoipa dependencies to crates.io.
+
+# 2025-11-12
+- #2071 Optimize WebSocket message delivery by batching writes. Messages are now grouped (up to 128 at a time) and flushed together, reducing system calls and improving throughput for WebSocket subscriptions.
+- #2070 **Breaking change**: The `MeteredSignature::charge_gas()` method signature changes from taking a `msg: &[u8]` parameter to `msg_len: usize`, as signature verification gas cost only depends on the number of bytes. This has no other impact except for direct users of the `MeteredSignature` struct.
+
+# 2025-11-11
+- #2078 Fixing the test in demo-rollup
+- #2004 The sequencer will now buffer and intelligently reorder transactions with a nonce that arrive out-of-order within a short window of time. Adds `max_future_nonce_delta` and `future_nonce_transaction_timeout_millis` optional config options that allow configuring the limits of how eagerly the sequencer will try to buffer nonces.
+  - **Breaking change** Removes the `buffer_raw_txs` field from EthRpcConfig (as this is now handled by the sequencer). This change is only breaking for EVM rollups.
+- #2074 Renaming crate `full-node-configs` to `sov-full-node-configs`.
+
+# 2025-11-06
+- #2039 Add WebSocket subscription support to EVM logs soak tests.
+- #2032 Upgrade Reth/Revm to 1.9.0
+- #2036 Extends documentation of runner config
+- #2042 Fixes runner polling issue
+
+# 2025-11-05
+- #2027 Fix graceful shutdown with active WebSocket subscriptions. The rollup now properly shuts down within 2-5 seconds when Ctrl+C is pressed, even with active `eth_subscribe` connections.
+- #2011 Introduce ContractCreationPolicy allowing to whitelist addresses that can deploy contracts.
+- #2025 Breaking change for DaService implementations: `DaService::get_signer` now returns option. It is possible to return None if DaService can be configured without signer.
+- #2030 Adds new optional parameter to the rollup_config.toml: `runner.pre_fetched_blocks_capacity` with default value 20. 
+  This has an effect on how many blocks pre-fetcher is going to fetch before waiting for node to consume them.
+
+# 2025-11-01
+- #2013 Ensure `eth_getLogsWithCursor` respects a 1MB response size limit. Fix its cursor deserialization behavior to match other chains.
+- #2006 Add associated Error type to the EVM module.
+- #1953 Performance improvement for processing stf changes, but might delay writing finalized data to disk by 1 block
+- #2008 Treat `Latest` as `Pending` in EVM module to avoid foundry issues.
+
+# 2025-10-31
+- #2002 **Resync breaking change**. This PR moves rollup configuration files to demo-rollup/configs directory. 
+- #2007 Changes celestia rollup metrics, please switch to new dashboard.
+
+# 2025-10-29
+- #1996 Set gas limit to 1B on ETH API access.
+- #1838 Add binary WebSocket frame support to RPC server and client.
+- #1997 Fix `eth_sendTransaction` contract deployments without gas limit by converting `to: null` to `TxKind::Create`.
+
+# 2025-10-28
+- #1987 Added `newHeads` subscription to `eth_subscribe`.
+
+# 2025-10-27
+- #1981 **Breaking change** Adds support for celestia-client allowing direct use of RPC providers. Full message TBD.
+- #1976 Fixed `eth_subscribe` parameter parsing to accept standard Ethereum JSON-RPC positional parameters.
+
+# 2025-10-24
+- #1968 Implement EVM `BLOCKHASH` opcode with support for querying the last 256 block hashes.
+- #1966 **Resync breaking change**: Updates the schema generated for the `signature` and `public_key` fields on `Transaction` variants (both V0 and V1) to be byte arrays of the correct length. This is a follow-up on #1877, affecting only the web3 SDK functionality. However, this is a breaking change to the `CHAIN_HASH`, and therefore will invalidate existing transactions.
+
 # 2025-10-22
+- #1950 Adds a new new config option storage.separate_archival_state. If set to true, archival state will go into its own db at {storage_path}/archival-state-db. This option is false by default for backwards compatibility. When not set, the old database layout is used.
+- #1951 *Minor breaking change* Adds a new memo field to `Bank::TokenTransfer` events and a new callmessage which can set that field. This change requires resyncing any existing nodes due to the change in event serialization.
 - #1937 Reject log subscriptions with block filters.
 - #1887 *Minor breaking change*: Adds an optional third generic to the `Transaction` type, allowing overriding the `CryptoSpec` that defines the public key and signature types in the transaction. The generic defaults to `Spec::CryptoSpec`, which was the previous behaviour. This is a non-breaking change for the majority of cases, however some usages of `Transaction` may require explicitly specifying the `Runtime` and `Spec` generics which the compiler was able to infer previously.
 The purpose of this change is to enable rollups to accept transactions signed with different cryptographic primitives to the global `Spec`, e.g. allowing EIP712 transactions (which use secp256k1) on an ED25519-based rollup.
@@ -39,6 +149,10 @@ The purpose of this change is to enable rollups to accept transactions signed wi
 
 # 2025-10-10
 - #1840 DOn't panic on selfdestruct/blockhash. Return an error.
+
+# 2025-10-08
+- #1833 Adds a config option `pruner_max_batch_size` in the `storage` section of the rollup config. If the pruner appears to cause performance degradation, you can reduce the batch size here
+to decrease the number of writes it will attempt at each slot.
 
 # 2025-10-08
 - #1827 Implement eth_getBlockReceipts in EVM module.

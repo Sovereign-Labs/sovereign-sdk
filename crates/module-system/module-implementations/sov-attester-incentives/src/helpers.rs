@@ -10,6 +10,7 @@ use sov_modules_api::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::storage::{SlotKey, SlotValue, Storage, StorageProof};
 use sov_state::Kernel;
+use sov_state::SlotKeyFromCodec;
 use tracing::debug;
 
 use crate::{AttesterIncentives, ProcessAttestationErrors, SlashingReason};

@@ -13,6 +13,7 @@ use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
+use sov_rollup_interface::da::Time;
 
 /// Signed ethereum transaction
 pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
@@ -62,13 +63,15 @@ impl TxSignedAndRecovered {
 pub struct PendingTransaction {
     pub(crate) transaction: TxSignedAndRecovered,
     pub(crate) receipt: Receipt,
+    pub(crate) time: Time,
 }
 
 impl PendingTransaction {
-    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt) -> Self {
+    pub(crate) fn new(transaction: TxSignedAndRecovered, receipt: Receipt, time: Time) -> Self {
         Self {
             transaction,
             receipt,
+            time,
         }
     }
 }
@@ -90,7 +93,28 @@ impl Block {
         SealedBlock {
             header: self.header.seal_slow(),
             transactions: self.transactions,
+            rlp_size: 0, // Will be set in finalize_hook when transactions are available
         }
+    }
+
+    #[cfg(feature = "native")]
+    pub(crate) fn seal_with_size(self, transactions: Vec<TransactionSigned>) -> SealedBlock {
+        let rlp_size = self.calculate_rlp_size(transactions);
+        SealedBlock {
+            header: self.header.seal_slow(),
+            transactions: self.transactions,
+            rlp_size,
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn calculate_rlp_size(&self, transactions: Vec<TransactionSigned>) -> usize {
+        let body = reth_primitives::BlockBody {
+            transactions,
+            ommers: vec![],
+            withdrawals: None,
+        };
+        alloy_consensus::Block::rlp_length_for(&self.header, &body)
     }
 }
 
@@ -104,6 +128,10 @@ pub struct SealedBlock {
 
     /// Transactions in this block.
     pub transactions: Range<u64>,
+
+    /// RLP encoded size of the block (header + body).
+    /// Cached to avoid re-fetching transactions for RPC queries.
+    pub rlp_size: usize,
 }
 
 impl SealedBlock {
@@ -121,8 +149,7 @@ impl SealedBlock {
     pub fn base_fee(&self) -> u64 {
         self.header
             .base_fee_per_gas
-            // This is justified. We set it at genesis and never remove it — only overwrite it.
-            .expect("The base_fee_per_gas must be set.")
+            .expect("We set it at genesis and never remove it — only overwrite it")
     }
 }
 
@@ -133,11 +160,12 @@ impl serde::Serialize for SealedBlock {
     {
         use serde::ser::SerializeStruct;
 
-        let mut s = serializer.serialize_struct("SealedBlock", 3)?;
+        let mut s = serializer.serialize_struct("SealedBlock", 4)?;
         // serialize inner Header using bincode-compat wrapper
         s.serialize_field("header", &HeaderBincodeCompat::from(self.header.inner()))?;
         s.serialize_field("seal", &self.header.seal())?;
         s.serialize_field("transactions", &self.transactions)?;
+        s.serialize_field("rlp_size", &self.rlp_size)?;
         s.end()
     }
 }
@@ -155,16 +183,20 @@ impl<'de> serde::Deserialize<'de> for SealedBlock {
             header: Header,
             seal: B256,
             transactions: Range<u64>,
+            #[serde(default)]
+            rlp_size: usize,
         }
 
         let Raw {
             header,
             seal,
             transactions,
+            rlp_size,
         } = Raw::deserialize(deserializer)?;
         Ok(SealedBlock {
             header: Sealed::new_unchecked(header, seal),
             transactions,
+            rlp_size,
         })
     }
 }
@@ -232,6 +264,23 @@ impl MaybeSealedBlock {
             Self::Sealed(block) => block.header.inner(),
             Self::Pending(pending) => &pending.header,
         }
+    }
+
+    /// The block header.
+    pub fn into_header(self) -> Header {
+        match self {
+            Self::Sealed(block) => block.header.into_inner(),
+            Self::Pending(pending) => pending.header,
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+impl From<MaybeSealedBlock> for Sealed<Header> {
+    fn from(block: MaybeSealedBlock) -> Sealed<Header> {
+        let hash = block.hash().unwrap_or_default();
+        let header = block.into_header();
+        Sealed::new_unchecked(header, hash)
     }
 }
 

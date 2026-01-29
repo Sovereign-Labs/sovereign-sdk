@@ -8,11 +8,13 @@ mod tests;
 pub use accessors::UnmeteredStateWrapper;
 pub use accessors::{
     AccessoryDelta, BootstrapWorkingSet, BorshSerializedSize, ChangeSet, GenesisStateAccessor,
-    KernelStateAccessor, PreExecWorkingSet, RevertableTxState, StateCheckpoint,
+    KernelStateAccessor, LayeredRevertableTxState, PreExecWorkingSet, RevertableTxState, StateCheckpoint,
     StateMetricsProvider, StateProvider, TxChangeSet, TxScratchpad, WorkingSet,
 };
 #[cfg(feature = "native")]
-pub use accessors::{AccessoryStateCheckpoint, ApiStateAccessor, ApiStateAccessorError};
+pub use accessors::{
+    AccessoryStateCheckpoint, ApiStateAccessor, ApiStateAccessorError, ConcurrentStateCheckpoint,
+};
 #[cfg(feature = "native")]
 use sov_rollup_interface::ProvableHeightTracker;
 pub use sov_state::TypeErasedEvent;

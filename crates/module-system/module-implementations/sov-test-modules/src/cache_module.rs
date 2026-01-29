@@ -121,12 +121,14 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
 
     type Event = Event;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         _config: &Self::Config,
         _state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -135,7 +137,7 @@ impl<S: Spec> Module for CacheAndRevertTester<S> {
         msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::TestAndSetU8(msg) => msg.run(state),
             CallMessage::TestAndSetU16(msg) => msg.run(state),

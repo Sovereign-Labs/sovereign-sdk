@@ -6,31 +6,33 @@ use std::io;
 use crate::Multisig;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails};
+use derivative::Derivative;
 pub(crate) use rewards::transaction_consumption_helper;
 pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionConsumption};
-use serde::{Deserialize, Serialize};
-use sov_rollup_interface::common::SafeVec;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
-use sov_rollup_interface::crypto::SigVerificationError;
+use sov_rollup_interface::crypto::{SigVerificationError, Signature};
 use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
 use sov_universal_wallet::schema::UniversalWallet;
 use thiserror::Error;
+pub use types::{
+    v0::Version0,
+    v1::{PubKeyAndSignature, Version1},
+};
+pub use unsigned::UnsignedTransaction;
 
 use crate::capabilities::UniquenessData;
 use crate::{
-    Amount, CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec,
-    MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredSigVerificationError,
-    MeteredSignature, Spec,
+    CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec, MeteredBorshDeserialize,
+    MeteredBorshDeserializeError, MeteredSigVerificationError, MeteredSignature, Spec,
 };
 
 #[cfg(test)]
 mod tests;
-
-/// The maximum number of signers allowed in a multisig.
-pub const MAX_SIGNERS: usize = 21;
+mod types;
+mod unsigned;
 
 /// Structures that implement this trait represent a call message that can be included in a
 /// transaction.
@@ -46,177 +48,18 @@ impl<D: DispatchCall> TransactionCallable for D {
 }
 
 #[derive(
-    derive_more::Debug,
-    Clone,
-    borsh::BorshDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
-    borsh::BorshSerialize,
-    UniversalWallet,
-)]
-#[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
-/// V0 transaction.
-pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
-    /// The signature of the transaction.
-    #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 64]", display = "hex")]
-    pub signature: C::Signature,
-    /// The public key of the sender of the transaction.
-    #[serde(with = "hex_field_format")]
-    #[sov_wallet(as_ty = "[u8; 32]", display = "hex")]
-    pub pub_key: C::PublicKey,
-    /// The runtime call of the transaction.
-    #[sov_wallet(
-        bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
-    )]
-    pub runtime_call: Call,
-    /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
-    pub uniqueness: UniquenessData,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
-    pub details: TxDetails<S>,
-}
-
-#[derive(
-    derive_more::Debug,
-    Clone,
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    serde::Serialize,
-    serde::Deserialize,
-    UniversalWallet,
-    PartialEq,
-    Eq,
-)]
-#[serde(bound = "C: CryptoSpecExt")]
-/// A signature and public key pair.
-pub struct PubKeyAndSignature<C: CryptoSpecExt> {
-    /// The signature.
-    pub signature: C::Signature,
-    /// The public key
-    pub pub_key: C::PublicKey,
-}
-
-impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
-    /// Returns a reference to the public key.
-    pub fn key(&self) -> &C::PublicKey {
-        &self.pub_key
-    }
-}
-
-#[derive(
-    derive_more::Debug,
-    Clone,
-    borsh::BorshDeserialize,
-    serde::Serialize,
-    serde::Deserialize,
-    borsh::BorshSerialize,
-    UniversalWallet,
-)]
-#[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
-/// A V1 (multisig) transaction. The number of signers is capped at 10.
-///
-/// The credential ID for a multisig is hash(borsh(min_signers) || borsh(sort(pub_keys)))
-pub struct Version1<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
-    /// The signatures of the transaction.
-    #[borsh(bound(
-        serialize = "PubKeyAndSignature<C>: BorshSerialize",
-        deserialize = "PubKeyAndSignature<C>: BorshDeserialize",
-    ))]
-    pub signatures: SafeVec<PubKeyAndSignature<C>, MAX_SIGNERS>,
-    /// The credential IDs that are part of the multisig but not used to sign the transaction.
-    // This is used to compute the credential ID statelessly
-    #[borsh(bound(
-        serialize = "<C as CryptoSpec>::PublicKey: BorshSerialize",
-        deserialize = "<C as CryptoSpec>::PublicKey: BorshDeserialize",
-    ))]
-    pub unused_pub_keys: SafeVec<C::PublicKey, MAX_SIGNERS>,
-    /// The minimum number of signers required to sign the transaction. In a 3/5 multisig, this would be 3.
-    /// Note that...
-    ///  - The transaction will be valid if at least `min_signers` signers have signed the transaction, but more signers are allowed. (This is useful for record keeping in case of, say, a unanimous decision)
-    ///  - If an invalid signature is detected, the transaction will be invalid. This allows us to use batch verification.
-    // This is used to compute the credential ID statelessly.
-    pub min_signers: u8,
-    /// The runtime call of the transaction.
-    #[sov_wallet(
-        bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
-    )]
-    pub runtime_call: Call,
-    /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
-    pub uniqueness: UniquenessData,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
-    pub details: TxDetails<S>,
-}
-
-impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
-    /// Signs the transaction with the given key but does not add the signature to the list in the transaction.
-    #[cfg(feature = "native")]
-    pub fn sign_without_adding(&self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> C::Signature {
-        key.sign(&self.serialize_for_signing(chain_hash))
-    }
-
-    /// Signs and adds the signature to the transaction.
-    #[cfg(feature = "native")]
-    pub fn sign(&mut self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
-        let signature = self.sign_without_adding(key, chain_hash);
-        self.add_signature(signature, key.pub_key())
-    }
-
-    /// Serializes only the `UnsignedTransaction` part of the transaction and appens the chain_hash
-    pub fn serialize_for_signing(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(64); // Preallocate a little capacity to avoid excessive reallocations
-        BorshSerialize::serialize(&self.runtime_call, &mut out)
-            .expect("Serialization to vec is infallible");
-        BorshSerialize::serialize(&self.uniqueness, &mut out)
-            .expect("Serialization to vec is infallible");
-        BorshSerialize::serialize(&self.details, &mut out)
-            .expect("Serialization to vec is infallible");
-        out.extend_from_slice(chain_hash);
-        out
-    }
-
-    /// Adds a signature to the signing set of the multisig, removing the public key from the set of unused pub keys.
-    pub fn add_signature(
-        &mut self,
-        signature: C::Signature,
-        pub_key: C::PublicKey,
-    ) -> anyhow::Result<()> {
-        use crate::prelude::anyhow::Context;
-        if let Some(index) = self.unused_pub_keys.iter().position(|k| k == &pub_key) {
-            self.signatures
-                .try_push(PubKeyAndSignature { signature, pub_key })
-                .context("Too many signatures in multisig")?;
-            self.unused_pub_keys.remove(index);
-            Ok(())
-        } else {
-            anyhow::bail!("Public key is not a member of the multisig or has already signed");
-        }
-    }
-
-    /// Checks if enough signers have signed the transaction for it to be valid.
-    pub fn is_fully_signed(&self) -> bool {
-        self.signatures.len() >= self.min_signers as usize
-    }
-}
-
-impl<R: TransactionCallable, S: Spec> From<Version0<R::Call, S>> for Transaction<R, S> {
-    fn from(value: Version0<R::Call, S>) -> Self {
-        Transaction::V0(value)
-    }
-}
-
-impl<R: TransactionCallable, S: Spec> From<Version1<R::Call, S>> for Transaction<R, S> {
-    fn from(value: Version1<R::Call, S>) -> Self {
-        Transaction::V1(value)
-    }
-}
-#[derive(
     derive_more::Debug, // derive_more uses the correct bound of TransactionCallable::RuntimeCall
     Clone,
+    Derivative,
     borsh::BorshSerialize,
     borsh::BorshDeserialize,
     serde::Serialize,
     serde::Deserialize,
     UniversalWallet,
+)]
+#[derivative(
+    PartialEq(bound = "R::Call: PartialEq + Eq"),
+    Eq(bound = "R::Call: PartialEq + Eq")
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
@@ -268,6 +111,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
+    /// Convenience function to return the transaction bytes in the correct format ready for submission.
+    pub fn tx_bytes(&self) -> Vec<u8> {
+        borsh::to_vec(self).expect("Serialization should be never fail")
+    }
+
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
         let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
         tracing::trace!(transaction = ?this, "Deserialized transaction");
@@ -310,34 +158,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> MeteredBorshDeserialize<
     }
 }
 
-// Unfortunately built-in Rust derives for Eq and PartialEq use a bound of `TransactionCallable:
-// Eq, PartialEq` which is incorrect (TransactionCallable will be the Runtime in most cases).
-// Thus we have to manually derive them, because the real bound is
-// `TransactionCallable::RuntimeCall: Eq` (aka `<Runtime as DispatchCall>::Decodable`) which is already
-// enforced in the trait definition.
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> PartialEq for Transaction<R, S, C> {
-    fn eq(&self, other: &Self) -> bool {
-        match (&self, &other) {
-            (Transaction::V0(self_inner), Transaction::V0(other_inner)) => {
-                self_inner.signature == other_inner.signature
-                    && self_inner.pub_key == other_inner.pub_key
-                    && self_inner.runtime_call == other_inner.runtime_call
-                    && self_inner.uniqueness == other_inner.uniqueness
-                    && self_inner.details == other_inner.details
-            }
-            (Transaction::V1(self_inner), Transaction::V1(other_inner)) => {
-                self_inner.signatures == other_inner.signatures
-                    && self_inner.runtime_call == other_inner.runtime_call
-                    && self_inner.uniqueness == other_inner.uniqueness
-                    && self_inner.details == other_inner.details
-            }
-            _ => false,
-        }
-    }
-}
-
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Eq for Transaction<R, S, C> {}
-
 /// Errors that can be raised by the [`Transaction::verify`] method.
 #[derive(Error, Debug)]
 pub enum TransactionVerificationError<GU: Gas> {
@@ -374,32 +194,20 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
+    /// Extract the runtime call from the transaction
+    pub fn into_runtime_call(self) -> R::Call {
+        match self {
+            Transaction::V0(inner) => inner.runtime_call,
+            Transaction::V1(inner) => inner.runtime_call,
+        }
+    }
+
     /// Returns the chain id.
     pub fn chain_id(&self) -> u64 {
         match &self {
             Transaction::V0(inner) => inner.details.chain_id,
             Transaction::V1(inner) => inner.details.chain_id,
         }
-    }
-
-    /// Check whether the transaction has been signed correctly.
-    ///
-    /// # Errors
-    /// Returns an error if:
-    ///  * The signature is wrong
-    ///  * Serializing or hashing the transaction fails
-    ///  * Any operation runs out of gas
-    pub fn verify(
-        &self,
-        chain_hash: &[u8; 32],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<(), TransactionVerificationError<S::Gas>> {
-        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
-            TransactionVerificationError::TransactionDeserializationError(e.to_string())
-        })?;
-        serialized_tx.extend_from_slice(chain_hash);
-
-        self.verify_signature(&serialized_tx, meter)
     }
 
     /// Creates a new transaction with the provided metadata.
@@ -419,33 +227,55 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         })
     }
 
-    /// Extract the runtime call from the transaction
-    pub fn call(self) -> R::Call {
-        match self {
-            Transaction::V0(inner) => inner.runtime_call,
-            Transaction::V1(inner) => inner.runtime_call,
-        }
+    /// Serialize the transaction, appending the runtime's chain_hash.
+    /// This is the standard serialization for Sovereign signature signing.
+    pub fn serialized_with_chain_hash(
+        &self,
+        chain_hash: &[u8; 32],
+    ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
+        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
+            TransactionVerificationError::TransactionDeserializationError(e.to_string())
+        })?;
+        serialized_tx.extend_from_slice(chain_hash);
+        Ok(serialized_tx)
     }
 
-    /// Verify the transaction signature against the provided message.
-    pub fn verify_signature(
+    /// Charge gas for verifying the transaction signature against the given message.
+    pub fn charge_gas_for_signature(
         &self,
-        msg: &[u8],
+        msg_len: usize,
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<(), TransactionVerificationError<S::Gas>> {
         match &self {
             Transaction::V0(inner) => {
-                MeteredSignature::new::<S>(inner.signature.clone())
-                    .verify(&inner.pub_key, msg, meter)
-                    .map_err(TransactionVerificationError::from)?;
+                MeteredSignature::new::<S>(inner.signature.clone()).charge_gas(meter, msg_len)?;
             }
             Transaction::V1(inner) => {
                 for signature in inner.signatures.iter() {
                     // Charge gas for all the signatures up front before verifying. This way, we can switch to batch verification and the gas price will be the same.
                     MeteredSignature::new::<S>(signature.signature.clone())
-                        .charge_gas(meter, msg)
-                        .map_err(TransactionVerificationError::from)?;
+                        .charge_gas(meter, msg_len)?;
                 }
+            }
+        }
+        Ok(())
+    }
+
+    /// Verify the transaction signature against the provided message.
+    /// *Does not* charge gas for verification. Callers are responsible for calling
+    /// `charge_gas_for_signature()` with the same message for gas metering.
+    pub fn verify_signature_unmetered(
+        &self,
+        msg: &[u8],
+    ) -> Result<(), TransactionVerificationError<S::Gas>> {
+        match &self {
+            Transaction::V0(inner) => {
+                inner
+                    .signature
+                    .verify(&inner.pub_key, msg)
+                    .map_err(TransactionVerificationError::BadSignature)?;
+            }
+            Transaction::V1(inner) => {
                 let all_signers = inner
                     .signatures
                     .iter()
@@ -478,105 +308,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     }
 }
 
-/// An unsent transaction with the required data to be submitted to the DA layer
-#[derive(
-    derive_more::Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet,
-)]
-#[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
-    /// The runtime call
-    pub runtime_call: R::Call,
-    /// The uniqueness identifier
-    pub uniqueness: UniquenessData,
-    /// Data related to fees and gas handling.
-    pub details: TxDetails<S>,
-}
-// Manually implemented to ensure correct trait bounds for the same reason as for `Transaction`
-// above
-impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
-    fn eq(&self, other: &Self) -> bool {
-        self.runtime_call == other.runtime_call
-            && self.uniqueness == other.uniqueness
-            && self.details == other.details
-    }
-}
-impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
-
-impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
-    /// Creates a new [`UnsignedTransaction`] with the given arguments.
-    pub const fn new(
-        runtime_call: R::Call,
-        chain_id: u64,
-        max_priority_fee_bips: PriorityFeeBips,
-        max_fee: Amount,
-        uniqueness: UniquenessData,
-        gas_limit: Option<S::Gas>,
-    ) -> Self {
-        Self {
-            runtime_call,
-            uniqueness,
-            details: TxDetails {
-                max_priority_fee_bips,
-                max_fee,
-                gas_limit,
-                chain_id,
-            },
-        }
-    }
-
-    /// Creates a new unsigned transaction with the provided metadata.
-    pub const fn new_with_details(
-        runtime_call: R::Call,
-        uniqueness: UniquenessData,
-        details: TxDetails<S>,
-    ) -> Self {
-        Self {
-            runtime_call,
-            uniqueness,
-            details,
-        }
-    }
-
-    /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
-    /// and a public key.
-    pub fn to_signed_tx<C: CryptoSpecExt>(
-        self,
-        pub_key: C::PublicKey,
-        signature: C::Signature,
-    ) -> Transaction<R, S, C> {
-        Transaction::new_with_details_v0(
-            pub_key,
-            self.runtime_call,
-            signature,
-            self.uniqueness,
-            self.details,
-        )
-    }
-
-    /// Creates a new `V1` transaction from this unsigned transaction.
-    pub fn to_multisig_tx(
-        self,
-        multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
-    ) -> Version1<R::Call, S> {
-        Version1 {
-            signatures: SafeVec::new(),
-            unused_pub_keys: multisig
-                .signers
-                .try_into()
-                .expect("Too many signers in multisig"),
-            min_signers: multisig.required_signers,
-            runtime_call: self.runtime_call,
-            uniqueness: self.uniqueness,
-            details: self.details,
-        }
-    }
-
-    /// Returns a copy of the RuntimeCall from this unsigned transaction.
-    pub fn call(&self) -> R::Call {
-        self.runtime_call.clone()
-    }
-}
-
 /// A struct containing an authenticated transaction and its associated hash.
 pub struct AuthenticatedTransactionAndRawHash<S: Spec> {
     /// Hash of raw bytes.
@@ -585,7 +316,7 @@ pub struct AuthenticatedTransactionAndRawHash<S: Spec> {
     pub authenticated_tx: AuthenticatedTransactionData<S>,
 }
 
-mod hex_field_format {
+pub(crate) mod hex_field_format {
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S, V>(value: &V, serializer: S) -> Result<S::Ok, S::Error>

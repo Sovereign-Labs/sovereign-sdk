@@ -19,7 +19,7 @@ where
     ) -> Result<(), AttesterRegistryError<S, ST>> {
         if self.unbonding_attesters.get(user_address, state)?.is_some() {
             return Err(RegistrationError::Custom(CustomError::AttesterIsUnbonding(
-                user_address.clone(),
+                *user_address,
             )));
         }
 
@@ -45,7 +45,7 @@ where
             .is_some()
         {
             return Err(RegistrationError::Custom(CustomError::AttesterIsUnbonding(
-                attester_address.clone(),
+                *attester_address,
             )));
         }
 
@@ -113,7 +113,7 @@ where
                 > curr_height
             {
                 return Err(RegistrationError::Custom(
-                    CustomError::UnbondingNotFinalized(context.sender().clone()),
+                    CustomError::UnbondingNotFinalized(*context.sender()),
                 ));
             }
 
@@ -123,7 +123,7 @@ where
             self.transfer_tokens_to_sender(context.sender(), unbonding_info.amount, state)
                 .map_err(|_err| {
                     AttesterRegistryError::<S, ST>::InsufficientFundsToRefundStakedAmount {
-                        address: context.sender().clone(),
+                        address: *context.sender(),
                         amount: unbonding_info.amount,
                     }
                 })?;
@@ -140,7 +140,7 @@ where
             );
         } else {
             return Err(RegistrationError::Custom(
-                CustomError::AttesterIsNotUnbonding(context.sender().clone()),
+                CustomError::AttesterIsNotUnbonding(*context.sender()),
             ));
         }
         Ok(())

@@ -95,7 +95,7 @@ where
     > {
         self.bonded_stakers
             .get(address, state)
-            .map(|opt| opt.map(|bond| (address.clone(), bond)))
+            .map(|opt| opt.map(|bond| (*address, bond)))
     }
 
     fn set_allowed_staker<ST: StateAccessor>(

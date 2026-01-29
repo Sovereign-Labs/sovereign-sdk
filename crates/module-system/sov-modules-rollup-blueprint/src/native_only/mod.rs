@@ -15,11 +15,11 @@ use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, 
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
-use sov_modules_api::GenesisParamsTrait;
 use sov_modules_api::{
     DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
     SyncStatus, VersionReader, ZkVerifier,
 };
+use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
@@ -31,7 +31,6 @@ use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
-use sov_stf_runner::make_da_sync_state;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
@@ -41,6 +40,7 @@ use sov_stf_runner::{
     initialize_state, query_state_update_info, CorsConfiguration, RollupConfig,
     StateTransitionRunner,
 };
+use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use tokio::signal::unix::SignalKind;
 use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
@@ -160,6 +160,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
+        exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
@@ -172,6 +173,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             prover_config,
             start_at_rollup_height,
             stop_at_rollup_height,
+            exec_config,
         )
         .await
     }
@@ -179,8 +181,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Injects additional HTTP APIs for the sequencer.
     async fn sequencer_additional_apis<Seq>(
         &self,
-        _sequencer: Arc<Seq>,
+        _sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _shutdown_receiver: watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -219,7 +222,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?;
 
                 let mut endpoints = self
-                    .sequencer_additional_apis(sequencer.clone(), rollup_config)
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                    )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
                     SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
@@ -229,9 +236,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     api_state: sequencer.api_state(),
                     endpoints,
                     background_handles,
-                    proof_sender: sequencer,
+                    proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await,
+                    da_address: da_service.get_signer().await.context(
+                        "Full node with standard sequencer require DaService with signer support",
+                    )?,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -243,7 +252,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_service.clone(),
                         state_update_receiver.clone(),
                         &rollup_config.storage.path,
-                        &rollup_config.sequencer.with_seq_config(seq_config.clone()),
+                        rollup_config
+                            .sequencer
+                            .with_seq_config(seq_config.clone())
+                            .clone(),
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
@@ -253,7 +265,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?;
 
                 let mut endpoints = self
-                    .sequencer_additional_apis(sequencer.clone(), rollup_config)
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                    )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
                     SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
@@ -263,9 +279,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     api_state: sequencer.api_state(),
                     endpoints,
                     background_handles,
-                    proof_sender: sequencer,
+                    proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await,
+                    da_address: da_service.get_signer().await.context(
+                        "Full node with preferred sequencer require DaService with signer support",
+                    )?,
                 })
             }
         }
@@ -281,10 +299,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
+        exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
     {
+        if let Some(exec_config) = &exec_config {
+            tracing::debug!("Initializing module execution config");
+            <<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::configure(exec_config).map_err(|e|anyhow::anyhow!(e))?;
+        }
+
         let (main_shutdown_sender, mut main_shutdown_receiver) = tokio::sync::watch::channel(());
         main_shutdown_receiver.mark_unchanged();
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
@@ -295,9 +319,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let receiver_for_metrics = secondary_shutdown_receiver.clone();
         let monitoring_config = rollup_config.monitoring.clone();
         if let Some(metrics_handle) =
-            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics.clone())
         {
             background_handles.push(metrics_handle);
+            background_handles.push(sov_metrics::spawn_tokio_runtime_metrics_task(
+                std::time::Duration::from_millis(
+                    monitoring_config.tokio_runtime_metrics_interval_millis,
+                ),
+                receiver_for_metrics,
+            ));
         } else {
             tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
@@ -318,6 +348,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .await;
         let da_service_handle = da_service.take_background_join_handle().await;
         let da_service = Arc::new(da_service);
+
+        let da_polling_interval =
+            std::time::Duration::from_millis(rollup_config.runner.da_polling_interval_ms);
+        let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            secondary_shutdown_receiver.clone(),
+            da_polling_interval,
+        )
+        .await?;
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
         let mut storage_manager = self.create_storage_manager(&rollup_config)?;
@@ -418,24 +457,22 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             }
         };
 
-        let (sync_status_sender, sync_status_receiver) =
-            tokio::sync::watch::channel(SyncStatus::START);
-
         let da_sync_state = make_da_sync_state(
             genesis_slot_number,
             stop_at_rollup_height,
             &ledger_db,
-            da_service.as_ref(),
-            sync_status_sender,
+            &da_service_with_cache,
         )
         .await?;
+
+        let sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
         let state_update_info =
             query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())
                 .await?;
 
         let mut rt = Self::Runtime::default();
-        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
+        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel(), None);
         let current_height = checkpoint.rollup_height_to_access();
 
         validate_heights(
@@ -465,7 +502,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             if prover_config.is_some() {
-                Some(rollup_config.proof_manager.clone())
+                Some(rollup_config.proof_manager)
             } else {
                 None
             },
@@ -480,6 +517,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
+            da_service_with_cache,
         )
         .await?;
 
@@ -511,7 +549,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
             let workflow_task_handle = match operating_mode {
                 OperatingMode::Optimistic => {
-                    let prover_address = rollup_config.proof_manager.prover_address.clone();
+                    let prover_address = rollup_config.proof_manager.prover_address;
                     let bonding_proof_service = Self::Runtime::default()
                         .proof_processor()
                         .create_bonding_proof_service::<Self::Runtime>(
@@ -717,6 +755,7 @@ fn spawn_task_monitor(
 
         let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
+            _ = shutdown_sender.send(());
             false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
@@ -737,6 +776,7 @@ fn spawn_task_monitor(
         for handle in handles {
             if let Err(error) = handle.await {
                 tracing::error!(error = %error, "Additional background task joined with error");
+                _ = shutdown_sender.send(());
                 was_graceful = false;
             }
         }

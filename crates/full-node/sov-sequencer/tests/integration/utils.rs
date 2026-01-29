@@ -6,10 +6,11 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_mock_zkvm::MockZkvm;
-use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::prelude::*;
 use sov_modules_api::rest::HasRestApi;
+use sov_modules_api::transaction::TransactionCallable;
 use sov_modules_api::transaction::{Transaction, TxDetails};
 use sov_modules_api::{
     Amount, BlockHooks, CryptoSpec, DispatchCall, FullyBakedTx, GasUnit, Module, ModuleId,
@@ -177,13 +178,14 @@ impl<S: Spec> Module for ModuleWithVersionedStateAccessInSlotHook<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         _msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -270,7 +272,7 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     let tx = test_signed_transaction::<RT, TestSpec>(
         key,
         call_message,
-        generation,
+        UniquenessData::Generation(generation),
         &<RT as Runtime<TestSpec>>::CHAIN_HASH,
         tx_details,
     );
@@ -298,4 +300,21 @@ pub fn tx_set_value_with_gas<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<Test
 // This allows for easily setting file sharing when using Docker Desktop.
 pub fn tempdir_inside_codebase_dir() -> Arc<tempfile::TempDir> {
     Arc::new(tempfile::tempdir_in(std::env!("CARGO_TARGET_TMPDIR")).unwrap())
+}
+
+pub(crate) fn encode_call<
+    RT: Runtime<TestSpec> + TransactionCallable<Call = <RT as DispatchCall>::Decodable>,
+>(
+    key: &Ed25519PrivateKey,
+    generation: u64,
+    call_message: &<RT as DispatchCall>::Decodable,
+) -> RawTx {
+    let tx = default_test_signed_transaction::<RT, TestSpec>(
+        key,
+        call_message,
+        generation,
+        &RT::CHAIN_HASH,
+    );
+
+    RawTx::new(borsh::to_vec(&tx).unwrap())
 }

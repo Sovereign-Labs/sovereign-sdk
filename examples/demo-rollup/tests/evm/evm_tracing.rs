@@ -3,7 +3,7 @@ use alloy_primitives::Address;
 use alloy_provider::ext::DebugApi;
 use alloy_rpc_types_eth::BlockNumberOrTag;
 use alloy_rpc_types_trace::geth::{CallConfig, GethDebugTracingOptions, GethTrace};
-use sov_test_utils::Erc20;
+use sov_evm_test_utils::Erc20;
 
 use crate::evm::evm_test_helper::alloy_client;
 use crate::evm::evm_test_helper::setup_test_rollup;

@@ -468,7 +468,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
 
         let prefix = Prefix::new(0, 0);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -490,7 +490,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
 
         let prefix = Prefix::new(1, 1);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -513,7 +513,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
 
         let prefix = Prefix::new(2, 2);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);

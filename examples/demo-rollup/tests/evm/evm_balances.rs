@@ -1,7 +1,7 @@
 use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use crate::test_helpers::DemoRollupSpec;
-use ethers::core::abi::Address;
+use alloy_primitives::{Address, U256};
 use sov_address::{EthereumAddress, MultiAddress};
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::MockDemoRollup;
@@ -18,17 +18,19 @@ async fn evm_test_balances() -> anyhow::Result<()> {
 
     let reciever_address = Address::from_str(RECIEVER_ADDR_STR).unwrap();
 
-    let (snder_bank_balance_start, sender_evm_balance_start) =
+    let (sender_bank_balance_start, sender_evm_balance_start) =
         get_balances(sender_address, &test_rollup, &evm_client).await;
 
     let (reciever_bank_balance_start, reciever_evm_balance_start) =
         get_balances(reciever_address, &test_rollup, &evm_client).await;
 
-    let eth_to_send = 2;
-    evm_client.send_eth(reciever_address, eth_to_send).await;
+    let eth_to_send = 2u128;
+    evm_client
+        .send_eth(reciever_address, U256::from(eth_to_send))
+        .await;
     test_rollup.wait_for_next_blocks(2).await;
 
-    let (snder_bank_balance_end, sender_evm_balance_end) =
+    let (sender_bank_balance_end, sender_evm_balance_end) =
         get_balances(sender_address, &test_rollup, &evm_client).await;
 
     let (reciever_bank_balance_end, reciever_evm_balance_end) =
@@ -37,13 +39,13 @@ async fn evm_test_balances() -> anyhow::Result<()> {
     // ASSERTIONS:
 
     // Sender
-    assert_eq!(snder_bank_balance_start, sender_evm_balance_start);
-    assert_eq!(snder_bank_balance_end, sender_evm_balance_end);
+    assert_eq!(sender_bank_balance_start, sender_evm_balance_start);
+    assert_eq!(sender_bank_balance_end, sender_evm_balance_end);
 
     //  Sender also pays gas, so the balance check uses `>`
-    assert!(snder_bank_balance_start > snder_bank_balance_end + eth_to_send);
+    assert!(sender_bank_balance_start > sender_bank_balance_end + eth_to_send);
 
-    // Reciever
+    // Receiver
     assert_eq!(reciever_bank_balance_start, reciever_evm_balance_start);
     assert_eq!(
         reciever_bank_balance_start + eth_to_send,
@@ -62,7 +64,7 @@ async fn get_balances(
     test_rollup: &test_rollup::TestRollup<MockDemoRollup<Native>>,
     evm_client: &sov_eth_client::SimpleStorageClient,
 ) -> (u128, u128) {
-    let sov_to_addr = MultiAddress::Vm(EthereumAddress::new(address.0));
+    let sov_to_addr = MultiAddress::Vm(EthereumAddress::new(address.0 .0));
 
     let token_id = config_gas_token_id();
 
@@ -73,6 +75,10 @@ async fn get_balances(
         .unwrap()
         .0;
 
-    let evm_balance = evm_client.eth_get_balance(address).await.as_u128();
+    let evm_balance: u128 = evm_client
+        .eth_get_balance(address)
+        .await
+        .try_into()
+        .unwrap();
     (bank_balance, evm_balance)
 }

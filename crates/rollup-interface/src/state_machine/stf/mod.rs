@@ -4,6 +4,7 @@
 //! The most important trait in this module is the [`StateTransitionFunction`], which defines the
 //! main event loop of the rollup.
 
+mod batch;
 mod events;
 #[cfg(any(test, feature = "arbitrary"))]
 pub mod fuzzing;
@@ -16,6 +17,7 @@ use borsh::BorshSerialize;
 
 use std::fmt::{Debug, Display};
 
+pub use batch::*;
 pub use events::*;
 pub use proof_sender::*;
 use serde::de::DeserializeOwned;

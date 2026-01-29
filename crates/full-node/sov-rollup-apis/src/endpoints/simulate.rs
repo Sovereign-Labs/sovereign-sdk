@@ -20,12 +20,13 @@ use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
-    get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, EventModuleName,
-    FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, Spec, StateCheckpoint,
-    StateProvider as _, WorkingSet,
+    get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, ErrorContext,
+    EventModuleName, FullyBakedTx, Gas, GasArray, HDTimestamp, HexHash, HexString, Runtime,
+    SequencerType, Spec, StateCheckpoint, StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
+use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::stf::TxEffect;
 use sov_uniqueness::Uniqueness;
 use std::str::FromStr;
@@ -197,6 +198,13 @@ pub struct FailOutcome {
     pub reason: String,
 }
 
+/// Reverted simulation outcome with details.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevertOutcome {
+    /// Details about the revert reason.
+    pub detail: ErrorContext,
+}
+
 /// The outcome of a transaction simulation.
 ///
 /// This enum represents the three possible outcomes when simulating a transaction:
@@ -207,7 +215,7 @@ pub enum SimulateOutcome<E> {
     /// The transaction executed successfully.
     Success(SuccessOutcome<E>),
     /// The transaction was reverted during execution.
-    Reverted(FailOutcome),
+    Reverted(RevertOutcome),
     /// The transaction was skipped due to pre-execution errors.
     Skipped(FailOutcome),
 }
@@ -275,14 +283,14 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
                 SimulateError::InvalidInput("failed to parse sequencer rollup address".to_owned())
             })?
         } else {
-            self.default_sequencer.rollup_address.clone()
+            self.default_sequencer.rollup_address
         };
         let da_address = if let Some(input) = partial.da_address {
             <S::Da as DaSpec>::Address::from_str(&input).map_err(|_| {
                 SimulateError::InvalidInput("failed to parse sequencer da address".to_owned())
             })?
         } else {
-            self.default_sequencer.da_address.clone()
+            self.default_sequencer.da_address
         };
         Ok({
             SequencerSimulate {
@@ -339,8 +347,8 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             TxEffect::Skipped(e) => SimulateOutcome::Skipped(FailOutcome {
                 reason: e.error.to_string(),
             }),
-            TxEffect::Reverted(e) => SimulateOutcome::Reverted(FailOutcome {
-                reason: e.reason.to_string(),
+            TxEffect::Reverted(e) => SimulateOutcome::Reverted(RevertOutcome {
+                detail: e.reason.error_detail().unwrap_or(json_obj!({})),
             }),
             TxEffect::Successful(_) => SimulateOutcome::Success(SuccessOutcome {
                 priority_fee: result.transaction_consumption.priority_fee().0,
@@ -412,6 +420,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
         let mut accessor = StateCheckpoint::new(
             state.state_receiver.borrow().storage.clone(),
             &runtime.kernel(),
+            None,
         );
         let gas_price = runtime
             .chain_state()
@@ -423,6 +432,8 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);
 
         let mut scratchpad = accessor.to_tx_scratchpad();
+        // Create sequencing metadata for simulation so modules can access timestamp data
+        let sequencing_metadata = borsh::to_vec(&HDTimestamp::now()).ok().map(Into::into);
         let context = runtime
             .transaction_authorizer()
             .resolve_context(
@@ -430,6 +441,9 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
                 &sequencer.da_address,
                 sequencer.rollup_address,
                 &mut scratchpad,
+                sequencing_metadata,
+                ExecutionContext::Sequencer,
+                SequencerType::Preferred,
             )
             .map_err(SimulateError::ContextResolution)?;
 

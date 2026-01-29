@@ -19,7 +19,6 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
-sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-modules-api = { workspace = true }
 
 [lints]

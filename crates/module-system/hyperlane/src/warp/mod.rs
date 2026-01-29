@@ -22,8 +22,16 @@ use crate::{HyperlaneAddress, Mailbox, Recipient};
 
 #[cfg(feature = "native")]
 mod api;
+#[cfg(feature = "native")]
+mod execution_config;
+#[cfg(feature = "native")]
+mod hooks;
+#[cfg(feature = "native")]
+mod metrics;
 mod types;
 
+#[cfg(feature = "native")]
+pub use execution_config::{WarpExecutionConfig, WARP_EXECUTION_CONFIG};
 pub use types::*;
 
 /// Implements support for Hyperlane Warp Routes
@@ -262,13 +270,14 @@ where
     type Config = ();
     type CallMessage = CallMessage<S>;
     type Event = Event<S>;
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::Register {
                 admin,
@@ -618,7 +627,7 @@ where
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<TokenId> {
         let holder: DerivedHolder = warp_route.0.into();
-        self.bank.create_token(
+        Ok(self.bank.create_token(
             format!("Synthetic token for {warp_route}"),
             Some(decimals),
             Amount::ZERO,              // No initial balance
@@ -627,7 +636,7 @@ where
             None,                // No supply cap
             holder.to_payable(), // The mint authority is the warp route
             state,
-        )
+        )?)
     }
 
     /// "Enroll" a remote router on another chain. Whenever this route needs to send/receive funds on that chain,

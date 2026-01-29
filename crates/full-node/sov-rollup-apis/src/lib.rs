@@ -81,7 +81,7 @@ async fn get_latest_base_fee_per_gas<S: Spec, R: Runtime<S> + HasCapabilities<S>
     State(state): State<Arc<RollupTxRouter<S, R>>>,
 ) -> ApiResult<GasPriceContainer<S>> {
     let storage = state.state_update_recv.borrow().storage.clone();
-    let mut state_checkpoint = StateCheckpoint::new(storage, &R::default().kernel());
+    let mut state_checkpoint = StateCheckpoint::new(storage, &R::default().kernel(), None);
 
     let base_fee_per_gas = R::default()
         .chain_state()

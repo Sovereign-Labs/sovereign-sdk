@@ -23,6 +23,7 @@
 
 mod axum_extractors;
 mod filter;
+mod get_ip;
 mod pagination;
 mod sorting;
 
@@ -31,26 +32,27 @@ pub mod errors;
 #[doc(hidden)]
 #[cfg(test)]
 pub mod test_utils;
-
-use std::fmt::Debug;
-
 use axum::body::Body;
-use axum::extract::ws::{self, WebSocket};
+use axum::extract::ws::WebSocket;
 use axum::extract::Request;
 use axum::http::{HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router};
 pub use axum_extractors::{Path, Query};
 pub use filter::{Filter, FilterError, FilterQuery};
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
+pub use get_ip::*;
 pub use pagination::{PageSelection, PaginatedResponse, Pagination};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
+use std::fmt::Debug;
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{error, error_span, trace, warn};
+
+use crate::errors::ReportableWsError;
 
 /// Standard result type for API endpoints.
 pub type ApiResult<T> = Result<axum::Json<T>, Response>;
@@ -173,17 +175,23 @@ pub fn cors_layer_opt(
     tower::util::option_layer(if enable { Some(cors_layer()) } else { None })
 }
 
+const MAX_BATCH_SIZE: usize = 128;
+
 /// A utility function for serving some data inside a [`futures::Stream`] over a
 /// WebSocket connection.
-pub async fn serve_generic_ws_subscription<S, M>(
+pub async fn serve_generic_ws_subscription<S, M, E>(
     mut socket: WebSocket,
-    mut subscription: S,
+    subscription: S,
     mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
 ) where
-    S: futures::Stream<Item = anyhow::Result<M>> + Unpin,
+    S: futures::Stream<Item = Result<M, E>> + Unpin,
+    E: ReportableWsError,
     M: Clone + serde::Serialize + Send + Sync + 'static,
 {
-    loop {
+    // Use ready_chunks to automatically batch items that are immediately available
+    let mut chunked_subscription = subscription.ready_chunks(MAX_BATCH_SIZE);
+
+    'outer: loop {
         tokio::select! {
             msg = socket.recv() => {
                 match msg {
@@ -201,25 +209,39 @@ pub async fn serve_generic_ws_subscription<S, M>(
                     },
                 }
             },
-            data_res = subscription.next() => {
-                match data_res {
-                    Some(Ok(data)) => {
-                        let serialized = match serde_json::to_string(&data) {
-                            Ok(serialized) => serialized,
-                            Err(err) => {
-                                error!(?err, "Failed to serialize data for WebSocket; this is a bug, please report it");
-                                break;
+            chunk_opt = chunked_subscription.next() => {
+                match chunk_opt {
+                    Some(chunk) => {
+                        for item in chunk {
+                            match item {
+                                Ok(data) => {
+                                    let serialized = match serde_json::to_string(&data) {
+                                        Ok(serialized) => serialized,
+                                        Err(err) => {
+                                            error!(?err, "Failed to serialize data for WebSocket; this is a bug, please report it");
+                                            break 'outer;
+                                        }
+                                    };
+                                    if let Err(err) = socket.feed(serialized.into()).await {
+                                        warn!(?err, "WebSocket error while sending data");
+                                        // Keep the loop going.
+                                    }
+                                }
+                                Err(err) => {
+                                    // Convert error to ErrorObject and send it to the client
+                                     if let Err(send_err) = socket.send(err.to_json().into()).await {
+                                        warn!(err=?send_err, "WebSocket error while sending error");
+                                        // keep the loop going.
+                                    }
+                                    if !err.is_recoverable() {
+                                        break 'outer;
+                                    }
+                                }
                             }
-                        };
-                        let message = ws::Message::Text(serialized);
-                        if let Err(err) = socket.send(message).await {
-                            warn!(?err, "WebSocket error while sending data");
-                            // Keep the loop going.
                         }
-                    },
-                    Some(Err(err)) => {
-                        warn!(?err, "WebSocket error while receiving data from internal Tokio channel");
-                        break;
+                        if let Err(err) = socket.flush().await {
+                            trace!(?err, "Failed to flush the socket");
+                        }
                     },
                     None => {
                         // No more data to send.
@@ -230,6 +252,7 @@ pub async fn serve_generic_ws_subscription<S, M>(
             _ = shutdown_receiver.changed() => break,
         }
     }
+
     tracing::trace!("Closing websocket subscription");
     socket.close().await.ok();
 }

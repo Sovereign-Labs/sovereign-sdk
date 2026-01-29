@@ -1,3 +1,5 @@
+use crate::flat_db::DbCache;
+use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
@@ -5,7 +7,7 @@ use std::thread::JoinHandle;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
-use rockbound::versioned_db::{VersionedDeltaReader, VersionedTableMetadataKey};
+use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
 use sov_rollup_interface::reexports::digest;
 
@@ -17,9 +19,7 @@ use crate::ledger_db::LedgerDb;
 use crate::metrics::nomt::{CommitDetailedMetric, PrunerMetric};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
-use crate::schema::namespace::{
-    NomtCommittedVersion, NomtHistoricalState, NomtPruningState, NomtStateValues,
-};
+use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay};
 use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
@@ -46,11 +46,12 @@ where
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
+        let separate_archival_state = config.separate_archival_state;
         let state_db = NomtStateDb::<H>::new(config)?;
         let accessory_rocksdb =
             AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
         let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let flat_state = FlatStateDb::new(path, state_cache_size)?;
+        let flat_state = FlatStateDb::new(path, state_cache_size, separate_archival_state)?;
         Ok(Self {
             merklized_state: Arc::new(state_db),
             flat_state,
@@ -79,14 +80,13 @@ where
         // as it duplicates the last written data to `self.state`.
         let flat_metrics = self.flat_state.commit(historical_state)?;
         let accessory_start = std::time::Instant::now();
-        self.accessory
-            .write_schemas(Arc::unwrap_or_clone(accessory))?;
+        self.accessory.write_schemas(&accessory)?;
         let accessory_commit = accessory_start.elapsed();
 
         let ledger_start = std::time::Instant::now();
         // Ledger goes after last, as its data is used during the start.
         // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(Arc::unwrap_or_clone(ledger))?;
+        self.ledger.write_schemas(&ledger)?;
         let ledger_commit = ledger_start.elapsed();
 
         let commit_detailed_metrics = CommitDetailedMetric {
@@ -109,10 +109,10 @@ where
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         self.flat_state
-            .other
-            .write_schemas(group.historical_state.pruning_batch)?;
+            .archival_db
+            .write_schemas(&group.historical_state.pruning_batch)?;
         self.accessory
-            .write_schemas(group.accessory.pruning_batch)?;
+            .write_schemas(&group.accessory.pruning_batch)?;
         Ok(())
     }
 
@@ -122,7 +122,8 @@ where
         relevant_snapshot_refs: Vec<K>,
         rockbound_snapshots: &HashMap<K, SnapshotGroup>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
-        use_strict_mode: bool,
+        pinned_cache: Option<Box<(dyn Any + Send + Sync)>>,
+        with_witness: bool,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
@@ -135,7 +136,7 @@ where
         // (in normal chronological order).
         for snapshot_ref in relevant_snapshot_refs.iter().rev() {
             let snapshot = rockbound_snapshots.get(snapshot_ref).unwrap();
-            historical_state_snapshots.push(snapshot.historical_state.other.clone());
+            historical_state_snapshots.push(snapshot.historical_state.root_hash_batch.clone());
             user_state_snapshots.push(snapshot.historical_state.user.clone());
             kernel_state_snapshots.push(snapshot.historical_state.kernel.clone());
             accessory_snapshots.push(snapshot.accessory.clone());
@@ -150,19 +151,21 @@ where
             nomt_snapshots,
         );
         let historical_state_reader =
-            DeltaReader::new(self.flat_state.other.clone(), historical_state_snapshots);
+            DeltaReader::new(self.flat_state.live_db.clone(), historical_state_snapshots);
         let version = self.flat_state.get_kernel_db().get_committed_version()?;
 
-        let user_state_reader = VersionedDeltaReader::<NomtStateValues<UserNamespace>>::new(
-            self.flat_state.user.clone(),
-            version,
-            user_state_snapshots,
-        );
-        let kernel_state_reader = VersionedDeltaReader::<NomtStateValues<KernelNamespace>>::new(
-            self.flat_state.kernel.clone(),
-            version,
-            kernel_state_snapshots,
-        );
+        let user_state_reader =
+            VersionedDeltaReader::<NomtStateValues<UserNamespace>, DbCache>::new(
+                self.flat_state.user.clone(),
+                version,
+                user_state_snapshots,
+            );
+        let kernel_state_reader =
+            VersionedDeltaReader::<NomtStateValues<KernelNamespace>, DbCache>::new(
+                self.flat_state.kernel.clone(),
+                version,
+                kernel_state_snapshots,
+            );
         let historical_state_mapper = HistoricalStateReader::new(
             user_state_reader,
             kernel_state_reader,
@@ -177,7 +180,8 @@ where
             state_session_builder,
             historical_state_mapper,
             accessory_db,
-            use_strict_mode,
+            with_witness,
+            pinned_cache,
         );
         Ok((storage, ledger_reader))
     }
@@ -188,94 +192,97 @@ where
 
     pub(crate) fn start_pruner(&self, versions_to_keep: usize, max_batch_size: usize) -> PrunerJob {
         tracing::info!(versions_to_keep, "Starting pruner task iteration");
-        let user = self.flat_state.get_user_db().clone();
-        let kernel = self.flat_state.get_kernel_db().clone();
+        // TODO(@preston-evans98) re-enable pruning in the new DB schema.
+        // Commented code is left as a reference for the follow up PR.
+        // let user = self.flat_state.get_user_db().clone();
+        // let kernel = self.flat_state.get_kernel_db().clone();
         let accessory_pruner = Pruner::new(self.accessory.clone(), Some(max_batch_size));
 
         // Spawn historical state pruner thread
         let historical_state: JoinHandle<Result<PrunerJobOutput, anyhow::Error>> =
             std::thread::spawn(move || -> anyhow::Result<PrunerJobOutput> {
+                tracing::warn!("Pruning temporarily disabled");
                 let pruning_time = std::time::Instant::now();
-                let current_user_version = user.get_committed_version()?;
-                let current_kernel_version = kernel.get_committed_version()?;
+                // let current_user_version = user.get_committed_version()?;
+                // let current_kernel_version = kernel.get_committed_version()?;
 
-                let mut batch = SchemaBatch::new();
-                let mut keys_to_prune = 0;
-                let mut keys_inspected = 0;
-                let mut hit_size_limit = false;
+                let batch = SchemaBatch::new();
+                let keys_to_prune = 0;
+                let keys_inspected = 0;
+                let hit_size_limit = false;
 
-                if let Some(user_version) =
-                    current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
-                {
-                    let prunable_keys = user.iter_pruning_keys_up_to_version(user_version)?;
-                    for key in prunable_keys {
-                        // Prune the pruning table.
-                        let key = key?;
-                        batch.delete::<NomtPruningState<UserNamespace>>(&key)?;
-                        keys_to_prune += 1;
-                        keys_inspected += 1;
-                        // Prune the historical state table. This is the main table that we want to prune.
-                        // We want to make sure that the the newest version of the key is accessible. The pruning table
-                        // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
-                        // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
-                        let mut key = key.into_versioned_key();
-                        let Some(previous_version) = key.1.checked_sub(1) else {
-                            continue;
-                        };
-                        let prev_written_version =
-                            user.get_version_for_key(&key.0, previous_version)?;
+                // if let Some(user_version) =
+                //     current_user_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
+                // {
+                //     let prunable_keys = user.iter_pruning_keys_up_to_version(user_version)?;
+                //     for key in prunable_keys {
+                //         // Prune the pruning table.
+                //         let key = key?;
+                //         batch.delete::<NomtPruningState<UserNamespace>>(&key)?;
+                //         keys_to_prune += 1;
+                //         keys_inspected += 1;
+                //         // Prune the historical state table. This is the main table that we want to prune.
+                //         // We want to make sure that the the newest version of the key is accessible. The pruning table
+                //         // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
+                //         // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
+                //         let mut key = key.into_versioned_key();
+                //         let Some(previous_version) = key.1.checked_sub(1) else {
+                //             continue;
+                //         };
+                //         let prev_written_version =
+                //             user.get_version_for_key(&key.0, previous_version)?;
 
-                        keys_inspected += 1;
-                        if let Some(previous_version) = prev_written_version {
-                            key.1 = previous_version;
-                            batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
-                            keys_to_prune += 1;
-                        }
-                        if keys_to_prune >= max_batch_size {
-                            hit_size_limit = true;
-                            break;
-                        }
-                    }
-                    batch.put::<NomtCommittedVersion<UserNamespace>>(
-                        &VersionedTableMetadataKey::PrunedVersion,
-                        &user_version,
-                    )?;
-                }
-                if let Some(kernel_version) =
-                    current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
-                {
-                    let prunable_keys = kernel
-                        .iter_pruning_keys_up_to_version(kernel_version)?
-                        .take(max_batch_size);
-                    for key in prunable_keys {
-                        // Prune the pruning table.
-                        let key = key?;
-                        batch.delete::<NomtPruningState<KernelNamespace>>(&key)?;
-                        keys_to_prune += 1;
-                        keys_inspected += 1;
-                        // Prune the historical state table.
-                        let mut key = key.into_versioned_key();
-                        let Some(previous_version) = key.1.checked_sub(1) else {
-                            continue;
-                        };
-                        let prev_written_version =
-                            kernel.get_version_for_key(&key.0, previous_version)?;
-                        keys_inspected += 1;
-                        if let Some(previous_version) = prev_written_version {
-                            key.1 = previous_version;
-                            batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
-                            keys_to_prune += 1;
-                        }
-                        if keys_to_prune >= max_batch_size {
-                            hit_size_limit = true;
-                            break;
-                        }
-                    }
-                    batch.put::<NomtCommittedVersion<KernelNamespace>>(
-                        &VersionedTableMetadataKey::PrunedVersion,
-                        &kernel_version,
-                    )?;
-                }
+                //         keys_inspected += 1;
+                //         if let Some(previous_version) = prev_written_version {
+                //             key.1 = previous_version;
+                //             batch.delete::<NomtHistoricalState<UserNamespace>>(&key)?;
+                //             keys_to_prune += 1;
+                //         }
+                //         if keys_to_prune >= max_batch_size {
+                //             hit_size_limit = true;
+                //             break;
+                //         }
+                //     }
+                //     batch.put::<NomtCommittedVersion<UserNamespace>>(
+                //         &VersionedTableMetadataKey::PrunedVersion,
+                //         &user_version,
+                //     )?;
+                // }
+                // if let Some(kernel_version) =
+                //     current_kernel_version.and_then(|v| v.checked_sub(versions_to_keep as u64))
+                // {
+                //     let prunable_keys = kernel
+                //         .iter_pruning_keys_up_to_version(kernel_version)?
+                //         .take(max_batch_size);
+                //     for key in prunable_keys {
+                //         // Prune the pruning table.
+                //         let key = key?;
+                //         batch.delete::<NomtPruningState<KernelNamespace>>(&key)?;
+                //         keys_to_prune += 1;
+                //         keys_inspected += 1;
+                //         // Prune the historical state table.
+                //         let mut key = key.into_versioned_key();
+                //         let Some(previous_version) = key.1.checked_sub(1) else {
+                //             continue;
+                //         };
+                //         let prev_written_version =
+                //             kernel.get_version_for_key(&key.0, previous_version)?;
+                //         keys_inspected += 1;
+                //         if let Some(previous_version) = prev_written_version {
+                //             key.1 = previous_version;
+                //             batch.delete::<NomtHistoricalState<KernelNamespace>>(&key)?;
+                //             keys_to_prune += 1;
+                //         }
+                //         if keys_to_prune >= max_batch_size {
+                //             hit_size_limit = true;
+                //             break;
+                //         }
+                //     }
+                //     batch.put::<NomtCommittedVersion<KernelNamespace>>(
+                //         &VersionedTableMetadataKey::PrunedVersion,
+                //         &kernel_version,
+                //     )?;
+                // }
 
                 let pruning_time = pruning_time.elapsed();
                 sov_metrics::track_metrics(|tracker| {
@@ -305,7 +312,7 @@ where
 
     fn are_root_hashes_match(&self) -> anyhow::Result<bool> {
         let historical_state_delta_reader =
-            DeltaReader::new(self.flat_state.other.clone(), Vec::new());
+            DeltaReader::new(self.flat_state.live_db.clone(), Vec::new());
 
         let nomt_root_hashes = self.merklized_state.get_root_hashes();
         let last_version =

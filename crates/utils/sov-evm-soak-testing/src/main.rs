@@ -1,7 +1,7 @@
-use alloy::eips::BlockNumberOrTag;
+use crate::{logs::run_logs_test, uniswap::UniSoakTest};
 use alloy::network::TransactionBuilder;
 use alloy::providers::{Provider, ProviderBuilder, WsConnect};
-use alloy::rpc::types::{Filter, TransactionRequest};
+use alloy::rpc::types::TransactionRequest;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{hex, providers::DynProvider};
 use alloy_primitives::U256;
@@ -10,12 +10,11 @@ use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
 use std::net::SocketAddr;
-use std::time::Instant;
-
-use crate::{logs::LogsSoakTest, uniswap::UniSoakTest};
-use sov_eth_client::LogsWithCursorProvider;
+use tracing::warn;
+use tracing_subscriber::EnvFilter;
 
 mod logs;
+pub(crate) mod recv_many;
 mod simple_storage;
 mod uniswap;
 
@@ -69,7 +68,22 @@ enum TestType {
         /// Number of parallel workers to spawn
         #[arg(short, long, default_value = "1")]
         num_workers: usize,
+
+        #[command(subcommand)]
+        mode: LogsRetrievalMode,
     },
+}
+
+#[derive(Subcommand, Clone, Debug)]
+enum LogsRetrievalMode {
+    /// Retrieve logs using eth_subscribe
+    Subscription {
+        /// Channel capacity for the subscription
+        #[arg(short, long, default_value = "100000")]
+        capacity: usize,
+    },
+    /// Retrieve logs using cursor-based pagination
+    WithCursor,
 }
 
 /// Derives a unique private key for a worker by tweaking the root key.
@@ -85,8 +99,18 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
     Ok(hex::encode(key_bytes))
 }
 
-/// Creates an Alloy WebSocket client connected to the specified RPC server.
-pub(crate) async fn alloy_client(
+/// Creates an Alloy HTTP client connected to the specified RPC server.
+pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Result<DynProvider> {
+    let url = Url::parse(&format!("http://{rpc_addr}/rpc"))?;
+    let client = ProviderBuilder::new()
+        .wallet(signer)
+        .connect_http(url)
+        .erased();
+    Ok(client)
+}
+
+/// Creates an Alloy WS client connected to the specified RPC server.
+pub(crate) async fn alloy_ws_client(
     rpc_addr: SocketAddr,
     signer: PrivateKeySigner,
 ) -> Result<DynProvider> {
@@ -95,7 +119,8 @@ pub(crate) async fn alloy_client(
     let client = ProviderBuilder::new()
         .wallet(signer)
         .connect_ws(ws)
-        .await?
+        .await
+        .unwrap()
         .erased();
     Ok(client)
 }
@@ -122,7 +147,7 @@ async fn run_uniswap_test(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone()).await?;
+        let client = alloy_client(rpc_addr, signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match UniSoakTest::new(client, signer.address()).await {
@@ -151,6 +176,10 @@ async fn fund_worker_accounts(
     num_workers: usize,
 ) -> Result<()> {
     let root_balance = root_client.get_balance(root_signer.address()).await?;
+    if root_balance == U256::ZERO {
+        warn!("Root balance is 0. Skipping funding. This is fine if the paymaster is enabled.");
+        return Ok(());
+    }
     let transfer_amount = root_balance.wrapping_div(U256::from(num_workers));
 
     for worker_idx in 0..num_workers {
@@ -163,80 +192,20 @@ async fn fund_worker_accounts(
 
         root_client.send_transaction(tx).await?.watch().await?;
     }
-
-    Ok(())
-}
-
-/// Spawns multiple log test workers, runs them, and retrieves all generated logs.
-async fn run_logs_test(
-    rpc_addr: SocketAddr,
-    private_key: &str,
-    tx_count: usize,
-    logs_per_tx: usize,
-    num_workers: usize,
-) -> Result<()> {
-    validate_worker_count(num_workers)?;
-
-    // Set up root account and fund workers
-    let root_signer: PrivateKeySigner = private_key.parse()?;
-    let root_client = alloy_client(rpc_addr, root_signer.clone()).await?;
-
-    fund_worker_accounts(&root_client, &root_signer, private_key, num_workers).await?;
-
-    let from_block = root_client.get_block_number().await?;
-
-    // Spawn workers
-    let produce_logs = Instant::now();
-    let mut handles = Vec::with_capacity(num_workers);
-    for worker_idx in 0..num_workers {
-        let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone()).await?;
-
-        handles.push(tokio::spawn(async move {
-            match LogsSoakTest::new(client, worker_idx).await {
-                Ok(test) => {
-                    if let Err(e) = test.run(tx_count, logs_per_tx).await {
-                        eprintln!("Worker {worker_idx} error during run: {e:?}");
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Worker {worker_idx} failed to deploy contracts: {e:?}");
-                }
-            }
-            Ok::<(), anyhow::Error>(())
-        }));
-    }
-    try_join_all(handles).await?;
-    println!(
-        "Produced {} logs in {:?}",
-        num_workers * tx_count * logs_per_tx,
-        produce_logs.elapsed()
-    );
-
-    // Retrieve and count all logs
-    let filter: Filter = Filter::new()
-        .from_block(from_block)
-        .to_block(BlockNumberOrTag::Pending);
-    let fetch_logs = Instant::now();
-    let logs = root_client.get_all_logs_with_cursor(&filter).await?;
-    println!(
-        "Retrieved {} logs in {:?}",
-        logs.len(),
-        fetch_logs.elapsed()
-    );
-
     Ok(())
 }
 
 /// Runs the SimpleStorage soak test.
 async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
     let signer: PrivateKeySigner = private_key.parse()?;
-    let client = alloy_client(rpc_addr, signer).await?;
+    let client = alloy_client(rpc_addr, signer)?;
     simple_storage::run(client).await
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let filter = EnvFilter::try_from_default_env().unwrap_or("debug".into());
+    tracing_subscriber::fmt().with_env_filter(filter).init();
     let args = Args::parse();
 
     match args.test {
@@ -250,6 +219,7 @@ async fn main() -> Result<()> {
             tx_count,
             logs_per_tx,
             num_workers,
+            mode,
         } => {
             run_logs_test(
                 args.rpc_addr,
@@ -257,6 +227,7 @@ async fn main() -> Result<()> {
                 tx_count,
                 logs_per_tx,
                 num_workers,
+                mode,
             )
             .await?;
         }

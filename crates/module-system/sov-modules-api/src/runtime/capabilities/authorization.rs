@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::stf::ExecutionContext;
-use sov_rollup_interface::TxHash;
+use sov_rollup_interface::{Bytes, TxHash};
 use sov_universal_wallet::UniversalWallet;
 
 use crate::transaction::Credentials;
-use crate::{Context, Spec, StateAccessor};
+use crate::{Context, SequencerType, Spec, StateAccessor};
 
 /// Authorizes transactions to be executed.
 pub trait TransactionAuthorizer<S: Spec> {
@@ -22,6 +22,9 @@ pub trait TransactionAuthorizer<S: Spec> {
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
         state: &mut impl StateAccessor,
+        sequencing_data: Option<Bytes>,
+        execution_context: ExecutionContext,
+        sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>>;
 
     /// Resolves the context for an unregistered transaction.
@@ -30,6 +33,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         state: &mut impl StateAccessor,
+        execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>>;
 
     /// Prevents duplicate transactions from running.

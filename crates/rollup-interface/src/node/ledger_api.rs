@@ -2,7 +2,6 @@
 //! via an RPC interface.
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Bytes;
 use derive_more::derive::Display;
 use futures::stream::BoxStream;
 use serde::de::DeserializeOwned;
@@ -10,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::{hex_string_serde, SlotNumber};
 use crate::da::Time;
-use crate::stf::{EventKey, StoredEvent, TxEffect, TxReceiptContents};
+use crate::stf::{EventKey, FullyBakedTx, StoredEvent, TxEffect, TxReceiptContents};
 use crate::zk::aggregated_proof::SerializedAggregatedProof;
 
 /// The finality status of a slot.
@@ -245,7 +244,7 @@ pub struct TxResponse<Tx: TxReceiptContents, E> {
     pub event_range: core::ops::Range<u64>,
     /// The transaction body, if stored by the rollup.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<Bytes>,
+    pub body: Option<FullyBakedTx>,
     /// The events emitted by this transaction, if the [`QueryMode`] of the request is not `Compact`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub events: Option<Vec<E>>,
@@ -296,7 +295,7 @@ pub struct PaginatedEventResponse<E> {
 #[async_trait]
 pub trait LedgerStateProvider {
     /// The error type for fallible methods on this trait.
-    type Error: ToString + Send + Sync + 'static;
+    type Error: std::fmt::Display + Send + Sync + 'static;
 
     /// Get the latest rollup height in the ledger.
     async fn get_head_slot_number(&self) -> Result<SlotNumber, Self::Error>;

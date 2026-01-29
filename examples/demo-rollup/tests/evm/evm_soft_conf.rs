@@ -26,18 +26,12 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
                 .eth_get_block_by_number(Some("pending".to_string()))
                 .await;
 
-            assert_eq!(pending_block.parent_hash, latest_block.hash.unwrap());
-            assert_eq!(
-                pending_block.number.unwrap(),
-                latest_block.number.unwrap() + 1
-            );
+            assert_eq!(latest_block, pending_block);
             assert!(pending_block.transactions.is_empty());
-            assert!(latest_block.transactions.is_empty());
         }
 
         let set_arg = 1;
-        let set_value_req = evm_client.set_value(contract_address, set_arg).await;
-        let tx_hash = set_value_req.tx_hash();
+        let tx_hash = evm_client.set_value(contract_address, set_arg).await;
 
         let expected_block_nr = evm_client.block_number().await + 1;
 
@@ -49,20 +43,22 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
             assert!(rec.block_hash.is_none());
             assert!(tx.block_hash.is_none());
 
-            assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
-            assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
+            assert_eq!(rec.block_number.unwrap(), expected_block_nr);
+            assert_eq!(tx.block_number.unwrap(), expected_block_nr);
         }
 
         // Verify the `pending_block` asserts after inserting the transaction.
         {
-            let pending_blokck = evm_client
+            let pending_block = evm_client
                 .eth_get_block_by_number(Some("pending".to_string()))
                 .await;
 
-            assert_eq!(pending_blokck.number.unwrap().as_u64(), expected_block_nr);
-            assert_eq!(pending_blokck.transactions, vec![tx_hash]);
-            let block_timestamp: u64 = pending_blokck.timestamp.try_into().unwrap();
-            assert!(block_timestamp == 0);
+            assert_eq!(pending_block.header.number, expected_block_nr);
+            assert_eq!(
+                pending_block.transactions.hashes().collect::<Vec<_>>(),
+                vec![tx_hash]
+            );
+            assert_ne!(pending_block.header.timestamp, 0);
         }
 
         // Now we created a block and the block hash becomes available.
@@ -76,8 +72,8 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
 
             assert_eq!(rec.block_hash, tx.block_hash);
 
-            assert_eq!(rec.block_number.unwrap().as_u64(), expected_block_nr);
-            assert_eq!(tx.block_number.unwrap().as_u64(), expected_block_nr);
+            assert_eq!(rec.block_number.unwrap(), expected_block_nr);
+            assert_eq!(tx.block_number.unwrap(), expected_block_nr);
         }
     }
 

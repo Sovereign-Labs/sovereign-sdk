@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::{ApiStateAccessor, KernelStateValue, StateCheckpoint};
+use sov_modules_api::{
+    ApiStateAccessor, ConcurrentStateCheckpoint, KernelStateValue, StateCheckpoint,
+};
 use sov_state::{BorshCodec, Prefix};
 use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
 use sov_test_utils::TestNomtSpec;
@@ -33,8 +35,13 @@ where
 
     for current_height in 0..100 {
         let (storage, prev_root) = storage_manager.create_storage_with_root();
-        let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
-        let api_accessor = ApiStateAccessor::new(&state_checkpoint, Arc::new(kernel.clone()));
+        let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let api_accessor = ApiStateAccessor::new(
+            Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                state_checkpoint,
+            )),
+            Arc::new(kernel.clone()),
+        );
 
         for past_height in 0..current_height {
             let mut archival_api_accessor = api_accessor
@@ -54,8 +61,13 @@ where
             prev_root,
         );
         let storage = storage_manager.create_prover_storage();
-        let state_checkpoint = StateCheckpoint::new(storage, &kernel);
-        let api_accessor = ApiStateAccessor::new(&state_checkpoint, Arc::new(kernel.clone()));
+        let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+        let api_accessor = ApiStateAccessor::new(
+            Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                state_checkpoint,
+            )),
+            Arc::new(kernel.clone()),
+        );
 
         for another_past_height in 0..=current_height {
             let mut archival_api_accessor = api_accessor

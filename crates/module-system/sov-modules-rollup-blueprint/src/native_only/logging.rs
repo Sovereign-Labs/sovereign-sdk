@@ -3,6 +3,7 @@
 use std::env;
 use std::str::FromStr;
 
+use crate::native_only::telemetry::should_init_tokio_console_subscriber;
 pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
 use crate::GIT_COMMIT_HASH;
 use sov_modules_api::ExecutionContext;
@@ -48,7 +49,7 @@ pub fn initialize_logging() -> Option<OtelGuard> {
         .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP))
         .boxed();
 
-    if cfg!(tokio_unstable) {
+    if cfg!(tokio_unstable) && should_init_tokio_console_subscriber() {
         layers = layers
             .and_then(
                 // See <https://github.com/tokio-rs/console?tab=readme-ov-file#using-it>.
@@ -60,9 +61,13 @@ pub fn initialize_logging() -> Option<OtelGuard> {
 
     if let Some(otel) = otel.as_ref() {
         layers = layers
-            .and_then(otel.otel_tracing_layer().with_filter(get_env_filter()))
             .and_then(otel.otel_logging_layer().with_filter(get_env_filter()))
             .boxed();
+        if let Some(otel_tracing_layer) = otel.otel_tracing_layer() {
+            layers = layers
+                .and_then(otel_tracing_layer.with_filter(get_env_filter()))
+                .boxed();
+        }
     }
 
     tracing_subscriber::registry().with(layers).init();
@@ -85,6 +90,7 @@ pub fn default_rust_log_value() -> String {
         "tungstenite=info",
         "hyper=info",
         "jmt=info",
+        "rustls=info",
         "jsonrpsee-server=info",
         "jsonrpsee-client=info",
         "risc0_circuit_rv32im=info",
@@ -113,7 +119,7 @@ fn log_info_about_logging(current_env_filter: &str) {
     );
 
     let tokio_console_info_url = "https://github.com/tokio-rs/console";
-    if cfg!(tokio_unstable) {
+    if cfg!(tokio_unstable) && should_init_tokio_console_subscriber() {
         info!(
             tokio_console_info_url,
             "The Tokio debugging console is available",

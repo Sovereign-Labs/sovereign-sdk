@@ -1,6 +1,11 @@
+use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
+use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use async_trait::async_trait;
+use sov_full_node_configs::sequencer::PostgresConfig;
+use sov_rollup_interface::node::future_or_shutdown;
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
@@ -26,35 +31,45 @@ pub(crate) struct ReplicaTaskHandles {
 
 pub(crate) struct ReplicaSyncTask {
     shutdown_sender: watch::Sender<()>,
-    postgres_connection_string: String,
     page_size: usize,
+    start_replica_task_receiver: watch::Receiver<()>,
 }
 
 impl ReplicaSyncTask {
     pub(crate) async fn new(
-        postgres_connection_string: String,
         shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<Self> {
-        Self::new_with_page_size(postgres_connection_string, shutdown_sender, PAGE_SIZE).await
+        seq_role: SequencerRole,
+    ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
+        Self::new_with_page_size(shutdown_sender, PAGE_SIZE, seq_role).await
     }
 
     pub(crate) async fn new_with_page_size(
-        postgres_connection_string: String,
         shutdown_sender: watch::Sender<()>,
         page_size: usize,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            postgres_connection_string,
-            shutdown_sender,
-            page_size,
-        })
+        seq_role: SequencerRole,
+    ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
+        let (start_replica_task_notifier, start_replica_task_receiver) =
+            EventReceiverStartNotifier::new(seq_role);
+        Ok((
+            Self {
+                shutdown_sender,
+                page_size,
+                start_replica_task_receiver,
+            },
+            start_replica_task_notifier,
+        ))
     }
 
-    pub(crate) async fn start<R: ReplicaEventHandler>(&mut self, handler: R) -> ReplicaTaskHandles {
+    pub(crate) async fn start<R: ReplicaEventHandler>(
+        &mut self,
+        handler: R,
+        postgres_config: &PostgresConfig,
+    ) -> ReplicaTaskHandles {
         let (event_receiver, db_data_receiver) = EventReceiver::new(
-            self.postgres_connection_string.clone(),
+            postgres_config.postgres_connection_string.clone(),
             self.shutdown_sender.clone(),
             self.page_size,
+            self.start_replica_task_receiver.clone(),
         )
         .await;
 
@@ -77,15 +92,16 @@ impl ReplicaSyncTask {
         shutdown_receiver: watch::Receiver<()>,
     ) {
         'outer: loop {
-            if shutdown_receiver.has_changed().unwrap_or(true) {
-                break 'outer;
-            }
-
-            let Some(mut data) = db_data_receiver.recv().await else {
+            let fut = future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+            let FutureOrShutdownOutput::Output(Some(mut data)) = fut.await else {
                 break 'outer;
             };
 
             'inner: loop {
+                if shutdown_receiver.has_changed().unwrap_or(true) {
+                    break 'outer;
+                }
+
                 match handler.on_db_event(data).await {
                     Ok(_) => {
                         // The data was applied on the executor.
@@ -94,14 +110,25 @@ impl ReplicaSyncTask {
 
                     Err(DBDataRejected::ExecutorAhead(executor_seq_nr)) => {
                         // The executor is ahead of the db drain the queue and wait until we catch up.
-                        while let Ok(new_data) = db_data_receiver.try_recv() {
-                            if new_data.sequence_number() > executor_seq_nr {
+                        loop {
+                            let fut =
+                                future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+
+                            let FutureOrShutdownOutput::Output(Some(new_data)) = fut.await else {
+                                break 'outer;
+                            };
+
+                            assert!(
+                                new_data.sequence_number() <= executor_seq_nr,
+                                "The sequence number must be consecutive"
+                            );
+
+                            if new_data.sequence_number() == executor_seq_nr {
                                 assert!(matches!(new_data, DbData::BatchStart(_)));
                                 data = new_data;
                                 continue 'inner;
                             }
                         }
-                        break 'inner;
                     }
 
                     Err(DBDataRejected::ExecutorBehind(db_data)) => {
@@ -121,13 +148,12 @@ mod tests {
     use super::*;
     use crate::preferred::db::postgres::PostgresBackend;
     use crate::preferred::db::BatchToStore;
-    use crate::preferred::db::PreferredSequencerDbBackend;
+    use crate::preferred::db::DbBackend;
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
-    use sov_test_utils::postgres::{
-        connection_string_from_postgres_container, create_postgres_container, CreatePostgresError,
-    };
+    use sov_test_utils::postgres::config_from_postgres_container;
+    use sov_test_utils::postgres::{create_postgres_container, CreatePostgresError};
     use std::sync::atomic::Ordering;
     use tokio::sync::mpsc::error::TryRecvError;
 
@@ -208,7 +234,7 @@ mod tests {
                 TestCase::CompleteBatch(seq_nr, nb_of_txs) => {
                     index = 0;
                     let stored_batch = new_batch_to_store(seq_nr);
-                    db.begin_rollup_block(stored_batch.clone()).await.unwrap();
+                    db.begin_rollup_block(stored_batch).await.unwrap();
 
                     for i in 0..nb_of_txs {
                         let tx = FullyBakedTx::new(vec![i as u8]);
@@ -295,6 +321,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_notifications_start_event_id() {
+        //sov_test_utils::initialize_logging();
         let test_data = vec![
             TestCase::Transaction(6),
             TestCase::Transaction(6),
@@ -310,9 +337,7 @@ mod tests {
     }
 
     async fn run(test_cases: Vec<TestCase>, expected: Vec<DbData>, exec_seq_nr: u64) {
-        let dir = tempfile::tempdir().unwrap();
-
-        let postgres = create_postgres_container(&dir.path().join("postgres_data")).await;
+        let postgres = create_postgres_container().await;
         let postgres = match postgres {
             Ok(pg) => pg,
             Err(CreatePostgresError::DockerNotSupported) => return,
@@ -321,22 +346,25 @@ mod tests {
             }
         };
 
-        let postgres_connection_string = connection_string_from_postgres_container(&postgres)
+        let postgres_config = config_from_postgres_container(&postgres, "Replica".into())
             .await
             .unwrap();
 
-        let db = PostgresBackend::connect(&postgres_connection_string)
-            .await
-            .unwrap();
+        let db = PostgresBackend::connect(&postgres_config).await.unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
-        let mut sync_task =
-            ReplicaSyncTask::new_with_page_size(postgres_connection_string, shutdown_snd, 8)
+        let (mut sync_task, start_replica_task_notifier) =
+            ReplicaSyncTask::new_with_page_size(shutdown_snd, 8, SequencerRole::Replica)
                 .await
                 .unwrap();
 
+        start_replica_task_notifier.notify();
+
         let (test_handler, mut recv) = TestHandler::new(exec_seq_nr);
-        sync_task.start(test_handler).await;
+        sync_task.start(test_handler, &postgres_config).await;
+
+        // Wait for sync_task.start to spawn the sync task
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         execute(db, test_cases).await;
 
@@ -373,8 +401,8 @@ mod tests {
 
         let seq_nr = 3;
         let test_cases = to_db_data(&test_cases);
-        // We skip batch 1,2 and 3 so 15 db messages in total.
-        let expected = test_cases.iter().skip(15).cloned().collect();
+        // We skip batch 1, 2 so 10 db messages in total.
+        let expected = test_cases.iter().skip(10).cloned().collect();
         check_sync_task(test_cases.clone(), expected, seq_nr).await;
     }
 

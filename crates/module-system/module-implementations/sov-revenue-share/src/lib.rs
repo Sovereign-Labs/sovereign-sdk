@@ -49,6 +49,7 @@ impl<S: Spec> Module for RevenueShare<S> {
     type Config = ();
     type CallMessage = CallMessage<S>;
     type Event = ();
+    type Error = anyhow::Error;
 
     fn genesis(
         &mut self,
@@ -69,7 +70,7 @@ impl<S: Spec> Module for RevenueShare<S> {
         msg: Self::CallMessage,
         context: &sov_modules_api::Context<S>,
         state: &mut impl sov_modules_api::TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::ActivateRevenueShare => {
                 self.activate_revenue_share(context, state)?;

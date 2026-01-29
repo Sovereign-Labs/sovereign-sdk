@@ -40,6 +40,8 @@ use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
 #[cfg(feature = "native")]
 use sov_state::storage::StateUpdate;
+#[cfg(feature = "native")]
+use sov_state::NativeStorage;
 use sov_state::{Storage, StorageProof};
 pub use stf_blueprint::StfBlueprint;
 use tracing::trace;
@@ -166,7 +168,7 @@ where
                                     )
                                     .as_bytes(),
                                 ) {
-                                    tracing::error!("Error while writing state root to file for debugging {}: {}", &file_name, e);
+                                    tracing::error!(error = ?e, file_name, "Error while writing state root to file for debugging");
                                     break;
                                 }
                             }
@@ -174,9 +176,8 @@ where
                     }
                     Err(e) => {
                         tracing::error!(
-                            "Failed to create file for state root debugging {}: {}",
-                            &file_name,
-                            e
+                            error = ?e, file_name,
+                            "Failed to create file for state root debugging",
                         );
                     }
                 }
@@ -285,7 +286,7 @@ where
         // Sanity checks.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
             .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
-        let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel());
+        let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel(), None);
 
         let mut genesis_accessor =
             state_checkpoint.to_genesis_state_accessor::<RT>(&params.runtime);
@@ -417,11 +418,13 @@ where
 {
     /// Run a state transition using the STF blueprint.
     // Similar to `apply_slot`, but enables the injection of a custom `InjectedControlFlow`.
+    // Danger! Note that the semantics of cloning `pre_state` are messy. They are guaranteed not to change the state that the rollup sees, but they are *not* guaranteed
+    // to preserve the pinned cache. Cloning in the wrong place might cause this funciton to slow down silently!
     #[allow(clippy::too_many_arguments)]
     pub fn apply_slot_with_control_flow<CF: InjectedControlFlow<S> + Clone>(
         &self,
         pre_state_root: &<S::Storage as Storage>::Root,
-        pre_state: S::Storage,
+        #[cfg_attr(not(feature = "native"), allow(unused_mut))] mut pre_state: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         slot_header: &<S::Da as DaSpec>::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
@@ -446,7 +449,25 @@ where
 
         start_timer!(start_slot);
 
-        let mut state = StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel());
+        let pinned_cache = {
+            #[cfg(feature = "native")]
+            {
+                let mut pinned_cache = pre_state.try_load_saved_pinned_cache();
+                if pinned_cache.is_none() {
+                    tracing::debug!("No pinned cache found in storage. Populating from db if supported - this may take a while...");
+                    pinned_cache = RT::populate_pinned_cache(&pre_state);
+                    tracing::debug!("Finished populating pinned cache from db.");
+                }
+                pinned_cache
+            }
+            #[cfg(not(feature = "native"))]
+            {
+                None
+            }
+        };
+
+        let mut state =
+            StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel(), pinned_cache);
         // First, we bootstrap the kernel from the previous state. The
         // `true_slot_number`, will *always* be stale because it's leftover from the
         // previous slot.

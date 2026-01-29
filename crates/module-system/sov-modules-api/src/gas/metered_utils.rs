@@ -141,7 +141,7 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
     pub fn charge_gas<Meter: GasMeter<Spec: Spec<Gas = GU>>>(
         &self,
         meter: &mut Meter,
-        msg: &[u8],
+        msg_len: usize,
     ) -> Result<(), MeteredSigVerificationError<GU>> {
         meter
             .charge_gas(self.fixed_gas_to_charge_per_verification)
@@ -150,7 +150,7 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         meter
             .charge_linear_gas(
                 self.gas_to_charge_per_byte_for_verification,
-                as_u32_or_panic(msg.len()),
+                as_u32_or_panic(msg_len),
             )
             .map_err(MeteredSigVerificationError::GasError)?;
 
@@ -161,7 +161,7 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         meter
             .charge_linear_gas(
                 <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
-                msg.len().try_into().map_err(|e: TryFromIntError| {
+                msg_len.try_into().map_err(|e: TryFromIntError| {
                     MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
                         e.to_string(),
                     ))
@@ -182,7 +182,7 @@ impl<GU: Gas, Sign: Signature> MeteredSignature<GU, Sign> {
         msg: &[u8],
         meter: &mut Meter,
     ) -> Result<(), MeteredSigVerificationError<GU>> {
-        self.charge_gas(meter, msg)?;
+        self.charge_gas(meter, msg.len())?;
 
         self.inner
             .verify(pub_key, msg)

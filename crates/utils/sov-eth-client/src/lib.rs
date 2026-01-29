@@ -1,16 +1,13 @@
-use alloy_primitives::Bytes;
+use alloy_primitives::{Address, Bytes, TxHash, U256};
+use alloy_rpc_types::{TransactionReceipt, TransactionRequest};
 use derive_more::Deref;
-use ethereum_types::H160;
-use ethers::core::abi::Address;
-use ethers::core::types::transaction::eip2718::TypedTransaction;
-use ethers::core::types::Eip1559TransactionRequest;
-use ethers::providers::{Http, PendingTransaction};
 use futures::StreamExt;
 use sov_cli::NodeClient;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::{Runtime, Spec};
-use sov_test_utils::LegacySimpleStorage;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 mod provider_ext;
 mod rpc;
@@ -18,9 +15,11 @@ mod rpc;
 pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
-const GAS: u64 = 9000000u64;
-const MAX_FEE_PER_GAS: u64 = 100;
-const MAX_PRIORITY_FEE_PER_GAS: u64 = 1;
+const RECEIPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+const GAS: u64 = 100_000_000u64;
+const MAX_FEE_PER_GAS: u128 = 100;
+const MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 #[derive(Deref)]
 pub struct SimpleStorageClient {
@@ -58,47 +57,79 @@ impl SimpleStorageClient {
 
 // Tx/nonce utils
 impl SimpleStorageClient {
-    pub fn make_tx(
-        &self,
-        to_address: Option<Address>,
-        data: Option<ethers::core::types::Bytes>,
-    ) -> TypedTransaction {
-        let mut tx = Eip1559TransactionRequest::new()
+    pub fn make_tx(&self, to_address: Option<Address>, data: Option<Bytes>) -> TransactionRequest {
+        let nonce = self.nonce.load(Ordering::SeqCst);
+
+        let mut tx = TransactionRequest::default()
             .from(self.address())
-            .chain_id(self.rpc_client.chain_id())
+            .nonce(nonce)
             .max_priority_fee_per_gas(MAX_PRIORITY_FEE_PER_GAS)
             .max_fee_per_gas(MAX_FEE_PER_GAS)
-            .gas(GAS);
-
-        // Get next nonce atomically
-        let nonce = self.nonce.load(Ordering::SeqCst);
-        tx = tx.nonce(nonce);
+            .gas_limit(GAS);
 
         if let Some(data) = data {
-            tx = tx.data(data)
+            tx = tx.input(data.into());
         }
 
         if let Some(addr) = to_address {
-            tx = tx.to(addr)
+            tx = tx.to(addr);
         }
 
-        tx.into()
+        tx
     }
 
     pub async fn send_tx(
         &self,
-        tx: TypedTransaction,
-    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+        tx: TransactionRequest,
+    ) -> Result<TxHash, Box<dyn std::error::Error>> {
         // Increment nonce
         let _ = self.nonce.fetch_add(1, Ordering::SeqCst);
         self.rpc_client.eth_send_transaction(tx).await
     }
+
+    /// Wait for a transaction receipt to be available (including pending block receipts).
+    pub async fn wait_for_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
+        loop {
+            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                return receipt;
+            }
+            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
+        }
+    }
+
+    /// Wait for a transaction receipt with a block hash (i.e., in a finalized block).
+    pub async fn wait_for_finalized_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
+        loop {
+            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                if receipt.block_hash.is_some() {
+                    return receipt;
+                }
+            }
+            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
+        }
+    }
+
+    /// Send a transaction and wait for its receipt (including pending block receipts).
+    pub async fn send_tx_and_wait(
+        &self,
+        tx: TransactionRequest,
+    ) -> Result<TransactionReceipt, Box<dyn std::error::Error>> {
+        let tx_hash = self.send_tx(tx).await?;
+        Ok(self.wait_for_receipt(tx_hash).await)
+    }
+
+    /// Send a transaction and wait for it to be in a finalized block.
+    pub async fn send_tx_and_wait_finalized(
+        &self,
+        tx: TransactionRequest,
+    ) -> Result<TransactionReceipt, Box<dyn std::error::Error>> {
+        let tx_hash = self.send_tx(tx).await?;
+        Ok(self.wait_for_finalized_receipt(tx_hash).await)
+    }
 }
 
 impl SimpleStorageClient {
-    pub async fn deploy_contract(
-        &self,
-    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+    pub async fn deploy_contract(&self) -> Result<TxHash, Box<dyn std::error::Error>> {
         let tx = self.make_tx(None, Some(self.contract.byte_code()));
         self.send_tx(tx).await
     }
@@ -108,54 +139,44 @@ impl SimpleStorageClient {
         self.eth_call(tx).await
     }
 
-    pub async fn send_eth(&self, reciever: H160, eth_value: u128) -> PendingTransaction<'_, Http> {
-        let mut typed_transaction = self.make_tx(Some(reciever), None);
-        typed_transaction.set_value(eth_value);
+    pub async fn send_eth(&self, receiver: Address, eth_value: U256) -> TxHash {
+        let mut tx = self.make_tx(Some(receiver), None);
+        tx = tx.value(eth_value);
 
-        self.send_tx(typed_transaction).await.unwrap()
+        self.send_tx(tx).await.unwrap()
     }
 
-    pub async fn set_value(
-        &self,
-        contract_address: H160,
-        set_arg: u32,
-    ) -> PendingTransaction<'_, Http> {
+    pub async fn set_value(&self, contract_address: Address, set_arg: u32) -> TxHash {
         let tx = self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
 
         self.send_tx(tx).await.unwrap()
     }
 
-    pub async fn set_values(
-        &self,
-        contract_address: H160,
-        set_args: Vec<u32>,
-    ) -> Vec<PendingTransaction<'_, Http>> {
-        let mut requests: Vec<_> = Vec::with_capacity(set_args.len());
+    pub async fn set_values(&self, contract_address: Address, set_args: Vec<u32>) -> Vec<TxHash> {
+        let mut tx_hashes = Vec::with_capacity(set_args.len());
 
         for set_arg in set_args.into_iter() {
-            let typed_transaction =
-                self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
-
-            requests.push(self.send_tx(typed_transaction).await.unwrap());
+            let tx = self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
+            tx_hashes.push(self.send_tx(tx).await.unwrap());
         }
-        requests
+        tx_hashes
     }
 
     pub async fn set_value_call_and_estimate_gas(
         &self,
-        contract_address: H160,
+        contract_address: Address,
         set_arg: u32,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let mut tx = self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
         let gas = self.rpc_client.eth_estimate_gas(tx.clone()).await;
-        tx.set_gas(gas);
+        tx = tx.gas_limit(gas);
 
         self.rpc_client.eth_call(tx).await
     }
 
     pub async fn failing_call(
         &self,
-        contract_address: H160,
+        contract_address: Address,
     ) -> Result<Bytes, Box<dyn std::error::Error>> {
         let tx = self.make_tx(
             Some(contract_address),
@@ -166,36 +187,36 @@ impl SimpleStorageClient {
 
     pub async fn always_reverts(
         &self,
-        contract_address: H160,
-    ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
+        contract_address: Address,
+    ) -> Result<TxHash, Box<dyn std::error::Error>> {
         let tx = self.make_tx(Some(contract_address), Some(self.contract.always_revert()));
         self.send_tx(tx).await
     }
 
     pub async fn query_contract(
         &self,
-        contract_address: H160,
-    ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let typed_transaction = self.make_tx(Some(contract_address), Some(self.contract.get()));
+        contract_address: Address,
+    ) -> Result<U256, Box<dyn std::error::Error>> {
+        let tx = self.make_tx(Some(contract_address), Some(self.contract.get()));
 
-        let response = self.rpc_client.eth_call(typed_transaction).await?;
+        let response = self.rpc_client.eth_call(tx).await?;
 
         let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
-        Ok(ethereum_types::U256::from(resp_array))
+        Ok(U256::from_be_bytes(resp_array))
     }
 }
 
 // Rollup interactions
 impl SimpleStorageClient {
-    pub async fn send_transactions_and_wait_slot<S: Spec, Rt: Runtime<S>>(
+    pub async fn send_transaction_and_wait_slot<S: Spec, Rt: Runtime<S>>(
         &self,
-        transactions: &[sov_modules_api::transaction::Transaction<Rt, S>],
+        transaction: &sov_modules_api::transaction::Transaction<Rt, S>,
     ) -> anyhow::Result<()> {
         let mut slot_subscription = self.node_client.client.subscribe_slots().await?;
 
         self.node_client
             .client
-            .send_txs_to_sequencer(transactions)
+            .send_tx_to_sequencer_with_retry(&transaction)
             .await?;
 
         let _ = slot_subscription.next().await;
@@ -204,55 +225,30 @@ impl SimpleStorageClient {
     }
 }
 
-// Alloy
+// Alloy methods
 impl SimpleStorageClient {
-    pub async fn alloy_deploy_contract(&self) -> alloy_primitives::Address {
-        let typed_transaction = self.make_tx(None, Some(self.contract.byte_code()));
-        let addr = self
-            .send_tx(typed_transaction)
-            .await
-            .unwrap()
-            .await
-            .unwrap()
-            .unwrap()
-            .contract_address
-            .unwrap();
-
-        alloy_primitives::Address::from_slice(addr.0.as_slice())
+    pub async fn alloy_deploy_contract(&self) -> Address {
+        let tx = self.make_tx(None, Some(self.contract.byte_code()));
+        // Wait for finalized receipt to ensure contract deployment is in its own block
+        let receipt = self.send_tx_and_wait_finalized(tx).await.unwrap();
+        receipt.contract_address.unwrap()
     }
 
-    pub async fn alloy_set_value(
-        &self,
-        contract_address: alloy_primitives::Address,
-        set_arg: u32,
-    ) -> alloy_primitives::TxHash {
-        let typed_transaction = self.make_tx(
-            Some(ethers::core::abi::Address::from_slice(
-                contract_address.as_slice(),
-            )),
-            Some(self.contract.set(set_arg)),
-        );
-
-        let tx_hash = self.send_tx(typed_transaction).await.unwrap().tx_hash();
-
-        alloy_primitives::TxHash::from_slice(&tx_hash.0)
+    pub async fn alloy_set_value(&self, contract_address: Address, set_arg: u32) -> TxHash {
+        let tx = self.make_tx(Some(contract_address), Some(self.contract.set(set_arg)));
+        self.send_tx(tx).await.unwrap()
     }
 
     pub async fn alloy_emit_logs(
         &self,
-        contract_address: alloy_primitives::Address,
+        contract_address: Address,
         topic: u32,
         nb_of_logs: u32,
-    ) -> alloy_primitives::TxHash {
-        let typed_transaction = self.make_tx(
-            Some(ethers::core::abi::Address::from_slice(
-                contract_address.as_slice(),
-            )),
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
             Some(self.contract.emit_logs(topic, nb_of_logs)),
         );
-
-        let tx_hash = self.send_tx(typed_transaction).await.unwrap().tx_hash();
-
-        alloy_primitives::TxHash::from_slice(&tx_hash.0)
+        self.send_tx(tx).await.unwrap()
     }
 }

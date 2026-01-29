@@ -4,6 +4,7 @@ use std::num::TryFromIntError;
 
 use sov_metrics::StateAccessMetric;
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
 use sov_state::StorageProof;
 use sov_state::{
@@ -22,6 +23,7 @@ use crate::state::accessors::StateMetricsProvider;
 #[cfg(any(feature = "test-utils", feature = "evm"))]
 use crate::UnmeteredStateWrapper;
 use crate::{Gas, GasMeter, GasMeteringError, GasSpec, RevertableTxState, Spec};
+use crate::state::accessors::LayeredRevertableTxState;
 
 /// A type that can both read and write the normal "user-space" state of the rollup.
 ///
@@ -86,6 +88,14 @@ impl<T> InfallibleKernelStateAccessor for T where
 {
 }
 
+pub trait PinnedCacheAccessor<S: Spec> {
+    /// Returns a mutable reference to the pinned cache backing this accessor, if any exists.
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache>;
+
+    /// Returns a reference to the storage backing this accessor.
+    fn storage(&self) -> &S::Storage;
+}
+
 /// The state accessor used during transaction execution. It provides unrestricted
 /// access to [`User`]-space state, as well as limited visibility into the `Kernel` state.
 pub trait TxState<S: Spec>:
@@ -100,7 +110,15 @@ pub trait TxState<S: Spec>:
     + GasMeter<Spec = S>
     + Sized
     + StateMetricsProvider
+    + PinnedCacheAccessor<S>
 {
+    /// Converts this state accessor into a layered revertable state.
+    ///
+    /// You *MUST* call .commit_layer() to save the changes from the resulting accessor if you want them to be persisted
+    fn to_revertable_layered(&mut self) -> LayeredRevertableTxState<'_, S, Self> {
+        LayeredRevertableTxState::new(self)
+    }
+
     /// Converts this state accessor into a [`RevertableTxState`].
     ///
     /// You *MUST* call .commit() to save the changes from the resulting accessor if you want them to be persisted
@@ -121,6 +139,7 @@ impl<S: Spec, T> TxState<S> for T where
         + GasMeter<Spec = S>
         + Sized
         + StateMetricsProvider
+        + PinnedCacheAccessor<S>
 {
 }
 

@@ -11,10 +11,10 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
 use demo_stf_json_client::types::RuntimeAnyJsonValue;
-use full_node_configs::sequencer::SequencerKindConfig;
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{OperatingMode, RawTx, Runtime, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
@@ -91,7 +91,8 @@ async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
     match &*response {
         RuntimeAnyJsonValue::Object(inner) => {
             let state_value = inner.get("value").unwrap();
-            let heavy_vec = state_value.as_array().unwrap();
+            println!("State value: {state_value:?}");
+            let heavy_vec = state_value.as_array().expect("HeavyVec is not an array");
             assert_eq!(heavy_vec.len(), expected as usize);
         }
         _ => panic!("Getting SyntheticLoad state value returned unexpected JSON shape."),
@@ -332,6 +333,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
         (Level::WARN, "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works.".to_string()),
         (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
         (Level::WARN, "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string()),
+        (Level::WARN, "Cache warm up task: Transaction could not be applied on the executor.".to_string()),
     ];
 
     let mut recorded_errors_warnings =

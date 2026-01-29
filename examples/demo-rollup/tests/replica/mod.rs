@@ -1,11 +1,16 @@
 use crate::test_helpers::build_transfer_token_tx;
 use crate::test_helpers::test_genesis_source;
+use futures::stream::BoxStream;
+use futures::StreamExt;
+use sov_api_spec::types;
 use sov_bank::config_gas_token_id;
+use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::ExternalMockDemoRollup;
+use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{MockAddress, MockDaConfig};
+use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
@@ -18,12 +23,18 @@ use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
+use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::watch;
+use tokio::time::Duration;
+
+mod replica_gets_txs_from_master;
+mod start_stop;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
+const AMOUNT: u128 = 100;
 
 fn random_address() -> <S as Spec>::Address {
     let pk = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
@@ -44,7 +55,10 @@ async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
 async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
     let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
-    da_config.block_producing = sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+    da_config.block_producing = BlockProducingConfig::Periodic {
+        block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 2,
+    };
+
     let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
 
     let addr = start_server(da_service.clone(), "127.0.0.1", 0)
@@ -57,7 +71,7 @@ async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<(
 async fn start_rollup(
     is_replica: bool,
     addr: SocketAddr,
-    postgres: Option<Arc<PostgresData>>,
+    postgres: Option<(Arc<PostgresData>, String)>,
 ) -> TestRollup<ExternalMockDemoRollup<Native>> {
     let genesis = test_genesis_source(OperatingMode::Operator);
     RollupBuilder::new_with_external_da(
@@ -69,106 +83,70 @@ async fn start_rollup(
         postgres,
     )
     .await
+    .set_config(|c| match &mut c.sequencer_config {
+        SequencerKindConfig::Standard(_) => {}
+        SequencerKindConfig::Preferred(p) => {
+            p.num_cache_warmup_workers = 0;
+        }
+    })
     .start_test_rollup()
     .await
     .unwrap()
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_replica_receives_txs_from_da() {
-    let (_, shutdown_sender, addr) = create_da_service_periodic().await;
-    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
-
-    let test_rollup = start_rollup(false, addr, None).await;
-    let replica_test_rollup = start_rollup(true, addr, None).await;
-
-    let token_id = config_gas_token_id();
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    let receiver_addr = random_address();
-
-    let tx = build_transfer_token_tx::<S>(
-        &key_and_address.private_key,
-        token_id,
-        receiver_addr,
-        100,
-        0,
-    );
-
-    let height_before_tx = test_rollup.height().await;
-
-    test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
-
-    test_rollup
-        .wait_for_height(height_before_tx.get() + 5)
-        .await;
-
-    let receiver_balance = replica_test_rollup
-        .client
-        .get_balance::<S>(&receiver_addr, &token_id, None)
-        .await
-        .unwrap();
-
-    assert_eq!(receiver_balance.0, 100);
-    let _ = test_rollup.shutdown().await;
-    let _ = shutdown_sender.send(());
+async fn send_transfers(
+    start_nonce: u64,
+    count: u64,
+    key_and_address: PrivateKeyAndAddress<S>,
+    receiver: <S as Spec>::Address,
+    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
+) {
+    for n in 0..count {
+        let tx = build_transfer_token_tx::<S>(
+            &key_and_address.private_key,
+            config_gas_token_id(),
+            receiver,
+            AMOUNT,
+            start_nonce + n,
+        );
+        let mut retry_duration = Duration::from_millis(100);
+        // Send the tx with retries, up to 7 attempts (about 30 seconds)
+        for attempt in 1..=7 {
+            match test_rollup.send_tx_to_sequencer(&tx).await {
+                Ok(_) => break,
+                Err(e) => {
+                    if e.to_string().contains("The node fell out of sync") {
+                        if attempt == 7 {
+                            panic!("Failed to send tx after 7 attempts (about 30 seconds). This probably means that the test is too heavy.: {e}");
+                        }
+                        tokio::time::sleep(retry_duration).await;
+                        retry_duration *= 2;
+                    } else {
+                        panic!("Unexpected error while sending tx: {e}");
+                    }
+                }
+            }
+        }
+        // Wait between each successful send, to avoid overwhelming the sequencer
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_replica_receives_txs_from_postgres() {
-    let postgres = PostgresData::create_postgres().await;
-
-    let postgres = match postgres {
-        Ok(pg) => Some(pg),
-        Err(CreatePostgresError::DockerNotSupported) => return,
-        Err(CreatePostgresError::DockerError(e)) => {
-            panic!("Failed to create Postgres container: {e}");
-        }
-    };
-
-    let (da_service, addr) = create_da_service_manual().await;
-    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
-
-    let test_rollup = start_rollup(false, addr, postgres.clone()).await;
-    let replica_test_rollup = start_rollup(true, addr, postgres).await;
-
-    let token_id = config_gas_token_id();
-
-    da_service.produce_n_blocks_now(20).await.unwrap();
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    let receiver_addr = random_address();
-
-    let tx = build_transfer_token_tx::<S>(
-        &key_and_address.private_key,
-        token_id,
-        receiver_addr,
-        100,
-        0,
-    );
-
-    let height_before_tx = test_rollup.height().await;
-    test_rollup.send_tx_to_sequencer(&tx).await.unwrap();
-    let gap = 5;
-    // producing blocks, like it is standard periodic production
-    for _ in 0..gap {
-        da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(std::time::Duration::from_millis(
-            sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
-        ))
-        .await;
-    }
-
-    test_rollup
-        .wait_for_height(height_before_tx.get() + gap)
-        .await;
-
-    let receiver_balance = replica_test_rollup
-        .client
-        .get_balance::<S>(&receiver_addr, &token_id, None)
+async fn wait_for_all_events_with_timeout(
+    timeout: Duration,
+    nb_of_events: u64,
+    subscription: &mut BoxStream<'static, anyhow::Result<types::LedgerEvent>>,
+) {
+    tokio::time::timeout(timeout, wait_for_all_events(nb_of_events, subscription))
         .await
         .unwrap();
+}
 
-    assert_eq!(receiver_balance.0, 100);
-    let _ = test_rollup.shutdown().await;
+async fn wait_for_all_events(
+    nb_of_events: u64,
+    subscription: &mut BoxStream<'static, anyhow::Result<types::LedgerEvent>>,
+) {
+    for _ in 0..nb_of_events {
+        let _ = subscription.next().await.unwrap();
+    }
 }

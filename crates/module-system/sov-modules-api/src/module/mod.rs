@@ -5,17 +5,18 @@ use core::fmt::Debug;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::da::DaSpec;
 use sov_state::EventContainer;
-use sov_universal_wallet::schema::UniversalWallet;
 
 use crate::common::ModuleError;
 use crate::{GenesisState, ModuleId, TxState};
 
+mod call;
 mod dispatch;
 mod event;
 mod gas_spec;
 mod prefix;
 mod spec;
 
+pub use call::*;
 pub use dispatch::*;
 pub use event::*;
 pub use gas_spec::*;
@@ -32,14 +33,7 @@ pub trait Module: Clone {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Debug
-        + BorshSerialize
-        + BorshDeserialize
-        + UniversalWallet
-        + schemars::JsonSchema
-        + Clone
-        + PartialEq
-        + Eq;
+    type CallMessage: CallMessage;
 
     /// Module defined event resulting from a call method.
     type Event: Debug
@@ -49,6 +43,9 @@ pub trait Module: Clone {
         + 'static
         + core::marker::Send
         + PartialEq;
+
+    /// Error type returned by [`Module::call`].
+    type Error: Debug + std::fmt::Display + Send + Sync + 'static;
 
     /// Genesis is called once when a rollup is deployed.
     ///
@@ -92,7 +89,7 @@ pub trait Module: Clone {
         _message: Self::CallMessage,
         _context: &Context<Self::Spec>,
         _state: &mut impl TxState<Self::Spec>,
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), Self::Error>;
 
     /// Attempts to charge the provided amount of gas from the working set reverting the transaction if unsuccessful.
     ///
@@ -283,6 +280,101 @@ where
             state,
         )?)
     }
+}
+
+/// Allows a module to initialize offchain components.
+///
+/// This trait provides a standardized interface for initializing offchain components when
+/// starting up. It is automatically implemented for all types that implement [`Module`].
+///
+/// The primary purpose of this trait is to abstract over module initialization, allowing
+/// code to initialize all modules in a uniform way without needing to know the specific
+/// types of each module.
+///
+/// # Relationship to Other Traits
+/// - [`ExecutionInit`] is similar to [`Genesis`] but for offchain components
+/// - Like [`Genesis`], this trait is blanket-implemented for all [`Module`] types
+/// - Unlike [`Genesis`], initialization here is non-deterministic and happens on every startup
+///
+/// # When to Use
+/// Use this trait when initializing modules at startup.
+/// Module developers typically don't need to interact with this trait directly.
+pub trait ExecutionInit {
+    /// Configuration type for offchain components.
+    type Config;
+
+    /// Initializes offchain components for the module.
+    ///
+    /// This method is called at startup (before processing any blocks) to initialize
+    /// offchain components that the module needs. Unlike [`Module::genesis`],
+    /// which is called once during rollup deployment and must be deterministic, `init` can perform
+    /// non-deterministic operations and is called on every startup.
+    ///
+    /// Common use cases include:
+    /// - Initializing metrics collectors
+    /// - Connecting to external services
+    ///
+    /// # Determinism
+    /// Unlike [`Module::genesis`] and [`Module::call`], this method does NOT need to be deterministic.
+    /// Different instances can have different configurations for offchain components as long as they
+    /// produce the same state transitions when processing blocks.
+    ///
+    /// # Errors
+    /// Returns an error if initialization fails. This will typically cause startup to fail.
+    ///
+    /// # Example
+    ///
+    /// A common pattern is to store the configuration in a global variable (using [`std::sync::OnceLock`])
+    /// and then access it from hooks like [`BlockHooks`]:
+    ///
+    /// ```rust,ignore
+    /// use std::sync::OnceLock;
+    /// use sov_modules_api::{ExecutionInit, BlockHooks, StateCheckpoint};
+    ///
+    /// // Define the execution configuration for offchain components
+    /// #[derive(Clone)]
+    /// struct MyModuleExecutionConfig {
+    ///     metrics_endpoint: String,
+    ///     enable_detailed_logging: bool,
+    /// }
+    ///
+    /// // Global storage for the configuration
+    /// static EXECUTION_CONFIG: OnceLock<MyModuleExecutionConfig> = OnceLock::new();
+    ///
+    /// #[derive(Clone)]
+    /// struct MyModule { /* ... */ }
+    ///
+    /// impl ExecutionInit for MyModule {
+    ///     type Config = MyModuleExecutionConfig;
+    ///
+    ///     // Initialize offchain components at startup
+    ///     fn init(config: &Self::Config) -> Result<(), Box<dyn std::error::Error>> {
+    ///         EXECUTION_CONFIG.set(config.clone())
+    ///             .map_err(|_| "Execution config already initialized")?;
+    ///
+    ///         // Perform any other initialization (e.g., connect to metrics endpoint)
+    ///         println!("Connecting to metrics at: {}", config.metrics_endpoint);
+    ///
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// // Access the configuration in BlockHooks
+    /// impl BlockHooks for MyModule {
+    ///     type Spec = /* ... */;
+    ///
+    ///     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<Self::Spec>) {
+    ///         // Access the execution configuration
+    ///         if let Some(config) = EXECUTION_CONFIG.get() {
+    ///             if config.enable_detailed_logging {
+    ///                 println!("Block completed - detailed logging enabled");
+    ///             }
+    ///             // Submit metrics to the configured endpoint, etc.
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    fn init(config: &Self::Config) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[cfg(test)]

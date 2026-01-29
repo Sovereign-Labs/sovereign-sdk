@@ -2,7 +2,7 @@ use alloy_primitives::{Address, U256};
 use itertools::Itertools;
 use revm::primitives::HashMap;
 use revm::state::{Account, EvmStorageSlot};
-use revm_database_interface::DBErrorMarker;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{Spec, StateAccessor};
 
@@ -10,21 +10,13 @@ use super::EvmDb;
 use crate::db::{DbAccount, Error};
 use crate::{to_rollup_address, to_rollup_balance};
 
-/// EVM database commit interface.
-pub trait FallibleDatabaseCommit {
-    type Error: DBErrorMarker + core::error::Error;
-
-    /// Commit changes to the database.
-    fn commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error>;
-}
-
-impl<'a, Ws: StateAccessor, S: Spec> FallibleDatabaseCommit for EvmDb<'a, Ws, S>
+impl<'a, Ws: StateAccessor, S: Spec> TryDatabaseCommit for EvmDb<'a, Ws, S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     type Error = Error<Ws>;
 
-    fn commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error> {
+    fn try_commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error> {
         for (address, account) in changes
             .into_iter()
             // Sort addresses to avoid non-determinism in ZK
@@ -39,14 +31,14 @@ where
 
 impl<'a, Ws: StateAccessor, S: Spec> EvmDb<'a, Ws, S>
 where
-    EvmDb<'a, Ws, S>: FallibleDatabaseCommit<Error = Error<Ws>>,
+    EvmDb<'a, Ws, S>: TryDatabaseCommit<Error = Error<Ws>>,
     S::Address: FromVmAddress<EthereumAddress>,
 {
     fn commit_account(
         &mut self,
         address: Address,
         account: Account,
-    ) -> Result<(), <Self as FallibleDatabaseCommit>::Error> {
+    ) -> Result<(), <Self as TryDatabaseCommit>::Error> {
         // TODO figure out what to do when account is destroyed.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
         if account.is_selfdestructed() {
@@ -87,7 +79,7 @@ where
         &mut self,
         address: Address,
         storage: HashMap<U256, EvmStorageSlot>,
-    ) -> Result<(), <Self as FallibleDatabaseCommit>::Error> {
+    ) -> Result<(), <Self as TryDatabaseCommit>::Error> {
         storage
             .into_iter()
             .sorted_by_key(|(key, _)| *key) // Sort keys explicitly to avoid non-determinism.

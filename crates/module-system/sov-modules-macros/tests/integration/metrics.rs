@@ -46,6 +46,7 @@ async fn test_metrics_macro() {
             telegraf_address: TelegrafSocketConfig::udp(channel.local_addr().unwrap()),
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         },
         shutdown_receiver,
     );
@@ -108,6 +109,7 @@ async fn test_metrics_macro_without_input() {
             telegraf_address: TelegrafSocketConfig::udp(channel.local_addr().unwrap()),
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         },
         shutdown_receiver,
     );
