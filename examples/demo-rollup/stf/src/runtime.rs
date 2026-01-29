@@ -126,7 +126,7 @@ where
         let schema_endpoint = StandardSchemaEndpoint::<S>::new(
             &serde_json::from_str(__generated::SCHEMA_JSON)
                 .expect("Failed to deserialize schema json"),
-            Self::CHAIN_HASH,
+            Self::CHAIN_HASH.into(),
             api_state.checkpoint_receiver(),
         )
         .expect("Failed to initialize StandardSchemaEndpoint");

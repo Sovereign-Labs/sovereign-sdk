@@ -64,7 +64,7 @@ pub trait SchemaEndpoint: Clone + Send + Sync + 'static {
 #[derive(Clone)]
 pub struct StandardSchemaEndpoint<S: Spec> {
     schema: serde_json::Value,
-    default_chain_hash: [u8; 32],
+    default_chain_hash: HexHash,
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
 }
 
@@ -77,7 +77,7 @@ impl<S: Spec> StandardSchemaEndpoint<S> {
     /// * `checkpoint_receiver` - Receiver for state checkpoints to read current height
     pub fn new(
         schema: &Schema,
-        default_chain_hash: [u8; 32],
+        default_chain_hash: HexHash,
         checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
@@ -108,7 +108,7 @@ impl<S: Spec> SchemaEndpoint for StandardSchemaEndpoint<S> {
         // Resolve the chain hash for the current height
         let resolved = sov_modules_api::capabilities::resolve_chain_hashes_for_height(
             height.get(),
-            self.default_chain_hash,
+            self.default_chain_hash.0,
         );
 
         Ok(StandardSchemaResponse {

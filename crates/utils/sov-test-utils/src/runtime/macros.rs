@@ -154,7 +154,7 @@ macro_rules! generate_runtime_without_capabilities {
                 // This ensures wallets get the correct chain hash during chain hash transitions.
                 let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
-                    Self::CHAIN_HASH,
+                    Self::CHAIN_HASH.into(),
                     api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");
