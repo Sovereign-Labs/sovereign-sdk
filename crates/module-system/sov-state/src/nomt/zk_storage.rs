@@ -164,48 +164,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
         state_root: Self::Root,
         proof: StorageProof<Self::Proof>,
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-        let StorageProof {
-            key,
-            value,
-            proof: multi_proof,
-            namespace,
-        } = proof;
-        let root_node: Node = state_root.namespace_root(namespace);
-
-        let verified = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
-            &multi_proof.0,
-            root_node,
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to verify proof: {:?}", e))?;
-
-        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
-
-        match &value {
-            None => {
-                if !verified
-                    .confirm_nonexistence(&key_path)
-                    .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
-                {
-                    anyhow::bail!("Failed to verify non-existence of key");
-                }
-            }
-            Some(slot_value) => {
-                let authenticated_write = slot_value.combine_val_hash_and_size::<S::Hasher>();
-                let value_hash: ValueHash = S::Hasher::digest(&authenticated_write).into();
-                let leaf = LeafData {
-                    key_path,
-                    value_hash,
-                };
-                if !verified
-                    .confirm_value(&leaf)
-                    .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
-                {
-                    anyhow::bail!("Failed to verify value for key");
-                }
-            }
-        }
-
-        Ok((key, value))
+        crate::nomt::verify_storage_proof::<S>(state_root, proof)
     }
 }
 
