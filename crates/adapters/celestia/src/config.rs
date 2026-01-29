@@ -46,7 +46,7 @@ pub struct CelestiaConfig {
     pub request_timeout_secs: NonZero<u64>,
     /// Timeout for individual API requests to the Celestia node (in seconds).
     /// This is passed to the underlying celestia-client for each API call.
-    /// Default: 6 (one block time).
+    /// Default: 8 (one block time plus 2 seconds of wiggle room).
     #[serde(default = "default_api_request_timeout_secs")]
     pub api_request_timeout_secs: NonZero<u64>,
     /// Interval for polling transaction status confirmation (in milliseconds).
