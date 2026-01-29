@@ -297,13 +297,19 @@ pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
                     },
                     Some(Ok(_)) => {
                         // Client sent an unexpected message - notify them it was ignored
-                        trace!("Incoming WebSocket message but none was expected; notifying client");
-                        if let Err(err) = send_json(&mut socket, &ErrorObject {
+                        let error = ErrorObject {
                             status: StatusCode::BAD_REQUEST,
                             message: "This subscription does not accept incoming messages".to_string(),
                             details: JsonObject::new(),
-                        }).await {
-                            warn!(?err, "Failed to send error response - disconnecting client");
+                        };
+                        trace!("Incoming WebSocket message but none was expected; notifying client");
+                        if config.compress {
+                            if let Err(e) = feed_compressed_bytes(&mut socket, serde_json::to_string(&error).expect("Failed to serialize error as JSON. This is a bug, please report it").as_bytes()).await {
+                                warn!(?e, "Failed to send error response - disconnecting client");
+                                break;
+                            }
+                        } else if let Err(e) = send_json(&mut socket, &error).await {
+                            warn!(?e, "Failed to send error response - disconnecting client");
                             break;
                         }
                     },
@@ -330,11 +336,12 @@ pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
                                         }
 
                                         // Send compressed error
-                                        if send_compressed_bytes(&mut socket, err.to_json().as_bytes()).await.is_err() {
+                                        if feed_compressed_bytes(&mut socket, err.to_json().as_bytes()).await.is_err() {
                                             break 'outer;
                                         }
 
                                         if !err.is_recoverable() {
+                                            // Note that breaking out of the loop will also flush the socket, so we don't need to do it here.
                                             break 'outer;
                                         }
                                     }
@@ -465,14 +472,13 @@ async fn send_compressed_batch<T: Serialize>(
 
 /// Compresses and sends raw bytes as a binary WebSocket message.
 /// Returns Err(()) if the send fails or compression fails.
-async fn send_compressed_bytes(socket: &mut WebSocket, data: &[u8]) -> Result<(), ()> {
+async fn feed_compressed_bytes(socket: &mut WebSocket, data: &[u8]) -> Result<(), anyhow::Error> {
     use axum::extract::ws::Message;
 
     match compress_bytes(data) {
         Ok(compressed) => {
             if let Err(err) = socket.feed(Message::Binary(compressed)).await {
-                warn!(?err, "WebSocket send error - disconnecting client");
-                return Err(());
+                return Err(err.into());
             }
             Ok(())
         }
@@ -481,7 +487,7 @@ async fn send_compressed_bytes(socket: &mut WebSocket, data: &[u8]) -> Result<()
                 ?err,
                 "Failed to compress data for WebSocket; this is a bug, please report it"
             );
-            Err(())
+            Err(err.into())
         }
     }
 }
