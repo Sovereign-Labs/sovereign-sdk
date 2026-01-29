@@ -533,6 +533,268 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
     Ok(())
 }
 
+mod adversarial_blocks {
+    use super::*;
+    use crate::types::NamespaceBoundaryProof;
+    use crate::verifier::proofs::BlobProof;
+    use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
+    use sov_rollup_interface::da::RelevantProofs;
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    #[derive(Debug)]
+    struct AdversarialCase {
+        block: FilteredCelestiaBlock,
+        params: RollupParams,
+        blobs: RelevantBlobs<BlobWithSender>,
+        proofs: RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>>,
+    }
+
+    impl AdversarialCase {
+        fn from_fixture(
+            fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
+        ) -> Self {
+            let (block, params, _signers) = fixture;
+            Self::from_block(block, params)
+        }
+
+        fn from_block(block: FilteredCelestiaBlock, params: RollupParams) -> Self {
+            Self::from_block_with_readers(
+                block,
+                params,
+                |blob| {
+                    let total_len = blob.total_len();
+                    blob.advance(total_len);
+                },
+                |blob| {
+                    let total_len = blob.total_len();
+                    blob.advance(total_len);
+                },
+            )
+        }
+
+        fn from_block_with_readers<F1, F2>(
+            block: FilteredCelestiaBlock,
+            params: RollupParams,
+            mut batch_reader: F1,
+            mut proof_reader: F2,
+        ) -> Self
+        where
+            F1: FnMut(&mut BlobWithSender),
+            F2: FnMut(&mut BlobWithSender),
+        {
+            let mut blobs = extract_relevant_blobs(&block);
+            for blob in &mut blobs.batch_blobs {
+                batch_reader(blob);
+            }
+            for blob in &mut blobs.proof_blobs {
+                proof_reader(blob);
+            }
+            let proofs = get_extraction_proof(&block, &blobs);
+
+            let verifier = CelestiaVerifier::new(params);
+            let baseline_proofs = get_extraction_proof(&block, &blobs);
+            verifier
+                .verify_relevant_tx_list(&block.header, &blobs, baseline_proofs)
+                .expect("baseline block should verify");
+
+            Self {
+                block,
+                params,
+                blobs,
+                proofs,
+            }
+        }
+
+        fn mutate_batch_inclusion_proofs<F>(&mut self, mutator: F)
+        where
+            F: FnOnce(&mut Vec<BlobProof>),
+        {
+            mutator(&mut self.proofs.batch.inclusion_proof);
+        }
+
+        fn mutate_batch_completeness_proof<F>(&mut self, mutator: F)
+        where
+            F: FnOnce(&mut Option<NamespaceBoundaryProof>),
+        {
+            mutator(&mut self.proofs.batch.completeness_proof);
+        }
+
+        // Proof namespace mutators can be added when we need adversarial proof tests.
+    }
+
+    fn case_with_multiple_batches() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(with_several_small_rollup_batches::test_case());
+        assert!(
+            case.blobs.batch_blobs.len() >= 2,
+            "expected fixture to contain at least two batch blobs"
+        );
+        assert!(
+            case.proofs.batch.inclusion_proof.len() >= 2,
+            "expected fixture to contain at least two batch proofs"
+        );
+        case
+    }
+
+    fn case_with_single_batch() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(with_rollup_batch_data::test_case());
+        assert!(
+            !case.blobs.batch_blobs.is_empty(),
+            "expected fixture to contain at least one batch blob"
+        );
+        assert!(
+            !case.proofs.batch.inclusion_proof.is_empty(),
+            "expected fixture to contain at least one batch proof"
+        );
+        case
+    }
+
+    fn case_with_namespace_padding() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(with_namespace_padding::test_case());
+        assert!(
+            case.proofs.batch.completeness_proof.is_some(),
+            "expected completeness proof to be present for padded namespace"
+        );
+        case
+    }
+
+    fn assert_verification_error_contains(case: AdversarialCase, pattern: &str) {
+        let params = case.params;
+        assert_verification_error_contains_with_params(case, params, pattern);
+    }
+
+    fn assert_verification_error_contains_with_params(
+        case: AdversarialCase,
+        params: RollupParams,
+        pattern: &str,
+    ) {
+        let verifier = CelestiaVerifier::new(params);
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            verifier.verify_relevant_tx_list(&case.block.header, &case.blobs, case.proofs)
+        }));
+
+        match result {
+            Ok(Ok(_)) => panic!("expected verification to fail, but it succeeded"),
+            Ok(Err(err)) => {
+                let message = err.to_string();
+                assert!(
+                    message.contains(pattern),
+                    "Expected error to contain '{pattern}', got: {message}"
+                );
+            }
+            Err(_) => panic!("verification panicked; expected Err"),
+        }
+    }
+
+    #[test]
+    fn verification_fails_if_blob_order_swapped() {
+        let mut case = case_with_multiple_batches();
+        case.blobs.batch_blobs.swap(0, 1);
+        assert_verification_error_contains(case, "NonMatchingShare");
+    }
+
+    #[test]
+    fn verification_fails_if_blob_duplicated() {
+        let mut case = case_with_single_batch();
+
+        let blob = case.blobs.batch_blobs[0].clone();
+        case.blobs.batch_blobs.insert(1, blob);
+
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            let proof = proofs[0].clone();
+            proofs.insert(1, proof);
+        });
+
+        assert_verification_error_contains(case, "WrongStartShareIndex");
+    }
+
+    #[test]
+    fn verification_fails_if_fake_blob_inserted() {
+        let mut case = case_with_single_batch();
+
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            let proof = proofs[0].clone();
+            proofs.push(proof);
+        });
+
+        assert_verification_error_contains(case, "WrongStartShareIndex");
+    }
+
+    #[test]
+    fn verification_fails_if_left_boundary_missing() {
+        let mut case = case_with_multiple_batches();
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            proofs.remove(0);
+        });
+        assert_verification_error_contains(case, "ProofError(Missing)");
+    }
+
+    #[test]
+    fn verification_fails_if_right_boundary_missing() {
+        let mut case = case_with_namespace_padding();
+        case.mutate_batch_completeness_proof(|proof| {
+            *proof = None;
+        });
+        assert_verification_error_contains(case, "ProofError(Missing)");
+    }
+
+    #[test]
+    fn verification_fails_if_right_boundary_missing_blobs() {
+        let mut case = case_with_namespace_padding();
+        case.mutate_batch_completeness_proof(|proof| {
+            let proof = proof
+                .as_mut()
+                .expect("expected completeness proof to be present");
+            let NamespaceBoundaryProof { last_share_proof, .. } = proof;
+            match &mut **last_share_proof {
+                NmtNamespaceProof::PresenceProof { proof, .. }
+                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+                    proof.range.start = proof.range.start.saturating_add(1);
+                    proof.range.end = proof.range.end.saturating_add(1);
+                }
+            }
+        });
+        assert_verification_error_contains(case, "MissingBlobs");
+    }
+
+    #[test]
+    fn verification_fails_if_gap_between_blobs() {
+        let mut case = case_with_multiple_batches();
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            proofs[1].range_proofs[0].start_share_idx =
+                proofs[1].range_proofs[0].start_share_idx.saturating_add(1);
+        });
+        assert_verification_error_contains(case, "WrongStartShareIndex");
+    }
+
+    #[test]
+    fn verification_fails_if_start_index_manipulated() {
+        let mut case = case_with_single_batch();
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            proofs[0].range_proofs[0].start_share_idx =
+                proofs[0].range_proofs[0].start_share_idx.saturating_add(1);
+        });
+        assert_verification_error_contains(case, "MissingBlobs");
+    }
+
+    #[test]
+    fn verification_fails_for_wrong_namespace_proof() {
+        let mut case = case_with_single_batch();
+        case.params.rollup_batch_namespace = Namespace::new_v0(b"xyz").unwrap();
+        case.params.rollup_proof_namespace = Namespace::new_v0(b"abc").unwrap();
+        let params = case.params;
+        assert_verification_error_contains_with_params(case, params, "InvalidRoot");
+    }
+
+    #[test]
+    fn verification_fails_if_proofs_reordered() {
+        let mut case = case_with_multiple_batches();
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            proofs.reverse();
+        });
+        assert_verification_error_contains(case, "MissingBlobs");
+    }
+}
+
 // This test is supposed to be run manually when celestia data format is updated.
 // Run celestia dev environment.
 // It does not require authentication.
