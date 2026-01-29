@@ -55,6 +55,7 @@ use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
 const DELAYED_TX_DELAY_MS: u64 = 2500;
+const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 generate_optimistic_runtime_with_kernel!(
     TestRuntime <=
@@ -141,11 +142,19 @@ impl DaLayerWithSubscription {
         let subscription = self.slot_subscription.as_mut().unwrap();
         while self.back_slot_notifications > 1 {
             self.back_slot_notifications -= 1;
-            subscription.next().await.unwrap().unwrap();
+            tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+                .await
+                .expect("timeout waiting for slot notification")
+                .unwrap()
+                .unwrap();
         }
 
         self.back_slot_notifications -= 1;
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for slot notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Gets the next state update notification, clearing any *known* updates from the queue first.
@@ -154,7 +163,11 @@ impl DaLayerWithSubscription {
     /// how many state update notifications we should ultimately be receiving.
     pub async fn next_state_update_notification(&mut self) -> StateUpdateNotification {
         let subscription = self.state_update_subscription.as_mut().unwrap();
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for state update notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Produces a slot and waits for the state update and slot notifications.
@@ -545,7 +558,7 @@ async fn test_tx_ws_submission() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
+#[ignore = "This test covers pruning behavior, which is currently disabled."]
 async fn test_archival_state_with_pruning() {
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -2335,9 +2348,24 @@ async fn test_no_crashes_on_resync_with_transactions() {
 
     let rollup_storage_path = builder.storage_path();
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
-    // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
-        std::fs::remove_dir_all(rollup_storage_path.path().join(path)).unwrap();
+    // doesn't interfere.
+    // NOMT uses different directories than JMT:
+    // - user_nomt_db, kernel_nomt_db (NOMT state)
+    // - state-db, archival-state-db (FlatStateDb)
+    // - accessory, ledger, blob_sender (common to both)
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
+        let full_path = rollup_storage_path.path().join(path);
+        if full_path.exists() {
+            std::fs::remove_dir_all(full_path).unwrap();
+        }
     }
 
     let test_rollup = builder.start().await.unwrap();

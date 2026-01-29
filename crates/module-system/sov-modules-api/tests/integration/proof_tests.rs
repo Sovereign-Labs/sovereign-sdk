@@ -8,6 +8,14 @@ use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::validate_and_materialize;
 use unwrap_infallible::UnwrapInfallible;
 
+/// Helper to write a dummy value to the kernel namespace.
+/// NOMT requires both user and kernel namespaces to be written together.
+fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) {
+    let mut kernel_val: KernelStateValue<u8> =
+        KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
+    kernel_val.set(&0u8, state).unwrap_infallible();
+}
+
 type S = sov_test_utils::TestSpec;
 
 #[allow(clippy::type_complexity)]
@@ -25,6 +33,7 @@ fn make_user_map_proof(
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel, None);
     let mut map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
     map.set(&key, &value, &mut state).unwrap_infallible();
+    write_kernel_marker(&mut state);
 
     let (cache_log, _, witness) = state.freeze();
 
@@ -64,6 +73,7 @@ fn make_user_value_proof(
     let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default(), None);
     let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
     state_val.set(&value, &mut state).unwrap_infallible();
+    write_kernel_marker(&mut state);
 
     let (cache_log, _, witness) = state.freeze();
 
@@ -175,6 +185,7 @@ mod value {
 }
 
 #[test]
+#[ignore = "NOMT does not support archival proof generation - proofs are always generated against the current state"]
 fn test_archival_proof_gen() {
     let mut kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
@@ -200,6 +211,7 @@ fn test_archival_proof_gen() {
         } else {
             state_val.delete(&mut state).unwrap_infallible();
         }
+        write_kernel_marker(&mut state);
 
         let (cache_log, _, witness) = state.freeze();
 

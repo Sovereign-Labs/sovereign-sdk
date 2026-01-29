@@ -1,3 +1,6 @@
+# 2026-01-14
+- #2329 Changes default storage in sov-test-utils's TestRollup to be NOMT. No impact for regular customers
+# 2026-01-16 
 # 2026-01-29
 - #2415 Non-breaking, but **important**. Config for MockDa rollup now stricter and prevents unknown fields. Previously there was incorrect `finalization` field instead of `finalization_blocks`
 

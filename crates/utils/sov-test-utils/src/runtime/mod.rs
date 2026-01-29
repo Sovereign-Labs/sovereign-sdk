@@ -1002,7 +1002,7 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
 }
 
 // This replicate logic from `AsyncBatchResponder`.
-// And all modifications mede there shold be replicated.
+// And all modifications mede there should be replicated.
 #[derive(Clone)]
 struct SeqControlFlow;
 

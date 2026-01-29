@@ -3,10 +3,17 @@ use std::num::NonZero;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
+use crate::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
+use crate::runtime::{GenesisConfig, TestOptimisticRuntime};
+use crate::{
+    TestHasher, TestPrivateKey, TestSlotHash, TestSpec, TestStfBlueprint, TestStorageManager,
+    TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
+};
 use sov_api_spec::Client;
+use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::SchemaBatch;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockBlock, MockDaSpec};
 use sov_modules_api::{DaSyncState, Runtime, SlotData, Spec, SyncStatus};
@@ -18,18 +25,12 @@ use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
 pub use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::{SequencerApis, SequencerConfig};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_stf_runner::query_state_update_info;
 use sov_value_setter::ValueSetterConfig;
 use tempfile::TempDir;
 use tokio::sync::watch;
-
-use crate::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
-use crate::runtime::{GenesisConfig, TestOptimisticRuntime};
-use crate::{
-    TestHasher, TestPrivateKey, TestSpec, TestStfBlueprint, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS,
-};
 
 /// A `struct` that contains a sequencer and a copy of its running Axum
 /// server, for use in tests. See [`TestSequencerSetup::new`] and
@@ -66,16 +67,13 @@ impl<Rt: Runtime<TestSpec>> Drop for TestSequencerSetup<Rt> {
 }
 
 impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
-    /// Like [`TestSequencerSetup::new`], but with a custom [`NativeStorageManager`].
+    /// Like [`TestSequencerSetup::new`], but with a custom [`NomtStorageManager`].
     pub async fn with_storage_manager(
         dir: TempDir,
         da_service: StorableMockDaService,
         sequencer_config: StdSequencerConfig,
         register_admin: bool,
-        mut storage_manager: NativeStorageManager<
-            MockDaSpec,
-            ProverStorage<DefaultStorageSpec<TestHasher>>,
-        >,
+        mut storage_manager: TestStorageManager,
     ) -> anyhow::Result<Self> {
         // Generate a genesis config, then overwrite the attester key/address with ones that
         // we know. We leave the other values untouched.
@@ -213,10 +211,12 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         sequencer_config: StdSequencerConfig,
         register_admin: bool,
     ) -> anyhow::Result<Self> {
-        let storage_manager = NativeStorageManager::<
+        let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
+        let storage_manager = NomtStorageManager::<
             MockDaSpec,
-            ProverStorage<DefaultStorageSpec<TestHasher>>,
-        >::new(dir.path())?;
+            TestHasher,
+            NomtProverStorage<DefaultStorageSpec<TestHasher>, TestSlotHash>,
+        >::new(config)?;
 
         Self::with_storage_manager(
             dir,
