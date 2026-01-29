@@ -19,7 +19,7 @@ use sov_rollup_interface::zk::aggregated_proof::AggregateProofVerifier;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
 use sov_test_utils::{
-    default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+    default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
     TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
 };
 
@@ -82,7 +82,7 @@ pub(crate) fn build_create_token_tx(
         admins: SafeVec::new(),
         supply_cap: None,
     });
-    default_test_signed_transaction(key, &msg, nonce, &CHAIN_HASH)
+    default_test_signed_transaction_with_nonce(key, &msg, nonce, &CHAIN_HASH)
 }
 
 pub(crate) fn build_multiple_transfers(

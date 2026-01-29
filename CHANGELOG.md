@@ -1,5 +1,8 @@
 # 2026-01-23
 - #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
+# 2026-01-29
+- #2415 Non-breaking, but **important**. Config for MockDa rollup now stricter and prevents unknown fields. Previously there was incorrect `finalization` field instead of `finalization_blocks`
+
 # 2026-01-17
 - #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
 # 2026-01-25

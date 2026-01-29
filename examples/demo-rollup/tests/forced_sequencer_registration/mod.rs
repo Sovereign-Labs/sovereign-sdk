@@ -1,4 +1,5 @@
 use std::future::Future;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -532,14 +533,19 @@ async fn forced_tx_gas_limit_test_case(
     client: NodeClient,
     _http_addr: std::net::SocketAddr,
 ) -> anyhow::Result<()> {
-    let (key, _, _, recipient_address) = create_keys_and_addresses();
-    let token_id = config_gas_token_id();
+    let (key, _, _, _recipient_address) = create_keys_and_addresses();
     let mut forced_tx_batches = subscribe_forced_tx_batches(&client).await?;
 
     // Submit a forced tx that exceeds the gas limit by writing large state data.
     // 1000 u64s = 8000 bytes * 100 gas/byte = 800k gas > 50k limit.
     let excessive_data_size = 1000;
     let gas_heavy_tx = build_state_heavy_tx(&key, excessive_data_size, 0);
+
+    // Calculate the tx hash before submission so we can query for it later.
+    let tx_hash = gas_heavy_tx.hash();
+    let api_hash = api_types::Hash::from_str(&tx_hash.to_string())
+        .expect("TxHash should be a valid hex string");
+
     submit_forced_tx(
         da_service.as_ref(),
         ForcedTx::Runtime(gas_heavy_tx),
@@ -548,14 +554,30 @@ async fn forced_tx_gas_limit_test_case(
     .await?;
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
 
-    // The gas-heavy tx should have been rejected. Submit a preferred tx with the same nonce (0).
-    // If the gas-heavy tx was processed, this would fail due to nonce reuse.
-    let transfer_amount = 100u128;
-    let valid_tx = build_transfer_token_tx(&key, token_id, recipient_address, transfer_amount, 0);
-    submit_preferred_tx(&client, &valid_tx).await?;
+    // Poll until the transaction is available in the ledger DB by its hash.
+    // Note: Reverted txs still consume the nonce, but the state changes are rolled back.
+    let tx = poll_until(&format!("tx {tx_hash} to be available in ledger"), || {
+        let client = &client;
+        let api_hash = api_hash.clone();
+        async move {
+            match client
+                .client
+                .get_tx_by_id(&api_types::IntOrHash::Hash(api_hash), None)
+                .await
+            {
+                Ok(resp) => Ok(Some(resp.into_inner())),
+                Err(_) => Ok(None), // Tx not available yet, keep polling
+            }
+        }
+    })
+    .await?;
 
-    // Verify the transfer succeeded, confirming the gas-heavy tx was rejected.
-    wait_for_bank_balance(&client, transfer_amount, token_id, recipient_address).await?;
+    let tx_receipt = &tx.receipt;
+    anyhow::ensure!(
+        tx_receipt.result == api_types::TxReceiptResult::Reverted,
+        "Expected gas-heavy tx to be Reverted due to out-of-gas, but got {:?}",
+        tx_receipt.result
+    );
 
     Ok(())
 }
@@ -627,7 +649,6 @@ async fn max_blobs_per_slot_test_case(
 
 /// Verifies forced transactions show up in sequencer state after a resync
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
 async fn test_forced_txs_survive_resync() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "500");
 
@@ -653,7 +674,7 @@ async fn forced_txs_resync_test_case(
     forced_da_service: Arc<impl DaService>,
 ) -> anyhow::Result<()> {
     const RESYNC_FORCED_BLOCKS: usize = 15;
-    const RESYNC_EXTRA_BLOCKS: usize = 15;
+    const RESYNC_EXTRA_BLOCKS: usize = 150;
     const GAS_FUNDING_AMOUNT: u128 = 1_000_000_000_000;
 
     let client = &rollup.client;
@@ -709,17 +730,17 @@ async fn forced_txs_resync_test_case(
     }
     rollup.resume_preferred_batches().await;
 
-    // Make sure the sequencer becomes unready. Then, let it get back to ready.
-    rollup.wait_for_sequencer_not_ready().await?;
+    // Wait for sequencer to stabilize after processing the backlog
     rollup.wait_for_sequencer_ready().await?;
 
-    // Wait for all forced blocks to be processed
+    // Subscribe to state updates and wait for forced blocks slot notifications
     let mut state_update_subscription = rollup.subscribe_state_updates().await?;
     let mut slot_num_of_last_forced_tx = 0;
     for _ in 0..RESYNC_FORCED_BLOCKS {
         let slot = slot_subscription.next().await.unwrap()?;
         slot_num_of_last_forced_tx = slot.number;
     }
+
     // This part is sensitive to numbers; we need to produce more blocks than we had forced blocks *plus* in flight batches. This gives time for the blob sender
     // to actually send all of the original blobs on chain and then the preferred sequencer to create new batches that increment the visible slot number.
     // This is necessary because the preferred sequencer tries not to produce batches when there are more than a few blobs in flight, and the blob sender

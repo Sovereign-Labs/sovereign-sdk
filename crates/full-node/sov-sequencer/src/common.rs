@@ -32,24 +32,64 @@ use crate::{SequencerNotReadyDetails, SlotNumber, TxHash, TxStatus, TxStatusMana
 
 #[derive(Debug, Error, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SubscriptionStreamError {
-    #[error("Subscription data was produced faster than it could be sent. Try again later.")]
-    Lagged,
+    /// The receiver fell behind and some messages were skipped.
+    #[error("Subscription data was produced faster than it could be sent. {skipped} messages were skipped.")]
+    Lagged {
+        /// The number of messages that were skipped due to lag.
+        skipped: u64,
+        /// The identifier of the last successfully sent message before lag occurred.
+        /// `None` if no messages were sent before the lag or if the stream doesn't support identifiers.
+        disconnected_at: Option<u64>,
+        /// The identifier of the next message that will be sent after resuming.
+        /// `None` if the identifier couldn't be determined or if the stream doesn't support identifiers.
+        resumed_at: Option<u64>,
+    },
     #[error("Requested future data. The next available item is {next_available}")]
     RequestedFutureData { next_available: u64 },
     #[error("Internal server error")]
     Internal,
 }
 
+impl SubscriptionStreamError {
+    /// Creates a lag error for streams that don't track sequential identifiers.
+    pub fn lagged_without_identifiers(skipped: u64) -> Self {
+        Self::Lagged {
+            skipped,
+            disconnected_at: None,
+            resumed_at: None,
+        }
+    }
+}
+
 impl ReportableWsError for SubscriptionStreamError {
     fn to_json(&self) -> String {
-        serde_json::to_string(&match self {
-            SubscriptionStreamError::Lagged => {
-                json_obj!({
-                    "error": "LAGGED",
-                    "description": "Subscription data was produced faster than it could be sent. Try again later.",
-                    "details": {},
-                })
-            },
+        let obj = match self {
+            SubscriptionStreamError::Lagged {
+                skipped,
+                disconnected_at,
+                resumed_at,
+            } => {
+                // Use detailed format with identifiers when available, otherwise standard format
+                let has_identifiers = disconnected_at.is_some() || resumed_at.is_some();
+                if has_identifiers {
+                    json_obj!({
+                        "message": "lagged",
+                        "details": {
+                            "disconnected_at": *disconnected_at,
+                            "resumed_at": *resumed_at,
+                        },
+                    })
+                } else {
+                    json_obj!({
+                        "status": 200,
+                        "message": "Messages skipped due to lag",
+                        "details": {
+                            "skipped": *skipped,
+                            "reason": "lag",
+                        },
+                    })
+                }
+            }
             SubscriptionStreamError::RequestedFutureData { next_available } => {
                 json_obj!({
                     "error": "REQUESTED_FUTURE_DATA",
@@ -58,15 +98,21 @@ impl ReportableWsError for SubscriptionStreamError {
                         "next_available": *next_available,
                     },
                 })
-            },
+            }
             SubscriptionStreamError::Internal => {
                 json_obj!({
                     "error": "INTERNAL_SERVER_ERROR",
                     "description": "An internal server error occurred.",
                     "details": {},
                 })
-            },
-        }).expect("Failed to serialize SubscriptionStreamError literal to JSON. This is a bug, please report it.")
+            }
+        };
+        serde_json::to_string(&obj)
+            .expect("Failed to serialize SubscriptionStreamError to JSON. This is a bug.")
+    }
+
+    fn is_recoverable(&self) -> bool {
+        matches!(self, SubscriptionStreamError::Lagged { .. })
     }
 }
 

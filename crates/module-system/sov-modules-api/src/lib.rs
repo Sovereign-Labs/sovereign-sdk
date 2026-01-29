@@ -262,7 +262,7 @@ impl<'a, S: Spec> ModuleVisitor<'a, S> {
     fn visit_module(
         &mut self,
         module: &'a dyn ModuleInfo<Spec = S>,
-        module_map: &HashMap<&'a ModuleId, &'a (dyn ModuleInfo<Spec = S>)>,
+        module_map: &HashMap<&'a ModuleId, &'a dyn ModuleInfo<Spec = S>>,
     ) -> anyhow::Result<()> {
         let id = module.id();
 

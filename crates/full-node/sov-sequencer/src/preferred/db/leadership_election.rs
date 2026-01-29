@@ -13,7 +13,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
-use super::postgres::PostgresBackend;
+use super::postgres::{PostgresBackend, LEADER_TIMEOUT};
 use crate::preferred::exit_rollup;
 
 /// How often replicas attempt to acquire leadership.
@@ -31,16 +31,13 @@ pub struct LeadershipElectionTask {
 }
 
 impl LeadershipElectionTask {
-    /// Creates a new leadership election task.
-    ///
-    /// Connects to PostgreSQL without claiming leadership - the caller should
-    /// call `try_acquire_leadership()` to attempt to become leader.
+    /// Creates a new leadership election task. And attempts to acquire leadership.
     pub async fn new(
         postgres_config: &PostgresConfig,
         shutdown_sender: watch::Sender<()>,
         bind_addr: SocketAddr,
     ) -> Result<Self> {
-        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+        let (backend, _) = PostgresBackend::connect(postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
 
         Ok(Self {
@@ -59,7 +56,11 @@ impl LeadershipElectionTask {
     /// This method always registers the node in the nodes table, regardless of
     /// whether leadership was acquired.
     pub async fn try_acquire_leadership(&self) -> Result<bool> {
-        match self.backend.try_update_leader_and_register_node().await? {
+        match self
+            .backend
+            .try_update_leader_and_register_node(LEADER_TIMEOUT)
+            .await?
+        {
             Some(leader) => Ok(leader.node_id == self.node_id),
             None => Ok(false),
         }

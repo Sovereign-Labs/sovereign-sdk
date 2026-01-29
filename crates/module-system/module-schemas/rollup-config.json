@@ -152,6 +152,38 @@
         }
       ]
     },
+    "ConfiguredNodeRole": {
+      "oneOf": [
+        {
+          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
+          "type": "string",
+          "enum": [
+            "Leader"
+          ]
+        },
+        {
+          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
+          "type": "string",
+          "enum": [
+            "Replica"
+          ]
+        },
+        {
+          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
+          "type": "string",
+          "enum": [
+            "ReplicaNoLeaderSync"
+          ]
+        },
+        {
+          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
+          "type": "string",
+          "enum": [
+            "DbElected"
+          ]
+        }
+      ]
+    },
     "CorsConfiguration": {
       "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
       "oneOf": [
@@ -398,7 +430,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "MonitoringConfig": {
       "description": "Configuration of Sovereign monitoring",
@@ -442,38 +475,6 @@
         }
       }
     },
-    "NodeRole": {
-      "oneOf": [
-        {
-          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
-          "type": "string",
-          "enum": [
-            "Leader"
-          ]
-        },
-        {
-          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
-          "type": "string",
-          "enum": [
-            "Replica"
-          ]
-        },
-        {
-          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
-          "type": "string",
-          "enum": [
-            "ReplicaNoLeaderSync"
-          ]
-        },
-        {
-          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
-          "type": "string",
-          "enum": [
-            "DbElected"
-          ]
-        }
-      ]
-    },
     "PostgresConfig": {
       "description": "Postgres DB config.",
       "type": "object",
@@ -488,7 +489,7 @@
           "type": "string"
         },
         "node_role": {
-          "$ref": "#/definitions/NodeRole"
+          "$ref": "#/definitions/ConfiguredNodeRole"
         },
         "postgres_connection_string": {
           "description": "Connection string.",

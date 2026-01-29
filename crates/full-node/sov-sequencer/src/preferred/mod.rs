@@ -36,13 +36,13 @@ use futures::Stream;
 pub use initialization::Builder;
 use nonce_buffer_task::{NonceBufferInputSender, NonceBufferTask, SequencerTxExecutionBackend};
 use preferred_blob_sender::PreferredBlobSender;
-use serde_with::serde_as;
 use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    NodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy, TimingOracleConfig,
+    ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
+    TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -785,22 +785,7 @@ where
     }
 
     async fn subscribe_events(&self) -> Option<SequencerEventStream<Self::Rt>> {
-        use futures::StreamExt;
-
-        let tx_stream = self.transaction_cache.subscribe();
-
-        let event_stream: SequencerEventStream<Self::Rt> =
-            Box::pin(tx_stream.flat_map(|tx| match tx {
-                Ok(tx) => Box::pin(futures::stream::iter(
-                    tx.confirmation.events.into_iter().map(Ok),
-                )),
-                Err(e) => {
-                    let output: SequencerEventStream<Self::Rt> =
-                        Box::pin(futures::stream::once(async { Err(e) }));
-                    output
-                }
-            }));
-        Some(event_stream)
+        Some(self.transaction_cache.subscribe_events())
     }
 
     async fn get_tx(
@@ -880,7 +865,7 @@ where
         self.synchronized_state_updator
             .sequencer_role_msg("get_sequencer_role")
             .await
-            .unwrap_or(SequencerRole::Leader)
+            .unwrap_or(SequencerRole::BatchProducer)
     }
 }
 
@@ -912,10 +897,6 @@ where
         Ok(())
     }
 }
-
-#[serde_with::serde_as]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct TxBody(#[serde_as(as = "serde_with::base64::Base64")] Vec<u8>);
 
 /// Transaction confirmation data of [`PreferredSequencer`].
 #[derive(derivative::Derivative, serde::Serialize, serde::Deserialize)]

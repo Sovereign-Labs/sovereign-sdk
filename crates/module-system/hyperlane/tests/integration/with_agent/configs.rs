@@ -3,7 +3,12 @@ use serde_json::json;
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::macros::config_value;
 
-use super::helpers::{EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX, RELAYER_ACCOUNT};
+use super::helpers::{
+    EVM_CHAIN_ID, EVM_DOMAIN, EVM_MAILBOX, EVM_MERKLE_TREE_HOOK, EVM_TEST_RECIPIENT,
+    RELAYER_ACCOUNT,
+};
+
+const EVM_SNAPSHOT_BLOCK: u32 = 19;
 
 /// Generates a configuration file for the agents with the given rollup port
 pub fn agent_config(rollup_port: u16, anvil_port: u16, host_address: &str) -> Vec<u8> {
@@ -57,23 +62,29 @@ pub fn agent_config(rollup_port: u16, anvil_port: u16, host_address: &str) -> Ve
                 "rpcUrls": [{
                     "http": format!("http://{}:{}", host_address, anvil_port)
                 }],
-                "domainRoutingIsmFactory": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-                "interchainAccountIsm": "0x9A676e781A523b5d0C0e43731313A708CB607508",
-                "interchainAccountRouter": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed",
+                "domainRoutingIsmFactory": "0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629",
+                "interchainAccountIsm": "0x0000000000000000000000000000000000000000",
+                "interchainAccountRouter": "0x2a264F26859166C5BF3868A54593eE716AeBC848",
                 "mailbox": EVM_MAILBOX.to_string(),
-                "merkleTreeHook": "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e",
-                "proxyAdmin": "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853",
-                "staticAggregationHookFactory": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
-                "staticAggregationIsmFactory": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-                "staticMerkleRootMultisigIsmFactory": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-                "staticMerkleRootWeightedMultisigIsmFactory": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
-                "staticMessageIdMultisigIsmFactory": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-                "staticMessageIdWeightedMultisigIsmFactory": "0x0165878A594ca255338adfa4d48449f69242Eb8F",
-                "testRecipient": "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d",
-                "validatorAnnounce": "0x3Aa5ebB10DC797CAC828524e59A333d0A371443c",
+                "merkleTreeHook": EVM_MERKLE_TREE_HOOK.to_string(),
+                "proxyAdmin": "0xeD1DB453C3156Ff3155a97AD217b3087D5Dc5f6E",
+                "staticAggregationHookFactory": "0x8ce361602B935680E8DeC218b820ff5056BeB7af",
+                "staticAggregationIsmFactory": "0xb19b36b1456E65E3A6D514D3F715f204BD59f431",
+                "staticMerkleRootMultisigIsmFactory": "0x700b6A60ce7EaaEA56F065753d8dcB9653dbAD35",
+                "staticMerkleRootWeightedMultisigIsmFactory": "0xe1DA8919f262Ee86f9BE05059C9280142CF23f48",
+                "staticMessageIdMultisigIsmFactory": "0xA15BB66138824a1c7167f5E85b957d04Dd34E468",
+                "staticMessageIdWeightedMultisigIsmFactory": "0x0C8E79F3534B00D9a3D4a856B665Bf4eBC22f2ba",
+                "testRecipient": EVM_TEST_RECIPIENT.to_string(),
+                "validatorAnnounce": "0xd04fF4A75Edd737A73E92b2F2274Cb887d96E110",
                 "interchainGasPaymaster": "0x0000000000000000000000000000000000000000",
+                // Snapshot only retains the latest block, so don't subtract a reorg window.
+                "blocks": {
+                    "confirmations": 1,
+                    "estimateBlockTime": 1,
+                    "reorgPeriod": 0
+                },
                 "index": {
-                    "from": 9
+                    "from": EVM_SNAPSHOT_BLOCK
                 }
             }
         },
@@ -148,6 +159,27 @@ pub fn sovtest_addresses() -> &'static str {
         testRecipient: \"0x0000000000000000000000000000000000000000\"
         validatorAnnounce: \"0x0000000000000000000000000000000000000000\"
         merkleTreeHook: \"0x0000000000000000000000000000000000000000\"
+        interchainGasPaymaster: \"0x0000000000000000000000000000000000000000\"
+    "}
+}
+
+/// Configuration of ethtest smart contract addresses in hyperlane.
+pub fn ethtest_addresses() -> String {
+    formatdoc! {"
+        domainRoutingIsmFactory: \"0xe1Aa25618fA0c7A1CFDab5d6B456af611873b629\"
+        interchainAccountIsm: \"0x0000000000000000000000000000000000000000\"
+        interchainAccountRouter: \"0x2a264F26859166C5BF3868A54593eE716AeBC848\"
+        mailbox: \"{EVM_MAILBOX}\"
+        merkleTreeHook: \"{EVM_MERKLE_TREE_HOOK}\"
+        proxyAdmin: \"0xeD1DB453C3156Ff3155a97AD217b3087D5Dc5f6E\"
+        staticAggregationHookFactory: \"0x8ce361602B935680E8DeC218b820ff5056BeB7af\"
+        staticAggregationIsmFactory: \"0xb19b36b1456E65E3A6D514D3F715f204BD59f431\"
+        staticMerkleRootMultisigIsmFactory: \"0x700b6A60ce7EaaEA56F065753d8dcB9653dbAD35\"
+        staticMerkleRootWeightedMultisigIsmFactory: \"0xe1DA8919f262Ee86f9BE05059C9280142CF23f48\"
+        staticMessageIdMultisigIsmFactory: \"0xA15BB66138824a1c7167f5E85b957d04Dd34E468\"
+        staticMessageIdWeightedMultisigIsmFactory: \"0x0C8E79F3534B00D9a3D4a856B665Bf4eBC22f2ba\"
+        testRecipient: \"{EVM_TEST_RECIPIENT}\"
+        validatorAnnounce: \"0xd04fF4A75Edd737A73E92b2F2274Cb887d96E110\"
         interchainGasPaymaster: \"0x0000000000000000000000000000000000000000\"
     "}
 }

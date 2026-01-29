@@ -11470,6 +11470,7 @@ dependencies = [
  "base64 0.22.1",
  "borsh",
  "derive_more 1.0.0",
+ "flate2",
  "futures",
  "hex",
  "indoc",
@@ -11946,10 +11947,13 @@ dependencies = [
  "test-strategy",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
+ "tokio-tungstenite 0.28.0",
  "tower",
  "tower-http 0.5.2",
  "tower-request-id",
  "tracing",
+ "tungstenite 0.28.0",
 ]
 
 [[package]]

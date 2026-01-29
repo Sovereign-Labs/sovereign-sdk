@@ -230,7 +230,7 @@ where
         }));
 
         // Launch replica sync task only for replicas.
-        if let SequencerRole::Replica = seq_role {
+        if let SequencerRole::PgSyncReplica = seq_role {
             if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task
                     .start(synchronized_state_updator, postgres_config)
@@ -242,7 +242,7 @@ where
 
         // Launch leadership task for DbElected nodes
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            if postgres_config.node_role == NodeRole::DbElected {
+            if postgres_config.node_role == ConfiguredNodeRole::DbElected {
                 let election_task = LeadershipElectionTask::new(
                     postgres_config,
                     shutdown_sender.clone(),
@@ -251,9 +251,11 @@ where
                 .await?;
 
                 let leadership_handle = match seq_role {
-                    SequencerRole::Leader => election_task.spawn_leader_heartbeat_task(),
-                    SequencerRole::Replica => election_task.spawn_replica_election_task(),
-                    _ => unreachable!("DbElected should only result in Leader or Replica role"),
+                    SequencerRole::BatchProducer => election_task.spawn_leader_heartbeat_task(),
+                    SequencerRole::PgSyncReplica => election_task.spawn_replica_election_task(),
+                    _ => unreachable!(
+                        "DbElected should only result in BatchProducer or PgSyncReplica role"
+                    ),
                 };
                 handles.push(leadership_handle);
             }
@@ -281,7 +283,7 @@ where
         }));
 
         if let Some(oracle_config) = maybe_oracle_config {
-            if let SequencerRole::Leader = seq_role {
+            if let SequencerRole::BatchProducer = seq_role {
                 if Rt::default().maybe_set_oracle_timestamp(0).is_some() {
                     match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
                         Ok(handle) => handles.push(handle),

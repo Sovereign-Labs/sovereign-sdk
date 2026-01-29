@@ -46,7 +46,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::preferred::{
-    NodeRole, PostgresConfig, PreferredSequencerConfig, TimingOracleConfig,
+    ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, TimingOracleConfig,
 };
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
@@ -151,6 +151,16 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 });
         }
         self
+    }
+
+    /// Sets the node role to Leader for the Postgres configuration.
+    /// Used when a replica node needs to transition to leader role.
+    pub fn set_as_leader(&mut self) {
+        if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
+            if let Some(c) = config.postgres_config.as_mut() {
+                c.node_role = ConfiguredNodeRole::Leader;
+            }
+        }
     }
 
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
@@ -461,7 +471,7 @@ where
     pub async fn new_with_external_da(
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
-        postgres: Option<(Arc<PostgresData>, String, NodeRole)>,
+        postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
 

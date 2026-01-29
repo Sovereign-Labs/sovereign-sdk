@@ -27,6 +27,7 @@ sov-value-setter = { workspace = true, features = ["native"] }
 secp256k1 = { workspace = true, features = ["rand"] }
 
 base64 = { workspace = true }
+flate2 = "1"
 futures = { workspace = true }
 hex = { workspace = true }
 indoc = "2"
