@@ -1089,8 +1089,6 @@ async fn test_fee_history_empty_blocks_zero_ratio() -> anyhow::Result<()> {
 }
 
 /// TC29: Block with transaction returns expected baseFeePerGas and gas_used_ratio.
-///
-/// KNOWN BUG: feeHistory baseFeePerGas does not reflect the EVM genesis config.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -1128,6 +1126,14 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     assert_eq!(
         expected_base_fee, header_base_fee,
         "receipt-derived base fee should match block header"
+    );
+
+    // Verify chain-state gas_info matches block header
+    let gas_info = fetch_chain_state_gas_info(&rollup.client, tx_block).await?;
+    let chain_base_fee = gas_price_dim0(&gas_info.base_fee_per_gas);
+    assert_eq!(
+        chain_base_fee, header_base_fee,
+        "chain-state base fee should match block header"
     );
 
     let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;

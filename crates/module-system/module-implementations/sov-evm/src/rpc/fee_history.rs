@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use alloy_consensus::BlockHeader;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_rpc_types::FeeHistory;
-use jsonrpsee::types::error::INVALID_PARAMS_CODE;
+use jsonrpsee::types::error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE};
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
@@ -187,12 +187,17 @@ where
         let next_height = RollupHeight::new(end_block + 1);
         let next_from_chain = self
             .chain_state_module
-            .base_fee_per_gas_at(next_height, state)
-            .ok()
-            .flatten()
-            .map(|p| p.as_ref()[0].0.try_into().unwrap_or(u64::MAX));
+            .base_fee_per_gas_at(next_height, state)?;
 
-        let next_gas_price: u64 = next_from_chain.unwrap_or_else(|| {
+        let next_gas_price: u64 = if let Some(price) = next_from_chain {
+            price.as_ref()[0].0.try_into().map_err(|_| {
+                EthApiError::other(ErrorObjectOwned::owned(
+                    INTERNAL_ERROR_CODE,
+                    "base fee overflow: value exceeds u64::MAX",
+                    None::<()>,
+                ))
+            })?
+        } else {
             // Fallback: EIP-1559 estimation for future blocks not yet in chain-state
             ChainState::<S>::compute_base_fee_per_gas_unidimensional(
                 gas_limit,
@@ -201,8 +206,14 @@ where
             )
             .0
             .try_into()
-            .unwrap_or(u64::MAX)
-        });
+            .map_err(|_| {
+                EthApiError::other(ErrorObjectOwned::owned(
+                    INTERNAL_ERROR_CODE,
+                    "base fee overflow: value exceeds u64::MAX",
+                    None::<()>,
+                ))
+            })?
+        };
         base_fees.push(next_gas_price);
 
         #[allow(clippy::float_arithmetic)]
