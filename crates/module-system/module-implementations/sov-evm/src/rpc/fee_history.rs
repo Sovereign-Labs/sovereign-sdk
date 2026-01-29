@@ -8,8 +8,8 @@ use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
 use sov_chain_state::ChainState;
-use sov_modules_api::GasSpec;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, GasSpec, Spec};
+use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::EthApiError;
 
 /// When estimating the base fee for the next block, we assume that at least two thirds of the gas limit will be used.
@@ -181,16 +181,19 @@ where
             .last()
             .expect("At least one base fee must have been collected");
 
-        // Compute the predicted base fee for the next block.
-        // Chain-state has a special case: blocks 0 and 1 use initial_base_fee_per_gas.
-        // We must respect this to stay consistent with chain-state as the source of truth.
-        let next_block_number = end_block + 1;
-        let next_gas_price: u64 = if next_block_number <= 1 {
-            S::initial_base_fee_per_gas().as_ref()[0]
-                .0
-                .try_into()
-                .unwrap_or(u64::MAX)
-        } else {
+        // Query chain-state for the next block's base fee. Chain-state is the source of truth
+        // and handles all special cases (setup mode, initial blocks, etc.).
+        // If chain-state returns None (future block not yet recorded), fall back to EIP-1559 estimate.
+        let next_height = RollupHeight::new(end_block + 1);
+        let next_from_chain = self
+            .chain_state_module
+            .base_fee_per_gas_at(next_height, state)
+            .ok()
+            .flatten()
+            .map(|p| p.as_ref()[0].0.try_into().unwrap_or(u64::MAX));
+
+        let next_gas_price: u64 = next_from_chain.unwrap_or_else(|| {
+            // Fallback: EIP-1559 estimation for future blocks not yet in chain-state
             ChainState::<S>::compute_base_fee_per_gas_unidimensional(
                 gas_limit,
                 conservative_parent_gas_usage,
@@ -199,7 +202,7 @@ where
             .0
             .try_into()
             .unwrap_or(u64::MAX)
-        };
+        });
         base_fees.push(next_gas_price);
 
         #[allow(clippy::float_arithmetic)]
