@@ -81,7 +81,7 @@ pub struct TomlByteStringValue {
 }
 
 /// A chain hash override for a range of block heights.
-/// Used in constants.toml as: `{ start = <height>, end = <height>, hash = "0x..." }`
+/// Used in constants.toml as: `{ start_height = <height>, end_height = <height>, chain_hash = "0x...", grace_period = <blocks> }`
 #[derive(serde::Deserialize)]
 pub struct TomlChainHashOverride {
     /// The start height (inclusive).
@@ -90,6 +90,10 @@ pub struct TomlChainHashOverride {
     pub end_height: u64,
     /// The chain hash as a hex string (with or without "0x" prefix).
     pub chain_hash: String,
+    /// Number of blocks after end_height during which this hash is still accepted.
+    /// During the grace period, both this hash and the next override's hash are valid.
+    #[serde(default)]
+    pub grace_period: u64,
 }
 
 pub enum AllowedTomlValue {
@@ -305,10 +309,23 @@ fn chain_hash_override_array_override_logic() -> TokenStream {
 
         // Intermediate struct for deserialization with string chain_hash
         #[derive(serde::Deserialize)]
+        #[serde(default)]
         struct RawChainHashOverride {
             start_height: u64,
             end_height: u64,
             chain_hash: String,
+            grace_period: u64,
+        }
+
+        impl Default for RawChainHashOverride {
+            fn default() -> Self {
+                Self {
+                    start_height: 0,
+                    end_height: 0,
+                    chain_hash: String::new(),
+                    grace_period: 0,
+                }
+            }
         }
 
         let deserializer = toml::de::ValueDeserializer::new(&env_value);
@@ -328,6 +345,7 @@ fn chain_hash_override_array_override_logic() -> TokenStream {
                     start_height: raw.start_height,
                     end_height: raw.end_height,
                     chain_hash: hash_bytes,
+                    grace_period: raw.grace_period,
                 }
             })
             .collect::<Vec<_>>()
@@ -513,6 +531,7 @@ pub fn toml_chain_hash_override_to_rust(
 ) -> syn::Result<syn::Expr> {
     let start_height = hash_override.start_height;
     let end_height = hash_override.end_height;
+    let grace_period = hash_override.grace_period;
 
     let hex_str = hash_override
         .chain_hash
@@ -548,6 +567,7 @@ pub fn toml_chain_hash_override_to_rust(
             start_height: #start_height,
             end_height: #end_height,
             chain_hash: [#(#hash_bytes_tokens),*],
+            grace_period: #grace_period,
         }
     });
 

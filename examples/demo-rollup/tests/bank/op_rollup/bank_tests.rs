@@ -39,6 +39,7 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
         OperatingMode::Operator,
     )
     .await?;
+    let client = test_rollup.client.client;
 
     let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
     // Send a tx with the standard chain hash. It should not be accepted because the override is active.
@@ -51,9 +52,7 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
     );
     let raw_tx = borsh::to_vec(&tx).unwrap();
     assert!(
-        test_rollup
-            .client
-            .client
+        client
             .accept_tx(&AcceptTxBody {
                 body: BASE64_STANDARD.encode(&raw_tx),
             })
@@ -71,9 +70,7 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
         "First Token".to_string(),
     );
     let raw_tx = borsh::to_vec(&tx).unwrap();
-    test_rollup
-        .client
-        .client
+    client
         .accept_tx(&AcceptTxBody {
             body: BASE64_STANDARD.encode(&raw_tx),
         })
@@ -81,9 +78,7 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
         .unwrap();
 
     // Wait a while to pass rollup height 10 where the override expires.
-    let mut slots_subscription = test_rollup
-        .client
-        .client
+    let mut slots_subscription = client
         .subscribe_slots_with_children(IncludeChildren::new(true))
         .await?;
     let mut done_waiting = false;
@@ -105,9 +100,7 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
         "Second Token".to_string(),
     );
     let raw_tx = borsh::to_vec(&tx).unwrap();
-    test_rollup
-        .client
-        .client
+    client
         .accept_tx(&AcceptTxBody {
             body: BASE64_STANDARD.encode(&raw_tx),
         })
@@ -124,15 +117,182 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
     );
     let raw_tx = borsh::to_vec(&tx).unwrap();
     assert!(
-        test_rollup
-            .client
-            .client
+        client
             .accept_tx(&AcceptTxBody {
                 body: BASE64_STANDARD.encode(&raw_tx),
             })
             .await
             .is_err(),
         "Should not be able to send tx with old chain hash after override expires"
+    );
+
+    Ok(())
+}
+
+/// Tests that chain hash override grace periods work as expected.
+///
+/// Setup a rollup with an override that expires at rollup height 10 with a grace period of 5 blocks.
+/// - Before height 10: only the override hash should be accepted
+/// - During grace period (heights 10-14): both hashes should be accepted
+/// - After grace period (height 15+): only the default hash should be accepted
+#[tokio::test(flavor = "multi_thread")]
+async fn test_chain_hash_override_grace_period() -> anyhow::Result<()> {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES", "[{start_height = 0, end_height = 10, chain_hash = \"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\", grace_period = 5}]");
+    sov_test_utils::logging::initialize_or_change_logging_with_filter("warn");
+    let default_chain_hash = <Runtime<DemoRollupSpec> as RuntimeTrait<DemoRollupSpec>>::CHAIN_HASH;
+    let override_chain_hash = [255u8; 32];
+
+    let test_rollup = start_test_rollup(
+        &TestCase {
+            wait_for_aggregated_proof: false,
+            finalization_blocks: 0,
+        },
+        OperatingMode::Operator,
+    )
+    .await?;
+    let client = test_rollup.client.client;
+
+    let (key, user_address, token_id, recipient_address) = create_keys_and_addresses();
+
+    // Phase 1: Before override expires (height < 10)
+    // Only the override hash should be accepted
+
+    // Send a tx with the default chain hash - should be rejected
+    let tx = build_create_token_tx_with_chain_hash_and_token_name(
+        &key,
+        0,
+        1000,
+        Some(default_chain_hash),
+        "Token With Default Hash Before Expiry".to_string(),
+    );
+    let raw_tx = borsh::to_vec(&tx).unwrap();
+    assert!(
+        client
+            .accept_tx(&AcceptTxBody {
+                body: BASE64_STANDARD.encode(&raw_tx),
+            })
+            .await
+            .is_err(),
+        "Before override expires: default chain hash should be rejected"
+    );
+
+    // Send a tx with the override chain hash - should be accepted
+    let tx = build_create_token_tx_with_chain_hash_and_token_name(
+        &key,
+        0,
+        1000,
+        Some(override_chain_hash),
+        "Token With Override Hash Before Expiry".to_string(),
+    );
+    let raw_tx = borsh::to_vec(&tx).unwrap();
+    client
+        .accept_tx(&AcceptTxBody {
+            body: BASE64_STANDARD.encode(&raw_tx),
+        })
+        .await
+        .expect("Before override expires: override chain hash should be accepted");
+
+    // Wait for rollup height >= 10 (grace period starts)
+    let mut slots_subscription = client
+        .subscribe_slots_with_children(IncludeChildren::new(true))
+        .await?;
+    let mut current_height = 0;
+    for _ in 0..50 {
+        let slot = slots_subscription.next().await.unwrap()?;
+        current_height = slot.batch_range.start;
+        if current_height >= 10 {
+            break;
+        }
+    }
+    assert!(
+        current_height >= 10,
+        "Should have reached rollup height 10 for grace period"
+    );
+
+    // Phase 2: During grace period (10 <= height < 15)
+    // Both hashes should be accepted
+
+    // Send a tx with the default chain hash - should be accepted during grace period
+    let tx = build_create_token_tx_with_chain_hash_and_token_name(
+        &key,
+        1,
+        1000,
+        Some(default_chain_hash),
+        "Token With Default Hash During Grace".to_string(),
+    );
+    let raw_tx = borsh::to_vec(&tx).unwrap();
+    client
+        .accept_tx(&AcceptTxBody {
+            body: BASE64_STANDARD.encode(&raw_tx),
+        })
+        .await
+        .expect("During grace period: default chain hash should be accepted");
+
+    // Send a tx with the override chain hash - should also be accepted during grace period
+    let tx = build_create_token_tx_with_chain_hash_and_token_name(
+        &key,
+        2,
+        1000,
+        Some(override_chain_hash),
+        "Token With Override Hash During Grace".to_string(),
+    );
+    let raw_tx = borsh::to_vec(&tx).unwrap();
+    client
+        .accept_tx(&AcceptTxBody {
+            body: BASE64_STANDARD.encode(&raw_tx),
+        })
+        .await
+        .expect("During grace period: override chain hash should also be accepted");
+
+    // Wait for rollup height >= 15 (grace period ends)
+    for _ in 0..50 {
+        let slot = slots_subscription.next().await.unwrap()?;
+        current_height = slot.batch_range.start;
+        if current_height >= 15 {
+            break;
+        }
+    }
+    assert!(
+        current_height >= 15,
+        "Should have reached rollup height 15 (end of grace period)"
+    );
+
+    // Phase 3: After grace period (height >= 15)
+    // Only the default hash should be accepted
+
+    // Send a tx with the default chain hash - should be accepted
+    let tx = build_create_token_tx_with_chain_hash_and_token_name(
+        &key,
+        3,
+        1000,
+        Some(default_chain_hash),
+        "Token With Default Hash After Grace".to_string(),
+    );
+    let raw_tx = borsh::to_vec(&tx).unwrap();
+    client
+        .accept_tx(&AcceptTxBody {
+            body: BASE64_STANDARD.encode(&raw_tx),
+        })
+        .await
+        .expect("After grace period: default chain hash should be accepted");
+
+    // Send a tx with the override chain hash - should be rejected
+    let tx = build_create_token_tx_with_chain_hash_and_token_name(
+        &key,
+        4,
+        1000,
+        Some(override_chain_hash),
+        "Token With Override Hash After Grace".to_string(),
+    );
+    let raw_tx = borsh::to_vec(&tx).unwrap();
+    assert!(
+        client
+            .accept_tx(&AcceptTxBody {
+                body: BASE64_STANDARD.encode(&raw_tx),
+            })
+            .await
+            .is_err(),
+        "After grace period: override chain hash should be rejected"
     );
 
     Ok(())

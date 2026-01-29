@@ -278,6 +278,7 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
 /// enabling non-breaking upgrades when the rollup schema changes (e.g., adding a new transaction type).
 ///
 /// The range is `[start_height, end_height)` - start is inclusive, end is exclusive.
+/// The `grace_period` allows the hash to remain valid for additional blocks after `end_height`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct ChainHashOverride {
     /// The start height (inclusive).
@@ -286,22 +287,54 @@ pub struct ChainHashOverride {
     pub end_height: u64,
     /// The chain hash to use for this range.
     pub chain_hash: [u8; 32],
+    /// Number of blocks after `end_height` during which this hash is still accepted.
+    /// During the grace period `[end_height, end_height + grace_period)`, both this
+    /// hash and the next override's hash (or default) are valid.
+    #[serde(default)]
+    pub grace_period: u64,
 }
 
 impl ChainHashOverride {
-    /// Returns true if the given height falls within this override's range.
+    /// Returns true if the given height falls within this override's primary range.
     ///
     /// The range is `[start_height, end_height)` - start is inclusive, end is exclusive.
     pub const fn contains(&self, height: u64) -> bool {
         height >= self.start_height && height < self.end_height
     }
+
+    /// Returns true if the given height falls within this override's grace period.
+    ///
+    /// The grace period is `[end_height, end_height + grace_period)`.
+    pub const fn in_grace_period(&self, height: u64) -> bool {
+        self.grace_period > 0
+            && height >= self.end_height
+            && height < self.end_height.saturating_add(self.grace_period)
+    }
 }
 
-/// Resolves the chain hash for a given height by checking overrides.
+/// Resolved chain hashes for a given height.
+///
+/// Contains the primary hash and any additional hashes that are valid due to grace periods.
+#[derive(Clone, Debug)]
+pub struct ResolvedChainHashes {
+    /// The primary chain hash for this height.
+    pub primary: [u8; 32],
+    /// Additional valid hashes due to grace periods from previous overrides.
+    pub grace_period_hashes: Vec<[u8; 32]>,
+}
+
+impl ResolvedChainHashes {
+    /// Returns an iterator over all valid hashes (primary first, then grace period hashes).
+    pub fn iter(&self) -> impl Iterator<Item = &[u8; 32]> {
+        std::iter::once(&self.primary).chain(self.grace_period_hashes.iter())
+    }
+}
+
+/// Resolves all valid chain hashes for a given height by checking overrides.
 ///
 /// Overrides must be contiguous and start at zero (validated at compile time by the
-/// `config_value!` macro). If the height is beyond all overrides, falls back to the
-/// default hash.
+/// `config_value!` macro). If the height is beyond all overrides (including grace periods),
+/// falls back to the default hash.
 ///
 /// # Arguments
 /// * `height` - The block height to resolve the chain hash for
@@ -309,27 +342,45 @@ impl ChainHashOverride {
 /// * `default_hash` - The default chain hash to use when no override matches
 ///
 /// # Returns
-/// The chain hash to use for the given height
-pub fn resolve_chain_hash(
+/// A [`ResolvedChainHashes`] containing the primary hash and any grace period hashes.
+pub fn resolve_chain_hashes(
     height: u64,
     overrides: &[ChainHashOverride],
     default_hash: [u8; 32],
-) -> [u8; 32] {
-    // Early return if no overrides or height is beyond all overrides
-    let Some(last_override) = overrides.last() else {
-        return default_hash;
-    };
+) -> ResolvedChainHashes {
+    let mut primary = default_hash;
+    let mut grace_period_hashes = Vec::new();
 
-    if height >= last_override.end_height {
-        return default_hash;
-    }
-
+    // Find the primary hash for this height
     for hash_override in overrides {
         if hash_override.contains(height) {
-            return hash_override.chain_hash;
+            primary = hash_override.chain_hash;
+            break;
         }
     }
 
-    // Should not reach here if overrides are valid and height < last_end
-    default_hash
+    // If no override contains the height, check if we're beyond all overrides
+    if primary == default_hash {
+        if let Some(last) = overrides.last() {
+            if height < last.end_height.saturating_add(last.grace_period) {
+                // We're in the last override's grace period, primary is default
+                // but we need to check grace periods below
+            }
+        }
+    }
+
+    // Collect any grace period hashes from previous overrides
+    for hash_override in overrides {
+        if hash_override.in_grace_period(height) {
+            // Don't add if it's already the primary
+            if hash_override.chain_hash != primary {
+                grace_period_hashes.push(hash_override.chain_hash);
+            }
+        }
+    }
+
+    ResolvedChainHashes {
+        primary,
+        grace_period_hashes,
+    }
 }

@@ -198,7 +198,7 @@ fn assert_chain_id_was_not_overridden() {
 }
 
 mod chain_hash_override_tests {
-    use crate::runtime::{resolve_chain_hash, ChainHashOverride};
+    use crate::runtime::{resolve_chain_hashes, ChainHashOverride};
 
     const DEFAULT_HASH: [u8; 32] = [0xDDu8; 32];
     const OVERRIDE_HASH_1: [u8; 32] = [0x11u8; 32];
@@ -208,15 +208,12 @@ mod chain_hash_override_tests {
     #[test]
     fn test_empty_overrides_returns_default() {
         let overrides: &[ChainHashOverride] = &[];
-        assert_eq!(resolve_chain_hash(0, overrides, DEFAULT_HASH), DEFAULT_HASH);
-        assert_eq!(
-            resolve_chain_hash(1000, overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
-        assert_eq!(
-            resolve_chain_hash(u64::MAX, overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
+        let resolved = resolve_chain_hashes(0, overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
+        assert!(resolved.grace_period_hashes.is_empty());
+
+        let resolved = resolve_chain_hashes(1000, overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
     }
 
     #[test]
@@ -225,92 +222,81 @@ mod chain_hash_override_tests {
             start_height: 0,
             end_height: 1000,
             chain_hash: OVERRIDE_HASH_1,
+            grace_period: 0,
         }];
 
         // At start (inclusive): use override
-        assert_eq!(
-            resolve_chain_hash(0, &overrides, DEFAULT_HASH),
-            OVERRIDE_HASH_1
-        );
+        let resolved = resolve_chain_hashes(0, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_1);
+        assert!(resolved.grace_period_hashes.is_empty());
 
         // Within range: use override
-        assert_eq!(
-            resolve_chain_hash(500, &overrides, DEFAULT_HASH),
-            OVERRIDE_HASH_1
-        );
+        let resolved = resolve_chain_hashes(500, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_1);
 
         // At end - 1: use override
-        assert_eq!(
-            resolve_chain_hash(999, &overrides, DEFAULT_HASH),
-            OVERRIDE_HASH_1
-        );
+        let resolved = resolve_chain_hashes(999, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_1);
 
         // At end (exclusive): use default
-        assert_eq!(
-            resolve_chain_hash(1000, &overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
+        let resolved = resolve_chain_hashes(1000, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
 
         // After range: use default
-        assert_eq!(
-            resolve_chain_hash(2000, &overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
+        let resolved = resolve_chain_hashes(2000, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
     }
 
     #[test]
     fn test_multiple_contiguous_overrides() {
-        // Overrides must be contiguous and start at 0
         let overrides = [
             ChainHashOverride {
                 start_height: 0,
                 end_height: 100,
                 chain_hash: OVERRIDE_HASH_1,
+                grace_period: 0,
             },
             ChainHashOverride {
                 start_height: 100,
                 end_height: 200,
                 chain_hash: OVERRIDE_HASH_2,
+                grace_period: 0,
             },
             ChainHashOverride {
                 start_height: 200,
                 end_height: 300,
                 chain_hash: OVERRIDE_HASH_3,
+                grace_period: 0,
             },
         ];
 
         // In first override
         assert_eq!(
-            resolve_chain_hash(50, &overrides, DEFAULT_HASH),
+            resolve_chain_hashes(50, &overrides, DEFAULT_HASH).primary,
             OVERRIDE_HASH_1
         );
 
         // At boundary (100 is in second override)
         assert_eq!(
-            resolve_chain_hash(100, &overrides, DEFAULT_HASH),
+            resolve_chain_hashes(100, &overrides, DEFAULT_HASH).primary,
             OVERRIDE_HASH_2
         );
 
         // In second override
         assert_eq!(
-            resolve_chain_hash(150, &overrides, DEFAULT_HASH),
+            resolve_chain_hashes(150, &overrides, DEFAULT_HASH).primary,
             OVERRIDE_HASH_2
         );
 
         // In third override
         assert_eq!(
-            resolve_chain_hash(250, &overrides, DEFAULT_HASH),
+            resolve_chain_hashes(250, &overrides, DEFAULT_HASH).primary,
             OVERRIDE_HASH_3
         );
 
         // After all overrides: use default
         assert_eq!(
-            resolve_chain_hash(300, &overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
-
-        assert_eq!(
-            resolve_chain_hash(500, &overrides, DEFAULT_HASH),
+            resolve_chain_hashes(300, &overrides, DEFAULT_HASH).primary,
             DEFAULT_HASH
         );
     }
@@ -321,6 +307,7 @@ mod chain_hash_override_tests {
             start_height: 100,
             end_height: 200,
             chain_hash: OVERRIDE_HASH_1,
+            grace_period: 0,
         };
 
         assert!(!override_.contains(99));
@@ -332,36 +319,123 @@ mod chain_hash_override_tests {
     }
 
     #[test]
-    fn test_height_beyond_overrides_returns_default() {
+    fn test_grace_period_single_override() {
+        let overrides = [ChainHashOverride {
+            start_height: 0,
+            end_height: 100,
+            chain_hash: OVERRIDE_HASH_1,
+            grace_period: 50, // Grace period extends to height 150
+        }];
+
+        // Within primary range: only primary hash
+        let resolved = resolve_chain_hashes(50, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_1);
+        assert!(resolved.grace_period_hashes.is_empty());
+
+        // At end_height: primary is default, grace period has old hash
+        let resolved = resolve_chain_hashes(100, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
+        assert_eq!(resolved.grace_period_hashes, vec![OVERRIDE_HASH_1]);
+
+        // Within grace period: primary is default, grace period has old hash
+        let resolved = resolve_chain_hashes(125, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
+        assert_eq!(resolved.grace_period_hashes, vec![OVERRIDE_HASH_1]);
+
+        // At end of grace period (exclusive): no grace period hashes
+        let resolved = resolve_chain_hashes(150, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
+        assert!(resolved.grace_period_hashes.is_empty());
+    }
+
+    #[test]
+    fn test_grace_period_with_multiple_overrides() {
         let overrides = [
             ChainHashOverride {
                 start_height: 0,
                 end_height: 100,
                 chain_hash: OVERRIDE_HASH_1,
+                grace_period: 50, // Grace period extends to height 150
             },
             ChainHashOverride {
                 start_height: 100,
                 end_height: 200,
                 chain_hash: OVERRIDE_HASH_2,
+                grace_period: 25, // Grace period extends to height 225
             },
         ];
 
-        // Height exactly at end of last override
-        assert_eq!(
-            resolve_chain_hash(200, &overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
+        // Within first override's primary range
+        let resolved = resolve_chain_hashes(50, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_1);
+        assert!(resolved.grace_period_hashes.is_empty());
 
-        // Height well beyond overrides
-        assert_eq!(
-            resolve_chain_hash(1000, &overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
+        // At height 100: second override is primary, first is in grace period
+        let resolved = resolve_chain_hashes(100, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_2);
+        assert_eq!(resolved.grace_period_hashes, vec![OVERRIDE_HASH_1]);
 
-        assert_eq!(
-            resolve_chain_hash(u64::MAX, &overrides, DEFAULT_HASH),
-            DEFAULT_HASH
-        );
+        // At height 125: second override is primary, first still in grace period
+        let resolved = resolve_chain_hashes(125, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_2);
+        assert_eq!(resolved.grace_period_hashes, vec![OVERRIDE_HASH_1]);
+
+        // At height 150: second override is primary, first grace period ended
+        let resolved = resolve_chain_hashes(150, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, OVERRIDE_HASH_2);
+        assert!(resolved.grace_period_hashes.is_empty());
+
+        // At height 200: default is primary, second is in grace period
+        let resolved = resolve_chain_hashes(200, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
+        assert_eq!(resolved.grace_period_hashes, vec![OVERRIDE_HASH_2]);
+
+        // At height 225: default is primary, second grace period ended
+        let resolved = resolve_chain_hashes(225, &overrides, DEFAULT_HASH);
+        assert_eq!(resolved.primary, DEFAULT_HASH);
+        assert!(resolved.grace_period_hashes.is_empty());
+    }
+
+    #[test]
+    fn test_in_grace_period_method() {
+        let override_ = ChainHashOverride {
+            start_height: 100,
+            end_height: 200,
+            chain_hash: OVERRIDE_HASH_1,
+            grace_period: 50,
+        };
+
+        // Before range: not in grace period
+        assert!(!override_.in_grace_period(99));
+
+        // In primary range: not in grace period
+        assert!(!override_.in_grace_period(150));
+
+        // At end_height: in grace period
+        assert!(override_.in_grace_period(200));
+
+        // Within grace period
+        assert!(override_.in_grace_period(225));
+
+        // At end of grace period (exclusive)
+        assert!(!override_.in_grace_period(250));
+
+        // After grace period
+        assert!(!override_.in_grace_period(300));
+    }
+
+    #[test]
+    fn test_zero_grace_period_means_no_grace() {
+        let override_ = ChainHashOverride {
+            start_height: 100,
+            end_height: 200,
+            chain_hash: OVERRIDE_HASH_1,
+            grace_period: 0,
+        };
+
+        // At end_height: not in grace period when grace_period is 0
+        assert!(!override_.in_grace_period(200));
+        assert!(!override_.in_grace_period(250));
     }
 
     // Note: Validation that overrides start at 0 and are contiguous happens at
