@@ -1,7 +1,7 @@
 [da]
 connection_string = "sqlite://mock_da.sqlite?mode=rwc"
 sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
-finalization = 10
+finalization_blocks = 10
 [da.block_producing.periodic]
 block_time_ms = 3_000
 
