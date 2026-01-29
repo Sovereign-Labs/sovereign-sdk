@@ -181,6 +181,18 @@ where
             .last()
             .expect("At least one base fee must have been collected");
 
+        // Validate that the EVM block number aligns with the current rollup height.
+        // We allow a +1 offset to account for the pending block, but anything beyond that
+        // indicates a mapping mismatch between EVM blocks and rollup heights.
+        let current_rollup_height = self.chain_state_module.rollup_height(state)?;
+        let max_allowed_block = current_rollup_height.get().saturating_add(1);
+        if end_block > max_allowed_block {
+            return Err(EthApiError::HeaderNotFound(BlockId::Number(
+                //  We return max_allowed + 1 because that’s the first block number that is definitely missing,
+                max_allowed_block.saturating_add(1).into(),
+            )));
+        }
+
         // Query chain-state for the next block's base fee. Chain-state is the source of truth
         // and handles all special cases (setup mode, initial blocks, etc.).
         // If chain-state returns None (future block not yet recorded), fall back to EIP-1559 estimate.

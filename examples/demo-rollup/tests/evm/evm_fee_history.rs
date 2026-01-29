@@ -518,10 +518,10 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
+    // Pause before submitting the tx to ensure it stays pending
+    rollup.pause_preferred_batches().await;
     // Submit tx but don't wait - this creates pending transactions
     let _pending_tx_hash = simple_storage.set_value(contract_address, 42).await;
-
-    rollup.pause_preferred_batches().await;
 
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Pending, &[])
@@ -579,10 +579,10 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
+    // Pause before submitting the tx to ensure it stays pending
+    rollup.pause_preferred_batches().await;
     // Submit tx but don't wait - this creates pending transactions
     let _pending_tx_hash = simple_storage.set_value(contract_address, 42).await;
-
-    rollup.pause_preferred_batches().await;
 
     let latest = client.get_block_number().await?;
     let genesis = load_evm_genesis_config();
@@ -684,10 +684,10 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
+    // Pause before submitting the tx to ensure it stays pending
+    rollup.pause_preferred_batches().await;
     // Submit tx but don't wait - this creates pending transactions
     let _pending_tx_hash = simple_storage.set_value(contract_address, 42).await;
-
-    rollup.pause_preferred_batches().await;
 
     let latest_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[])
@@ -1137,6 +1137,11 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     );
 
     let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;
+    let chain_gas_used = gas_info.gas_used.as_ref()[0];
+    assert!(
+        chain_gas_used >= receipts_gas_used,
+        "chain-state gas_used should be >= receipts gas_used"
+    );
     let expected_next_base_fee = compute_next_base_fee(
         expected_base_fee,
         receipts_gas_used,
