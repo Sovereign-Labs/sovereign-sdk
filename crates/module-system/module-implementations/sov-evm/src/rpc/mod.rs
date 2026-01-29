@@ -804,7 +804,7 @@ pub(crate) fn build_rpc_receipt(
         TxKind::Call(addr) => (None, Some(Address(*addr))),
     };
 
-    // EIP-1559 effective gas price calculation (https://eips.ethereum.org/EIPS/eip-1559):
+    // EIP-1559 effective gas price calculation (https://github.com/ethereum/EIPs/blob/0d31c18725202ae8bbfb82b8d3d028ad1810d360/EIPS/eip-1559.md?plain=1#L222-L224):
     //   priority_fee_per_gas = min(transaction.max_priority_fee_per_gas,
     //                              transaction.max_fee_per_gas - block.base_fee_per_gas)
     //   effective_gas_price = priority_fee_per_gas + block.base_fee_per_gas
