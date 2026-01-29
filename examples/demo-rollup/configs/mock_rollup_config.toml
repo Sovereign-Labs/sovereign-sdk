@@ -8,7 +8,7 @@ connection_string = "sqlite://mock_da.sqlite?mode=rwc"
 # For initial full node should match genesis of sequencer-registry.
 # It is going to be a DA address that blobs from this node will be associated with.
 sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
-finalization_blocks = 40 # Reorgs up to this depth are allowed. Set to zero for instant finality
+finalization_blocks = 0 # Reorgs up to this depth are allowed. Set to zero for instant finality
 # failure_behavior = "none" # Configures failure injection for testing. Options: "none", or structured variants for testing
 
 [da.block_producing.periodic]
