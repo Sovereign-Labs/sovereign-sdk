@@ -869,20 +869,20 @@ async fn evm_contract_call_unregistered_test_case(
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
     let provider = alloy_client(http_addr);
 
-    // Verify the contract state was updated by calling getValue
+    // Verify the contract state was updated by calling getValue. The forced batch notification
+    // comes from the sequencer; the node may apply the batch shortly after, so poll until visible.
     let get_calldata = Bytes::from(contract_for_calldata.get().to_vec());
     let call_request = TransactionRequest::default()
         .with_to(contract_address)
         .with_input(get_calldata);
 
-    let result = provider.call(call_request).await?;
-    let resp_array: [u8; 32] = result.to_vec().try_into().unwrap();
-    let value = U256::from_be_bytes(resp_array);
-    assert_eq!(
-        value,
-        U256::from(set_value),
-        "Contract value should match set value"
-    );
+    poll_until("contract value update", || async {
+        let result = provider.call(call_request.clone()).await?;
+        let resp_array: [u8; 32] = result.to_vec().try_into().unwrap();
+        let value = U256::from_be_bytes(resp_array);
+        Ok((value == U256::from(set_value)).then_some(()))
+    })
+    .await?;
 
     Ok(())
 }

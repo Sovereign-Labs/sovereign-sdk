@@ -18,6 +18,14 @@ const ESTIMATED_GAS_LIMIT_DIVISOR: u64 = 3;
 
 use crate::{Evm, SyntheticBlockWithoutRootsAndBloom};
 
+fn base_fee_overflow_error(value: u128) -> EthApiError {
+    EthApiError::other(ErrorObjectOwned::owned(
+        INTERNAL_ERROR_CODE,
+        format!("base fee overflow: {value} exceeds u64::MAX"),
+        None::<()>,
+    ))
+}
+
 struct FeesAndUsage {
     fees: Vec<u128>,
     gas_used_ratios: Vec<f64>,
@@ -202,29 +210,21 @@ where
             .base_fee_per_gas_at(next_height, state)?;
 
         let next_gas_price: u64 = if let Some(price) = next_from_chain {
-            price.as_ref()[0].0.try_into().map_err(|_| {
-                EthApiError::other(ErrorObjectOwned::owned(
-                    INTERNAL_ERROR_CODE,
-                    "base fee overflow: value exceeds u64::MAX",
-                    None::<()>,
-                ))
-            })?
+            let value = price.as_ref()[0].0;
+            value
+                .try_into()
+                .map_err(|_| base_fee_overflow_error(value))?
         } else {
             // Fallback: EIP-1559 estimation for future blocks not yet in chain-state
-            ChainState::<S>::compute_base_fee_per_gas_unidimensional(
+            let value = ChainState::<S>::compute_base_fee_per_gas_unidimensional(
                 gas_limit,
                 conservative_parent_gas_usage,
                 Amount::from(*last_base_fee),
             )
-            .0
-            .try_into()
-            .map_err(|_| {
-                EthApiError::other(ErrorObjectOwned::owned(
-                    INTERNAL_ERROR_CODE,
-                    "base fee overflow: value exceeds u64::MAX",
-                    None::<()>,
-                ))
-            })?
+            .0;
+            value
+                .try_into()
+                .map_err(|_| base_fee_overflow_error(value))?
         };
         base_fees.push(next_gas_price);
 
