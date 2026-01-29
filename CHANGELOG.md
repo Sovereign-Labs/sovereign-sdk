@@ -1,3 +1,6 @@
+# 2026-01-29
+- #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
+
 # 2026-01-17
 - #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
 # 2026-01-25
