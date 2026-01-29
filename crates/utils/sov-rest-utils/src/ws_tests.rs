@@ -564,7 +564,7 @@ mod tests {
                         assert!(
                             data.len() >= 2 && data[0] == 0x1f && data[1] == 0x8b,
                             "Binary frame should start with gzip magic bytes (0x1f 0x8b), got: {:02x} {:02x}",
-                            data.get(0).copied().unwrap_or(0),
+                            data.first().copied().unwrap_or(0),
                             data.get(1).copied().unwrap_or(0)
                         );
 
