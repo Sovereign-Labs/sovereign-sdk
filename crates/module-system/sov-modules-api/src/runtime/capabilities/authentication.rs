@@ -34,7 +34,10 @@ pub fn config_chain_id() -> u64 {
 /// This function loads the `CHAIN_HASH_OVERRIDES` from config and uses them
 /// to resolve the appropriate chain hashes for the given height, including
 /// any hashes that are valid due to grace periods.
-fn resolve_chain_hashes_for_height(
+///
+/// This is useful for endpoints (like `/rollup/schema`) that need to return
+/// the currently active chain hash for wallets.
+pub fn resolve_chain_hashes_for_height(
     height: u64,
     default_hash: [u8; 32],
 ) -> crate::runtime::ResolvedChainHashes {

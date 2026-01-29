@@ -1,11 +1,14 @@
+use std::sync::Arc;
+
 use axum::extract::State;
 use axum::response::IntoResponse as _;
 use axum::routing::get;
 use axum::Router;
 use serde::Serialize;
 use sov_modules_api::prelude::anyhow;
+use sov_modules_api::prelude::tokio::sync::watch;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
-use sov_modules_api::HexHash;
+use sov_modules_api::{ConcurrentStateCheckpoint, HexHash, Spec};
 use sov_rest_utils::{errors, preconfigured_router_layers};
 
 /// Trait for the `/rollup/schema` endpoint.
@@ -52,29 +55,65 @@ pub trait SchemaEndpoint: Clone + Send + Sync + 'static {
     }
 }
 
-/// Provides a implementation of the `schema` endpoint using the schema JSON provided.
-#[derive(Debug, Clone, Serialize)]
-pub struct StandardSchemaEndpoint {
+/// Standard implementation of the schema endpoint that dynamically resolves the chain hash
+/// based on the current rollup height.
+///
+/// This endpoint uses chain hash overrides from the configuration to return the appropriate
+/// chain hash for wallets. During chain hash transitions (including grace periods), this
+/// ensures wallets always get the correct chain hash for signing transactions.
+#[derive(Clone)]
+pub struct StandardSchemaEndpoint<S: Spec> {
     schema: serde_json::Value,
-    chain_hash: HexHash,
+    default_chain_hash: [u8; 32],
+    checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
 }
 
-impl StandardSchemaEndpoint {
-    /// Creates a new `StandardSchemaEndpoint` using the provided [`Schema`] as the JSON.
-    pub fn new(schema: &Schema, chain_hash: HexHash) -> anyhow::Result<Self> {
+impl<S: Spec> StandardSchemaEndpoint<S> {
+    /// Creates a new `StandardSchemaEndpoint`.
+    ///
+    /// # Arguments
+    /// * `schema` - The schema to return
+    /// * `default_chain_hash` - The default chain hash (from `Runtime::CHAIN_HASH`)
+    /// * `checkpoint_receiver` - Receiver for state checkpoints to read current height
+    pub fn new(
+        schema: &Schema,
+        default_chain_hash: [u8; 32],
+        checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
+    ) -> anyhow::Result<Self> {
         Ok(Self {
             schema: serde_json::to_value(schema)?,
-            chain_hash,
+            default_chain_hash,
+            checkpoint_receiver,
         })
     }
 }
 
-impl SchemaEndpoint for StandardSchemaEndpoint {
-    type Response = StandardSchemaEndpoint;
+/// Response for the schema endpoint.
+#[derive(Debug, Clone, Serialize)]
+pub struct StandardSchemaResponse {
+    schema: serde_json::Value,
+    chain_hash: HexHash,
+}
+
+impl<S: Spec> SchemaEndpoint for StandardSchemaEndpoint<S> {
+    type Response = StandardSchemaResponse;
 
     type Error = anyhow::Error;
 
     fn handler(&self) -> Result<Self::Response, Self::Error> {
-        Ok(self.clone())
+        // Get the current rollup height from the checkpoint
+        let checkpoint = self.checkpoint_receiver.borrow();
+        let height = checkpoint.rollup_height_to_access();
+
+        // Resolve the chain hash for the current height
+        let resolved = sov_modules_api::capabilities::resolve_chain_hashes_for_height(
+            height.get(),
+            self.default_chain_hash,
+        );
+
+        Ok(StandardSchemaResponse {
+            schema: self.schema.clone(),
+            chain_hash: resolved.primary.into(),
+        })
     }
 }

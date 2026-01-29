@@ -121,10 +121,13 @@ where
         let dedup_endpoint = SovereignDeDupEndpoint::new(api_state.clone());
         let axum_router = axum_router.merge(dedup_endpoint.axum_router());
 
-        let schema_endpoint = StandardSchemaEndpoint::new(
+        // StandardSchemaEndpoint resolves chain hash based on current height.
+        // This ensures wallets get the correct chain hash during chain hash transitions.
+        let schema_endpoint = StandardSchemaEndpoint::<S>::new(
             &serde_json::from_str(__generated::SCHEMA_JSON)
                 .expect("Failed to deserialize schema json"),
-            Self::CHAIN_HASH.into(),
+            Self::CHAIN_HASH,
+            api_state.checkpoint_receiver(),
         )
         .expect("Failed to initialize StandardSchemaEndpoint");
         let axum_router = axum_router.merge(schema_endpoint.axum_router());

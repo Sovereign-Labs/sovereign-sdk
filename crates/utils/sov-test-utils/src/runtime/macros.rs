@@ -150,9 +150,12 @@ macro_rules! generate_runtime_without_capabilities {
                 })
                 .unwrap();
 
-                let schema_endpoint = StandardSchemaEndpoint::new(
+                // StandardSchemaEndpoint resolves chain hash based on current height.
+                // This ensures wallets get the correct chain hash during chain hash transitions.
+                let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
-                    Self::CHAIN_HASH.into(),
+                    Self::CHAIN_HASH,
+                    api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");
                 let axum_router = axum_router.merge(schema_endpoint.axum_router());
