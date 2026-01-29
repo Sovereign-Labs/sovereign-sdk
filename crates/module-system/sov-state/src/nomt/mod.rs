@@ -17,10 +17,28 @@ pub struct NomtMultiProof(pub MultiProof);
 
 impl PartialEq for NomtMultiProof {
     fn eq(&self, other: &Self) -> bool {
-        match (borsh::to_vec(&self.0), borsh::to_vec(&other.0)) {
-            (Ok(a), Ok(b)) => a == b,
-            _ => false,
+        let this = &self.0;
+        let other = &other.0;
+
+        if &this.siblings != &other.siblings {
+            return false;
         }
+
+        if this.paths.len() != this.paths.len() {
+            return false;
+        }
+
+        for (this_path, other_path) in this.paths.iter().zip(other.paths.iter()) {
+            if this_path.depth != other_path.depth {
+                return false;
+            }
+
+            if this_path.terminal != other_path.terminal {
+                return false;
+            }
+        }
+
+        true
     }
 }
 
