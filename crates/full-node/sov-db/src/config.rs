@@ -97,8 +97,8 @@ impl RollupDbConfig {
         if let Some(hashtable_buckets) = self.kernel_hashtable_buckets {
             opts.hashtable_buckets(hashtable_buckets);
         } else if cfg!(debug_assertions) {
-            // 9.77MB
-            opts.hashtable_buckets(2_500);
+            // 2MB
+            opts.hashtable_buckets(500);
         } else {
             // 1000MB
             opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
