@@ -785,22 +785,7 @@ where
     }
 
     async fn subscribe_events(&self) -> Option<SequencerEventStream<Self::Rt>> {
-        use futures::StreamExt;
-
-        let tx_stream = self.transaction_cache.subscribe();
-
-        let event_stream: SequencerEventStream<Self::Rt> =
-            Box::pin(tx_stream.flat_map(|tx| match tx {
-                Ok(tx) => Box::pin(futures::stream::iter(
-                    tx.confirmation.events.into_iter().map(Ok),
-                )),
-                Err(e) => {
-                    let output: SequencerEventStream<Self::Rt> =
-                        Box::pin(futures::stream::once(async { Err(e) }));
-                    output
-                }
-            }));
-        Some(event_stream)
+        Some(self.transaction_cache.subscribe_events())
     }
 
     async fn get_tx(

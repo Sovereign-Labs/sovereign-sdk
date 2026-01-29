@@ -4,14 +4,14 @@ use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{StateCheckpoint, StateValue};
 use sov_rollup_interface::execution_mode::Native;
 use sov_state::{BorshCodec, Prefix};
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleJmtStorageManager;
 use sov_test_utils::MockDaSpec;
 use unwrap_infallible::UnwrapInfallible;
 
 type TestSpec = sov_modules_api::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
 fn main() {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleJmtStorageManager::new();
     let storage = storage_manager.create_storage();
     let kernel = MockKernel::<TestSpec>::new(4, 1);
     let mut state = StateCheckpoint::new(storage, &kernel, None);

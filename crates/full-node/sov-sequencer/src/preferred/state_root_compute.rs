@@ -198,7 +198,7 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
 
 impl<S: Spec> StateRootTask<S> {
     pub(super) fn create<Rt: Runtime<S>>(
-        mut block_excutors_shutdown_receiver: mpsc::Receiver<()>,
+        mut block_executors_shutdown_receiver: mpsc::Receiver<()>,
         check_state_roots: bool,
     ) -> (JoinHandle<()>, StateRootTask<S>) {
         let span = span!(Level::DEBUG, "state_root_compute_background_task");
@@ -222,7 +222,7 @@ impl<S: Spec> StateRootTask<S> {
                             }
                         }
                     }
-                   _ = block_excutors_shutdown_receiver.recv() => {
+                   _ = block_executors_shutdown_receiver.recv() => {
                         info!(
                             "Sequencer state root background task shutdown in response to signal",
                         );
@@ -353,10 +353,10 @@ mod tests {
     use sov_state::SlotKey;
     use sov_state::StateUpdate;
     use sov_test_utils::storage::{
-        ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
+        ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
     };
     use sov_test_utils::{
-        generate_optimistic_runtime, TestHasher, TestNomtSpec, TestSpec, TestStorageSpec,
+        generate_optimistic_runtime, TestHasher, TestJmtSpec, TestSpec, TestStorageSpec,
     };
     use tokio::task::JoinHandle;
 
@@ -366,6 +366,24 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
+        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
+        new_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
+            storage_manager,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
+        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
+        known_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
+            storage_manager,
+        )
+        .await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
         new_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
             storage_manager,
@@ -374,24 +392,12 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
+    async fn test_nomt_known_rollup_height_state_root_on_stale_storage() {
         let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
         known_rollup_height_state_root_on_stale_storage::<TestSpec, _, TestRuntime<TestSpec>>(
             storage_manager,
         )
         .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager).await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_nomt_known_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleNomtStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestNomtSpec, _, TestRuntime<TestNomtSpec>>(storage_manager).await;
     }
 
     // Helpers go below
@@ -625,9 +631,9 @@ mod tests {
         )
         .unwrap();
         known_rollup_height_state_root_on_stale_storage_with_deep_jumps::<
-            TestNomtSpec,
+            TestSpec,
             _,
-            TestRuntime<TestNomtSpec>,
+            TestRuntime<TestSpec>,
         >(storage_manager)
         .await;
     }
@@ -777,7 +783,7 @@ mod tests {
 
         // Now we'll run a loop of...
         // - Commit the next block info, making one more set of sequencer storages become stale.
-        // - Iterate over all of the seqeuncer storages and compute the state root for each one. Make sure that they get the correct value
+        // - Iterate over all of the sequencer storages and compute the state root for each one. Make sure that they get the correct value
         //
         // This checks that stale storage is handled correctly, even when it becomes *very* stale. (For example, the storage we created for block 1 should still compute the correct root after block 10 has been written to disk.)
         for i in 0..block_infos.len() {

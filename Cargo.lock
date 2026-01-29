@@ -10876,6 +10876,7 @@ dependencies = [
  "serde",
  "sov-address",
  "sov-capabilities",
+ "sov-db",
  "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
@@ -11946,10 +11947,13 @@ dependencies = [
  "test-strategy",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-stream",
+ "tokio-tungstenite 0.28.0",
  "tower",
  "tower-http 0.5.2",
  "tower-request-id",
  "tracing",
+ "tungstenite 0.28.0",
 ]
 
 [[package]]
@@ -11971,6 +11975,7 @@ dependencies = [
  "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-state",
  "sov-test-utils",
  "strum 0.26.3",
  "thiserror 1.0.69",
