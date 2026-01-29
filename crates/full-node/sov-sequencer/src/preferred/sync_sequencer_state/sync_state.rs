@@ -29,6 +29,7 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
 use sov_modules_api::{
     FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
@@ -572,9 +573,9 @@ where
         // Atomically swap in the new storage and prune the old one.
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
-        let new_rollup_height =
-            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
-                .rollup_height_to_access();
+        let mut rt = Rt::default();
+        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None)
+            .rollup_height_to_access();
 
         inner
             .executor
@@ -587,12 +588,37 @@ where
             .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
 
-        Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
+        Self::common_for_final_catchup_and_new_storage(&mut inner, info.clone()).await;
+
+        // Compute finalized_rollup_height from the finalized slot to avoid over-pruning during reorgs.
+        // Only prune state roots for heights that are finalized on the DA layer.
+        let finalized_rollup_height = {
+            let concurrent_checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None),
+            ));
+            let kernel_with_slot_mapping = rt.kernel_with_slot_mapping();
+
+            match ApiStateAccessor::new_archival_with_true_slot_number(
+                concurrent_checkpoint,
+                kernel_with_slot_mapping.clone(),
+                info.latest_finalized_slot_number,
+            ) {
+                Ok(mut api_state) => kernel_with_slot_mapping.current_rollup_height(&mut api_state),
+                Err(e) => {
+                    // Fallback: if archival access fails, don't prune to avoid over-pruning
+                    tracing::warn!(
+                        ?e,
+                        "Failed to get finalized rollup height, skipping state_roots pruning"
+                    );
+                    return;
+                }
+            }
+        };
 
         inner
             .executor
             .state_roots
-            .retain(|height, _| *height > new_rollup_height);
+            .retain(|height, _| *height > finalized_rollup_height);
     }
 
     async fn process_final_catchup(
