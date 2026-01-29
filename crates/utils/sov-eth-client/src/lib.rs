@@ -16,6 +16,7 @@ pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
 const RECEIPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const RECEIPT_POLL_TIMEOUT: Duration = Duration::from_secs(120);
 
 const GAS: u64 = 100_000_000u64;
 const MAX_FEE_PER_GAS: u128 = 100;
@@ -89,24 +90,46 @@ impl SimpleStorageClient {
 
     /// Wait for a transaction receipt to be available (including pending block receipts).
     pub async fn wait_for_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
-        loop {
-            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
-                return receipt;
+        let wait = async {
+            loop {
+                if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                    return receipt;
+                }
+                tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
             }
-            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
-        }
+        };
+        tokio::time::timeout(RECEIPT_POLL_TIMEOUT, wait)
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "timed out waiting {:?}s for receipt of tx {:?}",
+                    RECEIPT_POLL_TIMEOUT.as_secs(),
+                    tx_hash
+                )
+            })
     }
 
     /// Wait for a transaction receipt with a block hash (i.e., in a finalized block).
     pub async fn wait_for_finalized_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
-        loop {
-            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
-                if receipt.block_hash.is_some() {
-                    return receipt;
+        let wait = async {
+            loop {
+                if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                    if receipt.block_hash.is_some() {
+                        return receipt;
+                    }
                 }
+                tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
             }
-            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
-        }
+        };
+        tokio::time::timeout(RECEIPT_POLL_TIMEOUT, wait)
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "timed out waiting {:?}s for finalized receipt of tx {:?}",
+                    RECEIPT_POLL_TIMEOUT.as_secs(),
+                    tx_hash
+                )
+            })
     }
 
     /// Send a transaction and wait for its receipt (including pending block receipts).
