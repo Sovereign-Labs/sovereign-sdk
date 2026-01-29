@@ -78,7 +78,7 @@ impl PartialEq for NomtMultiProof {
             return false;
         }
 
-        if &this.siblings != &other.siblings {
+        if this.siblings != other.siblings {
             return false;
         }
 

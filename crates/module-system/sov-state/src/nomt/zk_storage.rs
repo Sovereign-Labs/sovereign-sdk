@@ -181,22 +181,6 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         unimplemented!("Latest unbound version is not available for NomtVerifierStorage.");
     }
 
-    fn get_with_proof<N: crate::namespaces::ProvableCompileTimeNamespace>(
-        &self,
-        _key: SlotKey,
-        _version: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>> {
-        unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
-    }
-
-    fn get_accessory_historical(
-        &self,
-        _key: &SlotKey,
-        _version: Option<SlotNumber>,
-    ) -> anyhow::Result<Option<SlotValue>> {
-        unimplemented!("The NomtVerifierStorage does not support `get_accessory_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
-    }
-
     fn get_historical<N: ProvableCompileTimeNamespace>(
         &self,
         _key: &SlotKey,
@@ -213,6 +197,22 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         _witness: &Self::Witness,
     ) -> anyhow::Result<Option<NodeLeafAndMaybeValue>> {
         unimplemented!("The NomtVerifierStorage does not support `get_leaf_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
+    fn get_accessory_historical(
+        &self,
+        _key: &SlotKey,
+        _version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        unimplemented!("The NomtVerifierStorage does not support `get_accessory_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
+    fn get_with_proof<N: crate::namespaces::ProvableCompileTimeNamespace>(
+        &self,
+        _key: SlotKey,
+        _version: Option<SlotNumber>,
+    ) -> anyhow::Result<StorageProof<Self::Proof>> {
+        unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
