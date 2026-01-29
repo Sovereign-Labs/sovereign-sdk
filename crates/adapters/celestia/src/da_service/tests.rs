@@ -619,7 +619,19 @@ mod adversarial_blocks {
             mutator(&mut self.proofs.batch.completeness_proof);
         }
 
-        // Proof namespace mutators can be added when we need adversarial proof tests.
+        fn mutate_proof_inclusion_proofs<F>(&mut self, mutator: F)
+        where
+            F: FnOnce(&mut Vec<BlobProof>),
+        {
+            mutator(&mut self.proofs.proof.inclusion_proof);
+        }
+
+        fn mutate_proof_completeness_proof<F>(&mut self, mutator: F)
+        where
+            F: FnOnce(&mut Option<NamespaceBoundaryProof>),
+        {
+            mutator(&mut self.proofs.proof.completeness_proof);
+        }
     }
 
     fn case_with_multiple_batches() -> AdversarialCase {
@@ -653,6 +665,32 @@ mod adversarial_blocks {
         assert!(
             case.proofs.batch.completeness_proof.is_some(),
             "expected completeness proof to be present for padded namespace"
+        );
+        case
+    }
+
+    fn case_with_single_proof() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(with_rollup_proof_data::test_case());
+        assert!(
+            !case.blobs.proof_blobs.is_empty(),
+            "expected fixture to contain at least one proof blob"
+        );
+        assert!(
+            !case.proofs.proof.inclusion_proof.is_empty(),
+            "expected fixture to contain at least one proof inclusion proof"
+        );
+        case
+    }
+
+    fn case_with_multiple_proofs() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(with_batch_and_proof_same_block::test_case());
+        assert!(
+            case.blobs.proof_blobs.len() >= 2,
+            "expected fixture to contain at least two proof blobs"
+        );
+        assert!(
+            case.proofs.proof.inclusion_proof.len() >= 2,
+            "expected fixture to contain at least two proof inclusion proofs"
         );
         case
     }
@@ -744,7 +782,9 @@ mod adversarial_blocks {
             let proof = proof
                 .as_mut()
                 .expect("expected completeness proof to be present");
-            let NamespaceBoundaryProof { last_share_proof, .. } = proof;
+            let NamespaceBoundaryProof {
+                last_share_proof, ..
+            } = proof;
             match &mut **last_share_proof {
                 NmtNamespaceProof::PresenceProof { proof, .. }
                 | NmtNamespaceProof::AbsenceProof { proof, .. } => {
@@ -790,6 +830,44 @@ mod adversarial_blocks {
         let mut case = case_with_multiple_batches();
         case.mutate_batch_inclusion_proofs(|proofs| {
             proofs.reverse();
+        });
+        assert_verification_error_contains(case, "MissingBlobs");
+    }
+
+    #[test]
+    fn verification_fails_if_proof_blob_order_swapped() {
+        let mut case = case_with_multiple_proofs();
+        case.blobs.proof_blobs.swap(0, 1);
+        assert_verification_error_contains(case, "NonMatchingShare");
+    }
+
+    #[test]
+    fn verification_fails_if_fake_proof_blob_inserted() {
+        let mut case = case_with_single_proof();
+        case.mutate_proof_inclusion_proofs(|proofs| {
+            let proof = proofs[0].clone();
+            proofs.push(proof);
+        });
+        assert_verification_error_contains(case, "WrongStartShareIndex");
+    }
+
+    #[test]
+    fn verification_fails_if_proof_right_boundary_missing_blobs() {
+        let mut case = case_with_multiple_proofs();
+        case.mutate_proof_completeness_proof(|proof| {
+            let proof = proof
+                .as_mut()
+                .expect("expected completeness proof to be present");
+            let NamespaceBoundaryProof {
+                last_share_proof, ..
+            } = proof;
+            match &mut **last_share_proof {
+                NmtNamespaceProof::PresenceProof { proof, .. }
+                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+                    proof.range.start = proof.range.start.saturating_add(1);
+                    proof.range.end = proof.range.end.saturating_add(1);
+                }
+            }
         });
         assert_verification_error_contains(case, "MissingBlobs");
     }
