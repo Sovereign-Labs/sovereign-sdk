@@ -11,6 +11,15 @@ freeze = [1, 1]
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
 
+# Chain hash overrides by rollup block height range.
+# When the rollup schema changes (e.g., adding a new transaction type), the CHAIN_HASH changes.
+# To avoid rejecting previously signed transactions, define overrides for old chain hashes.
+# Format: [{ start_height = <height>, end_height = <height>, chain_hash = "0x..." }, ...]
+# Ranges are [start, end) - start is inclusive, end is exclusive.
+# Falls back to Runtime::CHAIN_HASH when no override applies.
+# Example: CHAIN_HASH_OVERRIDES = [{ start_height = 0, end_height = 1000, chain_hash = "0xabc...32_bytes_hex" }]
+CHAIN_HASH_OVERRIDES = []
+
 # The namespace used by the rollup to store its data.
 # Using byte_string to convert "sov-test-b" to ASCII bytes
 # Should be 10 bytes long for Celestia

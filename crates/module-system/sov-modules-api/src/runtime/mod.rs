@@ -271,3 +271,65 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
     })?;
     Ok(schema)
 }
+
+/// A chain hash override for a range of block heights.
+///
+/// This allows SDK consumers to define different chain hashes for different height ranges,
+/// enabling non-breaking upgrades when the rollup schema changes (e.g., adding a new transaction type).
+///
+/// The range is `[start_height, end_height)` - start is inclusive, end is exclusive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+pub struct ChainHashOverride {
+    /// The start height (inclusive).
+    pub start_height: u64,
+    /// The end height (exclusive).
+    pub end_height: u64,
+    /// The chain hash to use for this range.
+    pub chain_hash: [u8; 32],
+}
+
+impl ChainHashOverride {
+    /// Returns true if the given height falls within this override's range.
+    ///
+    /// The range is `[start_height, end_height)` - start is inclusive, end is exclusive.
+    pub const fn contains(&self, height: u64) -> bool {
+        height >= self.start_height && height < self.end_height
+    }
+}
+
+/// Resolves the chain hash for a given height by checking overrides.
+///
+/// Overrides must be contiguous and start at zero (validated at compile time by the
+/// `config_value!` macro). If the height is beyond all overrides, falls back to the
+/// default hash.
+///
+/// # Arguments
+/// * `height` - The block height to resolve the chain hash for
+/// * `overrides` - A slice of chain hash overrides (must be contiguous, starting at 0)
+/// * `default_hash` - The default chain hash to use when no override matches
+///
+/// # Returns
+/// The chain hash to use for the given height
+pub fn resolve_chain_hash(
+    height: u64,
+    overrides: &[ChainHashOverride],
+    default_hash: [u8; 32],
+) -> [u8; 32] {
+    // Early return if no overrides or height is beyond all overrides
+    let Some(last_override) = overrides.last() else {
+        return default_hash;
+    };
+
+    if height >= last_override.end_height {
+        return default_hash;
+    }
+
+    for hash_override in overrides {
+        if hash_override.contains(height) {
+            return hash_override.chain_hash;
+        }
+    }
+
+    // Should not reach here if overrides are valid and height < last_end
+    default_hash
+}

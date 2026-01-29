@@ -73,16 +73,42 @@ pub(crate) fn build_create_token_tx(
     nonce: u64,
     initial_balance: u128,
 ) -> Transaction<Runtime<TestSpec>, TestSpec> {
+    build_create_token_tx_with_chain_hash(key, nonce, initial_balance, None)
+}
+
+pub(crate) fn build_create_token_tx_with_chain_hash(
+    key: &<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    nonce: u64,
+    initial_balance: u128,
+    chain_hash: Option<[u8; 32]>,
+) -> Transaction<Runtime<TestSpec>, TestSpec> {
+    build_create_token_tx_with_chain_hash_and_token_name(
+        key,
+        nonce,
+        initial_balance,
+        chain_hash,
+        TOKEN_NAME.to_string(),
+    )
+}
+
+pub(crate) fn build_create_token_tx_with_chain_hash_and_token_name(
+    key: &<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    nonce: u64,
+    initial_balance: u128,
+    chain_hash: Option<[u8; 32]>,
+    token_name: String,
+) -> Transaction<Runtime<TestSpec>, TestSpec> {
     let user_address: Address = key.pub_key().credential_id().into();
     let msg = RuntimeCall::<TestSpec>::Bank(sov_bank::CallMessage::<TestSpec>::CreateToken {
-        token_name: TOKEN_NAME.try_into().unwrap(),
+        token_name: token_name.try_into().unwrap(),
         token_decimals: Some(TOKEN_DECIMALS),
         initial_balance: initial_balance.into(),
         mint_to_address: user_address.into(),
         admins: SafeVec::new(),
         supply_cap: None,
     });
-    default_test_signed_transaction_with_nonce(key, &msg, nonce, &CHAIN_HASH)
+    let chain_hash = chain_hash.unwrap_or(CHAIN_HASH);
+    default_test_signed_transaction_with_nonce(key, &msg, nonce, &chain_hash)
 }
 
 pub(crate) fn build_multiple_transfers(

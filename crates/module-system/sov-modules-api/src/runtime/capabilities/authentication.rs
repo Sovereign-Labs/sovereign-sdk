@@ -29,6 +29,15 @@ pub fn config_chain_id() -> u64 {
     config_value_private!("CHAIN_ID")
 }
 
+/// Resolves the chain hash for a given height using configured overrides.
+///
+/// This function loads the `CHAIN_HASH_OVERRIDES` from config and uses them
+/// to resolve the appropriate chain hash for the given height.
+pub fn resolve_chain_hash_for_height(height: u64, default_hash: [u8; 32]) -> [u8; 32] {
+    let overrides: &[crate::ChainHashOverride] = &config_value_private!("CHAIN_HASH_OVERRIDES");
+    crate::runtime::resolve_chain_hash(height, overrides, default_hash)
+}
+
 /// A batch sent by an unregistered sequencer contains only one transaction.
 pub struct BatchFromUnregisteredSequencer {
     /// The transaction.
@@ -183,7 +192,7 @@ where
         capabilities::decode_sov_tx::<S, Rt>(&tx.data)
     }
 
-    fn authenticate<Accessor: ProvableStateReader<sov_state::User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<sov_state::User, Spec = S> + VersionReader>(
         tx: &FullyBakedTx,
         pre_exec_ws: &mut Accessor,
     ) -> ::core::result::Result<
@@ -429,18 +438,25 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 
 /// Authenticate raw sov-transaction.
 ///
+/// This function resolves the appropriate chain hash for the current block height
+/// using configured overrides, falling back to `default_chain_hash` when no override applies.
+///
 /// # Errors
 /// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
 /// signature cannot be verified.
 pub fn authenticate<
-    Accessor: ProvableStateReader<User, Spec = S>,
+    Accessor: ProvableStateReader<User, Spec = S> + VersionReader,
     S: Spec,
     D: DispatchCall<Spec = S>,
 >(
     mut raw_tx: &[u8],
-    chain_hash: &[u8; 32],
+    default_chain_hash: &[u8; 32],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    // Resolve chain hash with height-based overrides
+    let height = state.rollup_height_to_access();
+    let chain_hash = resolve_chain_hash_for_height(height.get(), *default_chain_hash);
+
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
@@ -461,12 +477,12 @@ pub fn authenticate<
             }
         };
 
-    verify_and_decode_tx::<S, D>(raw_tx_hash, tx, chain_hash, state)
+    verify_and_decode_tx::<S, D>(raw_tx_hash, tx, &chain_hash, state)
 }
 
 /// Authenticate raw unregistered sov-transaction.
 pub fn authenticate_unregistered<
-    Accessor: ProvableStateReader<sov_state::User, Spec = S>,
+    Accessor: ProvableStateReader<sov_state::User, Spec = S> + VersionReader,
     S: Spec,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
 >(

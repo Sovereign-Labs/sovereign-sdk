@@ -196,3 +196,175 @@ fn test_default_signature_roundtrip() {
 fn assert_chain_id_was_not_overridden() {
     assert_eq!(config_chain_id(), 4321);
 }
+
+mod chain_hash_override_tests {
+    use crate::runtime::{resolve_chain_hash, ChainHashOverride};
+
+    const DEFAULT_HASH: [u8; 32] = [0xDDu8; 32];
+    const OVERRIDE_HASH_1: [u8; 32] = [0x11u8; 32];
+    const OVERRIDE_HASH_2: [u8; 32] = [0x22u8; 32];
+    const OVERRIDE_HASH_3: [u8; 32] = [0x33u8; 32];
+
+    #[test]
+    fn test_empty_overrides_returns_default() {
+        let overrides: &[ChainHashOverride] = &[];
+        assert_eq!(resolve_chain_hash(0, overrides, DEFAULT_HASH), DEFAULT_HASH);
+        assert_eq!(
+            resolve_chain_hash(1000, overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+        assert_eq!(
+            resolve_chain_hash(u64::MAX, overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+    }
+
+    #[test]
+    fn test_single_override_starting_at_zero() {
+        let overrides = [ChainHashOverride {
+            start_height: 0,
+            end_height: 1000,
+            chain_hash: OVERRIDE_HASH_1,
+        }];
+
+        // At start (inclusive): use override
+        assert_eq!(
+            resolve_chain_hash(0, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_1
+        );
+
+        // Within range: use override
+        assert_eq!(
+            resolve_chain_hash(500, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_1
+        );
+
+        // At end - 1: use override
+        assert_eq!(
+            resolve_chain_hash(999, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_1
+        );
+
+        // At end (exclusive): use default
+        assert_eq!(
+            resolve_chain_hash(1000, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+
+        // After range: use default
+        assert_eq!(
+            resolve_chain_hash(2000, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+    }
+
+    #[test]
+    fn test_multiple_contiguous_overrides() {
+        // Overrides must be contiguous and start at 0
+        let overrides = [
+            ChainHashOverride {
+                start_height: 0,
+                end_height: 100,
+                chain_hash: OVERRIDE_HASH_1,
+            },
+            ChainHashOverride {
+                start_height: 100,
+                end_height: 200,
+                chain_hash: OVERRIDE_HASH_2,
+            },
+            ChainHashOverride {
+                start_height: 200,
+                end_height: 300,
+                chain_hash: OVERRIDE_HASH_3,
+            },
+        ];
+
+        // In first override
+        assert_eq!(
+            resolve_chain_hash(50, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_1
+        );
+
+        // At boundary (100 is in second override)
+        assert_eq!(
+            resolve_chain_hash(100, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_2
+        );
+
+        // In second override
+        assert_eq!(
+            resolve_chain_hash(150, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_2
+        );
+
+        // In third override
+        assert_eq!(
+            resolve_chain_hash(250, &overrides, DEFAULT_HASH),
+            OVERRIDE_HASH_3
+        );
+
+        // After all overrides: use default
+        assert_eq!(
+            resolve_chain_hash(300, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+
+        assert_eq!(
+            resolve_chain_hash(500, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+    }
+
+    #[test]
+    fn test_override_contains_method() {
+        let override_ = ChainHashOverride {
+            start_height: 100,
+            end_height: 200,
+            chain_hash: OVERRIDE_HASH_1,
+        };
+
+        assert!(!override_.contains(99));
+        assert!(override_.contains(100));
+        assert!(override_.contains(150));
+        assert!(override_.contains(199));
+        assert!(!override_.contains(200));
+        assert!(!override_.contains(201));
+    }
+
+    #[test]
+    fn test_height_beyond_overrides_returns_default() {
+        let overrides = [
+            ChainHashOverride {
+                start_height: 0,
+                end_height: 100,
+                chain_hash: OVERRIDE_HASH_1,
+            },
+            ChainHashOverride {
+                start_height: 100,
+                end_height: 200,
+                chain_hash: OVERRIDE_HASH_2,
+            },
+        ];
+
+        // Height exactly at end of last override
+        assert_eq!(
+            resolve_chain_hash(200, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+
+        // Height well beyond overrides
+        assert_eq!(
+            resolve_chain_hash(1000, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+
+        assert_eq!(
+            resolve_chain_hash(u64::MAX, &overrides, DEFAULT_HASH),
+            DEFAULT_HASH
+        );
+    }
+
+    // Note: Validation that overrides start at 0 and are contiguous happens at
+    // compile time in the config_value! macro. Invalid configurations will fail
+    // to compile rather than panic at runtime.
+}

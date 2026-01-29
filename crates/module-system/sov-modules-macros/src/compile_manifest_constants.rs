@@ -80,6 +80,18 @@ pub struct TomlByteStringValue {
     byte_string: String,
 }
 
+/// A chain hash override for a range of block heights.
+/// Used in constants.toml as: `{ start = <height>, end = <height>, hash = "0x..." }`
+#[derive(serde::Deserialize)]
+pub struct TomlChainHashOverride {
+    /// The start height (inclusive).
+    pub start_height: u64,
+    /// The end height (exclusive).
+    pub end_height: u64,
+    /// The chain hash as a hex string (with or without "0x" prefix).
+    pub chain_hash: String,
+}
+
 pub enum AllowedTomlValue {
     Bool(bool),
     Integer(i64),
@@ -88,6 +100,7 @@ pub enum AllowedTomlValue {
     Bech32(TomlBech32Value),
     Hex(TomlHexValue),
     ByteString(TomlByteStringValue),
+    ChainHashOverride(TomlChainHashOverride),
 }
 
 pub struct ParsedConstant {
@@ -111,6 +124,10 @@ fn parse_constant_inner(value: &toml::Value, span: Span) -> syn::Result<AllowedT
                 Ok(AllowedTomlValue::Hex(hex_table))
             } else if let Ok(byte_string_table) = value.clone().try_into::<TomlByteStringValue>() {
                 Ok(AllowedTomlValue::ByteString(byte_string_table))
+            } else if let Ok(chain_hash_override) =
+                value.clone().try_into::<TomlChainHashOverride>()
+            {
+                Ok(AllowedTomlValue::ChainHashOverride(chain_hash_override))
             } else {
                 Err(error("table"))
             }
@@ -162,6 +179,63 @@ fn parse_constant(value: &toml::Value, span: Span) -> syn::Result<ParsedConstant
     }
 }
 
+/// Validates that an array of ChainHashOverride values is contiguous and starts at zero.
+/// Returns Ok(()) if the array contains no ChainHashOverride values (i.e., it's a different
+/// type of array). Errors if the array contains a mix of ChainHashOverride and other types.
+fn validate_chain_hash_override_array(
+    constant_name: &syn::LitStr,
+    arr: &[AllowedTomlValue],
+) -> syn::Result<()> {
+    // Collect all ChainHashOverride values from the array
+    let overrides: Vec<&TomlChainHashOverride> = arr
+        .iter()
+        .filter_map(|v| match v {
+            AllowedTomlValue::ChainHashOverride(o) => Some(o),
+            _ => None,
+        })
+        .collect();
+
+    // If no ChainHashOverride values, this is a different type of array - skip validation
+    if overrides.is_empty() {
+        return Ok(());
+    }
+
+    // If some but not all elements are ChainHashOverride, that's an error
+    if overrides.len() != arr.len() {
+        return Err(syn::Error::new(
+            constant_name.span(),
+            "Chain hash override array contains mixed types; all elements must be chain hash overrides",
+        ));
+    }
+
+    // Validate: first override must start at 0
+    if overrides[0].start_height != 0 {
+        return Err(syn::Error::new(
+            constant_name.span(),
+            format!(
+                "Chain hash overrides must start at height 0, but first override starts at {}",
+                overrides[0].start_height
+            ),
+        ));
+    }
+
+    // Validate: each subsequent override must start where the previous one ended
+    for window in overrides.windows(2) {
+        if window[1].start_height != window[0].end_height {
+            return Err(syn::Error::new(
+                constant_name.span(),
+                format!(
+                    "Chain hash overrides must be contiguous: override ending at {} is followed by override starting at {}",
+                    window[0].end_height,
+                    window[1].start_height
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 fn allowed_toml_value_to_const_expr(
     constant_name: &syn::LitStr,
     value: &AllowedTomlValue,
@@ -180,15 +254,26 @@ fn allowed_toml_value_to_const_expr(
             lit: syn::Lit::Int(syn::LitInt::new(&i.to_string(), Span::call_site())),
         }),
         AllowedTomlValue::Array(arr) => {
+            // Check if this is an array of ChainHashOverride - if so, validate at compile time
+            validate_chain_hash_override_array(constant_name, arr)?;
+
             let values = arr
                 .iter()
                 .map(|v| allowed_toml_value_to_const_expr(constant_name, v))
                 .collect::<syn::Result<Vec<_>>>()?;
-            syn::Expr::Array(syn::ExprArray {
-                attrs: Vec::new(),
-                bracket_token: syn::token::Bracket::default(),
-                elems: Punctuated::from_iter(values),
-            })
+
+            // For ChainHashOverride arrays (or empty arrays that might be overridden with
+            // ChainHashOverride), generate a Vec to match the override logic type
+            let is_chain_hash_array = is_chain_hash_override_array(arr) || values.is_empty();
+            if is_chain_hash_array {
+                syn::parse_quote!(vec![#(#values),*])
+            } else {
+                syn::Expr::Array(syn::ExprArray {
+                    attrs: Vec::new(),
+                    bracket_token: syn::token::Bracket::default(),
+                    elems: Punctuated::from_iter(values),
+                })
+            }
         }
         AllowedTomlValue::Bech32(bech32) => {
             let bech32_type = format_ident!("{}", bech32.r#type);
@@ -198,10 +283,61 @@ fn allowed_toml_value_to_const_expr(
         AllowedTomlValue::ByteString(byte_string) => {
             toml_byte_string_value_to_rust(constant_name, &byte_string.byte_string)?
         }
+        AllowedTomlValue::ChainHashOverride(override_) => {
+            toml_chain_hash_override_to_rust(constant_name, override_)?
+        }
     })
 }
 
-fn allowed_toml_value_to_expr_with_override_logic(value: &AllowedTomlValue) -> TokenStream {
+/// Returns true if the array contains ChainHashOverride elements.
+fn is_chain_hash_override_array(arr: &[AllowedTomlValue]) -> bool {
+    arr.first()
+        .map(|v| matches!(v, AllowedTomlValue::ChainHashOverride(_)))
+        .unwrap_or(false)
+}
+
+/// Generates the override logic expression for ChainHashOverride arrays.
+fn chain_hash_override_array_override_logic() -> TokenStream {
+    // ChainHashOverride arrays need special handling: deserialize with string chain_hash,
+    // then convert hex strings to [u8; 32]
+    quote::quote!({
+        use sov_modules_api::prelude::{serde, toml};
+
+        // Intermediate struct for deserialization with string chain_hash
+        #[derive(serde::Deserialize)]
+        struct RawChainHashOverride {
+            start_height: u64,
+            end_height: u64,
+            chain_hash: String,
+        }
+
+        let deserializer = toml::de::ValueDeserializer::new(&env_value);
+        let raw_overrides: Vec<RawChainHashOverride> =
+            serde::Deserialize::deserialize(deserializer).unwrap();
+
+        // Convert hex strings to [u8; 32]
+        raw_overrides
+            .into_iter()
+            .map(|raw| {
+                let hex_str = raw.chain_hash.strip_prefix("0x").unwrap_or(&raw.chain_hash);
+                let hash_bytes: [u8; 32] = hex::decode(hex_str)
+                    .expect("Invalid hex string in chain hash override")
+                    .try_into()
+                    .expect("Chain hash must be exactly 32 bytes");
+                sov_modules_api::ChainHashOverride {
+                    start_height: raw.start_height,
+                    end_height: raw.end_height,
+                    chain_hash: hash_bytes,
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+fn allowed_toml_value_to_expr_with_override_logic(
+    constant_name: &str,
+    value: &AllowedTomlValue,
+) -> TokenStream {
     match value {
         AllowedTomlValue::Bool(_) | AllowedTomlValue::Integer(_) | AllowedTomlValue::Bech32(_) => {
             quote::quote!({ str::parse(&env_value).unwrap() })
@@ -214,7 +350,15 @@ fn allowed_toml_value_to_expr_with_override_logic(value: &AllowedTomlValue) -> T
             // leaked once? See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2510>.
             &*env_value.leak()
         }),
-        AllowedTomlValue::Array(_) | AllowedTomlValue::Hex(_) | AllowedTomlValue::ByteString(_) => {
+        AllowedTomlValue::Array(arr)
+            if is_chain_hash_override_array(arr) || constant_name == "CHAIN_HASH_OVERRIDES" =>
+        {
+            chain_hash_override_array_override_logic()
+        }
+        AllowedTomlValue::Array(_)
+        | AllowedTomlValue::Hex(_)
+        | AllowedTomlValue::ByteString(_)
+        | AllowedTomlValue::ChainHashOverride(_) => {
             quote::quote!({
                 use sov_modules_api::prelude::{serde, toml};
 
@@ -249,7 +393,10 @@ pub fn compile_toml_value_to_rust(
     Ok(if parsed_constant.make_const {
         quote::quote!(#const_expr)
     } else {
-        let non_const_expr = allowed_toml_value_to_expr_with_override_logic(&parsed_constant.value);
+        let non_const_expr = allowed_toml_value_to_expr_with_override_logic(
+            &input.constant_name.value(),
+            &parsed_constant.value,
+        );
 
         quote::quote!({
             #[cfg(debug_assertions)]
@@ -358,4 +505,51 @@ fn bytes_to_array_expr(bytes: &[u8]) -> syn::Result<syn::Expr> {
         bracket_token: syn::token::Bracket::default(),
         elems: Punctuated::from_iter(elems),
     }))
+}
+
+pub fn toml_chain_hash_override_to_rust(
+    constant_name: &syn::LitStr,
+    hash_override: &TomlChainHashOverride,
+) -> syn::Result<syn::Expr> {
+    let start_height = hash_override.start_height;
+    let end_height = hash_override.end_height;
+
+    let hex_str = hash_override
+        .chain_hash
+        .strip_prefix("0x")
+        .unwrap_or(&hash_override.chain_hash);
+    let hash_bytes = hex::decode(hex_str).map_err(|e| {
+        syn::Error::new(
+            constant_name.span(),
+            format!("Invalid hex string in chain hash override: {e}"),
+        )
+    })?;
+
+    if hash_bytes.len() != 32 {
+        return Err(syn::Error::new(
+            constant_name.span(),
+            format!(
+                "Chain hash override hash must be exactly 32 bytes, got {}",
+                hash_bytes.len()
+            ),
+        ));
+    }
+
+    let hash_bytes_tokens = hash_bytes.iter().map(|b| {
+        let lit = syn::LitInt::new(&format!("{b}u8"), Span::call_site());
+        syn::Expr::Lit(syn::ExprLit {
+            attrs: Vec::new(),
+            lit: syn::Lit::Int(lit),
+        })
+    });
+
+    let const_expr_tokens = quote::quote!({
+        sov_modules_api::ChainHashOverride {
+            start_height: #start_height,
+            end_height: #end_height,
+            chain_hash: [#(#hash_bytes_tokens),*],
+        }
+    });
+
+    syn::parse2(const_expr_tokens)
 }
