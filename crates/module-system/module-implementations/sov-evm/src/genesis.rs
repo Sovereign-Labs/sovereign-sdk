@@ -110,7 +110,6 @@ fn init_block<S: Spec>(config: &EvmGenesisConfig<S>) -> Block {
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
         excess_blob_gas: Some(EXCESS_BLOB_GAS),
-        // TODO: Or constants.toml ?? Explain what it needed
         base_fee_per_gas: Some(config.initial_base_fee),
         // Default values
         parent_hash: B256::ZERO,
