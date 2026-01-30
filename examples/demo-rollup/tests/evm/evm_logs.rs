@@ -476,6 +476,9 @@ async fn get_logs_address_filter_multiple() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// Semantics refers to EIP-1474 topic filter semantics.
+// When you pass multiple values for a single topic position (like topic3([1, 3])),
+// it uses OR semantics - meaning "match logs where topic3 is 1 OR topic3 is 3"
 async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let nb_of_txs = 2;
     let nb_of_logs_per_tx: u32 = 5;
@@ -493,8 +496,12 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let pending_block = latest_block_context(&rollup_and_client.client).await;
     let sender = rollup_and_client.client.address();
 
-    let topics = vec![U256::from(1).into(), U256::from(3).into()];
-    let filter = filter_for_tag(BlockNumberOrTag::Pending).topic3(topics);
+    // By filtering for topic3 values [1, 3],
+    // the test expects to get 2 logs per transaction (the ones at indices 1 and 3),
+    // verifying the OR semantics work correctly.
+    // The values 1 and 3 are arbitrary choices that demonstrate the OR filter returns non-consecutive matches.
+    let topic_3_eq_1_or_3 = vec![U256::from(1).into(), U256::from(3).into()];
+    let filter = filter_for_tag(BlockNumberOrTag::Pending).topic3(topic_3_eq_1_or_3);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     assert_eq!(logs.len() as u32, nb_of_txs * 2);
@@ -1970,53 +1977,53 @@ async fn build_tx_log_meta(
     client: &SimpleStorageClient,
     plans: &[TxLogPlan],
 ) -> HashMap<TxHash, TxLogMeta> {
-    struct PlanReceipt {
-        plan: TxLogPlan,
-        block_number: u64,
-        block_hash: B256,
-        tx_index: u64,
-    }
-
-    let mut by_block: HashMap<u64, Vec<PlanReceipt>> = HashMap::new();
+    let mut receipts: Vec<_> = Vec::with_capacity(plans.len());
     for plan in plans {
         let receipt = client
             .alloy_receipt(plan.tx_hash)
             .await
             .expect("receipt should be present for test tx");
+        receipts.push((plan, receipt));
+    }
+
+    receipts.sort_by_key(|(_, r)| {
+        (
+            r.block_number.expect("block number should be present"),
+            r.transaction_index
+                .expect("transaction index should be present"),
+        )
+    });
+
+    let mut meta_map = HashMap::new();
+    let mut current_block = None;
+    let mut base_log_index = 0u64;
+    let mut block_timestamp = 0u64;
+
+    for (plan, receipt) in receipts {
         let block_number = receipt
             .block_number
             .expect("block number should be present");
-        let block_hash = receipt.block_hash.expect("block hash should be present");
-        let tx_index = receipt
-            .transaction_index
-            .expect("transaction index should be present");
-        by_block.entry(block_number).or_default().push(PlanReceipt {
-            plan: *plan,
-            block_number,
-            block_hash,
-            tx_index,
-        });
-    }
-
-    let mut meta_map = HashMap::new();
-    for (block_number, mut entries) in by_block {
-        entries.sort_by_key(|entry| entry.tx_index);
-        let block = block_context_by_number(client, block_number).await;
-        let mut base_log_index = 0u64;
-        for entry in entries {
-            assert_eq!(block.hash, entry.block_hash);
-            meta_map.insert(
-                entry.plan.tx_hash,
-                TxLogMeta {
-                    block_hash: entry.block_hash,
-                    block_number: entry.block_number,
-                    tx_index: entry.tx_index,
-                    base_log_index,
-                    block_timestamp: block.timestamp,
-                },
-            );
-            base_log_index += entry.plan.log_count;
+        if current_block != Some(block_number) {
+            current_block = Some(block_number);
+            base_log_index = 0;
+            block_timestamp = block_context_by_number(client, block_number)
+                .await
+                .timestamp;
         }
+
+        meta_map.insert(
+            plan.tx_hash,
+            TxLogMeta {
+                block_hash: receipt.block_hash.expect("block hash should be present"),
+                block_number,
+                tx_index: receipt
+                    .transaction_index
+                    .expect("transaction index should be present"),
+                base_log_index,
+                block_timestamp,
+            },
+        );
+        base_log_index += plan.log_count;
     }
 
     meta_map
