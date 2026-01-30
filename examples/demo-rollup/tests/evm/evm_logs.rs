@@ -44,80 +44,53 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
     let pending_filter = filter_for_tag(BlockNumberOrTag::Pending);
 
     // Helper to build expected logs for a snapshot
-    let build_expected_at_snapshot = |block: &BlockContext,
-                                      first_tx: TxHash,
-                                      second_tx: Option<TxHash>,
-                                      third_tx: Option<TxHash>|
-     -> Vec<ExpectedSimpleLog> {
-        let mut logs = vec![
-            ExpectedSimpleLog {
-                meta: ExpectedLogMeta {
-                    address: contract_address,
-                    tx_hash: first_tx,
-                    tx_index: 0,
-                    log_index: 0,
-                    block_hash: block.hash,
-                    block_number: block.number,
-                    block_timestamp: Some(block.timestamp),
-                },
+    let build_expected_at_snapshot =
+        |block: &BlockContext, tx_infos: &[TxLogInfo]| -> Vec<ExpectedSimpleLog> {
+            let mut logs = Vec::with_capacity(tx_infos.len());
+            let mut last_log_index = 0;
+            for (tx_index, tx_info) in tx_infos.iter().enumerate() {
+                for log_data in &tx_info.logs {
+                    logs.push(ExpectedSimpleLog {
+                        meta: ExpectedLogMeta {
+                            address: contract_address,
+                            tx_hash: tx_info.hash,
+                            tx_index: tx_index as u64,
+                            log_index: last_log_index,
+                            block_hash: block.hash,
+                            block_number: block.number,
+                            block_timestamp: Some(block.timestamp),
+                        },
+                        topic1: log_data.topic1,
+                        topic2: log_data.topic2,
+                        data: log_data.data,
+                    });
+                    last_log_index += 1;
+                }
+            }
+
+            logs
+        };
+
+    // After first_tx: 2 logs
+    let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
+    let first_tx_info = TxLogInfo {
+        hash: first_tx,
+        logs: vec![
+            SimpleLogData {
                 topic1: U256::ZERO,
                 topic2: U256::ZERO,
                 data: U256::ZERO,
             },
-            ExpectedSimpleLog {
-                meta: ExpectedLogMeta {
-                    address: contract_address,
-                    tx_hash: first_tx,
-                    tx_index: 0,
-                    log_index: 1,
-                    block_hash: block.hash,
-                    block_number: block.number,
-                    block_timestamp: Some(block.timestamp),
-                },
+            SimpleLogData {
                 topic1: U256::ZERO,
                 topic2: U256::from(1),
                 data: U256::ZERO,
             },
-        ];
-        if let Some(tx) = second_tx {
-            logs.push(ExpectedSimpleLog {
-                meta: ExpectedLogMeta {
-                    address: contract_address,
-                    tx_hash: tx,
-                    tx_index: 1,
-                    log_index: 2,
-                    block_hash: block.hash,
-                    block_number: block.number,
-                    block_timestamp: Some(block.timestamp),
-                },
-                topic1: U256::from(1),
-                topic2: U256::ZERO,
-                data: U256::ZERO,
-            });
-        }
-        if let Some(tx) = third_tx {
-            logs.push(ExpectedSimpleLog {
-                meta: ExpectedLogMeta {
-                    address: contract_address,
-                    tx_hash: tx,
-                    tx_index: 2,
-                    log_index: 3,
-                    block_hash: block.hash,
-                    block_number: block.number,
-                    block_timestamp: Some(block.timestamp),
-                },
-                topic1: U256::from(2),
-                topic2: U256::ZERO,
-                data: U256::ZERO,
-            });
-        }
-        logs
+        ],
     };
-
-    // After first_tx: 2 logs
-    let first_tx = client.alloy_emit_logs(contract_address, 0, 2).await;
+    let only_first_tx = [first_tx_info.clone()];
     let pending_block_first = latest_block_context(&client).await;
-    let expected_at_first = build_expected_at_snapshot(&pending_block_first, first_tx, None, None);
+    let expected_at_first = build_expected_at_snapshot(&pending_block_first, &only_first_tx);
 
     let logs_by_hash_first = client
         .get_logs(&Filter::new().at_block_hash(pending_block_first.hash))
@@ -128,9 +101,17 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
 
     // After second_tx: 3 logs (cumulative)
     let second_tx = client.alloy_emit_logs(contract_address, 1, 1).await;
+    let second_tx_info = TxLogInfo {
+        hash: second_tx,
+        logs: vec![SimpleLogData {
+            topic1: U256::from(1),
+            topic2: U256::ZERO,
+            data: U256::ZERO,
+        }],
+    };
+    let first_and_second = [first_tx_info.clone(), second_tx_info.clone()];
     let pending_block_second = latest_block_context(&client).await;
-    let expected_at_second =
-        build_expected_at_snapshot(&pending_block_second, first_tx, Some(second_tx), None);
+    let expected_at_second = build_expected_at_snapshot(&pending_block_second, &first_and_second);
 
     let logs_by_hash_second = client
         .get_logs(&Filter::new().at_block_hash(pending_block_second.hash))
@@ -141,13 +122,17 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
 
     // After third_tx: 4 logs (cumulative)
     let third_tx = client.alloy_emit_logs(contract_address, 2, 1).await;
+    let third_tx_info = TxLogInfo {
+        hash: third_tx,
+        logs: vec![SimpleLogData {
+            topic1: U256::from(2),
+            topic2: U256::ZERO,
+            data: U256::ZERO,
+        }],
+    };
+    let all_3_txs = [first_tx_info, second_tx_info, third_tx_info];
     let pending_block_third = latest_block_context(&client).await;
-    let expected_at_third = build_expected_at_snapshot(
-        &pending_block_third,
-        first_tx,
-        Some(second_tx),
-        Some(third_tx),
-    );
+    let expected_at_third = build_expected_at_snapshot(&pending_block_third, &all_3_txs);
 
     let logs_by_hash_third = client
         .get_logs(&Filter::new().at_block_hash(pending_block_third.hash))
@@ -1205,7 +1190,7 @@ async fn get_logs_schema_correctness() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "alloy-rpc-eth does not support using BlockId in range. Our own implementation will require considerable effort"]
-async fn get_logs_eip1898_blockhash_object() -> anyhow::Result<()> {
+async fn get_logs_eip1898_block_hash_object() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     let tx_hash = rollup_and_client
@@ -1916,8 +1901,22 @@ struct SimpleLogPlan {
 }
 
 #[derive(Clone)]
+struct TxLogInfo {
+    hash: TxHash,
+    logs: Vec<SimpleLogData>,
+}
+
+#[derive(Clone)]
+struct SimpleLogData {
+    topic1: U256,
+    topic2: U256,
+    data: U256,
+}
+
+#[derive(Clone)]
 struct ExpectedSimpleLog {
     meta: ExpectedLogMeta,
+    // TODO: use SimpleLogData
     topic1: U256,
     topic2: U256,
     data: U256,
@@ -1925,6 +1924,7 @@ struct ExpectedSimpleLog {
 
 enum ExpectedLogKind {
     Simple {
+        // TODO: Use SimpleLogData
         topic1: U256,
         topic2: U256,
         data: U256,
