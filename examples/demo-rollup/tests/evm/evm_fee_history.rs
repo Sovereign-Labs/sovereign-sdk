@@ -897,7 +897,7 @@ async fn test_fee_history_gas_ratio_valid_range() -> anyhow::Result<()> {
 
 // ==================== Value Correctness Tests ====================
 
-/// KNOWN BUG: baseFeePerGas can drop to 0 after genesis (violates EIP-1559 min base fee).
+/// Regression: baseFeePerGas should never drop below 1 after genesis (EIP-1559 min base fee).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_base_fee_nonzero_after_genesis() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(4).await;
@@ -924,12 +924,19 @@ async fn test_fee_history_base_fee_nonzero_after_genesis() -> anyhow::Result<()>
             *fee >= 1,
             "baseFeePerGas for block {block_num} should be >= 1, got {fee}"
         );
+        if i < fee_history.gas_used_ratio.len() {
+            let header_base_fee = get_block_base_fee(&client, block_num).await?;
+            assert_eq!(
+                *fee, header_base_fee,
+                "baseFeePerGas for block {block_num} should match block header"
+            );
+        }
     }
 
     Ok(())
 }
 
-/// KNOWN BUG: genesis baseFeePerGas in feeHistory does not match the block header.
+/// Regression: genesis baseFeePerGas in feeHistory matches the block header.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_earliest_values_match_block_header() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(2).await;
@@ -1426,21 +1433,10 @@ async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// TC35: Base fee stability - KNOWN BUG
+/// TC35: Base fee stability - regression test
 ///
 /// This test verifies EIP-1559 base fee constraints: changes should be max 12.5% per block,
 /// and base fee should never drop below 1 wei.
-///
-/// **KNOWN BUG**: Currently FAILING because the rollup uses `saturating_sub` in
-/// `crates/module-system/module-implementations/sov-chain-state/src/gas.rs:189`
-/// which allows base_fee to drop to 0, violating EIP-1559.
-///
-/// Example failure: "Base fee swing from block 7->8 is too large: 7 -> 0"
-///
-/// This should be fixed by either:
-/// 1. Using checked arithmetic with min(1) bound
-/// 2. Implementing proper EIP-1559 elasticity constraints
-///
 /// See: crates/module-system/module-implementations/sov-chain-state/src/gas.rs
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
@@ -1567,10 +1563,7 @@ async fn test_fee_history_duplicate_percentiles() -> anyhow::Result<()> {
 
 /// TC14: Empty percentiles array omits reward field
 ///
-/// BUG: Per Ethereum spec, when empty percentiles are provided, the reward field
-/// should be omitted from the response (None). The rollup instead returns
-/// Some([[], []]) - empty 2D arrays. This may confuse clients that check for
-/// reward presence to determine if percentiles were requested.
+/// Regression: when empty percentiles are provided, the reward field is omitted (None).
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_empty_percentiles_no_reward() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(3).await;
@@ -1664,11 +1657,7 @@ async fn test_fee_history_predicted_next_block_fee() -> anyhow::Result<()> {
 
 /// TC27: Future block number handling
 ///
-/// BUG: When requesting fee history for a future block (e.g., block 1003 when
-/// chain is at block 3), the rollup should either return an error or return
-/// data bounded by the current chain height. Instead, it returns fabricated
-/// data with oldest_block = 1001, which is invalid since those blocks don't exist.
-/// This could mislead clients into thinking the chain has more history than it does.
+/// Regression: requesting fee history for a future block returns an error.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_future_block() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(3).await;
@@ -1680,19 +1669,10 @@ async fn test_fee_history_future_block() -> anyhow::Result<()> {
         .get_fee_history(3, BlockNumberOrTag::Number(future_block), &[])
         .await;
 
-    match result {
-        Ok(fee_history) => {
-            assert!(
-                fee_history.oldest_block <= current_block + 1,
-                "oldest_block {} should not be beyond current block {}",
-                fee_history.oldest_block,
-                current_block
-            );
-        }
-        Err(_) => {
-            // Error is also acceptable for future block
-        }
-    }
+    assert!(
+        result.is_err(),
+        "Future block should return error (current block: {current_block}, future: {future_block})"
+    );
 
     Ok(())
 }
