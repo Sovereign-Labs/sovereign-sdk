@@ -5,8 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use sov_modules_api::state::TxScratchpad;
 use sov_modules_api::{
-    ChangeSet, Context, DispatchCall, ExecutionContext, FullyBakedTx, GasArray, IncrementalBatch,
-    InjectedControlFlow, IterableBatchWithId, MaybeExecuted, NoOpControlFlow,
+    ChangeSet, Context, DispatchCall, ExecutionContext, FullyBakedTx, Gas, GasArray,
+    IncrementalBatch, InjectedControlFlow, IterableBatchWithId, MaybeExecuted, NoOpControlFlow,
     ProvisionalSequencerOutcome, Runtime, SlotGasMeter, TransactionReceipt, TxChangeSet,
     TxControlFlow,
 };
@@ -39,10 +39,11 @@ impl<S: Spec> MaybeAsyncBatch<S> {
     pub fn new_async(
         txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
         setup_sender: oneshot::Sender<ChangeSet>,
-        result_channel: Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
+        result_channel: Sender<AsyncBatchResult<S>>,
         tx_profit_threshold: u128,
         sequencer_admins: Arc<Vec<S::Address>>,
         address: S::Address,
+        is_responsible_for_gating_admins: bool,
     ) -> Self {
         Self::Async {
             txs_receiver,
@@ -54,6 +55,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
                 tx_profit_threshold,
                 // This will get overwritten by the pre-flight hook.
                 unix_timestamp_micros: AtomicU64::new(0),
+                is_responsible_for_gating_admins,
             },
         }
     }
@@ -100,7 +102,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         provisional_outcome: ProvisionalSequencerOutcome<S>,
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
-        gas_used: &<S as Spec>::Gas,
+        gas_used: <S as Spec>::Gas,
         execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match self {
@@ -146,33 +148,53 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
     }
 }
 
+/// The response from the sequencer for a submitted transaction, along with the resources consumed by that transaction.
+pub(crate) struct AsyncBatchResult<S: Spec> {
+    pub(crate) execution_time_micros: u64,
+    pub(crate) gas_used: <S as Spec>::Gas,
+    pub(crate) inner_result: Result<ExecutedTxResponse<S>, RejectReason>,
+}
+
 /// The response from the sequencer to a submitted tx that was actually executed. Note that this
 /// transaction may not have been successful!
 pub(crate) struct ExecutedTxResponse<S: Spec> {
-    pub receipt: TransactionReceipt<S>,
-    pub tx_changes: TxChangeSet,
-    pub remaining_slot_gas: <S as Spec>::Gas,
-    pub execution_time_micros: u64,
+    pub(crate) receipt: TransactionReceipt<S>,
+    pub(crate) tx_changes: TxChangeSet,
+    pub(crate) remaining_slot_gas: <S as Spec>::Gas,
 }
 
 /// The channel responsible for notifying an async tx submitter of the txs result
 #[derive(Debug)]
 pub struct AsyncBatchResponder<S: Spec> {
-    result_channel: Sender<Result<ExecutedTxResponse<S>, RejectReason>>,
+    result_channel: Sender<AsyncBatchResult<S>>,
     admins: Arc<Vec<S::Address>>,
     tx_profit_threshold: u128,
     /// The timestamp of the start of the latest tx in microseconds since the UNIX epoch
     /// We use an atomic u64 to avoid requiring a mutex. Note that this is set during the pre-flight hook.
     /// and read during the post-tx hook. It may not be meaningful before the pre-flight hook is called.
     unix_timestamp_micros: AtomicU64,
+    is_responsible_for_gating_admins: bool,
 }
 
 impl<S: Spec> AsyncBatchResponder<S> {
-    fn send_item(&self, item: Result<ExecutedTxResponse<S>, RejectReason>) {
+    fn send_async_batch_result(&self, item: AsyncBatchResult<S>) {
         // Try a simple non-blocking send first, then fall back to blocking the runtime if that fails
         if let Err(TrySendError::Full(item)) = self.result_channel.try_send(item) {
             let _ = Handle::current().block_on(async move { self.result_channel.send(item).await });
         }
+    }
+
+    fn send(
+        &self,
+        gas_used: <S as Spec>::Gas,
+        execution_time_micros: u64,
+        inner_result: Result<ExecutedTxResponse<S>, RejectReason>,
+    ) {
+        self.send_async_batch_result(AsyncBatchResult {
+            gas_used,
+            execution_time_micros,
+            inner_result,
+        });
     }
 
     /// Create a new responder for a single tx that shares the same config as the old value. Note that the timestamp is a fresh atomic initialized to zero
@@ -183,8 +205,13 @@ impl<S: Spec> AsyncBatchResponder<S> {
             admins: self.admins.clone(),
             tx_profit_threshold: self.tx_profit_threshold,
             unix_timestamp_micros: AtomicU64::new(0),
+            is_responsible_for_gating_admins: self.is_responsible_for_gating_admins,
         }
     }
+}
+
+fn time_now_to_u64() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years")
 }
 
 impl<S: Spec> AsyncBatchResponder<S> {
@@ -194,19 +221,27 @@ impl<S: Spec> AsyncBatchResponder<S> {
         context: &Context<S>,
         call: &<RT as DispatchCall>::Decodable,
     ) -> TxControlFlow<()> {
-        let start_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
+        let start_time: u64 = time_now_to_u64();
         self.unix_timestamp_micros
             .store(start_time, Ordering::SeqCst);
-        if sender_is_allowed(
-            runtime,
-            call,
-            context.sender(),
-            context.sequencer_da_address(),
-            self.admins.as_slice(),
-        ) {
+        if !self.is_responsible_for_gating_admins
+            || sender_is_allowed(
+                runtime,
+                call,
+                context.sender(),
+                context.sequencer_da_address(),
+                self.admins.as_slice(),
+            )
+        {
             TxControlFlow::ContinueProcessing(())
         } else {
-            self.send_item(Err(RejectReason::SenderMustBeAdmin));
+            let execution_time_micros =
+                time_now_to_u64() - self.unix_timestamp_micros.load(Ordering::SeqCst);
+            self.send(
+                S::Gas::zero(),
+                execution_time_micros,
+                Err(RejectReason::SenderMustBeAdmin),
+            );
             TxControlFlow::IgnoreTx
         }
     }
@@ -216,18 +251,22 @@ impl<S: Spec> AsyncBatchResponder<S> {
         provisional_outcome: ProvisionalSequencerOutcome<S>,
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
-        gas_used: &<S as Spec>::Gas,
+        gas_used: <S as Spec>::Gas,
         execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
-        let end_time: u64 = SystemTime::now().duration_since(UNIX_EPOCH).expect("SystemTime::now() returned something earlier than the UNIX epoch. This should be unreachable.").as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
-        let execution_time = end_time - self.unix_timestamp_micros.load(Ordering::SeqCst);
+        let execution_time_micros =
+            time_now_to_u64() - self.unix_timestamp_micros.load(Ordering::SeqCst);
         let ProvisionalSequencerOutcome {
             reward,
             penalty,
             execution_status,
         } = provisional_outcome;
         let MaybeExecuted::Executed(receipt) = execution_status else {
-            self.send_item(Err(RejectReason::SequencerOutOfGas));
+            self.send(
+                gas_used,
+                execution_time_micros,
+                Err(RejectReason::SequencerOutOfGas),
+            );
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         };
 
@@ -236,23 +275,27 @@ impl<S: Spec> AsyncBatchResponder<S> {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),
                 remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
-                execution_time_micros: execution_time,
             };
 
-            self.send_item(Ok(response));
+            self.send(gas_used, execution_time_micros, Ok(response));
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 
         if penalty > reward || reward.saturating_sub(penalty) < self.tx_profit_threshold {
-            self.send_item(Err(RejectReason::InsufficientReward {
-                expected: self.tx_profit_threshold,
-                found: reward.saturating_sub(penalty).0,
-            }));
+            self.send(
+                gas_used,
+                execution_time_micros,
+                Err(RejectReason::InsufficientReward {
+                    expected: self.tx_profit_threshold,
+                    found: reward.saturating_sub(penalty).0,
+                }),
+            );
+
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 
         let remaining_slot_gas = (*slot_gas_meter_before_tx.remaining_preferred_slot_gas())
-            .checked_sub(*gas_used)
+            .checked_sub(gas_used)
             // SAFETY: We always enforce that the gas used is less than the remaining slot gas limit
             .expect("Impossible happened: SlotGasMeter underflow when charging gas.");
 
@@ -260,10 +303,9 @@ impl<S: Spec> AsyncBatchResponder<S> {
             receipt: receipt.clone(),
             tx_changes: dirty_scratchpad.tx_changes(execution_context),
             remaining_slot_gas,
-            execution_time_micros: execution_time,
         };
 
-        self.send_item(Ok(response));
+        self.send(gas_used, execution_time_micros, Ok(response));
         (
             dirty_scratchpad.commit(),
             TxControlFlow::ContinueProcessing(receipt),
@@ -301,8 +343,8 @@ impl<S: Spec> IncrementalBatch<S> for MaybeAsyncBatch<S> {
 
     fn sequencer_address(&self) -> S::Address {
         match self {
-            MaybeAsyncBatch::Async { address, .. } => address.clone(),
-            MaybeAsyncBatch::Sync { batch } => batch.sequencer_address.clone(),
+            MaybeAsyncBatch::Async { address, .. } => *address,
+            MaybeAsyncBatch::Sync { batch } => batch.sequencer_address,
         }
     }
 }

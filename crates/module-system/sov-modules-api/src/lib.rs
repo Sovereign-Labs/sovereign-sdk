@@ -59,6 +59,9 @@ pub mod state;
 /// Defines the metadata that is used to generate execution proofs.
 pub mod proof_metadata;
 
+/// Defines the metadata that is added to transactions by the sequencer but not signed by the user
+pub mod sequencing_metadata;
+
 mod reexport_macros;
 
 #[cfg(test)]
@@ -94,6 +97,7 @@ pub use reexport_macros::*;
 #[cfg(feature = "native")]
 pub use rpc::*;
 pub use runtime::*;
+pub use sequencing_metadata::*;
 pub use sov_rollup_interface::common::{
     safe_vec, HexHash, HexString, SafeString, SafeVec, SizedSafeString, VisibleSlotNumber,
 };
@@ -108,9 +112,9 @@ pub use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 pub use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
 pub use sov_rollup_interface::reexports::digest;
 pub use sov_rollup_interface::stf::{
-    ApplySlotOutput, BatchReceipt, ExecutionContext, IgnoredTransactionReceipt, InvalidProofError,
-    ProofOutcome, ProofReceipt, ProofReceiptContents, ProofSender, StateTransitionFunction,
-    StoredEvent,
+    ApplySlotOutput, BatchReceipt, ExecutionContext, GenesisParams as GenesisParamsTrait,
+    IgnoredTransactionReceipt, InvalidProofError, ProofOutcome, ProofReceipt, ProofReceiptContents,
+    ProofSender, StateTransitionFunction, StoredEvent,
 };
 pub use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
@@ -123,6 +127,7 @@ pub use sov_rollup_interface::zk::{
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::StateUpdateInfo;
 pub use sov_rollup_interface::{execution_mode, BasicAddress, TxHash};
+pub use sov_state::User;
 pub use sov_state::{CompileTimeNamespace, Prefix, Storage};
 pub use state::*;
 pub use transaction::AuthenticatedTransactionData;
@@ -257,7 +262,7 @@ impl<'a, S: Spec> ModuleVisitor<'a, S> {
     fn visit_module(
         &mut self,
         module: &'a dyn ModuleInfo<Spec = S>,
-        module_map: &HashMap<&'a ModuleId, &'a (dyn ModuleInfo<Spec = S>)>,
+        module_map: &HashMap<&'a ModuleId, &'a dyn ModuleInfo<Spec = S>>,
     ) -> anyhow::Result<()> {
         let id = module.id();
 

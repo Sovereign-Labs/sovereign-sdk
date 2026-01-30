@@ -2,17 +2,18 @@ use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Bytes, TxKind};
 use sov_evm::{EthereumAuthenticator, Evm};
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::RawTx;
-use sov_test_utils::{LegacySimpleStorage, TransactionTestCase, TransactionType};
+use sov_test_utils::{TransactionTestCase, TransactionType};
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};
 
 #[test]
 fn test_block_updates() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let create_contract_tx_request = TypedTransaction::Eip1559(TxEip1559 {
         chain_id: config_value!("CHAIN_ID"),
@@ -51,8 +52,12 @@ fn test_block_updates() {
             let txs = current_block.transactions();
             assert_eq!(txs.start, 0);
             assert_eq!(txs.end, 1);
-            let block_height = evm.block_height(&current_block.header().hash(), state);
-            assert_eq!(block_height, Some(1));
+            let block_height = evm
+                .get_block_by_hash(current_block.header().hash(), None, state)
+                .unwrap()
+                .unwrap()
+                .number();
+            assert_eq!(block_height, 1);
         }),
     });
 }

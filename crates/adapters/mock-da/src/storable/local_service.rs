@@ -17,13 +17,15 @@ use tracing::Instrument;
 use crate::config::WAIT_ATTEMPT_PAUSE;
 use crate::storable::layer::{Randomizer, StorableMockDaLayer};
 use crate::{
-    BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockHash,
-    RandomizationBehaviour, RandomizationConfig, DEFAULT_BLOCK_WAITING_TIME_MS,
+    BlockProducingConfig, CheckResult, FailureBehavior, FailureInjector, MockAddress, MockBlock,
+    MockBlockHeader, MockDaConfig, MockHash, RandomizationBehaviour, RandomizationConfig,
+    DEFAULT_BLOCK_WAITING_TIME_MS,
 };
 
 const DEFAULT_BLOCK_WAITING_TIME: Duration = Duration::from_secs(3600);
 // Time to accommodate rare cases of lock waiting time or latency to the database.
 const EXTRA_TIME_FOR_MAX_BLOCK: Duration = Duration::from_secs(10);
+const GET_BLOCK_ATTEMPTS: usize = 10;
 
 impl BlockProducingConfig {
     fn get_max_waiting_time_for_block(&self) -> Duration {
@@ -105,6 +107,9 @@ pub struct StorableMockDaService {
     pub(crate) block_producer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     pub(crate) block_producing_pauser: Arc<Mutex<Option<watch::Sender<()>>>>,
     pub(crate) send_transaction_success: Arc<AtomicBool>,
+    /// Configurable failure injection for testing. Allows injecting failures,
+    /// delays, or reorgs during `get_block_at` / `get_block_header_at` calls.
+    failure_injector: Arc<Mutex<FailureInjector>>,
 }
 
 impl StorableMockDaService {
@@ -113,6 +118,7 @@ impl StorableMockDaService {
         da_layer: Arc<RwLock<StorableMockDaLayer>>,
         block_producing: BlockProducingConfig,
         block_producer_handle: Option<JoinHandle<()>>,
+        failure_behavior: FailureBehavior,
     ) -> Self {
         let (aggregated_proof_subscription, mut rec) = broadcast::channel(16);
         tokio::spawn(async move { while rec.recv().await.is_ok() {} });
@@ -130,6 +136,7 @@ impl StorableMockDaService {
             block_producer_handle: Arc::new(Mutex::new(block_producer_handle)),
             block_producing_pauser: Arc::new(Mutex::new(None)),
             send_transaction_success: Arc::new(AtomicBool::new(true)),
+            failure_injector: Arc::new(Mutex::new(FailureInjector::new(failure_behavior, 42))),
         }
     }
     /// The `send_transaction` method will fail to post blobs to the DA.
@@ -151,6 +158,51 @@ impl StorableMockDaService {
     /// The `send_transaction` method will start posting blobs to the DA.
     pub fn set_success_send_blob(&self) {
         self.send_transaction_success.store(true, Ordering::Relaxed);
+    }
+
+    /// Configure DA to fail `get_block_at` / `get_block_header_at` after N successful calls.
+    /// When the counter reaches 0, the next call will return an error.
+    pub async fn set_fail_after_n_calls(&self, n: u64) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::FailAfterNCalls {
+            remaining: n,
+            failure_probability: 100,
+        });
+    }
+
+    /// Configure DA to fail with a given probability after N successful calls.
+    pub async fn set_fail_after_n_calls_with_probability(&self, n: u64, probability: u8) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::FailAfterNCalls {
+            remaining: n,
+            failure_probability: probability,
+        });
+    }
+
+    /// Configure DA to add delays after N successful calls.
+    pub async fn set_delay_after_n_calls(&self, n: u64, delay_range_ms: std::ops::Range<u64>) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::DelayAfterNCalls {
+            remaining: n,
+            delay_range_ms,
+        });
+    }
+
+    /// Configure DA to trigger a reorg (shuffle non-finalized blobs) when
+    /// `get_block_at` / `get_block_header_at` is called for the specified height.
+    /// The reorg triggers once; subsequent calls for that height proceed normally.
+    pub async fn set_reorg_during_get_block(&self, height: u64) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::ReorgDuringCall {
+            trigger_at_height: height,
+            triggered: false,
+        });
+    }
+
+    /// Clear any configured failure behavior, returning to normal operation.
+    pub async fn clear_failure_behavior(&self) {
+        let mut injector = self.failure_injector.lock().await;
+        injector.set_behavior(FailureBehavior::None);
     }
 
     /// Suspend blob submission in the mock DA.
@@ -175,7 +227,14 @@ impl StorableMockDaService {
         if !matches!(block_producing, BlockProducingConfig::Periodic { .. }) {
             tracing::warn!("Periodic block should be spawned separately, please use Self::from_config otherwise");
         }
-        Self::construct(sequencer_da_address, da_layer, block_producing, None).await
+        Self::construct(
+            sequencer_da_address,
+            da_layer,
+            block_producing,
+            None,
+            FailureBehavior::None,
+        )
+        .await
     }
 
     /// Create a new [` StorableMockDaService `] with the given address and [`BlockProducingConfig::Manual`].
@@ -228,46 +287,6 @@ impl StorableMockDaService {
         .await
     }
 
-    /// Creates new [`StorableMockDaService`] with a given address.
-    /// Manual block production.
-    pub async fn new_in_memory_manual(sequencer_da_address: MockAddress) -> Self {
-        let da_layer = StorableMockDaLayer::new_in_memory(0)
-            .await
-            .expect("Failed to initialize StorableMockDaLayer");
-        let producing = BlockProducingConfig::OnBatchSubmit {
-            block_wait_timeout_ms: None,
-        };
-        Self::new(
-            sequencer_da_address,
-            Arc::new(RwLock::new(da_layer)),
-            producing,
-        )
-        .await
-    }
-
-    /// Creates new [`StorableMockDaService`] with a given address.
-    /// - Periodic block production.
-    /// - Data is stored only in memory.
-    pub async fn new_in_memory_periodic(
-        block_time_ms: u64,
-        sequencer_da_address: MockAddress,
-    ) -> (Self, watch::Sender<()>) {
-        let config = MockDaConfig {
-            connection_string: MockDaConfig::sqlite_in_memory(),
-            sender_address: sequencer_da_address,
-            finalization_blocks: 0,
-            block_producing: BlockProducingConfig::Periodic { block_time_ms },
-            da_layer: None,
-            randomization: None,
-        };
-
-        let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-        (
-            StorableMockDaService::from_config(config, shutdown_receiver).await,
-            shutdown_sender,
-        )
-    }
-
     /// Creates new in memory [`StorableMockDaService`] from [`MockDaConfig`].
     pub async fn from_config(config: MockDaConfig, shutdown_receiver: watch::Receiver<()>) -> Self {
         let da_layer = match config.da_layer.as_ref() {
@@ -297,6 +316,7 @@ impl StorableMockDaService {
             da_layer,
             config.block_producing,
             handle,
+            config.failure_behavior,
         )
         .await
     }
@@ -396,8 +416,42 @@ impl StorableMockDaService {
         Ok(stream.boxed())
     }
 
+    /// Checks and applies any configured failure behavior before a DA call.
+    /// Returns `Ok(())` if the call should proceed, or an error if it should fail.
+    /// May trigger side effects like delays or reorgs based on the configured behavior.
+    async fn check_and_apply_failure_behavior(&self, height: u64) -> anyhow::Result<()> {
+        use rand::SeedableRng;
+
+        let result = {
+            let mut injector = self.failure_injector.lock().await;
+            injector.check(height)
+        };
+
+        match result {
+            CheckResult::Ok => Ok(()),
+            CheckResult::Delay(delay_ms) => {
+                tracing::debug!(%height, delay_ms, "Injecting artificial delay");
+                tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                Ok(())
+            }
+            CheckResult::TriggerReorg => {
+                tracing::info!(%height, "Triggering injected reorg during get_block call");
+                let mut rng = rand::rngs::StdRng::seed_from_u64(height);
+                let mut da_layer = self.da_layer.write().await;
+                da_layer.shuffle_non_finalized_blobs(&mut rng, 0).await?;
+                Ok(())
+            }
+            CheckResult::Fail(msg) => {
+                anyhow::bail!("StorableMockDaService: {msg}")
+            }
+        }
+    }
+
     pub(crate) async fn get_block_at_inner(&self, height: u64) -> anyhow::Result<MockBlock> {
         tracing::trace!(%height, "Getting block at");
+        // Check failure injection before proceeding
+        self.check_and_apply_failure_behavior(height).await?;
+
         if height > u32::MAX as u64 {
             return Err(anyhow::anyhow!(
                 "Height {} is too big for StorableMockDaService. Max is {}",
@@ -408,15 +462,27 @@ impl StorableMockDaService {
 
         let height = height as u32;
 
-        self.wait_for_height(height).await?;
+        for _ in 0..GET_BLOCK_ATTEMPTS {
+            self.wait_for_height(height).await?;
+            let block = {
+                let da_layer = self.da_layer.read().await;
+                match da_layer.get_block_at(height).await {
+                    Ok(block) => block,
+                    Err(err) => {
+                        tracing::trace!(error = ?err, "Error from DaLayer");
+                        let error_string = err.to_string();
+                        if error_string.contains("has not been produced yet") {
+                            continue;
+                        }
+                        return Err(anyhow::anyhow!(err));
+                    }
+                }
+            };
 
-        let block = {
-            let da_layer = self.da_layer.read().await;
-            da_layer.get_block_at(height).await?
-        };
-
-        tracing::trace!(block_header = %block.header().display(), "Block retrieved");
-        Ok(block)
+            tracing::trace!(block_header = %block.header().display(), "Block retrieved");
+            return Ok(block);
+        }
+        anyhow::bail!("Failed to get block after {GET_BLOCK_ATTEMPTS} attempts");
     }
 
     pub(crate) async fn get_block_header_at_inner(
@@ -424,6 +490,9 @@ impl StorableMockDaService {
         height: u64,
     ) -> anyhow::Result<MockBlockHeader> {
         tracing::trace!(%height, "Getting block header at");
+        // Check failure injection before proceeding
+        self.check_and_apply_failure_behavior(height).await?;
+
         if height > u32::MAX as u64 {
             return Err(anyhow::anyhow!(
                 "Height {} is too big for StorableMockDaService. Max is {}",

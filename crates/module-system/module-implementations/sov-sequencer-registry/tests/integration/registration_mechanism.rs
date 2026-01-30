@@ -2,7 +2,6 @@ use sov_mock_da::MockAddress;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::transaction::PriorityFeeBips;
-use sov_modules_api::Error::ModuleError;
 use sov_modules_api::{Amount, Gas, GasArray, GasSpec, GetGasPrice, TxEffect};
 use sov_sequencer_registry::{CallMessage, CustomError};
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
@@ -172,15 +171,13 @@ fn test_registration_bond_too_small() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::InsufficientStakeAmount {
-                            address: seq_address,
-                            bond_amount: amount_to_register,
-                            minimum_bond_amount: Amount::new(1000)
-                        }
-                        .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::InsufficientStakeAmount {
+                        address: seq_address,
+                        bond_amount: amount_to_register,
+                        minimum_bond_amount: Amount::new(1000)
+                    }
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -227,14 +224,12 @@ fn test_registration_not_enough_funds() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::InsufficientFundsToRegister {
-                            address: additional_sequencer_address,
-                            amount: amount_to_register,
-                        }
-                        .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::InsufficientFundsToRegister {
+                        address: additional_sequencer_address,
+                        amount: amount_to_register,
+                    }
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -274,11 +269,9 @@ fn test_registration_second_time() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::AlreadyRegistered(other_sequencer_address)
-                            .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::AlreadyRegistered(other_sequencer_address)
+                        .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -531,15 +524,11 @@ fn cannot_exit_with_own_batch() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::Custom(
-                            CustomError::CannotUnregisterDuringOwnBatch(
-                                default_sequencer.da_address,
-                            )
-                        )
-                        .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::Custom(
+                        CustomError::CannotUnregisterDuringOwnBatch(default_sequencer.da_address,)
+                    )
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -588,16 +577,14 @@ fn test_exit_different_sender_fails() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::Custom(
-                            CustomError::SuppliedAddressDoesNotMatchTxSender {
-                                parameter: second_sequencer_address,
-                                sender: additional_sequencer_address,
-                            },
-                        )
-                        .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::Custom(
+                        CustomError::SuppliedAddressDoesNotMatchTxSender {
+                            parameter: second_sequencer_address,
+                            sender: additional_sequencer_address,
+                        },
+                    )
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -625,16 +612,14 @@ fn test_exit_different_sender_fails() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::Custom(
-                            CustomError::SuppliedAddressDoesNotMatchTxSender {
-                                parameter: second_sequencer.address(),
-                                sender: additional_sequencer.address(),
-                            },
-                        )
-                        .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::Custom(
+                        CustomError::SuppliedAddressDoesNotMatchTxSender {
+                            parameter: second_sequencer.address(),
+                            sender: additional_sequencer.address(),
+                        },
+                    )
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -745,16 +730,14 @@ fn test_balance_increase_fails_if_insufficient_funds() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::InsufficientFundsToTopUpAccount {
-                            address: default_sequencer_address,
-                            amount_to_add: default_sequencer_balance
-                                .checked_add(SEQUENCE_STAKE)
-                                .unwrap(),
-                        }
-                        .into(),
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::InsufficientFundsToTopUpAccount {
+                        address: default_sequencer_address,
+                        amount_to_add: default_sequencer_balance
+                            .checked_add(SEQUENCE_STAKE)
+                            .unwrap(),
+                    }
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }
@@ -815,13 +798,11 @@ fn test_balance_increase_fails_for_unknown_sequencer() {
         assert: Box::new(move |result, _state| match &result.tx_receipt {
             TxEffect::Reverted(reason) => {
                 assert_eq!(
-                    reason.reason,
-                    ModuleError(
-                        TestSequencerRegistryError::IsNotRegistered(MockAddress::from(
-                            NON_DEFAULT_SEQUENCER_DA_ADDRESS,
-                        ))
-                        .into()
-                    ),
+                    reason.reason.to_string(),
+                    TestSequencerRegistryError::IsNotRegistered(MockAddress::from(
+                        NON_DEFAULT_SEQUENCER_DA_ADDRESS,
+                    ))
+                    .to_string(),
                     "Transaction reverted, but with unexpected reason"
                 );
             }

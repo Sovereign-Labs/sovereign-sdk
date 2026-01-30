@@ -37,3 +37,57 @@ pub enum FutureOrShutdownOutput<O> {
     /// The future should not be polled anymore.
     Shutdown,
 }
+
+/// Repeatedly receives messages until shutdown or channel close.
+///
+/// Works with any async source returning `Option<T>` (e.g. `recv()` or `next()`).
+///
+/// # Args
+/// * `$name` – task name (for structured logs, e.g. `"writer"` or `format!("task-{id}")`)
+/// * `$recv` – async expression like `rx.recv()` or `stream.next()`
+/// * `$shutdown` – `watch::Receiver<()>` for graceful stop
+/// * `$var => $body` – code run for each received item
+///
+/// Logs:
+/// * `trace!(%name, "Message received")` for each message
+/// * `debug!(%name, "Shutdown signal received, stopping task")` on shutdown
+/// * `debug!(%name, "Stream/channel closed, stopping task")` on close
+///
+/// # Example
+/// ```ignore
+/// sov_rollup_interface::consume_until_shutdown!(
+///     "WebSocket reader",
+///     ws_reader.next(),
+///     shutdown_rx,
+///     msg => {
+///         handle(m).await,
+///     }
+/// );
+/// ```
+#[macro_export]
+macro_rules! consume_until_shutdown {
+    (
+        $name:expr,
+        $recv:expr,
+        $shutdown:expr,
+        $var:ident => $body:block
+    ) => {
+        let name = $name;
+        loop {
+            tokio::select! {
+                _ = $shutdown.changed() => {
+                    tracing::debug!(%name, "Shutdown signal received, stopping task");
+                    break;
+                }
+                maybe_item = $recv => {
+                    let Some($var) = maybe_item else {
+                        tracing::debug!(%name, "Stream/channel closed, stopping task");
+                        break;
+                    };
+                    tracing::trace!(%name, "Message received");
+                    $body
+                }
+            }
+        }
+    };
+}

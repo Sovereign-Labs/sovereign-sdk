@@ -1,0 +1,5 @@
+error: Invalid hex string: Odd number of digits
+ --> tests/integration/trybuild/constants/hex_odd_length.rs:3:42
+  |
+3 | const NAMESPACE: [u8; 2] = config_value!("HEX_ODD_LENGTH");
+  |                                          ^^^^^^^^^^^^^^^^

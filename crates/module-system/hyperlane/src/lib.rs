@@ -104,6 +104,10 @@ pub struct Mailbox<S: Spec, R: Recipient<S>> {
     #[module]
     pub recipients: R,
 
+    /// The number of successful deliveries.
+    #[state]
+    pub deliveries_count: StateValue<u64>,
+
     #[phantom]
     phantom: std::marker::PhantomData<S>,
 }
@@ -120,6 +124,8 @@ where
 
     type Event = Event;
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
@@ -135,7 +141,7 @@ where
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             call::CallMessage::Dispatch {
                 domain,

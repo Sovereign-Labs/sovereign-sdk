@@ -1,6 +1,7 @@
-use crate::db::commit::FallibleDatabaseCommit;
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
+use alloy_consensus::ReceiptEnvelope;
+use alloy_eips::BlockId;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
@@ -12,26 +13,17 @@ use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
 use revm::context::result::ResultAndState;
 use revm::Database;
+use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
-use sov_rpc_eth_types::EthApiError;
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
-use tracing::debug;
+use tracing::trace;
 
 use crate::{apply_margins, Evm};
 use std::ops::DerefMut;
-
-const EMPTY_FEE_HISTORY: FeeHistory = FeeHistory {
-    base_fee_per_gas: vec![],
-    gas_used_ratio: vec![],
-    oldest_block: 0,
-    reward: None,
-    blob_gas_used_ratio: vec![],
-    // EIP-4844 related
-    base_fee_per_blob_gas: vec![],
-};
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -41,7 +33,7 @@ where
     /// Handler for `net_version`
     #[rpc_method(name = "net_version")]
     pub fn net_version(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<String> {
-        debug!("EVM module JSON-RPC request to `net_version`");
+        trace!(method = "net_version", "EVM module JSON-RPC request");
 
         // Network ID is the same as chain ID for most networks
         let chain_id = config_value!("CHAIN_ID");
@@ -52,9 +44,10 @@ where
     #[rpc_method(name = "eth_chainId")]
     pub fn chain_id(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<Option<U64>> {
         let chain_id = config_value!("CHAIN_ID");
-        debug!(
+        trace!(
             chain_id = chain_id,
-            "EVM module JSON-RPC request to `eth_chainId`"
+            method = "eth_chainId",
+            "EVM module JSON-RPC request"
         );
         Ok(Some(U64::from(chain_id)))
     }
@@ -67,37 +60,33 @@ where
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Block>> {
-        debug!(
+        trace!(
             ?block_hash,
-            "EVM module JSON-RPC request to `eth_getBlockByHash`"
+            method = "eth_getBlockByHash",
+            "EVM module JSON-RPC request"
         );
-
-        let block_number_hex = self
-            .block_hashes
-            .get(&block_hash, state)
-            .unwrap_infallible()
-            .map(|number| hex::encode(number.to_be_bytes()));
-        let kind = details.unwrap_or_default().into();
-        Ok(match block_number_hex {
-            Some(block_number_hex) => self.get_block(Some(block_number_hex), kind, state),
-            None => None,
-        })
+        Ok(self.get_maybe_synthetic_block_for_rpc(
+            Some(BlockId::Hash(block_hash.into())),
+            details.unwrap_or_default().into(),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getBlockByNumber`
     #[rpc_method(name = "eth_getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Block>> {
-        debug!(
-            block_number,
-            "EVM module JSON-RPC request to `eth_getBlockByNumber`"
+        trace!(
+            ?block_id,
+            method = "eth_getBlockByNumber",
+            "EVM module JSON-RPC request"
         );
         let kind = details.unwrap_or_default().into();
-        Ok(self.get_block(block_number, kind, state))
+        Ok(self.get_maybe_synthetic_block_for_rpc(block_id, kind, state)?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -105,10 +94,10 @@ where
     pub fn get_balance(
         &self,
         address: Address,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        let mut state = self.resolve_state(block_number, state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
         let balance = self
             .db(state.deref_mut())
             .basic(address)
@@ -116,10 +105,11 @@ where
             .map(|account| account.balance)
             .unwrap_or_default();
 
-        debug!(
+        trace!(
             %address,
             %balance,
-            "EVM module JSON-RPC request to `eth_getBalance`"
+            method = "eth_getBalance",
+            "EVM module JSON-RPC request"
         );
 
         Ok(balance)
@@ -131,12 +121,12 @@ where
         &self,
         address: Address,
         index: U256,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        debug!("EVM module JSON-RPC request to `eth_getStorageAt`");
+        trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
-        let mut state = self.resolve_state(block_number, state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
         let storage_slot = self
             .account_storage
             .get(&(&address, &index), state.deref_mut())
@@ -151,10 +141,10 @@ where
     pub fn get_transaction_count(
         &self,
         address: Address,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        let mut state = self.resolve_state(block_number, state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
 
         let ethereum_address: EthereumAddress = address.into();
         let credential_id = ethereum_address.as_credential_id();
@@ -164,7 +154,7 @@ where
             .next_nonce(&credential_id, state.deref_mut())
             .unwrap_or_default();
 
-        debug!(%address, nonce, "EVM module JSON-RPC request to `eth_getTransactionCount`");
+        trace!(%address, nonce, method = "eth_getTransactionCount", "EVM module JSON-RPC request");
         Ok(U64::from(nonce))
     }
 
@@ -173,20 +163,49 @@ where
     pub fn get_code(
         &self,
         address: Address,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
-        debug!("EVM module JSON-RPC request to `eth_getCode`");
-        let state = self.resolve_state(block_number, state)?;
+        trace!(method = "eth_getCode", %address, ?block_id, "EVM module JSON-RPC request");
+        let state = self.resolve_state_for_block_id(block_id, state)?;
         Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
+    /// Handler for: `eth_gasPrice`
+    #[rpc_method(name = "eth_gasPrice")]
+    pub fn gas_price(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+        trace!(method = "eth_gasPrice", "EVM module JSON-RPC request");
+        Ok(U256::from(self.block_env(state)?.basefee))
+    }
+
     /// Handler for: `eth_feeHistory`
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    /// Returns historical gas price and usage data for recent blocks.
+    ///
+    /// This endpoint helps wallets and users determine appropriate gas prices
+    /// by exposing the rollup's EIP-1559 style base fee history.
     #[rpc_method(name = "eth_feeHistory")]
-    pub fn fee_history(&self) -> RpcResult<FeeHistory> {
-        debug!("EVM module JSON-RPC request to `eth_feeHistory`");
-        Ok(EMPTY_FEE_HISTORY)
+    pub fn fee_history(
+        &self,
+        block_count: U64,
+        newest_block: BlockNumberOrTag,
+        reward_percentiles: Option<Vec<f64>>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<FeeHistory> {
+        let block_count = block_count.to::<u64>();
+        trace!(
+            block_count,
+            ?newest_block,
+            ?reward_percentiles,
+            method = "eth_feeHistory",
+            "EVM module JSON-RPC request"
+        );
+
+        Ok(self.get_fee_history(
+            block_count,
+            newest_block,
+            reward_percentiles.as_deref(),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getTransactionByHash`
@@ -197,10 +216,11 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
         let transaction = self.get_transaction(hash, state);
-        debug!(
+        trace!(
             %hash,
             ?transaction,
-            "EVM module JSON-RPC request to `eth_getTransactionByHash`"
+            method = "eth_getTransactionByHash",
+            "EVM module JSON-RPC request"
         );
         Ok(transaction)
     }
@@ -209,14 +229,16 @@ where
     #[rpc_method(name = "eth_getBlockReceipts")]
     pub fn get_block_receipts(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Vec<TransactionReceipt>>> {
-        debug!(
-            block_number,
-            "EVM module JSON-RPC request to `eth_getBlockReceipts`"
+    ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
+    {
+        trace!(
+            ?block_id,
+            method = "eth_getBlockReceipts",
+            "EVM module JSON-RPC request"
         );
-        Ok(self.get_receipts(block_number, state))
+        Ok(self.get_receipts(block_id, state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`
@@ -225,10 +247,11 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<TransactionReceipt>> {
-        debug!(
+    ) -> RpcResult<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>> {
+        trace!(
             %hash,
-            "EVM module JSON-RPC request to `eth_getTransactionReceipt`"
+            method = "eth_getTransactionReceipt",
+            "EVM module JSON-RPC request"
         );
         Ok(self.get_receipt_by_hash(hash, state))
     }
@@ -239,20 +262,24 @@ where
     pub fn eth_call(
         &self,
         request: TransactionRequest,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         _state_overrides: Option<StateOverride>,
         _block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
-        debug!("EVM module JSON-RPC request to `eth_call`");
-        let result = self.call(request, block_number, state)?.result;
+        trace!(
+            method = "eth_call",
+            ?block_id,
+            "EVM module JSON-RPC request"
+        );
+        let result = self.call(request, block_id, state)?.result;
         Ok(ensure_success(result)?)
     }
 
     /// Handler for: `eth_blockNumber`
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
-        debug!("EVM module JSON-RPC request to `eth_blockNumber`");
+        trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
         let block_number_range = self.block_numbers(state);
         Ok(U256::from(*block_number_range.end()))
     }
@@ -263,17 +290,25 @@ where
     pub fn eth_estimate_gas(
         &self,
         request: TransactionRequest,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        debug!("EVM module JSON-RPC request to `eth_estimateGas`");
+        trace!(
+            ?block_id,
+            method = "eth_estimateGas",
+            "EVM module JSON-RPC request"
+        );
+
+        // Add 1,000 bytes to account for all other data in the Transaction structure, apart from call data.
+        let tx_size = request.input.input().as_ref().map(|i| i.len()).unwrap_or(0) + 1000;
+
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_number, state)?;
+        } = self.call(request, block_id, state)?;
         self.db(state)
-            .commit(changes)
-            .expect("Impossible as gas meter is initialized with INF");
+            .try_commit(changes)
+            .expect("Gas meter is initialized with INF");
         let gas_used = result.gas_used();
 
         // Charge for logs storage in the receipt
@@ -292,12 +327,24 @@ where
             logs_size as u32,
         )
         .map_err(into_rpc_error)?;
-        let gas_meter = state.try_as_basic_gas_meter().unwrap();
+
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter");
+
+        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
+        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
-            .expect("No underflow is possible here as we init EVM gas with gas meter gas");
+            .expect("Gas meter is initialized with INF");
+
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+
         Ok(U64::from(apply_margins(total_gas_used)?))
     }
 
@@ -309,7 +356,10 @@ where
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Vec<TraceResult>> {
-        debug!("EVM module JSON-RPC request to `debug_traceBlockByNumber`");
+        trace!(
+            method = "debug_traceBlockByNumber",
+            "EVM module JSON-RPC request"
+        );
         Ok(self.trace_block_by_number(block, opts.unwrap_or_default(), state)?)
     }
 
@@ -321,7 +371,101 @@ where
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
-        debug!("EVM module JSON-RPC request to `debug_traceTransaction`");
+        trace!(method = "debug_traceTransaction", %tx_hash, "EVM module JSON-RPC request");
         Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
+    }
+
+    // ========== web3 namespace ==========
+
+    /// Handler for: `web3_clientVersion`
+    /// Returns the current client version.
+    #[rpc_method(name = "web3_clientVersion")]
+    pub fn web3_client_version(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<String> {
+        trace!(method = "web3_clientVersion", "EVM module JSON-RPC request");
+        Ok(format!(
+            "sov-evm/{}",
+            option_env!("CARGO_PKG_VERSION").unwrap_or("unknown")
+        ))
+    }
+
+    /// Handler for: `web3_sha3`
+    /// Returns Keccak-256 hash of the given data.
+    #[rpc_method(name = "web3_sha3")]
+    pub fn web3_sha3(&self, data: Bytes, _state: &mut ApiStateAccessor<S>) -> RpcResult<B256> {
+        trace!(method = "web3_sha3", "EVM module JSON-RPC request");
+        Ok(alloy_primitives::keccak256(&data))
+    }
+
+    // ========== net namespace ==========
+
+    /// Handler for: `net_listening`
+    /// Returns true if client is actively listening for network connections.
+    #[rpc_method(name = "net_listening")]
+    pub fn net_listening(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<bool> {
+        trace!(method = "net_listening", "EVM module JSON-RPC request");
+        // Rollup is always accepting connections via RPC
+        Ok(true)
+    }
+
+    /// Handler for: `eth_maxPriorityFeePerGas`
+    /// Returns the current max priority fee per gas.
+    #[rpc_method(name = "eth_maxPriorityFeePerGas")]
+    pub fn eth_max_priority_fee_per_gas(
+        &self,
+        _state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<U256> {
+        trace!(
+            method = "eth_maxPriorityFeePerGas",
+            "EVM module JSON-RPC request"
+        );
+        // Rollup uses preferred sequencer model, no priority fees
+        Ok(U256::ZERO)
+    }
+
+    /// Handler for: `eth_getBlockTransactionCountByNumber`
+    /// Returns the number of transactions in a block by block number.
+    #[rpc_method(name = "eth_getBlockTransactionCountByNumber")]
+    pub fn get_block_transaction_count_by_number(
+        &self,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<U64>> {
+        trace!(
+            ?block_id,
+            method = "eth_getBlockTransactionCountByNumber",
+            "EVM module JSON-RPC request"
+        );
+        let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
+        Ok(block.map(|b| U64::from(b.transactions.len())))
+    }
+
+    /// Handler for: `eth_getBlockTransactionCountByHash`
+    /// Returns the number of transactions in a block by block hash.
+    #[rpc_method(name = "eth_getBlockTransactionCountByHash")]
+    pub fn get_block_transaction_count_by_hash(
+        &self,
+        block_hash: B256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<U64>> {
+        trace!(
+            %block_hash,
+            method = "eth_getBlockTransactionCountByHash",
+            "EVM module JSON-RPC request"
+        );
+        let block_number = self
+            .block_hash_to_number
+            .get(&block_hash, state)
+            .unwrap_infallible();
+        match block_number {
+            Some(number) => {
+                let block = self.get_maybe_synthetic_block_for_rpc(
+                    Some(BlockId::Number(BlockNumberOrTag::Number(number))),
+                    false.into(),
+                    state,
+                )?;
+                Ok(block.map(|b| U64::from(b.transactions.len())))
+            }
+            None => Ok(None),
+        }
     }
 }

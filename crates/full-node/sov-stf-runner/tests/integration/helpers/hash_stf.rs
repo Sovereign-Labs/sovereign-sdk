@@ -1,20 +1,20 @@
 use sha2::Digest;
-use sov_db::storage_manager::NativeChangeSet;
-use sov_mock_da::MockAddress;
+use sov_db::storage_manager::NomtChangeSet;
+use sov_mock_da::{MockAddress, MockHash};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::{
     AggregatedProofPublicData, ProofOutcome, ProofReceipt, ProofReceiptContents, Storage,
 };
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec, RelevantBlobIters};
-use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
+use sov_rollup_interface::stf::{ApplySlotOutput, GenesisParams, StateTransitionFunction};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{ZkVerifier, Zkvm};
 use sov_state::namespaces::User;
+use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::storage::{NativeStorage, SlotKey, SlotValue};
 use sov_state::{
-    ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, ProverStorage, StateAccesses,
-    StorageRoot,
+    ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Prefix, StateAccesses, StorageRoot,
 };
 
 pub type S = DefaultStorageSpec<sha2::Sha256>;
@@ -32,28 +32,40 @@ impl HashStf {
         SlotKey::singleton(&prefix)
     }
 
+    fn kernel_key() -> SlotKey {
+        let prefix = Prefix::new(1, 0);
+        SlotKey::singleton(&prefix)
+    }
+
     fn save_from_hasher(
         hasher: sha2::Sha256,
-        storage: ProverStorage<S>,
+        storage: NomtProverStorage<S, MockHash>,
         witness: &ArrayWitness,
         root: StorageRoot<S>,
-    ) -> (StorageRoot<S>, NativeChangeSet) {
+    ) -> (StorageRoot<S>, NomtChangeSet) {
         let result = hasher.finalize();
 
         let hash_key = HashStf::hash_key();
         let hash_value = SlotValue::from(result.as_slice().to_vec());
 
-        let ordered_reads_writes = OrderedReadsAndWrites {
+        let kernel_key = HashStf::kernel_key();
+        let kernel_value = SlotValue::from(vec![0u8]); // Minimal kernel state marker
+
+        let user_reads_writes = OrderedReadsAndWrites {
             ordered_reads: Vec::default(),
             ordered_writes: vec![(hash_key, Some(hash_value))],
         };
+        let kernel_reads_writes = OrderedReadsAndWrites {
+            ordered_reads: Vec::default(),
+            ordered_writes: vec![(kernel_key, Some(kernel_value))],
+        };
         let state_accesses = StateAccesses {
-            user: ordered_reads_writes,
-            kernel: Default::default(),
+            user: user_reads_writes,
+            kernel: kernel_reads_writes,
         };
 
         let (jmt_root_hash, state_update) = storage
-            .compute_state_update(state_accesses, witness, root)
+            .compute_state_update(state_accesses, witness, root, None)
             .unwrap();
 
         let change_set = storage.materialize_changes(state_update);
@@ -62,14 +74,31 @@ impl HashStf {
     }
 }
 
+#[derive(Default, Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(transparent)]
+/// The genesis params for the HashStf. This is a simple wrapper around a vector of bytes.
+pub struct HashStfGenesisParams(pub Vec<u8>);
+
+impl GenesisParams for HashStfGenesisParams {
+    fn genesis_slot_number(&self) -> u64 {
+        0
+    }
+}
+
+impl From<Vec<u8>> for HashStfGenesisParams {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
 impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
     for HashStf
 {
     type Address = MockAddress;
     type StateRoot = StorageRoot<S>;
-    type GenesisParams = Vec<u8>;
-    type PreState = ProverStorage<S>;
-    type ChangeSet = NativeChangeSet;
+    type GenesisParams = HashStfGenesisParams;
+    type PreState = NomtProverStorage<S, MockHash>;
+    type ChangeSet = NomtChangeSet;
     type TxReceiptContents = ();
     type StorageProof = ();
     type GasPrice = ();
@@ -84,13 +113,13 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         params: Self::GenesisParams,
     ) -> (Self::StateRoot, Self::ChangeSet) {
         let mut hasher = sha2::Sha256::new();
-        hasher.update(params);
+        hasher.update(params.0);
 
         HashStf::save_from_hasher(
             hasher,
             genesis_state,
             &ArrayWitness::default(),
-            <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
+            <NomtProverStorage<S, MockHash> as Storage>::PRE_GENESIS_ROOT,
         )
     }
 

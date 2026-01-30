@@ -13,6 +13,7 @@ use base64::Engine;
 use sov_api_spec::types::{self as api_types};
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PriorityFeeBips;
 use sov_modules_api::transaction::TxDetails;
@@ -179,9 +180,10 @@ where
     )
     .await;
 
+    test_rollup.produce_enough_finalized_slots().await;
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    da_layer.produce_and_wait_for_n_slots(5).await;
+    let da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     // Send a transaction with a non-zero fee. Should fail, because we have no balance.
@@ -327,7 +329,7 @@ fn mint_gas_token_call(
 
 fn encode_zero_gas_tx(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
 ) -> RawTx {
     let details = TxDetails {
@@ -339,7 +341,7 @@ fn encode_zero_gas_tx(
     let tx = test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce,
+        UniquenessData::Generation(generation),
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
         details,
     );
@@ -349,13 +351,13 @@ fn encode_zero_gas_tx(
 
 fn encode_call(
     key: &Ed25519PrivateKey,
-    nonce: u64,
+    generation: u64,
     call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
 ) -> RawTx {
     let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,
         call_message,
-        nonce,
+        generation,
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
     );
 

@@ -3,26 +3,29 @@ use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::{VersionedDeltaReader, VersionedSchemaBatch};
-use rockbound::{SchemaBatch, SchemaKey, SchemaValue};
+use rockbound::{SchemaBatch, SchemaValue};
 use sov_rollup_interface::common::SlotNumber;
 
+use crate::flat_db::DbCache;
 use crate::metrics::StateMaterializationMetrics;
-use crate::namespaces::{KernelNamespace, Namespace, UserNamespace};
+use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::StateRootHashes;
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
 use crate::schema::types::StateRootHashId;
-use crate::DbOptions;
 
-const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
+pub(crate) const STATE_ROOT_HASH_SINGLETON: StateRootHashId = StateRootHashId(0);
+
+type KvPair = (SlotKey, Option<SlotValue>);
 
 /// A typed wrapper around the [`DeltaReader`] for reading materializing historical rollup state.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HistoricalStateReader {
     /// The underlying [`DeltaReader`] correctly routes requests to previous snapshots and/or [`rockbound::DB`]
-    user: VersionedDeltaReader<NomtStateValues<UserNamespace>>,
+    user: VersionedDeltaReader<NomtStateValues<UserNamespace>, DbCache>,
     /// The underlying [`DeltaReader`] correctly routes requests to previous snapshots and/or [`rockbound::DB`]
-    kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>>,
-    other: DeltaReader,
+    kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>, DbCache>,
+    root_hash_reader: DeltaReader,
 
     /// The [`SlotNumber`] that will be used for the next batch of writes to the DB
     /// This [`SlotNumber`] is also used for querying data,
@@ -31,37 +34,26 @@ pub struct HistoricalStateReader {
 }
 
 /// A collection of changes to the state db. Includes versioned changes to user/kernel state, and a plain schema batch of changes to any other columns.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct StateChanges {
     pub(crate) user: Arc<VersionedSchemaBatch<NomtStateValues<UserNamespace>>>,
     pub(crate) kernel: Arc<VersionedSchemaBatch<NomtStateValues<KernelNamespace>>>,
-    pub(crate) other: Arc<SchemaBatch>,
+    pub(crate) root_hash_batch: Arc<SchemaBatch>,
 }
 
 impl HistoricalStateReader {
-    const DB_PATH_SUFFIX: &'static str = "historical_state";
-    const DB_NAME: &'static str = "historical-state-db";
-
     // Used for testing only.
     #[cfg(test)]
     fn new_empty(flat_state: &crate::storage_manager::FlatStateDb) -> Self {
-        let kernel_version = flat_state
-            .get_kernel_db()
-            .load_latest_committed_version()
-            .unwrap();
-        let user_version = flat_state
-            .get_user_db()
-            .load_latest_committed_version()
-            .unwrap();
-        assert_eq!(
-            kernel_version, user_version,
-            "Kernel and user should always have the same latest version"
-        );
-        let kernel =
-            VersionedDeltaReader::new(flat_state.get_kernel_db().clone(), kernel_version, vec![]);
-        let user =
-            VersionedDeltaReader::new(flat_state.get_user_db().clone(), user_version, vec![]);
-        let other = DeltaReader::new(flat_state.get_db(), vec![]);
+        let version = flat_state
+            .latest_version_and_root_hash_live_db()
+            .unwrap()
+            .map(|(v, _)| v);
+
+        let kernel = VersionedDeltaReader::new(flat_state.get_kernel_db().clone(), version, vec![]);
+        let user = VersionedDeltaReader::new(flat_state.get_user_db().clone(), version, vec![]);
+
+        let root_hash_reader = DeltaReader::new(flat_state.get_db(), vec![]);
         let next_version = match user.latest_version() {
             Some(latest_version) => SlotNumber::new(
                 latest_version
@@ -73,16 +65,16 @@ impl HistoricalStateReader {
         Self {
             user,
             kernel,
-            other,
+            root_hash_reader,
             next_version,
         }
     }
 
     /// Create a new instance of [`HistoricalStateReader`].
     pub fn new(
-        user: VersionedDeltaReader<NomtStateValues<UserNamespace>>,
-        kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>>,
-        other: DeltaReader,
+        user: VersionedDeltaReader<NomtStateValues<UserNamespace>, DbCache>,
+        kernel: VersionedDeltaReader<NomtStateValues<KernelNamespace>, DbCache>,
+        root_hash_reader: DeltaReader,
     ) -> Self {
         // Cross check the versions across all three dbs
         assert_eq!(
@@ -92,7 +84,7 @@ impl HistoricalStateReader {
         );
         assert_eq!(
             user.latest_version(),
-            Self::last_version_from_reader(&other)
+            Self::last_version_from_reader(&root_hash_reader)
                 .expect("Failed to get last version from db")
                 .map(|v| v.get()),
             "Other must have the same last version as user"
@@ -108,7 +100,7 @@ impl HistoricalStateReader {
         Self {
             user,
             kernel,
-            other,
+            root_hash_reader,
             next_version,
         }
     }
@@ -119,19 +111,6 @@ impl HistoricalStateReader {
         let last_root_hash_version = last_root_hash.map(|((version, _key), _)| version);
 
         Ok(last_root_hash_version)
-    }
-
-    /// [`DbOptions`] for [`HistoricalStateReader`].
-    pub fn get_rockbound_options() -> DbOptions {
-        DbOptions {
-            name: Self::DB_NAME,
-            path_suffix: Self::DB_PATH_SUFFIX,
-            columns: UserNamespace::get_jmt_table_names()
-                .into_iter()
-                .chain(KernelNamespace::get_jmt_table_names())
-                .chain(vec![StateRootHashes::table_name()])
-                .collect(),
-        }
     }
 
     /// Get the current value of the `next_version` counter
@@ -147,63 +126,71 @@ impl HistoricalStateReader {
     /// The last version committed to the database.
     /// Can differ from [`Self::last_version`] in case if a newer version has been written to the underlying database.
     pub fn last_version_unbound(&self) -> anyhow::Result<SlotNumber> {
-        Self::last_version_from_reader(&self.other).map(|v| v.unwrap_or(SlotNumber::GENESIS))
+        Self::last_version_from_reader(&self.root_hash_reader)
+            .map(|v| v.unwrap_or(SlotNumber::GENESIS))
     }
 
     /// Get an optional value from the database, given a version and a key hash.
-    pub fn get_user_value_option_by_key(
-        &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.user.get_latest_borrowed(key)?.flatten())
+    pub fn get_user_value_option_by_key(&self, key: &SlotKey) -> anyhow::Result<Option<SlotValue>> {
+        self.user.get_latest_borrowed(key)
     }
 
     /// Get the very latest version of the given key from the database.
     pub fn get_user_value_option_by_key_unbound(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.user.get_latest_borrowed_unbound(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        self.user.get_latest_borrowed_unbound(key)
+    }
+
+    /// Iterate over all user values with the given prefix.
+    pub fn iter_user_values_with_prefix<'a>(
+        &'a self,
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(self.user.iter_with_prefix(prefix.clone())?))
+    }
+
+    /// Iterate over all kernel values with the given prefix.
+    pub fn iter_kernel_values_with_prefix<'a>(
+        &'a self,
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(self.kernel.iter_with_prefix(prefix.clone())?))
     }
 
     /// Get the very latest version of the given key from the database.
     pub fn get_kernel_value_option_by_key_unbound(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.kernel.get_latest_borrowed_unbound(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        self.kernel.get_latest_borrowed_unbound(key)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_user_value_option_by_key_historical(
         &self,
-        key: &SchemaKey,
+        key: &SlotKey,
         version: SlotNumber,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self
-            .user
-            .get_historical_borrowed(key, version.get())?
-            .flatten())
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.user.get_historical_borrowed(key, version.get())?)
     }
 
     /// Get an optional value from the database, given a version and a key hash.
     pub fn get_kernel_value_option_by_key(
         &self,
-        key: &SchemaKey,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self.kernel.get_latest_borrowed(key)?.flatten())
+        key: &SlotKey,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        self.kernel.get_latest_borrowed(key)
     }
 
     /// Get a value from the historical state, given a version and a key hash.
     pub fn get_kernel_value_option_by_key_historical(
         &self,
-        key: &SchemaKey,
+        key: &SlotKey,
         version: SlotNumber,
-    ) -> anyhow::Result<Option<SchemaValue>> {
-        Ok(self
-            .kernel
-            .get_historical_borrowed(key, version.get())?
-            .flatten())
+    ) -> anyhow::Result<Option<SlotValue>> {
+        Ok(self.kernel.get_historical_borrowed(key, version.get())?)
     }
 
     /// Get the serialized root hash for a given version.
@@ -221,34 +208,72 @@ impl HistoricalStateReader {
         &self,
         version: SlotNumber,
     ) -> anyhow::Result<Option<SchemaValue>> {
-        Self::get_serialized_root_hash_from_reader(&self.other, version)
+        Self::get_serialized_root_hash_from_reader(&self.root_hash_reader, version)
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
     pub fn materialize_values(
-        user_changes: impl IntoIterator<Item = (SchemaKey, Option<SchemaValue>)>,
-        kernel_changes: impl IntoIterator<Item = (SchemaKey, Option<SchemaValue>)>,
+        user_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+        kernel_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
         root_hash: SchemaValue,
         version: SlotNumber,
     ) -> anyhow::Result<StateChanges> {
-        let mut batch = SchemaBatch::default();
+        let mut root_hash_batch = SchemaBatch::default();
+
+        let (user_batch, kernel_batch) =
+            Self::materialize_user_and_kernel_values(user_changes, kernel_changes)?;
+
+        tracing::trace!(
+            %version,
+            root_hash = %hex::encode(&root_hash),
+            "Materialized root hash"
+        );
+
+        root_hash_batch
+            .put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
+
+        Ok(StateChanges {
+            user: Arc::new(user_batch),
+            kernel: Arc::new(kernel_batch),
+            root_hash_batch: Arc::new(root_hash_batch),
+        })
+    }
+
+    /// Collects a sequence of key-value pairs into [`SchemaBatch`] for user & kernel changes.
+    #[allow(clippy::type_complexity)]
+    pub fn materialize_user_and_kernel_values(
+        user_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+        kernel_changes: impl IntoIterator<Item = (SlotKey, Option<SlotValue>)>,
+    ) -> anyhow::Result<(
+        VersionedSchemaBatch<NomtStateValues<UserNamespace>>,
+        VersionedSchemaBatch<NomtStateValues<KernelNamespace>>,
+    )> {
         let mut has_kernel_been_updated = false;
         let mut has_user_been_updated = false;
-        let mut metric = StateMaterializationMetrics::new(version.get());
+        let mut metric = StateMaterializationMetrics::new();
         let mut kernel_batch = VersionedSchemaBatch::default();
         let mut user_batch = VersionedSchemaBatch::default();
 
-        // We always .put and not .delete to keep archival data.
         for (key, value) in kernel_changes {
             metric.inc_kernel_items();
             metric.track_key_value_size(&key, &value);
-            kernel_batch.put_versioned(Arc::new(key), value);
+            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
+            if let Some(value) = value {
+                kernel_batch.put_versioned(key, value);
+            } else {
+                kernel_batch.delete_versioned(key);
+            }
             has_kernel_been_updated = true;
         }
         for (key, value) in user_changes {
             metric.inc_user_items();
             metric.track_key_value_size(&key, &value);
-            user_batch.put_versioned(Arc::new(key), value);
+            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
+            if let Some(value) = value {
+                user_batch.put_versioned(key, value);
+            } else {
+                user_batch.delete_versioned(key);
+            }
             has_user_been_updated = true;
         }
         if has_user_been_updated && !has_kernel_been_updated {
@@ -257,22 +282,11 @@ impl HistoricalStateReader {
             );
         }
 
-        tracing::trace!(
-            %version,
-            root_hash = %hex::encode(&root_hash),
-            "Materialized root hash"
-        );
-        batch.put::<StateRootHashes>(&(version, STATE_ROOT_HASH_SINGLETON), &root_hash)?;
-
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(metric);
         });
 
-        Ok(StateChanges {
-            user: Arc::new(user_batch),
-            kernel: Arc::new(kernel_batch),
-            other: Arc::new(batch),
-        })
+        Ok((user_batch, kernel_batch))
     }
 }
 
@@ -284,16 +298,17 @@ mod tests {
     #[test]
     fn verify_last_version_bumped_properly() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
+        let db_path = tempdir.path();
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let key1 = b"AAA";
         let key2 = b"BBB";
 
         let writes = vec![
-            vec![(key2.to_vec(), Some(vec![1, 1, 1]))],
-            vec![(key1.to_vec(), Some(vec![2, 2, 2]))],
-            vec![(key1.to_vec(), Some(vec![3, 3, 3]))],
-            vec![(key1.to_vec(), Some(vec![4, 4, 4]))],
+            vec![(SlotKey::from_slice(key2), Some(vec![1, 1, 1].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![2, 2, 2].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![3, 3, 3].into()))],
+            vec![(SlotKey::from_slice(key1), Some(vec![4, 4, 4].into()))],
         ];
         for (idx, kernel_writes) in writes.into_iter().enumerate() {
             let historical_state = HistoricalStateReader::new_empty(&rocksdb);
@@ -301,7 +316,7 @@ mod tests {
             assert_eq!(slot_number.checked_sub(1), historical_state.last_version());
             assert_eq!(slot_number, historical_state.get_next_version());
 
-            let root_hash = idx.to_be_bytes().to_vec();
+            let root_hash = [idx as u8; 64].to_vec();
 
             let changes = HistoricalStateReader::materialize_values(
                 vec![],
@@ -329,10 +344,13 @@ mod tests {
         assert_eq!(reader1.get_next_version(), version0);
         assert_eq!(reader2.get_next_version(), version0);
 
-        let root_hash0 = vec![1; 32];
+        let root_hash0 = vec![1; 64];
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key1".to_vec(), Some(b"value1".to_vec()))],
+            vec![(
+                SlotKey::from_slice(b"key1"),
+                Some(b"value1".to_vec().into()),
+            )],
             root_hash0.clone(),
             version0,
         )
@@ -353,10 +371,13 @@ mod tests {
 
         // --- Second set of changes (version 1) ---
         let version1 = SlotNumber::new(1);
-        let root_hash1 = vec![2; 32];
+        let root_hash1 = vec![2; 64];
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key2".to_vec(), Some(b"value2".to_vec()))],
+            vec![(
+                SlotKey::from_slice(b"key2"),
+                Some(b"value2".to_vec().into()),
+            )],
             root_hash1.clone(),
             version1,
         )
@@ -389,7 +410,8 @@ mod tests {
     #[test]
     fn test_unbound_last_version() {
         let tempdir = tempfile::tempdir().unwrap();
-        let rocksdb = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
+        let db_path = tempdir.path();
+        let rocksdb = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
 
         let reader1 = HistoricalStateReader::new_empty(&rocksdb);
         let reader2 = HistoricalStateReader::new_empty(&rocksdb);
@@ -404,8 +426,11 @@ mod tests {
         let version0 = SlotNumber::new(0);
         let changes0 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key1".to_vec(), Some(b"value1".to_vec()))],
-            vec![1; 32],
+            vec![(
+                SlotKey::from_slice(b"key1"),
+                Some(b"value1".to_vec().into()),
+            )],
+            vec![1; 64],
             version0,
         )
         .unwrap();
@@ -423,8 +448,11 @@ mod tests {
         let version1 = SlotNumber::new(1);
         let changes1 = HistoricalStateReader::materialize_values(
             vec![],
-            vec![(b"key2".to_vec(), Some(b"value2".to_vec()))],
-            vec![2; 32],
+            vec![(
+                SlotKey::from_slice(b"key2"),
+                Some(b"value2".to_vec().into()),
+            )],
+            vec![2; 64],
             version1,
         )
         .unwrap();

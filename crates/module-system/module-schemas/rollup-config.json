@@ -61,6 +61,7 @@
       ]
     }
   },
+  "additionalProperties": false,
   "definitions": {
     "Address": {
       "description": "Address",
@@ -151,6 +152,38 @@
         }
       ]
     },
+    "ConfiguredNodeRole": {
+      "oneOf": [
+        {
+          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
+          "type": "string",
+          "enum": [
+            "Leader"
+          ]
+        },
+        {
+          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
+          "type": "string",
+          "enum": [
+            "Replica"
+          ]
+        },
+        {
+          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
+          "type": "string",
+          "enum": [
+            "ReplicaNoLeaderSync"
+          ]
+        },
+        {
+          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
+          "type": "string",
+          "enum": [
+            "DbElected"
+          ]
+        }
+      ]
+    },
     "CorsConfiguration": {
       "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
       "oneOf": [
@@ -167,6 +200,106 @@
           "enum": [
             "restrictive"
           ]
+        }
+      ]
+    },
+    "FailureBehavior": {
+      "description": "Configurable failure behavior for testing error handling in consumers of MockDa. This allows tests to inject failures at specific points during DA operations.",
+      "oneOf": [
+        {
+          "description": "No failures (default behavior).",
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        },
+        {
+          "description": "Fail `get_block_at` or `get_block_header_at` after N successful calls. The counter decrements on each call; when it reaches 0, failures may occur based on the configured probability.",
+          "type": "object",
+          "required": [
+            "fail_after_n_calls"
+          ],
+          "properties": {
+            "fail_after_n_calls": {
+              "type": "object",
+              "required": [
+                "remaining"
+              ],
+              "properties": {
+                "failure_probability": {
+                  "description": "Probability of failure (0-100). 100 = always fail, 0 = never fail.",
+                  "default": 100,
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                },
+                "remaining": {
+                  "description": "Number of successful calls remaining before failures may start.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or `get_block_header_at` is called for a specific height. After the reorg is triggered, subsequent calls proceed normally.",
+          "type": "object",
+          "required": [
+            "reorg_during_call"
+          ],
+          "properties": {
+            "reorg_during_call": {
+              "type": "object",
+              "required": [
+                "trigger_at_height"
+              ],
+              "properties": {
+                "trigger_at_height": {
+                  "description": "The height that triggers the reorg.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Add artificial delays to `get_block_at` or `get_block_header_at` after N calls. Useful for testing timeout handling and slow DA scenarios.",
+          "type": "object",
+          "required": [
+            "delay_after_n_calls"
+          ],
+          "properties": {
+            "delay_after_n_calls": {
+              "type": "object",
+              "required": [
+                "delay_range_ms",
+                "remaining"
+              ],
+              "properties": {
+                "delay_range_ms": {
+                  "description": "Range of delay in milliseconds. A random value from this range is used.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Range_of_uint64"
+                    }
+                  ]
+                },
+                "remaining": {
+                  "description": "Number of calls before delays start.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -211,6 +344,27 @@
         }
       }
     },
+    "Limits": {
+      "type": "object",
+      "required": [
+        "refill_rate",
+        "resources_per_bucket"
+      ],
+      "properties": {
+        "refill_rate": {
+          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch. Values between 1 and 20 are recommended starting points.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "resources_per_bucket": {
+          "description": "Determines the threshold for rate-limiting requests. The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "MockAddress": {
       "description": "Mock address; 32 bytes in hex-encoded format",
       "type": "string",
@@ -241,6 +395,15 @@
           "description": "Connection string to the database for storing Da Data. - \"sqlite://demo_data/da.sqlite?mode=rwc\" - \"sqlite::memory:\" - \"postgresql://root:hunter2@aws.amazon.com/mock-da\"",
           "type": "string"
         },
+        "failure_behavior": {
+          "description": "Configures failure injection for testing. Defaults to `FailureBehavior::None` (no failures).",
+          "default": "none",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FailureBehavior"
+            }
+          ]
+        },
         "finalization_blocks": {
           "description": "Defines how many blocks progress to finalization.",
           "default": 0,
@@ -267,7 +430,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "MonitoringConfig": {
       "description": "Configuration of Sovereign monitoring",
@@ -301,10 +465,39 @@
               "$ref": "#/definitions/TelegrafSocketConfig"
             }
           ]
+        },
+        "tokio_runtime_metrics_interval_millis": {
+          "description": "How often to collect tokio runtime metrics. Defaults to 500ms.",
+          "default": 500,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         }
       }
     },
-    "PreferredSequencerConfig": {
+    "PostgresConfig": {
+      "description": "Postgres DB config.",
+      "type": "object",
+      "required": [
+        "node_id",
+        "node_role",
+        "postgres_connection_string"
+      ],
+      "properties": {
+        "node_id": {
+          "description": "Id of the node.",
+          "type": "string"
+        },
+        "node_role": {
+          "$ref": "#/definitions/ConfiguredNodeRole"
+        },
+        "postgres_connection_string": {
+          "description": "Connection string.",
+          "type": "string"
+        }
+      }
+    },
+    "PreferredSequencerConfig_for_Address": {
       "description": "Configuration for [`PreferredSequencer`].",
       "type": "object",
       "required": [
@@ -337,6 +530,13 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "future_nonce_transaction_timeout_millis": {
+          "description": "The timeout after which a transaction with a near-future nonce (bounded by `maximum_future_nonce_delta`) will be dropped and forgotten by the sequencer. Increasing this value increases the leniency with which out-of-order transactions are considered a \"simultaneous batch\" which should be reordered, but can increase memory usage and queue lock contention.",
+          "default": 2000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "ideal_lag_behind_finalized_slot": {
           "description": "The ideal lag behind the finalized slot number.",
           "default": 10,
@@ -344,10 +544,12 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "is_replica": {
-          "description": "When enabled, the sequencer runs in replica mode and cannot accept transactions. It will sync from the master sequencer's database but remain read-only.",
-          "default": false,
-          "type": "boolean"
+        "maximum_future_nonce_delta": {
+          "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly impacts the maximum \"batch\" of transactions that can be simultaneously sent to the sequencer out of order.",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         },
         "minimum_profit_per_tx": {
           "description": "The minimum fee that the preferred sequencer is willing to accept, denominated in rollup tokens. Defaults to zero. Sequencers should set this to a non-zero value if they wish to cover their DA costs.",
@@ -363,12 +565,27 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "postgres_connection_string": {
+        "postgres_config": {
           "description": "Optional. When present, Postgres will be used as a database instead of RocksDB.",
           "default": null,
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/definitions/PostgresConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rate_limiter": {
+          "description": "Configuration for rate-limiting the sequencer.",
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SovRateLimiterConfig_for_Address"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "recovery_strategy": {
@@ -378,8 +595,21 @@
               "$ref": "#/definitions/RecoveryStrategy"
             }
           ]
+        },
+        "timing_oracle": {
+          "description": "Configuration for the timing oracle.",
+          "default": null,
+          "anyOf": [
+            {
+              "$ref": "#/definitions/TimingOracleConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "ProofManagerConfig_for_Address": {
       "description": "Prover service configuration.",
@@ -435,6 +665,30 @@
           "enum": [
             "rewind"
           ]
+        },
+        {
+          "description": "Makes `get_head_block_header` and `get_last_finalized_block_header` randomly return block headers below the actual finalized height.\n\nThis simulates scenarios where the DA layer reports stale data, useful for testing rollup resilience to DA layer inconsistencies.\n\nBehavior: - Each call advances the internal RNG, returning a different height each time. - `get_last_finalized_block_header()` stores its result as a floor for head. - `get_head_block_header()` returns `max(computed_height, last_finalized_floor)`. - To guarantee `head >= finalized`, call `get_last_finalized_block_header()` first.\n\nNotes: - Does not affect actual block production or chain state. - Triggered probabilistically based on `reorg_interval` configuration. - Heights are deterministic given the same seed and call sequence.",
+          "type": "object",
+          "required": [
+            "rewind_below_last_finalized"
+          ],
+          "properties": {
+            "rewind_below_last_finalized": {
+              "type": "object",
+              "required": [
+                "max_depth"
+              ],
+              "properties": {
+                "max_depth": {
+                  "description": "Maximum number of blocks below finalized height to report. Random height is chosen between `max(0, finalized - max_depth)` and `finalized`.",
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         },
         {
           "description": "Combines blob shuffling with chain height adjustment:\n\n1. All non-finalized blobs, including those being added to a new block, are shuffled across all blobs that are part of the new chain state. 2. The chain height is adjusted (rewound or extended) within the constraints of the finality window.\n\n**Constraints**: - Rewinding can only occur as far back as the finality window allows. - Extending is not possible if the finality window is already full. - Rewinding is not triggered if there is only one non-finalized block. - The specified percentage of blobs (`drop_percent`) is always respected.",
@@ -538,6 +792,25 @@
         "start": {
           "type": "integer",
           "format": "uint32",
+          "minimum": 0.0
+        }
+      }
+    },
+    "Range_of_uint64": {
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint64",
           "minimum": 0.0
         }
       }
@@ -701,34 +974,18 @@
       "type": "object",
       "required": [
         "da_polling_interval_ms",
-        "genesis_height",
         "http_config"
       ],
       "properties": {
         "concurrent_sync_tasks": {
-          "description": "How many concurrent tasks to get block from DA service",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "description": "How many concurrent tasks to prefetch DA block during sync.",
+          "default": 5,
+          "type": "integer",
           "format": "uint8",
           "minimum": 0.0
         },
         "da_polling_interval_ms": {
           "description": "Polling interval for the DA service to check the sync status (in milliseconds).",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "da_total_timeout_secs": {
-          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead to rollup shutdown.",
-          "default": 600,
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "genesis_height": {
-          "description": "DA start height.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
@@ -741,12 +998,20 @@
             }
           ]
         },
+        "pre_fetched_blocks_capacity": {
+          "description": "How many blocks maximum will be stored in memory. It affects total concurrent requests done do DA service. It should be larger than `concurrent_sync_tasks`.",
+          "default": 20,
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1.0
+        },
         "save_tx_bodies": {
           "description": "Whether to save transaction bodies to the database.",
           "default": false,
           "type": "boolean"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "SeqConfigExtension": {
       "description": "Configuration data used by sequencer extensions, such as EVM endpoints.",
@@ -756,6 +1021,13 @@
       ],
       "properties": {
         "max_log_limit": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "response_size_limit": {
+          "description": "The maximum size of the response to the eth_getLogs RPC endpoint. Use 1MB - 30KB for a safe default.",
+          "default": 1017856,
           "type": "integer",
           "format": "uint",
           "minimum": 0.0
@@ -787,7 +1059,7 @@
           ],
           "properties": {
             "preferred": {
-              "$ref": "#/definitions/PreferredSequencerConfig"
+              "$ref": "#/definitions/PreferredSequencerConfig_for_Address"
             }
           },
           "additionalProperties": false
@@ -863,6 +1135,72 @@
             }
           ]
         }
+      },
+      "additionalProperties": false
+    },
+    "SovRateLimiterConfig_for_Address": {
+      "type": "object",
+      "required": [
+        "address_custom_limits",
+        "default_limits",
+        "ip_custom_limits",
+        "max_nb_of_concurrent_users_in_rate_limiter",
+        "max_requests_per_second"
+      ],
+      "properties": {
+        "address_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "$ref": "#/definitions/Address"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "default_limits": {
+          "description": "Default limits.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Limits"
+            }
+          ]
+        },
+        "ip_custom_limits": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": [
+              {
+                "type": "string",
+                "format": "ip"
+              },
+              {
+                "$ref": "#/definitions/Limits"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2
+          }
+        },
+        "max_nb_of_concurrent_users_in_rate_limiter": {
+          "description": "The cache size for the rate limiter.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_requests_per_second": {
+          "description": "The maximum number of requests allowed per second.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
       }
     },
     "StdSequencerConfig": {
@@ -887,7 +1225,8 @@
           "format": "uint",
           "minimum": 1.0
         }
-      }
+      },
+      "additionalProperties": false
     },
     "TelegrafSocketConfig": {
       "description": "Config of receiving `inputs.socket_listener` <https://www.influxdata.com/blog/telegraf-socket-listener-input-plugin/>",
@@ -907,6 +1246,41 @@
             {
               "$ref": "#/definitions/Transport"
             }
+          ]
+        }
+      }
+    },
+    "TimingOracleConfig": {
+      "type": "object",
+      "required": [
+        "interval_millis",
+        "max_fee",
+        "priority_fee_percentage"
+      ],
+      "properties": {
+        "interval_millis": {
+          "description": "The interval in milliseconds at which the timestamp oracle update tx is submitted.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "max_fee": {
+          "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "priority_fee_percentage": {
+          "description": "The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.",
+          "type": "integer",
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "private_key_hex": {
+          "description": "The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.",
+          "type": [
+            "string",
+            "null"
           ]
         }
       }

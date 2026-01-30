@@ -6,6 +6,7 @@ on:
     branches:
       - "nightly"
       - "stable"
+      - "dev"
     paths:
       - "crates/full-node/sov-api-spec/openapi-v3.yaml"
       - "crates/full-node/sov-api-spec/openapi.stainless.yml"

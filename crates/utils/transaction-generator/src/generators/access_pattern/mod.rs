@@ -205,7 +205,7 @@ impl<S: Spec> ChangelogEntry for AccessPatternChangeLogEntry<S> {
             AccessPatternChangeLogEntry::AdminUpdated { new_admin } => {
                 let http_admin = rollup_state_accessor.get_admin::<S>().await;
 
-                assert_eq!(http_admin, Some(new_admin.clone()));
+                assert_eq!(http_admin, Some(*new_admin));
             }
         }
 
@@ -258,9 +258,7 @@ impl<S: Spec> CallMessageGenerator<S> for AccessPatternMessageGenerator<S> {
         generator_state.update_account(&new_admin, new_admin_acct);
 
         Ok(vec![GeneratedMessage {
-            message: AccessPatternMessages::UpdateAdmin {
-                new_admin: new_admin.clone(),
-            },
+            message: AccessPatternMessages::UpdateAdmin { new_admin },
             sender: self.genesis_admin_key.clone(),
             outcome: MessageOutcome::Successful {
                 changes: vec![AccessPatternChangeLogEntry::AdminUpdated { new_admin }],
@@ -724,9 +722,7 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
                 generator_state.update_account(&new_admin, new_admin_account);
 
                 Ok(GeneratedMessage {
-                    message: AccessPatternMessages::UpdateAdmin {
-                        new_admin: new_admin.clone(),
-                    },
+                    message: AccessPatternMessages::UpdateAdmin { new_admin },
                     sender: sender_acct.private_key,
                     outcome: MessageOutcome::Successful {
                         changes: vec![AccessPatternChangeLogEntry::AdminUpdated { new_admin }],

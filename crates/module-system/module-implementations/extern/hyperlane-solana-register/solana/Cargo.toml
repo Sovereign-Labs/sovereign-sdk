@@ -1,0 +1,147 @@
+[workspace]
+members = ["program", "program-tests"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+publish = false
+rust-version = "1.75"
+
+[workspace.dependencies]
+solana-sdk = "=1.14.13"
+borsh = "0.9"
+log = "0.4"
+solana-program = "=1.14.13"
+solana-program-test = "=1.14.13"
+solana-client = "=1.14.13"
+spl-noop = { version = "=0.1.3", features = ["no-entrypoint"] }
+hyperlane-sealevel-mailbox = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration", features = [
+  "no-entrypoint",
+] }
+hyperlane-sealevel-igp = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration", features = [
+  "no-entrypoint",
+] }
+account-utils = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration" }
+hyperlane-core = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration" }
+hyperlane-sealevel-connection-client = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration" }
+hyperlane-sealevel-test-ism = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration" }
+
+tokio = { version = "1.37", features = ["parking_lot", "tracing"] }
+
+
+[workspace.dependencies.ethers]
+features = []
+git = "https://github.com/hyperlane-xyz/ethers-rs"
+tag = "2024-04-25"
+
+[workspace.dependencies.ethers-contract]
+features = ["legacy"]
+git = "https://github.com/hyperlane-xyz/ethers-rs"
+tag = "2024-04-25"
+
+[workspace.dependencies.ethers-providers]
+features = []
+git = "https://github.com/hyperlane-xyz/ethers-rs"
+tag = "2024-04-25"
+
+[workspace.dependencies.ethers-signers]
+features = ["aws"]
+git = "https://github.com/hyperlane-xyz/ethers-rs"
+tag = "2024-04-25"
+
+[patch.crates-io.bumpalo]
+git = "https://github.com/fitzgen/bumpalo"
+tag = "3.14.0"
+version = "=3.14.0"
+
+[patch.crates-io.curve25519-dalek]
+branch = "v3.2.2-relax-zeroize"
+git = "https://github.com/Eclipse-Laboratories-Inc/curve25519-dalek"
+version = "3.2.2"
+
+[patch.crates-io.primitive-types]
+branch = "hyperlane"
+git = "https://github.com/hyperlane-xyz/parity-common.git"
+version = "=0.12.1"
+
+[patch.crates-io.rlp]
+branch = "hyperlane"
+git = "https://github.com/hyperlane-xyz/parity-common.git"
+version = "=0.5.2"
+
+[patch.crates-io.solana-account-decoder]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-banks-client]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-clap-utils]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-cli-config]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-client]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-program]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-program-test]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-sdk]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-transaction-status]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.solana-zk-token-sdk]
+git = "https://github.com/hyperlane-xyz/solana.git"
+tag = "hyperlane-1.14.13-2024-11-20"
+version = "=1.14.13"
+
+[patch.crates-io.spl-associated-token-account]
+branch = "hyperlane"
+git = "https://github.com/hyperlane-xyz/solana-program-library.git"
+version = "=1.1.2"
+
+[patch.crates-io.spl-noop]
+branch = "hyperlane"
+git = "https://github.com/hyperlane-xyz/solana-program-library.git"
+version = "=0.1.3"
+
+[patch.crates-io.spl-token]
+branch = "hyperlane"
+git = "https://github.com/hyperlane-xyz/solana-program-library.git"
+version = "=3.5.0"
+
+[patch.crates-io.spl-token-2022]
+branch = "hyperlane"
+git = "https://github.com/hyperlane-xyz/solana-program-library.git"
+version = "=0.5.0"
+
+[patch.crates-io.spl-type-length-value]
+version = "=0.1.0"
+git = "https://github.com/hyperlane-xyz/solana-program-library.git"
+branch = "hyperlane"

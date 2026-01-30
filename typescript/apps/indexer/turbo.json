@@ -1,0 +1,10 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["bin/**"],
+      "inputs": ["src/**", "package.json"]
+    }
+  }
+}

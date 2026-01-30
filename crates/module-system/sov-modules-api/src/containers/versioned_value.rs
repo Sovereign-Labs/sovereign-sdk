@@ -129,7 +129,7 @@ mod tests {
     use sov_rollup_interface::common::IntoSlotNumber;
     use sov_rollup_interface::execution_mode::Native;
     use sov_state::{BorshCodec, Prefix};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::MockDaSpec;
     use unwrap_infallible::UnwrapInfallible;
 
@@ -142,11 +142,11 @@ mod tests {
 
     #[test]
     fn test_kernel_state_value_as_value() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let kernel = MockKernel::<TestSpec>::new(4, 1);
-        let mut state = StateCheckpoint::new(storage, &kernel);
+        let mut state = StateCheckpoint::new(storage, &kernel, None);
 
         let prefix = Prefix::new(1, 1);
         let mut value = VersionedStateValue::<RollupHeight>::with_codec(prefix, BorshCodec);
@@ -176,11 +176,11 @@ mod tests {
 
     #[test]
     fn test_kernel_state_value_as_map() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let kernel = MockKernel::<TestSpec>::new(4, 1);
-        let mut state = StateCheckpoint::new(storage, &kernel);
+        let mut state = StateCheckpoint::new(storage, &kernel, None);
 
         let prefix = Prefix::new(1, 1);
         let mut value = VersionedStateValue::<RollupHeight>::with_codec(prefix, BorshCodec);

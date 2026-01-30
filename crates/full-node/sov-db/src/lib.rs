@@ -7,6 +7,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub use flat_db::DbCache;
 use rockbound::rocksdb::ColumnFamilyDescriptor;
 use rockbound::{SchemaKey, SchemaValue};
 
@@ -33,8 +34,6 @@ pub mod accessory_db;
 /// Define namespaces at the database level
 pub mod namespaces;
 
-/// Implements commit flag logic for state_db_nomt.
-pub(crate) mod commit_flag;
 /// Configuration for `sov-db`
 pub mod config;
 pub(crate) mod metrics;
@@ -76,7 +75,7 @@ impl DbOptions {
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open(db_path, self.name, self.columns, &config, 0) // We only setup the cache for NOMT - which is done in FlatStateDb. Use 0 for all other databases.
+        rockbound::DB::open(db_path, self.name, self.columns, &config)
     }
 }
 
@@ -85,16 +84,15 @@ impl DbOptions<ColumnFamilyDescriptor> {
     pub fn setup_db_in_path_with_column_descriptors(
         self,
         path: impl AsRef<std::path::Path>,
-        cache_size: usize,
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns, cache_size)
+        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns)
     }
 }
 
 pub(crate) fn ensure_version_is_correct(
-    key: &SchemaKey,
+    key: &[u8],
     version: sov_rollup_interface::common::SlotNumber,
     found: Option<(
         (SchemaKey, sov_rollup_interface::common::SlotNumber),
@@ -103,7 +101,7 @@ pub(crate) fn ensure_version_is_correct(
 ) -> anyhow::Result<Option<SchemaValue>> {
     match found {
         Some(((found_key, found_version), value)) => {
-            if &found_key == key {
+            if found_key == key {
                 anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                 Ok(value)
             } else {

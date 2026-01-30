@@ -1,6 +1,6 @@
 use sov_bank::utils::TokenHolder;
 use sov_bank::{get_token_id, Amount, Bank, TokenId};
-use sov_modules_api::{Address, ApiStateAccessor, Error, TxEffect};
+use sov_modules_api::{Address, ApiStateAccessor, TxEffect};
 use sov_test_utils::{AsUser, TestUser, TransactionTestCase};
 
 use crate::helpers::*;
@@ -113,12 +113,12 @@ fn test_update_admin() {
             assert: Box::new(move |result, state| {
                 assert!(result.tx_receipt.is_reverted());
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
-                    let msg = format!(
-                        "`{}` is already a member of the admin list",
+                    let actual = contents.reason.to_string();
+                    let expected = format!(
+                        "Token update admin error: Admin {} already exists for token Token1",
                         admins.current_admin.address()
                     );
-                    assert!(err.to_string().contains(&msg));
+                    assert_eq!(actual, expected);
                 }
 
                 assert_eq!(get_admins(&token_id, state), admins.original_admins());
@@ -137,12 +137,9 @@ fn test_update_admin() {
             assert: Box::new(move |result, state| {
                 assert!(result.tx_receipt.is_reverted());
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
-                    let msg = format!(
-                        "Cannot update admin: `{}` is not in the admin list for the specified token Token1",
-                        minter.address()
-                    );
-                    assert!(err.to_string().contains(&msg));
+                    let actual = contents.reason.to_string();
+                    let expected = format!("Token update admin error: Admin to replace {minter_address} does not exist for token Token1");
+                    assert_eq!(actual, expected);
                 }
                 assert_eq!(get_admins(&token_id, state), admins.original_admins());
             }),
@@ -179,12 +176,9 @@ fn test_update_admin() {
             assert: Box::new(move |result, state| {
                 assert!(result.tx_receipt.is_reverted());
                 if let TxEffect::Reverted(contents) = result.tx_receipt {
-                    let Error::ModuleError(err) = contents.reason;
-                    let msg = format!(
-                        "Cannot update admin: `{}` is not in the admin list for the specified token Token1",
-                        admins.current_admin.address()
-                    );
-                    assert!(err.to_string().contains(&msg));
+                    let actual = contents.reason.to_string();
+                    let expected = format!("Token update admin error: Admin to replace {} does not exist for token Token1", admins.current_admin.address());
+                    assert_eq!(actual, expected);
                 }
                 assert_eq!(get_admins(&token_id, state), admins.updated_admins());
             }),

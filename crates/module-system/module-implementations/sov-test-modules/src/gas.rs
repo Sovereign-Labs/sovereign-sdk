@@ -58,12 +58,14 @@ impl<S: Spec> Module for GasTester<S> {
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         _config: &Self::Config,
         _state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -72,7 +74,7 @@ impl<S: Spec> Module for GasTester<S> {
         msg: Self::CallMessage,
         _context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         match msg {
             CallMessage::SetValue { value } => {
                 self.charge_gas(

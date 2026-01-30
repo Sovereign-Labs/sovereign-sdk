@@ -23,6 +23,8 @@ sov-uniqueness = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
+sov-metrics = { workspace = true, features = ["native"] }
+sov-rest-utils = { workspace = true }
 
 borsh = { workspace = true }
 serde = { workspace = true }
@@ -53,9 +55,6 @@ sov-state = { workspace = true }
 sov-kernels = { workspace = true }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
-
-ethereum-types = { workspace = true }
-ethers = { workspace = true }
 
 [features]
 default = []

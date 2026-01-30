@@ -1,9 +1,11 @@
 use std::marker::PhantomData;
-#[cfg(feature = "native")]
-use std::sync::LazyLock;
 
+use crate::conversions::RlpConversionError;
+use crate::Evm;
+use crate::TransactionSigned;
+use crate::{call, CallMessage, RlpEvmTransaction};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
-use alloy_eips::eip2718::Decodable2718;
+use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -17,22 +19,65 @@ use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
 };
+use sov_modules_api::StateReader;
+use sov_modules_api::VersionReader;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 
-use crate::conversions::RlpConversionError;
-use crate::TransactionSigned;
-use crate::{call, CallMessage, RlpEvmTransaction};
-
-/// At 5k TPS, this gives us 50 seconds of cache lifetime at a cost of (about 70 bytes per entry - which is about 17.5 MB). This should be long enough that signatures almost always
-/// last until the node has processed the block.
 #[cfg(feature = "native")]
-static SIGNATURE_CACHE: LazyLock<
-    quick_cache::sync::Cache<TxHash, Result<Address, AuthenticationError>>,
-> = LazyLock::new(|| quick_cache::sync::Cache::new(250_000));
+use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+
+/// At default size, and ~70 bytes per entry, this costs about 17.5 MB at the default size.
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+
+impl<S: Spec> Evm<S> {
+    /// Validates the user's max fee per gas against the rollup's base fee and returns a gas multiplier.
+    ///
+    /// The max fee check is only enforced when:
+    /// - The current block number exceeds `EVM_MAX_FEE_CHECK_HEIGHT`
+    /// - The check has not been disabled via an admin `UpdateRuntimeConfig` message
+    ///
+    /// Returns:
+    /// - `Ok(1)` if the fee check passes (user fee >= rollup base fee)
+    /// - `Ok(100)` if the fee check is skipped (before height threshold or disabled)
+    /// - `Err(InsufficientMaxFeePerGas)` if the user's fee is below the rollup base fee
+    fn validate_fee_and_calculate_multiplier<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        user_max_fee_per_gas: u128,
+        rollup_base_fee: u128,
+        tx_hash: TxHash,
+        state: &mut Accessor,
+    ) -> Result<u64, AuthenticationError> {
+        let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
+
+        let block_number: u64 = state.rollup_height_to_access().get();
+
+        if block_number > apply_max_fee_check_after_height {
+            let is_max_fee_check_disabled = self.is_max_fee_check_disabled(state).map_err(|e| {
+                AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
+            })?;
+            if is_max_fee_check_disabled {
+                return Ok(100);
+            }
+            if user_max_fee_per_gas < rollup_base_fee {
+                let err = FatalError::InsufficientMaxFeePerGas {
+                    user_max_fee_per_gas,
+                    rollup_base_fee,
+                };
+                return Err(AuthenticationError::FatalError(err, tx_hash));
+            }
+
+            Ok(1)
+        } else {
+            Ok(100)
+        }
+    }
+}
 
 /// Recovers the signer from an EVM transaction.
 fn recover_evm_signer(
@@ -59,14 +104,31 @@ fn recover_evm_signer(
 }
 
 /// Creates the transaction details and tx hash for an EVM transaction.
-fn create_auth_tx_and_hash<S: Spec>(
+fn create_auth_tx_and_hash<
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
+    S: Spec,
+>(
     tx: &TransactionSigned,
     gas_price: <<S as Spec>::Gas as Gas>::Price,
+    state: &mut Accessor,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
-    let gas_limit = tx.gas_limit();
+
+    let user_max_fee_per_gas = tx.max_fee_per_gas();
+    let rollup_base_fee = gas_price.as_ref()[0].0;
+
+    let evm = Evm::<S>::default();
+    let multiplier = evm.validate_fee_and_calculate_multiplier(
+        user_max_fee_per_gas,
+        rollup_base_fee,
+        tx_hash,
+        state,
+    )?;
+
+    let gas_limit = tx.gas_limit().saturating_mul(multiplier);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
+
     let max_fee = gas_limit
         .checked_value(gas_price)
         .ok_or(AuthenticationError::FatalError(
@@ -97,7 +159,8 @@ fn validate_chain_id(
         tx_hash,
     ))?;
 
-    if tx_chain_id != rollup_chain_id {
+    // Allow 0 chain id for compatibility with EIP7702
+    if tx_chain_id != rollup_chain_id && tx_chain_id != 0 {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
                 expected: rollup_chain_id,
@@ -137,12 +200,12 @@ where
 /// If the caller does plan to derive rollup addresses from evm addresses, they should be sure that their scheme for doing so is deterministic and
 /// collision resistant. You don't want someone to be able to pick a rollup address that someone else is already using!
 pub fn authenticate<
-    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>,
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
     S: Spec,
 >(
     raw_tx: &[u8],
     state: &mut Accessor,
-) -> Result<AuthenticationOutput<S, CallMessage>, AuthenticationError>
+) -> Result<AuthenticationOutput<S, CallMessage<S>>, AuthenticationError>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
@@ -152,14 +215,21 @@ where
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
     let gas_price = state.gas_price();
-    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price)?;
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, gas_price, state)?;
 
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
     let nonce = tx.nonce();
     let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
-    let call = CallMessage { rlp };
+    let call = CallMessage::<S>::Call(rlp);
+
+    tracing::debug!(
+        nonce,
+        credential_id = ?auth_data.credential_id,
+        raw_tx_hash = ?tx_and_raw_hash.raw_tx_hash,
+        "Received and authenticated EVM transaction"
+    );
 
     Ok((tx_and_raw_hash, auth_data, call))
 }
@@ -175,7 +245,13 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
         ));
     }
 
-    let tx = TransactionSigned::decode_2718(&mut &tx_data.rlp[..])
+    let type_tag = TransactionSigned::extract_type_byte(&mut &tx_data.rlp[..]).unwrap_or(0); // Reject as a legacy transaction by default
+    if type_tag != EIP1559_TX_TYPE_ID {
+        return Err(FatalError::DeserializationFailed(
+            "Invalid transaction type: Only EIP1559 is currently supported. If you need to use EIP7702, please reach out to the SDK developers for support.".to_string(),
+        ));
+    }
+    let tx = TransactionSigned::decode_2718_exact(&tx_data.rlp)
         .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok((tx_data, tx))
@@ -215,7 +291,7 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
 {
-    type Decodable = EvmAuthenticatorInput<call::CallMessage, <Rt as DispatchCall>::Decodable>;
+    type Decodable = EvmAuthenticatorInput<call::CallMessage<S>, <Rt as DispatchCall>::Decodable>;
     type Input = EvmAuthenticatorInput;
 
     #[cfg(feature = "native")]
@@ -229,7 +305,9 @@ where
         match auth_variant {
             EvmAuthenticatorInput::Evm(raw_tx) => {
                 let (call, _tx) = decode_evm_tx(&raw_tx.data)?;
-                Ok(EvmAuthenticatorInput::Evm(call::CallMessage { rlp: call }))
+                Ok(EvmAuthenticatorInput::Evm(call::CallMessage::<S>::Call(
+                    call,
+                )))
             }
             EvmAuthenticatorInput::Standard(raw_tx) => {
                 let call = capabilities::decode_sov_tx::<S, Rt>(&raw_tx.data)?;
@@ -238,7 +316,9 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S>>(
+    fn authenticate<
+        Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
+    >(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<
@@ -294,47 +374,38 @@ where
         }
     }
 
-    fn authenticate_unregistered<Accessor: ProvableStateReader<User, Spec = S>>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
     ) -> Result<
         capabilities::AuthenticationOutput<S, Self::Decodable>,
         capabilities::UnregisteredAuthenticationError,
     > {
-        let Self::Input::Standard(input) = borsh::from_slice(&batch.tx.data)
+        match borsh::from_slice(&batch.tx.data)
             .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?
-        else {
-            return Err(UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant);
-        };
-
-        let (tx_and_raw_hash, auth_data, runtime_call) =
-            sov_modules_api::capabilities::authenticate::<_, S, Rt>(
-                &input.data,
-                &Rt::CHAIN_HASH,
-                state,
-            )
-            .map_err(|e| match e {
-                AuthenticationError::FatalError(err, hash) => {
-                    UnregisteredAuthenticationError::FatalError(err, hash)
-                }
-                AuthenticationError::OutOfGas(err) => {
-                    UnregisteredAuthenticationError::OutOfGas(err)
-                }
-            })?;
-
-        if Rt::allow_unregistered_tx(&runtime_call) {
-            Ok((
-                tx_and_raw_hash,
-                auth_data,
-                EvmAuthenticatorInput::Standard(runtime_call),
-            ))
-        } else {
-            Err(UnregisteredAuthenticationError::FatalError(
-                FatalError::Other(
-                    "The runtime call included in the transaction was invalid.".to_string(),
-                ),
-                tx_and_raw_hash.raw_tx_hash,
-            ))?
+        {
+            Self::Input::Evm(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    authenticate::<_, _>(&tx.data, state)?;
+                Ok((
+                    tx_and_raw_hash,
+                    auth_data,
+                    EvmAuthenticatorInput::Evm(runtime_call),
+                ))
+            }
+            Self::Input::Standard(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
+                        &tx.data, state,
+                    )?;
+                Ok((
+                    tx_and_raw_hash,
+                    auth_data,
+                    EvmAuthenticatorInput::Standard(runtime_call),
+                ))
+            }
         }
     }
 

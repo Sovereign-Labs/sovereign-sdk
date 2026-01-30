@@ -21,16 +21,19 @@
       "code": "0x"
     }
   ],
+  "contract_creation_policy": "everyone",
   "initial_base_fee": 7,
   "genesis_timestamp": 0,
   "chain_spec": {
     "limit_contract_code_size": null,
     "coinbase": "0x0000000000000000000000000000000000000000",
-    "block_gas_limit": 30000000,
+    "block_gas_limit": 1000000000,
+    "tx_gas_limit": 30000000,
     "base_fee_params": {
       "max_change_denominator": 8,
       "elasticity_multiplier": 2
     },
     "hardforks": [[0, "CANCUN"]]
-  }
+  },
+  "admin": "0xAeb37910f93486C85A1F8F994b67E8187554d664"
 }

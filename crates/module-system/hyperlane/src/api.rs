@@ -1,17 +1,28 @@
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize as _, Serialize};
 use sov_bank::{config_gas_token_id, Amount};
+use sov_modules_api::prelude::axum::http::StatusCode;
 use sov_modules_api::prelude::serde_json::json;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, UnwrapInfallible};
-use sov_modules_api::rest::utils::{errors, ApiResult, Path, Query};
+use sov_modules_api::rest::utils::{errors, json_obj, ApiResult, ErrorObject, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, CredentialId, HexHash, Spec};
 
 use crate::igp::RelayerWithDomainKey;
 use crate::{EthAddress, Ism, Mailbox, Recipient};
+
+fn deserialize_number_from_str<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    let s = String::deserialize(deserializer)?;
+    s.parse().map_err(serde::de::Error::custom)
+}
 
 /// A configuration of an [`Ism::MessageIdMultisig`].
 #[derive(Serialize)]
@@ -30,6 +41,7 @@ pub struct QuoteParams {
     /// Destination domain.
     pub destination_domain: u32,
     /// Gas limit.
+    #[serde(deserialize_with = "deserialize_number_from_str")]
     pub gas_limit: u128,
     /// Recipient address.
     pub recipient_address: HexHash,
@@ -55,7 +67,7 @@ impl<S: Spec, R: Recipient<S>> HasCustomRestApi for Mailbox<S, R> {
                 "/recipient-ism/:address/validators_and_threshold",
                 get(Self::get_recipient_ism_validators_and_threshold),
             )
-            .route("/quote_dispatch", get(Self::query_quote_dispatch))
+            .route("/quote-dispatch", get(Self::query_quote_dispatch))
             .with_state(state.with(self.clone()))
     }
 
@@ -71,6 +83,26 @@ impl<S: Spec, R: Recipient<S>> HasCustomRestApi for Mailbox<S, R> {
 }
 
 impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
+    fn get_ism(
+        state: &ApiState<S, Self>,
+        address: &HexHash,
+        mut accessor: ApiStateAccessor<S>,
+    ) -> Result<Ism, Box<Response>> {
+        let ism = state
+            .recipients
+            .ism(address, &mut accessor)
+            .map_err(errors::internal_server_error_response_500)?
+            .ok_or_else(|| Box::new(ErrorObject {
+                status: StatusCode::NOT_FOUND,
+                message: "Failed to retrieve Recipient ISM".to_string(),
+                details: json_obj!({
+                    "error": format!("Either the recipient doesn't exist or no ISM is set for the recipient"),
+                    "recipient": address.to_string(),
+                })
+            }.into_response()))?;
+        Ok(ism)
+    }
+
     async fn get_nonce(
         state: ApiState<S, Self>,
         mut accessor: ApiStateAccessor<S>,
@@ -87,13 +119,9 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
     async fn get_recipient_ism(
         state: ApiState<S, Self>,
         Path(address): Path<HexHash>,
-        mut accessor: ApiStateAccessor<S>,
+        accessor: ApiStateAccessor<S>,
     ) -> Result<Response, Response> {
-        let ism = state
-            .recipients
-            .ism(&address, &mut accessor)
-            .map_err(|_| errors::not_found_404("Mailbox", address))?
-            .ok_or_else(|| errors::not_found_404("Mailbox", address))?;
+        let ism = Self::get_ism(&state, &address, accessor).map_err(|e| *e)?;
         let ism_kind = ism.ism_kind() as u8;
         Ok(Json(json!({"ism_kind": ism_kind})).into_response())
     }
@@ -101,14 +129,9 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
     async fn get_recipient_ism_validators_and_threshold(
         state: ApiState<S, Self>,
         Path(address): Path<HexHash>,
-        mut accessor: ApiStateAccessor<S>,
+        accessor: ApiStateAccessor<S>,
     ) -> ApiResult<ValidatorsAndThreshold> {
-        let ism = state
-            .recipients
-            .ism(&address, &mut accessor)
-            .map_err(|_| errors::not_found_404("Mailbox", address))?
-            .ok_or_else(|| errors::not_found_404("Mailbox", address))?;
-
+        let ism = Self::get_ism(&state, &address, accessor).map_err(|e| *e)?;
         let Ism::MessageIdMultisig {
             validators,
             threshold,
@@ -160,5 +183,28 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
         };
 
         Ok(response.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr as _;
+
+    use sov_modules_api::prelude::axum::http::Uri;
+
+    use super::*;
+
+    #[test]
+    fn test_quote_query_params_handles_u128() {
+        let uri = Uri::from_static("https://0.0.0.0:12346/modules/mailbox/quote_dispatch?destination_domain=1399811149&gas_limit=500&recipient_address=0x71c7656ec7ab88b098defb751b7401b5f6d8976fae23aeb2342aedac24843ead");
+        let query_params: Query<QuoteParams> =
+            Query::try_from_uri(&uri).expect("Failed to parse query params");
+        assert_eq!(query_params.destination_domain, 1399811149);
+        assert_eq!(query_params.gas_limit, 500u128);
+        assert_eq!(
+            query_params.recipient_address,
+            HexHash::from_str("71c7656ec7ab88b098defb751b7401b5f6d8976fae23aeb2342aedac24843ead")
+                .unwrap()
+        );
     }
 }

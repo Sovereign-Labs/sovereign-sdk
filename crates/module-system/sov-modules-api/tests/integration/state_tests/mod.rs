@@ -10,17 +10,18 @@ mod structs;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::mocks::MockKernel;
-use sov_modules_api::{
-    execution_mode, CryptoSpec, KernelStateValue, Spec, StateCheckpoint, Storage,
-};
-use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
-use sov_test_utils::{validate_and_materialize, TestSpec};
+use sov_modules_api::{execution_mode, KernelStateValue, Spec, StateCheckpoint, Storage};
+use sov_test_utils::storage::ForklessStorageManager;
+use sov_test_utils::{validate_and_materialize, TestSpec, TestStorageSpec};
 use unwrap_infallible::UnwrapInfallible;
 
-pub type Zk =
-    sov_modules_api::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, execution_mode::Zk>;
-pub type TestHasher = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher;
-pub type StorageSpec = sov_state::DefaultStorageSpec<TestHasher>;
+pub type Zk = sov_modules_api::default_spec::DefaultNomtSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    execution_mode::Zk,
+>;
+pub type StorageSpec = TestStorageSpec;
 
 pub fn commit_to_storage<S, Sm>(
     state: StateCheckpoint<S>,
@@ -35,7 +36,7 @@ pub fn commit_to_storage<S, Sm>(
     let (cache_log, _, witness) = state.freeze();
 
     let (root_hash, state_update) = storage
-        .compute_state_update(cache_log, &witness, pre_state_root)
+        .compute_state_update(cache_log, &witness, pre_state_root, None)
         .expect("Compute state update must succeed");
     storage_manager.commit_state_update(storage, state_update, root_hash);
 
@@ -52,7 +53,7 @@ fn increase_value_and_commit<S, Sm>(
     S: Spec,
     Sm: ForklessStorageManager<Storage = S::Storage>,
 {
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), kernel);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), kernel, None);
 
     // Setting value, starting from 0
     let value = match state_value.get(&mut state).unwrap_infallible() {

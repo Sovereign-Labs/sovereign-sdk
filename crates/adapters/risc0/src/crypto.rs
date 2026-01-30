@@ -9,7 +9,7 @@ use ed25519_dalek::{
 };
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
 use sov_rollup_interface::reexports::schemars::{self, JsonSchema};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema;
 
 /// Defines private key types and operations
 #[cfg(feature = "native")]
@@ -169,14 +169,13 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized Risc0 fork of the ed25519-dalek crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, UniversalWallet)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema)]
 pub struct Risc0PublicKey {
     #[schemars(
         flatten,
         with = "String",
         length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH * 2")
     )]
-    #[sov_wallet(as_ty = "[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]")]
     pub(crate) pub_key: DalekPublicKey,
 }
 
@@ -224,6 +223,10 @@ impl sov_rollup_interface::crypto::PublicKey for Risc0PublicKey {
     }
 }
 
+impl OverrideSchema for Risc0PublicKey {
+    type Output = [u8; PUBLIC_KEY_LENGTH];
+}
+
 impl BorshDeserialize for Risc0PublicKey {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
@@ -242,9 +245,7 @@ impl BorshSerialize for Risc0PublicKey {
 }
 
 /// An ed25519 signature. Wraps the optimized Risc0 fork of the ed25519-dalek crate.
-#[derive(
-    PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema, UniversalWallet,
-)]
+#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema)]
 pub struct Risc0Signature {
     /// The inner signature.
     #[schemars(
@@ -252,7 +253,6 @@ pub struct Risc0Signature {
         with = "String",
         length(equal = "ed25519_dalek::Signature::BYTE_SIZE * 2")
     )]
-    #[sov_wallet(as_ty = "[u8; ed25519_dalek::Signature::BYTE_SIZE]")]
     pub msg_sig: DalekSignature,
     bytes: Vec<u8>,
 }
@@ -265,6 +265,10 @@ impl Risc0Signature {
             bytes: s.to_vec(),
         }
     }
+}
+
+impl OverrideSchema for Risc0Signature {
+    type Output = [u8; DalekSignature::BYTE_SIZE];
 }
 
 impl BorshDeserialize for Risc0Signature {

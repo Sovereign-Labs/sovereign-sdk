@@ -19,6 +19,7 @@ rockbound = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 nomt = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
+parking_lot = "0.12.4"
 
 # External
 anyhow = { workspace = true, default-features = true }
@@ -39,6 +40,11 @@ tracing = { workspace = true }
 rand = { workspace = true, optional = true }
 schemars = { workspace = true }
 uuid = { workspace = true, features = ["std", "v7"] }
+serde_with = { workspace = true }
+derivative = { workspace = true }
+digest = { workspace = true }
+sov-db-types = { workspace = true, features = ["native"] }
+strum = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
 test-strategy = { workspace = true }
@@ -57,19 +63,20 @@ proptest = { workspace = true }
 
 [features]
 arbitrary = [
-    "dep:arbitrary",
-    "dep:proptest",
-    "dep:proptest-derive",
-    "dep:tempfile",
-    "rockbound/arbitrary",
-    "sov-mock-zkvm/arbitrary",
-    "sov-rollup-interface/arbitrary",
-    "sov-test-utils/arbitrary",
-    "sov-mock-da/arbitrary",
-    "sov-db/arbitrary",
-    "uuid/arbitrary"
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"dep:tempfile",
+	"rockbound/arbitrary",
+	"sov-mock-zkvm/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-db/arbitrary",
+	"uuid/arbitrary",
+	"sov-db-types/arbitrary"
 ]
-test-utils = ["dep:rand"]
+test-utils = ["dep:rand", "strum"]
 
 [[bench]]
 name = "state_db_single_snapshot"

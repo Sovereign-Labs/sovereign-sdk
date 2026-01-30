@@ -1,40 +1,110 @@
-use alloy_consensus::Sealed;
+use std::any::Any;
+use std::collections::hash_map::Entry;
+#[cfg(feature = "native")]
+use std::collections::HashMap;
+use std::ops::DerefMut;
+#[cfg(feature = "native")]
+use std::sync::{OnceLock, RwLock};
+
+use crate::db::EvmDb;
+use crate::error::into_rpc_error;
+use crate::evm::executor;
+use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
+use crate::executor::get_cfg_env;
+use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
+use crate::primitive_types::parse_synthetic_block_hash;
+pub use crate::primitive_types::MaybeSealedBlock;
+use crate::primitive_types::{synthetic_block_hash_for, SyntheticBlockWithoutRootsAndBloom};
+use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
-use alloy_eips::BlockNumberOrTag;
-use alloy_primitives::{Address, BlockNumber};
+use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_eips::{BlockId, BlockNumberOrTag};
+use alloy_primitives::{Address, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
-use alloy_rpc_types_trace::geth::GethTrace;
-use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracerType};
-use alloy_rpc_types_trace::geth::{GethDebugTracingOptions, TraceResult};
-use jsonrpsee::core::RpcResult;
-use revm::context::result::{ExecResultAndState, ResultAndState};
-use revm::context::{BlockEnv, CfgEnv, TxEnv};
-use revm_inspectors::tracing::{TracingInspector, TracingInspectorConfig};
+use maybe_archival_state::MaybeArchivalState;
+use revm::context::result::ResultAndState;
+use revm::context::{BlockEnv, CfgEnv};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
-use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
 
-use crate::conversions::replay_tx_env;
-use crate::db::commit::FallibleDatabaseCommit;
-use crate::db::EvmDb;
-use crate::error::into_rpc_error;
-use crate::evm::executor;
-use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
-use crate::executor::{get_cfg_env, inspect, transact_commit};
-use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
-pub use crate::primitive_types::MaybeSealedBlock;
-use crate::Evm;
+// Prune synthetic blocks more than this number of blocks away from the latest block.
+const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
+
+/// Cache of synthetic block states by hash.
+///
+/// Currently, there's no way to recreate the state of a synthetic block once it's gone. This is because
+/// EVM state is shared with the sov-modules system, so any sov txs can impact the state of the synthetic block - but only
+/// EVM tx bodies are stored in the EVM module. This cache saves a copy of the API state accessor for each synthetic block we make,
+/// pruning them after some interval.
+#[cfg(feature = "native")]
+pub(crate) static SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH: OnceLock<RwLock<SyntheticBlocksCache>> =
+    OnceLock::new();
+
+#[derive(Default)]
+pub(crate) struct SyntheticBlocksCache {
+    // Store ApiStateAccessor<S> by hash. We have to type erase because static variables can't store generic types.
+    state_by_hash: HashMap<B256, Box<dyn Any + Send + Sync>>,
+    // To allow for pruning, save a list of all synthetic block hashes for each block number
+    // When those blocks are old enough, we prune them all.
+    hashes_by_block_number: HashMap<u64, Vec<B256>>,
+    oldest_block_number: u64,
+}
+impl SyntheticBlocksCache {
+    fn insert_if_absent<S: Spec>(
+        &mut self,
+        block: &SyntheticBlockWithoutRootsAndBloom,
+        state: &mut ApiStateAccessor<S>,
+    ) {
+        if let Entry::Vacant(entry) = self.state_by_hash.entry(block.hash()) {
+            let state = state.clone_without_local_writes();
+            let state: Box<dyn Any + Send + Sync> = Box::new(state);
+            entry.insert(state);
+            self.hashes_by_block_number
+                .entry(block.block_number())
+                .or_default()
+                .push(block.hash());
+            if block.block_number()
+                > self.oldest_block_number + SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL
+            {
+                self.prune(block.block_number());
+            }
+        }
+    }
+
+    fn get_state_by_hash<S: Spec>(&self, hash: B256) -> Option<&ApiStateAccessor<S>> {
+        self.state_by_hash.get(&hash).map(|b| b.downcast_ref::<ApiStateAccessor<S>>().expect("Attempted to get the wrong type out of the SyntheticBlocksCache. This is impossible unless you request a different Spec than you put in. It's a bug, please report it."))
+    }
+    fn prune(&mut self, block_number: u64) {
+        let stop_at = block_number.saturating_sub(SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL);
+        for number in self.oldest_block_number..stop_at {
+            let hashes = self
+                .hashes_by_block_number
+                .remove(&number)
+                .unwrap_or_default();
+            for hash in hashes {
+                self.state_by_hash.remove(&hash);
+            }
+        }
+        self.oldest_block_number = stop_at;
+    }
+}
 
 pub(crate) mod error;
 pub(crate) mod handlers;
+pub(crate) mod maybe_archival_state;
+
+mod fee_history;
+mod trace;
 
 /// Result of String => BlockNr conversion
 #[derive(Debug)]
@@ -43,8 +113,13 @@ pub enum PendingOrBlock {
     Pending,
     /// Block number.
     Number(u64),
-    /// Invalid block number.
-    Invalid(String),
+    /// A synthetic block which is not the current pending block.
+    PastSynthetic {
+        #[allow(missing_docs)]
+        block_number: u64,
+        #[allow(missing_docs)]
+        last_tx_idx: u32,
+    },
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
@@ -62,59 +137,124 @@ where
 {
     fn get_block_transactions(
         &self,
-        block: &MaybeSealedBlock,
+        block: &SealedBlock,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<BlockTransactions<Transaction>> {
-        let tx_range = block.tx_range();
+    ) -> Result<BlockTransactions<Transaction>, EthApiError> {
+        let tx_range = block.transactions.start..block.transactions.end;
         let txs = match kind {
             BlockTransactionsKind::Full => {
-                let txs = tx_range
-                    .clone()
-                    .map(|idx| {
-                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
-                        Some(from_recovered_with_block_context(
+                let txs: Vec<Transaction> = tx_range
+                    .into_iter()
+                    .enumerate()
+                    .map(|(pos, idx)| {
+                        let tx = self.tx(idx, state)?;
+                        Ok::<_, EthApiError>(from_recovered_with_block_context(
                             tx.into(),
-                            Some(block.hash().unwrap_or_default()),
-                            block.number(),
-                            U256::from(idx - tx_range.start),
+                            Some(block.header.hash()),
+                            block.number,
+                            pos as u64,
                         ))
                     })
-                    .collect::<Option<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Full(txs)
             }
             BlockTransactionsKind::Hashes => {
                 let hashes = tx_range
                     .into_iter()
                     .map(|idx| {
-                        let tx = self.transactions.get(&idx, state).unwrap_infallible()?;
-                        Some(*tx.signed_transaction.hash())
+                        let tx = self.tx(idx, state)?;
+                        Ok::<_, EthApiError>(*tx.signed_transaction.hash())
                     })
-                    .collect::<Option<Vec<_>>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Hashes(hashes)
             }
         };
-        Some(txs)
+        Ok(txs)
     }
 
-    fn get_block(
+    /// Gets a block requested by hash or number by an external caller.
+    fn get_maybe_synthetic_block_for_rpc(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         kind: BlockTransactionsKind,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<Block> {
-        let block = self.get_sealed_block_by_number(block_number, state)?;
-        let hash = block.hash().unwrap_or_default();
+    ) -> Result<Option<Block>, EthApiError> {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
+            return Ok(None);
+        };
+        match block {
+            MaybeSealedBlock::Sealed(sealed) => {
+                let block_size = sealed.rlp_size;
+                let transactions = self.get_block_transactions(&sealed, kind, state)?;
+                let header =
+                    Header::from_consensus(sealed.header, None, Some(U256::from(block_size)));
+                Ok(Some(Block {
+                    header,
+                    transactions,
+                    uncles: vec![],
+                    withdrawals: None,
+                }))
+            }
+            // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
+            MaybeSealedBlock::PendingSynthetic(block) | MaybeSealedBlock::PastSynthetic(block) => {
+                let (header, txs) = self.get_synthetic_block_contents_slow(block, state)?;
+                let txs = match kind {
+                    BlockTransactionsKind::Full => BlockTransactions::Full(
+                        txs.into_iter()
+                            .enumerate()
+                            .map(|(tx_idx, tx)| {
+                                from_recovered_with_block_context(
+                                    tx.into(),
+                                    Some(header.hash),
+                                    header.number,
+                                    tx_idx as u64,
+                                )
+                            })
+                            .collect(),
+                    ),
+                    BlockTransactionsKind::Hashes => BlockTransactions::Hashes(
+                        txs.into_iter()
+                            .map(|tx| *tx.signed_transaction.hash())
+                            .collect(),
+                    ),
+                };
+                Ok(Some(Block {
+                    header,
+                    transactions: txs,
+                    uncles: vec![],
+                    withdrawals: None,
+                }))
+            }
+        }
+    }
 
-        let transactions = self.get_block_transactions(&block, kind, state)?;
-        let header = Sealed::new_unchecked(block.header().clone(), hash);
-        let header = Header::from_consensus(header, None, None);
-
-        Some(Block {
-            header,
-            transactions,
-            ..Default::default()
-        })
+    /// Populates the header of a partial synthetic block and returns the transactions.
+    ///
+    /// This function has to fetch all the transactions and receipts, so it's relatively slow - avoid when possible.
+    pub fn get_synthetic_block_contents_slow(
+        &self,
+        block: SyntheticBlockWithoutRootsAndBloom,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<(Header, Vec<TxSignedAndRecovered>), EthApiError> {
+        let len = block.transactions.end - block.transactions.start;
+        let mut txs = Vec::with_capacity(len as usize);
+        let mut receipts = Vec::with_capacity(len as usize);
+        for tx_idx in block.transactions.clone() {
+            let tx = self.tx(tx_idx, state)?;
+            txs.push(tx);
+            let receipt = self.receipt(tx_idx, state).unwrap_or_else(|| panic!("Tx {tx_idx} exists but has no corresponding receipt. This is a bug, please report it."));
+            let receipt = receipt.0.receipt;
+            receipts.push(receipt);
+        }
+        let (synthetic_block, txs) = block.finish_and_seal(txs, &receipts);
+        let header = Header::from_consensus(
+            synthetic_block.header,
+            None,
+            Some(U256::from(synthetic_block.rlp_size)),
+        );
+        Ok((header, txs))
     }
 
     fn get_contract_code(
@@ -137,7 +277,7 @@ where
         let tx_number = self.tx_index(&hash, state)?;
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let index = U256::from(tx_number - block.transactions_start());
+        let index = tx_number - block.transactions_start();
         let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
         Some(tx)
     }
@@ -146,7 +286,7 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<TransactionReceipt> {
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let number = self.tx_index(&hash, state)?;
         self.get_receipt_by_index(number, state)
     }
@@ -155,163 +295,52 @@ where
         &self,
         number: u64,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<TransactionReceipt> {
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let receipt = self.receipt(number, state)?;
-        Some(build_rpc_receipt(block, tx, number, receipt))
+        let (receipt, time) = self.receipt(number, state)?;
+        Some(build_rpc_receipt(block, tx, number, receipt, time))
     }
 
     fn get_receipts(
         &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<Vec<TransactionReceipt>> {
-        let block = self.get_sealed_block_by_number(block_number, state)?;
-        let receipts = block
+    ) -> Result<
+        Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>,
+        EthApiError,
+    > {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
+            return Ok(None);
+        };
+        let Some(receipts) = block
             .tx_range()
             .map(|index| self.get_receipt_by_index(index, state))
-            .collect::<Option<Vec<_>>>()?;
-        Some(receipts)
-    }
-
-    fn trace_block_by_number(
-        &self,
-        block: BlockNumberOrTag,
-        opts: GethDebugTracingOptions,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<Vec<TraceResult>, EthApiError> {
-        let block_number = self.resolve_block_number(block, state);
-        // Get transaction and block data
-        let block = self.block(block_number, state)?;
-        let mut archival_state = self.archival_state_pre_block(block_number, state)?;
-
-        let block_env = self.block_env(&mut archival_state)?;
-
-        let cfg = self.cfg(&mut archival_state)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        // Replay previous transactions in the block
-        let mut evm_db = self.db(&mut archival_state);
-
-        let mut traces = vec![];
-        for tx_idx in block.transactions {
-            let tx = self
-                .transaction(tx_idx, state)
-                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-            let result = self.trace_transaction_inner(
-                &block_env,
-                replay_tx_env(&tx),
-                cfg_env.clone(),
-                &mut evm_db,
-                &opts,
-            )?;
-            traces.push(TraceResult::new_success(result, Some(*tx.hash())));
-        }
-        Ok(traces)
-    }
-
-    fn trace_transaction(
-        &self,
-        tx_hash: B256,
-        opts: GethDebugTracingOptions,
-        state: &mut ApiStateAccessor<S>,
-    ) -> Result<GethTrace, EthApiError> {
-        // Get transaction and block data
-        let traced_tx = self.tx(tx_hash, state)?;
-        let block = self.block(traced_tx.block_number, state)?;
-
-        let mut archival_state = self.archival_state_pre_block(traced_tx.block_number, state)?;
-
-        let block_env = self.block_env(&mut archival_state)?;
-
-        let cfg = self.cfg(&mut archival_state)?;
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
-
-        // Replay previous transactions in the block
-        let mut evm_db = self.db(&mut archival_state);
-
-        for tx_idx in block.transactions {
-            let tx = self
-                .transaction(tx_idx, state)
-                .ok_or_else(|| EthApiError::PrunedHistoryUnavailable)?;
-
-            // Skip the transaction we're tracing
-            if *tx.signed_transaction.hash() == tx_hash {
-                break;
-            }
-
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(EthApiError::from)?;
-        }
-
-        // Trace the target transaction
-        self.trace_transaction_inner(
-            &block_env,
-            replay_tx_env(&traced_tx),
-            cfg_env,
-            &mut evm_db,
-            &opts,
-        )
-    }
-
-    fn trace_transaction_inner(
-        &self,
-        block_env: &BlockEnv,
-        tx_env: TxEnv,
-        cfg: CfgEnv,
-        db: &mut EvmDb<ApiStateAccessor<S>, S>,
-        opts: &GethDebugTracingOptions,
-    ) -> Result<GethTrace, EthApiError> {
-        let GethDebugTracingOptions {
-            tracer,
-            tracer_config,
-            ..
-        } = opts;
-        if let Some(tracer) = tracer {
-            return match tracer {
-                GethDebugTracerType::BuiltInTracer(GethDebugBuiltInTracerType::CallTracer) => {
-                    let call_config = tracer_config
-                        .clone()
-                        .into_call_config()
-                        .map_err(|_| EthApiError::InvalidTracerConfig)?;
-
-                    let inspector_config =
-                        TracingInspectorConfig::from_geth_call_config(&call_config);
-                    let mut inspector = TracingInspector::new(inspector_config);
-
-                    let gas_limit = tx_env.gas_limit;
-                    let ExecResultAndState { result, state } =
-                        inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
-                    db.commit(state)?;
-
-                    inspector.set_transaction_gas_limit(gas_limit);
-                    let frame = inspector
-                        .geth_builder()
-                        .geth_call_traces(call_config, result.gas_used());
-
-                    return Ok(frame.into());
-                }
-                _ => Err(EthApiError::Unsupported("unsupported tracer")),
-            };
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Ok(None);
         };
-        Err(EthApiError::Unsupported("unsupported tracer"))
+        Ok(Some(receipts))
     }
 
     fn call(
         &self,
         request: TransactionRequest,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let block_env = self.resolve_block_env(block_number, state)?;
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
         let tx_env = prepare_call_env(&block_env, request.clone())?;
+        let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, cfg, Some(get_cfg_env_template()));
-        let evm_db: EvmDb<_, S> = self.db(state);
-
-        Ok(executor::transact(evm_db, &block_env, tx_env, cfg_env)?)
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        Ok(result)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.
@@ -320,36 +349,68 @@ where
         block_number: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<MaybeSealedBlock> {
+        // Check if the block is already sealed. Important: We must do this before checking the block env, because blocks are sealed in the finalize_hook.
+        // but the block env is set during the begin_rollup_block_hook.
+        // That means that if we call this function after the finalize hook but before the start of the next block, the "pending" block env corresponds to the same
+        // number and set of txs as the latest sealed block - in which case we want to return the sealed version of it rather than making up a synthetic one.
         let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
             return Some(MaybeSealedBlock::Sealed(block));
         }
 
-        let pending = self.pending_block(state);
-        if block_number == pending.header.number {
-            return Some(MaybeSealedBlock::Pending(pending));
+        let block_env = self.block_env(state).unwrap_infallible();
+        if block_env.number == block_number {
+            let Some(pending) = self.pending_block(Some(block_env), state) else {
+                return Some(MaybeSealedBlock::Sealed(self.latest_block(state)));
+            };
+            return Some(MaybeSealedBlock::PendingSynthetic(pending));
         }
 
         None
     }
 
-    /// Convert string to block nr.
-    pub fn str_to_block_nr(
+    fn block_tag_to_pending_or_block(
         &self,
-        block_number: Option<String>,
+        block: BlockNumberOrTag,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
-        let block_number_str = block_number.unwrap_or_else(|| "latest".into());
-
-        match block_number_str.as_str() {
-            "earliest" => PendingOrBlock::Number(*self.block_numbers(state).start()),
-            "latest" => PendingOrBlock::Number(*self.block_numbers(state).end()),
-            "pending" => PendingOrBlock::Pending,
-            number => match u64::from_str_radix(number.trim_start_matches("0x"), 16) {
-                Ok(nr) => PendingOrBlock::Number(nr),
-                Err(_) => PendingOrBlock::Invalid(block_number_str),
-            },
+        let block_numbers = self.block_numbers(state);
+        match block {
+            BlockNumberOrTag::Earliest => PendingOrBlock::Number(*block_numbers.start()),
+            // We treat latest and pending the same to avoid foundry issues
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => PendingOrBlock::Pending,
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                PendingOrBlock::Number(*block_numbers.end())
+            }
+            BlockNumberOrTag::Number(number) => PendingOrBlock::Number(number),
         }
+    }
+
+    fn block_id_to_pending_or_block(
+        &self,
+        block_id: BlockId,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<PendingOrBlock, EthApiError> {
+        Ok(match block_id {
+            BlockId::Number(tag) => self.block_tag_to_pending_or_block(tag, state),
+            BlockId::Hash(hash) => {
+                if let Some((block_number, last_tx_idx)) = parse_synthetic_block_hash(&hash.into())
+                {
+                    return Ok(PendingOrBlock::PastSynthetic {
+                        block_number,
+                        last_tx_idx,
+                    });
+                }
+                let Some(number) = self
+                    .block_hash_to_number
+                    .get(&hash.block_hash, state)
+                    .unwrap_infallible()
+                else {
+                    return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
+                };
+                PendingOrBlock::Number(number)
+            }
+        })
     }
 
     /// Converts BlockNumberOrTag into number.
@@ -361,56 +422,204 @@ where
         let block_numbers = self.block_numbers(state);
         let block_number = match block {
             BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                *block_numbers.end()
-            }
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
             BlockNumberOrTag::Number(nr) => nr,
-            BlockNumberOrTag::Pending => *block_numbers.end() + 1,
+            // We treat latest and pending the same to avoid foundry issues
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
+                if self.has_pending_block(state) {
+                    *block_numbers.end() + 1
+                } else {
+                    *block_numbers.end()
+                }
+            }
         };
         block_number
     }
 
-    /// Retrieves a sealed block by number.
-    pub fn get_sealed_block_by_number(
+    /// Retrieve a block by its id.
+    pub fn get_maybe_sealed_block_by_id(
         &self,
-        block_number: Option<String>,
+        block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
-    ) -> Option<MaybeSealedBlock> {
-        let pending_or_block_nr = self.str_to_block_nr(block_number, state);
+    ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
+        Ok(match block_id {
+            BlockId::Number(tag) => {
+                let pending_or_block = self.block_tag_to_pending_or_block(tag, state);
+                match pending_or_block {
+                    PendingOrBlock::Number(number) => self.get_maybe_sealed_block(number, state),
+                    PendingOrBlock::Pending => match self.pending_block(None, state) {
+                        Some(pending) => Some(MaybeSealedBlock::PendingSynthetic(pending)),
+                        None => {
+                            // pending_block() returns None when there are no pending txs, and so fall back to the latest sealed block in those cases
+                            return Ok(Some(MaybeSealedBlock::Sealed(self.latest_block(state))));
+                        }
+                    },
+                    PendingOrBlock::PastSynthetic { .. } => {
+                        unreachable!()
+                    }
+                }
+            }
+            BlockId::Hash(hash) => {
+                // If the hash is synthetic, handle that special case
+                if let Some((block_number, num_txs)) = parse_synthetic_block_hash(&hash.into()) {
+                    // Prerequisite: Check that the synthetic block exists and is recent enough to still be saved.
+                    // This ensures that any calls to "getBlockByHash" will succeed only if "eth_call" would succeed given the same hash.
+                    {
+                        let Some(cache) = SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH.get() else {
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
+                        };
+                        let lock = cache
+                            .read()
+                            .expect("Failed to read from synthetic blocks cache");
+                        if lock.get_state_by_hash::<S>(hash.into()).is_none() {
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
+                        }
+                    }
 
-        match pending_or_block_nr {
-            PendingOrBlock::Number(nr) => self.get_maybe_sealed_block(nr, state),
-            PendingOrBlock::Pending => {
-                let pending_block = self.pending_block(state);
-                Some(MaybeSealedBlock::Pending(pending_block))
+                    // Case 1: The synthetic block has the same block number as the pending block; that's a harder special case where we need to populate its fields from the pending block
+                    let block_env = self.block_env(state).unwrap_infallible();
+                    if block_env.number == block_number {
+                        let Some(mut newest_pending_block) =
+                            self.pending_block(Some(block_env), state)
+                        else {
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
+                        };
+                        // Check that the number of txs requested is no more than the number of txs in the pending block. If not, this block doesn't exist - return early
+                        if num_txs as u64 > newest_pending_block.num_transactions() {
+                            return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
+                        }
+                        // Check if the number of txs requested is exactly the same as the number of txs in the pending block. If so, this is the pending block! return it
+                        if num_txs as u64 == newest_pending_block.num_transactions() {
+                            return Ok(Some(MaybeSealedBlock::PendingSynthetic(
+                                newest_pending_block,
+                            )));
+                        }
+                        // Otherwise, this is a the same as the pending block but with fewer txs - truncate the pending block to the number of txs requested
+                        newest_pending_block.transactions.end =
+                            newest_pending_block.transactions.start + num_txs as u64;
+                        return Ok(Some(MaybeSealedBlock::PendingSynthetic(
+                            newest_pending_block,
+                        )));
+                    }
+
+                    // Case 2: The synthetic block is not pending. We can just populate the fields from the sealed block at that height if one exists
+                    return Ok(Some(MaybeSealedBlock::PastSynthetic(
+                        self.past_synthetic_block(block_number, num_txs, state)?,
+                    )));
+                }
+                self.block_hash_to_number
+                    .get(&hash.block_hash, state)
+                    .unwrap_infallible()
+                    .and_then(|number| self.get_maybe_sealed_block(number, state))
             }
-            PendingOrBlock::Invalid(invalid) => {
-                tracing::error!(invalid, "Invalid block number");
-                None
-            }
-        }
+        })
     }
 
-    /// Retrieves the pending block.
-    pub fn pending_block(&self, state: &mut ApiStateAccessor<S>) -> crate::Block {
+    /// Retrieves the latest block.
+    pub fn latest_block(&self, state: &mut ApiStateAccessor<S>) -> SealedBlock {
+        let block_numbers = self.block_numbers(state);
+        self.blocks
+            .get(block_numbers.end(), state)
+            .unwrap_infallible()
+            .expect("Block should exist as index is inside block_numbers")
+    }
+
+    /// Retrieves the pending block. We maintain the invariant that the pending block always has number
+    /// latest_sealed_block.number + 1. (Both are updated during the finalize_hook, so they're atomic). Returns None if there are no txs in the pending block.
+    /// In that case, we should use the latest sealed block instead.
+    ///
+    /// Note that values in the block_env (including the block number there!) are updated during the begin_rollup_block_hook, so the values here may be stale
+    /// if this function is called while no rollup block is in progress. In that case, the number of transactions will be zero.
+    ///
+    /// This function also caches the API state at the time this pending block was created in `SYNTHETIC_BLOCKS_CACHE_BY_HASH`. This allows recreate the state
+    /// as of the synthetic block as long as it remains in cache, which would otherwise be impossible. See the docs on `SYNTHETIC_BLOCKS_CACHE_BY_HASH` for more details
+    pub fn pending_block(
+        &self,
+        block_env: Option<BlockEnv>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<SyntheticBlockWithoutRootsAndBloom> {
+        self.maybe_pending_block(false, block_env, state)
+    }
+
+    // Populates a synthetic block from a sealed block.
+    fn past_synthetic_block(
+        &self,
+        block_number: u64,
+        num_txs: u32,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<SyntheticBlockWithoutRootsAndBloom, EthApiError> {
+        // Populate the header from the sealed block
+        let Some(block) = self.blocks.get(&block_number, state).unwrap_infallible() else {
+            return Err(EthApiError::HeaderNotFound(BlockId::Hash(
+                synthetic_block_hash_for(block_number, num_txs).into(),
+            )));
+        };
+
+        if block.transactions().end - block.transactions().start < num_txs as u64 {
+            return Err(EthApiError::HeaderNotFound(BlockId::Hash(
+                synthetic_block_hash_for(block_number, num_txs).into(),
+            )));
+        }
+        let first_tx_index = block.transactions().start;
+        let last_tx_index = first_tx_index
+            .checked_add(num_txs as u64)
+            .expect("Number of transactions should fit in u64");
+
+        let header = alloy_consensus::Header {
+            parent_hash: block.header.parent_hash(),
+            number: block_number,
+            timestamp: block.header.timestamp,
+            excess_blob_gas: block.header.excess_blob_gas,
+            base_fee_per_gas: block.header.base_fee_per_gas,
+            gas_limit: block.header.gas_limit,
+
+            // Values that will be filled in later
+            gas_used: 0,
+            logs_bloom: Bloom::default(),
+            state_root: EMPTY_ROOT_HASH,
+            transactions_root: EMPTY_ROOT_HASH,
+            receipts_root: EMPTY_ROOT_HASH,
+
+            // Values that never need to be initailized
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            beneficiary: Address::ZERO,
+            difficulty: U256::ZERO,
+            extra_data: Bytes::default(),
+            mix_hash: B256::ZERO,
+            nonce: B64::ZERO,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            parent_beacon_block_root: None,
+            requests_hash: None,
+        };
+
+        let block = SyntheticBlockWithoutRootsAndBloom::new(header, first_tx_index..last_tx_index);
+
+        Ok(block)
+    }
+
+    fn maybe_pending_block(
+        &self,
+        allow_empty: bool,
+        block_env: Option<BlockEnv>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<SyntheticBlockWithoutRootsAndBloom> {
         let block_numbers = self.block_numbers(state);
 
         let head_block = self
             .blocks
             .get(block_numbers.end(), state)
             .unwrap_infallible()
-            // This is justified, as we just fetched `block_numbers`.
-            .expect("The impossible happened: parent_block was not set.");
-
-        let current_block_env = self
-            .block_env
-            .get(state)
-            .unwrap_infallible()
-            .unwrap_or_default();
+            .expect("Block should exist as index is inside block_numbers");
+        let current_block_env =
+            block_env.unwrap_or_else(|| self.block_env(state).unwrap_infallible());
 
         assert_eq!(&head_block.header.number, block_numbers.end());
 
         let pending_transactions_len = self.pending_transactions.len(state).unwrap_infallible();
+        if pending_transactions_len == 0 && !allow_empty {
+            return None;
+        }
 
         let start = head_block.transactions.end;
         let end = start + pending_transactions_len;
@@ -420,94 +629,113 @@ where
         let header = alloy_consensus::Header {
             parent_hash: head_block.header.seal(),
             number: pending_block_number,
-            timestamp: current_block_env
-                .timestamp
-                .try_into()
-                .expect("The impossible happened: timestamp overflow u64"),
+            timestamp: current_block_env.timestamp.to::<u64>(),
             excess_blob_gas: current_block_env
                 .blob_excess_gas_and_price
                 .map(|blob_gas| blob_gas.excess_blob_gas),
             base_fee_per_gas: Some(current_block_env.basefee),
+            gas_limit: current_block_env.gas_limit,
+            // Values that will be filled in later
+            gas_used: 0,
+            logs_bloom: Bloom::default(),
+            state_root: EMPTY_ROOT_HASH,
+            transactions_root: EMPTY_ROOT_HASH,
+            receipts_root: EMPTY_ROOT_HASH,
 
-            ..Default::default()
+            // Values that never need to be initailized
+            ommers_hash: EMPTY_OMMER_ROOT_HASH,
+            beneficiary: Address::ZERO,
+            difficulty: U256::ZERO,
+            extra_data: Bytes::default(),
+            mix_hash: B256::ZERO,
+            nonce: B64::ZERO,
+            withdrawals_root: None,
+            blob_gas_used: None,
+            parent_beacon_block_root: None,
+            requests_hash: None,
         };
 
-        crate::Block {
-            header,
-            transactions: start..end,
+        let block = SyntheticBlockWithoutRootsAndBloom::new(header, start..end);
+        #[cfg(feature = "native")]
+        {
+            let state_by_hash =
+                SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH.get_or_init(|| RwLock::new(Default::default()));
+            // TODO: Optimization, lower priority - move the rwlock inside the cache and "read" to check if the block is already in the cache before grabbing the write lock.
+            state_by_hash
+                .write()
+                .expect("Failed to write to synthetic blocks cache")
+                .insert_if_absent(&block, state);
+        }
+
+        Some(block)
+    }
+
+    /// Returns the header of the newest synthetic block, even if it's empty.
+    pub fn get_newest_synthetic_header(
+        &self,
+        state: &mut ApiStateAccessor<S>,
+    ) -> SyntheticBlockWithoutRootsAndBloom {
+        self.maybe_pending_block(true, None, state)
+            .expect("Maybe pending block should never return None if allow_empty is true")
+    }
+
+    fn resolve_state_for_block_id<'a>(
+        &self,
+        block_id: Option<BlockId>,
+        state: &'a mut ApiStateAccessor<S>,
+    ) -> Result<MaybeArchivalState<'a, S>, EthApiError> {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let pending_or_block_nr = self.block_id_to_pending_or_block(block_id, state)?;
+        match pending_or_block_nr {
+            PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
+            PendingOrBlock::Number(number) => {
+                if number == state.rollup_height_to_access().get()
+                    || (number == state.rollup_height_to_access().get() + 1)
+                {
+                    return Ok(MaybeArchivalState::Current(state));
+                }
+                let archival_state = state.get_archival_state(RollupHeight::new(number))?;
+                Ok(MaybeArchivalState::Archival(archival_state.into()))
+            }
+            PendingOrBlock::PastSynthetic {
+                block_number,
+                last_tx_idx,
+            } => {
+                let hash = synthetic_block_hash_for(block_number, last_tx_idx);
+                let Some(cache) = SAVED_SYNTHETIC_BLOCK_STATE_BY_HASH.get() else {
+                    return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                };
+                let lock = cache
+                    .read()
+                    .expect("Failed to read from synthetic blocks cache");
+                let Some(state) = lock
+                    .get_state_by_hash(hash)
+                    .map(|state| state.clone_without_local_writes())
+                else {
+                    return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash.into())));
+                };
+                Ok(MaybeArchivalState::Synthetic(Box::new(state)))
+            }
         }
     }
 
-    fn resolve_state<'a>(
+    fn resolve_block_env_for_call(
         &self,
-        block_number: Option<String>,
-        state: &'a mut ApiStateAccessor<S>,
-    ) -> RpcResult<MaybeArchivalState<'a, S>> {
-        let state = match block_number {
-            None => MaybeArchivalState::Current(state),
-            Some(number) if number == "latest" => MaybeArchivalState::Current(state),
-            _ => {
-                let pending_or_block_nr = self.str_to_block_nr(block_number, state);
-                match pending_or_block_nr {
-                    PendingOrBlock::Pending => MaybeArchivalState::Current(state),
-                    PendingOrBlock::Number(number) => {
-                        let archival_state = state
-                            .get_archival_state(RollupHeight::new(number))
-                            .map_err(into_rpc_error)?;
-                        MaybeArchivalState::Archival(archival_state.into())
-                    }
-                    PendingOrBlock::Invalid(_) => {
-                        return Err(EthApiError::UnknownBlockOrTxIndex.into());
-                    }
-                }
-            }
-        };
-        Ok(state)
-    }
-
-    fn resolve_block_env(
-        &self,
-        block_number: Option<String>,
+        block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<BlockEnv, EthApiError> {
-        let maybe_blcok = self
-            .get_sealed_block_by_number(block_number, state)
-            .ok_or(EthApiError::UnknownBlockOrTxIndex)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let maybe_block = self
+            .get_maybe_sealed_block_by_id(block_id, state)?
+            .ok_or(EthApiError::UnknownBlock)?;
 
-        Ok(match maybe_blcok {
-            MaybeSealedBlock::Pending(_) => self
-                .block_env
-                .get(state)
-                .unwrap_infallible()
-                .expect("The impossible happened: block_env is not set."),
+        let mut block_env = match maybe_block {
+            MaybeSealedBlock::PendingSynthetic(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
-        })
-    }
-}
-
-use std::ops::{Deref, DerefMut};
-
-enum MaybeArchivalState<'a, S: Spec> {
-    Current(&'a mut ApiStateAccessor<S>),
-    Archival(Box<ApiStateAccessor<S>>),
-}
-
-impl<'a, S: Spec> Deref for MaybeArchivalState<'a, S> {
-    type Target = ApiStateAccessor<S>;
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Self::Current(a) => a,
-            Self::Archival(a) => a,
-        }
-    }
-}
-
-impl<'a, S: Spec> DerefMut for MaybeArchivalState<'a, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        match self {
-            Self::Current(a) => a,
-            Self::Archival(a) => a,
-        }
+            MaybeSealedBlock::PastSynthetic(synthetic_block) => BlockEnv::from(synthetic_block),
+        };
+        block_env.basefee = 0;
+        Ok(block_env)
     }
 }
 
@@ -520,6 +748,7 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env.disable_base_fee = true;
     cfg_env.chain_id = config_value!("CHAIN_ID");
     cfg_env.limit_contract_code_size = None;
+    cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
     cfg_env
 }
 
@@ -529,34 +758,38 @@ pub(crate) fn build_rpc_receipt(
     tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
-) -> TransactionReceipt {
+    time: Time,
+) -> TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>> {
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
 
     let block_hash = block.hash();
     let block_number = Some(block.number());
-    // Safety: The transaction cannot have a lower number than the block start
     let transaction_index = tx_number
-        .checked_sub(block.transactions_start())
-        .expect("The impossible happened: overflow while subtracting block start from tx number.");
+        .checked_sub(block.tx_range().start)
+        .expect("tx_number is within block.tx_range()");
 
     let transaction_hash = receipt.transaction_hash;
     let logs_bloom = receipt.receipt.bloom();
 
-    let logs: Vec<Log> = receipt
+    let time = time.as_millis().try_into().unwrap_or_default();
+    let logs: Vec<LogWithExecutionTimestamp> = receipt
         .receipt
         .logs
         .into_iter()
         .enumerate()
-        .map(|(tx_log_idx, log)| Log {
-            inner: log,
-            block_hash,
-            block_number,
-            block_timestamp: Some(block.timestamp()),
-            transaction_hash: Some(transaction_hash),
-            transaction_index: Some(transaction_index),
-            log_index: Some(receipt.log_index_start + tx_log_idx as u64),
-            removed: false,
+        .map(|(tx_log_idx, log)| LogWithExecutionTimestamp {
+            log: Log {
+                inner: log,
+                block_hash,
+                block_number,
+                block_timestamp: Some(block.timestamp()),
+                transaction_hash: Some(transaction_hash),
+                transaction_index: Some(transaction_index),
+                log_index: Some(receipt.log_index_start + tx_log_idx as u64),
+                removed: false,
+            },
+            time_executed_ms: time,
         })
         .collect();
 
@@ -578,7 +811,7 @@ pub(crate) fn build_rpc_receipt(
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
-        effective_gas_price: 0,
+        effective_gas_price: block.maybe_partial_header().base_fee_per_gas.unwrap_or(0) as u128,
         blob_gas_used: None,
         blob_gas_price: None,
         from,

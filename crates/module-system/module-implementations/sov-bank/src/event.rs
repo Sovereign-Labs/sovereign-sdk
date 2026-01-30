@@ -33,6 +33,9 @@ pub enum Event<S: Spec> {
         to: TokenHolder<S>,
         /// The tokens transferred.
         coins: Coins,
+        /// The message included with the transfer
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        memo: Option<String>,
     },
     /// Some tokens were burned
     TokenBurned {

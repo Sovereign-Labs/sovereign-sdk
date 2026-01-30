@@ -1,10 +1,13 @@
 use std::collections::VecDeque;
 
-use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet};
+use anyhow::Result;
+use sov_modules_api::sequencing_metadata::HDTimestamp;
+use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
+use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tracing::{error, warn};
+use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
@@ -12,8 +15,8 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
-    exit_rollup, PreferredBlobSender, PreferredSequencerDb, PreferredSequencerReadBatch,
-    PreferredSequencerReadBlob, RecoveryStrategy, RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
+    exit_rollup, PreferredBlobSender, PreferredSequencerDb, ReadBatch, ReadBlob, RecoveryStrategy,
+    RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
 };
 
 /// A task that runs in the background and handles side effects of accepted transactions.
@@ -23,7 +26,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    pub checkpoint_sender: watch::Sender<StateCheckpoint<S>>,
+    pub checkpoint_sender: watch::Sender<std::sync::Arc<ConcurrentStateCheckpoint<S>>>,
     pub blob_sender: PreferredBlobSender<Da>,
     pub db: PreferredSequencerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
@@ -40,26 +43,23 @@ where
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
-        if self.checkpoint_sender.send(checkpoint).is_err() {
-            tracing::debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
+        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        if self
+            .checkpoint_sender
+            .send(Arc::new(concurrent_checkpoint))
+            .is_err()
+        {
+            debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
         }
-    }
-
-    /// Applies the changes to the current [`StateCheckpoint`].
-    #[tracing::instrument(skip_all, level = "trace")]
-    fn update_api_state_with_changes(&self, changes: TxChangeSet) {
-        self.checkpoint_sender.send_modify(|checkpoint| {
-            checkpoint.apply_tx_changes(changes);
-        });
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
     async fn close_and_publish_current_batch(
         &mut self,
         checkpoint: StateCheckpoint<S>,
-        batch: PreferredSequencerReadBatch,
+        batch: ReadBatch,
         info_to_store: BatchToStore,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         self.db.terminate_batch(info_to_store).await?;
         self.update_api_state(checkpoint);
 
@@ -74,9 +74,9 @@ where
 
     async fn trigger_recovery(
         &mut self,
-        batches_to_flush: Vec<PreferredSequencerReadBlob>,
+        batches_to_flush: Vec<ReadBlob>,
         recovery_strategy: RecoveryStrategy,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         if !batches_to_flush.is_empty() {
             match recovery_strategy {
                 RecoveryStrategy::TryToSave => {
@@ -102,7 +102,7 @@ where
     async fn handle_executor_event(
         &mut self,
         event_queue: &mut VecDeque<ExecutorEvent<S, Rt>>,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         let queue_size_before = event_queue.len();
         let next_event = event_queue
             .pop_front()
@@ -114,37 +114,48 @@ where
                 let sequence_number = contents.sequence_number;
                 let tx_idx_within_batch = contents.tx_idx_within_batch;
                 let txs_to_insert = drain_consecutive_accepted_txs(contents, event_queue);
-                if tracing::enabled!(tracing::Level::DEBUG) {
+                if enabled!(Level::DEBUG) {
                     for tx in txs_to_insert.iter() {
-                        tracing::debug!(tx_hash = %tx.accepted_tx.tx_hash, "Transaction was accepted by the sequencer");
+                        debug!(tx_hash = %tx.accepted_tx.tx_hash, "Transaction was accepted by the sequencer");
                     }
                 }
+                let txs = txs_to_insert
+                    .iter()
+                    .map(|contents| {
+                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone().into());
+                        tx.set_sequencing_metadata(&HDTimestamp::now());
+                        (tx, contents.accepted_tx.tx_hash)
+                    })
+                    .collect();
                 self.db
-                    .bulk_insert_txs(
-                        txs_to_insert
-                            .iter()
-                            .map(|contents| {
-                                (
-                                    contents.accepted_tx.tx.clone(),
-                                    contents.accepted_tx.tx_hash,
-                                )
-                            })
-                            .collect(),
-                        sequence_number,
-                        tx_idx_within_batch,
-                    )
+                    .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)
                     .await?;
 
+                let checkpoint_ref = self.checkpoint_sender.borrow().clone();
+
+                let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
                     self.transaction_cache
                         .insert(contents.accepted_tx.clone())
                         .await;
                     // If the receiver is no longer listening, just don't send the confirmation.
-                    self.update_api_state_with_changes(contents.tx_changes);
-                    let _ = contents.oneshot_sender.send(contents.accepted_tx);
+                    // Apply all updates in a single batch
+                    checkpoint_ref.apply_tx_changes(contents.tx_changes);
+                    oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
+                }
+                // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
+                // relying on change notifications get one. Note, however, that change notifications are not in sync with the actual changes.
+                self.checkpoint_sender.send_modify(|_| {});
+                // Send tx confirmations after API state is updated
+                for (oneshot, tx) in oneshot_and_txs {
+                    let _ = oneshot.send(tx);
                 }
             }
-            ExecutorEvent::CloseBatch(batch, checkpoint) => {
+            ExecutorEvent::CloseBatch {
+                batch,
+                checkpoint,
+                forced_txs,
+            } => {
                 let info_to_store = BatchToStore {
                     blob_id: batch.blob_id,
                     sequence_number: batch.sequence_number,
@@ -153,6 +164,9 @@ where
                 };
                 self.close_and_publish_current_batch(checkpoint, batch, info_to_store)
                     .await?;
+                for tx in forced_txs {
+                    self.transaction_cache.insert(tx).await;
+                }
             }
             ExecutorEvent::StartBatch {
                 visible_slot_number_after_increase,
@@ -246,8 +260,8 @@ where
 
             while !event_queue.is_empty() {
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
-                    tracing::error!("Error handling executor event: {:?}", e);
-                    // If we've arleady started shutting down, this might fail - but then we're happy.
+                    tracing::error!(error = ?e, "Error handling executor event");
+                    // If we've already started shutting down, this might fail - but then we're happy.
                     let _ = self.shutdown_sender.send(());
                     break;
                 }
@@ -285,7 +299,9 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::{ApiTxEffect, FullyBakedTx, Gas, SuccessfulTxContents, TxHash};
+    use sov_modules_api::{
+        ApiTxEffect, FullyBakedTx, Gas, SuccessfulTxContents, TxChangeSet, TxHash,
+    };
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
     use tokio::sync::oneshot;
 

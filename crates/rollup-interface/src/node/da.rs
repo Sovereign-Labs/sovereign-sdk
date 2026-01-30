@@ -8,7 +8,6 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
-use tracing::error;
 
 use crate::common::HexHash;
 use crate::da::{BlockHeaderTrait, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs, Time};
@@ -69,7 +68,7 @@ pub enum MaybeRetryable<E> {
     Transient(E),
 }
 
-impl<E: std::fmt::Display> MaybeRetryable<E> {
+impl<E: std::fmt::Debug> MaybeRetryable<E> {
     fn is_retryable(&self) -> bool {
         matches!(self, Self::Transient(_))
     }
@@ -126,16 +125,11 @@ pub trait DaService: Clone + Send + Sync + 'static {
     /// The error type for fallible methods.
     type Error: Debug + Send + Sync + Display;
 
-    /// Subsequent calls of [`DaService::send_transaction`] guarantee that the
-    /// transactions are published and land in the DA layer in the same order as
-    /// the method calls.
-    const GUARANTEES_TRANSACTION_ORDERING: bool = false;
-
-    /// Fetch the block at the given height, waiting for one to be mined if necessary.
+    /// Fetch the block at the given height, **waiting for one to be mined** if necessary.
     ///
     /// The returned block may not be final, and can be reverted without a consensus violation.
     /// Calls to this method for the same height are allowed to return different results.
-    /// Should always returns the block at that height on the best fork.
+    /// Should always return the block at that height on the best fork.
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
 
     /// Similar to [`DaService::get_block_at`], but only returns the block header and not the whole block.
@@ -250,8 +244,14 @@ pub trait DaService: Clone + Send + Sync + 'static {
         None
     }
 
-    /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`]
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address;
+    /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`].
+    /// If `None` means that instance of DaService is not capable of sending blobs and can be used only in node mode.
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address>;
+
+    /// Method that should give an approximate block time of this DaService.
+    /// It helps other components to better arrange polling, timeouts or other operations.
+    /// If unclear it is better to return lower value.
+    async fn get_approximate_block_time(&self) -> std::time::Duration;
 }
 
 /// Retry the given async function with the given backoff policy.
@@ -263,12 +263,12 @@ pub async fn run_maybe_retryable_async_fn_with_retries<F, Fut, T, E>(
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = Result<T, MaybeRetryable<E>>>,
-    E: std::fmt::Display,
+    E: std::fmt::Debug,
 {
     fxn.retry(backoff_policy)
         .notify(|err: &MaybeRetryable<E>, dur: Duration| {
             tracing::warn!(
-                method_name = da_method_name, error = %err, duration = ?dur,
+                method_name = da_method_name, error = ?err, duration = ?dur,
                 "Error in DA Service, will retry in specified duration."
             );
         })

@@ -4,16 +4,17 @@ use alloy_primitives::{Bytes, TxKind};
 use revm::context::result::ExecutionResult;
 use revm::context::{BlockEnv, CfgEnv};
 use sov_evm::{convert_to_tx_signed, create_tx_env, executor, EthereumAuthenticator, Evm, SpecId};
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
-use sov_test_utils::{LegacySimpleStorage, TransactionType};
+use sov_test_utils::TransactionType;
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};
 
 #[test]
 fn test_invalid_contract_execution() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
     let tx_request = TypedTransaction::Eip1559(TxEip1559 {
@@ -57,7 +58,7 @@ fn test_invalid_contract_execution() {
 
 #[test]
 fn test_get_empty_code() {
-    let (runner, account, _) = setup();
+    let (runner, account, _, _) = setup();
     let address_without_code = account.address();
 
     runner.query_visible_state(|state| {

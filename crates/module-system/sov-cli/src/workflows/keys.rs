@@ -91,9 +91,7 @@ impl<S: sov_modules_api::Spec> KeyWorkflow<S> {
                     let identifier = if let Some(nickname) = nickname.clone() {
                         KeyIdentifier::ByNickname { nickname }
                     } else {
-                        KeyIdentifier::ByAddress {
-                            address: address.clone(),
-                        }
+                        KeyIdentifier::ByAddress { address }
                     };
                     if wallet_state.addresses.get_address(&identifier).is_some() {
                         tracing::info!(
@@ -105,7 +103,7 @@ impl<S: sov_modules_api::Spec> KeyWorkflow<S> {
                 }
                 wallet_state
                     .addresses
-                    .add(address.clone(), nickname, public_key, path)?;
+                    .add(address, nickname, public_key, path)?;
                 tracing::info!("Imported key pair. address: {}", address);
             }
             KeyWorkflow::Show { identifier } => {
@@ -166,14 +164,14 @@ where
     let keys = <S::CryptoSpec as CryptoSpec>::PrivateKey::generate();
     let key_and_address = PrivateKeyAndAddress::<S>::from_key(keys);
     let public_key = key_and_address.private_key.pub_key();
-    let address = key_and_address.address.clone();
+    let address = key_and_address.address;
     let key_path = app_dir.as_ref().join(format!("{address}.json"));
     // First try to serialize, before making anything dirty
     let serialized_key = serde_json::to_string(&key_and_address)?;
     // Trying to add key state
     wallet_state
         .addresses
-        .add(address.clone(), nickname, public_key, key_path.clone())?;
+        .add(address, nickname, public_key, key_path.clone())?;
     tracing::info!(
         %address,
         path = %key_path.display(),

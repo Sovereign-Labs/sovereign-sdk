@@ -1,20 +1,41 @@
+#[cfg(test)]
+mod tests;
+
+use crate::preferred::db::FailedOperation;
+use anyhow::{anyhow, Result};
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
+use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
+use crate::preferred::db::DbError;
+use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
+use anyhow::Context;
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::{FullyBakedTx, TxHash};
 use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
+use time::OffsetDateTime;
 
-use super::{DbSnapshotData, PreferredSequencerDbBackend, PreferredSequencerReadBlob, StoredBlob};
-use crate::preferred::db::{BatchToStore, InProgressBatch};
+/// The leader timeout used for leader election.
+pub(crate) const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+
+#[derive(Debug, FromRow, PartialEq)]
+pub(crate) struct SequencerLeader {
+    pub(crate) node_id: String,
+    pub(crate) last_updated: OffsetDateTime,
+}
 
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
+    node_id: String,
+    pub(crate) node_address: String,
 }
 
 // We need a macro to get around lifetime issues with async functions. Otherwise, Rust complains about FnMut
@@ -45,7 +66,40 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    pub async fn connect(connection_string: &str) -> anyhow::Result<Self> {
+    /// Connects to Postgres and attempts to acquire leadership.
+    /// Returns the backend and optionally the leader info if this node became leader.
+    /// The node is always registered in the nodes table regardless of leadership outcome.
+    pub async fn connect(
+        config: &PostgresConfig,
+        bind_addr: SocketAddr,
+    ) -> Result<(Self, Option<SequencerLeader>)> {
+        // Compute node address for registration
+        let node_address = node_address(bind_addr)?;
+
+        let backend = Self::connect_internal(config, node_address).await?;
+
+        let maybe_leader = backend
+            .try_update_leader_and_register_node(LEADER_TIMEOUT)
+            .await?;
+
+        Ok((backend, maybe_leader))
+    }
+
+    /// Connects to Postgres and registers this node without attempting leader election.
+    /// Used by Replica nodes that need to be visible in the cluster but should never
+    /// become leader.
+    pub async fn connect_as_replica(
+        config: &PostgresConfig,
+        bind_addr: SocketAddr,
+    ) -> Result<Self> {
+        let node_address = node_address(bind_addr)?;
+        let backend = Self::connect_internal(config, node_address).await?;
+        backend.upsert_node_registration_max_timestamp().await?;
+        Ok(backend)
+    }
+
+    async fn connect_internal(config: &PostgresConfig, node_address: String) -> Result<Self> {
+        let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
         // So total runtime is ~400 ms of sleeping. If we also account for 50ms latency on each roundtrip, we get about 800ms total time
@@ -71,6 +125,8 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
+            node_id: config.node_id.clone(),
+            node_address,
         })
     }
 
@@ -80,7 +136,7 @@ impl PostgresBackend {
         stored_blob: StoredBlob,
         connection: &mut PgConnection,
         with_retries: bool,
-    ) -> anyhow::Result<PreferredSequencerReadBlob<Inner>> {
+    ) -> Result<ReadBlob<Inner>> {
         let backoff_policy = self.maybe_retry_policy(with_retries).await;
         match stored_blob {
             StoredBlob::Batch {
@@ -103,13 +159,17 @@ impl PostgresBackend {
                     .into_iter()
                     .map(|bytes| {
                         Ok(TxHash::new(bytes.try_into().map_err(|err| {
-                            anyhow::anyhow!("Invalid database data for tx hash; check your database integrity: {err:?}")
+                            anyhow!("Invalid database data for tx hash; check your database integrity: {err:?}")
                         })?))
                     })
-                    .collect::<anyhow::Result<Vec<_>>>()?;
-                let txs = txs.into_iter().map(FullyBakedTx::new).collect::<Vec<_>>();
+                    .collect::<Result<Vec<_>>>()?;
+                // Deserialize the full FullyBakedTx (including sequencing_data)
+                let txs = txs
+                    .into_iter()
+                    .map(|data| borsh::from_slice::<FullyBakedTx>(&data))
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                Ok(PreferredSequencerReadBlob::Batch(
+                Ok(ReadBlob::Batch(
                     InProgressBatch {
                         sequence_number,
                         visible_slot_number_after_increase,
@@ -121,7 +181,7 @@ impl PostgresBackend {
                     .into(),
                 ))
             }
-            StoredBlob::Proof { data, blob_id } => Ok(PreferredSequencerReadBlob::Proof {
+            StoredBlob::Proof { data, blob_id } => Ok(ReadBlob::Proof {
                 sequence_number,
                 blob_id,
                 data,
@@ -140,7 +200,7 @@ impl PostgresBackend {
         &self,
         connection: &mut PgConnection,
         with_retries: bool,
-    ) -> anyhow::Result<Option<InProgressBatch>> {
+    ) -> Result<Option<InProgressBatch>> {
         let backoff_policy = self.maybe_retry_policy(with_retries).await;
         let Some((sequence_number, stored_blob_serialized)): Option<(i64, Vec<u8>)> = run_with_retries!(
             &backoff_policy,
@@ -161,16 +221,23 @@ impl PostgresBackend {
             .read_blob(sequence_number, stored_blob, connection, true)
             .await?
         {
-            PreferredSequencerReadBlob::Batch(batch) => Ok(Some(batch)),
-            PreferredSequencerReadBlob::Proof { .. } => panic!(
+            ReadBlob::Batch(batch) => Ok(Some(batch)),
+            ReadBlob::Proof { .. } => panic!(
                 "Expected a batch blob, but got a proof blob. This is a bug, please report it"
             ),
         }
     }
     /// Read all the current data as a single transaction. We have to attempt the whole transaction atomically,
     /// which is why this is wrapped in a helper function and any nested helpers have their retries disabled.
-    async fn current_data_transaction(&self) -> anyhow::Result<DbSnapshotData> {
+    async fn current_data_transaction(&self) -> Result<DbReadOutcome<SnapshotData>> {
         let mut tx = self.pool.begin().await?;
+        let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
+
+        if !self.is_leader(&maybe_leader) {
+            return Ok(DbReadOutcome::AbortedBecauseReplica {
+                db_leader: maybe_leader,
+            });
+        }
 
         let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
             sqlx::query_as::<Postgres, _>(
@@ -196,16 +263,168 @@ impl PostgresBackend {
 
         tx.commit().await?;
 
-        Ok(DbSnapshotData {
+        Ok(DbReadOutcome::Success(SnapshotData {
             completed_blobs,
             in_progress_batch,
-        })
+        }))
+    }
+
+    /// Attempts to acquire or refresh leadership and register the node in the nodes table atomically.
+    ///
+    /// Returns `Some(leader)` if leadership was acquired (this node became leader, refreshed its
+    /// leadership, or took over from a timed-out leader). Returns `None` if another node is
+    /// the active leader and hasn't timed out yet. The node is always registered regardless.
+    pub(crate) async fn try_update_leader_and_register_node(
+        &self,
+        leader_timeout: Duration,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        run_with_retries!(
+            &self.backoff_policy,
+            self.try_update_leader_and_register_node_in_tx(leader_timeout),
+            "postgres_db_backend_try_update_leader_and_register_node"
+        )
+    }
+
+    async fn try_update_leader_and_register_node_in_tx(
+        &self,
+        leader_timeout: Duration,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
+        let result = self
+            .try_update_leader_inner(&mut tx, leader_timeout)
+            .await?;
+        self.upsert_node_registration_inner(&mut tx).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    async fn try_update_leader_inner(
+        &self,
+        conn: &mut PgConnection,
+        leader_timeout: Duration,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let leader_timeout: i64 = leader_timeout
+            .as_millis()
+            .try_into()
+            // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
+            .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
+
+        let res = sqlx::query_as::<_, SequencerLeader>(
+            "WITH ts AS (SELECT NOW() as current_time)
+            INSERT INTO sequencer_leader (node_id, last_updated)
+            SELECT $1, ts.current_time FROM ts
+                ON CONFLICT (singleton) DO UPDATE
+                    SET
+                        node_id = EXCLUDED.node_id,
+                        last_updated = EXCLUDED.last_updated,
+                        leader_acquired_at = CASE
+                            WHEN sequencer_leader.node_id != EXCLUDED.node_id THEN EXCLUDED.last_updated
+                            ELSE sequencer_leader.leader_acquired_at
+                        END
+                    WHERE
+                        sequencer_leader.node_id = EXCLUDED.node_id
+                        OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                    RETURNING node_id, last_updated",
+        )
+        .bind(&self.node_id)
+        .bind(leader_timeout)
+        .fetch_optional(&mut *conn)
+        .await?;
+
+        Ok(res)
+    }
+
+    async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO nodes (node_id, address, last_updated)
+             VALUES ($1, $2, NOW())
+             ON CONFLICT (node_id) DO UPDATE
+             SET address = EXCLUDED.address,
+                 last_updated = NOW()",
+        )
+        .bind(&self.node_id)
+        .bind(&self.node_address)
+        .execute(&mut *conn)
+        .await?;
+        Ok(())
+    }
+
+    /// Registers this node in the nodes table with the maximum possible timestamp.
+    /// Used by Replica nodes that need to be visible in the cluster but don't participate in leader election.
+    /// The infinity timestamp ensures that the replica nodes won't be pruned from the nodes table.
+    async fn upsert_node_registration_max_timestamp(&self) -> anyhow::Result<()> {
+        sqlx::query(
+            "INSERT INTO nodes (node_id, address, last_updated)
+             VALUES ($1, $2, 'infinity'::TIMESTAMPTZ)
+             ON CONFLICT (node_id) DO UPDATE
+             SET address = EXCLUDED.address,
+                 last_updated = 'infinity'::TIMESTAMPTZ",
+        )
+        .bind(&self.node_id)
+        .bind(&self.node_address)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn prune_inner(
+        &self,
+        prune_up_to_including: SequenceNumber,
+    ) -> anyhow::Result<DbReadOutcome<()>> {
+        let mut tx = self.pool.begin().await?;
+        let prune_up_to_including: i64 = prune_up_to_including.saturating_add(1).try_into()?;
+
+        let result = sqlx::query(
+            "WITH blobs_deleted AS (
+                    DELETE FROM proof_blobs
+                    WHERE sequence_number <= $1
+                    AND is_leader($2))
+                DELETE FROM events
+                    WHERE sequence_number <= $1 AND is_leader($2);",
+        )
+        .bind(prune_up_to_including)
+        .bind(&self.node_id)
+        .execute(&mut *tx)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
+            if !self.is_leader(&maybe_leader) {
+                return Ok(DbReadOutcome::AbortedBecauseReplica {
+                    db_leader: maybe_leader,
+                });
+            }
+        }
+        tx.commit().await?;
+        Ok(DbReadOutcome::Success(()))
+    }
+
+    async fn get_sequencer_leader_inner(
+        &self,
+        connection: &mut PgConnection,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let maybe_leader: Option<SequencerLeader> = sqlx::query_as::<_, SequencerLeader>(
+            "SELECT node_id, last_updated
+                FROM sequencer_leader
+                WHERE singleton = 1",
+        )
+        .fetch_optional(connection)
+        .await?;
+
+        Ok(maybe_leader.map(|l| l.node_id))
+    }
+
+    fn is_leader(&self, maybe_leader_id: &Option<String>) -> bool {
+        match maybe_leader_id {
+            Some(leader_id) => leader_id == &self.node_id,
+            None => false,
+        }
     }
 }
 
 #[async_trait]
-impl PreferredSequencerDbBackend for PostgresBackend {
-    async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> anyhow::Result<()> {
+impl DbBackend for PostgresBackend {
+    async fn begin_rollup_block(&mut self, batch_to_store: BatchToStore) -> Result<(), DbError> {
         let blob_data = borsh::to_vec(&StoredBlob::Batch {
             blob_id: batch_to_store.blob_id,
             visible_slot_number_after_increase: batch_to_store.visible_slot_number_after_increase,
@@ -213,20 +432,34 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         })?;
 
         // Compound CTE statement to avoid multiple roundtrips
-        run_with_retries!(
+        let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
-                "WITH batch_insert AS (
-                    INSERT INTO in_progress_batch (sequence_number, borsh_value) VALUES ($1, $2)
-                )
-             INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) 
-             SELECT $1, 'batch_start', NULL, NULL, $2",
+                "
+            WITH batch_insert AS (
+                INSERT INTO in_progress_batch (sequence_number, borsh_value)
+                SELECT $1, $2
+                WHERE is_leader($3)
+            RETURNING sequence_number
+            )
+            INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+            SELECT bi.sequence_number, 'batch_start', NULL, NULL, $2
+            FROM batch_insert bi;
+            "
             )
             .bind(i64::try_from(batch_to_store.sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
+            .bind(&self.node_id)
             .execute(&self.pool),
             "postgres_db_backend_begin_rollup_block"
         )?;
+
+        if result.rows_affected() == 0 {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::BeginBlock,
+            });
+        }
 
         Ok(())
     }
@@ -236,31 +469,51 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         sequence_number: SequenceNumber,
         tx_idx_within_batch: u64,
         txs: &[(FullyBakedTx, TxHash)],
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), DbError> {
         let start = i64::try_from(tx_idx_within_batch)?;
         let end = start + txs.len() as i64;
         let sequence_number = vec![i64::try_from(sequence_number)?; txs.len()];
         let event_types = vec!["transaction"; txs.len()];
         let tx_indexes = (start..end).collect::<Vec<_>>();
         let hashes = txs.iter().map(|(_, hash)| hash.0).collect::<Vec<_>>();
+        // Serialize the full FullyBakedTx (including sequencing_data) to preserve metadata
         let txs = txs
             .iter()
-            .map(|(tx, _)| tx.data.as_ref())
+            .map(|(tx, _)| borsh::to_vec(tx).unwrap())
             .collect::<Vec<_>>();
-        run_with_retries!(
+        let txs_refs: Vec<&[u8]> = txs.iter().map(|t| t.as_slice()).collect();
+
+        let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
                 "INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
-                SELECT * FROM UNNEST($1::bigint[], $2::event_type[], $3::bigint[], $4::bytea[], $5::bytea[])"
+                SELECT *
+                    FROM UNNEST(
+                    $1::bigint[],
+                    $2::event_type[],
+                    $3::bigint[],
+                    $4::bytea[],
+                    $5::bytea[]
+                )
+                WHERE is_leader($6);"
             )
             .bind(&sequence_number[..])
             .bind(&event_types[..])
             .bind(&tx_indexes[..])
             .bind(&hashes[..])
-            .bind(&txs[..])
+            .bind(&txs_refs[..])
+            .bind(&self.node_id)
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;
+
+        if result.rows_affected() == 0 {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::BatchAddTxs,
+            });
+        }
+
         Ok(())
     }
 
@@ -270,24 +523,36 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         tx_index_within_batch: u64,
         tx: FullyBakedTx,
         hash: TxHash,
-    ) -> anyhow::Result<()> {
-        run_with_retries!(
+    ) -> anyhow::Result<(), DbError> {
+        // Serialize the full FullyBakedTx (including sequencing_data) to preserve metadata
+        let tx_serialized = borsh::to_vec(&tx)?;
+        let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query::<Postgres>(
-                "INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) VALUES ($1, 'transaction', $2, $3, $4)",
+                "INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+                    SELECT $1, 'transaction', $2, $3, $4
+                WHERE is_leader($5);",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind(i64::try_from(tx_index_within_batch)?)
             .bind::<&[u8]>(hash.as_ref())
-            .bind(tx.data.as_ref())
+            .bind(&tx_serialized)
+            .bind(&self.node_id)
             .execute(&self.pool),
             "postgres_db_backend_add_tx"
         )?;
 
+        if result.rows_affected() == 0 {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::AddTx,
+            });
+        }
+
         Ok(())
     }
 
-    async fn end_rollup_block(&mut self, cached: BatchToStore) -> anyhow::Result<()> {
+    async fn end_rollup_block(&mut self, cached: BatchToStore) -> Result<(), DbError> {
         let sequence_number = cached.sequence_number;
         let stored_blob: StoredBlob = cached.into();
         let blob_data = borsh::to_vec(&stored_blob)?;
@@ -298,46 +563,62 @@ impl PreferredSequencerDbBackend for PostgresBackend {
             sqlx::query(
                 "WITH batch_delete AS (
                     DELETE FROM in_progress_batch
-                RETURNING 1
-            )
-            INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) 
-            SELECT $1, 'batch_end', NULL, NULL, $2
-            FROM batch_delete",
+                    WHERE is_leader($3)
+                    RETURNING 1)
+                INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+                SELECT $1, 'batch_end', NULL, NULL, $2
+                FROM batch_delete",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
+            .bind(&self.node_id)
             .execute(&self.pool),
             "postgres_db_backend_end_rollup_block"
         )?;
 
         if result.rows_affected() == 0 {
-            return Err(anyhow::anyhow!("No in-progress batch found to end"));
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::EndBlock,
+            });
         }
 
         Ok(())
     }
 
-    async fn prune(&mut self, up_to_including: SequenceNumber) -> anyhow::Result<()> {
-        // Compound CTE statement to avoid multiple roundtrips
-        run_with_retries!(
+    async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
+        let outcome = run_with_retries!(
             &self.backoff_policy,
-            sqlx::query(
-                "WITH blobs_deleted AS (
-                    DELETE FROM proof_blobs WHERE sequence_number <= $1
-             )
-             DELETE FROM events WHERE sequence_number <= $1",
-            )
-            .bind(i64::try_from(up_to_including)?)
-            .execute(&self.pool),
+            self.prune_inner(up_to_including),
             "postgres_db_backend_prune"
         )?;
 
+        if let DbReadOutcome::AbortedBecauseReplica { db_leader } = outcome {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::Prune { db_leader },
+            });
+        }
+
         Ok(())
     }
-    async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>> {
-        let mut conn = self.pool.acquire().await?;
-        self.read_in_progress_batch_with_connection(&mut conn, true)
-            .await
+    async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
+        let mut tx = self.pool.begin().await?;
+        let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;
+
+        if !self.is_leader(&maybe_leader) {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::ReadBatch,
+            });
+        }
+
+        let res = self
+            .read_in_progress_batch_with_connection(&mut tx, true)
+            .await;
+        tx.commit().await?;
+
+        Ok(res?)
     }
 
     async fn add_proof_blob(
@@ -345,33 +626,99 @@ impl PreferredSequencerDbBackend for PostgresBackend {
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), DbError> {
         let blob_data = borsh::to_vec(&StoredBlob::Proof { data, blob_id })?;
 
         // Compound CTE statement to avoid multiple roundtrips
-        run_with_retries!(
+        let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
-                "WITH blob_insert AS (
-                    INSERT INTO proof_blobs (sequence_number, borsh_value) VALUES ($1, $2)
-             )
-             INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data) 
-             SELECT $1, 'new_proof', NULL, NULL, NULL",
+                "
+                WITH blob_insert AS (
+                    INSERT INTO proof_blobs (sequence_number, borsh_value)
+                    SELECT $1, $2
+                    WHERE is_leader($3)
+                    RETURNING sequence_number
+                )
+                INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+                SELECT bi.sequence_number, 'new_proof', NULL, NULL, NULL
+                FROM blob_insert bi",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
+            .bind(&self.node_id)
             .execute(&self.pool),
             "postgres_db_backend_add_proof_blob"
         )?;
 
+        if result.rows_affected() == 0 {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::AddProof,
+            });
+        }
+
         Ok(())
     }
 
-    async fn current_data(&self) -> anyhow::Result<DbSnapshotData> {
-        run_with_retries!(
+    async fn current_data(&self) -> anyhow::Result<SnapshotData, DbError> {
+        let res = run_with_retries!(
             &self.backoff_policy,
             self.current_data_transaction(),
             "postgres_db_backend_current_data"
-        )
+        )?;
+
+        match res {
+            DbReadOutcome::Success(data) => Ok(data),
+            DbReadOutcome::AbortedBecauseReplica { db_leader } => {
+                return Err(DbError::ReplicaDisallowed {
+                    self_node_id: self.node_id.clone(),
+                    operation: FailedOperation::CurrentData { db_leader },
+                });
+            }
+        }
     }
+}
+
+/// Computes the node address from the local IP and bind port.
+fn node_address(bind_addr: SocketAddr) -> Result<String> {
+    let bind_port = bind_addr.port();
+    let ip = bind_addr.ip();
+
+    let effective_ip = if ip.is_unspecified() {
+        get_local_ip(ip)?
+    } else {
+        ip
+    };
+
+    let effective_addr = SocketAddr::new(effective_ip, bind_port);
+    Ok(effective_addr.to_string())
+}
+
+/// Gets the local IP address by creating a UDP socket and checking its local address.
+fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
+    // This is a classic networking trick to figure out your machine’s local IP address,
+    // without actually sending any data.
+    let addr = if ip.is_ipv6() {
+        let socket = std::net::UdpSocket::bind("[::]:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv6 address discovery: {ip}")
+        })?;
+        socket
+            .connect("[2001:4860:4860::8888]:80")
+            .context("Failed to connect UDP socket for local IPv6 address discovery")?;
+        socket
+    } else {
+        let socket = std::net::UdpSocket::bind("0.0.0.0:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv4 address discovery: {ip}")
+        })?;
+        socket
+            .connect("8.8.8.8:80")
+            .context("Failed to connect UDP socket for local IPv4 address discovery.")?;
+
+        socket
+    }
+    .local_addr()
+    .context("Failed to retrieve local address from UDP socket.")?;
+
+    Ok(addr.ip())
 }

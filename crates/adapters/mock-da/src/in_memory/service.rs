@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -13,7 +13,7 @@ use sov_rollup_interface::node::da::{DaService, MaybeRetryable, SlotData, Submit
 use tokio::sync::{broadcast, oneshot, Mutex, RwLock};
 use tokio::time;
 
-use crate::config::{GENESIS_BLOCK, GENESIS_HEADER, WAIT_ATTEMPT_PAUSE};
+use crate::config::{GENESIS_BLOCK, GENESIS_HEADER, SENSIBLE_BLOCK_PULL_TIME, WAIT_ATTEMPT_PAUSE};
 use crate::in_memory::fork::PlannedFork;
 use crate::utils::hash_to_array;
 use crate::{
@@ -283,8 +283,6 @@ impl DaService for MockDaService {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
-
     /// Gets block at given height
     /// If block is not available, waits until it is produced.
     /// It is possible to read non-finalized and last finalized blocks multiple times
@@ -432,8 +430,12 @@ impl DaService for MockDaService {
             .collect())
     }
 
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
-        self.sequencer_da_address
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
+        Some(self.sequencer_da_address)
+    }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        SENSIBLE_BLOCK_PULL_TIME
     }
 }
 

@@ -10,19 +10,50 @@ use backon::{ExponentialBuilder, Retryable};
 use base64::prelude::*;
 use borsh::BorshSerialize;
 use futures::stream::BoxStream;
+use futures::stream::SplitSink;
+use futures::SinkExt;
 use futures::StreamExt;
 use sov_modules_api::RawTx;
 use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::node::ledger_api::{FinalityStatus, IncludeChildren};
 use sov_rollup_interface::zk::aggregated_proof;
 use sov_rollup_interface::TxHash;
-use tokio_tungstenite::connect_async;
+use tokio::net::{TcpSocket, TcpStream};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 use tokio_tungstenite::tungstenite::{Error as WsError, Message};
+use tokio_tungstenite::{client_async_with_config, connect_async, MaybeTlsStream, WebSocketStream};
 use types::TxInfoWithConfirmation;
 
 pub extern crate tokio_tungstenite;
 
 pub type WsSubscription<T> = Result<BoxStream<'static, anyhow::Result<T>>, WsError>;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct WsMessage<T> {
+    pub id: String,
+    pub contents: T,
+}
+
+pub struct TxWsSender {
+    sink: SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+}
+
+impl TxWsSender {
+    pub async fn send(&mut self, tx: &RawTx, id: String) -> Result<(), WsError> {
+        let message = WsMessage {
+            id: id.clone(),
+            contents: types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(tx),
+            },
+        };
+        self.sink
+            .send(Message::Text(
+                serde_json::to_string(&message).unwrap().into(),
+            ))
+            .await?;
+        Ok(())
+    }
+}
 
 progenitor::generate_api!(
     spec = "./openapi-v3.yaml",
@@ -134,7 +165,7 @@ impl Client {
         let mut receipts = Vec::with_capacity(txs.len());
 
         for tx in txs {
-            let res = self.send_tx_to_sequencer(tx).await?;
+            let res = self.send_tx_to_sequencer_with_retry(tx).await?;
             receipts.push(res);
         }
 
@@ -165,6 +196,31 @@ impl Client {
         self.subscribe_to_ws("/sequencer/events/ws").await
     }
 
+    pub async fn subscribe_to_events_with_config(
+        &self,
+        config: WebSocketConfig,
+    ) -> WsSubscription<types::LedgerEvent> {
+        self.subscribe_to_ws_with_config("/sequencer/events/ws", Some(config))
+            .await
+    }
+
+    /// Subscribe to events with custom WebSocket and TCP socket configuration.
+    ///
+    /// This allows setting TCP-level options like `SO_RCVBUF` which control the actual
+    /// TCP receive buffer size, enabling proper backpressure testing.
+    pub async fn subscribe_to_events_with_socket_options(
+        &self,
+        ws_config: Option<WebSocketConfig>,
+        recv_buffer_size: Option<u32>,
+    ) -> WsSubscription<types::LedgerEvent> {
+        self.subscribe_to_ws_with_socket_options(
+            "/sequencer/events/ws",
+            ws_config,
+            recv_buffer_size,
+        )
+        .await
+    }
+
     pub async fn subscribe_to_events_with_filter(
         &self,
         filter: &str,
@@ -177,11 +233,73 @@ impl Client {
         &self,
         path: &str,
     ) -> WsSubscription<T> {
-        // The base URL can't be used for WebSocket connections; we need to
-        // change the protocol.
-        let url = format!("{}{}", self.baseurl(), path).replace("http://", "ws://");
+        self.subscribe_to_ws_with_socket_options(path, None, None)
+            .await
+    }
 
-        let (ws, _) = connect_async(url).await?;
+    pub async fn subscribe_to_ws_with_config<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        config: Option<WebSocketConfig>,
+    ) -> WsSubscription<T> {
+        self.subscribe_to_ws_with_socket_options(path, config, None)
+            .await
+    }
+
+    /// Subscribe to a WebSocket endpoint with custom WebSocket and TCP socket options.
+    ///
+    /// The `recv_buffer_size` parameter sets the TCP socket's `SO_RCVBUF` option,
+    /// which controls the actual TCP receive buffer size. This enables proper
+    /// backpressure testing by limiting how much data TCP can buffer before
+    /// the sender blocks.
+    pub async fn subscribe_to_ws_with_socket_options<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        ws_config: Option<WebSocketConfig>,
+        recv_buffer_size: Option<u32>,
+    ) -> WsSubscription<T> {
+        use std::net::ToSocketAddrs;
+        use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+
+        // Build the WebSocket URL
+        let ws_url = format!("{}{}", self.baseurl(), path).replace("http://", "ws://");
+
+        // Parse host and port from baseurl for TCP connection
+        // baseurl is like "http://127.0.0.1:12345"
+        let base = self.baseurl();
+        let without_scheme = base
+            .strip_prefix("http://")
+            .or_else(|| base.strip_prefix("https://"))
+            .unwrap_or(base);
+        let addr = without_scheme
+            .to_socket_addrs()
+            .map_err(WsError::Io)?
+            .next()
+            .ok_or_else(|| {
+                WsError::Io(std::io::Error::new(
+                    std::io::ErrorKind::AddrNotAvailable,
+                    "Could not resolve address",
+                ))
+            })?;
+
+        // Create TCP socket and set options
+        let socket = if addr.is_ipv4() {
+            TcpSocket::new_v4()
+        } else {
+            TcpSocket::new_v6()
+        }
+        .map_err(WsError::Io)?;
+
+        if let Some(size) = recv_buffer_size {
+            socket.set_recv_buffer_size(size).map_err(WsError::Io)?;
+        }
+
+        // Connect
+        let stream = socket.connect(addr).await.map_err(WsError::Io)?;
+
+        // Perform WebSocket handshake
+        let request = ws_url.into_client_request()?;
+        let (ws, _) = client_async_with_config(request, stream, ws_config).await?;
 
         Ok(ws
             .filter_map(|msg| async {
@@ -194,12 +312,90 @@ impl Client {
                             err
                         ))),
                     },
-                    Ok(Message::Binary(msg)) => {
-                        tracing::warn!(
-                            ?msg,
-                            "Received unsupported binary message from WebSocket connection"
-                        );
-                        None
+                    Ok(Message::Binary(data)) => {
+                        // Parse binary frame as UTF-8 JSON
+                        match std::str::from_utf8(&data) {
+                            Ok(text) => match serde_json::from_str(text) {
+                                Ok(tx_status) => Some(Ok(tx_status)),
+                                Err(err) => Some(Err(anyhow::anyhow!(
+                                    "failed to deserialize JSON from binary frame: {}",
+                                    err
+                                ))),
+                            },
+                            Err(err) => Some(Err(anyhow::anyhow!(
+                                "invalid UTF-8 in binary WebSocket frame: {}",
+                                err
+                            ))),
+                        }
+                    }
+                    // All other kinds of messages are ignored because
+                    // `tokio-tungstenite` ought to handle all
+                    // meta-communication messages (ping, pong, close) for us anyway.
+                    Ok(_) => None,
+                    // Errors are not handled here but passed to the caller.
+                    Err(err) => Some(Err(anyhow::anyhow!("{}", err))),
+                }
+            })
+            .boxed())
+    }
+
+    pub async fn connect_txs_ws(
+        &self,
+    ) -> Result<
+        (
+            TxWsSender,
+            BoxStream<'static, anyhow::Result<WsMessage<types::ApiAcceptedTx>>>,
+        ),
+        anyhow::Error,
+    > {
+        let (sink, stream) = self.connect_to_ws("/sequencer/txs/submit/ws").await?;
+        Ok((TxWsSender { sink }, stream))
+    }
+
+    pub async fn connect_to_ws<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+    ) -> Result<
+        (
+            SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>, Message>,
+            BoxStream<'static, anyhow::Result<T>>,
+        ),
+        anyhow::Error,
+    > {
+        // The base URL can't be used for WebSocket connections; we need to
+        // change the protocol.
+        let url = format!("{}{}", self.baseurl(), path).replace("http://", "ws://");
+
+        let (ws, _) = connect_async(url).await?;
+        let (write, read) = ws.split();
+
+        Ok((
+            write,
+            read.filter_map(|msg| async {
+                match msg {
+                    Ok(Message::Text(text)) => match serde_json::from_str(&text) {
+                        Ok(tx_status) => Some(Ok(tx_status)),
+                        Err(err) => Some(Err(anyhow::anyhow!(
+                            "failed to deserialize JSON {} into type: {}",
+                            text,
+                            err
+                        ))),
+                    },
+                    Ok(Message::Binary(data)) => {
+                        // Parse binary frame as UTF-8 JSON
+                        match std::str::from_utf8(&data) {
+                            Ok(text) => match serde_json::from_str(text) {
+                                Ok(tx_status) => Some(Ok(tx_status)),
+                                Err(err) => Some(Err(anyhow::anyhow!(
+                                    "failed to deserialize JSON from binary frame: {}",
+                                    err
+                                ))),
+                            },
+                            Err(err) => Some(Err(anyhow::anyhow!(
+                                "invalid UTF-8 in binary WebSocket frame: {}",
+                                err
+                            ))),
+                        }
                     }
                     // All other kinds of messages are ignored because
                     // `tokio-tungstenite` ought to handle all
@@ -209,7 +405,8 @@ impl Client {
                     Err(err) => Some(Err(anyhow::anyhow!("{}", err))),
                 }
             })
-            .boxed())
+            .boxed(),
+        ))
     }
 
     pub async fn get_next_nonce(&self, credential_id: &CredentialId) -> anyhow::Result<u64> {

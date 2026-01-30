@@ -9,20 +9,25 @@
 //! invariants and we'd rather have an application crash due to broken
 //! invariants than to have bugs that result in subtle state inconsistencies.
 
+pub mod leadership_election;
 pub mod postgres;
 pub mod rocksdb;
 use crate::preferred::PostgresBackend;
 use crate::preferred::RocksDbBackend;
+use anyhow::Result;
 use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
+use sov_full_node_configs::sequencer::ConfiguredNodeRole;
+use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxHash,
     VisibleSlotNumber,
 };
 use std::collections::VecDeque;
+use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::Arc;
@@ -31,27 +36,63 @@ use tokio::sync::{mpsc, watch};
 use crate::common::WithCachedTxHashes;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
 
+#[derive(Debug)]
+pub(crate) enum DbReadOutcome<T> {
+    Success(T),
+    AbortedBecauseReplica { db_leader: Option<String> },
+}
+
+#[derive(Debug, PartialEq, strum::Display)]
+pub(crate) enum FailedOperation {
+    BeginBlock,
+    BatchAddTxs,
+    AddTx,
+    EndBlock,
+    Prune { db_leader: Option<String> },
+    ReadBatch,
+    AddProof,
+    CurrentData { db_leader: Option<String> },
+}
+
+#[derive(Debug)]
+pub(crate) enum DbError {
+    Database(anyhow::Error),
+    ReplicaDisallowed {
+        self_node_id: String,
+        operation: FailedOperation,
+    },
+}
+
+impl<T: Into<anyhow::Error>> From<T> for DbError {
+    fn from(error: T) -> Self {
+        DbError::Database(error.into())
+    }
+}
+
+// Don’t prune the data from the database immediately — give the replica some time to read it before it is pruned.
+const PRUNING_LAG: u64 = 10;
+
 #[async_trait]
-pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
-    async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> anyhow::Result<()>;
+pub trait DbBackend: Send + Sync + 'static {
+    async fn begin_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<(), DbError>;
 
     /// Calls to this method MUST be "sandwiched" between
-    /// [`PreferredSequencerDbBackend::begin_rollup_block`] and
-    /// [`PreferredSequencerDbBackend::end_rollup_block`].
+    /// [`DbBackend::begin_rollup_block`] and
+    /// [`DbBackend::end_rollup_block`].
     async fn add_tx(
         &mut self,
         sequence_number_of_in_progress_batch: SequenceNumber,
         tx_idx_within_batch: u64,
         tx: FullyBakedTx,
         hash: TxHash,
-    ) -> anyhow::Result<()>;
+    ) -> anyhow::Result<(), DbError>;
 
     async fn batch_add_txs(
         &mut self,
         sequence_number_of_in_progress_batch: SequenceNumber,
         mut tx_idx_within_batch: u64,
         txs: &[(FullyBakedTx, TxHash)],
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<(), DbError> {
         for (tx, hash) in txs {
             self.add_tx(
                 sequence_number_of_in_progress_batch,
@@ -65,41 +106,48 @@ pub trait PreferredSequencerDbBackend: Send + Sync + 'static {
         Ok(())
     }
 
-    async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> anyhow::Result<()>;
+    async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<(), DbError>;
 
-    async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>>;
+    async fn read_in_progress_batch(&self) -> Result<Option<InProgressBatch>, DbError>;
 
     /// Reads completed blobs, in-progress batch, and latest event_id.
     /// Bundling this as a single function allows the Postgres backend to do this atomically, which
     /// is necessary to support replica initialization in the presence of concurrent writes.
-    async fn current_data(&self) -> anyhow::Result<DbSnapshotData>;
+    async fn current_data(&self) -> Result<SnapshotData, DbError>;
 
     async fn add_proof_blob(
         &mut self,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), DbError>;
 
     /// Instructs the database it MAY delete all data up to the given
     /// [`SequenceNumber`] (included).
     ///
     /// This method exists because the sequencer has no use for data that is
     /// already finalized.
-    async fn prune(&mut self, up_to_including: SequenceNumber) -> anyhow::Result<()>;
+    async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError>;
 }
 
-/// The return type of `PreferredSequencerDbBackend::current_data()`.
+/// The return type of `DbBackend::current_data()`.
 /// Primarily used to populate in-memory caches on initialization.
 #[derive(Debug, Default, Clone)]
-pub struct DbSnapshotData {
-    pub completed_blobs: Vec<PreferredSequencerReadBlob>,
+pub struct SnapshotData {
+    pub completed_blobs: Vec<ReadBlob>,
     pub in_progress_batch: Option<InProgressBatch>,
+}
+
+impl SnapshotData {
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.completed_blobs.is_empty() && self.in_progress_batch.is_none()
+    }
 }
 
 /// See [`PreferredSequencerReadBlob::Batch`].
 #[derive(Debug, Clone)]
-pub struct PreferredSequencerReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = Arc<Vec<TxHash>>> {
+pub struct ReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = Arc<Vec<TxHash>>> {
     pub sequence_number: SequenceNumber,
     pub visible_slot_number_after_increase: VisibleSlotNumber,
     pub visible_slots_to_advance: NonZero<u8>,
@@ -108,11 +156,11 @@ pub struct PreferredSequencerReadBatch<Txs = Arc<Vec<FullyBakedTx>>, TxHashes = 
     pub tx_hashes: TxHashes,
 }
 
-pub type InProgressBatch = PreferredSequencerReadBatch<Vec<FullyBakedTx>, Vec<TxHash>>;
+pub type InProgressBatch = ReadBatch<Vec<FullyBakedTx>, Vec<TxHash>>;
 
-impl From<InProgressBatch> for PreferredSequencerReadBatch {
+impl From<InProgressBatch> for ReadBatch {
     fn from(batch: InProgressBatch) -> Self {
-        PreferredSequencerReadBatch {
+        ReadBatch {
             sequence_number: batch.sequence_number,
             visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
             visible_slots_to_advance: batch.visible_slots_to_advance,
@@ -123,7 +171,7 @@ impl From<InProgressBatch> for PreferredSequencerReadBatch {
     }
 }
 
-impl PreferredSequencerReadBatch {
+impl ReadBatch {
     pub(crate) fn into_with_cached_tx_hashes(self) -> WithCachedTxHashes<PreferredBatchData> {
         WithCachedTxHashes {
             tx_hashes: self.tx_hashes.clone(),
@@ -136,9 +184,9 @@ impl PreferredSequencerReadBatch {
     }
 }
 
-/// See [`PreferredSequencerDbBackend::read_completed_blobs`].
+/// See [`DbBackend::read_completed_blobs`].
 #[derive(Debug, Clone)]
-pub enum PreferredSequencerReadBlob<Inner = PreferredSequencerReadBatch> {
+pub enum ReadBlob<Inner = ReadBatch> {
     Batch(Inner),
     Proof {
         blob_id: BlobInternalId,
@@ -147,11 +195,11 @@ pub enum PreferredSequencerReadBlob<Inner = PreferredSequencerReadBatch> {
     },
 }
 
-impl PreferredSequencerReadBlob {
+impl ReadBlob {
     pub fn sequence_number(&self) -> SequenceNumber {
         match &self {
-            PreferredSequencerReadBlob::Batch(batch) => batch.sequence_number,
-            PreferredSequencerReadBlob::Proof {
+            ReadBlob::Batch(batch) => batch.sequence_number,
+            ReadBlob::Proof {
                 sequence_number, ..
             } => *sequence_number,
         }
@@ -170,16 +218,16 @@ pub(crate) enum DbEvent {
     ProofBlobAccepted(SequenceNumber),
 }
 
-pub struct PreferredSequencerCache {
-    completed_blobs: VecDeque<PreferredSequencerReadBlob>,
+pub struct BlobsCache {
+    completed_blobs: VecDeque<ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
     shutdown_sender: watch::Sender<()>,
 }
 
-impl PreferredSequencerCache {
+impl BlobsCache {
     pub fn new(
-        completed_blobs: VecDeque<PreferredSequencerReadBlob>,
+        completed_blobs: VecDeque<ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
         shutdown_sender: watch::Sender<()>,
     ) -> Self {
@@ -195,14 +243,14 @@ impl PreferredSequencerCache {
         self.in_progress_batch.as_ref()
     }
 
-    pub fn all_completed_blobs(&self) -> Vec<PreferredSequencerReadBlob> {
+    pub fn all_completed_blobs(&self) -> Vec<ReadBlob> {
         self.completed_blobs.clone().into()
     }
 
     pub fn all_completed_blobs_greater_than_or_equal_to(
         &self,
         sequence_number: SequenceNumber,
-    ) -> Vec<PreferredSequencerReadBlob> {
+    ) -> Vec<ReadBlob> {
         self.completed_blobs
             .iter()
             .filter(|b| {
@@ -268,7 +316,7 @@ impl PreferredSequencerCache {
             exit_rollup(&self.shutdown_sender).await;
         };
         let blob_id = new_blob_id();
-        self.in_progress_batch = Some(PreferredSequencerReadBatch {
+        self.in_progress_batch = Some(ReadBatch {
             sequence_number,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
@@ -286,23 +334,27 @@ impl PreferredSequencerCache {
         blob_id
     }
 
+    pub fn clean_all_batches(&mut self) {
+        self.completed_blobs.clear();
+        self.in_progress_batch = None;
+    }
+
     pub async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
         sequence_number: SequenceNumber,
     ) {
-        self.completed_blobs
-            .push_back(PreferredSequencerReadBlob::Proof {
-                blob_id,
-                sequence_number,
-                data,
-            });
+        self.completed_blobs.push_back(ReadBlob::Proof {
+            blob_id,
+            sequence_number,
+            data,
+        });
         self.send_event_if_necessary(DbEvent::ProofBlobAccepted(sequence_number))
             .await;
     }
 
-    pub async fn terminate_batch(&mut self) -> PreferredSequencerReadBatch {
+    pub async fn terminate_batch(&mut self) -> ReadBatch {
         let Some(in_progress_batch) = self.in_progress_batch.as_ref() else {
             tracing::error!("No in-progress batch; this is a bug, please report it");
             exit_rollup(&self.shutdown_sender).await;
@@ -316,10 +368,10 @@ impl PreferredSequencerCache {
             unreachable!();
         };
 
-        let batch: PreferredSequencerReadBatch = batch.into();
+        let batch: ReadBatch = batch.into();
 
         self.completed_blobs
-            .push_back(PreferredSequencerReadBlob::Batch(batch.clone()));
+            .push_back(ReadBlob::Batch(batch.clone()));
 
         self.send_event_if_necessary(DbEvent::BatchClosed(sequence_number))
             .await;
@@ -349,7 +401,7 @@ impl PreferredSequencerCache {
         self.event_stream = Some(sender);
     }
 }
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub(crate) struct BatchToStore {
     pub blob_id: BlobInternalId,
     pub sequence_number: SequenceNumber,
@@ -367,73 +419,135 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
+/// The role of the sequencer in a distributed setup.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SequencerRole {
+    /// Node that does not sync with the `BatchProducer` and relies on DA for updates.
+    DaOnlyReplica,
+    /// Node that syncs with the `BatchProducer` via PostgreSQL.
+    PgSyncReplica,
+    /// Node that accepts transactions and produces batches.
+    BatchProducer,
+}
+
 pub struct PreferredSequencerDb {
-    backend: Option<Box<dyn PreferredSequencerDbBackend>>,
+    backend: Option<Box<dyn DbBackend>>,
     shutdown_sender: watch::Sender<()>,
 }
 
 impl PreferredSequencerDb {
     pub(crate) async fn new(
         shutdown_sender: watch::Sender<()>,
-        is_replica: bool,
         storage_path: &Path,
-        postgres_connection_string: &Option<String>,
-    ) -> anyhow::Result<Self> {
-        if is_replica {
-            return Ok(Self {
-                backend: None,
-                shutdown_sender: shutdown_sender.clone(),
-            });
-        }
+        postgres_config: &Option<PostgresConfig>,
+        bind_addr: SocketAddr,
+    ) -> anyhow::Result<(Self, SequencerRole)> {
+        let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
+            if let Some(postgres_config) = &postgres_config {
+                match postgres_config.node_role {
+                    ConfiguredNodeRole::ReplicaNoLeaderSync => {
+                        // Connect and register the node without attempting leader election.
+                        // The backend is dropped after registration since replicas don't need it.
+                        PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
+                        (None, SequencerRole::DaOnlyReplica)
+                    }
+                    ConfiguredNodeRole::Replica => {
+                        // Connect and register the node without attempting leader election.
+                        // The backend is dropped after registration since replicas don't need it.
+                        PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
+                        (None, SequencerRole::PgSyncReplica)
+                    }
+                    ConfiguredNodeRole::Leader => {
+                        let (backend, _) =
+                            PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        (Some(Box::new(backend)), SequencerRole::BatchProducer)
+                    }
+                    ConfiguredNodeRole::DbElected => {
+                        // Connect and attempt to acquire leadership
+                        let (backend, maybe_leader) =
+                            PostgresBackend::connect(postgres_config, bind_addr).await?;
 
-        let backend: Option<Box<dyn PreferredSequencerDbBackend>> = {
-            if let Some(postgres_connection_string) = &postgres_connection_string {
-                Some(Box::new(
-                    PostgresBackend::connect(postgres_connection_string).await?,
-                ))
+                        let is_leader = maybe_leader
+                            .map(|leader| leader.node_id == postgres_config.node_id)
+                            .unwrap_or(false);
+
+                        if is_leader {
+                            tracing::info!(
+                                node_id = %postgres_config.node_id,
+                                "DbElected node acquired leadership, running as BatchProducer"
+                            );
+                            (Some(Box::new(backend)), SequencerRole::BatchProducer)
+                        } else {
+                            tracing::info!(
+                                node_id = %postgres_config.node_id,
+                                "DbElected node did not acquire leadership, running as PgSyncReplica"
+                            );
+                            (None, SequencerRole::PgSyncReplica)
+                        }
+                    }
+                }
             } else {
-                Some(Box::new(RocksDbBackend::new(storage_path).await?))
+                (
+                    Some(Box::new(RocksDbBackend::new(storage_path).await?)),
+                    SequencerRole::BatchProducer,
+                )
             }
         };
-
-        Ok(Self {
-            backend,
-            shutdown_sender: shutdown_sender.clone(),
-        })
+        Ok((
+            Self {
+                backend,
+                shutdown_sender: shutdown_sender.clone(),
+            },
+            role,
+        ))
     }
 
-    pub(crate) async fn initial_data(
-        &self,
-    ) -> anyhow::Result<(SequenceNumber, PreferredSequencerCache)> {
+    pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, BlobsCache)> {
         if let Some(backend) = &self.backend {
-            let DbSnapshotData {
-                completed_blobs,
-                in_progress_batch,
-            } = backend.current_data().await?;
-
-            let completed_blobs = VecDeque::from(completed_blobs);
-
-            let sequence_number_of_next_blob = match (completed_blobs.back(), &in_progress_batch) {
-                (Some(blob), None) => blob.sequence_number() + 1,
-                (None, Some(batch)) => batch.sequence_number + 1,
-                (Some(blob), Some(batch)) => {
-                    std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
-                }
-                (None, None) => 0,
-            };
-
-            Ok((
-                sequence_number_of_next_blob,
-                PreferredSequencerCache::new(
+            match backend.current_data().await {
+                Ok(SnapshotData {
                     completed_blobs,
                     in_progress_batch,
-                    self.shutdown_sender.clone(),
-                ),
-            ))
+                }) => {
+                    let completed_blobs = VecDeque::from(completed_blobs);
+
+                    let sequence_number_of_next_blob =
+                        match (completed_blobs.back(), &in_progress_batch) {
+                            (Some(blob), None) => blob.sequence_number() + 1,
+                            (None, Some(batch)) => batch.sequence_number + 1,
+                            (Some(blob), Some(batch)) => {
+                                std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
+                            }
+                            (None, None) => 0,
+                        };
+
+                    Ok((
+                        sequence_number_of_next_blob,
+                        BlobsCache::new(
+                            completed_blobs,
+                            in_progress_batch,
+                            self.shutdown_sender.clone(),
+                        ),
+                    ))
+                }
+                Err(DbError::Database(err)) => Err(err),
+                Err(DbError::ReplicaDisallowed {
+                    self_node_id,
+                    operation,
+                }) => {
+                    tracing::error!(
+                        %self_node_id,
+                        %operation,
+                        "The primary has become a replica. Shutting down.",
+                    );
+                    exit_rollup(&self.shutdown_sender).await;
+                    unreachable!()
+                }
+            }
         } else {
             Ok((
                 0, // TODO this will be revisited when we enable the replica sync task.
-                PreferredSequencerCache::new(
+                BlobsCache::new(
                     VecDeque::default(),
                     Option::None,
                     self.shutdown_sender.clone(),
@@ -448,11 +562,14 @@ impl PreferredSequencerDb {
         txs: Vec<(FullyBakedTx, TxHash)>,
         sequence_number: SequenceNumber,
         tx_idx_within_batch: u64,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend
+            if let Err(err) = backend
                 .batch_add_txs(sequence_number, tx_idx_within_batch, &txs)
-                .await?;
+                .await
+            {
+                return Err(self.check_replica_err(err).await);
+            }
         }
 
         Ok(())
@@ -465,7 +582,7 @@ impl PreferredSequencerDb {
         visible_slots_to_advance: NonZero<u8>,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
-    ) -> anyhow::Result<SequenceNumber> {
+    ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
             Self::debug_assert_in_progress_batch_is_none(
                 "Cached in-progress batch state (None) didn't match backend db state",
@@ -488,10 +605,31 @@ impl PreferredSequencerDb {
                 visible_slot_number_after_increase,
                 visible_slots_to_advance,
             };
-            backend.begin_rollup_block(batch_to_store).await?;
+
+            if let Err(err) = backend.begin_rollup_block(batch_to_store).await {
+                return Err(self.check_replica_err(err).await);
+            }
         }
 
-        Ok(sequence_number)
+        Ok(())
+    }
+
+    async fn check_replica_err(&self, err: DbError) -> anyhow::Error {
+        match err {
+            DbError::Database(err) => err,
+            DbError::ReplicaDisallowed {
+                self_node_id,
+                operation,
+            } => {
+                tracing::error!(
+                    %self_node_id,
+                    %operation,
+                    "The primary has become a replica. Shutting down.",
+                );
+                exit_rollup(&self.shutdown_sender).await;
+                unreachable!()
+            }
+        }
     }
 
     #[tracing::instrument(skip_all, level = "info")]
@@ -500,20 +638,25 @@ impl PreferredSequencerDb {
         blob_id: BlobInternalId,
         data: Arc<[u8]>,
         sequence_number: SequenceNumber,
-    ) -> anyhow::Result<SequenceNumber> {
+    ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend
+            if let Err(err) = backend
                 .add_proof_blob(sequence_number, blob_id, data.clone())
-                .await?;
+                .await
+            {
+                return Err(self.check_replica_err(err).await);
+            };
         }
 
-        Ok(sequence_number)
+        Ok(())
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub(crate) async fn terminate_batch(&mut self, batch: BatchToStore) -> anyhow::Result<()> {
+    pub(crate) async fn terminate_batch(&mut self, batch: BatchToStore) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend.end_rollup_block(batch).await?;
+            if let Err(err) = backend.end_rollup_block(batch).await {
+                return Err(self.check_replica_err(err).await);
+            };
             Self::debug_assert_in_progress_batch_is_none(
                 "Backend didn't remove in-progress batch from database when ending rollup block",
                 backend,
@@ -526,24 +669,25 @@ impl PreferredSequencerDb {
     }
 
     #[tracing::instrument(skip_all, level = "info")]
-    pub(super) async fn prune_db(
-        &mut self,
-        prune_up_to_including: SequenceNumber,
-    ) -> anyhow::Result<()> {
+    pub(super) async fn prune_db(&mut self, prune_up_to_including: SequenceNumber) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            backend.prune(prune_up_to_including).await?;
+            if let Some(prune_up_to_including) = prune_up_to_including.checked_sub(PRUNING_LAG) {
+                if let Err(err) = backend.prune(prune_up_to_including).await {
+                    return Err(self.check_replica_err(err).await);
+                }
+            }
         }
         Ok(())
     }
 
     async fn debug_assert_in_progress_batch_is_none(
         msg: &str,
-        backend: &mut Box<dyn PreferredSequencerDbBackend>,
+        backend: &mut Box<dyn DbBackend>,
         shutdown_sender: &watch::Sender<()>,
     ) {
         if cfg!(debug_assertions) {
             match backend.read_in_progress_batch().await {
-                Ok(None) => {}
+                Ok(_) => {}
                 other => {
                     tracing::error!("{msg}: {other:?}");
                     exit_rollup(shutdown_sender).await;
@@ -574,7 +718,8 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
+    let mut checkpoint =
+        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
     state.read_from_storage_at_slot_number(latest_state_info.latest_finalized_slot_number);
 

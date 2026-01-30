@@ -6,9 +6,10 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::node::ledger_api::{BatchResponse, TxResponse};
 use sov_rollup_interface::stf::{
-    DiscardedBlob, StoredEvent, TransactionReceipt, TxReceiptContents,
+    DiscardedBlob, FullyBakedTx, StoredEvent, TransactionReceipt, TxReceiptContents,
 };
-use sov_rollup_interface::Bytes;
+
+pub use sov_db_types as slot_key;
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -76,6 +77,8 @@ pub struct StoredSlot {
     pub extra_data: DbBytes,
     /// The range of batches which occurred in this slot.
     pub batches: std::ops::Range<BatchNumber>,
+    /// The range of discarded blobs which occurred in this slot.
+    pub discarded_blobs: std::ops::Range<DiscardedBlobNumber>,
     /// The timestamp of the slot.
     pub timestamp: Time,
 }
@@ -138,7 +141,7 @@ pub struct StoredTransaction {
     /// The range of event-numbers emitted by this transaction.
     pub events: std::ops::Range<EventNumber>,
     /// The serialized transaction data, if the rollup decides to store it.
-    pub body: Option<Bytes>,
+    pub body: Option<FullyBakedTx>,
     /// A custom "receipt" for this transaction defined by the rollup.
     pub receipt: DbBytes,
     /// This transaction's parent batch number.
@@ -269,6 +272,7 @@ macro_rules! u64_wrapper {
 
 u64_wrapper!(TxIncrId);
 u64_wrapper!(BatchNumber);
+u64_wrapper!(DiscardedBlobNumber);
 u64_wrapper!(TxNumber);
 u64_wrapper!(EventNumber);
 u64_wrapper!(ProofUniqueId);

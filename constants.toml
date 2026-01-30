@@ -10,10 +10,24 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+
+# The namespace used by the rollup to store its data.
+# Using byte_string to convert "sov-test-b" to ASCII bytes
+# Should be 10 bytes long for Celestia
+BATCH_NAMESPACE = { byte_string = "sov-test-b" }
+# The namespace used by the rollup to store aggregated ZK proofs.
+# This is "sov-test-p" encoded as ASCII bytes.
+# "hex" format is used as an example, that it is possible to define namespace as any sequence of bytes.
+# `python3 -c "import sys; print('0x' + sys.argv[1].encode().hex())" "sov-test-p"`
+# Should be 10 bytes long for Celestia
+PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
+
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
 EVM_GAS_METERING_MODE = "Rollup"
+# After this evm block height, the max_fee check will be enforced.
+EVM_MAX_FEE_CHECK_HEIGHT = 0
 # How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
 # the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
 SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.
@@ -38,7 +52,8 @@ STATE_ROOT_DELAY_BLOCKS = 3
 UNREGISTERED_BLOBS_PER_SLOT = 5
 # How many past transaction generations into the past to keep per-account buckets for
 # Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
-PAST_TRANSACTION_GENERATIONS = 5
+# Preferrably to use milliseconds as a value in tx
+PAST_TRANSACTION_GENERATIONS = 5_000
 # The maximum number of transactions hashes we remember per credential. 
 # Higher numbers allow accounts to send more transactions without updating their generation number. 
 # This is more user friendly for power users, but increases the worst case cost of the uniqueness check.
@@ -92,7 +107,7 @@ DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS = [1, 0]
 MAX_SEQUENCER_EXEC_GAS_PER_TX = [1_000_000_000, 1_000_000_000]
 
 # Maximum amount of gas the unregistered sequencer can pay for the tx execution ---
-MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX = [50000, 50000]
+MAX_UNREGISTERED_SEQUENCER_EXEC_GAS_PER_TX = [500_000, 500_000]
 # Gas parameters to specify tx pre execution costs ---
 PROCESS_TX_PRE_EXEC_GAS = [1, 1]
 # Gas parameter to specify tx pre execution costs per tx byte
@@ -162,9 +177,15 @@ MERKLE_TREE_HOOK_DISCRIMINANT = 14
 WARP_DISCRIMINANT = 15
 PAYMASTER_DISCRIMINANT = 16
 REVENUE_SHARE_DISCRIMINANT = 17
-
+SOLANA_REGISTRATION_DISCRIMINANT = 18
+SESSION_REGISTRY_DISCRIMINANT = 19
+BLACKLIST_DISCRIMINANT = 20
 
 # Test modules
+EVENT_EMITTER_MODULE_DISCRIMINANT = 227
+TEST_DEX_DISCRIMINANT = 228
+SEQUENCING_DATA_TESTER_DISCRIMINANT = 229
+PINNED_CACHE_TESTER_DISCRIMINANT = 230
 STATE_CONSISTENCY_DISCRIMINANT = 231
 MODULE_WITH_VERSIONED_STATE_ACCESS_IN_SLOT_HOOK_DISCRIMINANT = 232
 GAS_TESTER_DISCRIMINANT = 233

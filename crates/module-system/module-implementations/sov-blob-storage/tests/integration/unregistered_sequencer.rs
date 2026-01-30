@@ -2,7 +2,7 @@ use std::num::NonZero;
 
 use sov_blob_storage::{config_deferred_slots_count, config_unregistered_blobs_per_slot};
 use sov_mock_da::{MockAddress, MockBlob};
-use sov_modules_api::{Amount, CryptoSpec, Spec};
+use sov_modules_api::{Amount, CryptoSpec, FullyBakedTx, HDTimestamp, Spec};
 use sov_modules_stf_blueprint::{BatchReceipt, Runtime};
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
@@ -43,8 +43,11 @@ fn make_unregistered_blobs<
                 details,
                 nonces,
             );
+            let mut fully_baked_tx = FullyBakedTx::new(tx.data);
+            // Add sequencing metadata for integration test
+            fully_baked_tx.set_sequencing_metadata(&HDTimestamp::now());
 
-            MockBlob::new_with_hash(borsh::to_vec(&tx).unwrap(), sender.da_address)
+            MockBlob::new_with_hash(borsh::to_vec(&fully_baked_tx).unwrap(), sender.da_address)
         })
         .collect::<Vec<_>>()
 }
@@ -68,8 +71,11 @@ fn make_unregistered_blob_with_approx_size<
         details,
         nonces,
     );
+    let mut fully_baked_tx = FullyBakedTx::new(tx.data);
+    // Add sequencing metadata for integration test
+    fully_baked_tx.set_sequencing_metadata(&HDTimestamp::now());
 
-    MockBlob::new_with_hash(borsh::to_vec(&tx).unwrap(), sender.da_address)
+    MockBlob::new_with_hash(borsh::to_vec(&fully_baked_tx).unwrap(), sender.da_address)
 }
 
 /// Tries to send too many blobs from a non-registered sequencer and hit rate limits.

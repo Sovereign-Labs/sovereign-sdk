@@ -166,11 +166,11 @@ where
     };
 
     let (native_root, change_set) = prover_storage
-        .compute_state_update(state_accesses, &witness, prev_state_root.clone())
+        .compute_state_update(state_accesses, &witness, prev_state_root.clone(), None)
         .expect("state update computation must succeed");
 
     let (zk_root, _) = zk_storage
-        .compute_state_update(state_accesses_for_zk, &witness, prev_state_root)
+        .compute_state_update(state_accesses_for_zk, &witness, prev_state_root, None)
         .expect("state update computation must succeed");
 
     assert_eq!(native_root.as_ref(), zk_root.as_ref());

@@ -47,6 +47,8 @@ where
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<S::Da as DaSpec>::BlockHeader,
@@ -107,6 +109,7 @@ where
 
 #[derive(Default, DispatchCall)]
 #[expose_rpc]
+#[allow(dead_code)]
 pub struct TestRuntime<S: Spec> {
     module: MyModule<S, u32>,
 }

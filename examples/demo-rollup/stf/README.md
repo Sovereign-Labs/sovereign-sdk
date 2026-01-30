@@ -73,6 +73,9 @@ pub struct MyRuntime<S: Spec> {
 
     #[allow(unused)]
     accounts: sov_accounts::Accounts<S>,
+
+    #[allow(unused)]
+    chain_state: sov_chain_state::ChainState<S>,
 }
 
 fn main() {}

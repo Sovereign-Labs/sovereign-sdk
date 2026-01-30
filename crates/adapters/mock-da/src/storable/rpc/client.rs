@@ -66,8 +66,6 @@ impl DaService for StorableMockDaClient {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    const GUARANTEES_TRANSACTION_ORDERING: bool = true;
-
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let url = self.url(&format!("/blocks/{height}"))?;
         let response = self.client.get(url).send().await?;
@@ -190,7 +188,7 @@ impl DaService for StorableMockDaClient {
         Ok(proofs)
     }
 
-    async fn get_signer(&self) -> <Self::Spec as DaSpec>::Address {
+    async fn get_signer(&self) -> Option<<Self::Spec as DaSpec>::Address> {
         let url = self.url("/signer").expect("Bad url");
         let response = self
             .client
@@ -202,6 +200,22 @@ impl DaService for StorableMockDaClient {
         let signer_response: SignerResponse = handle_response(response)
             .await
             .expect("Failed to parse signer response");
-        signer_response.address
+        Some(signer_response.address)
+    }
+
+    async fn get_approximate_block_time(&self) -> Duration {
+        let url = self.url("/approximate-block-time").expect("Bad url");
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .expect("Failed to fetch approximate block time");
+
+        let block_time_response: BlockTimeResponse = handle_response(response)
+            .await
+            .expect("Failed to parse approximate block time response");
+
+        std::time::Duration::from_millis(block_time_response.approximate_block_time_ms)
     }
 }

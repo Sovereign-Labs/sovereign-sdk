@@ -1,6 +1,7 @@
 //! InfluxDB metrics for Sovereign rollups.
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::LazyLock;
 mod config;
 #[cfg(feature = "gas-constant-estimation")]
@@ -14,13 +15,74 @@ pub use config::{MonitoringConfig, TelegrafSocketConfig};
 #[cfg(feature = "gas-constant-estimation")]
 pub use gas_constant_estimation::{GasConstantTracker, GAS_CONSTANTS};
 pub use tracker::{
-    init_metrics_tracker, timestamp, BatchMetrics, BatchOutcome, HttpMetrics, RunnerMetrics,
-    RunnerProcessStfChangesMetrics, SlotProcessingMetrics, TransactionEffect,
-    TransactionProcessingMetrics, UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime,
-    ZkVmExecutionChunk,
+    init_metrics_tracker, spawn_tokio_runtime_metrics_task, timestamp, BatchMetrics, BatchOutcome,
+    HttpMetrics, RateLimiterMetrics, RpcMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics,
+    SlotProcessingMetrics, TransactionEffect, TransactionProcessingMetrics,
+    UserSpaceSlotProcessingMetrics, ZkCircuit, ZkProvingTime, ZkVmExecutionChunk,
 };
 
-pub(crate) type SerializableMetric = Box<dyn Metric>;
+#[derive(Debug)]
+pub(crate) enum SubmittableMetricKind {
+    Boxed(Box<dyn Metric>),
+    Http(HttpMetrics),
+    Batch(BatchMetrics),
+    Rpc(RpcMetrics),
+    TransactionProcessing(TransactionProcessingMetrics),
+}
+
+impl Metric for SubmittableMetricKind {
+    fn measurement_name(&self) -> &'static str {
+        match self {
+            SubmittableMetricKind::Boxed(metric) => metric.measurement_name(),
+            SubmittableMetricKind::Http(metric) => metric.measurement_name(),
+            SubmittableMetricKind::Batch(metric) => metric.measurement_name(),
+            SubmittableMetricKind::Rpc(metric) => metric.measurement_name(),
+            SubmittableMetricKind::TransactionProcessing(metric) => metric.measurement_name(),
+        }
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        match self {
+            SubmittableMetricKind::Boxed(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::Http(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::Batch(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::Rpc(metric) => metric.serialize_for_telegraf(buffer),
+            SubmittableMetricKind::TransactionProcessing(metric) => {
+                metric.serialize_for_telegraf(buffer)
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SubmittableMetric {
+    contents: SubmittableMetricKind,
+    timestamp: u128,
+}
+
+impl SubmittableMetric {
+    pub(crate) fn new(contents: SubmittableMetricKind, timestamp: u128) -> Self {
+        Self {
+            contents,
+            timestamp,
+        }
+    }
+
+    pub(crate) fn now(contents: SubmittableMetricKind) -> Self {
+        Self::new(contents, timestamp())
+    }
+}
+
+impl Metric for SubmittableMetric {
+    fn measurement_name(&self) -> &'static str {
+        self.contents.measurement_name()
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        self.contents.serialize_for_telegraf(buffer)?;
+        write!(buffer, " {}", self.timestamp)
+    }
+}
 
 /// Count of metrics that have been dropped.
 pub(crate) static DROPPED_METRICS_COUNT: std::sync::atomic::AtomicUsize =
@@ -30,7 +92,7 @@ pub(crate) static DROPPED_METRICS_COUNT: std::sync::atomic::AtomicUsize =
 /// Hides underlying monitoring system implementation.
 #[derive(Debug, Clone)]
 pub struct MetricsTracker {
-    sender: tokio::sync::mpsc::Sender<SerializableMetric>,
+    sender: tokio::sync::mpsc::Sender<SubmittableMetric>,
 }
 
 /// Anything that makes sense to serialize for telegraf.
@@ -47,6 +109,11 @@ pub trait Metric: Send + Sync + std::fmt::Debug {
     fn write_to_csv(&self, _writers: &mut csv_helper::CsvWriters) -> std::io::Result<()> {
         Ok(())
     }
+}
+
+/// Anything that makes sense to serialize for telegraf.
+pub trait KnownMetric: Metric {
+    fn to_known_submittable(self) -> SubmittableMetric;
 }
 
 impl Metric for Box<dyn Metric> {
@@ -122,6 +189,7 @@ mod tests {
             // Setting low, so each metric is published immediately
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
@@ -217,6 +285,7 @@ mod tests {
             // Setting low, so each metric is published immediately
             max_datagram_size: Some(1),
             max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);

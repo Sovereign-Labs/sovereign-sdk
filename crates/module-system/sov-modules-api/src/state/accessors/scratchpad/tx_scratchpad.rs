@@ -4,6 +4,7 @@ use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::stf::ExecutionContext;
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
 
 use super::super::checkpoints::StateCheckpoint;
@@ -14,7 +15,7 @@ use super::super::{
 };
 use super::PreExecWorkingSet;
 use crate::module::Spec;
-use crate::state::traits::{delegate_version_reader, PerBlockCache};
+use crate::state::traits::{delegate_version_reader, PerBlockCache, PinnedCacheAccessor};
 use crate::{BasicGasMeter, GasMeter};
 
 /// Transaction-level state accumulator without gas metering.
@@ -143,6 +144,16 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for TxScratchpad<S, I> {
     }
 }
 
+impl<S: Spec, I: StateProvider<S>> PinnedCacheAccessor<S> for TxScratchpad<S, I> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.inner.inner.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.inner.inner.storage()
+    }
+}
+
 impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
     /// Change set resulting from transaction execution.
     pub fn tx_changes(&self, execution_context: ExecutionContext) -> TxChangeSet {
@@ -174,8 +185,9 @@ mod tests {
     use sov_metrics::StateAccessMetric;
     use sov_rollup_interface::stf::ExecutionContext;
     use sov_state::codec::BcsCodec;
+    use sov_state::SlotValueFromCodec;
     use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::TestHasher;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
@@ -195,7 +207,7 @@ mod tests {
     }
 
     fn test_cache_warmup_changeset_with_namespace(namespace: Namespace) {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let mut worker_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
@@ -236,7 +248,7 @@ mod tests {
     }
 
     fn test_cache_warmup_overrides_with_namespace(namespace: Namespace) {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let mut worker_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
@@ -279,7 +291,7 @@ mod tests {
     }
 
     fn create_srcratchpad<S: Spec>(storage: S::Storage) -> TxScratchpad<S, StateCheckpoint<S>> {
-        let checkpoint = StateCheckpoint::new(storage, &MockKernel::new(4, 1));
+        let checkpoint = StateCheckpoint::new(storage, &MockKernel::new(4, 1), None);
         checkpoint.to_tx_scratchpad()
     }
 

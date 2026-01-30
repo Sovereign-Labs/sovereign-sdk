@@ -12,7 +12,8 @@ use super::primitive_types::SealedBlock;
 #[cfg(feature = "native")]
 use crate::primitive_types::TxSignedAndRecovered;
 use crate::{
-    evm::primitive_types::TransactionSigned, RlpEvmTransaction, BLOB_GAS_PRICE, EXCESS_BLOB_GAS,
+    evm::primitive_types::TransactionSigned, RlpEvmTransaction, SyntheticBlockWithoutRootsAndBloom,
+    BLOB_GAS_PRICE, EXCESS_BLOB_GAS,
 };
 
 // BlockEnv from SealedBlock
@@ -25,6 +26,22 @@ impl From<SealedBlock> for BlockEnv {
             block.header.beneficiary,
             block.header.number,
             Some(block.header.mix_hash),
+        )
+    }
+}
+
+impl From<SyntheticBlockWithoutRootsAndBloom> for BlockEnv {
+    fn from(block: SyntheticBlockWithoutRootsAndBloom) -> Self {
+        let header = block.partial_header();
+        create_block_env(
+            header
+                .base_fee_per_gas
+                .expect("Synthetic blocks have their base fee set"),
+            header.gas_limit,
+            header.timestamp,
+            header.beneficiary,
+            header.number,
+            Some(header.mix_hash),
         )
     }
 }
@@ -58,7 +75,13 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         chain_id: tx.chain_id(),
         // We don't set gas_price nor the gas_priority_fee.
         // We disable the EVM logic charging gas at the beginning of the TX and instead rely on sov gas metering
-        ..Default::default()
+        // Default values
+        gas_price: 0,
+        access_list: vec![].into(),
+        gas_priority_fee: None,
+        blob_hashes: vec![],
+        max_fee_per_blob_gas: 0,
+        authorization_list: vec![],
     }
 }
 
@@ -122,7 +145,8 @@ pub(crate) fn create_block_env(
             excess_blob_gas: EXCESS_BLOB_GAS,
             blob_gasprice: BLOB_GAS_PRICE,
         }),
-        ..Default::default()
+        // Default values
+        difficulty: U256::ZERO,
     }
 }
 

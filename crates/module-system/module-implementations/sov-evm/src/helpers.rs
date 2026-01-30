@@ -1,7 +1,7 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_primitives::BlockNumber;
 use alloy_primitives::TxKind;
-use alloy_primitives::{B256, U256};
+use alloy_primitives::B256;
 use alloy_rpc_types::{TransactionInfo, TransactionRequest};
 use revm::context::{BlockEnv, TransactionType, TxEnv};
 use sov_rpc_eth_types::EthResult;
@@ -40,7 +40,10 @@ pub(crate) fn prepare_call_env(
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
         access_list: access_list.unwrap_or_default(),
-        ..Default::default()
+        // Default values
+        blob_hashes: vec![],
+        max_fee_per_blob_gas: 0,
+        authorization_list: vec![],
     };
 
     Ok(env)
@@ -51,21 +54,22 @@ pub(crate) fn from_recovered_with_block_context(
     tx: Recovered<TransactionSigned>,
     block_hash: Option<B256>,
     block_number: BlockNumber,
-    tx_index: U256,
+    tx_index: u64,
 ) -> alloy_rpc_types::Transaction {
-    let index = Some(tx_index.to::<u64>());
     let tx_info = TransactionInfo {
         block_hash,
         block_number: Some(block_number),
-        index,
-        ..Default::default()
+        index: Some(tx_index),
+        // Default values
+        hash: None,
+        base_fee: None,
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::Address;
+    use alloy_primitives::{Address, U256};
     use revm::context::TransactTo;
 
     use super::*;

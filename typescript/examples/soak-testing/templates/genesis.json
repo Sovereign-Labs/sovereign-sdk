@@ -1,0 +1,97 @@
+{
+  "accounts": {
+    "accounts": []
+  },
+  "attester_incentives": {
+    "minimum_attester_bond": [1000, 1000],
+    "minimum_challenger_bond": [1000, 1000],
+    "initial_attesters": [
+      ["sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf", "200000"]
+    ],
+    "rollup_finality_period": 5,
+    "maximum_attested_height": 0,
+    "light_client_finalized_height": 0
+  },
+  "bank": {
+    "gas_token_config": {
+      "token_name": "sov-token",
+      "address_and_balances": [
+        [
+          "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+          "10000000000000000"
+        ],
+        [
+          "sov1x3jtvq0zwhj2ucsc4hqugskvralrulxvf53vwtkred93s85ar2a",
+          "1000000000"
+        ],
+        [
+          "sov10d6chuh8vu86ltmt7qq4ec8lt25qyvr0cl3lg4mzs5llcfnx69m",
+          "1000000000"
+        ],
+        [
+          "sov1v870parxhssv5wyz634wqlt9yflrrnawlwzjhj8409q4yevcj3s",
+          "1000000000"
+        ],
+        [
+          "sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3crhxalf",
+          "1000000000"
+        ],
+        [
+          "sov1nc27sae83wj0prl0en4y9lldk6e7v9qz63k50tus95zpvt0jvak",
+          "1000000000"
+        ],
+        [
+          "sov16wxfprgt9lhvd097kes7e2v4juz5rn8jrzt7477cp9dwwg0lh5p",
+          "1000000000"
+        ]
+      ],
+      "admins": ["sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"]
+    },
+    "tokens": []
+  },
+  "chain_state": {
+    "current_time": 0,
+    "operating_mode": "zk",
+    "inner_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
+    "outer_code_commitment": [
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0
+    ],
+    "genesis_da_height": 0
+  },
+  "paymaster": {
+    "payers": [
+      {
+        "payer_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+        "policy": {
+          "default_payee_policy": {
+            "allow": {}
+          },
+          "payees": [],
+          "authorized_updaters": [],
+          "authorized_sequencers": "all"
+        },
+        "sequencers_to_register": [
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ]
+      }
+    ]
+  },
+  "prover_incentives": {
+    "proving_penalty": [10, 10],
+    "minimum_bond": [1000, 1000],
+    "initial_provers": [
+      ["sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf", "200000"]
+    ]
+  },
+  "sequencer_registry": {
+    "seq_rollup_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+    "seq_da_address": "0000000000000000000000000000000000000000000000000000000000000000",
+    "seq_bond": "100000000000",
+    "minimum_bond": [5000, 5000],
+    "is_preferred_sequencer": true
+  },
+  "uniqueness": null,
+  "blob_storage": null,
+  "example_module": {}
+}

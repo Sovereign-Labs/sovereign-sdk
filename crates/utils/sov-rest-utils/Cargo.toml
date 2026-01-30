@@ -11,8 +11,10 @@ publish = true
 
 [dependencies]
 anyhow = { workspace = true }
+client-ip = "0.1.1"
 axum = { workspace = true, features = ["query", "ws", "json", "original-uri"] }
 derive_more = { workspace = true, default-features = true, features = ["deref", "display"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 futures = { workspace = true }
 proptest = { workspace = true, features = ["std"], optional = true }
 proptest-derive = { workspace = true, optional = true }
@@ -30,6 +32,11 @@ tracing = { workspace = true }
 sov-rest-utils = { path = ".", features = ["arbitrary"] }
 serde_urlencoded = "0.7"
 test-strategy = { workspace = true }
+tokio-tungstenite = { version = "0.28.0", default-features = false, features = ["connect"] }
+tokio-stream = { workspace = true }
+tungstenite = "0.28.0"
+axum = { workspace = true, features = ["query", "ws", "json", "original-uri", "tokio", "http1"] }
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [features]
 arbitrary = ["proptest", "proptest-derive", "sov-rest-utils/arbitrary"]

@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use sov_modules_api::{Amount, CryptoSpec, PrivateKey, SafeVec, Spec};
 use sov_paymaster::{PayeePolicy, PayerGenesisConfig, PaymasterConfig, PaymasterPolicyInitializer};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::traits::MinimalGenesis;
 use sov_test_utils::runtime::{
     Runtime, TestRunner, ValueSetter, ValueSetterCallMessage, ValueSetterConfig,
 };
 use sov_test_utils::{
-    AsUser, EncodeCall, MockDaSpec, TestSequencer, TestUser, TransactionTestCase, TransactionType,
+    AsUser, EncodeCall, MockDaSpec, MockHash, TestSequencer, TestUser, TransactionTestCase,
+    TransactionType,
 };
 
 use crate::runtime::{GenesisConfig, PaymasterRuntime};
@@ -42,10 +44,10 @@ pub enum TxOutcome {
 // Use a trait to circumvent the orphan rule and add `do_value_setter_tx` to TestRunner
 pub trait DoValueSetterTx<S: Spec> {
     fn do_value_setter_tx(&mut self, user: &TestUser<S>, expected_outcome: TxOutcome);
-    fn do_value_setter_tx_with_generation(
+    fn do_value_setter_tx_with_nonce(
         &mut self,
         user: &TestUser<S>,
-        generation: u64,
+        nonce: u64,
         expected_outcome: TxOutcome,
     );
 }
@@ -54,8 +56,9 @@ impl<RT: Runtime<S>, S: Spec> DoValueSetterTx<S> for TestRunner<RT, S>
 where
     RT: 'static + Runtime<S> + MinimalGenesis<S> + EncodeCall<ValueSetter<S>>,
     S: Spec<
-        Storage = ProverStorage<
+        Storage = NomtProverStorage<
             DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
         >,
         Da = MockDaSpec,
     >,
@@ -93,10 +96,10 @@ where
         };
     }
 
-    fn do_value_setter_tx_with_generation(
+    fn do_value_setter_tx_with_nonce(
         &mut self,
         user: &TestUser<S>,
-        generation: u64,
+        nonce: u64,
         expected_outcome: TxOutcome,
     ) {
         match expected_outcome {
@@ -109,7 +112,7 @@ where
                 );
                 let input =
                     TransactionType::PreAuthenticated(input.to_serialized_authenticated_tx(
-                        &mut HashMap::from([(user.private_key().pub_key(), generation)]),
+                        &mut HashMap::from([(user.private_key().pub_key(), nonce)]),
                     ));
                 self.execute_skipped_transaction(TransactionTestCase {
                     input,
@@ -130,7 +133,7 @@ where
                 );
                 let input =
                     TransactionType::PreAuthenticated(input.to_serialized_authenticated_tx(
-                        &mut HashMap::from([(user.private_key().pub_key(), generation)]),
+                        &mut HashMap::from([(user.private_key().pub_key(), nonce)]),
                     ));
                 self.execute_transaction(TransactionTestCase {
                     input,

@@ -7,62 +7,62 @@ use sov_state::{
 };
 use sov_test_utils::storage::{
     ForklessStorageManager, NativeStorageManager, NomtStorageManager, NonCommitingStorageManager,
-    SimpleNomtStorageManager, SimpleStorageManager,
+    SimpleJmtStorageManager, SimpleStorageManager,
 };
-use sov_test_utils::{TestHasher, TestNomtSpec, TestSpec};
+use sov_test_utils::{TestHasher, TestJmtSpec, TestSpec};
 
 #[test]
 fn jmt_concurrent_prover_storages() {
-    let storage_manager = SimpleStorageManager::new();
-    concurrent_prover_storages::<TestSpec, _>(storage_manager);
+    let storage_manager = SimpleJmtStorageManager::new();
+    concurrent_prover_storages::<TestJmtSpec, _>(storage_manager);
 }
 
 #[test]
 fn jmt_concurrent_prover_in_memory_storages() {
     let storage_manager =
         NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
-    concurrent_prover_storages::<TestSpec, _>(storage_manager);
+    concurrent_prover_storages::<TestJmtSpec, _>(storage_manager);
 }
 
 #[test]
 fn nomt_concurrent_prover_storages() {
-    let mut storage_manager = SimpleNomtStorageManager::new();
+    let mut storage_manager = SimpleStorageManager::new();
     storage_manager.set_strict_mode(false);
-    concurrent_prover_storages::<TestNomtSpec, _>(storage_manager);
+    concurrent_prover_storages::<TestSpec, _>(storage_manager);
 }
 
 #[test]
 fn nomt_concurrent_prover_in_memory_storages() {
     let storage_manager =
         NonCommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-    concurrent_prover_storages::<TestNomtSpec, _>(storage_manager);
+    concurrent_prover_storages::<TestSpec, _>(storage_manager);
 }
 
 #[test]
 fn jmt_node_sequencer_concurrent_state_update() {
-    let storage_manager = SimpleStorageManager::new();
-    node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
+    let storage_manager = SimpleJmtStorageManager::new();
+    node_sequencer_compute_state_update_concurrency::<TestJmtSpec, _>(storage_manager);
 }
 
 #[test]
 fn jmt_node_sequencer_concurrent_state_update_in_memory() {
     let storage_manager =
         NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
-    node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
+    node_sequencer_compute_state_update_concurrency::<TestJmtSpec, _>(storage_manager);
 }
 
 #[test]
 fn nomt_node_sequencer_concurrent_state_update() {
-    let mut storage_manager = SimpleNomtStorageManager::new();
+    let mut storage_manager = SimpleStorageManager::new();
     storage_manager.set_strict_mode(false);
-    node_sequencer_compute_state_update_concurrency::<TestNomtSpec, _>(storage_manager);
+    node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
 }
 
 #[test]
 fn nomt_node_sequencer_concurrent_state_update_in_memory() {
     let storage_manager =
         NonCommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
-    node_sequencer_compute_state_update_concurrency::<TestNomtSpec, _>(storage_manager);
+    node_sequencer_compute_state_update_concurrency::<TestSpec, _>(storage_manager);
 }
 
 /// # Description
@@ -427,6 +427,7 @@ where
         sequencer_state_accesses,
         &<S::Storage as Storage>::Witness::default(),
         sequencer_root_hash,
+        None,
     );
     let (sequencer_root, _) = result.unwrap();
 
@@ -453,7 +454,7 @@ fn materialize_writes<S: Storage>(
     };
 
     let (root, mut state_update) = storage
-        .compute_state_update(state_accesses, &S::Witness::default(), prev_root)
+        .compute_state_update(state_accesses, &S::Witness::default(), prev_root, None)
         .unwrap();
 
     state_update.add_accessory_items(accessory_writes);

@@ -9,7 +9,7 @@ repository = { workspace = true }
 
 version = { workspace = true }
 readme = "README.md"
-publish = false
+publish = true 
 
 [lints]
 workspace = true
@@ -32,6 +32,7 @@ thiserror = { workspace = true }
 bytes = { workspace = true }
 derive_more = { workspace = true, features = ["deref_mut"] }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 derive-new = { workspace = true }
@@ -44,7 +45,6 @@ jsonrpsee = { workspace = true, features = [
 ], optional = true }
 schemars = { workspace = true }
 tracing = { workspace = true }
-quick_cache = { workspace = true }
 
 alloy-eips = { workspace = true, features = ["std"] }
 # `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there
@@ -63,6 +63,7 @@ revm = { workspace = true, features = [
 	"optional_eip3607",
 	"optional_no_base_fee",
 	"optional_balance_check",
+	"memory_limit",
 	"std",
 ] }
 revm-database-interface = { workspace = true }
@@ -80,12 +81,14 @@ proptest = { workspace = true, optional = true }
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["getrandom"] }
 alloy-consensus = { workspace = true, features = ["secp256k1"] }
+alloy-signer = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-rlp = { workspace = true }
 sov-evm = { path = ".", features = ["native"] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 tempfile = { workspace = true }
 bytes = { workspace = true }
-ethers = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
 lazy_static = { workspace = true }
 jsonschema = { workspace = true }
@@ -93,6 +96,7 @@ bincode = { workspace = true }
 
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
+sov-evm-test-utils = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
 sov-modules-api = { workspace = true, features = ["test-utils"] }
 
@@ -118,6 +122,7 @@ arbitrary = [
 	"alloy-consensus/arbitrary",
 	"reth-primitives-traits/arbitrary",
 	"reth-ethereum-primitives/arbitrary",
+	"sov-evm-test-utils/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",
@@ -131,6 +136,7 @@ native = [
 	"dep:sov-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
+	"revm/blst", # Use faster C implementation of bls in native code
 	"sov-evm/native",
 	"sov-metrics/native",
 	"sov-address/native",

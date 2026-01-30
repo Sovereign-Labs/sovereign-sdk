@@ -1,18 +1,18 @@
 use std::num::NonZero;
 use std::sync::Arc;
 
+use crate::helpers::hash_stf::HashStf;
 use axum::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use rockbound::SchemaBatch;
-use sha2::Sha256;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::{
-    BlockProducingConfig, MockAddress, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec,
+    BlockProducingConfig, MockAddress, MockBlockHeader, MockDaConfig, MockDaService,
     MockDaVerifier, MockHash,
 };
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
@@ -29,8 +29,7 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
-use sov_state::{DefaultStorageSpec, NativeStorage, ProverStorage};
-use sov_stf_runner::make_da_sync_state;
+use sov_state::NativeStorage;
 use sov_stf_runner::processes::{
     start_zk_workflow_in_background, ParallelProverService, RollupProverConfigDiscriminants,
 };
@@ -38,20 +37,20 @@ use sov_stf_runner::{
     initialize_state, query_state_update_info, HttpServerConfig, ProofManagerConfig, RollupConfig,
     RunnerConfig, StateTransitionRunner,
 };
+use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::{
-    TestSpec, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
+    TestSpec, TestStorage, TestStorageManager, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE,
+    TEST_MAX_CONCURRENT_BLOBS, TEST_MOCK_DA_POLLING_INTERVAL,
 };
+use tokio::net::TcpListener;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
-use crate::helpers::hash_stf::HashStf;
-
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
 
-pub type S = DefaultStorageSpec<Sha256>;
-pub type StorageManager = NativeStorageManager<MockDaSpec, ProverStorage<S>>;
-pub type HashStfRunner<Da> = StateTransitionRunner<HashStf, StorageManager, Da, MockZkvm, MockZkvm>;
+pub type HashStfRunner<Da> =
+    StateTransitionRunner<HashStf, TestStorageManager, Da, MockZkvm, MockZkvm>;
 
 /// TestNode simulates a full-node.
 pub struct TestNode {
@@ -149,9 +148,9 @@ impl ProofSender for MockProofSender {
 
 // Returns genesis state root, prev state root for given init variant and initial value for state update info.
 pub async fn bootstrap_state_update_info(
-    storage_manager: &mut StorageManager,
+    storage_manager: &mut TestStorageManager,
     da_sync_state: &DaSyncState,
-) -> anyhow::Result<StateUpdateInfo<ProverStorage<S>>> {
+) -> anyhow::Result<StateUpdateInfo<TestStorage>> {
     let genesis_block_header = MockBlockHeader::from_height(0);
     let (stf_storage, ledger_state) = storage_manager.create_state_after(&genesis_block_header)?;
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
@@ -159,13 +158,17 @@ pub async fn bootstrap_state_update_info(
     query_state_update_info(&ledger_db, stf_storage, da_sync_state).await
 }
 
+pub type StateRoot = <TestStorage as sov_state::Storage>::Root;
+
+// TODO: extract similarities into helper for rollup blueprint, a lot of duplication
+/// Returns (runner, state_root_after_init, test_node)
 pub async fn initialize_runner(
     da_service: Arc<MockDaService>,
     path: &std::path::Path,
     init_variant: MockInitVariant,
     aggregated_proof_block_jump: usize,
     nb_of_prover_threads: Option<usize>,
-) -> (HashStfRunner<MockDaService>, TestNode) {
+) -> (HashStfRunner<MockDaService>, StateRoot, TestNode) {
     let stf = HashStf::new();
     let inner_vm = MockZkvmHost::new();
     let outer_vm = MockZkvmHost::new_non_blocking();
@@ -173,39 +176,53 @@ pub async fn initialize_runner(
 
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
 
-    let mut storage_manager: StorageManager = NativeStorageManager::new(path).unwrap();
+    let mut tasks = JoinSet::new();
+    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
+    shutdown_receiver.mark_unchanged();
+
+    let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
+        da_service.clone(),
+        shutdown_receiver.clone(),
+        TEST_MOCK_DA_POLLING_INTERVAL,
+    )
+    .await
+    .unwrap();
+
+    let receiver_for_metrics = shutdown_receiver.clone();
+    let monitoring_config = rollup_config.monitoring.clone();
+    tasks.spawn(async move {
+        if let Some(handle) =
+            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+        {
+            handle.await.expect("Metrics task errored");
+        } else {
+            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+        };
+    });
+
+    let db_config = RollupDbConfig::default_in_path(path.to_path_buf());
+    let mut storage_manager: TestStorageManager = NomtStorageManager::new(db_config).unwrap();
 
     let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     let (_, ledger_state) = storage_manager
         .create_state_after(&finalized_header)
         .unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
-    let (sync_sender, _sync_status_receiver) = watch::channel(SyncStatus::START);
 
-    let da_sync_state = make_da_sync_state(
-        &rollup_config.runner,
-        None,
-        &ledger_db,
-        da_service.as_ref(),
-        sync_sender,
-    )
-    .await
-    .unwrap();
+    let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache)
+        .await
+        .unwrap();
+    let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
     let (state_update_sender, state_update_recv) = watch::channel(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await
             .unwrap(),
     );
 
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
-
     let (prev_state_root, genesis_state_root) = init_variant
         .initialize(&stf, &mut storage_manager)
         .await
         .unwrap();
-
-    let mut tasks = JoinSet::new();
 
     tasks.spawn({
         let ledger_updates = ledger_db.clone();
@@ -224,8 +241,18 @@ pub async fn initialize_runner(
         )
     });
 
+    let axum_socket_addr = rollup_config
+        .runner
+        .http_config
+        .socket_address()
+        .unwrap_or_else(|e| {
+            panic!("Unable to create socket from config: {e:?}");
+        });
+
+    let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
+        axum_tcp,
         if nb_of_prover_threads.is_some() {
             Some(rollup_config.proof_manager)
         } else {
@@ -239,10 +266,11 @@ pub async fn initialize_runner(
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
-        rollup_config.monitoring.clone(),
         None,
         None,
         da_sync_state,
+        da_service_with_cache,
+        0,
     )
     .await
     .unwrap();
@@ -282,6 +310,7 @@ pub async fn initialize_runner(
 
     (
         runner,
+        prev_state_root,
         TestNode {
             proof_posted_in_da_sub,
             agg_proof_saved_in_db_sub,
@@ -373,21 +402,14 @@ where
 
 fn get_da_polling_interval_ms(da_config: &MockDaConfig) -> u64 {
     match da_config.block_producing {
-        BlockProducingConfig::Periodic { block_time_ms } =>
-        // 10 times per block, but 10 ms in the worst case
-        {
+        BlockProducingConfig::Periodic { block_time_ms } => {
+            // 10 times per block, but 10 ms in the worst case
             block_time_ms.checked_div(5).unwrap_or(10)
         }
-        _ => 150,
+        _ => TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
     }
 }
 
-fn get_da_total_timeout_secs(da_config: &MockDaConfig) -> u64 {
-    match da_config.block_producing {
-        BlockProducingConfig::Periodic { block_time_ms } => block_time_ms.saturating_mul(10_000),
-        _ => 3_600,
-    }
-}
 pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     path: &std::path::Path,
     da_config: MockDaConfig,
@@ -396,11 +418,10 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
     RollupConfig {
         storage: RollupDbConfig::default_in_path(path.to_path_buf()),
         runner: RunnerConfig {
-            genesis_height: 0,
             da_polling_interval_ms: get_da_polling_interval_ms(&da_config),
-            da_total_timeout_secs: get_da_total_timeout_secs(&da_config),
             http_config: HttpServerConfig::localhost_on_free_port(),
-            concurrent_sync_tasks: Some(1),
+            concurrent_sync_tasks: 1,
+            pre_fetched_blocks_capacity: NonZero::new(3).unwrap(),
             save_tx_bodies: false,
         },
         da: da_config,

@@ -1,3 +1,4 @@
+use crate::rpc_limit_exceeded;
 use crate::Ethereum;
 use crate::EthereumAddress;
 use crate::EthereumAuthenticator;
@@ -5,17 +6,16 @@ use crate::FromVmAddress;
 use crate::HasKernel;
 use crate::Sequencer;
 use alloy_rpc_types::eth::Filter;
-use alloy_rpc_types::Log;
 pub use cursor::Cursor;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use service::LogsService;
 use sov_modules_api::Spec;
+use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::{FilterWithCursor, LogsWithMaybeCursor};
 use std::marker::PhantomData;
 use std::sync::Arc;
-
 mod cursor;
 mod service;
 
@@ -34,15 +34,24 @@ where
         parameters: JRpcParams<'static>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
-    ) -> Result<Vec<Log>, ErrorObjectOwned> {
+    ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
         let state = ethereum.api_state_accessor();
         let service = LogsService::<S, Seq>::new(
             parameters.one::<Filter>()?,
             None,
             ethereum.extension.max_log_limit,
             state,
+            ethereum.extension.response_size_limit,
         );
-        Ok(service.logs_for_filter().await?.logs)
+        let LogsWithMaybeCursor { logs, cursor } = service.logs_for_filter().await?;
+
+        if cursor.is_some() {
+            return Err(rpc_limit_exceeded(
+                "Response size exceeds limit. Use eth_getLogsWithCursor or reduce the number of logs requested",
+            ));
+        }
+
+        Ok(logs)
     }
 
     pub async fn eth_get_logs_with_cursor(
@@ -53,8 +62,13 @@ where
         let state = ethereum.api_state_accessor();
         let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
         let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
-        let service =
-            LogsService::<S, Seq>::new(filter, cursor, ethereum.extension.max_log_limit, state);
+        let service = LogsService::<S, Seq>::new(
+            filter,
+            cursor,
+            ethereum.extension.max_log_limit,
+            state,
+            ethereum.extension.response_size_limit,
+        );
         Ok(service.logs_for_filter().await?)
     }
 }

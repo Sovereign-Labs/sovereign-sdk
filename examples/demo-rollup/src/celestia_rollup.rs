@@ -103,7 +103,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> Self::DaService {
         CelestiaService::new(
             rollup_config.da.clone(),
@@ -111,14 +111,16 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
                 rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
                 rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
             },
+            shutdown_receiver,
         )
         .await
     }
 
     async fn sequencer_additional_apis<Seq>(
         &self,
-        sequencer: Arc<Seq>,
+        sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -127,7 +129,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
-            buffer_raw_txs: true,
+            shutdown_receiver,
         };
 
         Ok(NodeEndpoints {

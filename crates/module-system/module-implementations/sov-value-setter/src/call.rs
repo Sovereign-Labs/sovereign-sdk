@@ -78,7 +78,7 @@ impl<S: Spec> ValueSetter<S> {
             // Here we use a custom error type.
             Err(SetValueError::WrongSender::<S> {
                 admin,
-                sender: context.sender().clone(),
+                sender: *context.sender(),
             })?;
         }
 
@@ -115,7 +115,7 @@ impl<S: Spec> ValueSetter<S> {
             // Here we use a custom error type.
             Err(SetValueError::WrongSender::<S> {
                 admin,
-                sender: context.sender().clone(),
+                sender: *context.sender(),
             })?;
         }
 

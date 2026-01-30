@@ -14,7 +14,7 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::{
-    default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
+    default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
     TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
 };
 
@@ -88,18 +88,14 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
         },
     );
 
-    let tx = default_test_signed_transaction::<Runtime<TestSpec>, TestSpec>(
+    let tx = default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
         &key_and_address.private_key,
         &msg,
         0,
         &CHAIN_HASH,
     );
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
-    test_rollup
-        .client
-        .client
-        .send_txs_to_sequencer(&[tx])
-        .await?;
+    test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
     slot_subscription.next().await;
 
     test_rollup.da_service.produce_n_blocks_now(3).await?;

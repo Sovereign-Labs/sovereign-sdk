@@ -4,6 +4,7 @@
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{EventContainer, Namespace, SlotKey, SlotValue, TypeErasedEvent};
 
 use super::super::checkpoints::StateCheckpoint;
@@ -14,7 +15,7 @@ use super::super::{
 };
 use super::TxScratchpad;
 use crate::module::Spec;
-use crate::state::traits::{delegate_version_reader, PerBlockCache};
+use crate::state::traits::{delegate_version_reader, PerBlockCache, PinnedCacheAccessor};
 use crate::transaction::{
     transaction_consumption_helper, AuthenticatedTransactionData, PriorityFeeBips,
     TransactionConsumption,
@@ -166,7 +167,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
         use crate::capabilities::mocks::MockKernel;
 
         let state_checkpoint: StateCheckpoint<S> =
-            StateCheckpoint::new(inner, &MockKernel::<S>::default());
+            StateCheckpoint::new(inner, &MockKernel::<S>::default(), None);
         let tx_scratchpad = TxScratchpad {
             inner: RevertableWriter::new(state_checkpoint),
             phantom: PhantomData,
@@ -187,7 +188,7 @@ impl<S: Spec> WorkingSet<S, StateCheckpoint<S>> {
 
     /// Creates a new [`WorkingSet`] instance backed by the given [`Spec::Storage`] and a [`Kernel`].
     pub fn new_with_kernel<K: Kernel<S>>(inner: S::Storage, kernel: &K) -> Self {
-        let state_checkpoint: StateCheckpoint<S> = StateCheckpoint::new(inner, kernel);
+        let state_checkpoint: StateCheckpoint<S> = StateCheckpoint::new(inner, kernel, None);
         let tx_scratchpad = TxScratchpad {
             inner: RevertableWriter::new(state_checkpoint),
             phantom: PhantomData,
@@ -266,7 +267,11 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for WorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> EventContainer for WorkingSet<S, I> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 
@@ -299,13 +304,24 @@ impl<S: Spec, I: StateProvider<S>> PerBlockCache for WorkingSet<S, I> {
     }
 }
 
+impl<S: Spec, I: StateProvider<S>> PinnedCacheAccessor<S> for WorkingSet<S, I> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.delta.inner.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.delta.inner.storage()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use sov_rollup_interface::common::HexString;
     use sov_state::codec::BcsCodec;
     use sov_state::namespaces::User;
     use sov_state::{Kernel, SlotKey, SlotValue};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
     use crate::capabilities::mocks::MockKernel;
@@ -318,7 +334,7 @@ mod tests {
     #[test]
     fn test_workingset_get() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let prefix = sov_state::Prefix::new(1, 2);
@@ -336,7 +352,7 @@ mod tests {
     #[test]
     fn test_kernel_workingset_get() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let prefix = sov_state::Prefix::new(1, 2);
@@ -344,7 +360,7 @@ mod tests {
         let storage_value = SlotValue::new(&vec![7, 8, 9], &codec);
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
 
-        let mut working_set = StateCheckpoint::<TestSpec>::new(storage.clone(), &kernel);
+        let mut working_set = StateCheckpoint::<TestSpec>::new(storage.clone(), &kernel, None);
         let mut working_set = kernel.accessor(&mut working_set);
 
         StateWriter::<Kernel>::set(&mut working_set, &storage_key, storage_value.clone())

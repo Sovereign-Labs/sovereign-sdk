@@ -1,0 +1,71 @@
+name: 'Trigger Acceptance Test'
+description: 'Triggers an acceptance test on the server'
+inputs:
+  api_token:
+    description: 'Acceptance server API token'
+    required: true
+  api_url:
+    description: 'Acceptance server API URL'
+    required: true
+  commit_sha:
+    description: 'Commit SHA to test'
+    required: true
+  commit_short_sha:
+    description: 'Short commit SHA for display'
+    required: true
+  commit_message:
+    description: 'Commit message for display'
+    required: true
+  endpoint:
+    description: 'API endpoint to call (e.g., "start-test" or "start-evm-test")'
+    required: true
+  test_type:
+    description: 'Test type for display (e.g., "acceptance" or "EVM acceptance")'
+    required: true
+  skip_regeneration:
+    description: 'Skip automatic data regeneration on test failure'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Trigger test
+      shell: bash
+      env:
+        ACCEPTANCE_SERVER_API_TOKEN: ${{ inputs.api_token }}
+        ACCEPTANCE_SERVER_API_URL: ${{ inputs.api_url }}
+        COMMIT_SHA: ${{ inputs.commit_sha }}
+        ENDPOINT: ${{ inputs.endpoint }}
+        SKIP_REGENERATION: ${{ inputs.skip_regeneration }}
+      run: |
+        echo "Triggering ${{ inputs.test_type }} test for commit ${{ inputs.commit_short_sha }}"
+        echo "Commit message: ${{ inputs.commit_message }}"
+
+        # Build JSON payload based on whether skip_regeneration is needed
+        if [ "$ENDPOINT" = "start-test" ]; then
+          JSON_PAYLOAD="{\"commit_sha\": \"$COMMIT_SHA\", \"skip_regeneration\": $SKIP_REGENERATION}"
+        else
+          JSON_PAYLOAD="{\"commit_sha\": \"$COMMIT_SHA\"}"
+        fi
+
+        if ! response=$(curl -X POST "${ACCEPTANCE_SERVER_API_URL}/${ENDPOINT}" \
+          -H "Authorization: Bearer ${ACCEPTANCE_SERVER_API_TOKEN}" \
+          -H "Content-Type: application/json" \
+          -d "$JSON_PAYLOAD" \
+          -w "\n%{http_code}" -s); then
+          echo "❌ Curl command failed; unable to send request"
+          exit 1
+        fi
+
+        http_code=$(echo "$response" | tail -n1)
+        body=$(echo "$response" | head -n-1)
+
+        if [ "$http_code" -ne 200 ]; then
+          echo "❌ Failed to trigger ${{ inputs.test_type }} test (HTTP $http_code)"
+          echo "Response: $body"
+          exit 1
+        fi
+
+        echo "✅ ${{ inputs.test_type }} test triggered successfully"
+        echo "$body"

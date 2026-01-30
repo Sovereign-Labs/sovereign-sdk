@@ -91,6 +91,30 @@ where
     > {
         self.0.frame_return_result(frame_result)
     }
+
+    #[allow(clippy::type_complexity)]
+    fn all(
+        &self,
+    ) -> (
+        &Self::Context,
+        &Self::Instructions,
+        &Self::Precompiles,
+        &FrameStack<Self::Frame>,
+    ) {
+        self.0.all()
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn all_mut(
+        &mut self,
+    ) -> (
+        &mut Self::Context,
+        &mut Self::Instructions,
+        &mut Self::Precompiles,
+        &mut FrameStack<Self::Frame>,
+    ) {
+        self.0.all_mut()
+    }
 }
 
 impl<CTX: ContextTr, INSP> InspectorEvmTr for SovEvm<CTX, INSP>
@@ -123,5 +147,29 @@ where
         &mut Self::Instructions,
     ) {
         self.0.ctx_inspector_frame_instructions()
+    }
+
+    fn all_inspector(
+        &self,
+    ) -> (
+        &Self::Context,
+        &Self::Instructions,
+        &Self::Precompiles,
+        &FrameStack<Self::Frame>,
+        &Self::Inspector,
+    ) {
+        self.0.all_inspector()
+    }
+
+    fn all_mut_inspector(
+        &mut self,
+    ) -> (
+        &mut Self::Context,
+        &mut Self::Instructions,
+        &mut Self::Precompiles,
+        &mut FrameStack<Self::Frame>,
+        &mut Self::Inspector,
+    ) {
+        self.0.all_mut_inspector()
     }
 }

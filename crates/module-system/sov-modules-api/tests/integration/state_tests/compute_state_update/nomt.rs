@@ -1,13 +1,13 @@
 use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::{ArrayWitness, NodeLeaf, SlotKey, SlotValue, Storage};
-use sov_test_utils::storage::SimpleNomtStorageManager;
+use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::TestHasher;
 
 use crate::state_tests::compute_state_update::{run_test, ForklessStorageManager, TestCase};
 use crate::state_tests::StorageSpec;
 
 fn run_nomt_test(test_case: TestCase) {
-    let sm = SimpleNomtStorageManager::new();
+    let sm = SimpleStorageManager::new();
     run_test(test_case, sm, NomtVerifierStorage::<StorageSpec>::new());
 }
 
@@ -90,7 +90,7 @@ fn test_modified_read_to_none() {
 ///  - we don't test extra or missing writes, because all writes originate from within ZKVM
 ///  - we don't test extra proof for reads, because zk guest only cares about reads it made.
 fn check_malicious_case(native_case: TestCase, zk_case: TestCase, expected_error: &str) {
-    let mut sm = SimpleNomtStorageManager::new();
+    let mut sm = SimpleStorageManager::new();
 
     for (native_state_accesses, zk_state_accesses) in native_case
         .rounds
@@ -102,12 +102,12 @@ fn check_malicious_case(native_case: TestCase, zk_case: TestCase, expected_error
         let witness = ArrayWitness::default();
 
         let (native_root, change_set) = prover_storage
-            .compute_state_update(native_state_accesses, &witness, prev_state_root)
+            .compute_state_update(native_state_accesses, &witness, prev_state_root, None)
             .expect("state update computation must succeed");
 
         let zk_storage = NomtVerifierStorage::<StorageSpec>::new();
 
-        match zk_storage.compute_state_update(zk_state_accesses, &witness, prev_state_root) {
+        match zk_storage.compute_state_update(zk_state_accesses, &witness, prev_state_root, None) {
             Ok((zk_root, _)) => {
                 // If the update is correct, do normal operations.
                 // This allows having a more sophisticated error case to be detected.

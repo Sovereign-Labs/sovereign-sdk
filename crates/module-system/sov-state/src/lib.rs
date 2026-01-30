@@ -2,13 +2,13 @@
 
 #![deny(missing_docs)]
 
-mod bytes;
 pub(crate) mod cache;
 pub mod codec;
 pub mod config;
 mod event;
 pub mod namespaces;
 pub mod nomt;
+pub mod pinned_cache;
 #[cfg(feature = "native")]
 mod prover_storage;
 #[cfg(feature = "native")]
@@ -32,7 +32,6 @@ use sov_rollup_interface::reexports::digest::Digest;
 pub use storage_internals::{SparseMerkleProof, StorageRoot};
 pub use zk_storage::ZkStorage;
 
-pub use crate::bytes::*;
 pub use crate::cache::*;
 pub use crate::codec::*;
 pub use crate::namespaces::*;
@@ -70,7 +69,11 @@ impl<H: Digest<OutputSize = digest::typenum::U32> + Send + Sync> MerkleProofSpec
 /// Accepts events emitted by modules
 pub trait EventContainer {
     /// Adds a typed event to the working set.
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E);
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    );
 
     /// Adds a type erased event to the working set.
     fn add_type_erased_event(&mut self, event: TypeErasedEvent);

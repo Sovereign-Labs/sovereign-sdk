@@ -4,6 +4,7 @@ use alloy_primitives::Address;
 use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
+use sov_modules_api::da::Time;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
@@ -47,19 +48,14 @@ impl<S: Spec> Evm<S> {
         Ok(block)
     }
 
-    /// Gets tx by hash. Fails if prunned
+    /// Gets tx by idx. Fails if not found
     pub fn tx<Accessor: AccessoryStateReader>(
         &self,
-        hash: B256,
+        idx: u64,
         state: &mut Accessor,
     ) -> Result<TxSignedAndRecovered, EthApiError> {
-        let Some(idx) = self.tx_index(&hash, state) else {
-            return Err(EthApiError::PrunedHistoryUnavailable);
-        };
-        let Some(tx) = self.transaction(idx, state) else {
-            return Err(EthApiError::PrunedHistoryUnavailable);
-        };
-        Ok(tx)
+        self.transaction(idx, state)
+            .ok_or(EthApiError::UnknownTxIndex(idx))
     }
 
     /// Gets archival state before block `number`
@@ -88,6 +84,7 @@ impl<S: Spec> Evm<S> {
             self.accounts.clone(),
             self.account_storage.clone(),
             self.code.clone(),
+            self.block_hashes.clone(),
             state,
             self.bank_module.clone(),
         )
@@ -103,14 +100,14 @@ impl<S: Spec> Evm<S> {
         self.account_storage.get(&(address, index), state)
     }
 
-    /// Get the current block env.
+    /// Get the current block env. This corresponds to the pending block (i.e. the one that's currently being built).
+    /// It is set in the begin_rollup_block_hook.
     pub fn block_env<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
     ) -> Result<BlockEnv, Accessor::Error> {
-        Ok(self.block_env.get(state)?.expect(
-            "The impossible happened: block_env should be set in `begin_rollup_block_hook`",
-        ))
+        let block_env = self.block_env.get(state)?;
+        Ok(block_env.expect("block_env should be set in `begin_rollup_block_hook`"))
     }
 
     /// Get the Evm chain config.
@@ -118,11 +115,16 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<EvmRuntimeConfig, Accessor::Error> {
-        let cfg = self
-            .cfg
-            .get(state)? // The config must be set at genesis.
-            .expect("The impossible happened: EVM config is not set");
-        Ok(cfg)
+        let cfg = self.cfg.get(state)?;
+        Ok(cfg.expect("EVM config must be set in genesis"))
+    }
+
+    /// Check if the max fee check is disabled.
+    pub fn is_max_fee_check_disabled<Accessor: StateReader<User>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<bool, Accessor::Error> {
+        Ok(self.disable_max_fee_check.get(state)?.unwrap_or(false))
     }
 }
 
@@ -141,7 +143,7 @@ impl<S: Spec> Evm<S> {
         &self,
         index: u64,
         state: &mut Accessor,
-    ) -> Option<Receipt> {
+    ) -> Option<(Receipt, Time)> {
         self.receipts.get(&index, state).unwrap_infallible()
     }
 
@@ -165,15 +167,6 @@ impl<S: Spec> Evm<S> {
             .unwrap_infallible()
     }
 
-    /// Lookup the height of an Ethereum block based on the supplied hash.
-    pub fn block_height<Accessor: AccessoryStateReader>(
-        &self,
-        block_hash: &B256,
-        state: &mut Accessor,
-    ) -> Option<u64> {
-        self.block_hashes.get(block_hash, state).unwrap_infallible()
-    }
-
     /// Get the currently pending head block.
     pub fn pending_head<Accessor: AccessoryStateReader>(
         &self,
@@ -190,10 +183,14 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> RangeInclusive<u64> {
-        self.block_numbers
-            .get(state)
-            .unwrap_infallible()
-            .expect("Block numbers must be set in genesis")
+        let block_numbers = self.block_numbers.get(state).unwrap_infallible();
+        block_numbers.expect("Block numbers must be set in genesis")
+    }
+
+    /// Check if there are pending transactions.
+    #[cfg(feature = "native")]
+    pub fn has_pending_block(&self, state: &mut ApiStateAccessor<S>) -> bool {
+        self.pending_transactions.len(state).unwrap_infallible() != 0
     }
 
     /// Get the Evm chain config.
@@ -201,10 +198,13 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> EvmRuntimeConfig {
-        self.cfg
-            .get(state)
-            .unwrap_infallible()
-            // The config must be set at genesis.
-            .expect("EVM config must be set in genesis")
+        let cfg = self.cfg.get(state).unwrap_infallible();
+        cfg.expect("EVM config must be set in genesis")
+    }
+
+    /// Get head block
+    pub fn head<Accessor: InfallibleStateAccessor>(&self, state: &mut Accessor) -> Block {
+        let head = self.head.get(state).unwrap_infallible();
+        head.expect("Head is set in genesis and never deleted")
     }
 }

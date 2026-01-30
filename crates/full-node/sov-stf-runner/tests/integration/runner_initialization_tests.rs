@@ -30,7 +30,7 @@ async fn init_and_restart_inner() {
     };
     let init_variant: MockInitVariant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params: vec![1],
+        genesis_params: vec![1].into(),
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
@@ -39,9 +39,8 @@ async fn init_and_restart_inner() {
     let da_service = Arc::new(MockDaService::new(MockAddress::new([11u8; 32])));
 
     let state_root_after_genesis = {
-        let (runner, node) =
+        let (_runner, state_root, node) =
             initialize_runner(da_service.clone(), path, init_variant, 1, None).await;
-        let state_root = *runner.get_state_root();
         node.stop().await;
         state_root
     };
@@ -52,8 +51,8 @@ async fn init_and_restart_inner() {
     };
 
     let state_root_2 = {
-        let (runner_2, node_2) = initialize_runner(da_service, path, init_variant_2, 1, None).await;
-        let state_root = *runner_2.get_state_root();
+        let (_runner_2, state_root, node_2) =
+            initialize_runner(da_service, path, init_variant_2, 1, None).await;
         node_2.stop().await;
         state_root
     };

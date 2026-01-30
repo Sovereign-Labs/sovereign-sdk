@@ -61,19 +61,15 @@ where
         let (tx, journal) = context.tx_journal_mut();
 
         // Load caller's account.
-        let caller_account = journal.load_account_code(tx.caller())?.data;
-        let old_balance = caller_account.info.balance;
-
-        // Touch account so we know it is changed.
-        caller_account.mark_touch();
+        let mut caller = journal.load_account_with_code_mut(tx.caller())?.data;
 
         // Bump the nonce for calls. Nonce for CREATE will be bumped in `handle_create`.
         if tx.kind().is_call() {
-            // Nonce is already checked
-            caller_account.info.nonce = caller_account.info.nonce.saturating_add(1);
+            caller.bump_nonce();
         }
 
-        journal.caller_accounting_journal_entry(tx.caller(), old_balance, tx.kind().is_call());
+        // Touch account so we know it is changed.
+        journal.touch_account(tx.caller());
 
         Ok(())
     }

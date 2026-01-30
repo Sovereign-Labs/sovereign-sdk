@@ -65,7 +65,7 @@ impl<S: Spec> SequencerRegistry<S> {
         context: &Context<S>,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
-        self.register_staker(da_address, amount, context.sender().clone(), state)?;
+        self.register_staker(da_address, amount, *context.sender(), state)?;
 
         Ok(())
     }
@@ -89,7 +89,7 @@ impl<S: Spec> SequencerRegistry<S> {
 
         if amount < minimum_bond {
             return Err(SequencerRegistryError::<S, ST>::InsufficientStakeAmount {
-                address: address.clone(),
+                address,
                 bond_amount: amount,
                 minimum_bond_amount: minimum_bond,
             });
@@ -104,12 +104,12 @@ impl<S: Spec> SequencerRegistry<S> {
             )
             .map_err(
                 |_| SequencerRegistryError::<S, ST>::InsufficientFundsToRegister {
-                    address: address.clone(),
+                    address,
                     amount,
                 },
             )?;
         let new_sequencer = KnownSequencer {
-            address: address.clone(),
+            address,
             balance: amount,
             balance_state: BalanceState::Active,
         };
@@ -135,12 +135,12 @@ impl<S: Spec> SequencerRegistry<S> {
     ) -> Result<(), SequencerRegistryError<S, ST>> {
         self.validate_sender(da_address, context.sender(), state)?;
         let Some(mut existing_sequencer) = self.known_sequencers.get(da_address, state)? else {
-            return Err(RegistrationError::IsNotRegistered(da_address.clone()));
+            return Err(RegistrationError::IsNotRegistered(*da_address));
         };
-        let address = existing_sequencer.address.clone();
+        let address = existing_sequencer.address;
         existing_sequencer.balance = existing_sequencer.balance.checked_add(amount).ok_or(
             SequencerRegistryError::<S, ST>::ToppingAccountMakesBalanceOverflow {
-                address: address.clone(),
+                address,
                 existing_balance: existing_sequencer.balance,
                 amount_to_add: amount,
             },
@@ -157,7 +157,7 @@ impl<S: Spec> SequencerRegistry<S> {
             )
             .map_err(
                 |_| SequencerRegistryError::<S, ST>::InsufficientFundsToTopUpAccount {
-                    address: address.clone(),
+                    address,
                     amount_to_add: amount,
                 },
             )?;
@@ -168,7 +168,7 @@ impl<S: Spec> SequencerRegistry<S> {
         self.emit_event(
             state,
             Event::<S>::Deposited {
-                sequencer: address.clone(),
+                sequencer: address,
                 amount: amount.0,
             },
         );
@@ -194,12 +194,12 @@ impl<S: Spec> SequencerRegistry<S> {
     ) -> Result<(), SequencerRegistryError<S, ST>> {
         self.validate_sender(da_address, context.sender(), state)?;
         let Some(mut existing_sequencer) = self.known_sequencers.get(da_address, state)? else {
-            return Err(RegistrationError::IsNotRegistered(da_address.clone()));
+            return Err(RegistrationError::IsNotRegistered(*da_address));
         };
 
         if &existing_sequencer.address == context.sequencer() {
             return Err(RegistrationError::Custom(
-                CustomError::CannotUnregisterDuringOwnBatch(da_address.clone()),
+                CustomError::CannotUnregisterDuringOwnBatch(*da_address),
             ));
         }
         if existing_sequencer.balance_state != BalanceState::Active {
@@ -221,7 +221,7 @@ impl<S: Spec> SequencerRegistry<S> {
         self.emit_event(
             state,
             Event::<S>::InitiatedWithdrawal {
-                sequencer: existing_sequencer.address.clone(),
+                sequencer: existing_sequencer.address,
             },
         );
         Ok(())
@@ -235,16 +235,16 @@ impl<S: Spec> SequencerRegistry<S> {
     ) -> Result<(), SequencerRegistryError<S, ST>> {
         self.validate_sender(da_address, context.sender(), state)?;
         let Some(existing_sequencer) = self.known_sequencers.get(da_address, state)? else {
-            return Err(RegistrationError::IsNotRegistered(da_address.clone()));
+            return Err(RegistrationError::IsNotRegistered(*da_address));
         };
         let BalanceState::PendingWithdrawal { ready_at } = existing_sequencer.balance_state else {
             return Err(RegistrationError::Custom(
-                CustomError::WithdrawalNotInitiated(da_address.clone()),
+                CustomError::WithdrawalNotInitiated(*da_address),
             ));
         };
         if ready_at > state.current_visible_slot_number() {
             return Err(RegistrationError::Custom(CustomError::WithdrawalNotReady {
-                sequencer: da_address.clone(),
+                sequencer: *da_address,
                 current_visible_height: state.current_visible_slot_number(),
                 ready_at,
             }));
@@ -262,7 +262,7 @@ impl<S: Spec> SequencerRegistry<S> {
         self.emit_event(
             state,
             Event::<S>::Withdrew {
-                sequencer: existing_sequencer.address.clone(),
+                sequencer: existing_sequencer.address,
                 amount_withdrawn: existing_sequencer.balance,
             },
         );
@@ -279,14 +279,14 @@ impl<S: Spec> SequencerRegistry<S> {
         let belongs_to = self
             .known_sequencers
             .get_or_err(da_address, state)?
-            .map_err(|_| RegistrationError::IsNotRegistered(da_address.clone()))?
+            .map_err(|_| RegistrationError::IsNotRegistered(*da_address))?
             .address;
 
         if sender != &belongs_to {
             return Err(RegistrationError::Custom(
                 CustomError::SuppliedAddressDoesNotMatchTxSender {
                     parameter: belongs_to,
-                    sender: sender.clone(),
+                    sender: *sender,
                 },
             ));
         }

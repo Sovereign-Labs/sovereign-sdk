@@ -20,6 +20,7 @@ derive_more = { workspace = true, features = ["display"] }
 proptest = { workspace = true, optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 strum = { workspace = true }
@@ -38,20 +39,20 @@ sov-test-utils = { workspace = true }
 [features]
 default = []
 arbitrary = [
-	"sov-modules-api/arbitrary",
-	"dep:proptest",
-	"sov-bank/arbitrary",
-	"sov-state/arbitrary",
-	"sov-test-utils/arbitrary",
-	"sov-rollup-interface/arbitrary"
+  "sov-modules-api/arbitrary",
+  "dep:proptest",
+  "sov-bank/arbitrary",
+  "sov-state/arbitrary",
+  "sov-test-utils/arbitrary",
+  "sov-rollup-interface/arbitrary",
 ]
 native = [
-	"sov-bank/native",
-	"sov-modules-api/native",
-	"sov-state/native",
-	"sov-chain-state/native",
-	"sov-modules-stf-blueprint/native",
-	"sov-rollup-interface/native"
+  "sov-bank/native",
+  "sov-modules-api/native",
+  "sov-state/native",
+  "sov-chain-state/native",
+  "sov-modules-stf-blueprint/native",
+  "sov-rollup-interface/native",
 ]
 cli = ["native"]
 test-utils = []

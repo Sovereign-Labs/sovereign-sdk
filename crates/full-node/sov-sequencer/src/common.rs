@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::future::Future;
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -11,11 +12,12 @@ use axum::http::StatusCode;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{BlobExecutionStatus, BlobInternalId, BlobSenderHooks};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::capabilities::{AuthenticationOutput, TransactionAuthenticator};
+use sov_modules_api::capabilities::{AuthenticationOutput, RollupHeight, TransactionAuthenticator};
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::*;
 use sov_modules_stf_blueprint::{PreExecError, Runtime};
+use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::{json_obj, to_json_object};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
@@ -28,14 +30,105 @@ use tracing::{info, trace};
 use crate::rest_api::ApiAcceptedTx;
 use crate::{SequencerNotReadyDetails, SlotNumber, TxHash, TxStatus, TxStatusManager};
 
-pub(crate) type SequencerTxStream<Confirmation> =
-    Pin<Box<dyn futures::Stream<Item = Result<ApiAcceptedTx<Confirmation>, anyhow::Error>> + Send>>;
+#[derive(Debug, Error, Clone, serde::Serialize, serde::Deserialize)]
+pub enum SubscriptionStreamError {
+    /// The receiver fell behind and some messages were skipped.
+    #[error("Subscription data was produced faster than it could be sent. {skipped} messages were skipped.")]
+    Lagged {
+        /// The number of messages that were skipped due to lag.
+        skipped: u64,
+        /// The identifier of the last successfully sent message before lag occurred.
+        /// `None` if no messages were sent before the lag or if the stream doesn't support identifiers.
+        disconnected_at: Option<u64>,
+        /// The identifier of the next message that will be sent after resuming.
+        /// `None` if the identifier couldn't be determined or if the stream doesn't support identifiers.
+        resumed_at: Option<u64>,
+    },
+    #[error("Requested future data. The next available item is {next_available}")]
+    RequestedFutureData { next_available: u64 },
+    #[error("Internal server error")]
+    Internal,
+}
+
+impl SubscriptionStreamError {
+    /// Creates a lag error for streams that don't track sequential identifiers.
+    pub fn lagged_without_identifiers(skipped: u64) -> Self {
+        Self::Lagged {
+            skipped,
+            disconnected_at: None,
+            resumed_at: None,
+        }
+    }
+}
+
+impl ReportableWsError for SubscriptionStreamError {
+    fn to_json(&self) -> String {
+        let obj = match self {
+            SubscriptionStreamError::Lagged {
+                skipped,
+                disconnected_at,
+                resumed_at,
+            } => {
+                // Use detailed format with identifiers when available, otherwise standard format
+                let has_identifiers = disconnected_at.is_some() || resumed_at.is_some();
+                if has_identifiers {
+                    json_obj!({
+                        "message": "lagged",
+                        "details": {
+                            "disconnected_at": *disconnected_at,
+                            "resumed_at": *resumed_at,
+                        },
+                    })
+                } else {
+                    json_obj!({
+                        "status": 200,
+                        "message": "Messages skipped due to lag",
+                        "details": {
+                            "skipped": *skipped,
+                            "reason": "lag",
+                        },
+                    })
+                }
+            }
+            SubscriptionStreamError::RequestedFutureData { next_available } => {
+                json_obj!({
+                    "error": "REQUESTED_FUTURE_DATA",
+                    "description": "Attempted to subscribe to data that hasn't been produced yet.",
+                    "details": {
+                        "next_available": *next_available,
+                    },
+                })
+            }
+            SubscriptionStreamError::Internal => {
+                json_obj!({
+                    "error": "INTERNAL_SERVER_ERROR",
+                    "description": "An internal server error occurred.",
+                    "details": {},
+                })
+            }
+        };
+        serde_json::to_string(&obj)
+            .expect("Failed to serialize SubscriptionStreamError to JSON. This is a bug.")
+    }
+
+    fn is_recoverable(&self) -> bool {
+        matches!(self, SubscriptionStreamError::Lagged { .. })
+    }
+}
+
+pub(crate) type SequencerTxStream<Confirmation> = Pin<
+    Box<
+        dyn futures::Stream<Item = Result<ApiAcceptedTx<Confirmation>, SubscriptionStreamError>>
+            + Send,
+    >,
+>;
 
 pub(crate) type SequencerEventStream<Rt> = Pin<
     Box<
         dyn futures::Stream<
-                Item = anyhow::Result<
+                Item = Result<
                     RuntimeEventResponse<<Rt as RuntimeEventProcessor>::RuntimeEvent>,
+                    SubscriptionStreamError,
                 >,
             > + Send,
     >,
@@ -44,7 +137,7 @@ pub(crate) type SequencerEventStream<Rt> = Pin<
 /// The [`Sequencer`] trait is responsible for accepting transactions and
 /// assembling them into batches.
 #[async_trait]
-pub trait Sequencer: Send + Sync + 'static {
+pub trait Sequencer: Clone + Send + Sync + 'static {
     /// What data is returned to clients when a transaction is accepted.
     type Confirmation: Clone + serde::Serialize + Send + Sync + 'static;
     /// The rollup spec.
@@ -63,7 +156,7 @@ pub trait Sequencer: Send + Sync + 'static {
     async fn subscribe_transactions(
         &self,
         _starting_from: Option<u64>,
-    ) -> Option<anyhow::Result<SequencerTxStream<Self::Confirmation>>> {
+    ) -> Option<Result<SequencerTxStream<Self::Confirmation>, SubscriptionStreamError>> {
         None
     }
 
@@ -117,9 +210,14 @@ pub trait Sequencer: Send + Sync + 'static {
     /// implementation itself is responsible for "encoding" the transaction.
     ///
     /// Can return an error if transaction is invalid or mempool is full.
+    ///
+    /// Safe for use in cancellable APIs, but the actual transaction submission cannot safely be
+    /// cancelled and will continue executing even if the thread `accept_tx()` was called on is
+    /// killed.
     async fn accept_tx(
         &self,
         tx: FullyBakedTx,
+        ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject>;
 
     /// Can be used to query and update the status of transactions.
@@ -136,15 +234,24 @@ pub trait Sequencer: Send + Sync + 'static {
     ) -> Option<tokio::sync::broadcast::Receiver<StateUpdateNotification>> {
         None
     }
+
+    /// Subscribe to forced transaction batch notifications. Note that notifications may be delivered out of order.
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_forced_tx_batches_unstable(
+        &self,
+    ) -> Option<tokio::sync::broadcast::Receiver<ForcedTxBatchNotification>> {
+        None
+    }
+
+    /// Returns the current sequencer role.
+    async fn sequencer_role(&self) -> crate::SequencerRole;
 }
 
 /// A transaction that has been accepted by the batch builder.
-#[serde_with::serde_as]
 #[derive(Clone, serde::Serialize, derivative::Derivative)]
 #[derivative(Debug)]
 pub struct AcceptedTx<C> {
     /// Encoded transaction, as will appear on-chain.
-    #[serde_as(as = "serde_with::base64::Base64")]
     pub tx: FullyBakedTx,
     /// Hash of the transaction.
     pub tx_hash: TxHash,
@@ -160,6 +267,13 @@ pub struct StateUpdateNotification {
     pub slot_number: SlotNumber,
     /// The finalized slot number.
     pub finalized_slot_number: SlotNumber,
+}
+
+/// A notification that the sequencer has processed a forced (non-preferred) batch.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ForcedTxBatchNotification {
+    /// The rollup height at which the forced batch was executed.
+    pub rollup_height: RollupHeight,
 }
 
 impl<C> AcceptedTx<C> {
@@ -345,7 +459,7 @@ pub async fn react_to_state_updates<S, Fut>(
 }
 
 pub async fn loop_call_update_state<Seq: Sequencer>(
-    seq: Arc<Seq>,
+    seq: Seq,
     state_update_receiver: StateUpdateReceiver<<Seq::Spec as Spec>::Storage>,
     shutdown_receiver: watch::Receiver<()>,
 ) {
@@ -496,17 +610,17 @@ pub fn error_not_fully_synced(details: SequencerNotReadyDetails) -> ErrorObject 
                 details: Default::default(),
             };
         }
-        SequencerNotReadyDetails::ReplicaMode => {
-            return ErrorObject {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                message: "Sequencer is replica and cannot accept transactions".to_string(),
-                details: Default::default(),
-            };
-        }
         SequencerNotReadyDetails::Shutdown => {
             return ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "The sequencer is shutting down and cannot accept transactions".to_string(),
+                details: Default::default(),
+            };
+        }
+        SequencerNotReadyDetails::ReplicaNotReady => {
+            return ErrorObject {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                message: "The replica is waiting for the first batch from master".to_string(),
                 details: Default::default(),
             };
         }

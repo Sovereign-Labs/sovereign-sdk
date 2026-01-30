@@ -31,6 +31,32 @@ where
     RT: Runtime<S>,
     I: StateProvider<S>,
 {
+    if runtime.is_unauthorized_system_tx(&message, ctx, &mut working_set) {
+        // It's expected that transactions will revert, so we log them at the info level.
+        info!(
+            error = %"Unauthorized system transaction",
+            %raw_tx_hash,
+            "Tx was reverted",
+        );
+        let (tx_scratchpad, transaction_consumption) = working_set.revert();
+        let receipt = TransactionReceipt {
+            tx_hash: raw_tx_hash,
+            body_to_save: Some(raw_tx),
+            events: vec![], // As in Ethereum, reverted transactions don't emit events
+            receipt: TxEffect::Reverted(RevertedTxContents {
+                gas_used: *transaction_consumption.base_fee(),
+                reason: ModuleError::from(anyhow::anyhow!("Unauthorized system transaction")),
+            }),
+        };
+        return (
+            ApplyTxResult::<S> {
+                transaction_consumption,
+                receipt,
+            },
+            tx_scratchpad,
+        );
+    }
+
     let tx_result = attempt_tx(tx, message, ctx, runtime, &mut working_set);
     let (tx_scratchpad, receipt, transaction_consumption) = match tx_result {
         Ok(_) => {
@@ -41,7 +67,7 @@ where
                 tx_scratchpad,
                 TransactionReceipt {
                     tx_hash: raw_tx_hash,
-                    body_to_save: Some(raw_tx.data),
+                    body_to_save: Some(raw_tx),
                     events: convert_to_runtime_events::<S, RT>(events, raw_tx_hash.into()),
                     receipt: TxEffect::Successful(SuccessfulTxContents {
                         gas_used: *gas_used,
@@ -70,7 +96,7 @@ where
 
             let receipt = TransactionReceipt {
                 tx_hash: raw_tx_hash,
-                body_to_save: Some(raw_tx.data),
+                body_to_save: Some(raw_tx),
                 events: vec![], // As in Ethereum, reverted transactions don't emit events
                 receipt: TxEffect::Reverted(RevertedTxContents {
                     gas_used: *transaction_consumption.base_fee(),
@@ -147,7 +173,7 @@ pub(crate) fn create_tx_receipt<S: Spec>(
 
     TransactionReceipt {
         tx_hash: raw_tx_hash,
-        body_to_save: Some(raw_tx_body),
+        body_to_save: Some(FullyBakedTx::new(raw_tx_body.to_vec())),
         events: Vec::new(),
         receipt: TxEffect::Skipped(skipped),
     }

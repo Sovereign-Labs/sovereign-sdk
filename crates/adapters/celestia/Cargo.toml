@@ -19,9 +19,9 @@ borsh = { workspace = true, features = ["derive", "bytes"] }
 bech32 = { workspace = true }
 prost = "0.13"
 
-# Upgrade with care. The new version might be incompatible and require run of soak tests
-celestia-rpc = { version = "0.14.0", default-features = false, optional = true }
-celestia-types = { version = "0.16.0", default-features = false }
+# Upgrade with care. The new version might be incompatible and require a run of soak tests
+celestia-types = { version = "0.19.0", default-features = false }
+celestia-client = { version = "0.4.1", optional = true }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
@@ -34,7 +34,6 @@ backon = { workspace = true, optional = true }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 futures = { workspace = true, default-features = false, optional = true }
 hex = { workspace = true, features = ["serde"] }
-jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
 proptest = { workspace = true, features = ["alloc", "std"], optional = true }
 schemars = { workspace = true, features = ["derive"] }
 serde = { workspace = true, default-features = false, features = [
@@ -55,11 +54,11 @@ sov-modules-macros = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
 
 [dev-dependencies]
-postcard = { version = "1", features = ["use-std"] }
-reltester = { workspace = true }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-wiremock = "0.6"
+rustls = { workspace = true, features = ["ring"] }
+postcard = { version = "1", features = ["use-std"] }
+reltester = { workspace = true }
 test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
@@ -71,15 +70,16 @@ risc0-zkvm = { workspace = true, features = ["std"] }
 risc0-zkvm-platform = { workspace = true }
 bincode = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
+testcontainers = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [features]
 default = []
 native = [
     "backon",
     "tendermint/default",
-    "dep:celestia-rpc",
+    "dep:celestia-client",
     "dep:futures",
-    "dep:jsonrpsee",
     "dep:tokio",
     "sov-celestia-adapter/native",
     "sov-rollup-interface/native",
@@ -100,5 +100,6 @@ arbitrary = [
     "sov-celestia-adapter/arbitrary",
     "sov-rollup-interface/arbitrary",
     "sov-test-utils/arbitrary",
-    "sov-modules-macros?/arbitrary"
+    "sov-modules-macros?/arbitrary",
+    "uuid/arbitrary"
 ]

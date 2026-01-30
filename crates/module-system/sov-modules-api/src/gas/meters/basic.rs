@@ -1,8 +1,12 @@
+use anyhow::Result;
 use core::fmt::Debug;
 
-use anyhow::Result;
-
 use crate::{Amount, Gas, GasArray, GasMeter, GasMeteringError, GetGasPrice, Spec};
+
+/// The default Ethereum block gas limit: 1B
+pub const ETHEREUM_BLOCK_GAS_LIMIT: u64 = 1_000_000_000;
+/// The default Ethereum tx gas limit: 30M
+pub const ETHEREUM_TX_GAS_LIMIT: u64 = 30_000_000;
 
 /// A struct that keeps track of the gas used.
 /// The gas meter continues running until it either depletes its funds or runs out of gas, depending on its configuration.
@@ -61,6 +65,12 @@ impl<S: Spec> BasicGasMeter<S> {
             remaining_funds: Some(remaining_funds),
             gas_price,
         }
+    }
+
+    /// Creates a new `BasicGasMeter` for API access with gas limit set at ETH block gas limit.
+    pub fn new_api(gas_price: <S::Gas as Gas>::Price) -> Self {
+        let remaining_gas = [ETHEREUM_BLOCK_GAS_LIMIT, ETHEREUM_BLOCK_GAS_LIMIT].into();
+        Self::new_with_funds_and_gas(Amount::MAX, remaining_gas, gas_price)
     }
 
     /// Creates a new `BasicGasMeter`

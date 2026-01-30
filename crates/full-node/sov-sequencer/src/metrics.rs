@@ -213,3 +213,137 @@ impl Metric for PreferredSequencerExecutorEventSendingMetrics {
         )
     }
 }
+
+/// Metric for main queue blocked time (sender side).
+/// Only submitted when the send was actually blocked (blocked_for_us > 0).
+#[derive(Debug)]
+pub struct NonceBufferMainQueueBlockedMetric {
+    /// How long the send was blocked waiting for capacity (microseconds).
+    pub blocked_for_us: u64,
+}
+
+impl Metric for NonceBufferMainQueueBlockedMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_nonce_buffer_main_queue_blocked"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} blocked_for_us={}",
+            self.measurement_name(),
+            self.blocked_for_us,
+        )
+    }
+}
+
+/// Metric for main queue depth, meant to be used batched.
+#[derive(Debug)]
+pub struct NonceBufferMainQueueDepthMetric {
+    /// Current depth of the queue.
+    pub queue_depth: usize,
+}
+
+impl Metric for NonceBufferMainQueueDepthMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_nonce_buffer_main_queue_depth"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} queue_depth={}",
+            self.measurement_name(),
+            self.queue_depth,
+        )
+    }
+}
+
+/// Combined metric for timeout queue, meant to be used batched.
+#[derive(Debug)]
+pub struct NonceBufferTimeoutQueueMetric {
+    /// How long the send was blocked waiting for capacity (microseconds).
+    pub blocked_for_us: u64,
+    /// Current depth of the queue after sending.
+    pub queue_depth: usize,
+}
+
+impl Metric for NonceBufferTimeoutQueueMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_nonce_buffer_timeout_queue"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} blocked_for_us={},queue_depth={}",
+            self.measurement_name(),
+            self.blocked_for_us,
+            self.queue_depth,
+        )
+    }
+}
+
+/// Generic batch wrapper for any metric type.
+/// Serializes multiple metrics separated by newlines.
+#[derive(Debug)]
+pub struct MetricBatch<M: Metric> {
+    pub metrics: Vec<M>,
+}
+
+impl<M: Metric> Metric for MetricBatch<M> {
+    fn measurement_name(&self) -> &'static str {
+        // Return empty string since each metric has its own name
+        // TODO: in practice measurement names are usually static, if this is always the case then
+        // we could refactor it to not take `&self` and use `M::measurement_name()` here. #2264
+        ""
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        if self.metrics.is_empty() {
+            return Ok(());
+        }
+        for (i, metric) in self.metrics.iter().enumerate() {
+            metric.serialize_for_telegraf(buffer)?;
+            if i != (self.metrics.len() - 1) {
+                buffer.push(b'\n');
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Helper struct for batching metrics and flushing when batch is full.
+/// Accumulates metrics and submits them in batches for efficiency.
+pub struct MetricBatcher<M: Metric> {
+    batch: Vec<M>,
+    batch_size: usize,
+}
+
+impl<M: Metric + 'static> MetricBatcher<M> {
+    /// Create a new batcher with the specified batch size.
+    pub fn new(batch_size: usize) -> Self {
+        Self {
+            batch: Vec::with_capacity(batch_size),
+            batch_size,
+        }
+    }
+
+    /// Add a metric to the batch. Flushes automatically when batch is full.
+    pub fn push(&mut self, metric: M) {
+        self.batch.push(metric);
+        if self.batch.len() >= self.batch_size {
+            self.flush();
+        }
+    }
+
+    /// Flush any accumulated metrics immediately.
+    pub fn flush(&mut self) {
+        if !self.batch.is_empty() {
+            let metrics = std::mem::replace(&mut self.batch, Vec::with_capacity(self.batch_size));
+            sov_metrics::track_metrics(|t| {
+                t.submit(MetricBatch { metrics });
+            });
+        }
+    }
+}

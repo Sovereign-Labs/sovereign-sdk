@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 
 use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
+use sov_state::SlotValueFromCodec;
 use sov_state::{EncodeLike, Prefix, SlotKey, SlotValue, StateCodec, StateItemCodec};
 use thiserror::Error;
 
@@ -115,7 +116,7 @@ where
     pub fn borrow<Reader>(
         &self,
         state: &mut Reader,
-    ) -> Result<Borrowed<Option<V>, Self>, Reader::Error>
+    ) -> Result<Borrowed<'_, Option<V>, Self>, Reader::Error>
     where
         Reader: StateReader<N>,
     {
@@ -129,7 +130,7 @@ where
     pub fn borrow_mut<Reader>(
         &mut self,
         state: &mut Reader,
-    ) -> Result<BorrowedMut<Option<V>, Self>, Reader::Error>
+    ) -> Result<BorrowedMut<'_, Option<V>, Self>, Reader::Error>
     where
         Reader: StateReader<N>,
     {

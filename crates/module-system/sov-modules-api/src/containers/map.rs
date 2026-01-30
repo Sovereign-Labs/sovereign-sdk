@@ -1,3 +1,4 @@
+use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -236,7 +237,7 @@ where
         &self,
         key: &Kq,
         state: &mut Reader,
-    ) -> Result<Borrowed<Option<V>, Self>, Reader::Error>
+    ) -> Result<Borrowed<'_, Option<V>, Self>, Reader::Error>
     where
         Codec::KeyCodec: EncodeLike<Kq, K>,
         Kq: ?Sized,
@@ -254,7 +255,7 @@ where
         &mut self,
         key: &Kq,
         state: &mut Reader,
-    ) -> Result<BorrowedMut<Option<V>, Self>, Reader::Error>
+    ) -> Result<BorrowedMut<'_, Option<V>, Self>, Reader::Error>
     where
         Codec::KeyCodec: EncodeLike<Kq, K>,
         Kq: ?Sized,

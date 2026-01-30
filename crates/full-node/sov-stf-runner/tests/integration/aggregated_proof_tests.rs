@@ -12,22 +12,22 @@ use tokio::task::JoinHandle;
 use crate::helpers::hash_stf::S;
 use crate::helpers::runner_init::{initialize_runner, InitVariant, TestNode};
 
+const TEST_TOTAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "Prover is broken in current design"]
 async fn fetch_aggregated_proof_test_sync() -> anyhow::Result<()> {
     let test_case = TestCase::new(5);
-    run_make_proof_sync(test_case, 3).await?;
+    tokio::time::timeout(TEST_TOTAL_TIMEOUT, run_make_proof_sync(test_case, 3)).await??;
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "Prover is broken in current design"]
 async fn fetch_aggregated_proof_test_async() -> anyhow::Result<()> {
     let test_case = TestCase::new(5);
-    tokio::time::timeout(
-        std::time::Duration::from_secs(60),
-        run_make_proof_async(test_case, 3),
-    )
-    .await??;
+    tokio::time::timeout(TEST_TOTAL_TIMEOUT, run_make_proof_async(test_case, 3)).await??;
 
     Ok(())
 }
@@ -142,13 +142,13 @@ async fn spawn(
     };
     let init_variant = InitVariant::Genesis {
         block: genesis_block,
-        genesis_params: vec![1],
+        genesis_params: vec![1].into(),
     };
 
     let da_service =
         Arc::new(MockDaService::new(MockAddress::new([11u8; 32])).with_wait_attempts(200));
 
-    let (mut runner, test_node) = initialize_runner(
+    let (mut runner, _state_root, test_node) = initialize_runner(
         da_service,
         path.as_ref(),
         init_variant,

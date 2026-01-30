@@ -268,7 +268,7 @@ impl<T> Distribution<T> {
     }
 
     /// Maps the values inside the distribution using the mapping function
-    pub fn map_values<U>(self, map_fn: &mut impl (FnMut(T) -> U)) -> Distribution<U> {
+    pub fn map_values<U>(self, map_fn: &mut impl FnMut(T) -> U) -> Distribution<U> {
         Distribution {
             weights_and_values: self
                 .weights_and_values
@@ -340,7 +340,7 @@ where
         }
 
         let (address, account) = self.0.accounts.random_entry(u)?;
-        Ok((address.clone(), account.into()))
+        Ok((*address, account.into()))
     }
 
     fn get_random_existing_account_with_tag(
@@ -359,7 +359,7 @@ where
                 .get(address)
                 .expect("Account from secondary index must exist");
 
-            Ok(Some((address.clone(), account.into())))
+            Ok(Some((*address, account.into())))
         } else {
             Ok(None)
         }
@@ -392,11 +392,7 @@ where
         for action in view.take_tags().into_iter() {
             match action {
                 TagAction::Add(tag) => {
-                    self.0
-                        .tags
-                        .entry(tag.into())
-                        .or_default()
-                        .insert(address.clone());
+                    self.0.tags.entry(tag.into()).or_default().insert(*address);
                 }
                 TagAction::Remove(tag) => {
                     self.0
@@ -432,7 +428,7 @@ where
 
         let account = AccountState::<S, T>::with_private_key(private_key);
 
-        self.0.accounts.insert(address.clone(), account.clone());
+        self.0.accounts.insert(address, account.clone());
         Ok((address, (&account).into()))
     }
 }

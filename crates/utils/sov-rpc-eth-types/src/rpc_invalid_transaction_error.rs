@@ -194,7 +194,7 @@ impl RpcInvalidTransactionError {
     /// Converts the halt error
     ///
     /// Takes the configured gas limit of the transaction which is attached to the error
-    pub const fn halt(reason: HaltReason, gas_limit: u64) -> Self {
+    pub fn halt(reason: HaltReason, gas_limit: u64) -> Self {
         match reason {
             HaltReason::OutOfGas(err) => Self::out_of_gas(err, gas_limit),
             HaltReason::NonceOverflow => Self::NonceMaxValue,
@@ -240,6 +240,7 @@ impl From<RpcInvalidTransactionError> for jsonrpsee_types::error::ErrorObject<'s
 impl From<InvalidTransaction> for RpcInvalidTransactionError {
     fn from(err: InvalidTransaction) -> Self {
         match err {
+            InvalidTransaction::Str(err) => Self::other(internal_rpc_err(err)),
             InvalidTransaction::InvalidChainId | InvalidTransaction::MissingChainId => {
                 Self::InvalidChainId
             }
@@ -276,7 +277,7 @@ impl From<InvalidTransaction> for RpcInvalidTransactionError {
             InvalidTransaction::BlobVersionedHashesNotSupported => {
                 Self::BlobVersionedHashesNotSupported
             }
-            InvalidTransaction::BlobGasPriceGreaterThanMax => Self::BlobFeeCapTooLow,
+            InvalidTransaction::BlobGasPriceGreaterThanMax { .. } => Self::BlobFeeCapTooLow,
             InvalidTransaction::EmptyBlobs => Self::BlobTransactionMissingBlobHashes,
             InvalidTransaction::BlobVersionNotSupported => Self::BlobHashVersionMismatch,
             InvalidTransaction::TooManyBlobs { have, .. } => Self::TooManyBlobs { have },

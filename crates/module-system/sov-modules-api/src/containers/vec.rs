@@ -453,7 +453,7 @@ mod test {
     use sov_rollup_interface::execution_mode::Native;
     use sov_state::codec::BorshCodec;
     use sov_state::Prefix;
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::MockDaSpec;
     use unwrap_infallible::UnwrapInfallible;
 
@@ -465,10 +465,10 @@ mod test {
 
     #[test]
     fn double_ended_iterator_from_back() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
 
         let prefix = Prefix::new(0, 0);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -487,10 +487,10 @@ mod test {
     #[test]
     // FIXME: this test should not panic. This is a repro for <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2121>.
     fn double_ended_iterator_meet_in_the_middle() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
 
         let prefix = Prefix::new(1, 1);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -510,10 +510,10 @@ mod test {
 
     #[test]
     fn test_state_vec() {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
 
         let prefix = Prefix::new(2, 2);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);

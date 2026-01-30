@@ -5,7 +5,7 @@ use sov_mock_zkvm::crypto::Ed25519Signature;
 use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::execution_mode::Native;
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleJmtStorageManager;
 use sov_test_utils::MockDaSpec;
 
 use crate::default_spec::DefaultSpec;
@@ -30,7 +30,7 @@ fn create_working_set(
     remaining_funds: Amount,
     gas_price: &<<S as Spec>::Gas as Gas>::Price,
 ) -> WorkingSet<S, StateCheckpoint<S>> {
-    let storage_manager = SimpleStorageManager::new();
+    let storage_manager = SimpleJmtStorageManager::new();
     let storage = storage_manager.create_storage();
     WorkingSet::new_with_gas_meter(storage, remaining_funds, gas_price)
 }
@@ -156,19 +156,16 @@ pub struct BorshTestStruct {
 }
 
 impl MeteredBorshDeserialize<S> for BorshTestStruct {
-    fn bias_borsh_deserialization() -> <S as Spec>::Gas {
-        <S as Spec>::Gas::zero()
-    }
-
-    fn gas_to_charge_per_byte_borsh_deserialization() -> <S as Spec>::Gas {
-        <S as Spec>::Gas::zero()
-    }
-
     fn deserialize(
         buf: &mut &[u8],
         meter: &mut impl GasMeter<Spec = S>,
     ) -> Result<Self, MeteredBorshDeserializeError<<S as Spec>::Gas>> {
-        Self::charge_gas_to_deserialize(buf, meter)?;
+        crate::charge_gas_to_deserialize(
+            <S as Spec>::Gas::zero(),
+            <S as Spec>::Gas::zero(),
+            buf.len(),
+            meter,
+        )?;
 
         <Self as borsh::BorshDeserialize>::deserialize(buf)
             .map_err(MeteredBorshDeserializeError::IOError)

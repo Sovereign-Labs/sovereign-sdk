@@ -51,6 +51,10 @@ struct Args {
     #[arg(short, long, default_value = "mixed")]
     /// The distribution of token transfers vs. synthetic load transactions to generate.
     tx_type: TxType,
+
+    /// After that many seconds main loop will restart with salt incremented by number of workerAs
+    #[arg(long, default_value = "None")]
+    restart_after_seconds: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -72,6 +76,7 @@ async fn run_soak_test_with_demo_runtime<R, S>(
     num_workers: u32,
     validity: Distribution<MessageValidity>,
     tx_type: TxType,
+    restart_after: Option<std::time::Duration>,
 ) -> anyhow::Result<()>
 where
     R: Runtime<S> + EncodeCall<Bank<S>> + EncodeCall<SyntheticLoad<S>> + Clone,
@@ -86,7 +91,7 @@ where
     };
 
     runner
-        .run(client, rx, worker_id, num_workers, validity)
+        .run(client, rx, worker_id, num_workers, validity, restart_after)
         .await
 }
 
@@ -98,6 +103,7 @@ async fn worker_task(
     runtime: SelectedRuntime,
     validity_profile: ValidityProfile,
     tx_type: TxType,
+    restart_after: Option<std::time::Duration>,
 ) -> anyhow::Result<()> {
     let validity = validity_profile.get_validity();
 
@@ -110,6 +116,7 @@ async fn worker_task(
                 num_workers,
                 validity,
                 tx_type,
+                restart_after,
             )
             .await
         }
@@ -121,6 +128,7 @@ async fn worker_task(
                 num_workers,
                 validity,
                 tx_type,
+                restart_after,
             )
             .await
         }
@@ -132,6 +140,7 @@ async fn worker_task(
                 num_workers,
                 validity,
                 tx_type,
+                restart_after,
             )
             .await
         }
@@ -157,6 +166,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .build()?;
     let client = sov_api_spec::Client::new_with_client(&args.api_url, reqwest_client);
 
+    let restart_after = args
+        .restart_after_seconds
+        .map(std::time::Duration::from_secs);
+
     for i in 0..args.num_workers {
         worker_set.spawn(worker_task(
             client.clone(),
@@ -166,6 +179,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.runtime,
             args.validity_profile,
             args.tx_type,
+            restart_after,
         ));
     }
 

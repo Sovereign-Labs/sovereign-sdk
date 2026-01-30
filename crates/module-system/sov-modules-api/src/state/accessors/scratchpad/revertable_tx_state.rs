@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use sov_metrics::{StateAccessMetric, StateMetrics};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{
     EventContainer, Kernel as KernelType, Namespace, SlotKey, SlotValue, TypeErasedEvent, User,
 };
@@ -11,8 +12,8 @@ use sov_state::{
 use super::super::temp_cache::{CacheLookup, TempCache};
 use super::super::{BorshSerializedSize, StateMetricsProvider, UniversalStateAccessor};
 use crate::module::Spec;
-use crate::state::traits::delegate_version_reader;
 use crate::state::traits::PerBlockCache;
+use crate::state::traits::{delegate_version_reader, PinnedCacheAccessor};
 use crate::{
     AccessoryStateWriter, BasicGasMeter, GasMeter, GasMeteringError, ProvableStateReader,
     ProvableStateWriter, TxState,
@@ -104,6 +105,16 @@ impl<S: Spec, I: TxState<S>> PerBlockCache for RevertableTxState<'_, S, I> {
     }
 }
 
+impl<S: Spec, I: TxState<S>> PinnedCacheAccessor<S> for RevertableTxState<'_, S, I> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.inner.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.inner.storage()
+    }
+}
+
 delegate_version_reader!(RevertableTxState<'_, S, I> where [S: Spec, I: TxState<S>] => inner);
 
 impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S, I> {
@@ -172,7 +183,11 @@ impl<S: Spec, I: TxState<S>> AccessoryStateWriter for RevertableTxState<'_, S, I
 impl<S: Spec, I: TxState<S>> AccessoryStateReader for RevertableTxState<'_, S, I> {}
 
 impl<S: Spec, I: TxState<S>> EventContainer for RevertableTxState<'_, S, I> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 

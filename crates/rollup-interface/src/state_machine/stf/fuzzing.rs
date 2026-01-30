@@ -1,12 +1,13 @@
 //! Implements fuzzing strategies for structs in the stf module
 
-use bytes::Bytes;
 use digest::typenum::U32;
 use digest::Digest;
 use proptest::prelude::{any, Arbitrary};
 use proptest::strategy::{BoxedStrategy, Strategy};
 
-use super::{BatchReceipt, StoredEvent, TransactionReceipt, TxEffect, TxReceiptContents};
+use super::{
+    BatchReceipt, FullyBakedTx, StoredEvent, TransactionReceipt, TxEffect, TxReceiptContents,
+};
 use crate::TxHash;
 
 /// An object-safe hashing trait, which is blanket implemented for all
@@ -140,7 +141,7 @@ where
                     };
                     Self {
                         tx_hash,
-                        body_to_save: body_to_save.map(Bytes::from_owner),
+                        body_to_save: body_to_save.map(FullyBakedTx::new),
                         events,
                         receipt,
                     }

@@ -1,0 +1,43 @@
+{
+  "name": "@sovereign-sdk/universal-wallet-wasm",
+  "version": "0.6.0",
+  "scripts": {
+    "build": "pnpm run compile:node && pnpm run compile:esm && ./scripts/ensure_module_types.sh",
+    "compile:esm": "wasm-pack build --target bundler --release --out-dir dist/esm",
+    "compile:node": "wasm-pack build --target nodejs --release --out-dir dist/node",
+    "test": "vitest run --project unit"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "files": [
+    "dist/**/*",
+    "!dist/**/.gitignore",
+    "!dist/**/README.md",
+    "package.json",
+    "README.md"
+  ],
+  "sideEffects": [
+    "./dist/node/wallet_wasm.js",
+    "./dist/esm/wallet_wasm.js"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/node/wallet_wasm.d.ts",
+      "import": "./dist/esm/wallet_wasm.js",
+      "require": "./dist/node/wallet_wasm.js"
+    }
+  },
+  "main": "dist/node/wallet_wasm.js",
+  "module": "dist/esm/wallet_wasm.js",
+  "types": "dist/node/wallet_wasm.d.ts",
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "vitest": "4.0.7",
+    "wasm-pack": "^0.13.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

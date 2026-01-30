@@ -1,6 +1,8 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_primitives::{Address, B256, U256};
+use alloy_consensus::{EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
+use alloy_primitives::{Address, Bloom, B256, B64, U256};
 use alloy_primitives::{BlockNumber, Bytes};
+use anyhow::bail;
 use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -45,20 +47,17 @@ where
         config: &<Self as Module>::Config,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
-        for acc in config.accounts.clone() {
-            self.init_account(acc, state)?;
-        }
-
+        self.admin.set(&config.admin, state)?;
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
 
-        let block = init_block(config, self.base_fee());
+        let block = init_block(config);
 
         self.cfg.set(&chain_cfg, state)?;
         self.head.set(&block, state)?;
 
         let block_env = create_block_env(
-            self.base_fee(),
+            0,
             block.header.gas_limit,
             block.header.timestamp,
             block.header.beneficiary,
@@ -66,6 +65,9 @@ where
             None,
         );
         self.block_env.set(&block_env, state)?;
+        for acc in config.accounts.clone() {
+            self.init_account(acc, state)?;
+        }
 
         #[cfg(feature = "native")]
         {
@@ -100,7 +102,7 @@ where
     }
 }
 
-fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
+fn init_block<S: Spec>(config: &EvmGenesisConfig<S>) -> Block {
     let header = alloy_consensus::Header {
         beneficiary: config.chain_spec.coinbase,
         // This will be set in finalize_hook or in the next begin_rollup_block_hook
@@ -108,8 +110,23 @@ fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
         excess_blob_gas: Some(EXCESS_BLOB_GAS),
-        base_fee_per_gas: Some(base_fee),
-        ..Default::default()
+        base_fee_per_gas: Some(0),
+        // Default values
+        parent_hash: B256::ZERO,
+        ommers_hash: EMPTY_OMMER_ROOT_HASH,
+        transactions_root: EMPTY_ROOT_HASH,
+        receipts_root: EMPTY_ROOT_HASH,
+        logs_bloom: Bloom::default(),
+        difficulty: U256::ZERO,
+        number: 0,
+        gas_used: 0,
+        extra_data: Bytes::default(),
+        mix_hash: B256::ZERO,
+        nonce: B64::ZERO,
+        withdrawals_root: None,
+        blob_gas_used: None,
+        parent_beacon_block_root: None,
+        requests_hash: None,
     };
 
     Block {
@@ -118,7 +135,7 @@ fn init_block(config: &EvmGenesisConfig, base_fee: u64) -> Block {
     }
 }
 
-fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
+fn init_spec<S: Spec>(config: &EvmGenesisConfig<S>) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
     let mut spec = config.chain_spec.hardforks.to_vec();
 
     spec.sort_by(|a, b| a.0.cmp(&b.0));
@@ -126,15 +143,19 @@ fn init_spec(config: &EvmGenesisConfig) -> anyhow::Result<Vec<(BlockNumber, Spec
     if spec.is_empty() {
         spec.push((0, SpecId::CANCUN));
     } else if spec[0].0 != 0u64 {
-        panic!("EVM spec must start from block 0");
+        bail!("EVM spec must start from block 0");
     };
 
     Ok(spec)
 }
 
-fn evm_chain_config(cfg: &EvmGenesisConfig, spec: Vec<(BlockNumber, SpecId)>) -> EvmRuntimeConfig {
+fn evm_chain_config<S: Spec>(
+    cfg: &EvmGenesisConfig<S>,
+    spec: Vec<(BlockNumber, SpecId)>,
+) -> EvmRuntimeConfig {
     EvmRuntimeConfig {
         chain_spec: cfg.chain_spec.clone(),
         hardforks: spec,
+        contract_creation_policy: cfg.contract_creation_policy.clone(),
     }
 }

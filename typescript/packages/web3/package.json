@@ -1,0 +1,47 @@
+{
+  "name": "@sovereign-sdk/web3",
+  "version": "0.12.4",
+  "scripts": {
+    "build": "pnpm typecheck && tsup",
+    "ci": "biome ci",
+    "fix": "biome check --write",
+    "lint": "biome lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "files": ["dist", "package.json"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "devDependencies": {
+    "@sovereign-sdk/types": "workspace:^",
+    "tsup": "^8.3.0",
+    "vitest": "4.0.7"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@sovereign-sdk/client": "0.1.0-alpha.39",
+    "@sovereign-sdk/serializers": "workspace:^",
+    "@sovereign-sdk/signers": "workspace:^",
+    "@sovereign-sdk/universal-wallet-wasm": "workspace:^",
+    "@sovereign-sdk/utils": "workspace:^",
+    "bech32": "^2.0.0",
+    "isomorphic-ws": "^5.0.0",
+    "js-base64": "^3.7.7",
+    "partysocket": "^1.1.3",
+    "ws": "^8.18.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

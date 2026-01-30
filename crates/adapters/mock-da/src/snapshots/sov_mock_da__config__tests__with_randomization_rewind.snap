@@ -18,5 +18,6 @@ expression: config
       "end": 5
     },
     "behaviour": "rewind"
-  }
+  },
+  "failure_behavior": "none"
 }

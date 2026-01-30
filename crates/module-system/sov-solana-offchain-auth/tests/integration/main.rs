@@ -27,20 +27,19 @@ use sov_solana_offchain_auth::authentication::{
     SolanaOffchainSimpleMessage, SolanaOffchainSpecCompliantMessage,
     SolanaOffchainUnsignedTransaction,
 };
-use sov_solana_offchain_auth::capabilities::{
+use sov_solana_offchain_auth::utils::make_preamble_for_message;
+use sov_solana_offchain_auth::{
     SolanaOffchainAuthenticator, SolanaOffchainAuthenticatorInput, SolanaOffchainAuthenticatorTrait,
 };
-use sov_solana_offchain_auth::utils::make_preamble_for_message;
-use sov_state::{DefaultStorageSpec, ProverStorage};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{BankConfig, Runtime as _};
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
-    generate_runtime, RtAgnosticBlueprint, TestUser, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE,
-    TEST_DEFAULT_MAX_PRIORITY_FEE,
+    generate_runtime, RtAgnosticBlueprint, TestStorage, TestUser, TEST_DEFAULT_GAS_LIMIT,
+    TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
 };
-use sov_test_utils::{MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestHasher, TestStorageSpec};
+use sov_test_utils::{MockDaSpec, MockZkvm, MockZkvmCryptoSpec};
 use sov_value_setter::ValueSetterConfig;
 use tempfile::tempdir;
 
@@ -55,7 +54,7 @@ pub type SolanaTestSpec = ConfigurableSpec<
     Base58Address, // Use Base58Address instead of the default Address
     Native,
     MockZkvmCryptoSpec,
-    ProverStorage<DefaultStorageSpec<TestHasher>>,
+    TestStorage,
 >;
 
 /// An arbitrary base58 address.

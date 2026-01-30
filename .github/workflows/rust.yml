@@ -45,7 +45,7 @@ on:
   merge_group:
     types: ["checks_requested"]
   push:
-    branches: ["nightly", "stable"]
+    branches: ["nightly", "stable", "dev"]
   pull_request: {}
   workflow_dispatch: {}
 
@@ -58,9 +58,9 @@ env:
 # Source: <https://stackoverflow.com/a/72408109/5148606>
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  # Except in `nightly` and `stable` branches! Any cancelled job will cause the
+  # Except in `dev`, `nightly` and `stable` branches! Any cancelled job will cause the
   # CI run to fail, and we want to keep a clean history for major branches.
-  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') }}
+  cancel-in-progress: ${{ (github.ref != 'refs/heads/nightly') && (github.ref != 'refs/heads/stable') && (github.ref != 'refs/heads/dev') }}
 
 jobs:
   check-aggregate:
@@ -444,7 +444,6 @@ jobs:
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
-
       - name: Login to Docker Hub
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: docker/login-action@v3
@@ -454,9 +453,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      # CI always operates on the entire workspace
-      - run: cargo switcheroo disable
-        shell: bash
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
       - run: cat demo-rollup-readme.sh
@@ -517,10 +513,6 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
-    # There exists a circular dependency between repos where web3 JS needs changes from a PR
-    # But the PR needs the web3 SDK to be updated for this job to pass. In these cases
-    # we can skip this check but do our best to avoid this until we can fix the situation
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-web3-js-check') }}
     timeout-minutes: 60
     env:
       SP1_SKIP_PROGRAM_BUILD: "true"
@@ -533,18 +525,14 @@ jobs:
           cache: |
             rust
             pnpm
+          path: |
+            ./typescript/.turbo
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
-      - uses: pnpm/action-setup@v2
+      - uses: pnpm/action-setup@v4
         with:
-          version: 9
-      - name: Checkout web3-js SDK
-        uses: actions/checkout@v5
-        with:
-          repository: "Sovereign-Labs/sovereign-sdk-web3-js"
-          path: "examples/demo-rollup/web3-js-sdk"
-          ref: "8eef971f7bd3e353930d4802463e8b5535027b23"
+          package_json_file: ./typescript/package.json
       - name: Run web3-js SDK tests against demo-rollup
         # See the script for more details about what to do if job
         run: |

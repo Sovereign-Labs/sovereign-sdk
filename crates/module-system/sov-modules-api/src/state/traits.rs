@@ -4,6 +4,7 @@ use std::num::TryFromIntError;
 
 use sov_metrics::StateAccessMetric;
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
 use sov_state::StorageProof;
 use sov_state::{
@@ -40,7 +41,7 @@ use crate::{Gas, GasMeter, GasMeteringError, GasSpec, RevertableTxState, Spec};
 pub trait StateAccessor: StateReaderAndWriter<User> {
     /// Converts this accessor into an [`UnmeteredStateWrapper`]. This method should only be used either in tests or in the `EVM` module.
     #[cfg(any(feature = "test-utils", feature = "evm"))]
-    fn to_unmetered(&mut self) -> UnmeteredStateWrapper<Self>
+    fn to_unmetered(&mut self) -> UnmeteredStateWrapper<'_, Self>
     where
         Self: Sized,
     {
@@ -86,6 +87,14 @@ impl<T> InfallibleKernelStateAccessor for T where
 {
 }
 
+pub trait PinnedCacheAccessor<S: Spec> {
+    /// Returns a mutable reference to the pinned cache backing this accessor, if any exists.
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache>;
+
+    /// Returns a reference to the storage backing this accessor.
+    fn storage(&self) -> &S::Storage;
+}
+
 /// The state accessor used during transaction execution. It provides unrestricted
 /// access to [`User`]-space state, as well as limited visibility into the `Kernel` state.
 pub trait TxState<S: Spec>:
@@ -100,11 +109,12 @@ pub trait TxState<S: Spec>:
     + GasMeter<Spec = S>
     + Sized
     + StateMetricsProvider
+    + PinnedCacheAccessor<S>
 {
     /// Converts this state accessor into a [`RevertableTxState`].
     ///
     /// You *MUST* call .commit() to save the changes from the resulting accessor if you want them to be persisted
-    fn to_revertable(&mut self) -> RevertableTxState<S, Self> {
+    fn to_revertable(&mut self) -> RevertableTxState<'_, S, Self> {
         RevertableTxState::new(self)
     }
 }
@@ -121,6 +131,7 @@ impl<S: Spec, T> TxState<S> for T where
         + GasMeter<Spec = S>
         + Sized
         + StateMetricsProvider
+        + PinnedCacheAccessor<S>
 {
 }
 
@@ -302,7 +313,7 @@ pub trait AccessoryStateReader: UniversalStateAccessor + StateMetricsProvider {}
 /// A trait wrapper that replicates the functionality of [`StateReader`] but with a gas metering interface.
 /// This allows a storage reader to charge gas for read operations.
 pub trait ProvableStateReader<N: ProvableCompileTimeNamespace>:
-    UniversalStateAccessor + GasMeter
+    UniversalStateAccessor + GasMeter + StateMetricsProvider
 {
 }
 
@@ -388,11 +399,11 @@ macro_rules! blanket_impl_metered_state_reader {
     };
 }
 
-impl<T: ProvableStateReader<Kernel> + StateMetricsProvider> StateReader<Kernel> for T {
+impl<T: ProvableStateReader<Kernel>> StateReader<Kernel> for T {
     blanket_impl_metered_state_reader!(Kernel);
 }
 
-impl<T: ProvableStateReader<User> + StateMetricsProvider> StateReader<User> for T {
+impl<T: ProvableStateReader<User>> StateReader<User> for T {
     blanket_impl_metered_state_reader!(User);
 }
 

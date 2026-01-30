@@ -42,7 +42,7 @@ impl<S: Spec> PostDispatchHook<S> for InterchainGasPaymaster<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        let key = RelayerWithDomainKey::new(relayer.clone(), message.dest_domain);
+        let key = RelayerWithDomainKey::new(*relayer, message.dest_domain);
 
         let Quote {
             metadata,
@@ -102,7 +102,7 @@ impl<S: Spec> PostDispatchHook<S> for InterchainGasPaymaster<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<Amount> {
-        let key = RelayerWithDomainKey::new(relayer.clone(), message.dest_domain);
+        let key = RelayerWithDomainKey::new(*relayer, message.dest_domain);
         let Quote { gas_required, .. } = self
             .prepare_quote(&key, metadata, context, state)
             .context("quote dispatch")?;

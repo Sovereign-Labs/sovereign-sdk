@@ -4,7 +4,9 @@ expression: "&tx"
 ---
 {
   "batch_number": 3,
-  "body": "dHg3IGJvZHk=",
+  "body": {
+    "data": "dHg3IGJvZHk="
+  },
   "event_range": {
     "end": 16,
     "start": 14

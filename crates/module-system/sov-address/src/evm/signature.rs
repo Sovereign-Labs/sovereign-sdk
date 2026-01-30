@@ -1,19 +1,16 @@
 use alloy_primitives::keccak256;
 use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
-use sov_modules_api::macros::UniversalWallet;
+use sov_modules_api::sov_universal_wallet::schema::OverrideSchema;
 use sov_rollup_interface::crypto::SigVerificationError;
 
 use crate::evm::public_key::EthereumPublicKey;
 
 /// A secp256k1 signature. Wraps the rust-secp256k1 crate.
-#[derive(
-    PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema, UniversalWallet,
-)]
+#[derive(PartialEq, Eq, Debug, Clone, serde::Serialize, serde::Deserialize, JsonSchema)]
 pub struct EthereumSignature {
     /// The inner signature.
     #[schemars(flatten, with = "String", length(equal = "128"))]
-    #[sov_wallet(as_ty = "[u8; 64]")]
     pub msg_sig: k256::ecdsa::Signature,
     bytes: Vec<u8>,
 }
@@ -26,6 +23,10 @@ impl EthereumSignature {
             bytes: s.to_vec(),
         }
     }
+}
+
+impl OverrideSchema for EthereumSignature {
+    type Output = [u8; 64];
 }
 
 impl BorshDeserialize for EthereumSignature {

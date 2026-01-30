@@ -5,6 +5,7 @@
 use sov_modules_api::{Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, VersionedStateValue};
 
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
+#[allow(dead_code)]
 struct TestModule<S: Spec> {
     #[id]
     id: ModuleId,
@@ -23,6 +24,7 @@ impl<S: Spec> Module for TestModule<S> {
     type Config = ();
     type CallMessage = ();
     type Event = ();
+    type Error = anyhow::Error;
 
     fn call(
         &mut self,

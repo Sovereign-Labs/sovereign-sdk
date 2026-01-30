@@ -1,11 +1,11 @@
 //! Utilities and definitions for the sequencer's REST APIs.
 
+use std::net::SocketAddr;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::time::Instant;
 
-use anyhow::Context;
 use axum::extract::ws::WebSocket;
-use axum::extract::{ws, State, WebSocketUpgrade};
+use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::Json;
 use futures::StreamExt;
@@ -15,20 +15,49 @@ use serde_with::base64::Base64;
 use serde_with::serde_as;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_rest_utils::handle_bad_ws_request;
+use sov_rest_utils::send_json;
 use sov_rest_utils::{
-    errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
-    PageSelection, PaginatedResponse, Pagination, Path, Query,
+    errors, preconfigured_router_layers, serve_generic_ws_subscription,
+    serve_generic_ws_subscription_with_config, ApiResult, FilterQuery, PageSelection,
+    PaginatedResponse, Pagination, Path, Query, WsSubscriptionConfig,
 };
+use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::Bytes;
 use sov_rollup_interface::TxHash;
 use tokio::sync::watch::Receiver;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer};
+use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
+
+/// Interval between ping frames sent to the client for keepalive.
+const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Maximum time to wait for a pong response before considering the connection dead.
+const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// Converts an optional broadcast receiver into a subscription stream.
+/// Returns an empty stream if the receiver is None.
+#[cfg(feature = "test-utils")]
+fn broadcast_to_subscription_stream<T>(
+    receiver: Option<tokio::sync::broadcast::Receiver<T>>,
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = Result<T, SubscriptionStreamError>> + Send>>
+where
+    T: Clone + Send + 'static,
+{
+    receiver
+        .map(|rx| {
+            BroadcastStream::new(rx)
+                .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                    SubscriptionStreamError::lagged_without_identifiers(n)
+                })
+                .boxed()
+        })
+        .unwrap_or_else(|| futures::stream::empty().boxed())
+}
 
 /// [`StartFrom`] is used as a query parameter for the txs subscription
 #[derive(
@@ -47,19 +76,47 @@ pub struct StartFrom {
     start_from: u64,
 }
 
+/// Compression mode for WebSocket subscriptions.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompressionMode {
+    /// No compression (default). Messages are sent as individual JSON text frames.
+    #[default]
+    None,
+    /// Gzip compression. Messages are batched into JSON arrays, compressed, and sent as binary frames.
+    Gzip,
+}
+
+/// Query parameters for WebSocket subscriptions that support compression.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct CompressionQuery {
+    /// The compression mode to use for this subscription.
+    #[serde(default)]
+    pub compression: CompressionMode,
+}
+
+impl CompressionQuery {
+    /// Converts the query into a [`WsSubscriptionConfig`].
+    pub fn to_config(&self) -> WsSubscriptionConfig {
+        WsSubscriptionConfig {
+            compress: self.compression == CompressionMode::Gzip,
+        }
+    }
+}
+
 /// Provides REST APIs for any [`Sequencer`]. See [`SequencerApis::rest_api_server`].
 #[derive(derivative::Derivative)]
 #[derivative(Clone(bound = ""))]
 pub struct SequencerApis<Seq: Sequencer> {
-    sequencer: Arc<Seq>,
+    sequencer: Seq,
     shutdown_receiver: Receiver<()>,
 }
 
 impl<Seq: Sequencer> SequencerApis<Seq> {
     /// Creates a new Axum router for this sequencer.
-    pub fn rest_api_server(seq: Arc<Seq>, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
+    pub fn rest_api_server(sequencer: Seq, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
         let state = Self {
-            sequencer: seq,
+            sequencer,
             shutdown_receiver,
         };
 
@@ -87,13 +144,18 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 axum::routing::get(Self::subscribe_to_transactions),
             )
             .route(
+                "/sequencer/txs/submit/ws",
+                axum::routing::get(Self::axum_ws_submit_tx),
+            )
+            .route(
                 "/sequencer/unstable/events/:eventId",
                 axum::routing::get(Self::axum_get_event),
             )
             .route(
                 "/sequencer/unstable/events",
                 axum::routing::get(Self::axum_list_events),
-            );
+            )
+            .route("/sequencer/role", axum::routing::get(Self::axum_get_role));
 
         #[cfg(feature = "test-utils")]
         let router = router
@@ -108,6 +170,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .route(
                 "/sequencer/test-utils/state-updates/ws",
                 axum::routing::get(Self::subscribe_to_state_updates_unstable),
+            )
+            .route(
+                "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+                axum::routing::get(Self::subscribe_to_forced_tx_batches_unstable),
             );
 
         preconfigured_router_layers(router).with_state(state)
@@ -128,6 +194,179 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         socket.send(ws_msg).await?;
 
         Ok(())
+    }
+
+    async fn axum_ws_submit_tx(
+        connect_info: ConnectInfo<SocketAddr>,
+        state: State<Self>,
+        headers: axum::http::HeaderMap,
+        ws: ws::WebSocketUpgrade,
+    ) -> Result<impl IntoResponse, axum::response::Response> {
+        let ip_addr = get_client_ip(headers, Some(&connect_info))
+            .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
+        Ok(ws.on_upgrade(move |mut socket| async move {
+            let mut shutdown_receiver = state.shutdown_receiver.clone();
+            let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
+            // Use interval_at to delay the first ping until after a full interval of inactivity
+            let mut ping_interval =
+                tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
+            ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut awaiting_pong: Option<[u8; 8]> = None;
+            let mut ping_sent_time = Instant::now();
+            let mut ping_counter: u64 = 0;
+            let mut should_drain = true;
+
+            loop {
+                tokio::select! {
+                    // Biased ensures we check recv first to handle Close frames promptly
+                    biased;
+                    // The client sent us a message
+                    inbound_msg = socket.recv() => {
+                        match inbound_msg {
+                            // Try to deserialize the message as a WsMessage<AcceptTx>. On success, spawn a task to handle it.
+                            Some(Ok(ws::Message::Text(text))) => {
+                                ping_interval.reset();
+                                match serde_json::from_str::<WsMessage<AcceptTx>>(&text) {
+                                    Ok(WsMessage { id, contents }) => {
+                                        let sender = outbound_tx.clone();
+                                        let state = state.clone();
+                                        // Spawn a task to handle the transaction submission and forward the response back to the main handler loop for this subscription
+                                        tokio::spawn(async move {
+                                            let raw_tx = RawTx::new(contents.body.blob);
+                                            let baked_tx = <<Seq::Rt as Runtime<Seq::Spec>>::Auth as TransactionAuthenticator<
+                                                Seq::Spec,
+                                            >>::encode_with_standard_auth(raw_tx);
+
+                                            let response = match state
+                                                .sequencer
+                                                .accept_tx(baked_tx, ip_addr)
+                                                .await {
+                                                    Ok(tx_with_hash) => {
+                                                        Ok(WsMessage {
+                                                            id,
+                                                            contents: TxInfoWithConfirmation {
+                                                                id: tx_with_hash.tx_hash,
+                                                                confirmation: tx_with_hash.confirmation,
+                                                                status: TxStatus::<DaBlobHash<<Seq::Da as DaService>::Spec>>::Submitted,
+                                                            }
+                                                        })
+                                                    }
+                                                    Err(e) => {
+                                                        if e.status.is_server_error() {
+                                                            tracing::error!(error = ?e, "Error accepting transaction");
+                                                        }
+                                                        Err(WsMessage {
+                                                            id,
+                                                            contents: e,
+                                                        })
+                                                    }
+                                                };
+                                            if let Err(e) = sender.send(response).await {
+                                                tracing::warn!(?e, "Error sending response to client. Could not respond because outbound ws channel was dropped. This usually means the seqeuncer is shutting down.");
+                                            };
+                                        });
+                                    }
+                                    Err(e) => {
+                                        if handle_bad_ws_request(&mut socket, ip_addr, e).await.is_err() {
+                                            should_drain = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            // If the client disconnected
+                            None  | Some(Ok(ws::Message::Close(_)))=> {
+                                should_drain = false;
+                                break;
+                            }
+                            Some(Err(error)) => {
+                                tracing::warn!(?error, "WebSocket error");
+                                should_drain = false;
+                                break;
+                            }
+                            Some(Ok(ws::Message::Pong(data))) => {
+                                if awaiting_pong.is_some_and(|expected| data == expected) {
+                                    awaiting_pong = None;
+                                    ping_interval.reset();
+                                    tracing::trace!("Received valid pong from client");
+                                } else {
+                                    tracing::trace!("Received pong with unexpected data; ignoring");
+                                }
+                            }
+                            Some(Ok(ws::Message::Ping(data))) => {
+                                if let Err(err) = socket.send(ws::Message::Pong(data)).await {
+                                    tracing::warn!(?err, "Failed to send pong - disconnecting client");
+                                    should_drain = false;
+                                    break;
+                                }
+                            }
+                            Some(_) => {
+                                if handle_bad_ws_request(&mut socket, ip_addr, "Invalid websocket message: only text messages are supported").await.is_err() {
+                                    should_drain = false;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    // We have an outbound message ready to send
+                    outbound_msg = outbound_rx.recv() => {
+                        let Some(msg) = outbound_msg else {
+                            break;
+                        };
+                        let send_result = match msg {
+                            Ok(m) => send_json(&mut socket, m).await,
+                            Err(m) => send_json(&mut socket, m).await,
+                        };
+                        if let Err(err) = send_result {
+                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                            should_drain = false;
+                            break;
+                        }
+                    }
+                    _ = ping_interval.tick() => {
+                        if awaiting_pong.is_some() {
+                            let elapsed = ping_sent_time.elapsed();
+                            if elapsed > PONG_TIMEOUT {
+                                tracing::warn!("No pong received within timeout ({:?}) - disconnecting client", PONG_TIMEOUT);
+                                should_drain = false;
+                                break;
+                            }
+                        }
+
+                        ping_counter = ping_counter.wrapping_add(1);
+                        let ping_data = ping_counter.to_le_bytes();
+                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec())).await {
+                            tracing::warn!(?err, "Failed to send ping - disconnecting client");
+                            should_drain = false;
+                            break;
+                        }
+                        ping_sent_time = Instant::now();
+                        awaiting_pong = Some(ping_data);
+                        tracing::trace!("Sent ping to client");
+                    }
+                    _ = shutdown_receiver.changed() => break,
+                }
+            }
+
+            // Drop the local handle to the channel for outbound messages.
+            // This guarantees that the channel will be closed as soon as all in-flight tasks have resolved.
+            drop(outbound_tx);
+            // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
+            if should_drain {
+                while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
+                    let send_result = match msg {
+                        Ok(m) => send_json(&mut socket, m).await,
+                        Err(m) => send_json(&mut socket, m).await,
+                    };
+                    if let Err(err) = send_result {
+                        tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                        break;
+                    }
+                }
+            }
+            socket.close().await.ok();
+        }))
     }
 
     async fn axum_get_tx_ws(
@@ -167,11 +406,14 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // Finally, convert the data into the type that we want to
             // serialize over the WS connection.
             .map(|data| {
-                data.context("Failed to subscribe to tx status updates")
-                    .map(|status| TxInfo {
-                        id: tx_hash.0,
-                        status,
-                    })
+                data.map(|status| TxInfo {
+                    id: tx_hash.0,
+                    status,
+                })
+                // Tx status subscriptions don't have sequential identifiers
+                .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                    SubscriptionStreamError::lagged_without_identifiers(n)
+                })
             })
             .boxed();
 
@@ -190,6 +432,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             Ok(()) => Ok(().into()),
             Err(details) => Err(error_not_fully_synced(details).into_response()),
         }
+    }
+
+    async fn axum_get_role(state: State<Self>) -> ApiResult<crate::SequencerRole> {
+        Ok(state.sequencer.sequencer_role().await.into())
     }
 
     async fn axum_get_tx_status(
@@ -226,24 +472,25 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     async fn axum_accept_tx(
+        connect_info: ConnectInfo<SocketAddr>,
+        headers: axum::http::HeaderMap,
         state: State<Self>,
         tx: Json<AcceptTx>,
     ) -> ApiResult<
         TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>,
     > {
+        let ip_addr = get_client_ip(headers, Some(&connect_info))
+            .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
         let raw_tx = RawTx::new(tx.0.body.blob);
         let baked_tx = <<Seq::Rt as Runtime<Seq::Spec>>::Auth as TransactionAuthenticator<
             Seq::Spec,
         >>::encode_with_standard_auth(raw_tx);
 
-        let tx_with_hash = tokio::spawn(async move { state.sequencer.accept_tx(baked_tx).await })
+        let tx_with_hash = state
+            .sequencer
+            .accept_tx(baked_tx, ip_addr)
             .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "A panic occurred while accepting a transaction");
-                sov_rest_utils::errors::internal_server_error_response_500(
-                    "An internal error occurred while processing the transaction",
-                )
-            })?
             .map_err(|e| {
                 if e.status.is_server_error() {
                     tracing::error!(error = ?e, "Error accepting transaction");
@@ -262,10 +509,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     async fn subscribe_to_events(
         State(state): State<Self>,
         filter: FilterQuery,
+        compression: Option<Query<CompressionQuery>>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         use futures::future;
-        ws.on_upgrade(|socket| async move {
+        let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
+        ws.on_upgrade(move |socket| async move {
             let stream = state
                 .sequencer
                 .subscribe_events()
@@ -276,28 +525,47 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     (Ok(event), Some(filter)) => future::ready(filter.matches(&event.key)),
                     (_, _) => future::ready(true),
                 });
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_receiver.clone(),
+                config,
+            )
+            .await;
         })
     }
 
     async fn subscribe_to_transactions(
         State(state): State<Self>,
         start_from: Option<Query<StartFrom>>,
+        compression: Option<Query<CompressionQuery>>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         let start_from = start_from.map(|start_from| start_from.0.start_from);
+        let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
             let stream =
                 Self::subscribe_txs_starting_from(start_from, state.sequencer.clone()).await;
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_receiver.clone(),
+                config,
+            )
+            .await;
         })
     }
 
     async fn subscribe_txs_starting_from(
         start_from: Option<u64>,
-        sequencer: Arc<Seq>,
-    ) -> Pin<Box<dyn futures::Stream<Item = anyhow::Result<ApiAcceptedTx<Seq::Confirmation>>> + Send>>
-    {
+        sequencer: Seq,
+    ) -> Pin<
+        Box<
+            dyn futures::Stream<
+                    Item = Result<ApiAcceptedTx<Seq::Confirmation>, SubscriptionStreamError>,
+                > + Send,
+        >,
+    > {
         let Some(stream) = sequencer.subscribe_transactions(start_from).await else {
             return futures::stream::empty().boxed();
         };
@@ -313,16 +581,9 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let stream = state
-                .sequencer
-                .subscribe_blobs_from_blob_sender()
-                .await
-                .map(|receiver| {
-                    BroadcastStream::new(receiver)
-                        .map_err(|err| anyhow::anyhow!("Error creating broadcast stream: {err}"))
-                        .boxed()
-                })
-                .unwrap_or_else(|| futures::stream::empty().boxed());
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_blobs_from_blob_sender().await,
+            );
             serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
         })
     }
@@ -342,23 +603,28 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         Ok(().into())
     }
 
-    /// Subscribe to state updates. Note that notifications may be delivered out of order.
     #[cfg(feature = "test-utils")]
     async fn subscribe_to_state_updates_unstable(
         State(state): State<Self>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let stream = state
-                .sequencer
-                .subscribe_state_updates_unstable()
-                .await
-                .map(|receiver| {
-                    BroadcastStream::new(receiver)
-                        .map_err(|err| anyhow::anyhow!("Error creating broadcast stream: {err}"))
-                        .boxed()
-                })
-                .unwrap_or_else(|| futures::stream::empty().boxed());
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_state_updates_unstable().await,
+            );
+            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+        })
+    }
+
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_to_forced_tx_batches_unstable(
+        State(state): State<Self>,
+        ws: WebSocketUpgrade,
+    ) -> impl IntoResponse {
+        ws.on_upgrade(|socket| async move {
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_forced_tx_batches_unstable().await,
+            );
             serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
         })
     }
@@ -457,15 +723,12 @@ pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
 }
 
 /// An accepted transaction, with the transaction body and confirmation data.
-#[serde_with::serde_as]
 #[derive(Clone, serde::Serialize)]
 pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,
-    /// The base64 encoded transaction body
-    #[serde_as(as = "serde_with::base64::Base64")]
-    #[serde(skip_serializing_if = "Bytes::is_empty")]
-    pub tx: Bytes,
+    /// Transaction body
+    pub tx: FullyBakedTx,
     /// The confirmation data
     #[serde(flatten)]
     pub confirmation: Confirmation,
@@ -475,7 +738,7 @@ impl<C> From<AcceptedTx<C>> for ApiAcceptedTx<C> {
     fn from(tx: AcceptedTx<C>) -> Self {
         Self {
             id: tx.tx_hash,
-            tx: tx.tx.data,
+            tx: tx.tx,
             confirmation: tx.confirmation,
         }
     }

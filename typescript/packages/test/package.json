@@ -1,0 +1,36 @@
+{
+  "name": "@sovereign-sdk/test",
+  "version": "0.1.18",
+  "description": "",
+  "scripts": {
+    "build": "pnpm typecheck && tsup",
+    "ci": "biome ci",
+    "fix": "biome check --write",
+    "lint": "biome lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "files": ["dist", "package.json"],
+  "exports": {
+    "./soak": {
+      "types": "./dist/soak/index.d.ts",
+      "require": "./dist/soak/index.js",
+      "import": "./dist/soak/index.mjs"
+    }
+  },
+  "dependencies": {
+    "@sovereign-sdk/signers": "workspace:^",
+    "@sovereign-sdk/web3": "workspace:^",
+    "p-queue": "^8.1.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "vitest": "4.0.7"
+  }
+}

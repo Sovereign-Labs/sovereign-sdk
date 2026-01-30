@@ -2,11 +2,21 @@
 
 mod mempool;
 
+use self::mempool::{Mempool, MempoolCursor, MempoolTx};
+use crate::common::{
+    loop_call_update_state, loop_send_tx_notifications, pre_exec_err_to_accept_tx_err,
+    sender_is_allowed, tx_auth, AcceptedTx, EmptyConfirmation, Sequencer, TxStatusBlobSenderHooks,
+    WithCachedTxHashes,
+};
+use crate::{
+    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxHash, TxStatus, TxStatusManager,
+};
+use anyhow::Context;
 use async_trait::async_trait;
 use axum::http::StatusCode;
-pub use full_node_configs::sequencer::StdSequencerConfig;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
+pub use sov_full_node_configs::sequencer::StdSequencerConfig;
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
 use sov_modules_api::rest::utils::ErrorObject;
@@ -19,6 +29,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 use std::boxed::Box;
 use std::marker::PhantomData;
+use std::net::IpAddr;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
@@ -27,17 +38,7 @@ use thiserror::Error;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
-use tracing::{debug, error, trace, warn};
-
-use self::mempool::{Mempool, MempoolCursor, MempoolTx};
-use crate::common::{
-    loop_call_update_state, loop_send_tx_notifications, pre_exec_err_to_accept_tx_err,
-    sender_is_allowed, tx_auth, AcceptedTx, EmptyConfirmation, Sequencer, TxStatusBlobSenderHooks,
-    WithCachedTxHashes,
-};
-use crate::{
-    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxHash, TxStatus, TxStatusManager,
-};
+use tracing::{debug, trace, warn};
 
 struct Inner<S, Rt, Da>
 where
@@ -58,7 +59,29 @@ where
 /// Transactions are included in batches by following a largest-first,
 /// least-recent-first priority. Only transactions that were successfully
 /// dispatched are included.
-pub struct StdSequencer<S, Rt, Da>
+#[derive(derivative::Derivative)]
+#[derivative(Clone(bound = ""))]
+pub struct StdSequencer<S, Rt, Da>(Arc<StdSequencerFields<S, Rt, Da>>)
+where
+    S: Spec,
+    Rt: Runtime<S>,
+    Da: DaService<Spec = S::Da>;
+
+impl<S, Rt, Da> std::ops::Deref for StdSequencer<S, Rt, Da>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+    Da: DaService<Spec = S::Da>,
+{
+    type Target = StdSequencerFields<S, Rt, Da>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// The inner fields of a `StdSequencer`. Should be accessed through the parent struct's Arc.
+pub struct StdSequencerFields<S, Rt, Da>
 where
     S: Spec,
     Rt: Runtime<S>,
@@ -67,7 +90,7 @@ where
     runtime: Rt,
     txsm: TxStatusManager<S::Da>,
     inner: Mutex<Inner<S, Rt, Da>>,
-    checkpoint_sender: watch::Sender<StateCheckpoint<S>>,
+    checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     api_state: ApiState<S>,
     da_address: <S::Da as DaSpec>::Address,
     config: SequencerConfig<S::Address, StdSequencerConfig>,
@@ -105,14 +128,15 @@ where
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
         let latest_state_update = state_update_receiver.borrow().clone();
-        let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
+        let checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
+        ));
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
         let api_state = ApiState::build(
@@ -124,9 +148,11 @@ where
 
         let txsm = TxStatusManager::default();
         let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
 
-        let da_address = da.get_signer().await;
+        let da_address = da.get_signer().await.context(
+            "Standard sequencer require DaService to be configured with submitting support",
+        )?;
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let (blob_sender, blob_sender_handle) = BlobSender::new(
@@ -159,7 +185,7 @@ where
             )?,
         };
 
-        let seq = Arc::new(StdSequencer {
+        let seq = StdSequencer(Arc::new(StdSequencerFields {
             inner: inner.into(),
             txsm,
             api_state,
@@ -168,7 +194,7 @@ where
             config: config.clone(),
             api_ledger_db,
             da_address,
-        });
+        }));
 
         handles.push(tokio::spawn({
             loop_call_update_state(
@@ -213,7 +239,7 @@ where
 
         // To fill a batch as big as possible, we only check if valid
         // tx can fit in the batch.
-        let tx_len = tx.data.len();
+        let tx_len = tx.len();
         if ctx.current_batch_size_in_bytes + tx_len > self.max_batch_size_bytes().get() {
             return (ctx, Ok(None));
         }
@@ -265,11 +291,12 @@ where
             auth_output,
             mempool_tx.tx.clone(),
             &self.da_address,
-            self.config.rollup_address.clone(),
+            self.config.rollup_address,
             execution_context,
             &NoOpControlFlow,
             operating_mode,
             metrics,
+            SequencerType::NonPreferred,
         );
 
         match res {
@@ -371,7 +398,7 @@ where
                             "Transaction has been included in the batch",
                         );
 
-                        ctx.current_batch_size_in_bytes += fully_baked_tx.data.len();
+                        ctx.current_batch_size_in_bytes += fully_baked_tx.len();
 
                         txs.push(TxWithHash {
                             fully_baked_tx,
@@ -485,115 +512,23 @@ where
 
         Ok(())
     }
-}
 
-#[cfg(feature = "test-utils")]
-#[allow(missing_docs)]
-impl<S, Rt, Da> StdSequencer<S, Rt, Da>
-where
-    S: Spec,
-    Rt: Runtime<S>,
-    Da: DaService<Spec = S::Da>,
-{
-    pub async fn produce_and_submit_batch(&self) -> Option<WithCachedTxHashes<Vec<FullyBakedTx>>> {
-        match self.produce_batch().await {
-            Ok(Some(batch)) => {
-                self.publish_batch(&batch).await.unwrap();
-                Some(batch)
-            }
-            _ => None,
-        }
-    }
-}
-
-#[async_trait]
-impl<S, Rt, Da> Sequencer for StdSequencer<S, Rt, Da>
-where
-    S: Spec,
-    Rt: Runtime<S>,
-    Da: DaService<Spec = S::Da>,
-{
-    // The standard, non-preferred sequencer doesn't provide any information as
-    // part of transaction confirmations. In the future, it might return
-    // authentication gas usage information.
-    type Confirmation = EmptyConfirmation;
-    type Spec = S;
-    type Rt = Rt;
-    type Da = Da;
-
-    async fn is_ready(&self) -> Result<(), SequencerNotReadyDetails> {
-        // The non-preferred batch builder is always ready to accept
-        // transactions.
-        Ok(())
-    }
-
-    fn tx_status_manager(&self) -> &TxStatusManager<<Self::Spec as Spec>::Da> {
-        &self.txsm
-    }
-
-    fn api_state(&self) -> ApiState<Self::Spec> {
-        self.api_state.clone()
-    }
-
-    async fn update_state(
-        &self,
-        state_update_info: StateUpdateInfo<S::Storage>,
-    ) -> anyhow::Result<()> {
-        let StateUpdateInfo {
-            storage,
-            slot_number,
-            ledger_reader,
-            ..
-        } = &state_update_info;
-        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
-
-        tracing::debug!(
-            %slot_number,
-            "The sequencer received a new state. Notifying the subscribers."
-        );
-
-        {
-            let mut inner = self.inner.lock().await;
-            self.checkpoint_sender
-                .send(checkpoint.clone_with_empty_witness_dropping_temp_cache())
-                .ok();
-            inner.checkpoint = Some(checkpoint);
-        }
-
-        self.api_ledger_db.replace_reader(ledger_reader.clone());
-        self.api_ledger_db.send_notifications_for_slot(*slot_number);
-
-        if self.config.automatic_batch_production {
-            match self.produce_batch().await {
-                Ok(Some(batch)) => {
-                    self.publish_batch(&batch).await?;
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    warn!(error = %e, %slot_number, "Couldn't produce a batch at this time (possibly due to imminent shutdown), continuing");
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn accept_tx(
+    async fn accept_tx_inner(
         &self,
         baked_tx: FullyBakedTx,
-    ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+    ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
         tracing::trace!(
             baked_tx = hex::encode(&baked_tx),
             "`accept_tx` has been called"
         );
 
-        if baked_tx.data.len() > self.max_batch_size_bytes().get() {
+        if baked_tx.len() > self.max_batch_size_bytes().get() {
             return Err(ErrorObject {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
                 message: "Transaction is too big".to_string(),
                 details: json_obj!({
                     "max_allowed_size": self.max_batch_size_bytes(),
-                    "submitted_size": baked_tx.data.len(),
+                    "submitted_size": baked_tx.len(),
                 }),
             });
         }
@@ -672,6 +607,117 @@ where
             confirmation: EmptyConfirmation {},
         })
     }
+}
+
+#[cfg(feature = "test-utils")]
+#[allow(missing_docs)]
+impl<S, Rt, Da> StdSequencer<S, Rt, Da>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+    Da: DaService<Spec = S::Da>,
+{
+    pub async fn produce_and_submit_batch(&self) -> Option<WithCachedTxHashes<Vec<FullyBakedTx>>> {
+        match self.produce_batch().await {
+            Ok(Some(batch)) => {
+                self.publish_batch(&batch).await.unwrap();
+                Some(batch)
+            }
+            _ => None,
+        }
+    }
+}
+
+#[async_trait]
+impl<S, Rt, Da> Sequencer for StdSequencer<S, Rt, Da>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+    Da: DaService<Spec = S::Da>,
+{
+    // The standard, non-preferred sequencer doesn't provide any information as
+    // part of transaction confirmations. In the future, it might return
+    // authentication gas usage information.
+    type Confirmation = EmptyConfirmation;
+    type Spec = S;
+    type Rt = Rt;
+    type Da = Da;
+
+    async fn is_ready(&self) -> Result<(), SequencerNotReadyDetails> {
+        // The non-preferred batch builder is always ready to accept
+        // transactions.
+        Ok(())
+    }
+
+    fn tx_status_manager(&self) -> &TxStatusManager<<Self::Spec as Spec>::Da> {
+        &self.txsm
+    }
+
+    fn api_state(&self) -> ApiState<Self::Spec> {
+        self.api_state.clone()
+    }
+
+    async fn update_state(
+        &self,
+        state_update_info: StateUpdateInfo<S::Storage>,
+    ) -> anyhow::Result<()> {
+        let StateUpdateInfo {
+            storage,
+            slot_number,
+            ledger_reader,
+            ..
+        } = &state_update_info;
+        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
+
+        tracing::debug!(
+            %slot_number,
+            "The sequencer received a new state. Notifying the subscribers."
+        );
+
+        {
+            let mut inner = self.inner.lock().await;
+            self.checkpoint_sender
+                .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                    checkpoint
+                        .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
+                )))
+                .ok();
+            inner.checkpoint = Some(checkpoint);
+        }
+
+        self.api_ledger_db.replace_reader(ledger_reader.clone());
+        self.api_ledger_db.send_notifications_for_slot(*slot_number);
+
+        if self.config.automatic_batch_production {
+            match self.produce_batch().await {
+                Ok(Some(batch)) => {
+                    self.publish_batch(&batch).await?;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    warn!(error = %e, %slot_number, "Couldn't produce a batch at this time (possibly due to imminent shutdown), continuing");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn accept_tx(
+        &self,
+        baked_tx: FullyBakedTx,
+        _ip_addr: IpAddr,
+    ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        let sequencer = self.clone();
+        tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx).await })
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "A panic occurred while accepting a transaction");
+                sov_rest_utils::errors::internal_server_error_500(
+                    "An internal error occurred while processing the transaction",
+                )
+            })?
+    }
 
     async fn tx_status(
         &self,
@@ -690,6 +736,10 @@ where
         } else {
             Ok(TxStatus::Unknown)
         }
+    }
+
+    async fn sequencer_role(&self) -> crate::SequencerRole {
+        crate::SequencerRole::BatchProducer
     }
 }
 

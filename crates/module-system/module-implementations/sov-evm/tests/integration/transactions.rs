@@ -1,20 +1,22 @@
 use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
+use alloy_eips::BlockId;
 use alloy_primitives::FixedBytes;
 use alloy_primitives::Log;
 use alloy_primitives::U256;
 use alloy_rpc_types::BlockTransactions;
 use revm::Database;
 use sov_evm::Evm;
+use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::GasArray;
+use sov_test_utils::BatchTestCase;
 use sov_test_utils::TransactionType;
-use sov_test_utils::{BatchTestCase, LegacySimpleStorage};
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
 #[test]
 fn test_simple_transfer() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let value = 1;
     let transfer_tx = create_transfer_tx(0, &from, &to, value).tx;
@@ -37,13 +39,42 @@ fn test_simple_transfer() {
 }
 
 #[test]
+fn test_simple_transfer_balance_larger_than_allowed() {
+    let (mut runner, from, to, _) = setup();
+
+    let transfer_tx = create_transfer_tx(
+        0,
+        &from,
+        &to,
+        TEST_DEFAULT_USER_BALANCE.0.checked_add(1).unwrap(),
+    )
+    .tx;
+
+    let evm = Evm::<S>::default();
+    runner.execute_transaction(TransactionTestCase {
+        input: transfer_tx,
+        assert: Box::new(move |ctx, state| {
+            let mut db = evm.db(state);
+            let from_acc = db.basic(from.address()).unwrap().unwrap();
+            let to_acc = db.basic(to.address()).unwrap().unwrap();
+            // The only balance changes should be from the transfer itself and not from gas as it's disabled in SovEvm
+            assert_eq!(to_acc.balance, 0);
+            assert_eq!(
+                from_acc.balance,
+                TEST_DEFAULT_USER_BALANCE.0 - ctx.gas_value_used.0
+            );
+        }),
+    });
+}
+
+#[test]
 fn test_evm_gas_usage() {
     std::env::set_var(
         "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_EVM_GAS",
         "[2, 0]",
     );
     let gas_used_with_evm_metering = {
-        let (mut runner, from, _) = setup();
+        let (mut runner, from, _, _) = setup();
         let contract = LegacySimpleStorage::default();
         let contract_addr = from.address().create(0);
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
@@ -56,7 +87,7 @@ fn test_evm_gas_usage() {
         "[1, 0]",
     );
     let gas_used_without_evm_metering = {
-        let (mut runner, from, _) = setup();
+        let (mut runner, from, _, _) = setup();
         let contract = LegacySimpleStorage::default();
         let contract_addr = from.address().create(0);
         runner.execute(create_deploy_tx(0, &contract, &from).tx);
@@ -75,7 +106,7 @@ fn test_evm_gas_usage() {
 
 #[test]
 fn test_executing_eth_transactions() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
 
@@ -112,7 +143,7 @@ fn test_executing_eth_transactions() {
 
                 assert_eq!(evm.tx_index(&tx_hash, state), Some(nonce));
 
-                assert!(evm.receipt(nonce, state).unwrap().receipt.success);
+                assert!(evm.receipt(nonce, state).unwrap().0.receipt.success);
 
                 let nonce_from_module = evm
                     .get_transaction_count(address, None, state)
@@ -136,7 +167,7 @@ fn test_executing_eth_transactions() {
 
 #[test]
 fn test_executing_eth_transactions_several_blocks() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let nb_of_transfers: u64 = 200;
     let batch_size: usize = 10;
@@ -151,7 +182,10 @@ fn test_executing_eth_transactions_several_blocks() {
             input: block.batch_txs().into(),
             assert: Box::new(move |_result, state| {
                 assert_eq!(block.nr, evm.block_number(state).unwrap().to::<u64>());
-                let block_from_evm = evm.get_block_by_number(None, None, state).unwrap().unwrap();
+                let block_from_evm = evm
+                    .get_block_by_number(Some(BlockId::number(block.nr)), None, state)
+                    .unwrap()
+                    .unwrap();
 
                 if let BlockTransactions::Hashes(hashes) = &block_from_evm.transactions {
                     assert_eq!(hashes, &block.tx_hashes());
@@ -188,7 +222,7 @@ fn test_executing_eth_transactions_several_blocks() {
 
 #[test]
 fn test_failed_tx_doesnt_update_evm_module_state() {
-    let (mut runner, _, no_balance_account) = setup();
+    let (mut runner, _, no_balance_account, _) = setup();
     let contract = LegacySimpleStorage::default();
     let create_contract_tx = create_deploy_tx(0, &contract, &no_balance_account).tx;
 
@@ -205,7 +239,7 @@ fn test_failed_tx_doesnt_update_evm_module_state() {
 
 #[test]
 fn test_account_nonce() {
-    let (mut runner, from, to) = setup();
+    let (mut runner, from, to, _) = setup();
 
     let from_addr = from.address();
     let value = 1;
@@ -237,7 +271,7 @@ fn test_account_nonce() {
 // Check that if the same account deploys two contracts, each deployment results in a unique contract address
 #[test]
 fn test_deploy_many_contracts() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr_1 = account.address().create(0);
 
@@ -290,7 +324,7 @@ fn test_deploy_many_contracts() {
 
 #[test]
 fn test_evm_logs() {
-    let (mut runner, account, _) = setup();
+    let (mut runner, account, _, _) = setup();
     let contract = LegacySimpleStorage::default();
     let contract_addr = account.address().create(0);
     let address_bytes: [u8; 32] = account.address().into_word().into();
@@ -315,10 +349,10 @@ fn test_evm_logs() {
     runner.execute_batch(BatchTestCase {
         input: txs.into(),
         assert: Box::new(move |_result, state| {
-            let logs_1 = evm.receipt(1, state).unwrap().receipt.logs;
+            let logs_1 = evm.receipt(1, state).unwrap().0.receipt.logs;
             check_logs(&logs_1, 1);
 
-            let logs_2 = evm.receipt(2, state).unwrap().receipt.logs;
+            let logs_2 = evm.receipt(2, state).unwrap().0.receipt.logs;
             check_logs(&logs_2, 2);
         }),
     });

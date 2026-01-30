@@ -26,14 +26,6 @@ pub const MAX_STR_LEN_BENCH: usize = 1_024;
 pub struct MeteredBorshDeserializeString(pub String);
 
 impl<S: Spec> MeteredBorshDeserialize<S> for MeteredBorshDeserializeString {
-    fn bias_borsh_deserialization() -> <S as Spec>::Gas {
-        <S as GasSpec>::string_bias_borsh_deserialization()
-    }
-
-    fn gas_to_charge_per_byte_borsh_deserialization() -> <S as Spec>::Gas {
-        <S as GasSpec>::string_gas_to_charge_per_byte_borsh_deserialization()
-    }
-
     fn deserialize(
         buf: &mut &[u8],
         meter: &mut impl sov_modules_api::GasMeter<Spec = S>,
@@ -41,7 +33,12 @@ impl<S: Spec> MeteredBorshDeserialize<S> for MeteredBorshDeserializeString {
         Self,
         sov_modules_api::MeteredBorshDeserializeError<<S as sov_modules_api::GasSpec>::Gas>,
     > {
-        Self::charge_gas_to_deserialize(buf, meter)?;
+        sov_modules_api::charge_gas_to_deserialize(
+            <S as GasSpec>::string_bias_borsh_deserialization(),
+            <S as GasSpec>::string_gas_to_charge_per_byte_borsh_deserialization(),
+            buf.len(),
+            meter,
+        )?;
 
         <MeteredBorshDeserializeString as BorshDeserialize>::deserialize(buf)
             .map_err(MeteredBorshDeserializeError::IOError)
@@ -285,12 +282,14 @@ impl<S: Spec> Module for AccessPattern<S> {
 
     type Event = ();
 
+    type Error = anyhow::Error;
+
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         // The initialization logic
         self.admin.set(&config.admin, state).map_err(Into::into)
     }
@@ -300,7 +299,7 @@ impl<S: Spec> Module for AccessPattern<S> {
         msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Self::Error> {
         let admin = self
             .admin
             .get(state)

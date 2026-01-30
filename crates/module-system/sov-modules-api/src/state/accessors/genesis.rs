@@ -1,5 +1,6 @@
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
+use sov_state::pinned_cache::PinnedCache;
 use sov_state::{EventContainer, SlotKey, SlotValue, TypeErasedEvent};
 
 use super::checkpoints::StateCheckpoint;
@@ -7,7 +8,7 @@ use super::temp_cache::{BorshSerializedSize, CacheLookup, TempCache};
 use super::UniversalStateAccessor;
 use crate::capabilities::RollupHeight;
 use crate::state::accessors::StateMetricsProvider;
-use crate::state::traits::PerBlockCache;
+use crate::state::traits::{PerBlockCache, PinnedCacheAccessor};
 use crate::{GasMeter, Genesis, PrivilegedKernelAccessor, Spec, VersionReader};
 
 /// A special state accessor which can only be used at genesis.
@@ -24,7 +25,7 @@ impl<S: Spec> StateCheckpoint<S> {
         &mut self,
         // This argument prevents this method from being called outside of genesis.
         _config: &G::Config,
-    ) -> GenesisStateAccessor<S> {
+    ) -> GenesisStateAccessor<'_, S> {
         GenesisStateAccessor {
             checkpoint: self,
             events: Vec::default(),
@@ -115,7 +116,11 @@ impl<S: Spec> GenesisStateAccessor<'_, S> {
 }
 
 impl<S: Spec> EventContainer for GenesisStateAccessor<'_, S> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 
@@ -149,5 +154,15 @@ impl<S: Spec> PerBlockCache for GenesisStateAccessor<'_, S> {
     fn update_cache_with(&mut self, other: TempCache) {
         self.cache.update_with(other);
         self.cache.prune(); // Since there's no other cache under the Genesis state, we can prune `None` entries
+    }
+}
+
+impl<S: Spec> PinnedCacheAccessor<S> for GenesisStateAccessor<'_, S> {
+    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
+        self.checkpoint.pinned_cache_mut()
+    }
+
+    fn storage(&self) -> &S::Storage {
+        self.checkpoint.storage()
     }
 }

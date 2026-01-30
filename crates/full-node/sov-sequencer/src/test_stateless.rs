@@ -6,6 +6,7 @@ use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{AuthenticationError, TransactionAuthenticator};
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::ConcurrentStateCheckpoint;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rest_utils::ErrorObject;
 use sov_rollup_interface::da::DaSpec;
@@ -13,6 +14,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::{StateUpdateInfo, TxHash};
 use std::marker::PhantomData;
+use std::net::IpAddr;
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
@@ -36,14 +38,15 @@ struct Inner<S: Spec> {
 /// Sequencer that accepts any transaction without verification.
 /// Build a batch out of all accepted transactions in the order they were received.
 /// Does not impose any restrictions on transaction validity or batch size.
-#[derive(Clone)]
+#[derive(derivative::Derivative)]
+#[derivative(Clone(bound = ""))]
 pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     inner: Arc<Mutex<Inner<S>>>,
     #[allow(clippy::type_complexity)]
     blob_sender: Arc<Mutex<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>>,
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
-    state_sender: watch::Sender<StateCheckpoint<S>>,
+    state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     api_ledger_db: LedgerDb,
 }
 
@@ -62,7 +65,7 @@ where
         config: &SequencerConfig<<S as Spec>::Address, ()>,
         ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<(Arc<Self>, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = R::default();
         let storage = state_update_receiver.borrow().storage.clone();
@@ -70,11 +73,14 @@ where
             storage: storage.clone(),
             mempool: vec![],
         });
-        let (state_sender, _rec) = watch::channel(StateCheckpoint::new(storage, &runtime.kernel()));
+        let (state_sender, _rec) =
+            watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                StateCheckpoint::new(storage, &runtime.kernel(), None),
+            )));
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
-        let seq = Arc::new(Self {
+        let seq = Self {
             inner: inner.into(),
             blob_sender: Arc::new(Mutex::new(
                 BlobSender::new(
@@ -95,7 +101,7 @@ where
             _r: Default::default(),
             state_sender,
             api_ledger_db: ledger_db.clone(),
-        });
+        };
 
         let mut handles = vec![];
         handles.push(tokio::spawn({
@@ -151,7 +157,7 @@ where
     fn get_tx_hash(&self, tx: &FullyBakedTx, storage: S::Storage) -> TxHash {
         let mut runtime = R::default();
 
-        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
         let mut tx_scratchpad = checkpoint.to_working_set_unmetered();
 
         match R::Auth::authenticate(tx, &mut tx_scratchpad) {
@@ -234,7 +240,12 @@ where
     async fn accept_tx(
         &self,
         tx: FullyBakedTx,
+        _addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
         Ok(self.accept_encoded_tx(tx).await)
+    }
+
+    async fn sequencer_role(&self) -> crate::SequencerRole {
+        crate::SequencerRole::BatchProducer
     }
 }

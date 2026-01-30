@@ -11,10 +11,10 @@ use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
 use demo_stf_json_client::types::RuntimeAnyJsonValue;
-use full_node_configs::sequencer::SequencerKindConfig;
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{OperatingMode, RawTx, Runtime, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
@@ -65,7 +65,7 @@ const CHECK_TRANSACTION_VALUE: u64 = 13;
 const DA_SLOTS_TO_GENERATE: u64 = 100;
 const FINALIZATION_SLOTS: u32 = 5;
 
-fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, nonce: u64) -> RawTx {
+fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, generation: u64) -> RawTx {
     let msg: RuntimeCall<DemoRollupSpec> =
         RuntimeCall::SyntheticLoad(sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
             number_of_new_values: value,
@@ -75,7 +75,7 @@ fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, nonce: u64) -> RawTx
     let tx = default_test_signed_transaction::<DemoRuntime<DemoRollupSpec>, DemoRollupSpec>(
         &key,
         &msg,
-        nonce,
+        generation,
         &<DemoRuntime<DemoRollupSpec> as Runtime<DemoRollupSpec>>::CHAIN_HASH,
     );
     RawTx::new(borsh::to_vec(&tx).unwrap())
@@ -91,7 +91,8 @@ async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
     match &*response {
         RuntimeAnyJsonValue::Object(inner) => {
             let state_value = inner.get("value").unwrap();
-            let heavy_vec = state_value.as_array().unwrap();
+            println!("State value: {state_value:?}");
+            let heavy_vec = state_value.as_array().expect("HeavyVec is not an array");
             assert_eq!(heavy_vec.len(), expected as usize);
         }
         _ => panic!("Getting SyntheticLoad state value returned unexpected JSON shape."),
@@ -331,7 +332,8 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
         // oddity that might be worth investigating.
         (Level::WARN, "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works.".to_string()),
         (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
-        (Level::WARN, "Metics have been initialized outside of runner, some measurements can be lost on shutdown".to_string()),
+        (Level::WARN, "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string()),
+        (Level::WARN, "Cache warm up task: Transaction could not be applied on the executor.".to_string()),
     ];
 
     let mut recorded_errors_warnings =
@@ -351,7 +353,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 // 5. Shuts down the rollup
 async fn sync_rollup_with_path(
     rollup_storage_path: Arc<TempDir>,
-    nonce_to_use: u64,
+    generation_to_use: u64,
 ) -> anyhow::Result<()> {
     let test_rollup = start_rollup(rollup_storage_path).await?;
 
@@ -405,7 +407,11 @@ async fn sync_rollup_with_path(
     // Ensure the rollup can still accept transactions
     let tx_signer_key =
         read_private_key::<DemoRollupSpec>("tx_signer_private_key.json").private_key;
-    let tx = tx_set_value_for_check(tx_signer_key.clone(), CHECK_TRANSACTION_VALUE, nonce_to_use);
+    let tx = tx_set_value_for_check(
+        tx_signer_key.clone(),
+        CHECK_TRANSACTION_VALUE,
+        generation_to_use,
+    );
     let accept_tx = test_rollup
         .api_client()
         .send_raw_tx_to_sequencer(&tx)

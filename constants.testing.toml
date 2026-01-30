@@ -13,6 +13,8 @@ CHAIN_NAME = "TestChain"
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
 EVM_GAS_METERING_MODE = "Rollup"
+# After this evm block height, the max_fee check will be enforced.
+EVM_MAX_FEE_CHECK_HEIGHT = 0
 # How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
 # the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
 SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.
@@ -35,7 +37,7 @@ MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT = 10
 UNREGISTERED_BLOBS_PER_SLOT = 5
 # How many past transaction generations into the past to keep per-account buckets for
 # Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
-PAST_TRANSACTION_GENERATIONS = 5
+PAST_TRANSACTION_GENERATIONS = 5_000
 # The maximum number of transactions hashes we remember per credential. 
 # Higher numbers allow accounts to send more transactions without updating their generation number. 
 # This is more user friendly for power users, but increases the worst case cost of the uniqueness check.
@@ -196,7 +198,43 @@ ARRAY_OF_U8 = [
     11,
 ]
 
+# --- Hex constants (valid) ---
+# Short hex (2 bytes)
+HEX_SHORT = { hex = "0xaabb" }
+# Medium hex (10 bytes, like namespace)
+HEX_MEDIUM = { hex = "0x736f762d746573742d70" }
+# Long hex (32 bytes, like hash)
+HEX_LONG = { hex = "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20" }
+# Hex without 0x prefix (also valid)
+HEX_NO_PREFIX = { hex = "aabbccdd" }
+# Empty hex (0 bytes)
+HEX_EMPTY = { hex = "0x" }
+# Const hex (cannot be overridden at runtime)
+CONST_HEX_ARRAY = { const = { hex = "0x0102030405" } }
 
+# --- Hex constants (invalid - for trybuild tests) ---
+# Invalid hex character 'z'
+HEX_INVALID_STRING = { hex = "0xzzzz" }
+# Odd length hex string (incomplete byte)
+HEX_ODD_LENGTH = { hex = "0xaaa" }
+
+# --- Byte string constants (valid) ---
+# ASCII string (10 bytes)
+BYTE_STRING_ASCII = { byte_string = "sov-test-b" }
+# Short ASCII (5 bytes)
+BYTE_STRING_SHORT = { byte_string = "hello" }
+# UTF-8 with Cyrillic - exactly 10 bytes (5 cyrillic chars × 2 bytes each)
+BYTE_STRING_UTF8 = { byte_string = "абвгд" }
+# UTF-8 with emoji + ASCII - exactly 10 bytes (🎉=4 + "hello"=5 + "!"=1)
+BYTE_STRING_EMOJI = { byte_string = "🎉hello!" }
+# UTF-8 mixed - exactly 10 bytes (Hi!=3 + мир=6 + !=1)
+BYTE_STRING_MIXED = { byte_string = "Hi!мир!" }
+# Empty string (0 bytes)
+BYTE_STRING_EMPTY = { byte_string = "" }
+# Single character
+BYTE_STRING_SINGLE = { byte_string = "a" }
+# Const byte string (cannot be overridden at runtime)
+CONST_BYTE_STRING = { const = { byte_string = "constant" } }
 
 
 BANK_DISCRIMINANT = 0
@@ -217,9 +255,15 @@ MERKLE_TREE_HOOK_DISCRIMINANT = 14
 WARP_DISCRIMINANT = 15
 PAYMASTER_DISCRIMINANT = 16
 REVENUE_SHARE_DISCRIMINANT = 17
+SOLANA_REGISTRATION_DISCRIMINANT = 18
+SESSION_REGISTRY_DISCRIMINANT = 19
+BLACKLIST_DISCRIMINANT = 20
 
 
 # Test modules
+TEST_DEX_DISCRIMINANT = 228
+SEQUENCING_DATA_TESTER_DISCRIMINANT = 229
+PINNED_CACHE_TESTER_DISCRIMINANT = 230
 STATE_CONSISTENCY_DISCRIMINANT = 231
 MODULE_WITH_VERSIONED_STATE_ACCESS_IN_SLOT_HOOK_DISCRIMINANT = 232
 GAS_TESTER_DISCRIMINANT = 233
@@ -238,7 +282,7 @@ TEST_ACCESSORY_MODULE_DISCRIMINANT = 245
 MY_MODULE_DISCRIMINANT = 246
 TEST_MODULE_DISCRIMINANT = 247
 ROUTING_RECIPIENT_DISCRIMINANT = 248
-EXAMPLE_MODULE_DISCRIMINANT = 249 
+EXAMPLE_MODULE_DISCRIMINANT = 249
 SYNTHETIC_LOAD_DISCRIMINANT = 250
 TEST_RECIPIENT_DISCRIMINANT = 251
 ACCESS_PATTERN_DISCRIMINANT = 252
