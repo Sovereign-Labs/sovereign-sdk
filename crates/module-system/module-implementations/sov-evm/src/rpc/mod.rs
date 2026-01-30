@@ -804,6 +804,14 @@ pub(crate) fn build_rpc_receipt(
         TxKind::Call(addr) => (None, Some(Address(*addr))),
     };
 
+    // EIP-1559 effective gas price calculation (https://github.com/ethereum/EIPs/blob/0d31c18725202ae8bbfb82b8d3d028ad1810d360/EIPS/eip-1559.md?plain=1#L222-L224):
+    //   priority_fee_per_gas = min(transaction.max_priority_fee_per_gas,
+    //                              transaction.max_fee_per_gas - block.base_fee_per_gas)
+    //   effective_gas_price = priority_fee_per_gas + block.base_fee_per_gas
+    let effective_gas_price = transaction
+        .inner()
+        .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
+
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
         transaction_hash,
@@ -811,7 +819,7 @@ pub(crate) fn build_rpc_receipt(
         block_hash,
         block_number,
         gas_used: receipt.gas_used,
-        effective_gas_price: block.maybe_partial_header().base_fee_per_gas.unwrap_or(0) as u128,
+        effective_gas_price,
         blob_gas_used: None,
         blob_gas_price: None,
         from,
