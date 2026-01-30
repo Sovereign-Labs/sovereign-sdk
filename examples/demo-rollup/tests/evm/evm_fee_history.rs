@@ -822,7 +822,8 @@ async fn test_fee_history_array_length_invariants() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// KNOWN BUG: reward rows are sized to requested blockCount even when fewer blocks exist.
+/// Regression: reward rows are sized to the returned block count (not the requested blockCount)
+/// when the chain is shorter than the requested range.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_reward_len_matches_available_blocks() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(2).await;
@@ -832,6 +833,19 @@ async fn test_fee_history_reward_len_matches_available_blocks() -> anyhow::Resul
     let fee_history = client
         .get_fee_history(block_count, BlockNumberOrTag::Number(latest), &[50.0])
         .await?;
+
+    // Chain is shorter than requested; should clamp to genesis.
+    assert_eq!(fee_history.oldest_block, 0);
+    assert_eq!(
+        fee_history.gas_used_ratio.len() as u64,
+        latest + 1,
+        "gas_used_ratio should cover all available blocks"
+    );
+    assert_eq!(
+        fee_history.base_fee_per_gas.len(),
+        fee_history.gas_used_ratio.len() + 1,
+        "base_fee_per_gas should have block_count + 1 entries"
+    );
 
     let rewards = fee_history.reward.expect("reward should be present");
     assert_eq!(
