@@ -26,8 +26,11 @@ use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 mod db_elected;
@@ -149,5 +152,105 @@ async fn wait_for_all_events(
 ) {
     for _ in 0..nb_of_events {
         let _ = subscription.next().await.unwrap();
+    }
+}
+
+use sov_proxy_utils::ClusterInfo;
+use sov_proxy_utils::NodeDiscovery;
+
+async fn wait_for_file_change(path: &Path, file_watcher: &mut watch::Receiver<()>) -> ClusterInfo {
+    tokio::time::timeout(Duration::from_secs(2), file_watcher.changed())
+        .await
+        .unwrap()
+        .unwrap();
+
+    let content = std::fs::read_to_string(path).expect("Failed to read file content");
+    ClusterInfo::parse(&content).expect("Failed to parse cluster info")
+}
+
+type Rollup = ExternalMockDemoRollup<Native>;
+
+/// Holds resources for a cluster info subscription.
+struct ClusterInfoSubscription {
+    _temp_dir: tempfile::TempDir,
+    path: PathBuf,
+    handle: JoinHandle<()>,
+    file_watcher: watch::Receiver<()>,
+}
+
+impl ClusterInfoSubscription {
+    async fn wait_for_change(&mut self) -> ClusterInfo {
+        wait_for_file_change(&self.path, &mut self.file_watcher).await
+    }
+
+    fn abort(self) {
+        self.handle.abort();
+    }
+}
+
+/// Test setup for DbElected tests with two nodes (leader and replica).
+struct NodeDiscoveryTestSetup {
+    postgres: Arc<PostgresData>,
+    da_addr: SocketAddr,
+    da_shutdown: watch::Sender<()>,
+    cluster_info_subscription: ClusterInfoSubscription,
+}
+
+impl NodeDiscoveryTestSetup {
+    /// Creates a new test setup with two DbElected nodes.
+    /// Returns None if Docker is not supported.
+    async fn new() -> Option<Self> {
+        let postgres = match PostgresData::create_postgres().await {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return None,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
+
+        // Create NodeDiscovery to query the nodes table
+        let (node_discovery, file_watcher) = NodeDiscovery::new(postgres.connection_string())
+            .await
+            .expect("Failed to create NodeDiscovery");
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("cluster_info.txt");
+        let path_clone = path.clone();
+
+        let handle = tokio::spawn(async move {
+            node_discovery
+                .subscribe_cluster_info_loop(path_clone)
+                .await
+                .unwrap();
+        });
+
+        let cluster_info_subscription = ClusterInfoSubscription {
+            _temp_dir: temp_dir,
+            path,
+            handle,
+            file_watcher,
+        };
+
+        Some(Self {
+            postgres,
+            da_shutdown,
+            da_addr,
+            //node_discovery,
+            //_file_watcher,
+            cluster_info_subscription,
+        })
+    }
+
+    /// Start the node.
+    async fn start_node(&self, node_id: &str, role: ConfiguredNodeRole) -> TestRollup<Rollup> {
+        let node = Some((self.postgres.clone(), node_id.into(), role));
+        start_rollup(self.da_addr, node).await
+    }
+
+    async fn shutdown(self) {
+        self.cluster_info_subscription.abort();
+        let _ = self.da_shutdown.send(());
     }
 }

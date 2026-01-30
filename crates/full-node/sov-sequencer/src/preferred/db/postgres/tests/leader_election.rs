@@ -71,12 +71,10 @@ async fn test_nodes_table_notifications() {
         return;
     };
 
-    let db = DB::new(
-        &postgres,
-        String::from("node_1"),
-        ConfiguredNodeRole::Leader,
-    )
-    .await;
+    let node_id = "node_1";
+    let expected_addr = test_bind_addr(node_id).to_string();
+
+    let db = DB::new(&postgres, String::from(node_id), ConfiguredNodeRole::Leader).await;
 
     let mut listener = sqlx::postgres::PgListener::connect_with(&db.backend.pool)
         .await
@@ -84,7 +82,7 @@ async fn test_nodes_table_notifications() {
 
     listener.listen("nodes_changes").await.unwrap();
 
-    // Test INSERT notification via try_update_leader_and_register_node
+    // Test INSERT notification via heartbeat
     db.maybe_update_leader().await.unwrap();
 
     let notification = tokio::time::timeout(Duration::from_secs(5), listener.recv())
@@ -94,9 +92,9 @@ async fn test_nodes_table_notifications() {
 
     assert_eq!(notification.channel(), "nodes_changes");
     let parts: Vec<&str> = notification.payload().split(',').collect();
-    assert_eq!(parts, vec!["node_1", "node_1_address", "INSERT"]);
+    assert_eq!(parts, vec![node_id, &expected_addr, "INSERT"]);
 
-    // Test UPDATE notification via try_update_leader_and_register_node
+    // Test UPDATE notification via heartbeat
     db.maybe_update_leader().await.unwrap();
 
     let notification = tokio::time::timeout(Duration::from_secs(5), listener.recv())
@@ -106,7 +104,7 @@ async fn test_nodes_table_notifications() {
 
     assert_eq!(notification.channel(), "nodes_changes");
     let parts: Vec<&str> = notification.payload().split(',').collect();
-    assert_eq!(parts, vec!["node_1", "node_1_address", "UPDATE"]);
+    assert_eq!(parts, vec![node_id, &expected_addr, "UPDATE"]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

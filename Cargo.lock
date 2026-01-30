@@ -11203,6 +11203,7 @@ dependencies = [
  "sov-universal-wallet",
  "sov-zkvm-utils",
  "sp1",
+ "sqlx",
  "strum 0.26.3",
  "tempfile",
  "tokio",
@@ -11924,6 +11925,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "sqlx",
+ "time",
  "tokio",
  "tracing",
 ]

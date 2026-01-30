@@ -1,8 +1,18 @@
 mod db_operations;
 mod leader_election;
 
+use std::net::SocketAddr;
+
 use super::*;
 use sov_full_node_configs::sequencer::ConfiguredNodeRole;
+
+pub(super) fn test_bind_addr(node_id: &str) -> SocketAddr {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    node_id.hash(&mut hasher);
+    let port = hasher.finish() as u16;
+    SocketAddr::from(([127, 0, 0, 1], port))
+}
 use sov_test_utils::postgres::{
     config_from_postgres_container, create_postgres_container, ContainerAsync, CreatePostgresError,
     Postgres,
@@ -46,10 +56,10 @@ impl DB {
         let postgres_config = config_from_postgres_container(postgres, node_id.clone(), node_role)
             .await
             .unwrap();
-        let backend =
-            PostgresBackend::connect_internal(&postgres_config, format!("{node_id}_address"))
-                .await
-                .unwrap();
+        let bind_addr = test_bind_addr(&node_id);
+        let backend = PostgresBackend::connect(&postgres_config, bind_addr)
+            .await
+            .unwrap();
 
         Self {
             backend,
@@ -64,7 +74,7 @@ impl DB {
 
     pub(super) async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
         self.backend
-            .try_update_leader_and_register_node(self.leader_timeout)
+            .heartbeat(Some(self.leader_timeout))
             .await
             .unwrap()
     }

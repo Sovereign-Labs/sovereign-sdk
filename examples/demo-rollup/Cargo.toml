@@ -125,6 +125,7 @@ strum = { workspace = true }
 
 reqwest = { workspace = true }
 sov-proxy-utils = { workspace = true }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "postgres", "time"] }
 
 [build-dependencies]
 anyhow = { workspace = true }

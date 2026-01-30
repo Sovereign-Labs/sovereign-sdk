@@ -1,7 +1,6 @@
-use crate::preferred::db::leadership_election::LeadershipElectionTask;
-use crate::preferred::db::SequencerRole;
-
 use super::*;
+use crate::preferred::db::heartbeat_task::HeartBeatTask;
+use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
@@ -240,25 +239,13 @@ where
             }
         }
 
-        // Launch leadership task for DbElected nodes
+        // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            if postgres_config.node_role == ConfiguredNodeRole::DbElected {
-                let election_task = LeadershipElectionTask::new(
-                    postgres_config,
-                    shutdown_sender.clone(),
-                    bind_addr,
-                )
-                .await?;
-
-                let leadership_handle = match seq_role {
-                    SequencerRole::BatchProducer => election_task.spawn_leader_heartbeat_task(),
-                    SequencerRole::PgSyncReplica => election_task.spawn_replica_election_task(),
-                    _ => unreachable!(
-                        "DbElected should only result in BatchProducer or PgSyncReplica role"
-                    ),
-                };
-                handles.push(leadership_handle);
-            }
+            let heartbeat_task =
+                HeartBeatTask::new(postgres_config.clone(), shutdown_sender.clone(), bind_addr)
+                    .await?;
+            let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
+            handles.push(heartbeat_handle);
         }
 
         handles.push(tokio::spawn(update_state_task(
