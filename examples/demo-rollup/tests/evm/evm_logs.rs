@@ -157,6 +157,8 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+// Checks our special case of latest == pending to keep support for existing tooling,
+// while providing quick tx confirmation.
 async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     let nb_of_txs = 3;
     let nb_of_logs_per_tx: u32 = 2;
@@ -355,16 +357,10 @@ async fn get_logs_single_block_range() -> anyhow::Result<()> {
         .to_block(block_number);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
-    let plans = [
-        TxLogPlan {
-            tx_hash: tx_hashes[0],
-            log_count: nb_of_logs_per_tx as u64,
-        },
-        TxLogPlan {
-            tx_hash: tx_hashes[1],
-            log_count: nb_of_logs_per_tx as u64,
-        },
-    ];
+    let plans = [TxLogPlan {
+        tx_hash: tx_hashes[0],
+        log_count: nb_of_logs_per_tx as u64,
+    }];
     let meta_map = build_tx_log_meta(&rollup_and_client.client, &plans).await;
     let meta = meta_map
         .get(&tx_hashes[0])
@@ -493,7 +489,7 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
     let tx_hashes = rollup_and_client
         .produce_logs(nb_of_txs, nb_of_logs_per_tx, None)
         .await;
-    let pending_block = latest_block_context(&rollup_and_client.client).await;
+    let latest_block = latest_block_context(&rollup_and_client.client).await;
     let sender = rollup_and_client.client.address();
 
     // By filtering for topic3 values [1, 3],
@@ -518,9 +514,9 @@ async fn get_logs_topic_or_semantics() -> anyhow::Result<()> {
             tx_hash,
             tx_index,
             log_index: tx_index * nb_of_logs_per_tx as u64 + log_index_in_tx,
-            block_hash: pending_block.hash,
-            block_number: pending_block.number,
-            block_timestamp: Some(pending_block.timestamp),
+            block_hash: latest_block.hash,
+            block_number: latest_block.number,
+            block_timestamp: Some(latest_block.timestamp),
         };
         assert_simple_log(
             log,
