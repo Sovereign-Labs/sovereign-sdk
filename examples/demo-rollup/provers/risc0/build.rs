@@ -18,6 +18,10 @@ fn main() {
             pub const MOCK_DA_PATH: &str = "";
             pub const MOCK_DA_ELF: &[u8] = b"";
             pub const ROLLUP_ELF: &[u8] = b"";
+            pub const MOCK_DA_NOMT_PATH: &str = "";
+            pub const MOCK_DA_NOMT_ELF: &[u8] = b"";
+            pub const ROLLUP_NOMT_PATH: &str = "";
+            pub const ROLLUP_NOMT_ELF: &[u8] = b"";
         "#;
 
         std::fs::write(methods_path, elf).expect("Failed to write mock rollup elf");
@@ -36,6 +40,7 @@ fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
         .features(features)
         .build()
         .unwrap();
-    guest_pkg_to_options.insert("sov-demo-prover-guest-mock-risc0", guest_options);
+    guest_pkg_to_options.insert("sov-demo-prover-guest-mock-risc0", guest_options.clone());
+    guest_pkg_to_options.insert("sov-demo-prover-guest-mock-nomt-risc0", guest_options);
     guest_pkg_to_options
 }

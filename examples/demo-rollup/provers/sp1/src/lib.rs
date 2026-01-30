@@ -27,4 +27,12 @@ lazy_static! {
         "{}/guest-celestia/elf/riscv32im-succinct-zkvm-elf",
         env!("CARGO_MANIFEST_DIR")
     ));
+    pub static ref SP1_GUEST_MOCK_NOMT_ELF: &'static [u8] = load_elf(&format!(
+        "{}/guest-mock-nomt/elf/riscv32im-succinct-zkvm-elf",
+        env!("CARGO_MANIFEST_DIR")
+    ));
+    pub static ref SP1_GUEST_CELESTIA_NOMT_ELF: &'static [u8] = load_elf(&format!(
+        "{}/guest-celestia-nomt/elf/riscv32im-succinct-zkvm-elf",
+        env!("CARGO_MANIFEST_DIR")
+    ));
 }
