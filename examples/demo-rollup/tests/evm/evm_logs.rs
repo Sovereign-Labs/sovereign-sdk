@@ -182,28 +182,12 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
     let pending_logs = rollup_and_client.client.get_logs(&pending_filter).await;
     let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
 
-    let mut expected = Vec::new();
-    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
-        for log_index_in_tx in 0..nb_of_logs_per_tx {
-            let expected_meta = ExpectedLogMeta {
-                address: rollup_and_client.contract_address,
-                tx_hash: *tx_hash,
-                tx_index: tx_index as u64,
-                log_index: tx_index as u64 * nb_of_logs_per_tx as u64 + log_index_in_tx as u64,
-                block_hash: pending_block.hash,
-                block_number: pending_block.number,
-                block_timestamp: Some(pending_block.timestamp),
-            };
-            expected.push(ExpectedSimpleLog {
-                meta: expected_meta,
-                log_data: SimpleLogData {
-                    topic1: U256::from(tx_index as u64),
-                    topic2: U256::from(log_index_in_tx as u64),
-                    data: U256::ZERO,
-                },
-            });
-        }
-    }
+    let expected = build_expected_pending_logs(
+        rollup_and_client.contract_address,
+        &tx_hashes,
+        nb_of_logs_per_tx,
+        &pending_block,
+    );
 
     assert_expected_simple_logs(&pending_logs, &expected, sender);
     assert_eq!(pending_logs, latest_logs);
@@ -283,28 +267,12 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
     let default_logs = rollup_and_client.client.get_logs(&default_filter).await;
     let latest_logs = rollup_and_client.client.get_logs(&latest_filter).await;
 
-    let mut expected = Vec::new();
-    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
-        for log_index_in_tx in 0..nb_of_logs_per_tx {
-            let expected_meta = ExpectedLogMeta {
-                address: rollup_and_client.contract_address,
-                tx_hash: *tx_hash,
-                tx_index: tx_index as u64,
-                log_index: tx_index as u64 * nb_of_logs_per_tx as u64 + log_index_in_tx as u64,
-                block_hash: pending_block.hash,
-                block_number: pending_block.number,
-                block_timestamp: Some(pending_block.timestamp),
-            };
-            expected.push(ExpectedSimpleLog {
-                meta: expected_meta,
-                log_data: SimpleLogData {
-                    topic1: U256::from(tx_index as u64),
-                    topic2: U256::from(log_index_in_tx as u64),
-                    data: U256::ZERO,
-                },
-            });
-        }
-    }
+    let expected = build_expected_pending_logs(
+        rollup_and_client.contract_address,
+        &tx_hashes,
+        nb_of_logs_per_tx,
+        &pending_block,
+    );
 
     assert_expected_simple_logs(&default_logs, &expected, sender);
     assert_eq!(default_logs, latest_logs);
@@ -2099,6 +2067,39 @@ fn filter_expected_by_topic2(
         .filter(|log| log.log_data.topic2 == topic2)
         .cloned()
         .collect()
+}
+
+/// Builds expected logs for pending block scenarios where tx_index equals the position
+/// in tx_hashes and logs are emitted with topic1 = tx_index, topic2 = log_index_in_tx.
+fn build_expected_pending_logs(
+    contract_address: Address,
+    tx_hashes: &[TxHash],
+    nb_of_logs_per_tx: u32,
+    pending_block: &BlockContext,
+) -> Vec<ExpectedSimpleLog> {
+    let mut expected = Vec::new();
+    for (tx_index, tx_hash) in tx_hashes.iter().enumerate() {
+        for log_index_in_tx in 0..nb_of_logs_per_tx {
+            let expected_meta = ExpectedLogMeta {
+                address: contract_address,
+                tx_hash: *tx_hash,
+                tx_index: tx_index as u64,
+                log_index: tx_index as u64 * nb_of_logs_per_tx as u64 + log_index_in_tx as u64,
+                block_hash: pending_block.hash,
+                block_number: pending_block.number,
+                block_timestamp: Some(pending_block.timestamp),
+            };
+            expected.push(ExpectedSimpleLog {
+                meta: expected_meta,
+                log_data: SimpleLogData {
+                    topic1: U256::from(tx_index as u64),
+                    topic2: U256::from(log_index_in_tx as u64),
+                    data: U256::ZERO,
+                },
+            });
+        }
+    }
+    expected
 }
 
 async fn expected_simple_logs_for_rollup(

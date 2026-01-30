@@ -232,6 +232,20 @@ async fn setup_fee_history_test(
     (rollup, client)
 }
 
+/// Sets up a test with pending transactions by deploying a contract and submitting
+/// a transaction that stays in the pending state.
+async fn setup_with_pending_tx(
+    rollup: &TestRollup<MockDemoRollup<Native>>,
+) -> (SimpleStorageClient, Address) {
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&simple_storage)
+        .await
+        .expect("deploy should succeed");
+    rollup.pause_preferred_batches().await;
+    simple_storage.set_value(contract_address, 42).await;
+    (simple_storage, contract_address)
+}
+
 fn assert_float_eq(actual: f64, expected: f64, context: &str) {
     let delta = (actual - expected).abs();
     assert!(
@@ -481,11 +495,10 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
         fee_history.base_fee_per_gas[idx], base_fee,
         "baseFeePerGas should match receipt-derived base fee"
     );
-    let delta = (fee_history.gas_used_ratio[idx] - expected_ratio).abs();
-    assert!(
-        delta < 1e-12,
-        "gas_used_ratio mismatch: expected {expected_ratio}, got {}",
-        fee_history.gas_used_ratio[idx]
+    assert_float_eq(
+        fee_history.gas_used_ratio[idx],
+        expected_ratio,
+        "gas_used_ratio",
     );
 
     let params = &genesis.chain_spec.base_fee_params;
@@ -513,15 +526,7 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(3).await;
 
-    // Create pending state by submitting a transaction without waiting for finalization
-    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let contract_address = deploy_contract_check(&simple_storage)
-        .await
-        .expect("deploy should succeed");
-    // Pause before submitting the tx to ensure it stays pending
-    rollup.pause_preferred_batches().await;
-    // Submit tx but don't wait - this creates pending transactions
-    let _pending_tx_hash = simple_storage.set_value(contract_address, 42).await;
+    let _ = setup_with_pending_tx(&rollup).await;
 
     let fee_history = client
         .get_fee_history(2, BlockNumberOrTag::Pending, &[])
@@ -574,15 +579,7 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(2).await;
 
-    // Create pending state by submitting a transaction without waiting for finalization
-    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let contract_address = deploy_contract_check(&simple_storage)
-        .await
-        .expect("deploy should succeed");
-    // Pause before submitting the tx to ensure it stays pending
-    rollup.pause_preferred_batches().await;
-    // Submit tx but don't wait - this creates pending transactions
-    let _pending_tx_hash = simple_storage.set_value(contract_address, 42).await;
+    let _ = setup_with_pending_tx(&rollup).await;
 
     let latest = client.get_block_number().await?;
     let genesis = load_evm_genesis_config();
@@ -679,15 +676,7 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(3).await;
 
-    // Create pending state by submitting a transaction without waiting for finalization
-    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let contract_address = deploy_contract_check(&simple_storage)
-        .await
-        .expect("deploy should succeed");
-    // Pause before submitting the tx to ensure it stays pending
-    rollup.pause_preferred_batches().await;
-    // Submit tx but don't wait - this creates pending transactions
-    let _pending_tx_hash = simple_storage.set_value(contract_address, 42).await;
+    let _ = setup_with_pending_tx(&rollup).await;
 
     let latest_history = client
         .get_fee_history(2, BlockNumberOrTag::Latest, &[])
