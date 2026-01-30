@@ -27,4 +27,3 @@ impl<S: sov_modules_api::Spec> MyModule<S> {
         unimplemented!()
     }
 }
-```
