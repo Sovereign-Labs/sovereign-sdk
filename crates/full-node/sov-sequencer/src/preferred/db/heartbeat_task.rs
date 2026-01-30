@@ -125,7 +125,7 @@ impl HeartBeatTask {
                             "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
                         );
                         exit_rollup(&self.shutdown_sender).await;
-                        return;
+                        unreachable!();
                     }
                 }
             }

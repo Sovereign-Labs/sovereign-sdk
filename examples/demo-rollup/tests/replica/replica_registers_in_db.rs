@@ -60,7 +60,7 @@ async fn test_multiple_replicas_register_in_nodes_table() {
         cluster_info = new_cluster_info;
     }
 
-    let _ = leader.shutdown();
+    let _ = leader.shutdown().await;
     let _ = replica_rollup.shutdown().await;
     setup.shutdown().await;
 }
