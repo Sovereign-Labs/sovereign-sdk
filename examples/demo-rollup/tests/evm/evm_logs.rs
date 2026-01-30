@@ -60,9 +60,7 @@ async fn get_log_from_pending_block() -> anyhow::Result<()> {
                             block_number: block.number,
                             block_timestamp: Some(block.timestamp),
                         },
-                        topic1: log_data.topic1,
-                        topic2: log_data.topic2,
-                        data: log_data.data,
+                        log_data: log_data.clone(),
                     });
                     last_log_index += 1;
                 }
@@ -196,9 +194,11 @@ async fn get_logs_latest_and_pending_match() -> anyhow::Result<()> {
             };
             expected.push(ExpectedSimpleLog {
                 meta: expected_meta,
-                topic1: U256::from(tx_index as u64),
-                topic2: U256::from(log_index_in_tx as u64),
-                data: U256::ZERO,
+                log_data: SimpleLogData {
+                    topic1: U256::from(tx_index as u64),
+                    topic2: U256::from(log_index_in_tx as u64),
+                    data: U256::ZERO,
+                },
             });
         }
     }
@@ -295,9 +295,11 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
             };
             expected.push(ExpectedSimpleLog {
                 meta: expected_meta,
-                topic1: U256::from(tx_index as u64),
-                topic2: U256::from(log_index_in_tx as u64),
-                data: U256::ZERO,
+                log_data: SimpleLogData {
+                    topic1: U256::from(tx_index as u64),
+                    topic2: U256::from(log_index_in_tx as u64),
+                    data: U256::ZERO,
+                },
             });
         }
     }
@@ -381,9 +383,11 @@ async fn get_logs_single_block_range() -> anyhow::Result<()> {
         };
         expected.push(ExpectedSimpleLog {
             meta: expected_meta,
-            topic1: U256::ZERO,
-            topic2: U256::from(log_index_in_tx as u64),
-            data: U256::ZERO,
+            log_data: SimpleLogData {
+                topic1: U256::ZERO,
+                topic2: U256::from(log_index_in_tx as u64),
+                data: U256::ZERO,
+            },
         });
     }
 
@@ -791,9 +795,9 @@ async fn get_logs_time_executed_ms_per_tx() -> anyhow::Result<()> {
             &log_with_time.log,
             &expected_log.meta,
             sender,
-            expected_log.topic1,
-            expected_log.topic2,
-            expected_log.data,
+            expected_log.log_data.topic1,
+            expected_log.log_data.topic2,
+            expected_log.log_data.data,
         );
         let tx_hash = log_with_time
             .log
@@ -1434,9 +1438,11 @@ async fn get_logs_topic1_without_topic0() -> anyhow::Result<()> {
         };
         expected.push(ExpectedSimpleLog {
             meta: expected_meta,
-            topic1: U256::from(5),
-            topic2: U256::from(log_index_in_tx),
-            data: U256::ZERO,
+            log_data: SimpleLogData {
+                topic1: U256::from(5),
+                topic2: U256::from(log_index_in_tx),
+                data: U256::ZERO,
+            },
         });
     }
 
@@ -1520,11 +1526,11 @@ async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
                 block_number: simple_meta.block_number,
                 block_timestamp: Some(simple_meta.block_timestamp),
             },
-            kind: ExpectedLogKind::Simple {
+            kind: ExpectedLogKind::Simple(SimpleLogData {
                 topic1: U256::from(1),
                 topic2: U256::from(log_index_in_tx),
                 data: U256::ZERO,
-            },
+            }),
         });
     }
     expected.push(ExpectedLogEntry {
@@ -1634,11 +1640,11 @@ async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
                 block_number: simple_meta.block_number,
                 block_timestamp: Some(simple_meta.block_timestamp),
             },
-            kind: ExpectedLogKind::Simple {
+            kind: ExpectedLogKind::Simple(SimpleLogData {
                 topic1: U256::from(7),
                 topic2: U256::ZERO,
                 data: U256::ZERO,
-            },
+            }),
         },
         ExpectedLogEntry {
             meta: ExpectedLogMeta {
@@ -1916,19 +1922,11 @@ struct SimpleLogData {
 #[derive(Clone)]
 struct ExpectedSimpleLog {
     meta: ExpectedLogMeta,
-    // TODO: use SimpleLogData
-    topic1: U256,
-    topic2: U256,
-    data: U256,
+    log_data: SimpleLogData,
 }
 
 enum ExpectedLogKind {
-    Simple {
-        // TODO: Use SimpleLogData
-        topic1: U256,
-        topic2: U256,
-        data: U256,
-    },
+    Simple(SimpleLogData),
     DataOnly {
         v1: U256,
         v2: U256,
@@ -2054,9 +2052,11 @@ async fn expected_simple_logs_from_plans(
             };
             expected.push(ExpectedSimpleLog {
                 meta: expected_meta,
-                topic1: plan.topic1,
-                topic2: U256::from(log_index_in_tx),
-                data: plan.data,
+                log_data: SimpleLogData {
+                    topic1: plan.topic1,
+                    topic2: U256::from(log_index_in_tx),
+                    data: plan.data,
+                },
             });
         }
     }
@@ -2093,7 +2093,7 @@ fn filter_expected_by_topic2(
 ) -> Vec<ExpectedSimpleLog> {
     expected
         .iter()
-        .filter(|log| log.topic2 == topic2)
+        .filter(|log| log.log_data.topic2 == topic2)
         .cloned()
         .collect()
 }
@@ -2117,9 +2117,9 @@ fn assert_expected_simple_logs(logs: &[Log], expected: &[ExpectedSimpleLog], sen
             log,
             &expected_log.meta,
             sender,
-            expected_log.topic1,
-            expected_log.topic2,
-            expected_log.data,
+            expected_log.log_data.topic1,
+            expected_log.log_data.topic2,
+            expected_log.log_data.data,
         );
     }
 }
@@ -2128,12 +2128,15 @@ fn assert_expected_log_entries(logs: &[Log], expected: &[ExpectedLogEntry], send
     assert_eq!(logs.len(), expected.len());
     for (log, expected_log) in logs.iter().zip(expected.iter()) {
         match &expected_log.kind {
-            ExpectedLogKind::Simple {
-                topic1,
-                topic2,
-                data,
-            } => {
-                assert_simple_log(log, &expected_log.meta, sender, *topic1, *topic2, *data);
+            ExpectedLogKind::Simple(log_data) => {
+                assert_simple_log(
+                    log,
+                    &expected_log.meta,
+                    sender,
+                    log_data.topic1,
+                    log_data.topic2,
+                    log_data.data,
+                );
             }
             ExpectedLogKind::DataOnly { v1, v2 } => {
                 assert_data_only_log(log, &expected_log.meta, *v1, *v2);
@@ -2270,7 +2273,7 @@ fn assert_log_json_matches_expected_simple_log(
         obj.get("data")
             .and_then(|v| v.as_str())
             .expect("data should be a string"),
-        u256_to_data_hex(expected.data)
+        u256_to_data_hex(expected.log_data.data)
     );
 
     let topics = obj
@@ -2280,8 +2283,8 @@ fn assert_log_json_matches_expected_simple_log(
     let expected_topics = [
         format!("{:#x}", simple_log_topic0()),
         format!("{:#x}", address_to_topic(sender)),
-        format!("{:#x}", B256::from(expected.topic1)),
-        format!("{:#x}", B256::from(expected.topic2)),
+        format!("{:#x}", B256::from(expected.log_data.topic1)),
+        format!("{:#x}", B256::from(expected.log_data.topic2)),
     ];
     assert_eq!(topics.len(), expected_topics.len());
     for (topic, expected_topic) in topics.iter().zip(expected_topics.iter()) {
@@ -2591,9 +2594,9 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         &log.log,
         &expected_log.meta,
         sender,
-        expected_log.topic1,
-        expected_log.topic2,
-        expected_log.data,
+        expected_log.log_data.topic1,
+        expected_log.log_data.topic2,
+        expected_log.log_data.data,
     );
     assert_eq!(log.log.transaction_index, Some(0));
     assert_eq!(log.log.log_index, Some(0));
@@ -2609,9 +2612,9 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         &log.log,
         &expected_log.meta,
         sender,
-        expected_log.topic1,
-        expected_log.topic2,
-        expected_log.data,
+        expected_log.log_data.topic1,
+        expected_log.log_data.topic2,
+        expected_log.log_data.data,
     );
     assert_eq!(log.log.transaction_index, Some(0));
     assert_eq!(log.log.log_index, Some(1));
