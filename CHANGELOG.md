@@ -1,3 +1,6 @@
+# 2026-01-31
+- #2365 **Added**: Configuration options `user_page_cache_upper_levels` and `kernel_page_cache_upper_levels` to `RollupDbConfig` for tuning NOMT storage performance on high-RAM machines.
+
 # 2026-01-23
 - #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
 # 2026-01-14
