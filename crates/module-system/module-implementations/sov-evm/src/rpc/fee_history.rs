@@ -8,7 +8,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
 use sov_chain_state::ChainState;
-use sov_modules_api::{ApiStateAccessor, GasSpec, Spec};
+use sov_modules_api::{ApiStateAccessor, GasSpec, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::EthApiError;
 
@@ -192,7 +192,7 @@ where
         // Validate that the EVM block number aligns with the current rollup height.
         // We allow a +1 offset to account for the pending block, but anything beyond that
         // indicates a mapping mismatch between EVM blocks and rollup heights.
-        let current_rollup_height = self.chain_state_module.rollup_height(state)?;
+        let current_rollup_height = state.rollup_height_to_access();
         let max_allowed_block = current_rollup_height.get().saturating_add(1);
         if end_block > max_allowed_block {
             return Err(EthApiError::HeaderNotFound(BlockId::Number(
