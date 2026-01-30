@@ -19,8 +19,9 @@ use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventRe
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::send_json;
 use sov_rest_utils::{
-    errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
-    PageSelection, PaginatedResponse, Pagination, Path, Query,
+    errors, preconfigured_router_layers, serve_generic_ws_subscription,
+    serve_generic_ws_subscription_with_config, ApiResult, FilterQuery, PageSelection,
+    PaginatedResponse, Pagination, Path, Query, WsSubscriptionConfig,
 };
 use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
@@ -73,6 +74,34 @@ where
 #[display("{}", self.start_from)]
 pub struct StartFrom {
     start_from: u64,
+}
+
+/// Compression mode for WebSocket subscriptions.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompressionMode {
+    /// No compression (default). Messages are sent as individual JSON text frames.
+    #[default]
+    None,
+    /// Gzip compression. Messages are batched into JSON arrays, compressed, and sent as binary frames.
+    Gzip,
+}
+
+/// Query parameters for WebSocket subscriptions that support compression.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct CompressionQuery {
+    /// The compression mode to use for this subscription.
+    #[serde(default)]
+    pub compression: CompressionMode,
+}
+
+impl CompressionQuery {
+    /// Converts the query into a [`WsSubscriptionConfig`].
+    pub fn to_config(&self) -> WsSubscriptionConfig {
+        WsSubscriptionConfig {
+            compress: self.compression == CompressionMode::Gzip,
+        }
+    }
 }
 
 /// Provides REST APIs for any [`Sequencer`]. See [`SequencerApis::rest_api_server`].
@@ -480,10 +509,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     async fn subscribe_to_events(
         State(state): State<Self>,
         filter: FilterQuery,
+        compression: Option<Query<CompressionQuery>>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         use futures::future;
-        ws.on_upgrade(|socket| async move {
+        let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
+        ws.on_upgrade(move |socket| async move {
             let stream = state
                 .sequencer
                 .subscribe_events()
@@ -494,20 +525,34 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     (Ok(event), Some(filter)) => future::ready(filter.matches(&event.key)),
                     (_, _) => future::ready(true),
                 });
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_receiver.clone(),
+                config,
+            )
+            .await;
         })
     }
 
     async fn subscribe_to_transactions(
         State(state): State<Self>,
         start_from: Option<Query<StartFrom>>,
+        compression: Option<Query<CompressionQuery>>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         let start_from = start_from.map(|start_from| start_from.0.start_from);
+        let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
             let stream =
                 Self::subscribe_txs_starting_from(start_from, state.sequencer.clone()).await;
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_receiver.clone(),
+                config,
+            )
+            .await;
         })
     }
 

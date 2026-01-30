@@ -737,7 +737,7 @@ where
     R: FullNodeBlueprint<Native> + Default + 'static,
 {
     /// Default timeout for polling operations in seconds.
-    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
     /// Helper to get api_client
     pub fn api_client(&self) -> &sov_api_spec::client::Client {

@@ -4,6 +4,7 @@
 //! 1. Socket errors (feed/flush) cause immediate disconnect
 //! 2. BroadcastStream lag sends skip notification and resumes (not disconnect)
 //! 3. Ping/pong keepalive detects dead connections
+//! 4. Gzip compression mode batches and compresses messages correctly
 
 #[cfg(test)]
 mod tests {
@@ -25,7 +26,10 @@ mod tests {
     use tokio_stream::wrappers::BroadcastStream;
 
     use crate::errors::ReportableWsError;
-    use crate::serve_generic_ws_subscription;
+    use crate::{
+        serve_generic_ws_subscription, serve_generic_ws_subscription_with_config,
+        WsSubscriptionConfig,
+    };
 
     /// Error type matching the real SubscriptionStreamError pattern.
     #[derive(Debug, Clone)]
@@ -201,12 +205,43 @@ mod tests {
         })
     }
 
-    /// Starts a test server and returns the address.
+    /// Handler that uses compression for WebSocket messages.
+    async fn compressed_handler(
+        ws: WebSocketUpgrade,
+        State(state): State<TestState>,
+    ) -> impl IntoResponse {
+        ws.on_upgrade(move |socket| async move {
+            let (stream, tx) = broadcast_message_stream(100, state.messages_yielded.clone());
+
+            let messages_produced = state.messages_produced.clone();
+            let producer = tokio::spawn(async move {
+                for i in 0..20 {
+                    if tx.send(format!("message-{i}")).is_err() {
+                        break;
+                    }
+                    messages_produced.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(10)).await;
+                }
+            });
+
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_rx.clone(),
+                WsSubscriptionConfig { compress: true },
+            )
+            .await;
+            producer.abort();
+        })
+    }
+
+    /// Starts a test server with all handlers and returns the address.
     async fn start_test_server(state: TestState) -> SocketAddr {
         let app = Router::new()
             .route("/broadcast", get(broadcast_handler))
             .route("/slow", get(slow_broadcast_handler))
             .route("/idle", get(idle_handler))
+            .route("/compressed", get(compressed_handler))
             .with_state(state);
 
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -497,5 +532,146 @@ mod tests {
         );
 
         state.shutdown_tx.send(()).ok();
+    }
+
+    // =========================================================================
+    // Compression Tests
+    // =========================================================================
+
+    /// Test: Compressed messages should be binary frames with gzip magic bytes.
+    #[tokio::test]
+    async fn test_compressed_messages_are_binary_gzip() {
+        use flate2::read::GzDecoder;
+        use std::io::Read;
+
+        let state = TestState::new();
+        let addr = start_test_server(state.clone()).await;
+
+        let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/compressed"))
+            .await
+            .unwrap();
+
+        let mut binary_count = 0;
+        let mut all_messages: Vec<String> = Vec::new();
+
+        let result = timeout(Duration::from_secs(5), async {
+            loop {
+                match ws.next().await {
+                    Some(Ok(tungstenite::Message::Binary(data))) => {
+                        binary_count += 1;
+
+                        // Verify gzip magic bytes
+                        assert!(
+                            data.len() >= 2 && data[0] == 0x1f && data[1] == 0x8b,
+                            "Binary frame should start with gzip magic bytes (0x1f 0x8b), got: {:02x} {:02x}",
+                            data.first().copied().unwrap_or(0),
+                            data.get(1).copied().unwrap_or(0)
+                        );
+
+                        // Decompress
+                        let mut decoder = GzDecoder::new(&data[..]);
+                        let mut decompressed = String::new();
+                        decoder.read_to_string(&mut decompressed).unwrap();
+
+                        // Parse as JSON array
+                        let batch: Vec<String> = serde_json::from_str(&decompressed).unwrap();
+                        all_messages.extend(batch);
+                    }
+                    Some(Ok(tungstenite::Message::Text(_))) => {
+                        panic!("Compressed mode should not send text frames");
+                    }
+                    Some(Ok(tungstenite::Message::Ping(_))) | Some(Ok(tungstenite::Message::Pong(_))) => continue,
+                    Some(Ok(tungstenite::Message::Close(_))) | None | Some(Err(_)) => break,
+                    _ => {}
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok(), "Test should complete without timeout");
+        assert!(binary_count > 0, "Should have received binary frames");
+        assert!(!all_messages.is_empty(), "Should have received messages");
+
+        // Verify message ordering is preserved
+        for (i, msg) in all_messages.iter().enumerate() {
+            assert_eq!(msg, &format!("message-{i}"), "Messages should be in order");
+        }
+
+        state.shutdown_tx.send(()).ok();
+    }
+
+    /// Test: Default config (no compression) should produce text frames.
+    #[tokio::test]
+    async fn test_default_config_produces_text_frames() {
+        let state = TestState::new();
+        let addr = start_test_server(state.clone()).await;
+
+        // Use /slow endpoint which uses default (uncompressed) mode
+        let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{addr}/slow"))
+            .await
+            .unwrap();
+
+        let mut text_count = 0;
+
+        let result = timeout(Duration::from_secs(3), async {
+            while text_count < 5 {
+                match ws.next().await {
+                    Some(Ok(tungstenite::Message::Text(t))) => {
+                        text_count += 1;
+                        // Verify it's a single JSON string, not an array
+                        let text = t.to_string();
+                        assert!(
+                            text.starts_with('"'),
+                            "Uncompressed mode should send individual JSON values, not arrays"
+                        );
+                    }
+                    Some(Ok(tungstenite::Message::Binary(_))) => {
+                        panic!("Uncompressed mode should not send binary frames for data");
+                    }
+                    Some(Ok(tungstenite::Message::Ping(_)))
+                    | Some(Ok(tungstenite::Message::Pong(_))) => continue,
+                    Some(Ok(tungstenite::Message::Close(_))) | None | Some(Err(_)) => break,
+                    _ => {}
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok(), "Test should complete without timeout");
+        assert!(text_count >= 5, "Should have received text frames");
+
+        ws.close(None).await.ok();
+        state.shutdown_tx.send(()).ok();
+    }
+
+    /// Test: Gzip roundtrip preserves data correctly.
+    #[test]
+    fn test_gzip_roundtrip() {
+        use flate2::read::GzDecoder;
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::{Read, Write};
+
+        let original = vec!["message-0", "message-1", "message-2"];
+        let json = serde_json::to_vec(&original).unwrap();
+
+        // Compress
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&json).unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        // Verify magic bytes
+        assert_eq!(compressed[0], 0x1f, "First byte should be gzip magic");
+        assert_eq!(compressed[1], 0x8b, "Second byte should be gzip magic");
+
+        // Decompress
+        let mut decoder = GzDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed).unwrap();
+
+        // Parse
+        let parsed: Vec<String> = serde_json::from_slice(&decompressed).unwrap();
+
+        assert_eq!(parsed, original);
     }
 }

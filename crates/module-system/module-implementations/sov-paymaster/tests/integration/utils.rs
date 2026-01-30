@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use sov_modules_api::{Amount, CryptoSpec, PrivateKey, SafeVec, Spec};
 use sov_paymaster::{PayeePolicy, PayerGenesisConfig, PaymasterConfig, PaymasterPolicyInitializer};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::traits::MinimalGenesis;
 use sov_test_utils::runtime::{
     Runtime, TestRunner, ValueSetter, ValueSetterCallMessage, ValueSetterConfig,
 };
 use sov_test_utils::{
-    AsUser, EncodeCall, MockDaSpec, TestSequencer, TestUser, TransactionTestCase, TransactionType,
+    AsUser, EncodeCall, MockDaSpec, MockHash, TestSequencer, TestUser, TransactionTestCase,
+    TransactionType,
 };
 
 use crate::runtime::{GenesisConfig, PaymasterRuntime};
@@ -54,8 +56,9 @@ impl<RT: Runtime<S>, S: Spec> DoValueSetterTx<S> for TestRunner<RT, S>
 where
     RT: 'static + Runtime<S> + MinimalGenesis<S> + EncodeCall<ValueSetter<S>>,
     S: Spec<
-        Storage = ProverStorage<
+        Storage = NomtProverStorage<
             DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
         >,
         Da = MockDaSpec,
     >,
