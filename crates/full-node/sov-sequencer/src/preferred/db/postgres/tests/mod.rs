@@ -6,13 +6,6 @@ use std::net::SocketAddr;
 use super::*;
 use sov_full_node_configs::sequencer::ConfiguredNodeRole;
 
-pub(super) fn test_bind_addr(node_id: &str) -> SocketAddr {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    node_id.hash(&mut hasher);
-    let port = hasher.finish() as u16;
-    SocketAddr::from(([127, 0, 0, 1], port))
-}
 use sov_test_utils::postgres::{
     config_from_postgres_container, create_postgres_container, ContainerAsync, CreatePostgresError,
     Postgres,
@@ -32,6 +25,7 @@ pub(super) struct DB {
     pub(super) backend: PostgresBackend,
     pub(super) node_id: String,
     leader_timeout: Duration,
+    node_address: String,
 }
 
 impl AsRef<PostgresBackend> for DB {
@@ -56,12 +50,14 @@ impl DB {
         let postgres_config = config_from_postgres_container(postgres, node_id.clone(), node_role)
             .await
             .unwrap();
-        let bind_addr = test_bind_addr(&node_id);
+        let bind_addr = SocketAddr::from(([127, 0, 0, 1], 0));
+        let node_address = node_address(bind_addr).unwrap();
         let backend = PostgresBackend::connect(&postgres_config, bind_addr)
             .await
             .unwrap();
 
         Self {
+            node_address,
             backend,
             node_id,
             leader_timeout,
