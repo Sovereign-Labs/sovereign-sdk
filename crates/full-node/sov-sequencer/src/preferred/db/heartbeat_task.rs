@@ -95,7 +95,6 @@ impl HeartBeatTask {
     fn spawn_leader_heartbeat_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting leader heartbeat task");
-
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
