@@ -12,6 +12,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
@@ -98,34 +99,35 @@ impl HeartBeatTask {
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
-                interval.tick().await;
-
-                if self.shutdown_receiver.has_changed().unwrap_or(true) {
-                    info!("Shutdown signal received, stopping heartbeat task");
-                    return;
-                }
-
-                match self.try_acquire_leadership().await {
-                    Ok(true) => {
-                        // Successfully refreshed leadership and node registration
-                        tracing::trace!("Leadership heartbeat successful.");
+                match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    FutureOrShutdownOutput::Shutdown => {
+                        info!("Shutdown signal received, stopping heartbeat task");
+                        return;
                     }
-                    Ok(false) => {
-                        error!(
-                            node_id = %self.node_id,
-                            "Leadership lost! Another node has taken over. Initiating graceful shutdown."
-                        );
-                        exit_rollup(&self.shutdown_sender).await;
-                        unreachable!();
-                    }
-                    Err(e) => {
-                        error!(
-                            node_id = %self.node_id,
-                            error = ?e,
-                            "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
-                        );
-                        exit_rollup(&self.shutdown_sender).await;
-                        unreachable!();
+                    FutureOrShutdownOutput::Output(_) => {
+                        match self.try_acquire_leadership().await {
+                            Ok(true) => {
+                                // Successfully refreshed leadership and node registration
+                                tracing::trace!("Leadership heartbeat successful.");
+                            }
+                            Ok(false) => {
+                                error!(
+                                    node_id = %self.node_id,
+                                    "Leadership lost! Another node has taken over. Initiating graceful shutdown."
+                                );
+                                exit_rollup(&self.shutdown_sender).await;
+                                unreachable!();
+                            }
+                            Err(e) => {
+                                error!(
+                                    node_id = %self.node_id,
+                                    error = ?e,
+                                    "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
+                                );
+                                exit_rollup(&self.shutdown_sender).await;
+                                unreachable!();
+                            }
+                        }
                     }
                 }
             }
@@ -142,32 +144,35 @@ impl HeartBeatTask {
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
-                interval.tick().await;
-
-                if self.shutdown_receiver.has_changed().unwrap_or(true) {
-                    info!("Shutdown signal received, stopping election task.");
-                    return;
-                }
-
-                match self.try_acquire_leadership().await {
-                    Ok(true) => {
-                        info!(
-                            node_id = %self.node_id,
-                            "Replica acquired leadership! Exiting to restart as leader."
-                        );
-                        let _ = self.shutdown_sender.send(());
-                        break;
+                match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    FutureOrShutdownOutput::Shutdown => {
+                        info!("Shutdown signal received, stopping election task.");
+                        return;
                     }
-                    Ok(false) => {
-                        // Another node is still leader, keep trying
-                        tracing::trace!("Leadership acquisition failed, another node is leader.");
-                    }
-                    Err(e) => {
-                        warn!(
-                            node_id = %self.node_id,
-                            error = ?e,
-                            "Election attempt failed, will retry."
-                        );
+                    FutureOrShutdownOutput::Output(_) => {
+                        match self.try_acquire_leadership().await {
+                            Ok(true) => {
+                                info!(
+                                    node_id = %self.node_id,
+                                    "Replica acquired leadership! Exiting to restart as leader."
+                                );
+                                let _ = self.shutdown_sender.send(());
+                                break;
+                            }
+                            Ok(false) => {
+                                // Another node is still leader, keep trying
+                                tracing::trace!(
+                                    "Leadership acquisition failed, another node is leader."
+                                );
+                            }
+                            Err(e) => {
+                                warn!(
+                                    node_id = %self.node_id,
+                                    error = ?e,
+                                    "Election attempt failed, will retry."
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -184,22 +189,21 @@ impl HeartBeatTask {
             let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
 
             loop {
-                interval.tick().await;
-
-                if self.shutdown_receiver.has_changed().unwrap_or(true) {
-                    info!("Shutdown signal received, stopping registration task.");
-                    return;
-                }
-
-                match self.register_node().await {
-                    Ok(_) => {}
-                    Err(e) => {
-                        warn!(
-                            node_id = %self.node_id,
-                            error = ?e,
-                            "Node registration attempt failed, will retry."
-                        );
+                match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    FutureOrShutdownOutput::Shutdown => {
+                        info!("Shutdown signal received, stopping registration task.");
+                        return;
                     }
+                    FutureOrShutdownOutput::Output(_) => match self.register_node().await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            warn!(
+                                node_id = %self.node_id,
+                                error = ?e,
+                                "Node registration attempt failed, will retry."
+                            );
+                        }
+                    },
                 }
             }
         })
