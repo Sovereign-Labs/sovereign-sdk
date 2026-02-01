@@ -24,8 +24,9 @@ pub(super) async fn setup_test_postgres() -> Option<ContainerAsync<Postgres>> {
 pub(super) struct DB {
     pub(super) backend: PostgresBackend,
     pub(super) node_id: String,
+    pub(super) node_address: String,
     leader_timeout: Duration,
-    node_address: String,
+    grace_period: Duration,
 }
 
 impl AsRef<PostgresBackend> for DB {
@@ -47,6 +48,7 @@ impl DB {
         node_role: ConfiguredNodeRole,
     ) -> Self {
         let leader_timeout = Duration::from_millis(100_000);
+        let grace_period = Duration::from_millis(100_000);
         let postgres_config = config_from_postgres_container(postgres, node_id.clone(), node_role)
             .await
             .unwrap();
@@ -61,18 +63,31 @@ impl DB {
             backend,
             node_id,
             leader_timeout,
+            grace_period,
         }
     }
 
+    /// Overrides both leader_timeout and grace_period for testing.
+    /// Both must be bypassed together when testing leadership takeover.
     pub(super) fn override_leader_timeout(&mut self, leader_timeout: Duration) {
         self.leader_timeout = leader_timeout;
+        self.grace_period = leader_timeout;
     }
 
     pub(super) async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
-        self.backend
-            .heartbeat(Some(self.leader_timeout))
+        let mut tx = self.backend.pool.begin().await.unwrap();
+        let result = self
+            .backend
+            .try_update_leader_inner(&mut tx, self.leader_timeout, self.grace_period)
             .await
-            .unwrap()
+            .unwrap();
+
+        self.backend
+            .upsert_node_registration_inner(&mut tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        result
     }
 
     pub(super) async fn get_sequencer_leader(&self) -> Result<Option<String>, sqlx::Error> {

@@ -25,6 +25,10 @@ use time::OffsetDateTime;
 /// The leader timeout used for leader election.
 pub(crate) const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
 
+/// Grace period after a new leader is elected before another node can take over.
+/// This prevents rapid leader flapping when a new leader is elected.
+pub(crate) const LEADER_GRACE_PERIOD: Duration = Duration::from_millis(2000);
+
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
     pub(crate) node_id: String,
@@ -290,7 +294,7 @@ impl PostgresBackend {
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
         let result = if let Some(leader_timeout) = leader_timeout {
-            self.try_update_leader_inner(&mut tx, leader_timeout)
+            self.try_update_leader_inner(&mut tx, leader_timeout, LEADER_GRACE_PERIOD)
                 .await?
         } else {
             None
@@ -300,10 +304,11 @@ impl PostgresBackend {
         Ok(result)
     }
 
-    async fn try_update_leader_inner(
+    pub(crate) async fn try_update_leader_inner(
         &self,
         conn: &mut PgConnection,
         leader_timeout: Duration,
+        grace_period: Duration,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let leader_timeout: i64 = leader_timeout
             .as_millis()
@@ -311,6 +316,16 @@ impl PostgresBackend {
             // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
             .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
 
+        let grace_period: i64 = grace_period
+            .as_millis()
+            .try_into()
+            .expect("PostgresBackend error: grace_period is bigger than i64::MAX");
+
+        // Leadership update logic:
+        // 1. Same node can always refresh its heartbeat
+        // 2. Different node can only take over if BOTH:
+        //    - The current leader has timed out (no heartbeat within leader_timeout)
+        //    - The grace period since leader_acquired_at has passed (prevents rapid flapping)
         let res = sqlx::query_as::<_, SequencerLeader>(
             "WITH ts AS (SELECT NOW() as current_time)
             INSERT INTO sequencer_leader (node_id, last_updated)
@@ -325,18 +340,22 @@ impl PostgresBackend {
                         END
                     WHERE
                         sequencer_leader.node_id = EXCLUDED.node_id
-                        OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                        OR (
+                            sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                            AND sequencer_leader.leader_acquired_at < EXCLUDED.last_updated - ($3 * INTERVAL '1 millisecond')
+                        )
                     RETURNING node_id, last_updated",
         )
         .bind(&self.node_id)
         .bind(leader_timeout)
+        .bind(grace_period)
         .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
-    async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
+    pub(crate) async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO nodes (node_id, address, last_updated)
              VALUES ($1, $2, NOW())
