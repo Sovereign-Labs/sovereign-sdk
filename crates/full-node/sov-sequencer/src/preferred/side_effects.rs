@@ -135,10 +135,6 @@ where
 
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
-                    self.transaction_cache
-                        .insert(contents.accepted_tx.clone())
-                        .await;
-                    // If the receiver is no longer listening, just don't send the confirmation.
                     // Apply all updates in a single batch
                     checkpoint_ref.apply_tx_changes(contents.tx_changes);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
@@ -146,9 +142,13 @@ where
                 // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
                 // relying on change notifications get one. Note, however, that change notifications are not in sync with the actual changes.
                 self.checkpoint_sender.send_modify(|_| {});
-                // Send tx confirmations after API state is updated
+                // Send tx confirmations after API state is updated, then broadcast to WebSocket.
+                // HTTP callers receive their response before WebSocket subscribers are notified.
+                // We yield after sending to the oneshot to give the HTTP handler a chance to
+                // process the response before we broadcast to WebSocket subscribers.
                 for (oneshot, tx) in oneshot_and_txs {
-                    let _ = oneshot.send(tx);
+                    let _ = oneshot.send(tx.clone());
+                    self.transaction_cache.insert(tx).await;
                 }
             }
             ExecutorEvent::CloseBatch {
