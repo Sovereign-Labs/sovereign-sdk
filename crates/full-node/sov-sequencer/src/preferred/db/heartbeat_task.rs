@@ -19,11 +19,11 @@ use tracing::{error, info, warn};
 
 use super::SequencerRole;
 
-use super::postgres::{PostgresBackend, LEADER_TIMEOUT};
+use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
 
 /// Periodic interval for heartbeat tasks.
-const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(200);
+const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.                                                                                                                                                                        
 ///                                                                                                                                                                                                                                                          
@@ -76,7 +76,11 @@ impl HeartBeatTask {
     // Sends a heartbeat that competes for leadership.
     // Returns `true` if this node is the current leader.
     async fn try_acquire_leadership(&self) -> Result<bool> {
-        match self.backend.heartbeat(Some(LEADER_TIMEOUT)).await? {
+        match self
+            .backend
+            .heartbeat(Some(self.postgres_config.leader_election))
+            .await?
+        {
             Some(leader) => Ok(leader.node_id == self.node_id),
             None => Ok(false),
         }
