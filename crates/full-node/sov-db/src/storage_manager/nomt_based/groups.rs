@@ -502,7 +502,9 @@ impl AllDBsStateRoots {
                     tracing::error!(
                         "Rollup instantiation error: Delete the rollup databases and start again."
                     );
-                    anyhow::bail!("Live db not found. Delete the rollup databases and start again.");
+                    anyhow::bail!(
+                        "Live db not found. Delete the rollup databases and start again."
+                    );
                 }
             }
         };
