@@ -241,9 +241,13 @@ where
 
         // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            let heartbeat_task =
-                HeartBeatTask::new(postgres_config.clone(), shutdown_sender.clone(), bind_addr)
-                    .await?;
+            let heartbeat_task = HeartBeatTask::new(
+                postgres_config.clone(),
+                shutdown_sender.clone(),
+                bind_addr,
+                postgres_config.leader_election.heartbeat_interval(),
+            )
+            .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
             handles.push(heartbeat_handle);
         }

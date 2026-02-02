@@ -149,6 +149,60 @@ pub enum ConfiguredNodeRole {
     DbElected,
 }
 
+/// Configuration for leader election timing.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+pub struct LeaderElectionConfig {
+    /// Maximum time in milliseconds without a heartbeat before a leader is considered inactive.
+    #[serde(default = "default_leader_timeout_millis")]
+    pub leader_timeout_millis: u64,
+    /// Minimum time in milliseconds after leader acquisition before another node can take over.
+    /// Prevents rapid leader flapping.
+    #[serde(default = "default_leader_grace_period_millis")]
+    pub grace_period_millis: u64,
+    /// Interval in milliseconds between heartbeat updates.
+    #[serde(default = "default_heartbeat_interval_millis")]
+    pub heartbeat_interval_millis: u64,
+}
+
+impl Default for LeaderElectionConfig {
+    fn default() -> Self {
+        Self {
+            leader_timeout_millis: default_leader_timeout_millis(),
+            grace_period_millis: default_leader_grace_period_millis(),
+            heartbeat_interval_millis: default_heartbeat_interval_millis(),
+        }
+    }
+}
+
+impl LeaderElectionConfig {
+    /// Returns the leader timeout as a `Duration`.
+    pub fn leader_timeout(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.leader_timeout_millis)
+    }
+
+    /// Returns the grace period as a `Duration`.
+    pub fn grace_period(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.grace_period_millis)
+    }
+
+    /// Returns the heartbeat interval as a `Duration`.
+    pub fn heartbeat_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.heartbeat_interval_millis)
+    }
+}
+
+const fn default_leader_timeout_millis() -> u64 {
+    500
+}
+
+const fn default_leader_grace_period_millis() -> u64 {
+    10_000
+}
+
+const fn default_heartbeat_interval_millis() -> u64 {
+    100
+}
+
 /// Postgres DB config.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct PostgresConfig {
@@ -158,6 +212,9 @@ pub struct PostgresConfig {
     pub node_id: String,
     #[allow(missing_docs)]
     pub node_role: ConfiguredNodeRole,
+    /// Configuration for leader election timing.
+    #[serde(default)]
+    pub leader_election: LeaderElectionConfig,
 }
 
 /// Configuration for [`PreferredSequencer`].
