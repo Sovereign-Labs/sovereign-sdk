@@ -328,14 +328,12 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
         BlockTransactions::Full(txs) => {
             for (i, tx) in txs.iter().enumerate() {
                 // TC25-TC29: Validate full tx object fields
-                assert!(
-                    tx.inner.hash() != &BlockHash::ZERO,
+                assert_ne!(
+                    tx.inner.hash(),
+                    &BlockHash::ZERO,
                     "tx {i} should have non-zero hash"
                 );
-                assert!(
-                    tx.block_number.is_some(),
-                    "tx {i} should have blockNumber"
-                );
+                assert!(tx.block_number.is_some(), "tx {i} should have blockNumber");
                 assert_eq!(
                     tx.block_number.unwrap(),
                     pending_number,
