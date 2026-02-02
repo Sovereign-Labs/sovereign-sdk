@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@sovereign-sdk/web3": "workspace:^",
-    "@sovereign-sdk/utils": "workspace:^"
+    "@sovereign-sdk/utils": "workspace:^",
+    "bech32": "^2.0.0"
   }
 }
