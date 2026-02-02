@@ -23,7 +23,7 @@ pub fn main() {
     let storage = NomtStorage::new();
 
     let stf: StfBlueprint<
-        ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvm, Zk, _, NomtStorage>,
+        ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvm, Zk, sov_sp1_adapter::SP1CryptoSpec, NomtStorage>,
         Runtime<_>,
     > = StfBlueprint::new();
 

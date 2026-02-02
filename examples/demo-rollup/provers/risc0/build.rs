@@ -15,13 +15,17 @@ fn main() {
 
         let elf = r#"
             pub const ROLLUP_PATH: &str = "";
+            pub const ROLLUP_ELF: &[u8] = b"";
+            pub const ROLLUP_ID: [u32; 8] = [0; 8];
             pub const MOCK_DA_PATH: &str = "";
             pub const MOCK_DA_ELF: &[u8] = b"";
-            pub const ROLLUP_ELF: &[u8] = b"";
-            pub const MOCK_DA_NOMT_PATH: &str = "";
-            pub const MOCK_DA_NOMT_ELF: &[u8] = b"";
+            pub const MOCK_DA_ID: [u32; 8] = [0; 8];
             pub const ROLLUP_NOMT_PATH: &str = "";
             pub const ROLLUP_NOMT_ELF: &[u8] = b"";
+            pub const ROLLUP_NOMT_ID: [u32; 8] = [0; 8];
+            pub const MOCK_DA_NOMT_PATH: &str = "";
+            pub const MOCK_DA_NOMT_ELF: &[u8] = b"";
+            pub const MOCK_DA_NOMT_ID: [u32; 8] = [0; 8];
         "#;
 
         std::fs::write(methods_path, elf).expect("Failed to write mock rollup elf");

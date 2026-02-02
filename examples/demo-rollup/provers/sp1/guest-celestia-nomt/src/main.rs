@@ -26,7 +26,7 @@ pub fn main() {
     let guest = SP1Guest::new();
     let storage = NomtStorage::new();
     let stf: StfBlueprint<
-        ConfigurableSpec<CelestiaSpec, SP1, MockZkvm, MultiAddressEvm, Zk, _, NomtStorage>,
+        ConfigurableSpec<CelestiaSpec, SP1, MockZkvm, MultiAddressEvm, Zk, sov_sp1_adapter::SP1CryptoSpec, NomtStorage>,
         Runtime<_>,
     > = StfBlueprint::new();
 
