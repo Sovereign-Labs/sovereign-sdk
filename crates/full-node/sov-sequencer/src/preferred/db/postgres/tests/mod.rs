@@ -49,6 +49,7 @@ impl DB {
         let election_config = LeaderElectionConfig {
             leader_timeout_millis: 100_000,
             grace_period_millis: 100_000,
+            heartbeat_interval_millis: 100,
         };
         let postgres_config = config_from_postgres_container(postgres, node_id.clone(), node_role)
             .await

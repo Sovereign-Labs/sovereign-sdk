@@ -22,9 +22,6 @@ use super::SequencerRole;
 use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
 
-/// Periodic interval for heartbeat tasks.
-pub(crate) const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
-
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.                                                                                                                                                                        
 ///                                                                                                                                                                                                                                                          
 /// This task maintains the node's presence in the cluster by periodically updating                                                                                                                                                                          

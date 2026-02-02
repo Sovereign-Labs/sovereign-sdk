@@ -1,6 +1,5 @@
 use super::*;
 use crate::preferred::db::heartbeat_task::HeartBeatTask;
-use crate::preferred::db::heartbeat_task::HEARTBEAT_INTERVAL;
 use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
@@ -246,7 +245,7 @@ where
                 postgres_config.clone(),
                 shutdown_sender.clone(),
                 bind_addr,
-                HEARTBEAT_INTERVAL,
+                postgres_config.leader_election.heartbeat_interval(),
             )
             .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;

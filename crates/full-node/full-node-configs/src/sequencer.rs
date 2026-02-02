@@ -159,6 +159,9 @@ pub struct LeaderElectionConfig {
     /// Prevents rapid leader flapping.
     #[serde(default = "default_leader_grace_period_millis")]
     pub grace_period_millis: u64,
+    /// Interval in milliseconds between heartbeat updates.
+    #[serde(default = "default_heartbeat_interval_millis")]
+    pub heartbeat_interval_millis: u64,
 }
 
 impl Default for LeaderElectionConfig {
@@ -166,6 +169,7 @@ impl Default for LeaderElectionConfig {
         Self {
             leader_timeout_millis: default_leader_timeout_millis(),
             grace_period_millis: default_leader_grace_period_millis(),
+            heartbeat_interval_millis: default_heartbeat_interval_millis(),
         }
     }
 }
@@ -180,6 +184,11 @@ impl LeaderElectionConfig {
     pub fn grace_period(&self) -> std::time::Duration {
         std::time::Duration::from_millis(self.grace_period_millis)
     }
+
+    /// Returns the heartbeat interval as a `Duration`.
+    pub fn heartbeat_interval(&self) -> std::time::Duration {
+        std::time::Duration::from_millis(self.heartbeat_interval_millis)
+    }
 }
 
 const fn default_leader_timeout_millis() -> u64 {
@@ -188,6 +197,10 @@ const fn default_leader_timeout_millis() -> u64 {
 
 const fn default_leader_grace_period_millis() -> u64 {
     10_000
+}
+
+const fn default_heartbeat_interval_millis() -> u64 {
+    100
 }
 
 /// Postgres DB config.
