@@ -355,6 +355,13 @@
           "format": "uint64",
           "minimum": 0.0
         },
+        "heartbeat_interval_millis": {
+          "description": "Interval in milliseconds between heartbeat updates.",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
         "leader_timeout_millis": {
           "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
           "default": 500,
@@ -507,6 +514,7 @@
           "description": "Configuration for leader election timing.",
           "default": {
             "grace_period_millis": 10000,
+            "heartbeat_interval_millis": 100,
             "leader_timeout_millis": 500
           },
           "allOf": [
