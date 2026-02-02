@@ -155,7 +155,11 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 "/sequencer/unstable/events",
                 axum::routing::get(Self::axum_list_events),
             )
-            .route("/sequencer/role", axum::routing::get(Self::axum_get_role));
+            .route("/sequencer/role", axum::routing::get(Self::axum_get_role))
+            .route(
+                "/sequencer/rollup-height",
+                axum::routing::get(Self::axum_get_rollup_height),
+            );
 
         #[cfg(feature = "test-utils")]
         let router = router
@@ -436,6 +440,17 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
     async fn axum_get_role(state: State<Self>) -> ApiResult<crate::SequencerRole> {
         Ok(state.sequencer.sequencer_role().await.into())
+    }
+
+    async fn axum_get_rollup_height(state: State<Self>) -> ApiResult<RollupHeightResponse> {
+        let api_state = state.sequencer.api_state();
+        let receiver = api_state.checkpoint_receiver();
+        let checkpoint = receiver.borrow();
+        let height = checkpoint.rollup_height_to_access();
+        Ok(RollupHeightResponse {
+            rollup_height: height.get(),
+        }
+        .into())
     }
 
     async fn axum_get_tx_status(
@@ -720,6 +735,13 @@ pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
     pub confirmation: Confirmation,
     #[serde(flatten)]
     pub status: TxStatus<DaTransactionId>,
+}
+
+/// The response for the /sequencer/rollup-height endpoint.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RollupHeightResponse {
+    /// The current rollup height.
+    pub rollup_height: u64,
 }
 
 /// An accepted transaction, with the transaction body and confirmation data.

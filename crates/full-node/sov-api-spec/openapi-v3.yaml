@@ -481,6 +481,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SyncStatus"
+  /sequencer/rollup-height:
+    get:
+      tags:
+        - Sequencer
+      summary: Get the current rollup height
+      description: Returns the current rollup height that the sequencer is operating at.
+      operationId: get_rollup_height
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RollupHeightResponse"
 components:
   parameters:
     pageType:
@@ -1302,3 +1316,13 @@ components:
         - value
         - key
         - module
+    RollupHeightResponse:
+      type: object
+      description: Response containing the current rollup height
+      properties:
+        rollup_height:
+          type: integer
+          format: uint64
+          description: The current rollup height
+      required:
+        - rollup_height
