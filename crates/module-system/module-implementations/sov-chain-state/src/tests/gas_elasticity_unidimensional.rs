@@ -28,17 +28,17 @@ fn assert_correct_gas_update(
     );
 }
 
-/// The base fee per gas should remain to zero if the gas used is below the target
+/// The base fee per gas should be clamped to 1 if it would otherwise be zero
 #[test]
-fn test_zero_base_fee_gas_below_target() {
+fn test_zero_base_fee_is_clamped_to_one() {
     assert_correct_gas_update(
         BaseFeeUpdateConfig {
             gas_limit: 0,
             gas_used: 0,
             base_fee_per_gas: Amount::ZERO,
         },
-        Amount::ZERO,
-        "When the base fee per gas is zero, it should remain to zero if the gas used is below the target",
+        Amount::new(1),
+        "When the base fee per gas is zero, it should be clamped to 1",
     );
 }
 
@@ -263,7 +263,10 @@ fn base_fee_decreases_if_gas_used_is_half_target() {
 
 #[test]
 fn base_fee_does_not_drop_below_one_with_override_constants() {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_BASE_FEE_MAX_CHANGE_DENOMINATOR", "1");
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_BASE_FEE_MAX_CHANGE_DENOMINATOR",
+        "1",
+    );
     // optional: keep elasticity=2 (default); explicit override if desired
     // std::env::set_var("SOV_TEST_CONST_OVERRIDE_ELASTICITY_MULTIPLIER", "2");
 
@@ -273,11 +276,12 @@ fn base_fee_does_not_drop_below_one_with_override_constants() {
     let base_fee = Amount::from(1u128);
 
     let updated = ChainState::<TestSpec>::compute_base_fee_per_gas_unidimensional(
-        gas_limit,
-        gas_used,
-        base_fee,
+        gas_limit, gas_used, base_fee,
     );
 
     // Expected: EIP‑1559 min clamp -> 1
-    assert!(updated >= Amount::from(1u128), "Base fee should never drop below 1");
+    assert!(
+        updated >= Amount::from(1u128),
+        "Base fee should never drop below 1"
+    );
 }
