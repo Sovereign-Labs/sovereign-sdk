@@ -591,7 +591,7 @@ impl<S: Spec> ChainState<S> {
         if self.is_setup_mode_active(next_rollup_height, state)? {
             return Ok(<S::Gas as Gas>::Price::ZEROED);
         }
-        // If the previous rollup height either didn't exist or was in setup mode, use the initial base fee per gas rather
+        // If the previous rollup height was in setup mode, use the initial base fee per gas rather
         // than computing based on the previous value. We have to special case setup mode, otherwise we'll end up with a zero price.
         if stale_rollup_height.get() == 0
             || self.is_setup_mode_active(stale_rollup_height, state)?

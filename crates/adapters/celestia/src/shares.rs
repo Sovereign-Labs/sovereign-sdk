@@ -5,20 +5,6 @@ use sov_rollup_interface::Bytes;
 
 const PARITY_SHARE_PANIC: &str = "Attempted to read the payload of a parity share, but only data shares have payloads. Parity shares should never be read by the adapter - this is a bug, please report it.";
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) enum VersionedStartShare {
-    Zero(celestia_types::Share),
-    One(celestia_types::Share),
-}
-
-impl AsRef<[u8]> for VersionedStartShare {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            VersionedStartShare::Zero(inner) | VersionedStartShare::One(inner) => inner.as_ref(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShareError {
     NotAStartShare,
@@ -280,7 +266,9 @@ impl Iterator for NamespaceDataIterator<'_> {
         }
         let mut relative_share_idx = self.relative_share_idx.unwrap_or(0);
 
-        let start = self.total_offset;
+        // Track when the first data share is added, not when iteration starts.
+        // This excludes namespace padding shares from the range.
+        let mut start: Option<usize> = None;
         let mut current_shares: Vec<celestia_types::Share> = Vec::new();
 
         while row_idx < self.rows.len() {
@@ -298,7 +286,8 @@ impl Iterator for NamespaceDataIterator<'_> {
                 let is_tail_padding = is_tail_padding(share);
                 // Found the new start. Stop and return all existing
                 if is_start && !current_shares.is_empty() {
-                    let range = start..self.total_offset;
+                    let range = start.expect("start must be set if current_shares is not empty")
+                        ..self.total_offset;
                     self.current_row_idx = Some(row_idx);
                     return Some(ShareSequence {
                         shares: current_shares,
@@ -309,6 +298,15 @@ impl Iterator for NamespaceDataIterator<'_> {
                 relative_share_idx += 1;
                 self.relative_share_idx = Some(relative_share_idx);
                 if !is_tail_padding && !share.is_parity() {
+                    // Capture start when adding the first data share.
+                    // total_offset was already incremented, so subtract 1.
+                    if start.is_none() {
+                        assert!(
+                            current_shares.is_empty(),
+                            "start must be set before any shares are added"
+                        );
+                        start = Some(self.total_offset - 1);
+                    }
                     current_shares.push(share.clone());
                 }
             }
@@ -321,7 +319,8 @@ impl Iterator for NamespaceDataIterator<'_> {
         self.current_row_idx = Some(self.rows.len());
         if !current_shares.is_empty() {
             // Return remaining
-            let range = start..self.total_offset;
+            let range =
+                start.expect("start must be set if current_shares is not empty")..self.total_offset;
             Some(ShareSequence {
                 shares: current_shares,
                 range_in_ns: range,

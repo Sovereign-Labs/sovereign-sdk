@@ -1,6 +1,5 @@
 use crate::handlers::subscribe::SubscriptionRequest;
-use crate::handlers::ETH_RPC_ERROR;
-use crate::to_jsonrpsee_error_object;
+use crate::rpc_invalid_params;
 use alloy_rpc_types::pubsub::Params;
 use alloy_rpc_types::pubsub::SubscriptionKind;
 use alloy_rpc_types::BlockNumberOrTag;
@@ -23,7 +22,7 @@ pub enum Error {
 
 impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> Self {
-        to_jsonrpsee_error_object(err, ETH_RPC_ERROR)
+        rpc_invalid_params(err)
     }
 }
 

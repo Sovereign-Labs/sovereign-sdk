@@ -3,19 +3,13 @@ use crate::utils::tempdir_inside_codebase_dir;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
-use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::BlockProducingConfig;
-use sov_mock_da::MockHash;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_modules_api::CryptoSpec;
 use sov_modules_api::RawTx;
-use sov_modules_api::Spec;
 use sov_modules_api::{DispatchCall, HexHash, HexString};
 use sov_modules_stf_blueprint::Runtime;
 use sov_sequencer::SequencerKindConfig;
-use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::pinned_cache::PinnedCache;
-use sov_state::DefaultStorageSpec;
 use sov_test_modules::pinned_cache::CallMessage as PinnedCacheCallMessage;
 use sov_test_modules::pinned_cache::PinnedCacheTester;
 use sov_test_modules::pinned_cache::ValueRange;
@@ -26,25 +20,14 @@ use sov_test_utils::test_rollup::GenesisSource;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::TestRollup;
-use sov_test_utils::MockDaSpec;
 use sov_test_utils::RtAgnosticBlueprint;
-use sov_test_utils::TestNomtSpec as TestSpec;
+use sov_test_utils::TestSpec;
+use sov_test_utils::TestStorageManager;
 use sov_test_utils::TestUser;
 use sov_test_utils::{default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS};
 use tokio_stream::StreamExt;
 
-type TestNomtBlueprint = RtAgnosticBlueprint<
-    TestSpec,
-    TestRuntime<TestSpec>,
-    NomtStorageManager<
-        MockDaSpec,
-        <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
-        NomtProverStorage<
-            DefaultStorageSpec<<<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
-            MockHash,
-        >,
-    >,
->;
+type TestNomtBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>, TestStorageManager>;
 
 const PINNED_ADDRESS: HexHash = HexString([1u8; 32]);
 
@@ -178,8 +161,6 @@ async fn test_nomt_basic_pinning_with_writes() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
     let client = test_rollup.api_client().clone();
-    let mut off_by_one_address = PINNED_ADDRESS;
-    off_by_one_address.0[31] += 1;
 
     for i in 0..8 {
         let tx = tx_write_pinned_cache(
@@ -523,9 +504,10 @@ async fn test_pinned_cache_after_total_resync() {
     test_rollup.shutdown().await.unwrap();
 }
 
-/// Ensures that RAM pinning works again after the node falls out of sync
+/// Ensures that RAM pinning works again after the node falls out of sync.
+/// Marked as flaky, because it calls the manual produce_batch endpoint but sometimes there’s no open batch.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_pinned_cache_after_fast_resync() {
+async fn flaky_test_pinned_cache_after_fast_resync() {
     sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_nomt_rollup().await;
     // Finalise some blocks

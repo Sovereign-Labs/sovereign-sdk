@@ -34,13 +34,13 @@ use futures::Stream;
 pub use initialization::Builder;
 use nonce_buffer_task::{NonceBufferInputSender, NonceBufferTask, SequencerTxExecutionBackend};
 use preferred_blob_sender::PreferredBlobSender;
-use serde_with::serde_as;
 use side_effects::SideEffectsTask;
 use sov_blob_sender::{new_blob_id, BlobExecutionStatus};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
-    NodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
+    ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
+   
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -61,7 +61,7 @@ use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
 use std::marker::PhantomData;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::num::NonZero;
 use std::path::Path;
 use std::pin::Pin;
@@ -77,8 +77,9 @@ use transaction_subscriptions::TransactionCache;
 
 use crate::common::{
     error_not_fully_synced, generic_accept_tx_error, loop_send_tx_notifications, poll_state_update,
-    pre_exec_err_to_accept_tx_err, AcceptedTx, Sequencer, SequencerEventStream, StateUpdateError,
-    StateUpdateNotification, SubscriptionStreamError, WithCachedTxHashes,
+    pre_exec_err_to_accept_tx_err, AcceptedTx, ForcedTxBatchNotification, Sequencer,
+    SequencerEventStream, StateUpdateError, StateUpdateNotification, SubscriptionStreamError,
+    WithCachedTxHashes,
 };
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerFetchBatchesToReplayMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
@@ -111,6 +112,7 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    seq_role: SequencerRole,
     synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
@@ -127,6 +129,8 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_state_update_notification_receiver: broadcast::Receiver<StateUpdateNotification>,
+    #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
+    test_only_forced_tx_batch_notification_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
     runtime: Rt,
 }
 
@@ -147,6 +151,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         Builder::new(da, config)
             .build(
@@ -156,6 +161,7 @@ where
                 api_ledger_db,
                 shutdown_sender,
                 stop_at_rollup_height,
+                bind_addr,
             )
             .await
     }
@@ -762,27 +768,22 @@ where
         )
     }
 
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_forced_tx_batches_unstable(
+        &self,
+    ) -> Option<broadcast::Receiver<ForcedTxBatchNotification>> {
+        Some(
+            self.test_only_forced_tx_batch_notification_receiver
+                .resubscribe(),
+        )
+    }
+
     fn tx_status_manager(&self) -> &TxStatusManager<<Self::Spec as Spec>::Da> {
         &self.tx_status_manager
     }
 
     async fn subscribe_events(&self) -> Option<SequencerEventStream<Self::Rt>> {
-        use futures::StreamExt;
-
-        let tx_stream = self.transaction_cache.subscribe();
-
-        let event_stream: SequencerEventStream<Self::Rt> =
-            Box::pin(tx_stream.flat_map(|tx| match tx {
-                Ok(tx) => Box::pin(futures::stream::iter(
-                    tx.confirmation.events.into_iter().map(Ok),
-                )),
-                Err(e) => {
-                    let output: SequencerEventStream<Self::Rt> =
-                        Box::pin(futures::stream::once(async { Err(e) }));
-                    output
-                }
-            }));
-        Some(event_stream)
+        Some(self.transaction_cache.subscribe_events())
     }
 
     async fn get_tx(
@@ -862,7 +863,7 @@ where
         self.synchronized_state_updator
             .sequencer_role_msg("get_sequencer_role")
             .await
-            .unwrap_or(SequencerRole::Leader)
+            .unwrap_or(SequencerRole::BatchProducer)
     }
 }
 
@@ -894,10 +895,6 @@ where
         Ok(())
     }
 }
-
-#[serde_with::serde_as]
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct TxBody(#[serde_as(as = "serde_with::base64::Base64")] Vec<u8>);
 
 /// Transaction confirmation data of [`PreferredSequencer`].
 #[derive(derivative::Derivative, serde::Serialize, serde::Deserialize)]

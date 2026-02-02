@@ -165,15 +165,6 @@ where
         }
     }
 
-    fn allow_unregistered_tx(call: &Self::Decodable) -> bool {
-        matches!(
-            call,
-            Self::Decodable::SequencerRegistry(
-                sov_sequencer_registry::CallMessage::Register { .. }
-            )
-        )
-    }
-
     #[cfg(feature = "native")]
     fn get_transaction_delay_ms(&self, call: &Self::Decodable) -> u64 {
         match call {

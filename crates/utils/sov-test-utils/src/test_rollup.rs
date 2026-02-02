@@ -45,12 +45,14 @@ use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_interface::StateUpdateInfo;
-use sov_sequencer::preferred::{NodeRole, PostgresConfig, PreferredSequencerConfig};
+use sov_sequencer::preferred::{
+    ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig,
+};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{
-    SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole, SovRateLimiterConfig,
-    StateUpdateNotification,
+    ForcedTxBatchNotification, SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole,
+    SovRateLimiterConfig, StateUpdateNotification,
 };
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
@@ -149,6 +151,16 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 });
         }
         self
+    }
+
+    /// Sets the node role to Leader for the Postgres configuration.
+    /// Used when a replica node needs to transition to leader role.
+    pub fn set_as_leader(&mut self) {
+        if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
+            if let Some(c) = config.postgres_config.as_mut() {
+                c.node_role = ConfiguredNodeRole::Leader;
+            }
+        }
     }
 
     /// See [`PreferredSequencerConfig::minimum_profit_per_tx`].
@@ -280,7 +292,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             }
         };
 
-        let (rest_addr_tx, rest_addr_rx) = tokio::sync::oneshot::channel();
         let shutdown_sender = rollup.shutdown_sender.clone();
 
         let mut other_handles = Vec::new();
@@ -290,8 +301,9 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             other_handles.push(handle);
         }
 
+        let rest_addr = rollup.runner.axum_socket_address()?;
         let rollup_task = tokio::spawn(async move {
-            match rollup.run_and_report_addr(Some(rest_addr_tx)).await {
+            match rollup.run().await {
                 Ok(()) => {
                     tracing::info!("Completed running a rollup");
                     Ok(())
@@ -302,8 +314,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 }
             }
         });
-
-        let rest_addr = rest_addr_rx.await?;
 
         let rest_url = format!("http://{}:{}", rest_addr.ip(), rest_addr.port());
         let client = match NodeClient::new(&rest_url).await {
@@ -339,7 +349,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             storage: rollup_db_config,
             runner: RunnerConfig {
                 da_polling_interval_ms: TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
-                da_total_timeout_secs: 3_600,
                 http_config: HttpServerConfig::on_host_port(
                     &self.config.axum_host,
                     self.config.axum_port,
@@ -431,6 +440,11 @@ impl PostgresData {
             postgres: pg,
         }))
     }
+
+    /// Returns the PostgreSQL connection string.
+    pub fn connection_string(&self) -> &str {
+        &self.connection_string
+    }
 }
 
 impl<R> RollupBuilder<R>
@@ -440,7 +454,7 @@ where
     pub async fn new_with_external_da(
         genesis: GenesisSource<R::Spec, R::Runtime>,
         da_config: MockDaClientConfig,
-        postgres: Option<(Arc<PostgresData>, String, NodeRole)>,
+        postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
     ) -> Self {
         let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
 
@@ -531,6 +545,7 @@ where
             block_producing,
             da_layer: None,
             randomization: None,
+            failure_behavior: Default::default(),
         };
 
         Self {
@@ -705,7 +720,7 @@ where
     R: FullNodeBlueprint<Native> + Default + 'static,
 {
     /// Default timeout for polling operations in seconds.
-    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
+    pub const POLLING_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
     /// Helper to get api_client
     pub fn api_client(&self) -> &sov_api_spec::client::Client {
@@ -777,6 +792,16 @@ where
         self.client
             .client
             .subscribe_to_ws::<StateUpdateNotification>("/sequencer/test-utils/state-updates/ws")
+            .await
+    }
+
+    /// Subscribe to forced batch notifications.
+    pub async fn subscribe_forced_tx_batches(&self) -> WsSubscription<ForcedTxBatchNotification> {
+        self.client
+            .client
+            .subscribe_to_ws::<ForcedTxBatchNotification>(
+                "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+            )
             .await
     }
 

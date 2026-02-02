@@ -41,7 +41,7 @@ use crate::{Gas, GasMeter, GasMeteringError, GasSpec, RevertableTxState, Spec};
 pub trait StateAccessor: StateReaderAndWriter<User> {
     /// Converts this accessor into an [`UnmeteredStateWrapper`]. This method should only be used either in tests or in the `EVM` module.
     #[cfg(any(feature = "test-utils", feature = "evm"))]
-    fn to_unmetered(&mut self) -> UnmeteredStateWrapper<Self>
+    fn to_unmetered(&mut self) -> UnmeteredStateWrapper<'_, Self>
     where
         Self: Sized,
     {
@@ -114,7 +114,7 @@ pub trait TxState<S: Spec>:
     /// Converts this state accessor into a [`RevertableTxState`].
     ///
     /// You *MUST* call .commit() to save the changes from the resulting accessor if you want them to be persisted
-    fn to_revertable(&mut self) -> RevertableTxState<S, Self> {
+    fn to_revertable(&mut self) -> RevertableTxState<'_, S, Self> {
         RevertableTxState::new(self)
     }
 }

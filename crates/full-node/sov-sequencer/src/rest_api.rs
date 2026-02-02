@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::time::Instant;
 
 use axum::extract::ws::WebSocket;
 use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
@@ -18,8 +19,9 @@ use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventRe
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::send_json;
 use sov_rest_utils::{
-    errors, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, FilterQuery,
-    PageSelection, PaginatedResponse, Pagination, Path, Query,
+    errors, preconfigured_router_layers, serve_generic_ws_subscription,
+    serve_generic_ws_subscription_with_config, ApiResult, FilterQuery, PageSelection,
+    PaginatedResponse, Pagination, Path, Query, WsSubscriptionConfig,
 };
 use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
@@ -31,6 +33,31 @@ use tokio_stream::wrappers::BroadcastStream;
 
 use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
 use crate::TxStatus;
+
+/// Interval between ping frames sent to the client for keepalive.
+const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Maximum time to wait for a pong response before considering the connection dead.
+const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// Converts an optional broadcast receiver into a subscription stream.
+/// Returns an empty stream if the receiver is None.
+#[cfg(feature = "test-utils")]
+fn broadcast_to_subscription_stream<T>(
+    receiver: Option<tokio::sync::broadcast::Receiver<T>>,
+) -> std::pin::Pin<Box<dyn futures::Stream<Item = Result<T, SubscriptionStreamError>> + Send>>
+where
+    T: Clone + Send + 'static,
+{
+    receiver
+        .map(|rx| {
+            BroadcastStream::new(rx)
+                .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                    SubscriptionStreamError::lagged_without_identifiers(n)
+                })
+                .boxed()
+        })
+        .unwrap_or_else(|| futures::stream::empty().boxed())
+}
 
 /// [`StartFrom`] is used as a query parameter for the txs subscription
 #[derive(
@@ -47,6 +74,34 @@ use crate::TxStatus;
 #[display("{}", self.start_from)]
 pub struct StartFrom {
     start_from: u64,
+}
+
+/// Compression mode for WebSocket subscriptions.
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompressionMode {
+    /// No compression (default). Messages are sent as individual JSON text frames.
+    #[default]
+    None,
+    /// Gzip compression. Messages are batched into JSON arrays, compressed, and sent as binary frames.
+    Gzip,
+}
+
+/// Query parameters for WebSocket subscriptions that support compression.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct CompressionQuery {
+    /// The compression mode to use for this subscription.
+    #[serde(default)]
+    pub compression: CompressionMode,
+}
+
+impl CompressionQuery {
+    /// Converts the query into a [`WsSubscriptionConfig`].
+    pub fn to_config(&self) -> WsSubscriptionConfig {
+        WsSubscriptionConfig {
+            compress: self.compression == CompressionMode::Gzip,
+        }
+    }
 }
 
 /// Provides REST APIs for any [`Sequencer`]. See [`SequencerApis::rest_api_server`].
@@ -115,6 +170,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .route(
                 "/sequencer/test-utils/state-updates/ws",
                 axum::routing::get(Self::subscribe_to_state_updates_unstable),
+            )
+            .route(
+                "/sequencer/test-utils/forced-tx-batch-notifier/ws",
+                axum::routing::get(Self::subscribe_to_forced_tx_batches_unstable),
             );
 
         preconfigured_router_layers(router).with_state(state)
@@ -149,13 +208,25 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         Ok(ws.on_upgrade(move |mut socket| async move {
             let mut shutdown_receiver = state.shutdown_receiver.clone();
             let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
+            // Use interval_at to delay the first ping until after a full interval of inactivity
+            let mut ping_interval =
+                tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
+            ping_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            let mut awaiting_pong: Option<[u8; 8]> = None;
+            let mut ping_sent_time = Instant::now();
+            let mut ping_counter: u64 = 0;
+            let mut should_drain = true;
+
             loop {
                 tokio::select! {
+                    // Biased ensures we check recv first to handle Close frames promptly
+                    biased;
                     // The client sent us a message
                     inbound_msg = socket.recv() => {
                         match inbound_msg {
                             // Try to deserialize the message as a WsMessage<AcceptTx>. On success, spawn a task to handle it.
                             Some(Ok(ws::Message::Text(text))) => {
+                                ping_interval.reset();
                                 match serde_json::from_str::<WsMessage<AcceptTx>>(&text) {
                                     Ok(WsMessage { id, contents }) => {
                                         let sender = outbound_tx.clone();
@@ -198,20 +269,41 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                     }
                                     Err(e) => {
                                         if handle_bad_ws_request(&mut socket, ip_addr, e).await.is_err() {
+                                            should_drain = false;
                                             break;
                                         }
                                     }
                                 }
                             }
                             // If the client disconnected
-                            None => break,
+                            None  | Some(Ok(ws::Message::Close(_)))=> {
+                                should_drain = false;
+                                break;
+                            }
                             Some(Err(error)) => {
-                                if handle_bad_ws_request(&mut socket, ip_addr, error).await.is_err() {
+                                tracing::warn!(?error, "WebSocket error");
+                                should_drain = false;
+                                break;
+                            }
+                            Some(Ok(ws::Message::Pong(data))) => {
+                                if awaiting_pong.is_some_and(|expected| data == expected) {
+                                    awaiting_pong = None;
+                                    ping_interval.reset();
+                                    tracing::trace!("Received valid pong from client");
+                                } else {
+                                    tracing::trace!("Received pong with unexpected data; ignoring");
+                                }
+                            }
+                            Some(Ok(ws::Message::Ping(data))) => {
+                                if let Err(err) = socket.send(ws::Message::Pong(data)).await {
+                                    tracing::warn!(?err, "Failed to send pong - disconnecting client");
+                                    should_drain = false;
                                     break;
                                 }
                             }
                             Some(_) => {
                                 if handle_bad_ws_request(&mut socket, ip_addr, "Invalid websocket message: only text messages are supported").await.is_err() {
+                                    should_drain = false;
                                     break;
                                 }
                             }
@@ -219,25 +311,39 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     }
                     // We have an outbound message ready to send
                     outbound_msg = outbound_rx.recv() => {
-                        match outbound_msg {
-                            Some(msg) => {
-                                match msg {
-                                    Ok(msg) => {
-                                        if let Err(err) = send_json(&mut socket, msg).await {
-                                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
-                                            break;
-                                        }
-                                    }
-                                    Err(msg) => {
-                                        if let Err(err) = send_json(&mut socket, msg).await {
-                                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            None => break,
+                        let Some(msg) = outbound_msg else {
+                            break;
+                        };
+                        let send_result = match msg {
+                            Ok(m) => send_json(&mut socket, m).await,
+                            Err(m) => send_json(&mut socket, m).await,
+                        };
+                        if let Err(err) = send_result {
+                            tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                            should_drain = false;
+                            break;
                         }
+                    }
+                    _ = ping_interval.tick() => {
+                        if awaiting_pong.is_some() {
+                            let elapsed = ping_sent_time.elapsed();
+                            if elapsed > PONG_TIMEOUT {
+                                tracing::warn!("No pong received within timeout ({:?}) - disconnecting client", PONG_TIMEOUT);
+                                should_drain = false;
+                                break;
+                            }
+                        }
+
+                        ping_counter = ping_counter.wrapping_add(1);
+                        let ping_data = ping_counter.to_le_bytes();
+                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec())).await {
+                            tracing::warn!(?err, "Failed to send ping - disconnecting client");
+                            should_drain = false;
+                            break;
+                        }
+                        ping_sent_time = Instant::now();
+                        awaiting_pong = Some(ping_data);
+                        tracing::trace!("Sent ping to client");
                     }
                     _ = shutdown_receiver.changed() => break,
                 }
@@ -247,13 +353,20 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // This guarantees that the channel will be closed as soon as all in-flight tasks have resolved.
             drop(outbound_tx);
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
-            while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                if let Err(err) = send_json(&mut socket, msg).await {
-                    tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
-                    break;
+            if should_drain {
+                while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
+                    let send_result = match msg {
+                        Ok(m) => send_json(&mut socket, m).await,
+                        Err(m) => send_json(&mut socket, m).await,
+                    };
+                    if let Err(err) = send_result {
+                        tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
+                        break;
+                    }
                 }
             }
-        }) )
+            socket.close().await.ok();
+        }))
     }
 
     async fn axum_get_tx_ws(
@@ -297,8 +410,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     id: tx_hash.0,
                     status,
                 })
-                // Put an explicit type check to ensure we catch this if the set of errors expands.
-                .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged)
+                // Tx status subscriptions don't have sequential identifiers
+                .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                    SubscriptionStreamError::lagged_without_identifiers(n)
+                })
             })
             .boxed();
 
@@ -394,10 +509,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     async fn subscribe_to_events(
         State(state): State<Self>,
         filter: FilterQuery,
+        compression: Option<Query<CompressionQuery>>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         use futures::future;
-        ws.on_upgrade(|socket| async move {
+        let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
+        ws.on_upgrade(move |socket| async move {
             let stream = state
                 .sequencer
                 .subscribe_events()
@@ -408,20 +525,34 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     (Ok(event), Some(filter)) => future::ready(filter.matches(&event.key)),
                     (_, _) => future::ready(true),
                 });
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_receiver.clone(),
+                config,
+            )
+            .await;
         })
     }
 
     async fn subscribe_to_transactions(
         State(state): State<Self>,
         start_from: Option<Query<StartFrom>>,
+        compression: Option<Query<CompressionQuery>>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         let start_from = start_from.map(|start_from| start_from.0.start_from);
+        let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
             let stream =
                 Self::subscribe_txs_starting_from(start_from, state.sequencer.clone()).await;
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription_with_config(
+                socket,
+                stream,
+                state.shutdown_receiver.clone(),
+                config,
+            )
+            .await;
         })
     }
 
@@ -450,16 +581,9 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let stream = state
-                .sequencer
-                .subscribe_blobs_from_blob_sender()
-                .await
-                .map(|receiver| {
-                    BroadcastStream::new(receiver)
-                        .map_err(|_| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
-                        .boxed()
-                })
-                .unwrap_or_else(|| futures::stream::empty().boxed());
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_blobs_from_blob_sender().await,
+            );
             serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
         })
     }
@@ -479,23 +603,28 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         Ok(().into())
     }
 
-    /// Subscribe to state updates. Note that notifications may be delivered out of order.
     #[cfg(feature = "test-utils")]
     async fn subscribe_to_state_updates_unstable(
         State(state): State<Self>,
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let stream = state
-                .sequencer
-                .subscribe_state_updates_unstable()
-                .await
-                .map(|receiver| {
-                    BroadcastStream::new(receiver)
-                        .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
-                        .boxed()
-                })
-                .unwrap_or_else(|| futures::stream::empty().boxed());
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_state_updates_unstable().await,
+            );
+            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+        })
+    }
+
+    #[cfg(feature = "test-utils")]
+    async fn subscribe_to_forced_tx_batches_unstable(
+        State(state): State<Self>,
+        ws: WebSocketUpgrade,
+    ) -> impl IntoResponse {
+        ws.on_upgrade(|socket| async move {
+            let stream = broadcast_to_subscription_stream(
+                state.sequencer.subscribe_forced_tx_batches_unstable().await,
+            );
             serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
         })
     }

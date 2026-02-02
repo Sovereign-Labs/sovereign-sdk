@@ -31,9 +31,13 @@ use sov_stf_runner::RollupConfig;
 pub struct RtAgnosticBlueprint<
     S: Spec,
     R: RuntimeTrait<S>,
-    Manager = NativeStorageManager<
+    Manager = NomtStorageManager<
         MockDaSpec,
-        ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
+        <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+        NomtProverStorage<
+            DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
+        >,
     >,
 > {
     phantom: PhantomData<(S, R, Manager)>,

@@ -183,7 +183,11 @@ impl<S: Spec, I: TxState<S>> AccessoryStateWriter for RevertableTxState<'_, S, I
 impl<S: Spec, I: TxState<S>> AccessoryStateReader for RevertableTxState<'_, S, I> {}
 
 impl<S: Spec, I: TxState<S>> EventContainer for RevertableTxState<'_, S, I> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 

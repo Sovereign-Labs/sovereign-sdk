@@ -45,7 +45,7 @@ async fn sanity_checks(test_client: &SimpleStorageClient) {
         .await;
 
     assert_eq!(latest_block, pending_block);
-    assert_eq!(pending_block.header.hash, B256::ZERO);
+    assert_ne!(pending_block.header.hash, B256::ZERO);
     assert_eq!(earliest_block.header.number, 0);
     assert!(pending_block.header.number > earliest_block.header.number);
 
@@ -107,8 +107,8 @@ async fn execute_evm_tests(
     // TODO: reenable this check by figuring out a way to get finer grained control over preferred batch production.
     //evm_test_helper::gas_check(client, da_service, contract_address).await?;
 
-    let first_block = client.eth_get_block_by_number(Some("0".to_owned())).await;
-    let second_block = client.eth_get_block_by_number(Some("1".to_owned())).await;
+    let first_block = client.eth_get_block_by_number(Some("0x0".to_owned())).await;
+    let second_block = client.eth_get_block_by_number(Some("0x1".to_owned())).await;
 
     // assert parent hash works correctly
     assert_eq!(

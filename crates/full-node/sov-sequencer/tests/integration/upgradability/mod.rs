@@ -65,9 +65,17 @@ async fn test_start_at_immediate_finality() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_start_at() {
+async fn test_start_at_finalization_minus_one() {
     check_start_at(TEST_FINALIZATION_BLOCKS - 1).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_at_finalization_threshold() {
     check_start_at(TEST_FINALIZATION_BLOCKS).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_start_at_finalization_plus_one() {
     check_start_at(TEST_FINALIZATION_BLOCKS + 1).await;
 }
 
@@ -78,7 +86,7 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
 
     let stop_at_height = RollupHeight::new(3);
 
-    let (test_rollup, _) = create_test_rollup(
+    let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
@@ -87,27 +95,39 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    // This is for make rollup operational, so rollup will give out slot notifications.
-    test_rollup
-        .tenderly_produce_blocks((finalization_blocks + 1) as usize)
-        .await
-        .unwrap();
-
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
-    let padding_to_shutdown = 20;
-    test_rollup
-        .tenderly_produce_blocks(padding_to_shutdown)
-        .await
-        .unwrap();
-    for _ in 0..padding_to_shutdown {
-        let _slot = slot_subscription.next().await.unwrap().unwrap();
+    let api_client = test_rollup.api_client().clone();
+
+    // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
+    let da = test_rollup.da_service.clone();
+    let mut da_sub = da.subscribe_finalized_header().await.unwrap();
+    for _ in 0..finalization_blocks + 3 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+    da_sub.next().await;
+
+    // Produce enough blocks with transactions to advance rollup height past stop_at_height.
+    // Transactions are required to trigger batch production and increment rollup height.
+    let target_height = stop_at_height.get() + finalization_blocks as u64 + 2;
+    let mut nonce = 0;
+    while test_rollup.height().await.get() < target_height {
+        send_tx(&admin, nonce, &api_client).await.unwrap();
+        nonce += 1;
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slot_subscription.next().await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     let slot_height = test_rollup.height().await;
 
     // Assert the condition that triggers an early return.
     assert!(stop_at_height < slot_height);
+
+    // Ensure that state up to at least `stop_at_height` is finalized and persisted to disk.
+    // Without this, non-finalized blocks' state changes are lost on shutdown, causing the
+    // restart to see a lower height than expected.
+    test_rollup.produce_enough_finalized_slots().await;
 
     let Err(err) = test_rollup
         .restart_with_heights(None, Some(stop_at_height))

@@ -186,13 +186,6 @@ macro_rules! generate_runtime_without_capabilities {
                 $auth_wrapper(auth_data)
             }
 
-            fn allow_unregistered_tx(call: &Self::Decodable) -> bool {
-                matches!(
-                    call,
-                    Self::Decodable::SequencerRegistry($crate::runtime::sov_sequencer_registry::CallMessage::Register {..})
-                )
-            }
-
             // Conditionally generate get_transaction_delay_ms if the wrapper is provided.
             // If not provided, the default from the Runtime trait (returning 0) will be used.
             $(

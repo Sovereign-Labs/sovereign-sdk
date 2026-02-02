@@ -49,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
         block_producing,
         da_layer: None,
         randomization: None,
+        failure_behavior: Default::default(),
     };
 
     tracing::info!("Starting mock-da server with configuration:");

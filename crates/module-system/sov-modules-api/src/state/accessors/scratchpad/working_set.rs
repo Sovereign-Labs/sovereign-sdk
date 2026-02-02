@@ -267,7 +267,11 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for WorkingSet<S, I> {
 }
 
 impl<S: Spec, I: StateProvider<S>> EventContainer for WorkingSet<S, I> {
-    fn add_event<E: 'static + core::marker::Send>(&mut self, event_key: &str, event: E) {
+    fn add_event<E: 'static + core::marker::Send + core::marker::Sync>(
+        &mut self,
+        event_key: &str,
+        event: E,
+    ) {
         self.events.push(TypeErasedEvent::new(event_key, event));
     }
 
@@ -317,7 +321,7 @@ mod tests {
     use sov_state::namespaces::User;
     use sov_state::{Kernel, SlotKey, SlotValue};
     use sov_state::{SlotKeyFromCodec, SlotValueFromCodec};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
     use crate::capabilities::mocks::MockKernel;
@@ -330,7 +334,7 @@ mod tests {
     #[test]
     fn test_workingset_get() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let prefix = sov_state::Prefix::new(1, 2);
@@ -348,7 +352,7 @@ mod tests {
     #[test]
     fn test_kernel_workingset_get() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let prefix = sov_state::Prefix::new(1, 2);

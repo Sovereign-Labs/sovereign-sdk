@@ -449,7 +449,7 @@ where
     }
 
     pub(crate) fn is_replica_role(&self) -> bool {
-        self.seq_role == SequencerRole::Replica
+        self.seq_role == SequencerRole::PgSyncReplica
     }
 
     pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
@@ -749,12 +749,14 @@ where
     #[tracing::instrument(skip_all, level = "trace")]
     pub(crate) async fn close_current_batch(&mut self) {
         // Terminate the batch.
-        self.executor.end_rollup_block().await;
+        let forced_txs = self.executor.end_rollup_block().await;
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
-        self.executor_events_sender.close_batch(checkpoint).await;
+        self.executor_events_sender
+            .close_batch(checkpoint, forced_txs)
+            .await;
     }
 }
