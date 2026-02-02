@@ -2,10 +2,11 @@
 
 use std::net::SocketAddr;
 use std::pin::Pin;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::WebSocket;
 use axum::extract::{ws, ConnectInfo, State, WebSocketUpgrade};
+use axum::http;
 use axum::response::IntoResponse;
 use axum::Json;
 use futures::StreamExt;
@@ -13,11 +14,11 @@ use futures::StreamExt;
 use futures::TryStreamExt;
 use serde_with::base64::Base64;
 use serde_with::serde_as;
+use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::runtime::Runtime;
 use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
 use sov_rest_utils::handle_bad_ws_request;
-use sov_rest_utils::send_json;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
     serve_generic_ws_subscription_with_config, ApiResult, FilterQuery, PageSelection,
@@ -39,6 +40,26 @@ const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Maximum time to wait for a pong response before considering the connection dead.
 const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Emits HTTP metrics for a WebSocket message.
+fn emit_ws_metrics(
+    handler_processing_time: Duration,
+    response_status: http::StatusCode,
+    response_body_size: u64,
+) {
+    track_metrics(|tracker| {
+        let point = HttpMetrics {
+            request_method: http::Method::GET,
+            request_uri: http::Uri::from_static("/sequencer/txs/submit/ws"),
+            response_status,
+            response_body_size,
+            handler_processing_time,
+            is_ws: true,
+        };
+        tracker.submit_known_metric(point);
+    });
+}
+
 /// Converts an optional broadcast receiver into a subscription stream.
 /// Returns an empty stream if the receiver is None.
 #[cfg(feature = "test-utils")]
@@ -207,7 +228,8 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
         Ok(ws.on_upgrade(move |mut socket| async move {
             let mut shutdown_receiver = state.shutdown_receiver.clone();
-            let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel(10);
+            // Channel sends pre-serialized JSON strings to avoid double serialization
+            let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<String>(10);
             // Use interval_at to delay the first ping until after a full interval of inactivity
             let mut ping_interval =
                 tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
@@ -227,6 +249,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                             // Try to deserialize the message as a WsMessage<AcceptTx>. On success, spawn a task to handle it.
                             Some(Ok(ws::Message::Text(text))) => {
                                 ping_interval.reset();
+                                let start = Instant::now();
                                 match serde_json::from_str::<WsMessage<AcceptTx>>(&text) {
                                     Ok(WsMessage { id, contents }) => {
                                         let sender = outbound_tx.clone();
@@ -238,31 +261,39 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                                 Seq::Spec,
                                             >>::encode_with_standard_auth(raw_tx);
 
-                                            let response = match state
+                                            let accept_result = state
                                                 .sequencer
                                                 .accept_tx(baked_tx, ip_addr)
-                                                .await {
-                                                    Ok(tx_with_hash) => {
-                                                        Ok(WsMessage {
-                                                            id,
-                                                            contents: TxInfoWithConfirmation {
-                                                                id: tx_with_hash.tx_hash,
-                                                                confirmation: tx_with_hash.confirmation,
-                                                                status: TxStatus::<DaBlobHash<<Seq::Da as DaService>::Spec>>::Submitted,
-                                                            }
-                                                        })
-                                                    }
-                                                    Err(e) => {
-                                                        if e.status.is_server_error() {
-                                                            tracing::error!(error = ?e, "Error accepting transaction");
+                                                .await;
+
+                                            let (serialized, response_status) = match accept_result {
+                                                Ok(tx_with_hash) => {
+                                                    let ws_msg = WsMessage {
+                                                        id,
+                                                        contents: TxInfoWithConfirmation {
+                                                            id: tx_with_hash.tx_hash,
+                                                            confirmation: tx_with_hash.confirmation,
+                                                            status: TxStatus::<DaBlobHash<<Seq::Da as DaService>::Spec>>::Submitted,
                                                         }
-                                                        Err(WsMessage {
-                                                            id,
-                                                            contents: e,
-                                                        })
+                                                    };
+                                                    (serde_json::to_string(&ws_msg).expect("WsMessage serialization should not fail"), http::StatusCode::OK)
+                                                }
+                                                Err(e) => {
+                                                    if e.status.is_server_error() {
+                                                        tracing::error!(error = ?e, "Error accepting transaction");
                                                     }
-                                                };
-                                            if let Err(e) = sender.send(response).await {
+                                                    let status = e.status;
+                                                    let ws_msg = WsMessage {
+                                                        id,
+                                                        contents: e,
+                                                    };
+                                                    (serde_json::to_string(&ws_msg).expect("WsMessage serialization should not fail"), status)
+                                                }
+                                            };
+
+                                            emit_ws_metrics(start.elapsed(), response_status, serialized.len() as u64);
+
+                                            if let Err(e) = sender.send(serialized).await {
                                                 tracing::warn!(?e, "Error sending response to client. Could not respond because outbound ws channel was dropped. This usually means the seqeuncer is shutting down.");
                                             };
                                         });
@@ -309,16 +340,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                             }
                         }
                     }
-                    // We have an outbound message ready to send
+                    // We have an outbound message ready to send (pre-serialized JSON)
                     outbound_msg = outbound_rx.recv() => {
                         let Some(msg) = outbound_msg else {
                             break;
                         };
-                        let send_result = match msg {
-                            Ok(m) => send_json(&mut socket, m).await,
-                            Err(m) => send_json(&mut socket, m).await,
-                        };
-                        if let Err(err) = send_result {
+                        if let Err(err) = socket.send(ws::Message::Text(msg)).await {
                             tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                             should_drain = false;
                             break;
@@ -355,11 +382,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
             if should_drain {
                 while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                    let send_result = match msg {
-                        Ok(m) => send_json(&mut socket, m).await,
-                        Err(m) => send_json(&mut socket, m).await,
-                    };
-                    if let Err(err) = send_result {
+                    if let Err(err) = socket.send(ws::Message::Text(msg)).await {
                         tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                         break;
                     }
