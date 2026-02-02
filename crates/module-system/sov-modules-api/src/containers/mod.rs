@@ -238,7 +238,7 @@ mod test {
     use sov_state::{
         DefaultStorageSpec, NativeStorage, ProverStorage, SlotKey, SlotValue, Storage,
     };
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::validate_and_materialize;
 
     use crate::capabilities::mocks::MockKernel;
@@ -283,7 +283,7 @@ mod test {
 
     #[test]
     fn test_jmt_storage() -> anyhow::Result<()> {
-        let mut storage_manager = SimpleStorageManager::<StorageSpec>::new();
+        let mut storage_manager = SimpleJmtStorageManager::<StorageSpec>::new();
         let mut prev_root = <ProverStorage<StorageSpec> as Storage>::PRE_GENESIS_ROOT;
         let tests = create_tests();
         {
@@ -332,7 +332,7 @@ mod test {
 
     #[test]
     fn test_restart_lifecycle() -> anyhow::Result<()> {
-        let mut storage_manager = SimpleStorageManager::new();
+        let mut storage_manager = SimpleJmtStorageManager::new();
         {
             let storage = storage_manager.create_storage();
             assert!(storage.is_empty());

@@ -457,7 +457,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "MonitoringConfig": {
       "description": "Configuration of Sovereign monitoring",

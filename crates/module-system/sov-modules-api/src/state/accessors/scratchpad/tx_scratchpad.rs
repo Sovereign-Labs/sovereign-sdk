@@ -187,7 +187,7 @@ mod tests {
     use sov_state::codec::BcsCodec;
     use sov_state::SlotValueFromCodec;
     use sov_state::{Namespace, NodeLeafAndMaybeValue, SlotKey, SlotValue};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::TestHasher;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
@@ -207,7 +207,7 @@ mod tests {
     }
 
     fn test_cache_warmup_changeset_with_namespace(namespace: Namespace) {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let mut worker_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());
@@ -248,7 +248,7 @@ mod tests {
     }
 
     fn test_cache_warmup_overrides_with_namespace(namespace: Namespace) {
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
 
         let mut worker_scratchpad = create_srcratchpad::<TestSpec>(storage.clone());

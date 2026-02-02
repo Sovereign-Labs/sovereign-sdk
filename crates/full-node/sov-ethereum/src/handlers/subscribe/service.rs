@@ -428,22 +428,22 @@ mod tests {
         };
         let block = make_synthetic_block(7, 100, 150);
 
-        assert!(matches!(
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NewRealBlock(5)
-        ));
-        assert!(matches!(
+        );
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NewRealBlock(6)
-        ));
-        assert!(matches!(
+        );
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
-        ));
-        assert!(matches!(
+        );
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NoChange
-        ));
+        );
     }
 
     #[test]
@@ -455,14 +455,14 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 100); // last_tx_index is 99, > 50
 
-        assert!(matches!(
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
-        ));
-        assert!(matches!(
+        );
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NoChange
-        ));
+        );
     }
 
     #[test]
@@ -474,10 +474,10 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 100); // last_tx_index is 99, matches watermark
 
-        assert!(matches!(
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NoChange
-        ));
+        );
     }
 
     #[test]
@@ -489,10 +489,10 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 0); // empty block
 
-        assert!(matches!(
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NoChange
-        ));
+        );
     }
 
     #[test]
@@ -505,10 +505,10 @@ mod tests {
         };
         let block = make_synthetic_block(10, 0, 50);
 
-        assert!(matches!(
+        assert_eq!(
             assert_peek_equals_and_advance(&mut watermark, &block),
             SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock
-        ));
+        );
     }
     #[test]
     fn from_synthetic_block_initializes_correctly() {

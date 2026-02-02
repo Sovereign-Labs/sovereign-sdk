@@ -22,10 +22,10 @@ use super::SequencerRole;
 use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
 
-/// Manages periodic heartbeat and optional leadership election for a sequencer node.                                                                                                                                                                        
-///                                                                                                                                                                                                                                                          
-/// This task maintains the node's presence in the cluster by periodically updating                                                                                                                                                                          
-/// its registration in the database. Depending on the spawn method used, it may                                                                                                                                                                             
+/// Manages periodic heartbeat and optional leadership election for a sequencer node.
+///
+/// This task maintains the node's presence in the cluster by periodically updating
+/// its registration in the database. Depending on the spawn method used, it may
 /// also compete for leadership.
 pub struct HeartBeatTask {
     backend: PostgresBackend,

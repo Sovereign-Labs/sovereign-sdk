@@ -16,6 +16,7 @@ pub use provider_ext::LogsWithCursorProvider;
 pub use rpc::RpcClient;
 
 const RECEIPT_POLL_INTERVAL: Duration = Duration::from_millis(100);
+const RECEIPT_POLL_TIMEOUT: Duration = Duration::from_secs(120);
 
 const GAS: u64 = 100_000_000u64;
 const MAX_FEE_PER_GAS: u128 = 100;
@@ -89,24 +90,46 @@ impl SimpleStorageClient {
 
     /// Wait for a transaction receipt to be available (including pending block receipts).
     pub async fn wait_for_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
-        loop {
-            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
-                return receipt;
+        let wait = async {
+            loop {
+                if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                    return receipt;
+                }
+                tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
             }
-            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
-        }
+        };
+        tokio::time::timeout(RECEIPT_POLL_TIMEOUT, wait)
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "timed out waiting {:?}s for receipt of tx {:?}",
+                    RECEIPT_POLL_TIMEOUT.as_secs(),
+                    tx_hash
+                )
+            })
     }
 
     /// Wait for a transaction receipt with a block hash (i.e., in a finalized block).
     pub async fn wait_for_finalized_receipt(&self, tx_hash: TxHash) -> TransactionReceipt {
-        loop {
-            if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
-                if receipt.block_hash.is_some() {
-                    return receipt;
+        let wait = async {
+            loop {
+                if let Some(receipt) = self.rpc_client.receipt(tx_hash).await {
+                    if receipt.block_hash.is_some() {
+                        return receipt;
+                    }
                 }
+                tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
             }
-            tokio::time::sleep(RECEIPT_POLL_INTERVAL).await;
-        }
+        };
+        tokio::time::timeout(RECEIPT_POLL_TIMEOUT, wait)
+            .await
+            .unwrap_or_else(|_| {
+                panic!(
+                    "timed out waiting {:?}s for finalized receipt of tx {:?}",
+                    RECEIPT_POLL_TIMEOUT.as_secs(),
+                    tx_hash
+                )
+            })
     }
 
     /// Send a transaction and wait for its receipt (including pending block receipts).
@@ -248,6 +271,77 @@ impl SimpleStorageClient {
         let tx = self.make_tx(
             Some(contract_address),
             Some(self.contract.emit_logs(topic, nb_of_logs)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Emit a log with all 4 topic slots populated (max EVM allows).
+    /// Useful for testing full topic array handling.
+    pub async fn alloy_emit_full_topic_log(
+        &self,
+        contract_address: Address,
+        t0: U256,
+        t1: U256,
+        t2: U256,
+        data: U256,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.emit_full_topic_log(t0, t1, t2, data)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Emit logs with configurable topic values for flexible testing scenarios.
+    pub async fn alloy_emit_configurable_logs(
+        &self,
+        contract_address: Address,
+        topic1_base: U256,
+        topic2_base: U256,
+        count: u32,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(
+                self.contract
+                    .emit_configurable_logs(topic1_base, topic2_base, count),
+            ),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Emit a log with no indexed topics (only event signature in topic0).
+    pub async fn alloy_emit_data_only_log(
+        &self,
+        contract_address: Address,
+        v1: U256,
+        v2: U256,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.emit_data_only_log(v1, v2)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Emit a log with only indexed topics (data == 0x).
+    pub async fn alloy_emit_indexed_only_log(
+        &self,
+        contract_address: Address,
+        value: U256,
+    ) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.emit_indexed_only_log(value)),
+        );
+        self.send_tx(tx).await.unwrap()
+    }
+
+    /// Burn gas by computing keccak256 in a loop (for gas usage testing).
+    pub async fn alloy_burn_gas(&self, contract_address: Address, iterations: u32) -> TxHash {
+        let tx = self.make_tx(
+            Some(contract_address),
+            Some(self.contract.burn_gas(iterations)),
         );
         self.send_tx(tx).await.unwrap()
     }

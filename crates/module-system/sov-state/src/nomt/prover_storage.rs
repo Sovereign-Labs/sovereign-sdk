@@ -9,6 +9,7 @@ use anyhow::Context;
 use nomt::hasher::BinaryHasher;
 use nomt::proof::MultiProof;
 use nomt::FinishedSession;
+use nomt_core::trie::KeyPath;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
@@ -18,6 +19,7 @@ use sov_db::storage_manager::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
@@ -401,7 +403,7 @@ where
 {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = ();
+    type Proof = NomtMultiProof;
     type Root = StorageRoot<S>;
     // These 2 are effectively the same thing, `StateUpdate` is not materialized, `ChangeSet` is materialized.
     type StateUpdate = NomtStateUpdate<S>;
@@ -617,10 +619,10 @@ where
     }
 
     fn open_proof(
-        _state_root: Self::Root,
-        _proof: StorageProof<Self::Proof>,
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-        unimplemented!("The NomtProverStorage does not support `open_proof` yet.")
+        crate::nomt::verify_storage_proof::<S>(state_root, proof)
     }
 }
 
@@ -675,11 +677,23 @@ where
             ProvableNamespace::Kernel => self.read_value::<crate::Kernel>(&key, slot_number)?,
         };
 
+        let session = match namespace {
+            ProvableNamespace::User => self
+                .state_session_builder
+                .begin_user_session_without_witness()?,
+            ProvableNamespace::Kernel => self
+                .state_session_builder
+                .begin_kernel_session_without_witness()?,
+        };
+
+        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+        let path_proof = session.prove(key_path)?;
+        let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
+
         Ok(StorageProof {
             key,
             value,
-            // TODO: Proof is empty now, will be fixed in follow
-            proof: (),
+            proof: NomtMultiProof(multi_proof),
             namespace,
         })
     }

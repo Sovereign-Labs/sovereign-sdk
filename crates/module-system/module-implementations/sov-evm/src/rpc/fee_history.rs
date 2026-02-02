@@ -3,13 +3,13 @@ use std::ops::RangeInclusive;
 use alloy_consensus::BlockHeader;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_rpc_types::FeeHistory;
-use jsonrpsee::types::error::INVALID_PARAMS_CODE;
+use jsonrpsee::types::error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE};
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
 use sov_chain_state::ChainState;
-use sov_modules_api::GasSpec;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, GasSpec, Spec, VersionReader};
+use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::EthApiError;
 
 /// When estimating the base fee for the next block, we assume that at least two thirds of the gas limit will be used.
@@ -17,6 +17,14 @@ const ESTIMATION_GAS_LIMIT_MULTIPLIER: u64 = 2;
 const ESTIMATED_GAS_LIMIT_DIVISOR: u64 = 3;
 
 use crate::{Evm, SyntheticBlockWithoutRootsAndBloom};
+
+fn base_fee_overflow_error(value: u128) -> EthApiError {
+    EthApiError::other(ErrorObjectOwned::owned(
+        INTERNAL_ERROR_CODE,
+        format!("base fee overflow: {value} exceeds u64::MAX"),
+        None::<()>,
+    ))
+}
 
 struct FeesAndUsage {
     fees: Vec<u128>,
@@ -81,7 +89,11 @@ where
             &sealed_block_numbers,
             state,
         )?;
-        let reward = Self::build_reward_percentiles(reward_percentiles, block_count);
+        // Use actual block count (not requested) since fewer blocks may exist if chain is young
+        let reward = Self::build_reward_percentiles(
+            reward_percentiles,
+            fees_and_usage.gas_used_ratios.len() as u64,
+        );
 
         Ok(FeeHistory {
             base_fee_per_gas: fees_and_usage.fees,
@@ -176,12 +188,45 @@ where
         let last_base_fee = base_fees
             .last()
             .expect("At least one base fee must have been collected");
-        let next_gas_price = ChainState::<S>::compute_base_fee_per_gas_unidimensional(
-            gas_limit,
-            conservative_parent_gas_usage,
-            Amount::from(*last_base_fee),
-        );
-        base_fees.push(next_gas_price.0.try_into().unwrap_or(u64::MAX));
+
+        // Validate that the EVM block number aligns with the current rollup height.
+        // We allow a +1 offset to account for the pending block, but anything beyond that
+        // indicates a mapping mismatch between EVM blocks and rollup heights.
+        let current_rollup_height = state.rollup_height_to_access();
+        let max_allowed_block = current_rollup_height.get().saturating_add(1);
+        if end_block > max_allowed_block {
+            return Err(EthApiError::HeaderNotFound(BlockId::Number(
+                //  We return max_allowed + 1 because that’s the first block number that is definitely missing,
+                max_allowed_block.saturating_add(1).into(),
+            )));
+        }
+
+        // Query chain-state for the next block's base fee. Chain-state is the source of truth
+        // and handles all special cases (setup mode, initial blocks, etc.).
+        // If chain-state returns None (future block not yet recorded), fall back to EIP-1559 estimate.
+        let next_height = RollupHeight::new(end_block + 1);
+        let next_from_chain = self
+            .chain_state_module
+            .base_fee_per_gas_at(next_height, state)?;
+
+        let next_gas_price: u64 = if let Some(price) = next_from_chain {
+            let value = price.as_ref()[0].0;
+            value
+                .try_into()
+                .map_err(|_| base_fee_overflow_error(value))?
+        } else {
+            // Fallback: EIP-1559 estimation for future blocks not yet in chain-state
+            let value = ChainState::<S>::compute_base_fee_per_gas_unidimensional(
+                gas_limit,
+                conservative_parent_gas_usage,
+                Amount::from(*last_base_fee),
+            )
+            .0;
+            value
+                .try_into()
+                .map_err(|_| base_fee_overflow_error(value))?
+        };
+        base_fees.push(next_gas_price);
 
         #[allow(clippy::float_arithmetic)]
         // Float arithmetic is safe here. This method is RPC only, not consensus-critical; and it's required by the spec
@@ -200,6 +245,8 @@ where
         percentiles: Option<&[f64]>,
         block_count: u64,
     ) -> Option<Vec<Vec<u128>>> {
-        percentiles.map(|p| vec![vec![0u128; p.len()]; block_count as usize])
+        percentiles
+            .filter(|p| !p.is_empty())
+            .map(|p| vec![vec![0u128; p.len()]; block_count as usize])
     }
 }

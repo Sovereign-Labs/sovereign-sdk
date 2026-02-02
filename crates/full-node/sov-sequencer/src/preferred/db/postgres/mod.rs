@@ -80,8 +80,8 @@ impl PostgresBackend {
         Ok((backend, maybe_leader))
     }
 
-    /// Connects to Postgres as a replica without competing for leadership.                                                                                                                                                                                  
-    ///                                                                                                                                                                                                                                                      
+    /// Connects to Postgres as a replica without competing for leadership.
+    ///
     /// Registers the node in the cluster but never attempts to become leader
     pub async fn connect_as_replica(
         config: &PostgresConfig,
@@ -92,7 +92,7 @@ impl PostgresBackend {
         Ok(backend)
     }
 
-    /// // Connects to Postgres db.
+    /// Connects to Postgres db.
     pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
         let node_address = node_address(bind_addr)?;
@@ -699,7 +699,7 @@ fn node_address(bind_addr: SocketAddr) -> Result<String> {
 
 /// Gets the local IP address by creating a UDP socket and checking its local address.
 fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
-    // This is a classic networking trick to figure out your machine’s local IP address,
+    // This is a classic networking trick to figure out your machine's local IP address,
     // without actually sending any data.
     let addr = if ip.is_ipv6() {
         let socket = std::net::UdpSocket::bind("[::]:0").with_context(|| {

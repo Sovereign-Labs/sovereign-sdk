@@ -139,45 +139,68 @@ describe("Bank", () => {
     });
   });
 
-  describe("totalSupply", () => {
-    const mockTokenId = "token_123";
-    const mockGasTokenId = "gas_token_456";
+  describe("tokenMetadata", () => {
+    // Valid bech32m token ID with decimals = 89 (last byte)
+    const mockTokenId =
+      "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7";
 
     beforeEach(() => {
       // Mock gasTokenId method
-      vi.spyOn(bank, "gasTokenId").mockResolvedValue(mockGasTokenId);
+      vi.spyOn(bank, "gasTokenId").mockResolvedValue(mockTokenId);
     });
 
-    it("should return total supply for a specific token", async () => {
+    it("should return token metadata for a specific token", async () => {
       const mockResponse = {
-        amount: "1000000000000000000000000",
-        token_id: mockTokenId,
+        key: mockTokenId,
+        value: {
+          name: "Test Token",
+          total_supply: "1000000000000000000000000",
+          supply_cap: "2000000000000000000000000",
+          admins: [{ user: "sov1abc123" }, { module: "sov1mod456" }],
+        },
       };
 
       mockClient.get.mockResolvedValue(mockResponse);
 
-      const result = await bank.totalSupply(mockTokenId);
+      const result = await bank.tokenMetadata(mockTokenId);
 
       expect(mockClient.get).toHaveBeenCalledWith(
-        `/modules/bank/tokens/${mockTokenId}/total-supply`,
+        `/modules/bank/state/tokens/items/${mockTokenId}`,
       );
-      expect(result).toBe(BigInt("1000000000000000000000000"));
+      expect(result).toEqual({
+        name: "Test Token",
+        decimals: 89,
+        totalSupply: BigInt("1000000000000000000000000"),
+        supplyCap: BigInt("2000000000000000000000000"),
+        admins: ["sov1abc123", "sov1mod456"],
+      });
     });
 
-    it("should return total supply for gas token when no tokenId provided", async () => {
+    it("should return token metadata for gas token when no tokenId provided", async () => {
       const mockResponse = {
-        amount: "500000000000000000000000",
-        token_id: mockGasTokenId,
+        key: mockTokenId,
+        value: {
+          name: "Gas Token",
+          total_supply: "500000000000000000000000",
+          supply_cap: "1000000000000000000000000",
+          admins: [{ derived: "sov1derived789" }],
+        },
       };
 
       mockClient.get.mockResolvedValue(mockResponse);
 
-      const result = await bank.totalSupply();
+      const result = await bank.tokenMetadata();
 
       expect(mockClient.get).toHaveBeenCalledWith(
-        `/modules/bank/tokens/${mockGasTokenId}/total-supply`,
+        `/modules/bank/state/tokens/items/${mockTokenId}`,
       );
-      expect(result).toBe(BigInt("500000000000000000000000"));
+      expect(result).toEqual({
+        name: "Gas Token",
+        decimals: 89,
+        totalSupply: BigInt("500000000000000000000000"),
+        supplyCap: BigInt("1000000000000000000000000"),
+        admins: ["sov1derived789"],
+      });
     });
 
     it("should throw error when API request fails", async () => {
@@ -194,7 +217,7 @@ describe("Bank", () => {
 
       mockClient.get.mockRejectedValue(apiError);
 
-      await expect(bank.totalSupply(mockTokenId)).rejects.toEqual(apiError);
+      await expect(bank.tokenMetadata(mockTokenId)).rejects.toEqual(apiError);
     });
   });
 

@@ -1,7 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
-use crate::utils::encode_call;
+use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
     generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
     tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
@@ -31,7 +31,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
-use sov_sequencer::StateUpdateNotification;
+use sov_sequencer::{SequencerKindConfig, StateUpdateNotification};
 use sov_test_modules::hooks_count::HooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::FullNodeBlueprint;
@@ -55,11 +55,12 @@ use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
 const DELAYED_TX_DELAY_MS: u64 = 2500;
+const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 generate_optimistic_runtime_with_kernel!(
     TestRuntime <=
     kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
-    modules: [value_setter: ValueSetter<S>, hooks_count: HooksCount<S>, paymaster: Paymaster<S>, slot_hook_checker: ModuleWithVersionedStateAccessInSlotHook<S>],
+    modules: [value_setter: ValueSetter<S>, hooks_count: HooksCount<S>, paymaster: Paymaster<S>, slot_hook_checker: ModuleWithVersionedStateAccessInSlotHook<S>, event_emitter: EventEmitterModule<S>],
     transaction_delay_ms_wrapper: |call: &Self::Decodable| {
         match call {
             Self::Decodable::HooksCount(sov_test_modules::hooks_count::CallMessage::DelayedCallMsg) => DELAYED_TX_DELAY_MS,
@@ -141,11 +142,19 @@ impl DaLayerWithSubscription {
         let subscription = self.slot_subscription.as_mut().unwrap();
         while self.back_slot_notifications > 1 {
             self.back_slot_notifications -= 1;
-            subscription.next().await.unwrap().unwrap();
+            tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+                .await
+                .expect("timeout waiting for slot notification")
+                .unwrap()
+                .unwrap();
         }
 
         self.back_slot_notifications -= 1;
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for slot notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Gets the next state update notification, clearing any *known* updates from the queue first.
@@ -154,7 +163,11 @@ impl DaLayerWithSubscription {
     /// how many state update notifications we should ultimately be receiving.
     pub async fn next_state_update_notification(&mut self) -> StateUpdateNotification {
         let subscription = self.state_update_subscription.as_mut().unwrap();
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for state update notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Produces a slot and waits for the state update and slot notifications.
@@ -363,14 +376,7 @@ pub(crate) enum InvalidGeneration {
     TooOld,
 }
 
-async fn create_test_rollup(
-    minimum_profit_per_tx: u128,
-    max_batch_size: usize,
-    blob_processing_timeout_secs: u64,
-    max_batch_execution_time_millis: u64,
-    finality: u32,
-    block_producing_config: BlockProducingConfig,
-) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
+fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<TestSpec>) {
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let admin = genesis_config.additional_accounts()[0].clone();
@@ -384,11 +390,26 @@ async fn create_test_rollup(
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
 
-    let genesis_params = GenesisParams {
-        runtime: rt_genesis_config.clone(),
-    };
+    (
+        GenesisParams {
+            runtime: rt_genesis_config.clone(),
+        },
+        admin,
+    )
+}
+
+async fn create_test_rollup(
+    minimum_profit_per_tx: u128,
+    max_batch_size: usize,
+    blob_processing_timeout_secs: u64,
+    max_batch_execution_time_millis: u64,
+    finality: u32,
+    block_producing_config: BlockProducingConfig,
+) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
+    let (genesis_params, admin) = create_genesis_params();
 
     let dir = tempdir_inside_codebase_dir();
 
@@ -537,7 +558,7 @@ async fn test_tx_ws_submission() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
+#[ignore = "This test covers pruning behavior, which is currently disabled."]
 async fn test_archival_state_with_pruning() {
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -636,6 +657,7 @@ async fn sequencer_filled_up_block() {
             },
             (),
             PaymasterConfig::default(),
+            (),
             (),
         );
     let genesis_params = GenesisParams {
@@ -1058,6 +1080,7 @@ async fn seq_out_of_gas_for_pre_checks() {
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config.clone(),
@@ -1388,6 +1411,111 @@ async fn test_sequencer_event_stream_filtering() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_sequencer_event_stream_lag_message() {
+    let events_channel_size = 5;
+
+    let (genesis_params, admin) = create_genesis_params();
+    let seq_da_address = genesis_params
+        .runtime
+        .sequencer_registry
+        .sequencer_config
+        .seq_da_address;
+    let dir = tempdir_inside_codebase_dir();
+    let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>>::new(
+        GenesisSource::CustomParams(genesis_params),
+        BlockProducingConfig::Manual,
+        0,
+    )
+    .set_config(|c| {
+        c.storage = StoragePath::Tmp(dir);
+        if let SequencerKindConfig::Preferred(preferred_sequencer_config) = &mut c.sequencer_config
+        {
+            preferred_sequencer_config.events_channel_size = events_channel_size;
+        }
+    })
+    .set_da_config(|c| c.sender_address = seq_da_address)
+    .set_persistent_da();
+
+    // Set up the rollup the usual way.
+    let test_rollup = builder.start().await.unwrap();
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // Set a small TCP receive buffer (SO_RCVBUF) to cause actual TCP backpressure,
+    // which should cause the server to block on send, leading to broadcast channel lag.
+    // Note: The OS enforces a minimum buffer size (check /proc/sys/net/core/rmem_min).
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events_with_socket_options(None, Some(256)) // Request tiny buffer
+        .await
+        .unwrap();
+
+    let events_per_tx = 1000;
+    let num_txs = 25;
+    let emit_pattern: Vec<bool> = (0..events_per_tx).map(|i| i % 2 == 0).collect();
+
+    for i in 0..num_txs {
+        // Send a tx that emits many events to generate lots of data
+        let tx = tx_event_emitter(&admin.private_key, emit_pattern.clone(), i as u64);
+        let _ = test_rollup
+            .api_client()
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(&tx),
+            })
+            .await
+            .unwrap();
+        if i < 2 {
+            for j in 0..events_per_tx {
+                let event = events.next().await.unwrap().unwrap();
+                assert_eq!(event.number, i as u64 * events_per_tx as u64 + j as u64);
+            }
+        }
+    }
+
+    // Now read events until we get a LAGGED error or the stream ends.
+    // We expect a LAGGED error because we're generating more data than the
+    // TCP buffers can hold while the client isn't reading. This causes the
+    // server's WebSocket send to block, which causes the broadcast channel
+    // to overflow.
+    let mut received_lagged = false;
+    let first_remaining_event = 2 * events_per_tx as u64;
+    let mut event_count = first_remaining_event;
+
+    while let Some(result) = events.next().await {
+        match result {
+            Ok(event) => {
+                assert_eq!(
+                    event.number, event_count,
+                    "Event numbers should be sequential"
+                );
+                event_count += 1;
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                if err_str.contains("lagged") {
+                    received_lagged = true;
+                    assert!(
+                        err_str
+                            .contains(format!("\"disconnected_at\":{}", event_count - 1).as_str()),
+                        "Expected \"disconnected_at\": {} in error message: {}",
+                        event_count - 1,
+                        err_str
+                    );
+                    break;
+                } else {
+                    panic!("Unexpected error: {e:?}");
+                }
+            }
+        }
+    }
+
+    assert!(
+        received_lagged,
+        "Expected to receive a LAGGED notification, but received {event_count} events without lagging",
+    );
+}
+
 /// This test checks that the sequencer closes its current batch when the tx **execution** time exceeds its target.
 /// Scenario. Percentage is from max execution of the batch parameter
 /// | tx# |    sleep time | batch# | exec time | wall clock |
@@ -1541,6 +1669,7 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
             },
             (),
             PaymasterConfig::default(),
+            (),
             (),
         );
     let genesis_params = GenesisParams {
@@ -2056,6 +2185,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config.clone(),
@@ -2218,9 +2348,24 @@ async fn test_no_crashes_on_resync_with_transactions() {
 
     let rollup_storage_path = builder.storage_path();
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
-    // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
-        std::fs::remove_dir_all(rollup_storage_path.path().join(path)).unwrap();
+    // doesn't interfere.
+    // NOMT uses different directories than JMT:
+    // - user_nomt_db, kernel_nomt_db (NOMT state)
+    // - state-db, archival-state-db (FlatStateDb)
+    // - accessory, ledger, blob_sender (common to both)
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
+        let full_path = rollup_storage_path.path().join(path);
+        if full_path.exists() {
+            std::fs::remove_dir_all(full_path).unwrap();
+        }
     }
 
     let test_rollup = builder.start().await.unwrap();
@@ -2474,6 +2619,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config.clone(),
@@ -2631,6 +2777,7 @@ async fn heavy_blob_submission_long_delay() {
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config.clone(),
@@ -2748,6 +2895,7 @@ async fn flaky_test_hooks_state_is_visible() {
             },
             (),
             PaymasterConfig::default(),
+            (),
             (),
         );
     let genesis_params = GenesisParams {
@@ -3100,6 +3248,7 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
             (),
             PaymasterConfig::default(),
             (),
+            (),
         );
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config.clone(),
@@ -3385,6 +3534,13 @@ pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_se
         None,
         sov_test_utils::TEST_DEFAULT_MAX_FEE,
     )
+}
+
+fn tx_event_emitter(key: &Ed25519PrivateKey, events: Vec<bool>, generation: u64) -> RawTx {
+    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::EventEmitter(
+        crate::utils::EventEmitterCallMessage::EmitEvents { events },
+    );
+    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
 }
 
 fn tx_delayed_call(key: &Ed25519PrivateKey, generation: u64) -> RawTx {

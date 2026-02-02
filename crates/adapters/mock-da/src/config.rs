@@ -325,6 +325,7 @@ pub fn seed_for_test(small_seed: u8) -> HexHash {
 
 /// The configuration for Mock Da.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct MockDaConfig {
     /// Connection string to the database for storing Da Data.
     ///   - "sqlite://demo_data/da.sqlite?mode=rwc"
