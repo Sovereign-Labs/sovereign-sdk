@@ -170,8 +170,7 @@ async fn test_nonexistent_block_returns_none() -> anyhow::Result<()> {
 
     assert!(
         result.is_none(),
-        "future block {} should return None",
-        future_block
+        "future block {future_block} should return None"
     );
 
     Ok(())
@@ -331,25 +330,21 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
                 // TC25-TC29: Validate full tx object fields
                 assert!(
                     tx.inner.hash() != &BlockHash::ZERO,
-                    "tx {} should have non-zero hash",
-                    i
+                    "tx {i} should have non-zero hash"
                 );
                 assert!(
                     tx.block_number.is_some(),
-                    "tx {} should have blockNumber",
-                    i
+                    "tx {i} should have blockNumber"
                 );
                 assert_eq!(
                     tx.block_number.unwrap(),
                     pending_number,
-                    "tx {} blockNumber should match block",
-                    i
+                    "tx {i} blockNumber should match block"
                 );
                 assert_eq!(
                     tx.transaction_index,
                     Some(i as u64),
-                    "tx {} should have correct transactionIndex",
-                    i
+                    "tx {i} should have correct transactionIndex"
                 );
             }
         }
@@ -600,8 +595,7 @@ async fn test_block_receipts_cross_check() -> anyhow::Result<()> {
         if let Some(receipt_block_hash) = receipt.block_hash {
             assert_eq!(
                 receipt_block_hash, block.header.hash,
-                "receipt {} blockHash should match block hash",
-                i
+                "receipt {i} blockHash should match block hash"
             );
         }
 
@@ -609,8 +603,7 @@ async fn test_block_receipts_cross_check() -> anyhow::Result<()> {
         if let Some(receipt_block_number) = receipt.block_number {
             assert_eq!(
                 receipt_block_number, sealed_head,
-                "receipt {} blockNumber should match",
-                i
+                "receipt {i} blockNumber should match"
             );
         }
 
@@ -618,9 +611,7 @@ async fn test_block_receipts_cross_check() -> anyhow::Result<()> {
         assert_eq!(
             receipt.transaction_index,
             Some(i as u64),
-            "receipt {} transactionIndex should be {}",
-            i,
-            i
+            "receipt {i} transactionIndex should be {i}"
         );
 
         total_gas_used += receipt.gas_used;
@@ -665,8 +656,7 @@ async fn test_timestamp_monotonicity() -> anyhow::Result<()> {
         if n > 0 {
             assert!(
                 block.header.timestamp > 0,
-                "block {} should have non-zero timestamp",
-                n
+                "block {n} should have non-zero timestamp"
             );
         }
 
