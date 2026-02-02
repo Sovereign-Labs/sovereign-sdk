@@ -65,7 +65,8 @@ expression: config
         "node_role": "Leader",
         "leader_election": {
           "leader_timeout_millis": 500,
-          "grace_period_millis": 10000
+          "grace_period_millis": 10000,
+          "heartbeat_interval_millis": 100
         }
       },
       "disable_state_root_consistency_checks": true,
