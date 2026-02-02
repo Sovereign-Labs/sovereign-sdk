@@ -260,3 +260,24 @@ fn base_fee_decreases_if_gas_used_is_half_target() {
         "The base fee per gas should increase by `base_fee_per_gas * 1/(2*config_base_fee_change_denominator)` if the gas used is half the target. The new base fee should not depend on the value of the gas used",
     );
 }
+
+#[test]
+fn base_fee_does_not_drop_below_one_with_override_constants() {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_BASE_FEE_MAX_CHANGE_DENOMINATOR", "1");
+    // optional: keep elasticity=2 (default); explicit override if desired
+    // std::env::set_var("SOV_TEST_CONST_OVERRIDE_ELASTICITY_MULTIPLIER", "2");
+
+    // Choose gas_limit so gas_target = 1 (with elasticity = 2)
+    let gas_limit = 2u64;
+    let gas_used = 0u64;
+    let base_fee = Amount::from(1u128);
+
+    let updated = ChainState::<TestSpec>::compute_base_fee_per_gas_unidimensional(
+        gas_limit,
+        gas_used,
+        base_fee,
+    );
+
+    // Expected: EIP‑1559 min clamp -> 1
+    assert!(updated >= Amount::from(1u128), "Base fee should never drop below 1");
+}
