@@ -768,3 +768,138 @@ async fn eth_get_transaction_count_genesis_block_nonce() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+/// Verify "earliest" is exactly equivalent to block 0.
+/// This catches bugs where "earliest" has different semantics than block 0.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_earliest_equals_block_zero() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Query both ways
+    let nonce_earliest = nonce_at_tag(&client, address, "earliest").await;
+    let nonce_block_0 = nonce_at_number(&client, address, 0).await;
+
+    // They should be identical
+    assert_eq!(
+        nonce_earliest, nonce_block_0,
+        "BUG: 'earliest' != block 0 - earliest should be synonymous with block 0"
+    );
+
+    Ok(())
+}
+
+/// Verify nonce at receipt's block number reflects the transaction.
+/// If tx is included in block N, nonce at block N should be post-tx nonce.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_receipt_block_reflects_tx() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Get current nonce
+    let nonce_before = nonce_at_tag(&client, address, "latest").await;
+
+    // Send transaction and get receipt
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x9876)).await;
+    let receipt = client.wait_for_finalized_receipt(tx_hash).await;
+
+    // Get the block number from receipt
+    let tx_block_number = receipt
+        .block_number
+        .expect("Receipt should have block number");
+
+    // Query nonce at that exact block
+    let nonce_at_tx_block = nonce_at_number(&client, address, tx_block_number).await;
+
+    // The nonce at the tx's block should be AFTER the tx (nonce_before + 1)
+    assert_eq!(
+        nonce_at_tx_block,
+        nonce_before + 1,
+        "BUG: Nonce at tx's block ({tx_block_number}) should be post-tx nonce"
+    );
+
+    // Also verify the block before (if it exists) has pre-tx nonce
+    if tx_block_number > 0 {
+        let nonce_at_prev_block = nonce_at_number(&client, address, tx_block_number - 1).await;
+        assert_eq!(
+            nonce_at_prev_block, nonce_before,
+            "BUG: Nonce at block before tx should be pre-tx nonce"
+        );
+    }
+
+    Ok(())
+}
+
+/// Verify that "latest" without paused batches works correctly.
+/// Send tx, wait for seal, verify latest reflects the sealed state.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_latest_after_seal() -> anyhow::Result<()> {
+    let (rollup, client) = setup_rollup().await;
+    // NOTE: Do NOT pause batches - test normal operation
+
+    let address = client.address();
+    let nonce_before = nonce_at_tag(&client, address, "latest").await;
+
+    // Send and wait for finalization
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0xABCD)).await;
+    client.wait_for_finalized_receipt(tx_hash).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let nonce_after = nonce_at_tag(&client, address, "latest").await;
+
+    assert_eq!(
+        nonce_after,
+        nonce_before + 1,
+        "Latest nonce should increment after sealed transaction"
+    );
+
+    Ok(())
+}
+
+/// Verify behavior at the exact boundary between blocks.
+/// Query at block N where tx was mined, and block N-1.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_count_block_boundary() -> anyhow::Result<()> {
+    let (rollup, client) = setup_rollup().await;
+
+    let address = client.address();
+
+    // Record pre-tx block
+    let pre_tx_block = client.block_number().await;
+    let nonce_pre = nonce_at_number(&client, address, pre_tx_block).await;
+
+    // Send tx and wait for finalization
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0xBCDE)).await;
+    let receipt = client.wait_for_finalized_receipt(tx_hash).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let tx_block = receipt
+        .block_number
+        .expect("Receipt should have block number");
+
+    // If tx is in a new block, verify boundary
+    if tx_block > pre_tx_block {
+        let nonce_at_pre_block = nonce_at_number(&client, address, pre_tx_block).await;
+        let nonce_at_tx_block = nonce_at_number(&client, address, tx_block).await;
+
+        assert_eq!(
+            nonce_at_pre_block, nonce_pre,
+            "Nonce at pre-tx block should be unchanged"
+        );
+        assert_eq!(
+            nonce_at_tx_block,
+            nonce_pre + 1,
+            "Nonce at tx block should be incremented"
+        );
+
+        // KEY: Must differ at boundary
+        assert_ne!(
+            nonce_at_pre_block, nonce_at_tx_block,
+            "BUG: Nonce same at block boundary"
+        );
+    }
+
+    Ok(())
+}
