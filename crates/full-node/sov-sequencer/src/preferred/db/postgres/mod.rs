@@ -92,7 +92,7 @@ impl PostgresBackend {
         Ok(backend)
     }
 
-    /// // Connects to Postgres db.
+    /// Connects to Postgres db.
     pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
         let node_address = node_address(bind_addr)?;
