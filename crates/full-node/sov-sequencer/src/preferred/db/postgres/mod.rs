@@ -66,33 +66,7 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    /// Connects to Postgres and competes for leadership.
-    ///
-    /// Returns the backend and `Some(leader)` if this node became leader,
-    /// or `None` if another node is the active leader.
-    /// The node is always registered in the cluster regardless of leadership outcome.
-    pub async fn connect_as_maybe_leader(
-        config: &PostgresConfig,
-        bind_addr: SocketAddr,
-    ) -> Result<(Self, Option<SequencerLeader>)> {
-        let backend = Self::connect(config, bind_addr).await?;
-        let maybe_leader = backend.heartbeat(Some(config.leader_election)).await?;
-        Ok((backend, maybe_leader))
-    }
-
-    /// Connects to Postgres as a replica without competing for leadership.                                                                                                                                                                                  
-    ///                                                                                                                                                                                                                                                      
-    /// Registers the node in the cluster but never attempts to become leader
-    pub async fn connect_as_replica(
-        config: &PostgresConfig,
-        bind_addr: SocketAddr,
-    ) -> Result<Self> {
-        let backend = Self::connect(config, bind_addr).await?;
-        let _maybe_leader = backend.heartbeat(None).await?;
-        Ok(backend)
-    }
-
-    /// // Connects to Postgres db.
+    /// Connects to Postgres db.
     pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
         let node_address = node_address(bind_addr)?;

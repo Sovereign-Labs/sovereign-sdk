@@ -395,9 +395,13 @@ mod tests {
         .unwrap();
 
         let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
-        let (db, _) = PostgresBackend::connect_as_maybe_leader(&postgres_config, addr)
+        let db = PostgresBackend::connect(&postgres_config, addr)
             .await
             .unwrap();
+
+        let _ = backend
+            .heartbeat(Some(postgres_config.leader_election))
+            .await?;
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
         let (mut sync_task, start_replica_task_notifier) =
