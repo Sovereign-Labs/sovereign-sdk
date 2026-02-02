@@ -8,8 +8,11 @@ pub trait SequencingDataHandler<S: Spec> {
     type SequencingData: BorshDeserialize;
 
     /// Decode sequencing metadata from raw bytes.
-    fn decode_sequencing_data(&self, bytes: &[u8]) -> Option<Self::SequencingData> {
-        Self::SequencingData::try_from_slice(bytes).ok()
+    fn decode_sequencing_data(
+        &self,
+        bytes: &[u8],
+    ) -> Result<Self::SequencingData, borsh::io::Error> {
+        Self::SequencingData::try_from_slice(bytes)
     }
 
     /// Handle decoded sequencing metadata.

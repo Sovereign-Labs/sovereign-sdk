@@ -44,6 +44,9 @@ use sov_state::namespaces::Kernel;
 use sov_state::{Storage, User};
 use tracing::trace;
 
+/// Nanoseconds per millisecond for time conversions.
+const NANOS_PER_MILLI: u128 = 1_000_000;
+
 #[derive(Clone, Debug)]
 /// A handy struct that groups the post state root of a slot with the information about the slot.
 pub struct StateTransition<S: Spec> {
@@ -334,7 +337,7 @@ impl<S: Spec> ChainState<S> {
         state: &mut Reader,
     ) -> Result<Time, E> {
         if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
-            let millis = oracle_time_nanos / 1_000_000;
+            let millis = oracle_time_nanos / NANOS_PER_MILLI;
             if millis <= i64::MAX as u128 {
                 return Ok(Time::from_millis(millis as i64));
             }
@@ -359,7 +362,9 @@ impl<S: Spec> ChainState<S> {
             return Ok(oracle_time_nanos);
         }
         let time = self.get_time(state)?;
-        Ok(time.as_millis() as u128 * 1_000_000)
+        Ok((time.as_millis() as u128)
+            .checked_mul(NANOS_PER_MILLI)
+            .expect("overflow impossible: i64 * 10^6 fits in u128"))
     }
 
     /// Updates the oracle time using sequencer-provided sequencing metadata.
@@ -371,7 +376,7 @@ impl<S: Spec> ChainState<S> {
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
         let nanos = timestamp.as_nanos();
-        let millis = nanos / 1_000_000;
+        let millis = nanos / NANOS_PER_MILLI;
         if millis > i64::MAX as u128 {
             tracing::warn!(
                 millis = %millis,

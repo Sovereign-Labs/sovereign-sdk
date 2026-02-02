@@ -127,10 +127,9 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 ) -> Result<(), Error> {
     if let Some(sequencing_data) = ctx.sequencing_data().as_ref() {
         let mut handler = runtime.sequencing_data_handler();
-        if let Some(decoded) = handler.decode_sequencing_data(sequencing_data) {
-            handler.handle_sequencing_data(decoded, ctx, state)?;
-        } else {
-            warn!("Invalid sequencing metadata; ignoring");
+        match handler.decode_sequencing_data(sequencing_data) {
+            Ok(decoded) => handler.handle_sequencing_data(decoded, ctx, state)?,
+            Err(e) => warn!("Invalid sequencing metadata; ignoring: {e}"),
         }
     }
 
