@@ -1,8 +1,11 @@
 mod db_operations;
 mod leader_election;
 
+use std::net::SocketAddr;
+
 use super::*;
 use sov_full_node_configs::sequencer::ConfiguredNodeRole;
+
 use sov_test_utils::postgres::{
     config_from_postgres_container, create_postgres_container, ContainerAsync, CreatePostgresError,
     Postgres,
@@ -22,6 +25,7 @@ pub(super) struct DB {
     pub(super) backend: PostgresBackend,
     pub(super) node_id: String,
     leader_timeout: Duration,
+    node_address: String,
 }
 
 impl AsRef<PostgresBackend> for DB {
@@ -46,12 +50,14 @@ impl DB {
         let postgres_config = config_from_postgres_container(postgres, node_id.clone(), node_role)
             .await
             .unwrap();
-        let backend =
-            PostgresBackend::connect_internal(&postgres_config, format!("{node_id}_address"))
-                .await
-                .unwrap();
+        let bind_addr = SocketAddr::from(([127, 0, 0, 1], 0));
+        let node_address = node_address(bind_addr).unwrap();
+        let backend = PostgresBackend::connect(&postgres_config, bind_addr)
+            .await
+            .unwrap();
 
         Self {
+            node_address,
             backend,
             node_id,
             leader_timeout,
@@ -64,7 +70,7 @@ impl DB {
 
     pub(super) async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
         self.backend
-            .try_update_leader_and_register_node(self.leader_timeout)
+            .heartbeat(Some(self.leader_timeout))
             .await
             .unwrap()
     }

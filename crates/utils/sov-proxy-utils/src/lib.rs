@@ -11,6 +11,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use sqlx::postgres::{PgListener, PgPool};
 use sqlx::FromRow;
+pub use time::OffsetDateTime;
 use tokio::sync::watch;
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
@@ -22,11 +23,18 @@ pub struct NodeInfo {
     pub node_id: String,
     /// The address (ip:port) where the node can be reached.
     pub address: SocketAddr,
+    /// The last time the node updated its heartbeat.
+    pub last_updated: OffsetDateTime,
 }
 
 impl NodeInfo {
     fn str(&self, role: &str) -> String {
-        format!("{role}={}", self.address)
+        let ts = self
+            .last_updated
+            .format(&time::format_description::well_known::Rfc3339)
+            .unwrap_or_else(|e| panic!("Failed to format timestamp: {e}"));
+
+        format!("{role}={},{ts},{}", self.address, self.node_id)
     }
 }
 
@@ -40,8 +48,18 @@ pub struct ClusterInfo {
 }
 
 impl ClusterInfo {
+    /// Returns true if a leader with the given node_id exists.
+    pub fn has_leader(&self, node_id: &str) -> bool {
+        self.leader.as_ref().is_some_and(|l| l.node_id == node_id)
+    }
+
+    /// Returns true if a follower with the given node_id exists.
+    pub fn has_follower(&self, node_id: &str) -> bool {
+        self.followers.iter().any(|f| f.node_id == node_id)
+    }
+
     /// Formats the cluster info as a string suitable for writing to a file.
-    /// Each node is written on a separate line in the format `role=address`.
+    /// Each node is written on a separate line in the format `role=address,timestamp,node_id`.
     pub fn to_file_content(&self) -> String {
         let mut lines = Vec::new();
 
@@ -54,6 +72,40 @@ impl ClusterInfo {
         }
 
         lines.join("\n")
+    }
+
+    /// Parses cluster info from file content.
+    /// Each line should be in the format `role=address,timestamp,node_id`.
+    pub fn parse(content: &str) -> Result<Self> {
+        let mut leader = None;
+        let mut followers = Vec::new();
+
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix("leader=") {
+                leader = Some(NodeInfo::parse(rest)?);
+            } else if let Some(rest) = line.strip_prefix("follower=") {
+                followers.push(NodeInfo::parse(rest)?);
+            }
+        }
+
+        Ok(ClusterInfo { leader, followers })
+    }
+}
+
+impl NodeInfo {
+    /// Parses a node info from a string in the format `address,timestamp,node_id`.
+    pub fn parse(s: &str) -> Result<Self> {
+        let mut parts = s.split(',');
+        let addr = parts.next().context("Missing address")?;
+        let ts = parts.next().context("Missing timestamp")?;
+        let node_id = parts.next().context("Missing node_id")?;
+
+        Ok(NodeInfo {
+            node_id: node_id.to_string(),
+            address: addr.parse().context("Invalid address")?,
+            last_updated: OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339)
+                .context("Invalid timestamp")?,
+        })
     }
 }
 
@@ -99,19 +151,23 @@ impl NodeDiscovery {
 
     fn cluster(
         leader_id: Option<String>,
-        all_nodes: Vec<(String, String)>,
+        all_nodes: Vec<(String, String, OffsetDateTime)>,
     ) -> anyhow::Result<ClusterInfo> {
         let cap = all_nodes.capacity();
         let mut leader = None;
         let mut followers = Vec::with_capacity(cap);
-        let mut seen_node_ids = HashSet::with_capacity(cap);
-        for (node_id, address) in all_nodes {
+        let mut seen_node_ids: HashSet<String> = HashSet::with_capacity(cap);
+        for (node_id, address, last_updated) in all_nodes {
             if !seen_node_ids.insert(node_id.clone()) {
                 anyhow::bail!("Duplicate node id found in Nodes table: {node_id}");
             }
 
             let address: SocketAddr = address.parse()?;
-            let node = NodeInfo { node_id, address };
+            let node = NodeInfo {
+                node_id,
+                address,
+                last_updated,
+            };
 
             if Some(&node.node_id) == leader_id.as_ref() {
                 leader = Some(node);
@@ -209,7 +265,9 @@ impl NodeDiscovery {
         Ok(())
     }
 
-    async fn get_cluster_info_from_db(&self) -> Result<(Option<String>, Vec<(String, String)>)> {
+    async fn get_cluster_info_from_db(
+        &self,
+    ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime)>)> {
         let mut tx = self.pool.begin().await?;
 
         // Fetch leader within transaction
@@ -219,8 +277,8 @@ impl NodeDiscovery {
                 .await?;
 
         // Fetch all nodes within same transaction
-        let all_nodes: Vec<(String, String)> =
-            sqlx::query_as("SELECT node_id, address FROM nodes ORDER BY node_id")
+        let all_nodes: Vec<(String, String, OffsetDateTime)> =
+            sqlx::query_as("SELECT node_id, address, last_updated FROM nodes ORDER BY node_id")
                 .fetch_all(&mut *tx)
                 .await?;
 
@@ -242,52 +300,71 @@ async fn write_to_file(path: &Path, content: String) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
+    fn test_timestamp() -> OffsetDateTime {
+        OffsetDateTime::UNIX_EPOCH
+    }
+
+    const TEST_TIME_STAMP: &str = "1970-01-01T00:00:00Z";
+
     #[test]
     fn cluster_with_leader_and_followers() {
+        let ts = test_timestamp();
         let info = NodeDiscovery::cluster(
             Some("node1".to_string()),
             vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string()),
-                ("node2".to_string(), "127.0.0.1:8001".to_string()),
-                ("node3".to_string(), "127.0.0.1:8002".to_string()),
+                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
+                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
+                ("node3".to_string(), "127.0.0.1:8002".to_string(), ts),
             ],
         )
         .unwrap();
 
         assert_eq!(
-            &info.to_file_content(),
-            "leader=127.0.0.1:8000\nfollower=127.0.0.1:8001\nfollower=127.0.0.1:8002",
+            info.to_file_content(),
+            format!(
+                "leader=127.0.0.1:8000,{TEST_TIME_STAMP},node1\n\
+                 follower=127.0.0.1:8001,{TEST_TIME_STAMP},node2\n\
+                 follower=127.0.0.1:8002,{TEST_TIME_STAMP},node3"
+            ),
         );
     }
 
     #[test]
     fn cluster_with_only_leader_adds_leader_to_followers() {
+        let ts = test_timestamp();
         let info = NodeDiscovery::cluster(
             Some("node1".to_string()),
-            vec![("node1".to_string(), "127.0.0.1:8000".to_string())],
+            vec![("node1".to_string(), "127.0.0.1:8000".to_string(), ts)],
         )
         .unwrap();
 
         assert_eq!(
-            &info.to_file_content(),
-            "leader=127.0.0.1:8000\nfollower=127.0.0.1:8000",
+            info.to_file_content(),
+            format!(
+                "leader=127.0.0.1:8000,{TEST_TIME_STAMP},node1\n\
+                 follower=127.0.0.1:8000,{TEST_TIME_STAMP},node1"
+            ),
         );
     }
 
     #[test]
     fn cluster_with_no_leader() {
+        let ts = test_timestamp();
         let info = NodeDiscovery::cluster(
             None,
             vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string()),
-                ("node2".to_string(), "127.0.0.1:8001".to_string()),
+                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
+                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
             ],
         )
         .unwrap();
 
         assert_eq!(
-            &info.to_file_content(),
-            "follower=127.0.0.1:8000\nfollower=127.0.0.1:8001",
+            info.to_file_content(),
+            format!(
+                "follower=127.0.0.1:8000,{TEST_TIME_STAMP},node1\n\
+                 follower=127.0.0.1:8001,{TEST_TIME_STAMP},node2"
+            ),
         );
     }
 
@@ -299,11 +376,12 @@ mod tests {
 
     #[test]
     fn cluster_errors_on_duplicate_node_id() {
+        let ts = test_timestamp();
         let result = NodeDiscovery::cluster(
             None,
             vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string()),
-                ("node1".to_string(), "127.0.0.1:8001".to_string()),
+                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
+                ("node1".to_string(), "127.0.0.1:8001".to_string(), ts),
             ],
         );
 
@@ -315,11 +393,12 @@ mod tests {
 
     #[test]
     fn cluster_errors_when_leader_not_in_nodes() {
+        let ts = test_timestamp();
         let result = NodeDiscovery::cluster(
             Some("missing_leader".to_string()),
             vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string()),
-                ("node2".to_string(), "127.0.0.1:8001".to_string()),
+                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
+                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
             ],
         );
 
