@@ -129,7 +129,7 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
         let mut handler = runtime.sequencing_data_handler();
         match handler.decode_sequencing_data(sequencing_data) {
             Ok(decoded) => handler.handle_sequencing_data(decoded, ctx, state)?,
-            Err(e) => warn!("Invalid sequencing metadata; ignoring: {e}"),
+            Err(error) => warn!(%error, "Invalid sequencing metadata; ignoring"),
         }
     }
 
