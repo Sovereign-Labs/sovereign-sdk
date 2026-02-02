@@ -1,5 +1,6 @@
 use super::*;
 use crate::preferred::db::heartbeat_task::HeartBeatTask;
+use crate::preferred::db::heartbeat_task::HEARTBEAT_INTERVAL;
 use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
@@ -241,9 +242,13 @@ where
 
         // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            let heartbeat_task =
-                HeartBeatTask::new(postgres_config.clone(), shutdown_sender.clone(), bind_addr)
-                    .await?;
+            let heartbeat_task = HeartBeatTask::new(
+                postgres_config.clone(),
+                shutdown_sender.clone(),
+                bind_addr,
+                HEARTBEAT_INTERVAL,
+            )
+            .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
             handles.push(heartbeat_handle);
         }
