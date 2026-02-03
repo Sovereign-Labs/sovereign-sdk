@@ -774,6 +774,62 @@ where
         Ok(())
     }
 
+    /// Waits for the rollup to crash and verifies the panic message contains the expected substring.
+    ///
+    /// This provides 100% guarantee that the crash was due to the expected condition, not some
+    /// unrelated bug. Useful in crash resilience tests where we intentionally trigger panics.
+    ///
+    /// # Arguments
+    /// * `t` - Timeout duration
+    /// * `expected_panic_substring` - String that must appear in the panic message
+    ///   (e.g., `CrashLocation` variant name)
+    ///
+    /// # Errors
+    /// - If the task doesn't crash within the timeout
+    /// - If the task completes successfully instead of panicking
+    /// - If the panic message doesn't contain the expected substring
+    pub async fn wait_for_rollup_to_crash_with_expected_panic(
+        self,
+        t: Duration,
+        expected_panic_substring: &str,
+    ) -> anyhow::Result<()> {
+        let result = timeout(t, self.rollup_task)
+            .await
+            .expect("Failed to join rollup task before timeout.");
+
+        match result {
+            Err(join_error) if join_error.is_panic() => {
+                let panic_payload = join_error.into_panic();
+                let panic_message = if let Some(msg) = panic_payload.downcast_ref::<&str>() {
+                    msg.to_string()
+                } else if let Some(msg) = panic_payload.downcast_ref::<String>() {
+                    msg.clone()
+                } else {
+                    anyhow::bail!("Panic payload is not a string type");
+                };
+
+                anyhow::ensure!(
+                    panic_message.contains(expected_panic_substring),
+                    "Panic message doesn't match expected crash.\n\
+                     Expected to contain: {}\n\
+                     Actual panic message: {}",
+                    expected_panic_substring,
+                    panic_message
+                );
+                Ok(())
+            }
+            Err(join_error) => {
+                anyhow::bail!("Task did not panic, but failed with: {}", join_error);
+            }
+            Ok(Ok(())) => {
+                anyhow::bail!("Task completed successfully, expected crash");
+            }
+            Ok(Err(e)) => {
+                anyhow::bail!("Task returned error instead of panicking: {}", e);
+            }
+        }
+    }
+
     /// Shuts down the rollup and waits for all background tasks to finish.
     pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R>> {
         if let Err(error) = self.shutdown_sender.send(()) {
