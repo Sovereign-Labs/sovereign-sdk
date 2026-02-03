@@ -776,7 +776,7 @@ where
 
     /// Waits for the rollup to crash and verifies the panic message contains the expected substring.
     ///
-    /// This provides 100% guarantee that the crash was due to the expected condition, not some
+    /// This provides stronger guarantee that the crash was due to the expected condition, not some
     /// unrelated bug. Useful in crash resilience tests where we intentionally trigger panics.
     ///
     /// # Arguments
@@ -811,21 +811,19 @@ where
                 anyhow::ensure!(
                     panic_message.contains(expected_panic_substring),
                     "Panic message doesn't match expected crash.\n\
-                     Expected to contain: {}\n\
-                     Actual panic message: {}",
-                    expected_panic_substring,
-                    panic_message
+                     Expected to contain: {expected_panic_substring,}\n\
+                     Actual panic message: {panic_message}",
                 );
                 Ok(())
             }
             Err(join_error) => {
-                anyhow::bail!("Task did not panic, but failed with: {}", join_error);
+                anyhow::bail!("Task did not panic, but failed with: {join_error}");
             }
             Ok(Ok(())) => {
                 anyhow::bail!("Task completed successfully, expected crash");
             }
             Ok(Err(e)) => {
-                anyhow::bail!("Task returned error instead of panicking: {}", e);
+                anyhow::bail!("Task returned error instead of panicking: {e}");
             }
         }
     }
