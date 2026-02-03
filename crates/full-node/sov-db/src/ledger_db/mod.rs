@@ -701,35 +701,79 @@ impl LedgerDb {
             }
         }
 
-        // Delete all batches in this slot
-        for current_batch_number in head_slot.batches.start.0..head_slot.batches.end.0 {
-            let current_batch_number = BatchNumber(current_batch_number);
+        // Delete all batches, transactions, and events in this slot.
+        // We use range deletes for number-indexed tables (TxByNumber, EventByNumber)
+        // and individual deletes for hash-indexed tables (TxByHash, EventByKey, BatchByHash).
+        if head_slot.batches.start < head_slot.batches.end {
+            let first_batch_num = head_slot.batches.start;
+            let last_batch_num = BatchNumber(head_slot.batches.end.0.saturating_sub(1));
 
-            if let Some(batch) = db.get::<BatchByNumber>(&current_batch_number)? {
-                // Delete all transactions in this batch
-                for current_tx_number in batch.txs.start.0..batch.txs.end.0 {
-                    let current_tx_number = TxNumber(current_tx_number);
+            // Get first and last batches to determine the overall tx range
+            if let (Some(first_batch), Some(last_batch)) = (
+                db.get::<BatchByNumber>(&first_batch_num)?,
+                db.get::<BatchByNumber>(&last_batch_num)?,
+            ) {
+                let tx_range_start = first_batch.txs.start;
+                let tx_range_end = last_batch.txs.end;
 
-                    if let Some(tx) = db.get::<TxByNumber>(&current_tx_number)? {
-                        // Delete all events in this transaction
-                        for current_event_number in tx.events.start.0..tx.events.end.0 {
-                            let current_event_number = EventNumber(current_event_number);
+                // Process transactions and events if there are any
+                if tx_range_start < tx_range_end {
+                    // Get first and last txs to determine overall event range
+                    if let (Some(first_tx), Some(last_tx)) = (
+                        db.get::<TxByNumber>(&tx_range_start)?,
+                        db.get::<TxByNumber>(&TxNumber(tx_range_end.0.saturating_sub(1)))?,
+                    ) {
+                        let event_range_start = first_tx.events.start;
+                        let event_range_end = last_tx.events.end;
 
-                            if let Some(event) = db.get::<EventByNumber>(&current_event_number)? {
-                                Self::delete_event(
-                                    &mut schema_batch,
-                                    current_tx_number,
-                                    &event,
-                                    current_event_number,
-                                )?;
+                        // Delete hash-indexed entries by iterating through txs
+                        // (we need tx_number to delete EventByKey, and tx.hash to delete TxByHash)
+                        for current_tx_number in tx_range_start.0..tx_range_end.0 {
+                            let current_tx_number = TxNumber(current_tx_number);
+
+                            if let Some(tx) = db.get::<TxByNumber>(&current_tx_number)? {
+                                // Delete EventByKey entries for this tx's events
+                                for current_event_number in tx.events.start.0..tx.events.end.0 {
+                                    let current_event_number = EventNumber(current_event_number);
+                                    if let Some(event) =
+                                        db.get::<EventByNumber>(&current_event_number)?
+                                    {
+                                        schema_batch.delete::<EventByKey>(&(
+                                            event.key().clone(),
+                                            current_tx_number,
+                                            current_event_number,
+                                        ))?;
+                                    }
+                                }
+                                // Delete TxByHash entry
+                                schema_batch.delete::<TxByHash>(&(tx.hash, current_tx_number))?;
                             }
                         }
-                        Self::delete_tx(&mut schema_batch, &tx, current_tx_number)?;
-                    }
-                }
 
-                Self::delete_batch(&mut schema_batch, &batch, &current_batch_number)?;
+                        // Range delete EventByNumber (reduces tombstones)
+                        if event_range_start < event_range_end {
+                            schema_batch.delete_range::<EventByNumber>(
+                                &event_range_start,
+                                &event_range_end,
+                            )?;
+                        }
+                    }
+
+                    // Range delete TxByNumber (reduces tombstones)
+                    schema_batch.delete_range::<TxByNumber>(&tx_range_start, &tx_range_end)?;
+                }
             }
+
+            // Delete BatchByHash individually (hash-indexed)
+            for current_batch_number in head_slot.batches.start.0..head_slot.batches.end.0 {
+                if let Some(batch) = db.get::<BatchByNumber>(&BatchNumber(current_batch_number))? {
+                    schema_batch.delete::<BatchByHash>(&batch.hash)?;
+                }
+            }
+
+            // Range delete BatchByNumber (reduces tombstones)
+            schema_batch
+                .delete_range::<BatchByNumber>(&head_slot.batches.start, &head_slot.batches.end)?;
         }
 
         Self::delete_slot(&mut schema_batch, &head_slot, &head_slot_number)?;
@@ -757,37 +801,6 @@ impl LedgerDb {
         }
 
         Ok(schema_batch)
-    }
-
-    fn delete_event(
-        schema_batch: &mut SchemaBatch,
-        tx_number: TxNumber,
-        event: &StoredEvent,
-        event_number: EventNumber,
-    ) -> anyhow::Result<()> {
-        schema_batch.delete::<EventByNumber>(&event_number)?;
-        schema_batch.delete::<EventByKey>(&(event.key().clone(), tx_number, event_number))?;
-        Ok(())
-    }
-
-    fn delete_tx(
-        schema_batch: &mut SchemaBatch,
-        tx: &StoredTransaction,
-        tx_number: TxNumber,
-    ) -> anyhow::Result<()> {
-        schema_batch.delete::<TxByNumber>(&tx_number)?;
-        schema_batch.delete::<TxByHash>(&(tx.hash, tx_number))?;
-        Ok(())
-    }
-
-    fn delete_batch(
-        schema_batch: &mut SchemaBatch,
-        batch: &StoredBatch,
-        batch_number: &BatchNumber,
-    ) -> anyhow::Result<()> {
-        schema_batch.delete::<BatchByNumber>(batch_number)?;
-        schema_batch.delete::<BatchByHash>(&batch.hash)?;
-        Ok(())
     }
 
     fn delete_discarded_blob(
