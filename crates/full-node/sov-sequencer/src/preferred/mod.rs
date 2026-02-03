@@ -47,7 +47,6 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
-use sov_modules_api::HDTimestamp;
 use sov_modules_api::{
     RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber,
     *,
@@ -385,7 +384,6 @@ where
             return Err(shut_down());
         }
 
-        let mut baked_tx = baked_tx;
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
@@ -420,9 +418,6 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
-
-        baked_tx.set_sequencing_metadata(&HDTimestamp::now());
-        let tx_len = baked_tx.len();
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (
@@ -515,6 +510,7 @@ where
                     DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
+                        tx_len,
                     } => return Err(cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                     DoNewTxError::ExecutorError(err) => {
                         return Err(RollupBlockExecutorError::into_http_error(err));
