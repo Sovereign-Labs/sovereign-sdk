@@ -344,6 +344,33 @@
         }
       }
     },
+    "LeaderElectionConfig": {
+      "description": "Configuration for leader election timing.",
+      "type": "object",
+      "properties": {
+        "grace_period_millis": {
+          "description": "Minimum time in milliseconds after leader acquisition before another node can take over. Prevents rapid leader flapping.",
+          "default": 10000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "heartbeat_interval_millis": {
+          "description": "Interval in milliseconds between heartbeat updates.",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "leader_timeout_millis": {
+          "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
+          "default": 500,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "Limits": {
       "type": "object",
       "required": [
@@ -484,6 +511,19 @@
         "postgres_connection_string"
       ],
       "properties": {
+        "leader_election": {
+          "description": "Configuration for leader election timing.",
+          "default": {
+            "grace_period_millis": 10000,
+            "heartbeat_interval_millis": 100,
+            "leader_timeout_millis": 500
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LeaderElectionConfig"
+            }
+          ]
+        },
         "node_id": {
           "description": "Id of the node.",
           "type": "string"
@@ -865,6 +905,15 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "kernel_page_cache_upper_levels": {
+          "description": "Page cache upper levels for kernel state. More details at [`Options::page_cache_upper_levels`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "kernel_preallocate_ht": {
           "description": "Sets whether to preallocate the hashtable file for kernel db. More details at [`Options::preallocate_ht`]",
           "type": [
@@ -941,6 +990,15 @@
         },
         "user_page_cache_size": {
           "description": "Page cache size for user state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_page_cache_upper_levels": {
+          "description": "Page cache upper levels for user state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"

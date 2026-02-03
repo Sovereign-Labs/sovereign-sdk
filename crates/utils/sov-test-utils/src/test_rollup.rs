@@ -464,6 +464,7 @@ where
             postgres_connection_string: p.0.connection_string.clone(),
             node_id: p.1.clone(),
             node_role: p.2,
+            leader_election: Default::default(),
         });
 
         Self {
