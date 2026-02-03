@@ -362,7 +362,11 @@ impl<S: Spec> ChainState<S> {
             return Ok(oracle_time_nanos);
         }
         let time = self.get_time(state)?;
-        Ok((time.as_millis() as u128)
+        let millis_i64 = time.as_millis();
+        let millis = u128::try_from(millis_i64).unwrap_or_else(|_| {
+            panic!("DA layer time must be non-negative, got {millis_i64}");
+        });
+        Ok(millis
             .checked_mul(NANOS_PER_MILLI)
             .expect("overflow impossible: i64 * 10^6 fits in u128"))
     }
