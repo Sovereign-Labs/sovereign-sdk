@@ -725,6 +725,12 @@ impl LedgerDb {
                     ) {
                         let event_range_start = first_tx.events.start;
                         let event_range_end = last_tx.events.end;
+                        debug_assert!(
+                            event_range_start <= event_range_end,
+                            "Event range inverted: start={:?} end={:?}",
+                            event_range_start,
+                            event_range_end
+                        );
 
                         // Delete hash-indexed entries by iterating through txs
                         // (we need tx_number to delete EventByKey, and tx.hash to delete TxByHash)
@@ -750,7 +756,8 @@ impl LedgerDb {
                             }
                         }
 
-                        // Range delete EventByNumber (reduces tombstones)
+                        // Range delete EventByNumber (reduces tombstones).
+                        // If there are no events in this slot, the range is empty and we skip it.
                         if event_range_start < event_range_end {
                             schema_batch.delete_range::<EventByNumber>(
                                 &event_range_start,
