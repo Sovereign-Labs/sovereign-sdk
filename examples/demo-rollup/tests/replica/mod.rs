@@ -196,10 +196,18 @@ struct NodeDiscoveryTestSetup {
     cluster_info_subscription: ClusterInfoSubscription,
 }
 
+const MAX_AGE: Duration = Duration::from_secs(10);
+
 impl NodeDiscoveryTestSetup {
-    /// Creates a new test setup with two DbElected nodes.
+    /// Creates a new test setup with default max_age.
     /// Returns None if Docker is not supported.
     async fn new() -> Option<Self> {
+        Self::new_with_max_age(MAX_AGE).await
+    }
+
+    /// Creates a new test setup with custom max_age for NodeDiscovery.
+    /// Returns None if Docker is not supported.
+    async fn new_with_max_age(max_age: Duration) -> Option<Self> {
         let postgres = match PostgresData::create_postgres().await {
             Ok(pg) => pg,
             Err(CreatePostgresError::DockerNotSupported) => return None,
@@ -211,9 +219,10 @@ impl NodeDiscoveryTestSetup {
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
         // Create NodeDiscovery to query the nodes table
-        let (node_discovery, file_watcher) = NodeDiscovery::new(postgres.connection_string())
-            .await
-            .expect("Failed to create NodeDiscovery");
+        let (node_discovery, file_watcher) =
+            NodeDiscovery::new_with_max_age(postgres.connection_string(), max_age)
+                .await
+                .expect("Failed to create NodeDiscovery");
 
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("cluster_info.txt");
@@ -237,8 +246,6 @@ impl NodeDiscoveryTestSetup {
             postgres,
             da_shutdown,
             da_addr,
-            //node_discovery,
-            //_file_watcher,
             cluster_info_subscription,
         })
     }
