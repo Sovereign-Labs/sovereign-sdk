@@ -253,9 +253,6 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     #[serde(default = "default_num_cache_warmup_workers")]
     /// The number of workers that warm up the main executor cache.
     pub num_cache_warmup_workers: usize,
-    /// Configuration for the timing oracle.
-    #[serde(default)]
-    pub timing_oracle: Option<TimingOracleConfig>,
     /// Configuration for rate-limiting the sequencer.
     #[serde(default = "default_rate_limiter::<Address>")]
     pub rate_limiter: Option<SovRateLimiterConfig<Address>>,
@@ -288,7 +285,6 @@ impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
             maximum_future_nonce_delta: default_maximum_future_nonce_delta(),
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
-            timing_oracle: None,
             rate_limiter: None,
         }
     }
@@ -335,19 +331,6 @@ pub struct StdSequencerConfig {
     /// Maximum size of a batch. The sequencer will not build batches larger
     /// than this size.
     pub max_batch_size_bytes: Option<NonZero<usize>>,
-}
-
-// Configuration for the timing oracle.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
-pub struct TimingOracleConfig {
-    /// The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.
-    pub priority_fee_percentage: u8,
-    /// The maximum fee that the sequencer will pay for the timestamp oracle update tx.
-    pub max_fee: u64,
-    /// The interval in milliseconds at which the timestamp oracle update tx is submitted.
-    pub interval_millis: u64,
-    /// The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.
-    pub private_key_hex: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]

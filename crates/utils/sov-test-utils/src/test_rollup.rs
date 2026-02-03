@@ -45,9 +45,7 @@ use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_rollup_interface::StateUpdateInfo;
-use sov_sequencer::preferred::{
-    ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, TimingOracleConfig,
-};
+use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
 use sov_sequencer::{
@@ -171,23 +169,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             self.config.sequencer_config =
                 SequencerKindConfig::Preferred(PreferredSequencerConfig {
                     minimum_profit_per_tx,
-                    ..PreferredSequencerConfig::default()
-                });
-        }
-        self
-    }
-
-    /// See [`PreferredSequencerConfig::timing_oracle`].
-    pub fn with_preferred_seq_oracle_config(
-        mut self,
-        timing_oracle_config: Option<TimingOracleConfig>,
-    ) -> Self {
-        if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
-            config.timing_oracle = timing_oracle_config;
-        } else {
-            self.config.sequencer_config =
-                SequencerKindConfig::Preferred(PreferredSequencerConfig {
-                    timing_oracle: timing_oracle_config,
                     ..PreferredSequencerConfig::default()
                 });
         }

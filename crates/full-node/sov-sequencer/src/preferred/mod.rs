@@ -15,7 +15,6 @@ mod rpc_errors;
 mod side_effects;
 mod state_root_compute;
 mod sync_sequencer_state;
-mod timestamp;
 mod transaction_subscriptions;
 mod update_state;
 
@@ -24,7 +23,6 @@ use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
-use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
@@ -42,7 +40,6 @@ use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
     ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
-    TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -422,8 +419,6 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let tx_len = baked_tx.data.len();
-
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (
                 self.synchronized_state_updator
@@ -515,6 +510,7 @@ where
                     DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
+                        tx_len,
                     } => return Err(cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                     DoNewTxError::ExecutorError(err) => {
                         return Err(RollupBlockExecutorError::into_http_error(err));

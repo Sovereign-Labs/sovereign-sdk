@@ -55,7 +55,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let new_timestamp = self
             .chain_state_module
-            .get_oracle_time_with_fallback(state)
+            .get_oracle_time(state)
             .unwrap_infallible()
             .secs() as u64;
 
