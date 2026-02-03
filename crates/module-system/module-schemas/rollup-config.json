@@ -917,6 +917,15 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "kernel_page_cache_upper_levels": {
+          "description": "Page cache upper levels for kernel state. More details at [`Options::page_cache_upper_levels`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "kernel_preallocate_ht": {
           "description": "Sets whether to preallocate the hashtable file for kernel db. More details at [`Options::preallocate_ht`]",
           "type": [
@@ -993,6 +1002,15 @@
         },
         "user_page_cache_size": {
           "description": "Page cache size for user state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_page_cache_upper_levels": {
+          "description": "Page cache upper levels for user state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
