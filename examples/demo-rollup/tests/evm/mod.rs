@@ -9,7 +9,7 @@ mod evm_logs;
 mod evm_max_fee_validation;
 mod evm_no_gas_limit;
 mod evm_oog_error;
-mod evm_oracle;
+mod evm_timestamp;
 mod evm_publish_reverted_txs;
 mod evm_ram_pinning;
 mod evm_rate_limit;

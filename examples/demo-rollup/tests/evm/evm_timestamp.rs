@@ -28,7 +28,7 @@ async fn setup_test_rollup() -> (
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn evm_test_oracle_timestamp() {
+async fn evm_test_logs_timestamp_gets_updated_with_txs() {
     let (test_rollup, evm_client, contract_addr) = setup_test_rollup().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 

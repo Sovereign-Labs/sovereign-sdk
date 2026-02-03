@@ -15,7 +15,7 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::{FullyBakedTx, HDTimestamp, Runtime, Spec, StateUpdateInfo};
+use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -135,10 +135,7 @@ where
         SequencerStateUpdatorError,
     > {
         let (resp, recv) = oneshot::channel();
-        // Set sequencing metadata here so generation txs are stamped immediately,
-        // while nonce-buffered txs are stamped only when dequeued for execution.
-        let mut baked_tx = baked_tx.clone();
-        baked_tx.set_sequencing_metadata(&HDTimestamp::now());
+        let baked_tx = baked_tx.clone();
         self.send(Message::AcceptTx {
             resp,
             baked_tx,
