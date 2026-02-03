@@ -727,9 +727,7 @@ impl LedgerDb {
                         let event_range_end = last_tx.events.end;
                         debug_assert!(
                             event_range_start <= event_range_end,
-                            "Event range inverted: start={:?} end={:?}",
-                            event_range_start,
-                            event_range_end
+                            "Event range inverted: start={event_range_start:?} end={event_range_end:?}",
                         );
 
                         // Delete hash-indexed entries by iterating through txs
