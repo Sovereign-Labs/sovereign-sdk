@@ -33,6 +33,7 @@ use tokio::time::Duration;
 mod db_elected;
 mod replica_gets_txs_from_master;
 mod start_stop;
+mod toxiproxy_leader_replica;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);

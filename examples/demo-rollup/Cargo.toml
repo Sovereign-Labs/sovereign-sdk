@@ -125,6 +125,8 @@ strum = { workspace = true }
 
 reqwest = { workspace = true }
 sov-proxy-utils = { workspace = true }
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true, features = ["postgres"] }
 
 [build-dependencies]
 anyhow = { workspace = true }

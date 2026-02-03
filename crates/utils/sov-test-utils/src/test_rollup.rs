@@ -448,6 +448,17 @@ impl PostgresData {
         }))
     }
 
+    /// Builds a [`PostgresData`] from an existing container and connection string.
+    pub fn from_container_with_connection_string(
+        postgres: ContainerAsync<Postgres>,
+        connection_string: String,
+    ) -> Arc<PostgresData> {
+        Arc::new(PostgresData {
+            postgres,
+            connection_string,
+        })
+    }
+
     /// Returns the PostgreSQL connection string.
     pub fn connection_string(&self) -> &str {
         &self.connection_string
