@@ -76,21 +76,21 @@ curl -X POST http://localhost:8545 \
 | Field | Type | Sealed block | Pending block | Notes |
 |-------|------|--------------|---------------|-------|
 | `number` | QUANTITY (hex) | Block number | sealed_head + 1 | |
-| `hash` | DATA (32 bytes) | Block hash | `null` (L1) / `0x0` (this rollup) | **Divergence** |
+| `hash` | DATA (32 bytes) | Block hash | Synthetic hash (non-zero); L1 returns `null` | **Divergence** |
 | `parentHash` | DATA (32 bytes) | Parent block hash | Sealed head's hash | |
 | `nonce` | DATA (8 bytes) | `0x0000000000000000` | `0x0000000000000000` | PoS blocks |
 | `sha3Uncles` | DATA (32 bytes) | EMPTY_OMMER_ROOT_HASH | EMPTY_OMMER_ROOT_HASH | Always empty |
-| `logsBloom` | DATA (256 bytes) | Bloom filter | Empty bloom | |
-| `transactionsRoot` | DATA (32 bytes) | Merkle root | EMPTY_ROOT_HASH | |
-| `stateRoot` | DATA (32 bytes) | State root | EMPTY_ROOT_HASH | |
-| `receiptsRoot` | DATA (32 bytes) | Receipts root | EMPTY_ROOT_HASH | |
+| `logsBloom` | DATA (256 bytes) | Bloom filter | Derived from pending receipts (zero if no logs) | |
+| `transactionsRoot` | DATA (32 bytes) | Merkle root | Computed from pending txs | |
+| `stateRoot` | DATA (32 bytes) | State root | Synthetic (not actual state root) | |
+| `receiptsRoot` | DATA (32 bytes) | Receipts root | Computed from pending receipts | |
 | `miner` | DATA (20 bytes) | Beneficiary address | Zero address | |
 | `difficulty` | QUANTITY | 0 | 0 | PoS |
 | `totalDifficulty` | QUANTITY | 0 | 0 | PoS |
 | `extraData` | DATA | May vary | Empty | |
-| `size` | QUANTITY | RLP-encoded size | 0 | |
+| `size` | QUANTITY | RLP-encoded size | RLP-encoded size for synthetic block | |
 | `gasLimit` | QUANTITY | Block gas limit | Block gas limit | |
-| `gasUsed` | QUANTITY | Actual gas used | 0 | |
+| `gasUsed` | QUANTITY | Actual gas used | Sum of pending receipt gasUsed | |
 | `timestamp` | QUANTITY | Block timestamp | Current timestamp | |
 | `transactions` | Array | Hashes or full txs | Hashes or full txs | Based on `details` |
 | `uncles` | Array | `[]` | `[]` | Always empty |
@@ -103,7 +103,7 @@ curl -X POST http://localhost:8545 \
 |-------|------|-------|
 | `hash` | DATA (32 bytes) | Transaction hash |
 | `nonce` | QUANTITY | Sender's nonce |
-| `blockHash` | DATA (32 bytes) | Containing block hash (`null` for pending) |
+| `blockHash` | DATA (32 bytes) | Containing block hash (synthetic for pending) |
 | `blockNumber` | QUANTITY | Containing block number |
 | `transactionIndex` | QUANTITY | Index within block |
 | `from` | DATA (20 bytes) | Sender address |
@@ -125,13 +125,14 @@ curl -X POST http://localhost:8545 \
 - `latest` resolves to `pending` (both return the pending block being constructed).
 - `safe` and `finalized` both resolve to the last sealed block (same as `eth_blockNumber`).
 - `requireCanonical` in EIP-1898 is accepted but ignored (no reorgs in this rollup).
-- Pending block `hash` is `0x0` (Ethereum L1 returns `null`).
-- Pending block `size` is 0 (sealed blocks have actual RLP size).
+- If there are no pending txs, `pending`/`latest` fall back to the latest sealed block.
+- Pending blocks use a **synthetic hash** (non-zero) and are resolvable via `eth_getBlockByHash`.
+- Pending block fields (logsBloom, roots, size, gasUsed) are computed from pending txs/receipts.
 
 ### Known deviations vs Ethereum L1 (bugs to track)
 1. **`latest` == `pending`**: Both return the pending block. L1: `latest` = last sealed, `pending` = being constructed.
 2. **`safe`/`finalized` == head**: Both map to latest sealed block. L1: these may lag behind `latest` based on finality.
-3. **Pending hash is `0x0`**: L1 returns `null` for pending block hash.
+3. **Pending hash is synthetic (non-null)**: L1 returns `null` for pending block hash.
 
 ## Real-world usage patterns
 
@@ -168,7 +169,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 |----|----------|-------------|-----------------|
 | TC01 | P0 | `earliest` returns genesis block | `number == 0`, `parentHash == 0x0...0` or genesis-defined |
 | TC02 | P0 | Numeric `0` returns same as `earliest` | All fields identical to TC01 |
-| TC03 | P0 | `latest` returns pending block | **Divergence**: `number == sealed_head + 1`, `hash == 0x0` |
+| TC03 | P0 | `latest` returns pending block | **Divergence**: `number == sealed_head + 1`, `hash != 0x0` (synthetic) |
 | TC04 | P0 | `pending` returns pending block | Same as TC03 |
 | TC05 | P0 | `safe` returns sealed head | `number == eth_blockNumber()`, `hash` is non-zero |
 | TC06 | P0 | `finalized` returns sealed head | Same as TC05 |
@@ -185,15 +186,15 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | ID | Priority | Description | Expected values |
 |----|----------|-------------|-----------------|
 | TC12 | P0 | Sealed block has real hash | `hash != 0x0`, `hash` is 32 bytes |
-| TC13 | P0 | Pending block has zero hash | `hash == 0x0` (divergence: L1 returns `null`) |
+| TC13 | P0 | Pending block has synthetic hash | `hash != 0x0` (divergence: L1 returns `null`) |
 | TC14 | P0 | Pending block number == sealed + 1 | `pending.number == sealed_head.number + 1` |
 | TC15 | P0 | Pending parentHash == sealed hash | `pending.parentHash == sealed_head.hash` |
 | TC16 | P1 | Sealed block has non-zero size | `size > 0` (actual RLP-encoded size) |
-| TC17 | P1 | Pending block has size 0 | `size == 0` (implementation detail) |
+| TC17 | P1 | Pending block has non-zero size | `size > 0` when pending txs exist |
 | TC18 | P1 | Sealed block gasUsed reflects actual | `gasUsed == sum(tx.gasUsed)` or 0 if empty |
-| TC19 | P1 | Pending block gasUsed is 0 | `gasUsed == 0` |
+| TC19 | P1 | Pending block gasUsed reflects pending txs | `gasUsed > 0` when pending txs exist |
 | TC20 | P2 | Sealed block has real logsBloom | Derived from transaction logs |
-| TC21 | P2 | Pending block has empty logsBloom | All zeros |
+| TC21 | P2 | Pending block logsBloom reflects pending logs | Zero if no logs |
 
 ---
 
@@ -243,7 +244,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | TC40 | P0 | `eth_blockNumber == safe.number` | `eth_blockNumber() == get_block("safe").number` |
 | TC41 | P0 | `eth_blockNumber == finalized.number` | `eth_blockNumber() == get_block("finalized").number` |
 | TC42 | P1 | Block by number == block by hash | `get_block(N) == get_block(get_block(N).hash)` |
-| TC43 | P1 | `pending.number == eth_blockNumber + 1` | Pending is always one ahead of sealed |
+| TC43 | P1 | `pending.number` vs `eth_blockNumber` | Pending is one ahead when pending txs exist; otherwise equals sealed |
 | TC44 | P2 | Block timestamp <= current time | `block.timestamp <= now()` |
 | TC45 | P2 | Block timestamps increase monotonically | `block[N].timestamp >= block[N-1].timestamp` |
 
@@ -378,7 +379,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | TC94 | P0 | Pending block shows submitted txs | `pending.transactions` includes waiting txs |
 | TC95 | P1 | Pending tx count matches mempool | After N submissions, `len(pending.txs) == N` |
 | TC96 | P1 | Pending tx has correct fields | `from`, `value`, `input` match submitted |
-| TC97 | P2 | Pending tx `blockHash` handling | `tx.blockHash` is `0x0` or `null` for pending |
+| TC97 | P2 | Pending tx `blockHash` handling | `tx.blockHash` matches pending block hash (synthetic, non-null) |
 
 #### Multiple transactions from same sender
 
@@ -468,7 +469,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 |----|----------|-------------|-----------------|
 | TC131 | P0 | eth_blockNumber == get_block("safe").number | Always equal |
 | TC132 | P0 | eth_blockNumber == get_block("finalized").number | Always equal |
-| TC133 | P1 | eth_blockNumber + 1 == get_block("pending").number | Pending is one ahead |
+| TC133 | P1 | get_block("pending").number vs eth_blockNumber | Pending is one ahead when pending txs exist |
 
 #### Transaction field value validation
 
@@ -519,7 +520,7 @@ Record these for cross-checks:
 - H0 = genesis hash
 - H1 = block 1 hash
 - H2 = block 2 hash
-- H_pending = pending hash (should be 0x0)
+- H_pending = pending hash (synthetic, non-zero)
 ```
 
 ## Value derivation rules
@@ -531,7 +532,7 @@ Record these for cross-checks:
 
 ### size
 - Sealed block: RLP-encoded size in bytes
-- Pending block: 0 (implementation detail)
+- Pending block: RLP-encoded size for synthetic block when pending txs exist
 - Genesis block 0 has a specific size (e.g., 507 bytes per existing test)
 
 ### timestamp
@@ -541,11 +542,11 @@ Record these for cross-checks:
 
 ### transactionsRoot, receiptsRoot, stateRoot
 - Sealed: Merkle roots computed from block data
-- Pending: `EMPTY_ROOT_HASH` = `0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421`
+- Pending: `transactionsRoot`/`receiptsRoot` computed from pending txs/receipts; `stateRoot` is synthetic
 
 ### logsBloom
 - Sealed: Bloom filter from all logs in block
-- Pending: All zeros (256 bytes)
+- Pending: Bloom filter from pending receipts (all zeros if no logs)
 
 ## Test dependencies
 
@@ -557,6 +558,8 @@ Record these for cross-checks:
 ---
 
 ## Existing Test Coverage Analysis
+
+> Note: This coverage analysis predates the newer tests in `evm_block_by_number_hash.rs` and may be stale. Refresh as needed.
 
 ### Files with relevant tests
 
@@ -591,13 +594,13 @@ Record these for cross-checks:
 | TC | Status | Covered by | Missing |
 |----|--------|------------|---------|
 | TC12 | Partial | `evm_block_hash:47-48` | Via contract call, not direct assertion |
-| TC13 | Covered | `evm_rpc:79`, `evm_tx:48` | `assert_eq!(pending_hash, BlockHash::ZERO)` |
+| TC13 | Covered | `evm_rpc:79`, `evm_tx:48` | Asserts pending hash is non-zero |
 | TC14 | Partial | `evm_soft_conf:36,56` | Implicitly via `expected_block_nr + 1` |
 | TC15 | Partial | `evm_rpc:73` | Gets parentHash but doesn't assert == sealed.hash |
 | TC16 | Covered | `evm_rpc:125-126` | Only for genesis, not sealed with txs |
 | TC17 | Missing | - | Pending size not tested |
 | TC18 | Missing | - | Sealed gasUsed not tested |
-| TC19 | Covered | `evm_block_number:22` | `assert_eq!(pending_header.gas_used, 0)` |
+| TC19 | Partial | `evm_block_number:22` | Only checks gasUsed==0 when no pending txs |
 | TC20 | Missing | - | logsBloom not tested |
 | TC21 | Missing | - | Pending logsBloom not tested |
 

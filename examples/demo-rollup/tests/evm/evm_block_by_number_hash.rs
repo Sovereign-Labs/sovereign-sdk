@@ -1,12 +1,39 @@
 //! Tests for eth_getBlockByNumber and eth_getBlockByHash RPC endpoints.
 //!
-//! Test case references are to docs/eth_getBlockBy.md
+//! Test case references are to docs/eth_getBlockBy_test_cases.md
 
 use alloy_primitives::BlockHash;
-use alloy_provider::Provider;
+use alloy_provider::{DynProvider, Provider};
 use alloy_rpc_types_eth::BlockNumberOrTag::{self, Earliest, Finalized, Latest, Pending, Safe};
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
+use serde_json::json;
 
-use crate::evm::evm_test_helper::{alloy_client, setup_test_rollup, EVM_EXTENSION};
+use crate::evm::evm_test_helper::{
+    alloy_client, create_simple_storage_client, deploy_contract_check, setup_test_rollup,
+    EVM_EXTENSION, SENDER_PRIV_KEY,
+};
+
+async fn wait_for_pending_block_with_txs(
+    client: &DynProvider,
+) -> anyhow::Result<alloy_rpc_types_eth::Block> {
+    use alloy_rpc_types_eth::BlockTransactions;
+
+    for _ in 0..100 {
+        let block = client.get_block_by_number(Pending).await?.unwrap();
+        let tx_count = match &block.transactions {
+            BlockTransactions::Hashes(h) => h.len(),
+            BlockTransactions::Full(f) => f.len(),
+            BlockTransactions::Uncle => 0,
+        };
+        if tx_count > 0 {
+            return Ok(block);
+        }
+        tokio::task::yield_now().await;
+    }
+
+    anyhow::bail!("timed out waiting for pending block to include transactions");
+}
 
 // =============================================================================
 // Group 1: Block Tag Semantics
@@ -75,9 +102,15 @@ async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(2).await;
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&simple_storage)
+        .await
+        .expect("deploy should succeed");
+    let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
+    let tx_hash = simple_storage.set_value(contract_address, 3000).await;
+    simple_storage.wait_for_receipt(tx_hash).await;
 
     let sealed_head_number = client.get_block_number().await?;
 
@@ -104,11 +137,19 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
         "pending block number should be sealed_head + 1"
     );
 
-    // Pending block has zero hash (L1 DIVERGENCE: L1 returns null)
-    assert_eq!(
+    // Pending block has synthetic (non-zero) hash (L1 DIVERGENCE: L1 returns null)
+    assert_ne!(
         pending_block.header.hash,
         BlockHash::ZERO,
-        "pending block hash should be 0x0 (L1 would return null)"
+        "pending block hash should be synthetic and non-zero"
+    );
+    let pending_by_hash = client
+        .get_block_by_hash(pending_block.header.hash)
+        .await?
+        .unwrap();
+    assert_eq!(
+        pending_by_hash.header.number, pending_block.header.number,
+        "pending block hash should be resolvable via eth_getBlockByHash"
     );
 
     Ok(())
@@ -118,12 +159,18 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
 ///
 /// Verifies:
 /// - eth_blockNumber == safe.number == finalized.number
-/// - pending.number == eth_blockNumber + 1
+/// - pending.number == eth_blockNumber + 1 when pending txs exist (otherwise equals sealed head)
 #[tokio::test(flavor = "multi_thread")]
 async fn test_block_number_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(3).await;
+    let client = alloy_client(rollup.http_addr);
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&simple_storage)
+        .await
+        .expect("deploy should succeed");
+    // Wait for deployment tx to be sealed before pausing
+    rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
     let eth_block_number = client.get_block_number().await?;
@@ -142,12 +189,35 @@ async fn test_block_number_consistency() -> anyhow::Result<()> {
         "eth_blockNumber should equal finalized block number"
     );
 
-    // TC43: pending.number == eth_blockNumber + 1
+    let latest_block = client.get_block_by_number(Latest).await?.unwrap();
+    assert_eq!(
+        latest_block.header.number, eth_block_number,
+        "latest block should equal sealed head when no pending txs exist"
+    );
+
+    // With no pending txs, pending falls back to latest sealed block
     let pending_block = client.get_block_by_number(Pending).await?.unwrap();
+    assert_eq!(
+        pending_block.header.number, eth_block_number,
+        "pending block should equal sealed head when no pending txs exist"
+    );
+
+    // Create a pending tx and re-check latest/pending behavior
+    let tx_hash = simple_storage.set_value(contract_address, 42).await;
+    simple_storage.wait_for_receipt(tx_hash).await;
+
+    let latest_block = client.get_block_by_number(Latest).await?.unwrap();
+    let pending_block = client.get_block_by_number(Pending).await?.unwrap();
+    assert_eq!(
+        latest_block.header.number,
+        eth_block_number + 1,
+        "latest block should track pending when pending txs exist"
+    );
+    // TC43: pending.number == eth_blockNumber + 1 when pending txs exist
     assert_eq!(
         pending_block.header.number,
         eth_block_number + 1,
-        "pending block number should be eth_blockNumber + 1"
+        "pending block number should be eth_blockNumber + 1 when pending txs exist"
     );
 
     Ok(())
@@ -211,16 +281,20 @@ async fn test_sealed_block_has_real_hash() -> anyhow::Result<()> {
 /// TC13, TC14, TC15, TC17, TC19: Pending block properties
 ///
 /// Verifies:
-/// - Pending hash is 0x0 (L1 divergence: would be null)
+/// - Pending hash is synthetic (L1 divergence: would be null)
 /// - Pending number is sealed_head + 1
 /// - Pending parentHash equals sealed head's hash
-/// - Pending size is 0
-/// - Pending gasUsed is 0
+/// - Pending size is non-zero when pending txs exist
+/// - Pending gasUsed reflects pending txs
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pending_block_properties() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(2).await;
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&simple_storage)
+        .await
+        .expect("deploy should succeed");
+    let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
     let sealed_head_number = client.get_block_number().await?;
@@ -228,13 +302,23 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
         .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
         .await?
         .unwrap();
+    let tx_hash = simple_storage.set_value(contract_address, 3000).await;
+    simple_storage.wait_for_receipt(tx_hash).await;
     let pending_block = client.get_block_by_number(Pending).await?.unwrap();
 
-    // TC13: Pending hash is 0x0 (L1 DIVERGENCE: L1 returns null)
-    assert_eq!(
+    // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)
+    assert_ne!(
         pending_block.header.hash,
         BlockHash::ZERO,
-        "pending block hash should be 0x0"
+        "pending block hash should be synthetic and non-zero"
+    );
+    let pending_by_hash = client
+        .get_block_by_hash(pending_block.header.hash)
+        .await?
+        .unwrap();
+    assert_eq!(
+        pending_by_hash.header.number, pending_block.header.number,
+        "pending block hash should be resolvable via eth_getBlockByHash"
     );
 
     // TC14: Pending number is sealed_head + 1
@@ -250,14 +334,44 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
         "pending parentHash should equal sealed head's hash"
     );
 
-    // TC17: Pending size is 0 (implementation detail)
+    // TC17: Pending size is non-zero when pending txs exist
     let pending_size = pending_block.header.size.unwrap_or_default().to::<u64>();
-    assert_eq!(pending_size, 0, "pending block size should be 0");
+    assert!(
+        pending_size > 0,
+        "pending block size should be non-zero when pending txs exist"
+    );
 
-    // TC19: Pending gasUsed is 0 (no finalized transactions)
+    // TC19: Pending gasUsed reflects pending transactions
+    assert!(
+        pending_block.header.gas_used > 0,
+        "pending block gasUsed should be non-zero when pending txs exist"
+    );
+
+    Ok(())
+}
+
+/// TC17, TC19: Pending block without txs falls back to latest sealed block
+#[tokio::test(flavor = "multi_thread")]
+async fn test_pending_without_txs_falls_back_to_sealed() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.wait_for_next_blocks(2).await;
+    rollup.pause_preferred_batches().await;
+
+    let sealed_head_number = client.get_block_number().await?;
+    let sealed_block = client
+        .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
+        .await?
+        .unwrap();
+    let pending_block = client.get_block_by_number(Pending).await?.unwrap();
+
     assert_eq!(
-        pending_block.header.gas_used, 0,
-        "pending block gasUsed should be 0"
+        pending_block.header.number, sealed_block.header.number,
+        "pending should fall back to latest sealed block when no pending txs exist"
+    );
+    assert_eq!(
+        pending_block.header.hash, sealed_block.header.hash,
+        "pending should fall back to latest sealed block hash when no pending txs exist"
     );
 
     Ok(())
@@ -286,13 +400,12 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
 
     // Deploy contract and mint (creates 2 txs)
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
+    // Pause before submitting so txs remain pending
+    rollup.pause_preferred_batches().await;
     usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
 
-    // Pause immediately after submitting - txs are guaranteed to be in pending
-    rollup.pause_preferred_batches().await;
-
     // TC22: Get pending block with hashes only (default)
-    let block_hashes = client.get_block_by_number(Pending).await?.unwrap();
+    let block_hashes = wait_for_pending_block_with_txs(&client).await?;
 
     // TC23: Get pending block with full transactions
     let block_full = client.get_block_by_number(Pending).full().await?.unwrap();
@@ -318,35 +431,49 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
     assert!(hashes_count > 0, "expected at least 1 transaction in block");
 
     // Verify hashes mode returns hashes
-    match &block_hashes.transactions {
-        BlockTransactions::Hashes(_) => {}
+    let hashes = match &block_hashes.transactions {
+        BlockTransactions::Hashes(h) => h,
         _ => panic!("expected hashes mode to return BlockTransactions::Hashes"),
-    }
+    };
 
     // Verify full mode returns full transactions
-    match &block_full.transactions {
-        BlockTransactions::Full(txs) => {
-            for (i, tx) in txs.iter().enumerate() {
-                // TC25-TC29: Validate full tx object fields
-                assert_ne!(
-                    tx.inner.hash(),
-                    &BlockHash::ZERO,
-                    "tx {i} should have non-zero hash"
-                );
-                assert!(tx.block_number.is_some(), "tx {i} should have blockNumber");
-                assert_eq!(
-                    tx.block_number.unwrap(),
-                    pending_number,
-                    "tx {i} blockNumber should match block"
-                );
-                assert_eq!(
-                    tx.transaction_index,
-                    Some(i as u64),
-                    "tx {i} should have correct transactionIndex"
-                );
-            }
-        }
+    let full_txs = match &block_full.transactions {
+        BlockTransactions::Full(txs) => txs,
         _ => panic!("expected full mode to return BlockTransactions::Full"),
+    };
+
+    for (i, tx) in full_txs.iter().enumerate() {
+        // TC25-TC29: Validate full tx object fields
+        assert_ne!(
+            tx.inner.hash(),
+            &BlockHash::ZERO,
+            "tx {i} should have non-zero hash"
+        );
+        assert!(tx.block_number.is_some(), "tx {i} should have blockNumber");
+        assert_eq!(
+            tx.block_number.unwrap(),
+            pending_number,
+            "tx {i} blockNumber should match block"
+        );
+        assert_eq!(
+            tx.transaction_index,
+            Some(i as u64),
+            "tx {i} should have correct transactionIndex"
+        );
+        assert_eq!(
+            tx.block_hash,
+            Some(block_full.header.hash),
+            "tx {i} blockHash should match block hash"
+        );
+    }
+
+    // TC29: Hashes mode matches full tx hashes
+    for (i, hash) in hashes.iter().enumerate() {
+        assert_eq!(
+            hash,
+            full_txs[i].inner.hash(),
+            "hashes[{i}] should match full tx hash"
+        );
     }
 
     Ok(())
@@ -449,6 +576,77 @@ async fn test_get_block_by_hash_sealed() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// TC35: `details` param works with eth_getBlockByHash (full tx objects)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_get_block_by_hash_full_transactions() -> anyhow::Result<()> {
+    use alloy_primitives::utils::parse_ether;
+    use alloy_primitives::Address;
+    use alloy_rpc_types_eth::BlockTransactions;
+    use sov_evm_test_utils::{Erc20, Submit};
+
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.wait_for_next_blocks(1).await;
+
+    // Create a sealed block with transactions
+    let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
+    usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
+    rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
+
+    let sealed_head = client.get_block_number().await?;
+    let block_by_number_full = client
+        .get_block_by_number(BlockNumberOrTag::Number(sealed_head))
+        .full()
+        .await?
+        .unwrap();
+
+    // Default (details=false) should return hashes
+    let block_by_hash_hashes = client
+        .get_block_by_hash(block_by_number_full.header.hash)
+        .await?
+        .unwrap();
+    match &block_by_hash_hashes.transactions {
+        BlockTransactions::Hashes(_) => {}
+        _ => panic!("expected hashes mode from eth_getBlockByHash"),
+    }
+
+    // details=true should return full transactions
+    let block_by_hash_full = client
+        .get_block_by_hash(block_by_number_full.header.hash)
+        .full()
+        .await?
+        .unwrap();
+    let hashes = match &block_by_hash_hashes.transactions {
+        BlockTransactions::Hashes(h) => h,
+        _ => panic!("expected hashes mode from eth_getBlockByHash"),
+    };
+    let full_txs = match &block_by_hash_full.transactions {
+        BlockTransactions::Full(txs) => txs,
+        _ => panic!("expected full mode from eth_getBlockByHash"),
+    };
+    let expected_count = match &block_by_number_full.transactions {
+        BlockTransactions::Full(txs) => txs.len(),
+        _ => panic!("expected full mode from eth_getBlockByNumber"),
+    };
+    assert_eq!(
+        full_txs.len(),
+        expected_count,
+        "full tx count should match block by number"
+    );
+
+    // Cross-check: hashes[i] == full[i].hash
+    for (i, hash) in hashes.iter().enumerate() {
+        assert_eq!(
+            hash,
+            full_txs[i].inner.hash(),
+            "eth_getBlockByHash: hashes[{i}] should match full tx hash"
+        );
+    }
+
+    Ok(())
+}
+
 /// TC33: Non-existent hash returns None
 #[tokio::test(flavor = "multi_thread")]
 async fn test_get_block_by_hash_nonexistent() -> anyhow::Result<()> {
@@ -476,19 +674,93 @@ async fn test_get_block_by_hash_zero() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    // Pending block has hash 0x0, but we shouldn't be able to fetch it by that hash
+    // Zero hash is not a valid block hash and should return None
     let result = client.get_block_by_hash(BlockHash::ZERO).await?;
 
+    assert!(result.is_none(), "zero hash should return None");
+
+    Ok(())
+}
+
+// =============================================================================
+// Group 5: EIP-1898 blockHash object
+// =============================================================================
+
+/// TC46-TC49: EIP-1898 blockHash object support
+#[tokio::test(flavor = "multi_thread")]
+async fn test_eip1898_block_hash_object() -> anyhow::Result<()> {
+    use alloy_primitives::B256;
+    use alloy_rpc_types_eth::Block;
+
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    let rpc_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    rollup.wait_for_next_blocks(2).await;
+    rollup.pause_preferred_batches().await;
+
+    let sealed_head = client.get_block_number().await?;
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(sealed_head))
+        .await?
+        .unwrap();
+    let block_hash = format!("{:#x}", block.header.hash);
+
+    // TC46: blockHash object
+    let block_from_obj: Option<Block> = rpc_client
+        .ws
+        .request(
+            "eth_getBlockByNumber",
+            rpc_params![json!({ "blockHash": block_hash.clone() }), false],
+        )
+        .await
+        .unwrap();
+    let block_from_obj = block_from_obj.expect("blockHash object should resolve");
+    assert_eq!(
+        block_from_obj.header.hash, block.header.hash,
+        "blockHash object should return the same block"
+    );
+
+    // TC47/TC48: requireCanonical true/false
+    for require_canonical in [true, false] {
+        let block_from_obj: Option<Block> = rpc_client
+            .ws
+            .request(
+                "eth_getBlockByNumber",
+                rpc_params![
+                    json!({ "blockHash": block_hash.clone(), "requireCanonical": require_canonical }),
+                    false
+                ],
+            )
+            .await
+            .unwrap();
+        let block_from_obj = block_from_obj.expect("blockHash object should resolve");
+        assert_eq!(
+            block_from_obj.header.hash, block.header.hash,
+            "blockHash object should return the same block"
+        );
+    }
+
+    // TC49: Non-existent hash returns None
+    let random_hash = B256::repeat_byte(0xAB);
+    let random_hash = format!("{:#x}", random_hash);
+    let missing: Option<Block> = rpc_client
+        .ws
+        .request(
+            "eth_getBlockByNumber",
+            rpc_params![json!({ "blockHash": random_hash }), false],
+        )
+        .await
+        .unwrap();
     assert!(
-        result.is_none(),
-        "zero hash should return None (pending block not fetchable by hash)"
+        missing.is_none(),
+        "non-existent blockHash should return None"
     );
 
     Ok(())
 }
 
 // =============================================================================
-// Group 5: Parent Hash Chain Integrity
+// Group 6: Parent Hash Chain Integrity
 // =============================================================================
 
 /// TC37, TC38, TC39: Parent hash chain is valid
@@ -536,7 +808,7 @@ async fn test_parent_hash_chain_integrity() -> anyhow::Result<()> {
 }
 
 // =============================================================================
-// Group 6: Value Cross-Checks
+// Group 7: Value Cross-Checks
 // =============================================================================
 
 /// TC108-TC112: Block receipts cross-check

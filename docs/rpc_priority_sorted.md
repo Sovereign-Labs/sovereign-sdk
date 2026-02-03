@@ -84,12 +84,12 @@
 ## Invariants to assert (semantic > schema)
 1. `eth_blockNumber` never decreases within a session.
 2. `eth_getBlockByNumber("latest").number == eth_blockNumber`.
-3. `eth_getBlockByNumber("pending").number == eth_blockNumber + 1` and `hash == null`.
+3. `eth_getBlockByNumber("pending").number == eth_blockNumber + 1` and `hash` is synthetic (non-zero). **L1 DIVERGENCE**: L1 returns `null` for pending hash.
 4. Data for a sealed block never changes.
 5. Receipts/logs/transactions agree on block hash/number once sealed.
 
 ## Likely L1 divergences to capture via tests (do not fix here)
-1. `latest` is treated as `pending` in block resolution [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:242], and existing tests assert `latest == pending` [examples/demo-rollup/tests/evm/evm_tx.rs:47] with `hash == 0x0` [examples/demo-rollup/tests/evm/evm_tx.rs:48].  
+1. `latest` is treated as `pending` in block resolution [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:242], and existing tests assert `latest == pending` [examples/demo-rollup/tests/evm/evm_tx.rs:47] with synthetic `hash != 0x0` (divergence: L1 returns null) [examples/demo-rollup/tests/evm/evm_block_by_number_hash.rs:117-122].
    Minimal repro: pause sequencer, call `eth_getBlockByNumber("latest")` and `eth_getBlockByNumber("pending")`; expect different blocks per L1, but current behavior returns the same pending block.
 2. `eth_getTransactionCount` includes pending txs for `latest` [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:168].  
    Minimal repro: pause sequencer, send tx, compare nonce for `latest` vs `pending`; L1 expects `latest` to ignore pending.
