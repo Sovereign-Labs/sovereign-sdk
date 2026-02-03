@@ -811,7 +811,7 @@ where
                 anyhow::ensure!(
                     panic_message.contains(expected_panic_substring),
                     "Panic message doesn't match expected crash.\n\
-                     Expected to contain: {expected_panic_substring,}\n\
+                     Expected to contain: {expected_panic_substring}\n\
                      Actual panic message: {panic_message}",
                 );
                 Ok(())
