@@ -1,8 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use sov_modules_api::sequencing_metadata::HDTimestamp;
-use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
@@ -121,11 +120,7 @@ where
                 }
                 let txs = txs_to_insert
                     .iter()
-                    .map(|contents| {
-                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone().into());
-                        tx.set_sequencing_metadata(&HDTimestamp::now());
-                        (tx, contents.accepted_tx.tx_hash)
-                    })
+                    .map(|contents| (contents.accepted_tx.tx.clone(), contents.accepted_tx.tx_hash))
                     .collect();
                 self.db
                     .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)

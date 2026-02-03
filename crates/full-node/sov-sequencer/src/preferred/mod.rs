@@ -51,6 +51,7 @@ use sov_modules_api::{
     RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber,
     *,
 };
+use sov_modules_api::HDTimestamp;
 use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
@@ -384,6 +385,7 @@ where
             return Err(shut_down());
         }
 
+        let mut baked_tx = baked_tx;
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
@@ -419,7 +421,8 @@ where
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
 
-        let tx_len = baked_tx.data.len();
+        baked_tx.set_sequencing_metadata(&HDTimestamp::now());
+        let tx_len = baked_tx.len();
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (
