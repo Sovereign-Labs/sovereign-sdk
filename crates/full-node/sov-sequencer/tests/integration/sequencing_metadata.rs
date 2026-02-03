@@ -32,7 +32,12 @@ fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, TestUser<S>) {
     let rt_genesis_config =
         <RT as Runtime<S>>::GenesisConfig::from_minimal_config(genesis_config.into(), ());
 
-    (GenesisParams { runtime: rt_genesis_config }, admin)
+    (
+        GenesisParams {
+            runtime: rt_genesis_config,
+        },
+        admin,
+    )
 }
 
 async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<S>) {
@@ -70,14 +75,9 @@ async fn sequencer_sets_timestamp_before_execution() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let call =
-        <RT as EncodeCall<SequencingDataTester<S>>>::to_decodable(());
-    let tx = default_test_signed_transaction::<RT, S>(
-        &admin.private_key,
-        &call,
-        0,
-        &RT::CHAIN_HASH,
-    );
+    let call = <RT as EncodeCall<SequencingDataTester<S>>>::to_decodable(());
+    let tx =
+        default_test_signed_transaction::<RT, S>(&admin.private_key, &call, 0, &RT::CHAIN_HASH);
     let raw_tx = RawTx::new(to_vec(&tx).unwrap());
 
     let baked_tx =

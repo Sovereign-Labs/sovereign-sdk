@@ -120,7 +120,12 @@ where
                 }
                 let txs = txs_to_insert
                     .iter()
-                    .map(|contents| (contents.accepted_tx.tx.clone(), contents.accepted_tx.tx_hash))
+                    .map(|contents| {
+                        (
+                            contents.accepted_tx.tx.clone(),
+                            contents.accepted_tx.tx_hash,
+                        )
+                    })
                     .collect();
                 self.db
                     .bulk_insert_txs(txs, sequence_number, tx_idx_within_batch)
