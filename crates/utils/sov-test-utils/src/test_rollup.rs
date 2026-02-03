@@ -801,7 +801,7 @@ where
             Err(join_error) if join_error.is_panic() => {
                 let panic_payload = join_error.into_panic();
                 let panic_message = if let Some(msg) = panic_payload.downcast_ref::<&str>() {
-                    msg.to_string()
+                    (*msg).to_string()
                 } else if let Some(msg) = panic_payload.downcast_ref::<String>() {
                     msg.clone()
                 } else {
