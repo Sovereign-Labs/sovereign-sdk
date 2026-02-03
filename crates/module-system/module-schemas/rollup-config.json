@@ -878,7 +878,7 @@
           "minimum": 0.0
         },
         "kernel_page_cache_upper_levels": {
-          "description": "Number of upper levels cached in memory for kernel state. More details at [`Options::page_cache_upper_levels`]",
+          "description": "Page cache upper levels for kernel state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
@@ -970,7 +970,7 @@
           "minimum": 0.0
         },
         "user_page_cache_upper_levels": {
-          "description": "Number of upper levels cached in memory for user state. More details at [`Options::page_cache_upper_levels`]",
+          "description": "Page cache upper levels for user state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
