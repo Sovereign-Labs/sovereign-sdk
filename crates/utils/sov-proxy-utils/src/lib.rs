@@ -16,6 +16,8 @@ use tokio::sync::watch;
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
 
+const MAX_AGE: Duration = Duration::from_secs(10);
+
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
 pub struct NodeInfo {
@@ -111,17 +113,32 @@ impl NodeInfo {
 
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
+    max_age: Duration,
     pool: PgPool,
     connection_string: String,
     file_saved_sender: watch::Sender<()>,
 }
 
 impl NodeDiscovery {
-    /// Creates a new NodeDiscovery with a connection pool.
+    /// Creates a new NodeDiscovery with a connection pool and default max_age.
     ///
     /// Returns the NodeDiscovery instance and a receiver that gets notified
     /// whenever the cluster info file is successfully saved.
     pub async fn new(connection_string: &str) -> Result<(Self, watch::Receiver<()>)> {
+        Self::new_with_max_age(connection_string, MAX_AGE).await
+    }
+
+    /// Creates a new NodeDiscovery with a connection pool and custom max_age.
+    ///
+    /// The `max_age` parameter controls how long a node can go without updating
+    /// its heartbeat before being filtered out of the cluster info.
+    ///
+    /// Returns the NodeDiscovery instance and a receiver that gets notified
+    /// whenever the cluster info file is successfully saved.
+    pub async fn new_with_max_age(
+        connection_string: &str,
+        max_age: Duration,
+    ) -> Result<(Self, watch::Receiver<()>)> {
         tracing::info!("Connecting to database.");
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
@@ -132,6 +149,7 @@ impl NodeDiscovery {
 
         Ok((
             Self {
+                max_age,
                 pool,
                 connection_string: connection_string.to_string(),
                 file_saved_sender,
@@ -140,11 +158,12 @@ impl NodeDiscovery {
         ))
     }
 
-    /// Fetches cluster info atomically using a single transaction.
-    ///
-    /// # Returns
-    /// A `ClusterInfo` struct containing the leader and all followers.
-    pub async fn get_cluster_info(&self) -> anyhow::Result<ClusterInfo> {
+    // Fetches cluster info atomically using a single transaction.
+    // Only nodes whose `last_updated` timestamp is within `max_age` are returned.
+    //
+    // # Returns
+    // A `ClusterInfo` struct containing the leader and all followers.
+    async fn get_cluster_info(&self) -> anyhow::Result<ClusterInfo> {
         let (leader_id, all_nodes) = self.get_cluster_info_from_db().await?;
         Self::cluster(leader_id, all_nodes)
     }
@@ -268,21 +287,30 @@ impl NodeDiscovery {
     async fn get_cluster_info_from_db(
         &self,
     ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime)>)> {
-        let mut tx = self.pool.begin().await?;
+        let max_age_secs = self.max_age.as_secs() as i64;
 
-        // Fetch leader within transaction
-        let leader_id: Option<String> =
-            sqlx::query_scalar("SELECT node_id FROM sequencer_leader WHERE singleton = 1")
-                .fetch_optional(&mut *tx)
-                .await?;
+        // Fetch nodes updated within max_age, always including the leader regardless of age.
+        // The leader_id is included in each row via LEFT JOIN, allowing us to get it from the results.
+        let rows: Vec<(String, String, OffsetDateTime, Option<String>)> = sqlx::query_as(
+            "SELECT n.node_id, n.address, n.last_updated, l.node_id as leader_id \
+             FROM nodes n \
+             LEFT JOIN sequencer_leader l ON l.singleton = 1 \
+             WHERE n.last_updated > NOW() - $1 * INTERVAL '1 second' \
+                OR n.node_id = l.node_id \
+             ORDER BY n.node_id",
+        )
+        .bind(max_age_secs)
+        .fetch_all(&self.pool)
+        .await?;
 
-        // Fetch all nodes within same transaction
-        let all_nodes: Vec<(String, String, OffsetDateTime)> =
-            sqlx::query_as("SELECT node_id, address, last_updated FROM nodes ORDER BY node_id")
-                .fetch_all(&mut *tx)
-                .await?;
+        // Extract leader_id from first row (same in all rows due to LEFT JOIN)
+        let leader_id = rows.first().and_then(|(_, _, _, lid)| lid.clone());
 
-        tx.commit().await?;
+        // Convert to the expected format without leader_id column
+        let all_nodes = rows
+            .into_iter()
+            .map(|(node_id, address, last_updated, _)| (node_id, address, last_updated))
+            .collect();
 
         Ok((leader_id, all_nodes))
     }

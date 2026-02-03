@@ -444,22 +444,19 @@ impl PreferredSequencerDb {
     ) -> anyhow::Result<(Self, SequencerRole)> {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
-                let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
-
                 match postgres_config.node_role {
-                    ConfiguredNodeRole::ReplicaNoLeaderSync => {
-                        PostgresBackend::connect(postgres_config, bind_addr).await?;
-                        (None, SequencerRole::DaOnlyReplica)
-                    }
-                    ConfiguredNodeRole::Replica => {
-                        PostgresBackend::connect(postgres_config, bind_addr).await?;
-                        (None, SequencerRole::PgSyncReplica)
-                    }
+                    ConfiguredNodeRole::ReplicaNoLeaderSync => (None, SequencerRole::DaOnlyReplica),
+                    ConfiguredNodeRole::Replica => (None, SequencerRole::PgSyncReplica),
                     ConfiguredNodeRole::Leader => {
                         let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        let _ = backend
+                            .heartbeat(Some(postgres_config.leader_election))
+                            .await?;
+
                         (Some(Box::new(backend)), SequencerRole::BatchProducer)
                     }
                     ConfiguredNodeRole::DbElected => {
+                        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
                         let maybe_leader = backend
                             .heartbeat(Some(postgres_config.leader_election))
                             .await?;

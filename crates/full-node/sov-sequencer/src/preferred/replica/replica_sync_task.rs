@@ -399,9 +399,10 @@ mod tests {
             .await
             .unwrap();
 
-        let _ = backend
+        let _ = db
             .heartbeat(Some(postgres_config.leader_election))
-            .await?;
+            .await
+            .unwrap();
 
         let (shutdown_snd, _shutdown_rcv) = watch::channel(());
         let (mut sync_task, start_replica_task_notifier) =
