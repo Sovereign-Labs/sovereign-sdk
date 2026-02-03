@@ -1,3 +1,6 @@
+# 2026-02-03
+- #2433 Updates tests in sov-demo-rollup.
+
 # 2026-01-23
 - #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
 # 2026-01-14
