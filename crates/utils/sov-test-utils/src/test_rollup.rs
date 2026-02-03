@@ -495,6 +495,33 @@ where
             exec_config: None,
         }
     }
+
+    /// Creates a new [`RollupBuilder`] with an external DA service and a custom
+    /// PostgreSQL connection string. This is useful for testing with ToxiProxy
+    /// where the connection goes through a proxy rather than directly to PostgreSQL.
+    pub fn new_with_external_da_and_connection_string(
+        genesis: GenesisSource<R::Spec, R::Runtime>,
+        da_config: MockDaClientConfig,
+        postgres_config: Option<(String, String, ConfiguredNodeRole)>,
+    ) -> Self {
+        let storage_path = StoragePath::Tmp(Arc::new(tempfile::tempdir().unwrap()));
+
+        let post_config = postgres_config.as_ref().map(|p| PostgresConfig {
+            postgres_connection_string: p.0.clone(),
+            node_id: p.1.clone(),
+            node_role: p.2,
+            leader_election: Default::default(),
+        });
+
+        Self {
+            genesis,
+            da_config,
+            config: Self::default_config(0, storage_path, post_config),
+            postgres_container_opt: None,
+            with_secondary_sequencer: None,
+            exec_config: None,
+        }
+    }
 }
 
 impl<R> RollupBuilder<R>

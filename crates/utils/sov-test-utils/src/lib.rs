@@ -41,6 +41,9 @@ pub use {
 /// Utilities for working with PostgreSQL.
 pub mod postgres;
 
+/// Utilities for ToxiProxy network chaos testing.
+pub mod toxiproxy;
+
 mod rt_agnostic_blueprint;
 
 /// Utilities for recording logs.

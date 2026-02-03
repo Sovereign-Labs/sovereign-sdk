@@ -37,6 +37,7 @@ mod db_elected;
 mod replica_gets_txs_from_master;
 mod replica_registers_in_db;
 mod start_stop;
+mod toxi_proxy;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
