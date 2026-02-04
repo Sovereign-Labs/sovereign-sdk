@@ -136,6 +136,7 @@ ELASTICITY_MULTIPLIER = 2
 
 # --- Hyperlane constants ---
 HYPERLANE_BRIDGE_DOMAIN = 5555
+HYPERLANE_METER_DELIVERY_COUNTER_AFTER_HEIGHT = 0
 # --- End Hyperlane constants ---
 
 CONST_TOKEN_ID = { const = { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm", type = "MyTokenId" } }
