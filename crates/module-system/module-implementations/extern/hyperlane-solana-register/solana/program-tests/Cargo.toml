@@ -30,7 +30,7 @@ hyperlane-core.workspace = true
 hyperlane-sealevel-connection-client.workspace = true
 hyperlane-sealevel-mailbox = { workspace = true, features = ["no-entrypoint"] }
 hyperlane-sealevel-igp = { workspace = true, features = ["no-entrypoint"] }
-hyperlane-test-utils = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", branch = "sovereign-rust-integration" }
+hyperlane-test-utils = { git = "https://github.com/Sovereign-Labs/hyperlane-monorepo.git", rev = "99f4861cb3e3d0cd803dcdbc20c8394eac14b8ec" }
 hyperlane-sealevel-test-ism.workspace = true
 
 [lib]
