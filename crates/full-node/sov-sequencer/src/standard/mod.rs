@@ -665,6 +665,7 @@ where
             storage,
             slot_number,
             ledger_reader,
+            latest_finalized_slot_number,
             ..
         } = &state_update_info;
         let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
@@ -677,10 +678,14 @@ where
         {
             let mut inner = self.inner.lock().await;
             self.checkpoint_sender
-                .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                    checkpoint
-                        .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
-                )))
+                .send(Arc::new(
+                    ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
+                        checkpoint
+                            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(
+                            ),
+                        *latest_finalized_slot_number,
+                    ),
+                ))
                 .ok();
             inner.checkpoint = Some(checkpoint);
         }

@@ -123,7 +123,7 @@ curl -X POST http://localhost:8545 \
 
 ### Rollup-specific behavior (intended)
 - `latest` resolves to `pending` (both return the pending block being constructed).
-- `safe` and `finalized` both resolve to the last sealed block (same as `eth_blockNumber`).
+- `safe` and `finalized` both resolve to the **latest finalized** block (may lag `eth_blockNumber` when `finalization_blocks > 0`).
 - `requireCanonical` in EIP-1898 is accepted but ignored (no reorgs in this rollup).
 - If there are no pending txs, `pending`/`latest` fall back to the latest sealed block.
 - Pending blocks use a **synthetic hash** (non-zero) and are resolvable via `eth_getBlockByHash`.
@@ -131,7 +131,7 @@ curl -X POST http://localhost:8545 \
 
 ### Known deviations vs Ethereum L1 (bugs to track)
 1. **`latest` == `pending`**: Both return the pending block. L1: `latest` = last sealed, `pending` = being constructed.
-2. **`safe`/`finalized` == head**: Both map to latest sealed block. L1: these may lag behind `latest` based on finality.
+2. **`safe`/`finalized` == latest finalized**: Both map to the latest finalized block. L1: `safe` and `finalized` can differ; here they are equal.
 3. **Pending hash is synthetic (non-null)**: L1 returns `null` for pending block hash.
 
 ## Real-world usage patterns
@@ -171,8 +171,8 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | TC02 | P0 | Numeric `0` returns same as `earliest` | All fields identical to TC01 |
 | TC03 | P0 | `latest` returns pending block | **Divergence**: `number == sealed_head + 1`, `hash != 0x0` (synthetic) |
 | TC04 | P0 | `pending` returns pending block | Same as TC03 |
-| TC05 | P0 | `safe` returns sealed head | `number == eth_blockNumber()`, `hash` is non-zero |
-| TC06 | P0 | `finalized` returns sealed head | Same as TC05 |
+| TC05 | P0 | `safe` returns latest finalized | `number == latest_finalized_rollup_height`, `hash` is non-zero |
+| TC06 | P0 | `finalized` returns latest finalized | Same as TC05 |
 | TC07 | P1 | `latest` and `pending` return identical blocks | All fields equal (document divergence from L1) |
 | TC08 | P1 | `safe` and `finalized` return identical blocks | All fields equal |
 | TC09 | P1 | Numeric block returns exact match | `get_block(N).number == N` |
@@ -241,8 +241,8 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 
 | ID | Priority | Description | Expected values |
 |----|----------|-------------|-----------------|
-| TC40 | P0 | `eth_blockNumber == safe.number` | `eth_blockNumber() == get_block("safe").number` |
-| TC41 | P0 | `eth_blockNumber == finalized.number` | `eth_blockNumber() == get_block("finalized").number` |
+| TC40 | P0 | `safe.number <= eth_blockNumber` | `get_block("safe").number <= eth_blockNumber()` |
+| TC41 | P0 | `finalized.number <= eth_blockNumber` | `get_block("finalized").number <= eth_blockNumber()` |
 | TC42 | P1 | Block by number == block by hash | `get_block(N) == get_block(get_block(N).hash)` |
 | TC43 | P1 | `pending.number` vs `eth_blockNumber` | Pending is one ahead when pending txs exist; otherwise equals sealed |
 | TC44 | P2 | Block timestamp <= current time | `block.timestamp <= now()` |
@@ -467,8 +467,8 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 
 | ID | Priority | Description | Expected values |
 |----|----------|-------------|-----------------|
-| TC131 | P0 | eth_blockNumber == get_block("safe").number | Always equal |
-| TC132 | P0 | eth_blockNumber == get_block("finalized").number | Always equal |
+| TC131 | P0 | eth_blockNumber >= get_block("safe").number | Always true |
+| TC132 | P0 | eth_blockNumber >= get_block("finalized").number | Always true |
 | TC133 | P1 | get_block("pending").number vs eth_blockNumber | Pending is one ahead when pending txs exist |
 
 #### Transaction field value validation
@@ -641,8 +641,8 @@ Record these for cross-checks:
 
 | TC | Status | Covered by | Missing |
 |----|--------|------------|---------|
-| TC40 | Missing | - | eth_blockNumber vs safe not tested |
-| TC41 | Missing | - | eth_blockNumber vs finalized not tested |
+| TC40 | Missing | - | eth_blockNumber >= safe not tested |
+| TC41 | Missing | - | eth_blockNumber >= finalized not tested |
 | TC42 | Partial | `evm_rpc:73-76` | By number vs by hash tested |
 | TC43 | Partial | `evm_soft_conf:36` | Implicit check only |
 | TC44 | Missing | - | Timestamp vs current time not tested |
@@ -693,7 +693,7 @@ Record these for cross-checks:
 **Critical gaps (P0):**
 - `safe` and `finalized` tags (TC05, TC06)
 - `details=true` (full transactions) mode (TC23-TC29)
-- Cross-check eth_blockNumber vs safe/finalized (TC40-TC41)
+- Cross-check eth_blockNumber >= safe/finalized (TC40-TC41)
 - Pending block shows submitted txs correctly (TC94-TC96)
 - Receipt fields match block (TC108-TC112 partial, TC117-TC121 missing)
 

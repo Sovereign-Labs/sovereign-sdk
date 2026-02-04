@@ -53,6 +53,35 @@ async fn setup_with_contract() -> (
     (rollup, simple_storage, contract_address)
 }
 
+async fn assert_safe_finalized_consistent(
+    client: &dyn Provider,
+    sealed_head_number: u64,
+) -> anyhow::Result<(alloy_rpc_types_eth::Block, alloy_rpc_types_eth::Block)> {
+    let safe_block = client
+        .get_block_by_number(Safe)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("safe block should exist"))?;
+    let finalized_block = client
+        .get_block_by_number(Finalized)
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("finalized block should exist"))?;
+
+    assert_eq!(
+        safe_block.header.number, finalized_block.header.number,
+        "safe and finalized should return same block number"
+    );
+    assert_eq!(
+        safe_block.header.hash, finalized_block.header.hash,
+        "safe and finalized should return same block hash"
+    );
+    assert!(
+        finalized_block.header.number <= sealed_head_number,
+        "finalized block should not exceed sealed head"
+    );
+
+    Ok((safe_block, finalized_block))
+}
+
 // =============================================================================
 // Group 1: Block Tag Semantics
 // =============================================================================
@@ -61,8 +90,8 @@ async fn setup_with_contract() -> (
 ///
 /// Verifies:
 /// - `earliest` returns genesis (block 0)
-/// - `safe` and `finalized` return the sealed head (this rollup's semantics)
-/// - `safe` == `finalized` (both map to head)
+/// - `safe` and `finalized` return the latest finalized rollup height
+/// - `safe` == `finalized`
 #[tokio::test(flavor = "multi_thread")]
 async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
@@ -74,38 +103,20 @@ async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
     let earliest = client.get_block_by_number(Earliest).await?.unwrap();
     assert_eq!(earliest.header.number, 0, "earliest should be block 0");
 
-    // TC05: safe returns sealed head
-    let safe_block = client.get_block_by_number(Safe).await?.unwrap();
-    assert_eq!(
-        safe_block.header.number, sealed_head_number,
-        "safe should equal eth_blockNumber (sealed head)"
-    );
+    // TC05: safe returns latest finalized rollup height (within the RPC snapshot)
+    let (safe_block, finalized_block) =
+        assert_safe_finalized_consistent(&client, sealed_head_number).await?;
     assert_ne!(
         safe_block.header.hash,
         BlockHash::ZERO,
         "safe block should have real hash"
     );
 
-    // TC06: finalized returns sealed head
-    let finalized_block = client.get_block_by_number(Finalized).await?.unwrap();
-    assert_eq!(
-        finalized_block.header.number, sealed_head_number,
-        "finalized should equal eth_blockNumber (sealed head)"
-    );
+    // TC06: finalized returns latest finalized rollup height (within the RPC snapshot)
     assert_ne!(
         finalized_block.header.hash,
         BlockHash::ZERO,
         "finalized block should have real hash"
-    );
-
-    // TC08: safe == finalized (both map to head in this rollup)
-    assert_eq!(
-        safe_block.header.number, finalized_block.header.number,
-        "safe and finalized should return same block number"
-    );
-    assert_eq!(
-        safe_block.header.hash, finalized_block.header.hash,
-        "safe and finalized should return same block hash"
     );
 
     Ok(())
@@ -116,39 +127,34 @@ async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
 /// Tests behavior when `finalization_blocks > 0`.
 ///
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "KNOWN BUG: to be fixed"]
 async fn test_finalized_block_with_non_instant_finality_config() -> anyhow::Result<()> {
     // Use finalization_blocks = 2 (not 0)
     let finalization = 2;
-    let rollup = setup_paused_rollup(finalization, 5).await;
+    let rollup = setup_test_rollup(finalization as u32, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(5).await;
+    // Ensure finalized slots advance
+    rollup.produce_enough_finalized_slots().await;
+    rollup.pause_preferred_batches().await;
     let client = alloy_client(rollup.http_addr);
-    // TODO: add contract deployment to have something in pending
 
     let eth_block_number = client.get_block_number().await?;
     let latest = client.get_block_by_number(Latest).await?.unwrap();
-    let safe = client.get_block_by_number(Safe).await?.unwrap();
-    let finalized = client.get_block_by_number(Finalized).await?.unwrap();
-    let _pending = client.get_block_by_number(Pending).await?.unwrap();
-    // TODO: Check pending is above latest and finalization + 1 above finalized
+    let (safe, finalized) = assert_safe_finalized_consistent(&client, latest.header.number).await?;
+    let _ = client.get_block_by_number(Pending).await?.unwrap();
 
-    // Document actual behavior: In this rollup, safe and finalized both equal sealed head
-    // even with finalization_blocks > 0. This is a rollup-specific divergence from L1.
-    assert_eq!(
-        safe.header.number, eth_block_number,
-        "safe should equal eth_blockNumber (rollup behavior)"
-    );
+    // Latest should still equal eth_blockNumber
     assert_eq!(
         latest.header.number, eth_block_number,
-        "latest should equal eth_blockNumber (rollup behavior)"
+        "latest should equal eth_blockNumber"
     );
 
-    assert_eq!(
-        finalized.header.number.saturating_sub(finalization),
-        eth_block_number,
-        "finalized should be lower eth_blockNumber and latest by finalization={finalization}"
+    // finalized/safe should not exceed latest
+    assert!(
+        finalized.header.number <= latest.header.number,
+        "finalized should not exceed latest"
     );
 
-    // All tags should return the same block (no lag in this rollup)
+    // safe and finalized should return identical blocks in this rollup
     assert_eq!(
         safe.header.number, finalized.header.number,
         "safe and finalized are equal in this rollup"
@@ -179,18 +185,31 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
 
     // Get sealed head BEFORE pending tx
     let sealed_head_number = client.get_block_number().await?;
+    let sealed_head_block = client
+        .get_block_by_number(Number(sealed_head_number))
+        .await?
+        .unwrap();
 
     // Submit pending tx
     let tx_hash_1 = simple_storage.set_value(contract_address, 3000).await;
     simple_storage.wait_for_receipt(tx_hash_1).await;
 
-    let finalized_block = client.get_block_by_number(Finalized).await?.unwrap();
-    assert_eq!(sealed_head_number, finalized_block.header.number);
     // TC03: latest returns pending block (L1 DIVERGENCE)
     let latest_block = client.get_block_by_number(Latest).await?.unwrap();
 
     // TC04: pending returns pending block
-    let pending_block_1 = client.get_block_by_number(Pending).await?.unwrap();
+    // Wait until the pending block is visible to avoid flakiness.
+    let pending_block_1 = {
+        let mut block = client.get_block_by_number(Pending).await?.unwrap();
+        for _ in 0..100 {
+            if block.header.number == sealed_head_number + 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            block = client.get_block_by_number(Pending).await?.unwrap();
+        }
+        block
+    };
 
     // TC14: Verify we have a real pending block (not fallback to sealed)
     assert_eq!(
@@ -200,8 +219,8 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     );
 
     assert_eq!(
-        pending_block_1.header.parent_hash, finalized_block.header.hash,
-        "Pending block should be child of finalized"
+        pending_block_1.header.parent_hash, sealed_head_block.header.hash,
+        "Pending block should be child of sealed head"
     );
 
     // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)
@@ -221,10 +240,6 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
         pending_by_hash_1.header.number, pending_block_1.header.number,
         "pending block hash should be resolvable via eth_getBlockByHash"
     );
-    assert_eq!(
-        pending_by_hash_1.header.number, pending_block_1.header.number,
-        "pending block hash should be resolvable via eth_getBlockByHash"
-    );
 
     // New tx changes pending header's hash, but not number
     let tx_hash_2 = simple_storage.set_value(contract_address, 5000).await;
@@ -234,8 +249,8 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     assert_eq!(pending_block_1.header.number, pending_block_2.header.number);
     assert_ne!(pending_block_1.header.hash, pending_block_2.header.hash);
     assert_eq!(
-        pending_block_2.header.parent_hash, finalized_block.header.hash,
-        "Pending block should be child of finalized"
+        pending_block_2.header.parent_hash, sealed_head_block.header.hash,
+        "Pending block should be child of sealed head"
     );
 
     // TC07: latest == pending (L1 DIVERGENCE: on L1 they would differ)
@@ -248,7 +263,10 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
         latest_block.header.hash, pending_block_1.header.hash,
         "L1 DIVERGENCE: latest and pending return same block hash"
     );
-    assert_eq!(latest_block.header.parent_hash, finalized_block.header.hash);
+    assert_eq!(
+        latest_block.header.parent_hash,
+        sealed_head_block.header.hash
+    );
 
     Ok(())
 }
@@ -256,7 +274,8 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
 /// TC40, TC41: Cross-endpoint consistency with eth_blockNumber
 ///
 /// Verifies:
-/// - eth_blockNumber == safe.number == finalized.number (with instant finality)
+/// - safe.number == finalized.number == latest finalized rollup height
+/// - finalized <= eth_blockNumber
 ///
 /// Note: Pending block behavior is tested in `test_pending_block_properties` and
 /// `test_pending_without_txs_falls_back_to_sealed`.
@@ -266,25 +285,17 @@ async fn test_block_number_consistency() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
 
     let eth_block_number = client.get_block_number().await?;
+    let (safe_block, finalized_block) =
+        assert_safe_finalized_consistent(&client, eth_block_number).await?;
 
-    // TC40: eth_blockNumber == safe.number
-    let safe_block = client.get_block_by_number(Safe).await?.unwrap();
-    assert_eq!(
-        safe_block.header.number, eth_block_number,
-        "eth_blockNumber should equal safe block number"
-    );
-
-    // TC41: eth_blockNumber == finalized.number (with instant finality)
-    let finalized_block = client.get_block_by_number(Finalized).await?.unwrap();
-    assert_eq!(
-        finalized_block.header.number, eth_block_number,
-        "eth_blockNumber should equal finalized block number (instant finality)"
-    );
-
-    // All should be equal with instant finality (finalization_blocks=0)
+    // safe and finalized should be identical
     assert_eq!(
         safe_block.header.number, finalized_block.header.number,
         "safe and finalized should equal with instant finality"
+    );
+    assert!(
+        finalized_block.header.number <= eth_block_number,
+        "finalized should not exceed eth_blockNumber"
     );
 
     let block_by_actual_number = client
@@ -298,10 +309,13 @@ async fn test_block_number_consistency() -> anyhow::Result<()> {
 
     let latest_block = client.get_block_by_number(Latest).await?.unwrap();
     assert_eq!(
-        latest_block.header.number, finalized_block.header.number,
-        "latest and finalized should equal with instant finality"
+        latest_block.header.number, eth_block_number,
+        "latest should equal eth_blockNumber when no pending txs"
     );
-    assert_eq!(latest_block.header.hash, finalized_block.header.hash);
+    assert!(
+        latest_block.header.number >= finalized_block.header.number,
+        "latest should not be below finalized"
+    );
 
     Ok(())
 }
@@ -379,7 +393,18 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
 
     let tx_hash = simple_storage.set_value(contract_address, 3000).await;
     simple_storage.wait_for_receipt(tx_hash).await;
-    let pending_block = client.get_block_by_number(Pending).await?.unwrap();
+    // Wait until the pending block is visible to avoid flakiness.
+    let pending_block = {
+        let mut block = client.get_block_by_number(Pending).await?.unwrap();
+        for _ in 0..100 {
+            if block.header.number == sealed_head_number + 1 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            block = client.get_block_by_number(Pending).await?.unwrap();
+        }
+        block
+    };
     let latest_block = client.get_block_by_number(Latest).await?.unwrap();
 
     // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)

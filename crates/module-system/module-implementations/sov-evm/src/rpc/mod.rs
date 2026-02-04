@@ -369,18 +369,33 @@ where
         None
     }
 
+    fn finalized_block_number(&self, state: &mut ApiStateAccessor<S>) -> u64 {
+        let sealed_numbers = self.block_numbers(state);
+        let start = *sealed_numbers.start();
+        let end = *sealed_numbers.end();
+
+        let finalized_slot_number = state.latest_finalized_slot_number();
+        let finalized_height = state
+            .rollup_height_for_true_slot(finalized_slot_number)
+            .unwrap_or(RollupHeight::GENESIS);
+
+        finalized_height.get().clamp(start, end)
+    }
+
     fn block_tag_to_pending_or_block(
         &self,
         block: BlockNumberOrTag,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
-        let block_numbers = self.block_numbers(state);
         match block {
-            BlockNumberOrTag::Earliest => PendingOrBlock::Number(*block_numbers.start()),
+            BlockNumberOrTag::Earliest => {
+                let block_numbers = self.block_numbers(state);
+                PendingOrBlock::Number(*block_numbers.start())
+            }
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => PendingOrBlock::Pending,
             BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                PendingOrBlock::Number(*block_numbers.end())
+                PendingOrBlock::Number(self.finalized_block_number(state))
             }
             BlockNumberOrTag::Number(number) => PendingOrBlock::Number(number),
         }
@@ -422,7 +437,9 @@ where
         let block_numbers = self.block_numbers(state);
         let block_number = match block {
             BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                self.finalized_block_number(state)
+            }
             BlockNumberOrTag::Number(nr) => nr,
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {

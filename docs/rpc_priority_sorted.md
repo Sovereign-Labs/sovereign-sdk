@@ -95,8 +95,8 @@
    Minimal repro: pause sequencer, send tx, compare nonce for `latest` vs `pending`; L1 expects `latest` to ignore pending.
 3. `eth_getTransactionReceipt` and `eth_getTransactionByHash` return objects with `blockNumber` set before sealing [examples/demo-rollup/tests/evm/evm_soft_conf.rs:40].  
    Minimal repro: pause sequencer, send tx, query receipt/tx; L1 expects `null` until mined.
-4. `safe`/`finalized` tags map to head block [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:244].  
-   Minimal repro: run with `finalization_blocks > 0`, produce blocks, and assert `finalized` < `latest`.
+4. `safe` and `finalized` resolve to the same latest-finalized block (no distinct `safe` semantics).  
+   Minimal repro: run with `finalization_blocks > 0`, compare `safe` vs `finalized`; L1 allows `safe` to be ahead of `finalized`.
 5. `eth_gasPrice` and `eth_maxPriorityFeePerGas` always return 0 [crates/full-node/sov-ethereum/src/lib.rs:122] [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:414].  
    Minimal repro: call both endpoints; L1 typically returns non-zero.
 6. `eth_call` ignores `state_overrides` and `block_overrides` [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:268].  
