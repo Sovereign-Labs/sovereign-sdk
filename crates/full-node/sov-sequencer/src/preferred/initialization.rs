@@ -70,13 +70,8 @@ where
             "Instantiating the preferred sequencer"
         );
 
-        let mut config = self.config;
+        let config = self.config;
         let preferred_config = &config.sequencer_kind_config;
-
-        let maybe_oracle_config =
-            TimingOracleConfigWithPrivateKey::new(preferred_config.timing_oracle.clone())
-                .transpose()?;
-        maybe_add_oracle_to_admins(&mut config.admin_addresses, &maybe_oracle_config);
 
         let tx_status_manager = TxStatusManager::default();
 
@@ -241,9 +236,13 @@ where
 
         // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            let heartbeat_task =
-                HeartBeatTask::new(postgres_config.clone(), shutdown_sender.clone(), bind_addr)
-                    .await?;
+            let heartbeat_task = HeartBeatTask::new(
+                postgres_config.clone(),
+                shutdown_sender.clone(),
+                bind_addr,
+                postgres_config.leader_election.heartbeat_interval(),
+            )
+            .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
             handles.push(heartbeat_handle);
         }
@@ -268,19 +267,6 @@ where
                 .await;
             }
         }));
-
-        if let Some(oracle_config) = maybe_oracle_config {
-            if let SequencerRole::BatchProducer = seq_role {
-                if Rt::default().maybe_set_oracle_timestamp(0).is_some() {
-                    match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
-                        Ok(handle) => handles.push(handle),
-                        Err(e) => {
-                            error!(error = ?e, "Failed to start timestamp oracle task");
-                        }
-                    }
-                }
-            }
-        }
 
         Ok((seq, handles))
     }
@@ -308,20 +294,4 @@ where
         );
         (api_state, checkpoint_sender)
     }
-}
-
-fn maybe_add_oracle_to_admins<S: Spec>(
-    admins: &mut Vec<S::Address>,
-    oracle_config: &Option<TimingOracleConfigWithPrivateKey<S>>,
-) {
-    if let Some(oracle_config) = oracle_config {
-        let oracle = oracle_config.address();
-        if !admins.contains(&oracle) {
-            info!(
-                "Adding oracle address {} to sequencer's admin address list",
-                oracle
-            );
-            admins.push(oracle);
-        }
-    };
 }

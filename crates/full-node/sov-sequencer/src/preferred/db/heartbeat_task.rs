@@ -19,16 +19,13 @@ use tracing::{error, info, warn};
 
 use super::SequencerRole;
 
-use super::postgres::{PostgresBackend, LEADER_TIMEOUT};
+use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
 
-/// Periodic interval for heartbeat tasks.
-const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(200);
-
-/// Manages periodic heartbeat and optional leadership election for a sequencer node.                                                                                                                                                                        
-///                                                                                                                                                                                                                                                          
-/// This task maintains the node's presence in the cluster by periodically updating                                                                                                                                                                          
-/// its registration in the database. Depending on the spawn method used, it may                                                                                                                                                                             
+/// Manages periodic heartbeat and optional leadership election for a sequencer node.
+///
+/// This task maintains the node's presence in the cluster by periodically updating
+/// its registration in the database. Depending on the spawn method used, it may
 /// also compete for leadership.
 pub struct HeartBeatTask {
     backend: PostgresBackend,
@@ -36,6 +33,7 @@ pub struct HeartBeatTask {
     shutdown_sender: watch::Sender<()>,
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
+    heartbeat_interval: Duration,
 }
 
 impl HeartBeatTask {
@@ -43,6 +41,7 @@ impl HeartBeatTask {
         postgres_config: PostgresConfig,
         shutdown_sender: watch::Sender<()>,
         bind_addr: SocketAddr,
+        heartbeat_interval: Duration,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
@@ -53,6 +52,7 @@ impl HeartBeatTask {
             shutdown_sender,
             shutdown_receiver,
             postgres_config,
+            heartbeat_interval,
         })
     }
 
@@ -76,7 +76,11 @@ impl HeartBeatTask {
     // Sends a heartbeat that competes for leadership.
     // Returns `true` if this node is the current leader.
     async fn try_acquire_leadership(&self) -> Result<bool> {
-        match self.backend.heartbeat(Some(LEADER_TIMEOUT)).await? {
+        match self
+            .backend
+            .heartbeat(Some(self.postgres_config.leader_election))
+            .await?
+        {
             Some(leader) => Ok(leader.node_id == self.node_id),
             None => Ok(false),
         }
@@ -95,7 +99,7 @@ impl HeartBeatTask {
     fn spawn_leader_heartbeat_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting leader heartbeat task");
-            let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+            let mut interval = tokio::time::interval(self.heartbeat_interval);
 
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
@@ -140,7 +144,7 @@ impl HeartBeatTask {
     fn spawn_replica_heartbeat_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica election task");
-            let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+            let mut interval = tokio::time::interval(self.heartbeat_interval);
 
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
@@ -185,7 +189,7 @@ impl HeartBeatTask {
     fn spawn_node_registration_task(self) -> JoinHandle<()> {
         tokio::spawn(async move {
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica registration task.");
-            let mut interval = tokio::time::interval(HEARTBEAT_INTERVAL);
+            let mut interval = tokio::time::interval(self.heartbeat_interval);
 
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {

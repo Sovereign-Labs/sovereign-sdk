@@ -64,3 +64,67 @@ async fn test_multiple_replicas_register_in_nodes_table() {
     let _ = replica_rollup.shutdown().await;
     setup.shutdown().await;
 }
+
+/// Tests that stale nodes are filtered out from cluster info based on max_age.
+///
+/// This test verifies the recent NodeDiscovery changes:
+/// 1. Nodes whose `last_updated` timestamp exceeds `max_age` are filtered out
+/// 2. The leader is always included regardless of its age
+/// 3. Active nodes continue to appear in the cluster info
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stale_nodes_are_filtered_from_cluster_info() {
+    // Use a short max_age (2 seconds) to speed up the test.
+    let max_age = Duration::from_secs(2);
+    let Some(mut setup) = NodeDiscoveryTestSetup::new_with_max_age(max_age).await else {
+        return;
+    };
+
+    // Start a leader node that will keep sending heartbeats.
+    let leader = setup.start_node("leader", ConfiguredNodeRole::Leader).await;
+
+    leader.wait_for_sequencer_ready().await.unwrap();
+
+    // Start a replica node.
+    let replica = setup
+        .start_node("replica", ConfiguredNodeRole::Replica)
+        .await;
+
+    // Wait for both nodes to appear in cluster info.
+    let cluster_info = setup.cluster_info_subscription.wait_for_change().await;
+    assert!(
+        cluster_info.has_leader("leader"),
+        "Leader should be present"
+    );
+    assert!(
+        cluster_info.has_follower("replica"),
+        "Replica should be present as follower"
+    );
+
+    // Shut down the replica - it will stop sending heartbeats.
+    let _ = replica.shutdown().await;
+
+    // Wait for the replica to become stale and be filtered out.
+    // The leader's heartbeat updates will trigger notifications.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let cluster_info = setup.cluster_info_subscription.wait_for_change().await;
+
+            // Leader should always be present (never filtered regardless of age).
+            assert!(
+                cluster_info.has_leader("leader"),
+                "Leader should always be present in cluster info"
+            );
+
+            // Check if the stale replica has been filtered out.
+            if !cluster_info.has_follower("replica") {
+                // Success - the stale replica was filtered out.
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timeout waiting for stale replica to be filtered out");
+
+    let _ = leader.shutdown().await;
+    setup.shutdown().await;
+}

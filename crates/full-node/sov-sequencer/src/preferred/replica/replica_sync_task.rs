@@ -395,7 +395,12 @@ mod tests {
         .unwrap();
 
         let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
-        let (db, _) = PostgresBackend::connect_as_maybe_leader(&postgres_config, addr)
+        let db = PostgresBackend::connect(&postgres_config, addr)
+            .await
+            .unwrap();
+
+        let _ = db
+            .heartbeat(Some(postgres_config.leader_election))
             .await
             .unwrap();
 
