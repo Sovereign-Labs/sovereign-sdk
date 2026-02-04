@@ -266,11 +266,13 @@ fn allowed_toml_value_to_const_expr(
                 .map(|v| allowed_toml_value_to_const_expr(constant_name, v))
                 .collect::<syn::Result<Vec<_>>>()?;
 
-            // For ChainHashOverride arrays (or empty arrays that might be overridden with
-            // ChainHashOverride), generate a Vec to match the override logic type
-            let is_chain_hash_array = is_chain_hash_override_array(arr) || values.is_empty();
-            if is_chain_hash_array {
-                syn::parse_quote!(vec![#(#values),*])
+            // HACK: Apply special casing for the chain hash overrides array when given an empty array,
+            // But only if we're actually handling the CHAIN_HASH_OVERRIDES constant.
+            let might_be_chain_hash_array = is_chain_hash_override_array(arr)
+                || (values.is_empty() && constant_name.value() == "CHAIN_HASH_OVERRIDES");
+            // We return slices instead of raw arrays for the chain hash overrides. This is because the length of the array is unknown.
+            if might_be_chain_hash_array {
+                syn::parse_quote!([#(#values),*].as_slice())
             } else {
                 syn::Expr::Array(syn::ExprArray {
                     attrs: Vec::new(),
@@ -333,7 +335,7 @@ fn chain_hash_override_array_override_logic() -> TokenStream {
             serde::Deserialize::deserialize(deserializer).unwrap();
 
         // Convert hex strings to [u8; 32]
-        raw_overrides
+        let overrides = raw_overrides
             .into_iter()
             .map(|raw| {
                 let hex_str = raw.chain_hash.strip_prefix("0x").unwrap_or(&raw.chain_hash);
@@ -349,6 +351,10 @@ fn chain_hash_override_array_override_logic() -> TokenStream {
                 }
             })
             .collect::<Vec<_>>()
+            .leak(); // Because we need the type of the result to be slice (to match the type returned by the function when overrides
+                     //are disabled), we have to leak the vector. Overrides are only active when debug assertions are enabled, so this is no big deal
+
+        &overrides[..]
     })
 }
 
@@ -369,7 +375,10 @@ fn allowed_toml_value_to_expr_with_override_logic(
             &*env_value.leak()
         }),
         AllowedTomlValue::Array(arr)
-            if is_chain_hash_override_array(arr) || constant_name == "CHAIN_HASH_OVERRIDES" =>
+        // HACK: Apply special casing for the chain hash overrides array when given an empty array, 
+        // But only if we're actually handling the CHAIN_HASH_OVERRIDES constant.
+        // Special casing is required because the length of the array is unknown.
+            if is_chain_hash_override_array(arr) || (arr.is_empty() && constant_name== "CHAIN_HASH_OVERRIDES") =>
         {
             chain_hash_override_array_override_logic()
         }
