@@ -870,7 +870,7 @@ where
         if conservative_finalized_height > highest_seen_transition {
             assert_eq!(
                 highest_seen_transition,
-                self.last_processed_finalized_header.height()
+                just_processed_header.height()
             );
             return Ok(just_processed_header.clone());
         }
