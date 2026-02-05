@@ -246,7 +246,7 @@ pub struct ApiStateAccessor<S: Spec> {
     local_kernel_writes: HashMap<SlotKey, Option<SlotValue>>,
     local_user_writes: HashMap<SlotKey, Option<SlotValue>>,
     local_accessory_writes: HashMap<SlotKey, AccessoryWrite>,
-    uncomitted_changes: Option<Box<dyn StateGetter>>,
+    uncommitted_changes: Option<Box<dyn StateGetter>>,
     temp_cache: TempCache,
     checkpoint_and_read_txn: CheckpointAndReadTxn<S>,
     #[debug(skip)]
@@ -408,7 +408,7 @@ impl<S: Spec> ApiStateAccessor<S> {
             return entry.clone();
         }
 
-        if let Some(changes) = self.uncomitted_changes.as_ref() {
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::User, key) {
                 return entry;
             }
@@ -433,7 +433,7 @@ impl<S: Spec> ApiStateAccessor<S> {
             return entry.clone();
         }
 
-        if let Some(changes) = self.uncomitted_changes.as_ref() {
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::Kernel, key) {
                 return entry;
             }
@@ -458,7 +458,7 @@ impl<S: Spec> ApiStateAccessor<S> {
             return write.clone();
         }
 
-        if let Some(changes) = self.uncomitted_changes.as_ref() {
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
                 return entry;
             }
@@ -554,7 +554,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         slot_number: SlotNumber,
     ) -> Result<Self, ApiStateAccessorError> {
         let uncommitted_changes = state_checkpoint
-            .uncomitted_changes
+            .uncommitted_changes
             .as_ref()
             .map(|c| c.box_clone());
         Self::build_archival_state(
@@ -577,7 +577,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         height: RollupHeight,
     ) -> Result<Self, ApiStateAccessorError> {
         let uncommitted_changes = state_checkpoint
-            .uncomitted_changes
+            .uncommitted_changes
             .as_ref()
             .map(|c| c.box_clone());
         Self::build_archival_state(
@@ -656,14 +656,14 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         gas_price: <S::Gas as Gas>::Price,
     ) -> Result<Self, ApiStateAccessorError> {
         let gas_meter = BasicGasMeter::new_api(gas_price);
-        let uncomitted_changes = state_checkpoint
-            .uncomitted_changes
+        let uncommitted_changes = state_checkpoint
+            .uncommitted_changes
             .as_ref()
             .map(|g| g.box_clone());
         let checkpoint_and_read_txn = CheckpointAndReadTxn::new(state_checkpoint);
 
         let mut out = Self {
-            uncomitted_changes,
+            uncommitted_changes,
             witness: Default::default(),
             gas_meter,
             events: Vec::new(),
@@ -712,8 +712,8 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         state_to_access: StateToAccess,
     ) -> Self {
-        let uncomitted_changes = state_checkpoint
-            .uncomitted_changes
+        let uncommitted_changes = state_checkpoint
+            .uncommitted_changes
             .as_ref()
             .map(|g| g.box_clone());
         let checkpoint_and_read_txn = CheckpointAndReadTxn::new(state_checkpoint);
@@ -721,7 +721,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         Self {
             events: Vec::new(),
             gas_meter,
-            uncomitted_changes,
+            uncommitted_changes,
             checkpoint_and_read_txn,
             witness: Default::default(),
             local_kernel_writes: HashMap::new(),
@@ -775,7 +775,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             kernel.clone(),
             height,
         );
-        state.uncomitted_changes = uncommitted_changes;
+        state.uncommitted_changes = uncommitted_changes;
         let true_slot_number = match height {
             // If the caller provided a rollup height, find the associated true slot number.
             StateToAccess::RollupHeight(height) => {
@@ -784,7 +784,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 {
                     true_slot_number
                 } else if let Some(max_height) = state
-                    .uncomitted_changes
+                    .uncommitted_changes
                     .as_ref()
                     .and_then(|c| c.latest_rollup_height())
                 {
@@ -793,8 +793,8 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                         return Err(ApiStateAccessorError::HeightNotAccessible);
                     }
                     // Otherwise, drop any uncommitted changes that are after the requested height and use our latest slot number from storage as a safe commit.
-                    // (Anything not already in storage by that point will be in the uncomitted changes)
-                    if let Some(c) = state.uncomitted_changes.as_mut() {
+                    // (Anything not already in storage by that point will be in the uncommitted changes)
+                    if let Some(c) = state.uncommitted_changes.as_mut() {
                         c.ignore_changes_after_height(height);
                     }
                     latest_true_slot_number
@@ -870,7 +870,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             local_kernel_writes: HashMap::new(),
             local_user_writes: HashMap::new(),
             local_accessory_writes: HashMap::new(),
-            uncomitted_changes: self.uncomitted_changes.as_ref().map(|c| c.box_clone()),
+            uncommitted_changes: self.uncommitted_changes.as_ref().map(|c| c.box_clone()),
             temp_cache: TempCache::new(),
             checkpoint_and_read_txn: self.checkpoint_and_read_txn.clone(),
             kernel: self.kernel.clone(),
@@ -890,7 +890,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
     ) -> Result<ApiStateAccessor<S>, ApiStateAccessorError> {
         Self::build_archival_state(
             self.checkpoint_and_read_txn.state_checkpoint.clone(),
-            self.uncomitted_changes.as_ref().map(|c| c.box_clone()),
+            self.uncommitted_changes.as_ref().map(|c| c.box_clone()),
             self.kernel.clone(),
             StateToAccess::RollupHeight(height),
         )

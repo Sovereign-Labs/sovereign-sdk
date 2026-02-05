@@ -1,4 +1,3 @@
-#![allow(dead_code)] // TODO: Remove this once the implementation is complete.
 use std::sync::Arc;
 
 use sov_rollup_interface::common::{RollupHeight, VisibleSlotNumber};
@@ -9,7 +8,7 @@ use crate::{Spec, StateCheckpoint, TxChangeSet};
 /// An analogue of `StateCheckpoint` that can be safely written while concurrent reads are happening.
 pub struct ConcurrentStateCheckpoint<S: Spec> {
     pub(super) storage: S::Storage,
-    pub(crate) uncomitted_changes: Option<Box<dyn StateGetter>>,
+    pub(crate) uncommitted_changes: Option<Box<dyn StateGetter>>,
     pub(crate) writes: Arc<concread::hashmap::HashMap<(SlotKey, Namespace), Option<SlotValue>>>,
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
@@ -34,7 +33,7 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
 
         Self {
             storage: state_checkpoint.delta.inner,
-            uncomitted_changes: state_checkpoint.delta.uncomitted_changes,
+            uncommitted_changes: state_checkpoint.delta.uncommitted_changes,
             writes: Arc::new(map),
             visible_slot_num: state_checkpoint.visible_slot_num,
             rollup_height: state_checkpoint.rollup_height,

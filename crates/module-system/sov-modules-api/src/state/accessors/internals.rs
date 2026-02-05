@@ -32,7 +32,7 @@ pub(super) struct Delta<S: Storage> {
     witness: S::Witness,
     #[cfg(feature = "native")]
     // Changes that are not yet committed to the underlying storage that should be taken into account when querying the storage
-    pub(crate) uncomitted_changes: Option<Box<dyn StateGetter>>,
+    pub(crate) uncommitted_changes: Option<Box<dyn StateGetter>>,
     pub(crate) kernel_cache: ProvableStorageCache<namespaces::Kernel>,
     pub(crate) user_cache: ProvableStorageCache<namespaces::User>,
     pub(crate) accessory_writes: HashMap<SlotKey, AccessoryWrite>,
@@ -44,7 +44,7 @@ impl<S: Storage> Delta<S> {
         Self {
             inner: self.inner.clone(),
             witness: Default::default(),
-            uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
+            uncommitted_changes: self.uncommitted_changes.as_ref().map(|g| g.box_clone()),
             kernel_cache: self.kernel_cache.clone_without_pinned_cache(),
             user_cache: self.user_cache.clone_without_pinned_cache(),
             accessory_writes: self.accessory_writes.clone(),
@@ -60,7 +60,7 @@ impl<S: Storage> Delta<S> {
             inner,
             witness,
             #[cfg(feature = "native")]
-            uncomitted_changes: None,
+            uncommitted_changes: None,
             user_cache: Default::default(),
             kernel_cache: Default::default(),
             accessory_writes: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
@@ -75,7 +75,7 @@ impl<S: Storage> Delta<S> {
                 HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
             ),
             #[cfg(feature = "native")]
-            uncomitted_changes: self.uncomitted_changes.as_ref().map(|g| g.box_clone()),
+            uncommitted_changes: self.uncommitted_changes.as_ref().map(|g| g.box_clone()),
             storage: self.inner.clone(),
             metrics: StateMetrics::default(),
         }
@@ -94,7 +94,7 @@ impl<S: Storage> Delta<S> {
             accessory_writes,
             witness,
             #[cfg(feature = "native")]
-            uncomitted_changes,
+            uncommitted_changes,
         } = self;
 
         (
@@ -106,7 +106,7 @@ impl<S: Storage> Delta<S> {
                 writes: accessory_writes,
                 storage: inner.clone(),
                 #[cfg(feature = "native")]
-                uncomitted_changes,
+                uncommitted_changes,
                 metrics: StateMetrics::default(),
             },
             witness,
@@ -188,14 +188,14 @@ impl<S: Storage> Delta<S> {
     ) -> Option<u32> {
         match namespace {
             Namespace::User => self.user_cache.get_size_or_fetch(
-                &self.uncomitted_changes,
+                &self.uncommitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
                 metric,
             ),
             Namespace::Kernel => self.kernel_cache.get_size_or_fetch(
-                &self.uncomitted_changes,
+                &self.uncommitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
@@ -204,8 +204,8 @@ impl<S: Storage> Delta<S> {
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(write) => write.value.as_ref().map(|v| v.size()),
                 None => {
-                    let val = match self.uncomitted_changes.as_ref() {
-                        Some(uncomitted_changes) => uncomitted_changes
+                    let val = match self.uncommitted_changes.as_ref() {
+                        Some(uncommitted_changes) => uncommitted_changes
                             .get(Namespace::Accessory, key)
                             .or_else(|| self.inner.get_accessory(key)),
                         None => self.inner.get_accessory(key),
@@ -255,14 +255,14 @@ impl<S: Storage> Delta<S> {
     ) -> Option<SlotValue> {
         match namespace {
             Namespace::User => self.user_cache.get_or_fetch(
-                &self.uncomitted_changes,
+                &self.uncommitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
                 metric,
             ),
             Namespace::Kernel => self.kernel_cache.get_or_fetch(
-                &self.uncomitted_changes,
+                &self.uncommitted_changes,
                 key,
                 &self.inner,
                 &self.witness,
@@ -271,8 +271,8 @@ impl<S: Storage> Delta<S> {
             Namespace::Accessory => match self.accessory_writes.get(key).cloned() {
                 Some(write) => write.value,
                 None => {
-                    let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
-                        return uncomitted_changes
+                    let val = if let Some(uncommitted_changes) = self.uncommitted_changes.as_ref() {
+                        return uncommitted_changes
                             .get(namespace, key)
                             .or_else(|| self.inner.get_accessory(key));
                     } else {
@@ -352,7 +352,7 @@ impl<S: Storage> fmt::Debug for Delta<S> {
 pub struct AccessoryDelta<S: Storage> {
     writes: HashMap<SlotKey, AccessoryWrite>,
     #[cfg(feature = "native")]
-    uncomitted_changes: Option<Box<dyn StateGetter>>,
+    uncommitted_changes: Option<Box<dyn StateGetter>>,
     storage: S,
     metrics: StateMetrics,
 }
@@ -414,8 +414,8 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
             return write.value.as_ref().map(|v| v.size());
         }
 
-        let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
-            uncomitted_changes
+        let val = if let Some(uncommitted_changes) = self.uncommitted_changes.as_ref() {
+            uncommitted_changes
                 .get(namespace, key)
                 .or_else(|| self.storage.get_accessory(key))
         } else {
@@ -437,8 +437,8 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
             return write.value.clone();
         }
 
-        let val = if let Some(uncomitted_changes) = self.uncomitted_changes.as_ref() {
-            uncomitted_changes
+        let val = if let Some(uncommitted_changes) = self.uncommitted_changes.as_ref() {
+            uncommitted_changes
                 .get(namespace, key)
                 .or_else(|| self.storage.get_accessory(key))
         } else {
