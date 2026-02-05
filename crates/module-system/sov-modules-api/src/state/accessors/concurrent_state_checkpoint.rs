@@ -18,6 +18,11 @@ pub struct ConcurrentStateCheckpoint<S: Spec> {
 
 impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// Create a `ConcurrentStateCheckpoint` containing the same changes as the given `StateCheckpoint`.
+    ///
+    /// Note: this defaults the latest finalized slot to the most recent slot
+    /// available in storage. That effectively treats all known slots as
+    /// finalized. Call `from_state_checkpoint_with_finalized_slot` if you need
+    /// to preserve the node's true finalized slot semantics.
     pub fn from_state_checkpoint(state_checkpoint: StateCheckpoint<S>) -> Self {
         let latest_finalized_slot_number = state_checkpoint.delta.inner.latest_version();
         Self::from_state_checkpoint_with_finalized_slot(

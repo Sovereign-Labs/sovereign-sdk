@@ -283,6 +283,8 @@ where
                 "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
             );
         let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        // Preferred sequencer deliberately treats the latest available slot as finalized
+        // when initializing API state (soft-confirmation semantics).
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
         let (checkpoint_sender, checkpoint_receiver) =
             watch::channel(Arc::new(concurrent_checkpoint));

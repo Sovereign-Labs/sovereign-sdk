@@ -42,6 +42,9 @@ where
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
+        // Preferred sequencer intentionally treats the latest available slot as finalized
+        // for API state (soft-confirmation semantics). This differs from the standard
+        // sequencer which passes the node's true finalized slot explicitly.
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
         if self
             .checkpoint_sender
