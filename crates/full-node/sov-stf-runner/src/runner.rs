@@ -645,6 +645,7 @@ where
             Self::collect_aggregated_proofs(slot_result.proof_receipts.into_iter());
 
         let processing_changes_start = std::time::Instant::now();
+        let conservative_finalized_height = self.sync_fetcher.last_finalized_height;
         self.state_manager
             .process_stf_changes(
                 slot_result.change_set,
@@ -652,6 +653,8 @@ where
                 transition_data,
                 data_to_commit,
                 aggregated_proofs,
+                &filtered_block_header,
+                conservative_finalized_height,
             )
             .await?;
         trace!("Stf changes processing is completed");

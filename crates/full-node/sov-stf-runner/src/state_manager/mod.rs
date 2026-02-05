@@ -328,6 +328,8 @@ where
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
         aggregated_proofs: Vec<SerializedAggregatedProof>,
+        just_processed_header: &<<Da as DaService>::Spec as DaSpec>::BlockHeader,
+        conservative_finalized_height: u64,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
@@ -368,7 +370,12 @@ where
         // ----
 
         let processing_finalized_transitions_start = std::time::Instant::now();
-        let finalized_transitions = self.process_finalized_state_transitions().await?;
+        let finalized_transitions = self
+            .process_finalized_state_transitions(
+                just_processed_header,
+                conservative_finalized_height,
+            )
+            .await?;
         let processing_finalized_transitions_time =
             processing_finalized_transitions_start.elapsed();
         tracing::trace!(
@@ -855,7 +862,18 @@ where
     async fn get_effective_finalized_header(
         &self,
         highest_seen_transition: u64,
+        just_processed_header: &<<Da as DaService>::Spec as DaSpec>::BlockHeader,
+        conservative_finalized_height: u64,
     ) -> anyhow::Result<<<Da as DaService>::Spec as DaSpec>::BlockHeader> {
+        // Early return if conservative finalized height is greater than highest seen transition.
+        // In that case, we're sure that we only have finalized blocks, so we don't need to check for reorgs.
+        if conservative_finalized_height > highest_seen_transition {
+            assert_eq!(
+                highest_seen_transition,
+                self.last_processed_finalized_header.height()
+            );
+            return Ok(just_processed_header.clone());
+        }
         let last_finalized_header = self
             .finalized_headers_provider
             .get_last_finalized_block_header()?;
@@ -1006,6 +1024,8 @@ where
     /// Returns all [`StateTransitionInfo`] which are below finalized height at this point.
     async fn process_finalized_state_transitions(
         &mut self,
+        just_processed_header: &<<Da as DaService>::Spec as DaSpec>::BlockHeader,
+        conservative_finalized_height: u64,
     ) -> anyhow::Result<Vec<StateOnBlock<Da::Spec, StateRoot>>> {
         let earliest_seen = self
             .get_earliest_seen_height()
@@ -1027,7 +1047,13 @@ where
         );
 
         // 1. Determine effective finalized header (handles syncing/stale edge cases)
-        let effective_finalized = self.get_effective_finalized_header(highest_seen).await?;
+        let effective_finalized = self
+            .get_effective_finalized_header(
+                highest_seen,
+                just_processed_header,
+                conservative_finalized_height,
+            )
+            .await?;
         assert!(
             self.state_on_block
                 .contains_key(&effective_finalized.hash())
