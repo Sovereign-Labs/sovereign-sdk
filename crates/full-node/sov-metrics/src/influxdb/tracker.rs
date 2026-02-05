@@ -593,6 +593,8 @@ pub struct HttpMetrics {
     /// Time it took for the inner handler to finish processing.
     /// Does not include request reading and response writing.
     pub handler_processing_time: std::time::Duration,
+    /// Whether this request came through a WebSocket connection.
+    pub is_ws: bool,
 }
 
 impl Metric for HttpMetrics {
@@ -603,12 +605,13 @@ impl Metric for HttpMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},req_method={},resp_status={},path={} processing_time_us={},response_body_bytes={}",
+            "{},req_method={},resp_status={},path={},is_ws={} processing_time_us={},response_body_bytes={}",
             self.measurement_name(),
             // Tags
             self.request_method,
             self.response_status.as_u16(),
             self.request_uri.path(),
+            self.is_ws,
             // Fields
             self.handler_processing_time.as_micros(),
             self.response_body_size,

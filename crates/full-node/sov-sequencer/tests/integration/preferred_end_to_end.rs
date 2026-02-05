@@ -1184,7 +1184,6 @@ async fn max_batch_size() {
     // The transaction is rejected because it is too large.
     {
         let tx = tx_set_many_values(&admin.private_key, 0, vec![0; 1024]);
-
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
     }
@@ -1199,10 +1198,12 @@ async fn max_batch_size() {
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
 
-        let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 512]);
+        // Fully baked txs include auth wrapper + sequencing metadata + borsh overhead.
+        // 480 bytes keeps two medium txs below the 99% comfortable size limit for a 1024 batch.
+        let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 480]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 480]);
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
     }
@@ -1221,7 +1222,7 @@ async fn max_batch_size() {
     test_rollup.pause_preferred_batches().await;
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 480]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }

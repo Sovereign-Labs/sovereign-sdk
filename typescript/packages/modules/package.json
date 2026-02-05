@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/modules",
-  "version": "0.1.12",
+  "version": "0.2.0",
   "description": "A package providing convenient helpers for interacting with core Sovereign SDK modules",
   "scripts": {
     "build": "tsup",
@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@sovereign-sdk/web3": "workspace:^",
-    "@sovereign-sdk/utils": "workspace:^"
+    "@sovereign-sdk/utils": "workspace:^",
+    "bech32": "^2.0.0"
   }
 }

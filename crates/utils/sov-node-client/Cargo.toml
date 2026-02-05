@@ -14,6 +14,7 @@ base64 = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
+serde_json = { workspace = true }
 
 sov-api-spec = { workspace = true }
 sov-bank = { workspace = true, features = ["native"] }

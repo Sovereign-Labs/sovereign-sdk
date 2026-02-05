@@ -22,8 +22,8 @@ use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
 use time::OffsetDateTime;
 
-/// The leader timeout used for leader election.
-pub(crate) const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+// Re-export for internal use
+pub(crate) use sov_full_node_configs::sequencer::LeaderElectionConfig;
 
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
@@ -66,39 +66,10 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
-    /// Connects to Postgres and attempts to acquire leadership.
-    /// Returns the backend and optionally the leader info if this node became leader.
-    /// The node is always registered in the nodes table regardless of leadership outcome.
-    pub async fn connect(
-        config: &PostgresConfig,
-        bind_addr: SocketAddr,
-    ) -> Result<(Self, Option<SequencerLeader>)> {
+    /// Connects to Postgres db.
+    pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
         let node_address = node_address(bind_addr)?;
-
-        let backend = Self::connect_internal(config, node_address).await?;
-
-        let maybe_leader = backend
-            .try_update_leader_and_register_node(LEADER_TIMEOUT)
-            .await?;
-
-        Ok((backend, maybe_leader))
-    }
-
-    /// Connects to Postgres and registers this node without attempting leader election.
-    /// Used by Replica nodes that need to be visible in the cluster but should never
-    /// become leader.
-    pub async fn connect_as_replica(
-        config: &PostgresConfig,
-        bind_addr: SocketAddr,
-    ) -> Result<Self> {
-        let node_address = node_address(bind_addr)?;
-        let backend = Self::connect_internal(config, node_address).await?;
-        backend.upsert_node_registration_max_timestamp().await?;
-        Ok(backend)
-    }
-
-    async fn connect_internal(config: &PostgresConfig, node_address: String) -> Result<Self> {
         let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
@@ -269,39 +240,45 @@ impl PostgresBackend {
         }))
     }
 
-    /// Attempts to acquire or refresh leadership and register the node in the nodes table atomically.
+    /// Sends a heartbeat to update this node's registration and optionally compete for leadership.
     ///
-    /// Returns `Some(leader)` if leadership was acquired (this node became leader, refreshed its
-    /// leadership, or took over from a timed-out leader). Returns `None` if another node is
-    /// the active leader and hasn't timed out yet. The node is always registered regardless.
-    pub(crate) async fn try_update_leader_and_register_node(
+    /// This method always updates the node's entry in the `nodes` table with the current timestamp.
+    ///
+    /// If `config` is `Some`, also attempts to acquire or refresh leadership using the provided timeouts.
+    /// Returns `Some(leader)` if this node became or remains the leader.
+    /// Returns `None` if another active leader exists or if leadership competition was skipped.
+    pub(crate) async fn heartbeat(
         &self,
-        leader_timeout: Duration,
+        config: Option<LeaderElectionConfig>,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         run_with_retries!(
             &self.backoff_policy,
-            self.try_update_leader_and_register_node_in_tx(leader_timeout),
-            "postgres_db_backend_try_update_leader_and_register_node"
+            self.heartbeat_in_tx(config),
+            "postgres_db_backend_heartbeat"
         )
     }
 
-    async fn try_update_leader_and_register_node_in_tx(
+    async fn heartbeat_in_tx(
         &self,
-        leader_timeout: Duration,
+        config: Option<LeaderElectionConfig>,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
-        let result = self
-            .try_update_leader_inner(&mut tx, leader_timeout)
-            .await?;
+        let result = if let Some(config) = config {
+            self.try_update_leader_inner(&mut tx, config.leader_timeout(), config.grace_period())
+                .await?
+        } else {
+            None
+        };
         self.upsert_node_registration_inner(&mut tx).await?;
         tx.commit().await?;
         Ok(result)
     }
 
-    async fn try_update_leader_inner(
+    pub(crate) async fn try_update_leader_inner(
         &self,
         conn: &mut PgConnection,
         leader_timeout: Duration,
+        grace_period: Duration,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let leader_timeout: i64 = leader_timeout
             .as_millis()
@@ -309,6 +286,16 @@ impl PostgresBackend {
             // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
             .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
 
+        let grace_period: i64 = grace_period
+            .as_millis()
+            .try_into()
+            .expect("PostgresBackend error: grace_period is bigger than i64::MAX");
+
+        // Leadership update logic:
+        // 1. Same node can always refresh its heartbeat
+        // 2. Different node can only take over if BOTH:
+        //    - The current leader has timed out (no heartbeat within leader_timeout)
+        //    - The grace period since leader_acquired_at has passed (prevents rapid flapping)
         let res = sqlx::query_as::<_, SequencerLeader>(
             "WITH ts AS (SELECT NOW() as current_time)
             INSERT INTO sequencer_leader (node_id, last_updated)
@@ -323,18 +310,25 @@ impl PostgresBackend {
                         END
                     WHERE
                         sequencer_leader.node_id = EXCLUDED.node_id
-                        OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                        OR (
+                            sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                            AND sequencer_leader.leader_acquired_at < EXCLUDED.last_updated - ($3 * INTERVAL '1 millisecond')
+                        )
                     RETURNING node_id, last_updated",
         )
         .bind(&self.node_id)
         .bind(leader_timeout)
+        .bind(grace_period)
         .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
-    async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
+    pub(crate) async fn upsert_node_registration_inner(
+        &self,
+        conn: &mut PgConnection,
+    ) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO nodes (node_id, address, last_updated)
              VALUES ($1, $2, NOW())
@@ -345,24 +339,6 @@ impl PostgresBackend {
         .bind(&self.node_id)
         .bind(&self.node_address)
         .execute(&mut *conn)
-        .await?;
-        Ok(())
-    }
-
-    /// Registers this node in the nodes table with the maximum possible timestamp.
-    /// Used by Replica nodes that need to be visible in the cluster but don't participate in leader election.
-    /// The infinity timestamp ensures that the replica nodes won't be pruned from the nodes table.
-    async fn upsert_node_registration_max_timestamp(&self) -> anyhow::Result<()> {
-        sqlx::query(
-            "INSERT INTO nodes (node_id, address, last_updated)
-             VALUES ($1, $2, 'infinity'::TIMESTAMPTZ)
-             ON CONFLICT (node_id) DO UPDATE
-             SET address = EXCLUDED.address,
-                 last_updated = 'infinity'::TIMESTAMPTZ",
-        )
-        .bind(&self.node_id)
-        .bind(&self.node_address)
-        .execute(&self.pool)
         .await?;
         Ok(())
     }
@@ -697,7 +673,7 @@ fn node_address(bind_addr: SocketAddr) -> Result<String> {
 
 /// Gets the local IP address by creating a UDP socket and checking its local address.
 fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
-    // This is a classic networking trick to figure out your machine’s local IP address,
+    // This is a classic networking trick to figure out your machine's local IP address,
     // without actually sending any data.
     let addr = if ip.is_ipv6() {
         let socket = std::net::UdpSocket::bind("[::]:0").with_context(|| {

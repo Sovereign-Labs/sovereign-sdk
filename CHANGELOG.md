@@ -1,5 +1,13 @@
 # 2026-01-29
 - #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
+# 2026-02-03
+- #2433 Updates tests in sov-demo-rollup.
+# 2026-02-02
+- #2360 **Breaking change**: sequencing data is now handled via rollup capabilities, replacing the sequencer-submitted timing-oracle transactions. Runtimes must implement `SequencingDataHandler` (or use `StandardProvenRollupCapabilities`, which now requires the `chain_state` module) and provide a sequencing-data type. Chain state now stores oracle time in nanoseconds (`oracle_time_nanos`) and derives millis via `get_oracle_time`; legacy `oracle_time` remains for layout compatibility but is no longer updated. Oracle time updates only from the preferred sequencer’s sequencing data.
+- #2421 **Added**: Configuration options `user_page_cache_upper_levels` and `kernel_page_cache_upper_levels` to `RollupDbConfig` for tuning NOMT storage performance on high-RAM machines.
+
+# 2026-01-23
+- #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
 # 2026-01-14
 - #2329 Changes default storage in sov-test-utils's TestRollup to be NOMT. No impact for regular customers
 # 2026-01-16 

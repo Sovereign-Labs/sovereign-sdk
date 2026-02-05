@@ -1,16 +1,42 @@
 import { type Rollup, SovereignClient } from "@sovereign-sdk/web3";
+import { bech32m } from "bech32";
 import type { ErrorResponse } from "./types";
+
+// TokenHolder is an enum: { user: string } | { module: string } | { derived: string }
+type TokenHolderPayload =
+  | { user: string }
+  | { module: string }
+  | { derived: string };
+
+type TokenStatePayload = {
+  key: string;
+  value: {
+    name: string;
+    total_supply: string;
+    supply_cap: string;
+    admins: TokenHolderPayload[];
+  };
+};
+
+export type TokenMetadata = {
+  name: string;
+  decimals: number;
+  totalSupply: bigint;
+  supplyCap: bigint;
+  admins: string[];
+};
+
+function getHolderAddress(holder: TokenHolderPayload): string {
+  if ("user" in holder) return holder.user;
+  if ("module" in holder) return holder.module;
+  return holder.derived;
+}
 
 type GasTokenIdPayload = {
   token_id: string;
 };
 
 type BalancePayload = {
-  amount: string;
-  token_id: string;
-};
-
-type TotalSupplyPayload = {
   amount: string;
   token_id: string;
 };
@@ -69,29 +95,41 @@ export class Bank {
   }
 
   /**
-   * Gets the total supply of a specific token.
+   * Gets the metadata of a specific token.
    *
-   * If no token ID is provided, returns the total supply of the gas token.
+   * If no token ID is provided, returns the metadata of the gas token.
    *
    * @param tokenId - Optional token ID. If not provided, uses the gas token
-   * @returns Promise resolving to the total supply as a bigint
+   * @returns Promise resolving to the token metadata
    * @throws {SovereignClient.APIError} When the request fails
    * @example
    * ```typescript
    * const bank = new Bank(rollup);
-   * const totalSupply = await bank.totalSupply();
-   * console.log(`Total gas token supply: ${totalSupply}`);
+   * const metadata = await bank.tokenMetadata();
+   * console.log(`Token name: ${metadata.name}, decimals: ${metadata.decimals}`);
    *
-   * // Query specific token supply
-   * const tokenSupply = await bank.totalSupply("token_123");
+   * // Query specific token metadata
+   * const tokenMeta = await bank.tokenMetadata("token_123");
    * ```
    */
-  async totalSupply(tokenId?: string): Promise<bigint> {
+  async tokenMetadata(tokenId?: string): Promise<TokenMetadata> {
     const token = await this.tokenIdOrElseGasTokenId(tokenId);
-    const response: TotalSupplyPayload = await this.rollup.http.get(
-      `/modules/bank/tokens/${token}/total-supply`,
+    const response: TokenStatePayload = await this.rollup.http.get(
+      `/modules/bank/state/tokens/items/${token}`,
     );
-    return BigInt(response.amount);
+
+    // Decimals are encoded in the last byte of the token ID (byte 31 of the 32-byte hash)
+    const decoded = bech32m.decode(token);
+    const bytes = bech32m.fromWords(decoded.words);
+    const decimals = bytes[31];
+
+    return {
+      name: response.value.name,
+      decimals,
+      totalSupply: BigInt(response.value.total_supply),
+      supplyCap: BigInt(response.value.supply_cap),
+      admins: response.value.admins.map(getHolderAddress),
+    };
   }
 
   /**

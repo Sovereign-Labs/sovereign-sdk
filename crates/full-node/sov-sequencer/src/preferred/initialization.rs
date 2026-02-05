@@ -1,7 +1,6 @@
-use crate::preferred::db::leadership_election::LeadershipElectionTask;
-use crate::preferred::db::SequencerRole;
-
 use super::*;
+use crate::preferred::db::heartbeat_task::HeartBeatTask;
+use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
@@ -71,13 +70,8 @@ where
             "Instantiating the preferred sequencer"
         );
 
-        let mut config = self.config;
+        let config = self.config;
         let preferred_config = &config.sequencer_kind_config;
-
-        let maybe_oracle_config =
-            TimingOracleConfigWithPrivateKey::new(preferred_config.timing_oracle.clone())
-                .transpose()?;
-        maybe_add_oracle_to_admins(&mut config.admin_addresses, &maybe_oracle_config);
 
         let tx_status_manager = TxStatusManager::default();
 
@@ -240,25 +234,17 @@ where
             }
         }
 
-        // Launch leadership task for DbElected nodes
+        // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            if postgres_config.node_role == ConfiguredNodeRole::DbElected {
-                let election_task = LeadershipElectionTask::new(
-                    postgres_config,
-                    shutdown_sender.clone(),
-                    bind_addr,
-                )
-                .await?;
-
-                let leadership_handle = match seq_role {
-                    SequencerRole::BatchProducer => election_task.spawn_leader_heartbeat_task(),
-                    SequencerRole::PgSyncReplica => election_task.spawn_replica_election_task(),
-                    _ => unreachable!(
-                        "DbElected should only result in BatchProducer or PgSyncReplica role"
-                    ),
-                };
-                handles.push(leadership_handle);
-            }
+            let heartbeat_task = HeartBeatTask::new(
+                postgres_config.clone(),
+                shutdown_sender.clone(),
+                bind_addr,
+                postgres_config.leader_election.heartbeat_interval(),
+            )
+            .await?;
+            let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
+            handles.push(heartbeat_handle);
         }
 
         handles.push(tokio::spawn(update_state_task(
@@ -281,19 +267,6 @@ where
                 .await;
             }
         }));
-
-        if let Some(oracle_config) = maybe_oracle_config {
-            if let SequencerRole::BatchProducer = seq_role {
-                if Rt::default().maybe_set_oracle_timestamp(0).is_some() {
-                    match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
-                        Ok(handle) => handles.push(handle),
-                        Err(e) => {
-                            error!(error = ?e, "Failed to start timestamp oracle task");
-                        }
-                    }
-                }
-            }
-        }
 
         Ok((seq, handles))
     }
@@ -321,20 +294,4 @@ where
         );
         (api_state, checkpoint_sender)
     }
-}
-
-fn maybe_add_oracle_to_admins<S: Spec>(
-    admins: &mut Vec<S::Address>,
-    oracle_config: &Option<TimingOracleConfigWithPrivateKey<S>>,
-) {
-    if let Some(oracle_config) = oracle_config {
-        let oracle = oracle_config.address();
-        if !admins.contains(&oracle) {
-            info!(
-                "Adding oracle address {} to sequencer's admin address list",
-                oracle
-            );
-            admins.push(oracle);
-        }
-    };
 }

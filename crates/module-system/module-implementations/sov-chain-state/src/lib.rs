@@ -26,6 +26,7 @@ mod genesis;
 pub use gas::{NonZeroRatio, NonZeroRatioConversionError};
 pub use genesis::*;
 use sov_modules_api::OperatingMode;
+use sov_modules_api::{HDTimestamp, TxState};
 
 /// Capabilities implementation for the module
 pub mod capabilities;
@@ -36,13 +37,15 @@ mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::da::Time;
-use sov_modules_api::InnerEnumVariant;
 use sov_modules_api::{DaSpec, Gas, KernelStateValue, Module, StateValue, VersionedStateValue};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::codec::BcsCodec;
 use sov_state::namespaces::Kernel;
 use sov_state::{Storage, User};
 use tracing::trace;
+
+/// Nanoseconds per millisecond for time conversions.
+const NANOS_PER_MILLI: u128 = 1_000_000;
 
 #[derive(Clone, Debug)]
 /// A handy struct that groups the post state root of a slot with the information about the slot.
@@ -127,7 +130,6 @@ impl<S: Spec> SlotInformation<S> {
 
 /// The chain state module definition. Contains the current state of the da layer.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
-#[module_info(sequencer_safety = "is_safe_for_sequencer")]
 pub struct ChainState<S: Spec> {
     /// The ID of the module.
     #[id]
@@ -243,23 +245,16 @@ pub struct ChainState<S: Spec> {
     #[state]
     admin_address: StateValue<S::Address>,
 
-    /// The current time, as reported by the timing oracle
+    /// Legacy oracle time in milliseconds.
+    /// Retained to preserve state layout compatibility with existing rollups.
+    /// This value is no longer updated or read by the runtime.
+    #[allow(dead_code)]
     #[state]
     oracle_time: StateValue<Time>,
-}
 
-/// Reject any SetOracleTime calls from anyone not explicitly whitelisted in the sequencer config.
-fn is_safe_for_sequencer<S: Spec>(
-    _module: &ChainState<S>,
-    call: InnerEnumVariant<'_>,
-    _sequencer_address: &<S::Da as DaSpec>::Address,
-) -> bool {
-    if let Some(CallMessage::SetOracleTime { .. }) = call.inner().downcast_ref::<CallMessage>() {
-        false
-    } else {
-        // Calls to other modules are safe as far as we're concerned
-        true
-    }
+    /// The current time in nanoseconds, as reported by the timing oracle.
+    #[state]
+    oracle_time_nanos: StateValue<u128>,
 }
 
 impl<S: Spec> ChainState<S> {
@@ -333,26 +328,85 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// Returns the current time, as reported by the timing oracle.
-    /// Returns 0 if the timing oracle is not set.
-    pub fn get_oracle_time<Reader: StateReader<User>>(
-        &self,
-        state: &mut Reader,
-    ) -> Result<Time, <Reader as StateReader<User>>::Error> {
-        Ok(self.oracle_time.get(state)?.unwrap_or(Time::from_millis(0)))
-    }
-
-    /// Returns the current time, as reported by the timing oracle fallback to the DA layer time if the oracle time is not set.
-    pub fn get_oracle_time_with_fallback<
+    /// Falls back to the DA layer time if the oracle time is not set.
+    pub fn get_oracle_time<
         Reader: StateReader<User, Error = E> + VersionReader + StateReader<Kernel, Error = E>,
         E,
     >(
         &self,
         state: &mut Reader,
     ) -> Result<Time, E> {
-        if let Some(oracle_time) = self.oracle_time.get(state)? {
-            return Ok(oracle_time);
-        };
+        if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
+            let millis = oracle_time_nanos / NANOS_PER_MILLI;
+            if millis <= i64::MAX as u128 {
+                return Ok(Time::from_millis(millis as i64));
+            }
+            tracing::warn!(
+                nanos = %oracle_time_nanos,
+                "Oracle time nanos overflow for millis conversion; ignoring"
+            );
+        }
         self.get_time(state)
+    }
+
+    /// Returns the current time in nanoseconds, as reported by the timing oracle.
+    /// Falls back to the DA layer time (converted to nanoseconds) if the oracle time is not set.
+    pub fn get_oracle_time_nanos<
+        Reader: StateReader<User, Error = E> + VersionReader + StateReader<Kernel, Error = E>,
+        E,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Result<u128, E> {
+        if let Some(oracle_time_nanos) = self.oracle_time_nanos.get(state)? {
+            return Ok(oracle_time_nanos);
+        }
+        let time = self.get_time(state)?;
+        let millis_i64 = time.as_millis();
+        let millis = u128::try_from(millis_i64).unwrap_or_else(|_| {
+            panic!("DA layer time must be non-negative, got {millis_i64}");
+        });
+        Ok(millis
+            .checked_mul(NANOS_PER_MILLI)
+            .expect("overflow impossible: i64 * 10^6 fits in u128"))
+    }
+
+    /// Updates the oracle time using sequencer-provided sequencing metadata.
+    ///
+    /// This method is best-effort: invalid, overflowing, or regressing timestamps are ignored.
+    pub fn update_oracle_time_from_sequencing_data(
+        &mut self,
+        timestamp: HDTimestamp,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let nanos = timestamp.as_nanos();
+        let millis = nanos / NANOS_PER_MILLI;
+        if millis > i64::MAX as u128 {
+            tracing::warn!(
+                millis = %millis,
+                "Sequencing metadata overflow for oracle time; ignoring"
+            );
+            return Ok(());
+        }
+
+        let current_nanos = self.oracle_time_nanos.get(state)?;
+
+        if let Some(current_nanos) = current_nanos {
+            if nanos < current_nanos {
+                tracing::warn!(
+                    current_time_nanos = %current_nanos,
+                    new_time_nanos = %nanos,
+                    "Oracle time regression detected; ignoring update"
+                );
+                return Ok(());
+            }
+            if nanos == current_nanos {
+                return Ok(());
+            }
+        }
+
+        self.oracle_time_nanos.set(&nanos, state)?;
+        Ok(())
     }
 
     /// Returns the current time, as reported by the DA layer. This can be called within the execution context of a transaction.
@@ -546,7 +600,7 @@ impl<S: Spec> ChainState<S> {
         if self.is_setup_mode_active(next_rollup_height, state)? {
             return Ok(<S::Gas as Gas>::Price::ZEROED);
         }
-        // If the previous rollup height either didn't exist or was in setup mode, use the initial base fee per gas rather
+        // If the previous rollup height was in setup mode, use the initial base fee per gas rather
         // than computing based on the previous value. We have to special case setup mode, otherwise we'll end up with a zero price.
         if stale_rollup_height.get() == 0
             || self.is_setup_mode_active(stale_rollup_height, state)?
@@ -585,11 +639,6 @@ impl<S: Spec> ChainState<S> {
 pub enum CallMessage {
     /// Terminates setup mode as of the next rollup block.
     TerminateSetupMode,
-    /// Sets the current time.
-    SetOracleTime {
-        /// The new time in milliseconds since the epoch
-        milliseconds_since_epoch: i64,
-    },
 }
 
 #[derive(
@@ -614,11 +663,6 @@ pub enum Event<S: Spec> {
         effective_at_rollup_height: u64,
         /// The address that terminated setup mode.
         by: S::Address,
-    },
-    /// Indicates that the oracle time has been updated.
-    OracleTimeUpdated {
-        /// The new time in milliseconds since the epoch
-        milliseconds_since_epoch: i64,
     },
 }
 
@@ -678,18 +722,6 @@ impl<S: Spec> Module for ChainState<S> {
                 tracing::debug!(
                     "setup mode terminated at height {}",
                     termination_height.get()
-                );
-            }
-            CallMessage::SetOracleTime {
-                milliseconds_since_epoch,
-            } => {
-                let time = Time::from_millis(milliseconds_since_epoch);
-                self.oracle_time.set(&time, state)?;
-                self.emit_event(
-                    state,
-                    Event::OracleTimeUpdated {
-                        milliseconds_since_epoch,
-                    },
                 );
             }
         }

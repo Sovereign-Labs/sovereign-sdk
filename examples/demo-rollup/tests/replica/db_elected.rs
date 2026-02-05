@@ -1,93 +1,33 @@
 use super::*;
-use sov_proxy_utils::NodeDiscovery;
 use sov_sequencer::SequencerRole;
-use std::path::Path;
-use tokio::time::Duration;
 
 type Rollup = ExternalMockDemoRollup<Native>;
-
-/// Test setup for DbElected tests with two nodes (leader and replica).
-struct DbElectedTestSetup {
-    postgres: Arc<PostgresData>,
-    leader: TestRollup<Rollup>,
-    replica: TestRollup<Rollup>,
-    da_shutdown: watch::Sender<()>,
-}
-
-impl DbElectedTestSetup {
-    /// Creates a new test setup with two DbElected nodes.
-    /// Returns None if Docker is not supported.
-    async fn new() -> Option<Self> {
-        let postgres = match PostgresData::create_postgres().await {
-            Ok(pg) => pg,
-            Err(CreatePostgresError::DockerNotSupported) => return None,
-            Err(CreatePostgresError::DockerError(e)) => {
-                panic!("Failed to create Postgres container: {e}");
-            }
-        };
-
-        let (_, da_shutdown, addr) = create_da_service_periodic().await;
-
-        // Start both DbElected nodes
-        let node1 = Some((
-            postgres.clone(),
-            "node1".into(),
-            ConfiguredNodeRole::DbElected,
-        ));
-        let rollup1 = start_rollup(addr, node1).await;
-
-        let node2 = Some((
-            postgres.clone(),
-            "node2".into(),
-            ConfiguredNodeRole::DbElected,
-        ));
-        let rollup2 = start_rollup(addr, node2).await;
-
-        // Wait for both nodes to be ready
-        rollup1.wait_for_sequencer_ready().await.unwrap();
-        rollup2.wait_for_sequencer_ready().await.unwrap();
-
-        // Discover roles via the /sequencer/role endpoint
-        let role1 = rollup1.sequencer_role().await.unwrap();
-        let role2 = rollup2.sequencer_role().await.unwrap();
-
-        // Determine which node is the leader and which is the replica
-        let (leader, replica) = match (role1, role2) {
-            (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (rollup1, rollup2),
-            (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (rollup2, rollup1),
-            _ => panic!(
-                "Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}"
-            ),
-        };
-
-        Some(Self {
-            postgres,
-            leader,
-            replica,
-            da_shutdown,
-        })
-    }
-
-    async fn shutdown(self) {
-        let _ = self.leader.shutdown().await;
-        let _ = self.replica.shutdown().await;
-        let _ = self.da_shutdown.send(());
-    }
-}
 
 /// Test that when two DbElected nodes start, one becomes leader and the other becomes replica.
 /// The leader can process transactions while the replica receives them via PostgreSQL sync.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_two_nodes_leader_and_replica() {
-    let Some(setup) = DbElectedTestSetup::new().await else {
+    let Some(setup) = NodeDiscoveryTestSetup::new().await else {
         return;
     };
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
+    let node_1 = setup
+        .start_node("replica_then_leader", ConfiguredNodeRole::DbElected)
+        .await;
+
+    let node_2 = setup
+        .start_node("replica", ConfiguredNodeRole::DbElected)
+        .await;
+
+    node_1.wait_for_sequencer_ready().await.unwrap();
+    node_2.wait_for_sequencer_ready().await.unwrap();
+
+    let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
+
     // Subscribe to events on the replica
-    let mut event_subscription = setup
-        .replica
+    let mut event_subscription = replica
         .api_client()
         .subscribe_to_events_with_filter("Bank/*")
         .await
@@ -105,36 +45,36 @@ async fn test_db_elected_two_nodes_leader_and_replica() {
         0,
     );
 
-    setup.leader.send_tx_to_sequencer(&tx).await.unwrap();
+    leader.send_tx_to_sequencer(&tx).await.unwrap();
 
     // Wait for the event on the replica (proves it received the tx via PostgreSQL sync)
     wait_for_all_events_with_timeout(Duration::from_millis(500), 1, &mut event_subscription).await;
 
+    replica.shutdown().await.unwrap();
+    leader.shutdown().await.unwrap();
     setup.shutdown().await;
 }
 
 /// Test that when the leader dies, the replica acquires leadership and becomes the new leader.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_failover() {
-    let Some(setup) = DbElectedTestSetup::new().await else {
+    let Some(mut setup) = NodeDiscoveryTestSetup::new().await else {
         return;
     };
 
-    let DbElectedTestSetup {
-        postgres,
-        leader,
-        replica,
-        da_shutdown,
-    } = setup;
+    let node_1 = setup
+        .start_node("replica_then_leader", ConfiguredNodeRole::DbElected)
+        .await;
 
-    let (node_discovery, _file_watcher) = NodeDiscovery::new(postgres.connection_string())
-        .await
-        .expect("Failed to create proxy");
+    let node_2 = setup
+        .start_node("replica", ConfiguredNodeRole::DbElected)
+        .await;
 
-    let cluster_info = node_discovery
-        .get_cluster_info()
-        .await
-        .expect("Failed to get cluster info");
+    node_1.wait_for_sequencer_ready().await.unwrap();
+    node_2.wait_for_sequencer_ready().await.unwrap();
+
+    let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
+    let cluster_info = setup.cluster_info_subscription.wait_for_change().await;
 
     tracing::info!(
         "Initial cluster state - BatchProducer: {:?}, Followers: {:?}",
@@ -174,11 +114,9 @@ async fn test_db_elected_leader_failover() {
     let _ = leader.shutdown().await;
 
     // Wait for replica to shutdown (it will acquire leadership and call exit_rollup)
-    let timeout_duration = Duration::from_secs(15);
     let start = std::time::Instant::now();
-
     while !replica.is_rollup_crashed() {
-        if start.elapsed() > timeout_duration {
+        if start.elapsed() > Duration::from_secs(15) {
             panic!("Timeout waiting for replica to acquire leadership and shutdown");
         }
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -201,10 +139,7 @@ async fn test_db_elected_leader_failover() {
     );
 
     // Check final cluster state after failover
-    let cluster_info = node_discovery
-        .get_cluster_info()
-        .await
-        .expect("Failed to get cluster info after failover");
+    let cluster_info = setup.cluster_info_subscription.wait_for_change().await;
 
     // Verify the former follower is now the leader in the sequencer_leader table
     let new_leader = cluster_info
@@ -215,106 +150,71 @@ async fn test_db_elected_leader_failover() {
     assert_eq!(new_leader.node_id, expected_new_leader.node_id);
 
     let _ = restarted_rollup.shutdown().await;
-    let _ = da_shutdown.send(());
+    let _ = setup.shutdown().await;
 }
 
 /// Test that `subscribe_cluster_info_loop` receives PostgreSQL notifications
 /// and writes updated cluster info to file when nodes register and leadership changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_subscribe_cluster_info_receives_notifications() {
-    let postgres = match PostgresData::create_postgres().await {
-        Ok(pg) => pg,
-        Err(CreatePostgresError::DockerNotSupported) => return,
-        Err(CreatePostgresError::DockerError(e)) => {
-            panic!("Failed to create Postgres container: {e}");
+    let Some(mut setup) = NodeDiscoveryTestSetup::new().await else {
+        return;
+    };
+
+    // Start first node - it will become leader and trigger notifications
+    let node_1 = setup
+        .start_node("node1", ConfiguredNodeRole::DbElected)
+        .await;
+    node_1.wait_for_sequencer_ready().await.unwrap();
+
+    // Wait for file to be updated with leader info.
+    let file_content1 = setup.cluster_info_subscription.wait_for_change().await;
+
+    // Start second node - it will become follower and trigger another notification
+    let node_2 = setup
+        .start_node("node2", ConfiguredNodeRole::DbElected)
+        .await;
+    node_2.wait_for_sequencer_ready().await.unwrap();
+
+    // Wait for file to be updated with follower info.
+    let file_content2 = setup.cluster_info_subscription.wait_for_change().await;
+
+    // After replica joined, the leader didn't change (compare addresses since timestamps may differ).
+    assert_eq!(
+        file_content1.leader.as_ref().unwrap().address,
+        file_content2.leader.as_ref().unwrap().address
+    );
+
+    // The followers list changed (node2 joined as follower).
+    // Note: When there's only a leader, it gets added to followers too, so both have len=1.
+    // But the follower addresses are different.
+    assert_ne!(
+        file_content1.followers[0].address,
+        file_content2.followers[0].address
+    );
+
+    // Cleanup
+    let _ = node_1.shutdown().await;
+    let _ = node_2.shutdown().await;
+    setup.shutdown().await;
+}
+
+async fn establish_leader_and_replica(
+    node_1: TestRollup<Rollup>,
+    node_2: TestRollup<Rollup>,
+) -> (TestRollup<Rollup>, TestRollup<Rollup>) {
+    // Discover roles via the /sequencer/role endpoint
+    let role1 = node_1.sequencer_role().await.unwrap();
+    let role2 = node_2.sequencer_role().await.unwrap();
+
+    // Determine which node is the leader and which is the replica
+    let (leader, replica) = match (role1, role2) {
+        (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (node_1, node_2),
+        (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (node_2, node_1),
+        _ => {
+            panic!("Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}")
         }
     };
 
-    // Create NodeDiscovery and spawn subscribe_cluster_info_loop
-    let (node_discovery, mut file_watcher) = NodeDiscovery::new(postgres.connection_string())
-        .await
-        .expect("Failed to create NodeDiscovery");
-
-    // Create temp file for cluster info output
-    let temp_dir = tempfile::tempdir().unwrap();
-    let cluster_info_path = temp_dir.path().join("cluster_info.txt");
-    let cluster_info_path_clone = cluster_info_path.clone();
-    let subscription_handle = tokio::spawn(async move {
-        node_discovery
-            .subscribe_cluster_info_loop(cluster_info_path_clone)
-            .await
-            .unwrap();
-    });
-
-    let (_, da_shutdown, addr) = create_da_service_periodic().await;
-
-    // Start first node - it will become leader and trigger notifications
-    let node1 = Some((
-        postgres.clone(),
-        "node1".into(),
-        ConfiguredNodeRole::DbElected,
-    ));
-    let rollup1 = start_rollup(addr, node1).await;
-    rollup1.wait_for_sequencer_ready().await.unwrap();
-
-    // Wait for file to be updated with leader info.
-    let file_content1 = wait_for_file_change(&cluster_info_path, &mut file_watcher).await;
-
-    // Start second node - it will become follower and trigger another notification
-    let node2 = Some((
-        postgres.clone(),
-        "node2".into(),
-        ConfiguredNodeRole::DbElected,
-    ));
-    let rollup2 = start_rollup(addr, node2).await;
-    rollup2.wait_for_sequencer_ready().await.unwrap();
-
-    // Wait for file to be updated with follower info.
-    let file_content2 = wait_for_file_change(&cluster_info_path, &mut file_watcher).await;
-
-    // After replica joined, the leader didn't change.
-    assert_eq!(
-        file_content1.leader.as_ref().unwrap(),
-        file_content2.leader.as_ref().unwrap()
-    );
-
-    // The followers are updated.
-    assert!(file_content1.followers[0] != file_content2.followers[0]);
-
-    // Cleanup
-    subscription_handle.abort();
-    let _ = rollup1.shutdown().await;
-    let _ = rollup2.shutdown().await;
-    let _ = da_shutdown.send(());
-}
-
-async fn wait_for_file_change(path: &Path, file_watcher: &mut watch::Receiver<()>) -> FileContent {
-    tokio::time::timeout(Duration::from_secs(2), file_watcher.changed())
-        .await
-        .unwrap()
-        .unwrap();
-
-    let content = std::fs::read_to_string(path).expect("Failed to read file content");
-    FileContent::parse(&content)
-}
-
-struct FileContent {
-    leader: Option<String>,
-    followers: Vec<String>,
-}
-
-impl FileContent {
-    fn parse(content: &str) -> FileContent {
-        let mut leader = None;
-        let mut followers = Vec::new();
-
-        for line in content.lines() {
-            if let Some(addr) = line.strip_prefix("leader=") {
-                leader = Some(addr.parse().expect("Invalid leader address"));
-            } else if let Some(addr) = line.strip_prefix("follower=") {
-                followers.push(addr.parse().expect("Invalid follower address"));
-            }
-        }
-        FileContent { leader, followers }
-    }
+    (leader, replica)
 }

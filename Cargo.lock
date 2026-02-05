@@ -10968,6 +10968,7 @@ dependencies = [
  "sov-accounts",
  "sov-attester-incentives",
  "sov-bank",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-operator-incentives",
  "sov-paymaster",
@@ -11840,6 +11841,7 @@ dependencies = [
  "futures",
  "reqwest",
  "serde",
+ "serde_json",
  "sov-api-spec",
  "sov-bank",
  "sov-modules-api",
@@ -11925,6 +11927,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "sqlx",
+ "time",
  "tokio",
  "tracing",
 ]
@@ -11937,6 +11940,7 @@ dependencies = [
  "axum 0.7.9",
  "client-ip",
  "derive_more 1.0.0",
+ "flate2",
  "futures",
  "proptest",
  "proptest-derive 0.5.1",

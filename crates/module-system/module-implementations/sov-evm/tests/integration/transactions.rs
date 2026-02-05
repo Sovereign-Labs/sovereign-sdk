@@ -100,7 +100,7 @@ fn test_evm_gas_usage() {
             .checked_sub(gas_used_without_evm_metering)
             .unwrap()
             .as_ref(),
-        &[5_251, 0]
+        &[5_318, 0]
     );
 }
 

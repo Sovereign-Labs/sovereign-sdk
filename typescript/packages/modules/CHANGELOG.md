@@ -1,5 +1,16 @@
 # @sovereign-sdk/modules
 
+## 0.2.0
+
+### Minor Changes
+
+-   3574515: Adds a method to fetch the tokens metadata. Removes the old totalSupply method as it is redundant; the token metadata contains the total supply
+
+### Patch Changes
+
+-   Updated dependencies [91137f7]
+    -   @sovereign-sdk/web3@0.12.5
+
 ## 0.1.12
 
 ### Patch Changes

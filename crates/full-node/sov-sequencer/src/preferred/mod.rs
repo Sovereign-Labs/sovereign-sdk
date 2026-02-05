@@ -15,7 +15,6 @@ mod rpc_errors;
 mod side_effects;
 mod state_root_compute;
 mod sync_sequencer_state;
-mod timestamp;
 mod transaction_subscriptions;
 mod update_state;
 
@@ -24,7 +23,6 @@ use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
-use crate::preferred::timestamp::{update_timestamp_task, TimingOracleConfigWithPrivateKey};
 use async_trait::async_trait;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
@@ -42,7 +40,6 @@ use sov_blob_storage::{PreferredBatchData, SequenceNumber};
 use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::{
     ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig, RecoveryStrategy,
-    TimingOracleConfig,
 };
 use sov_modules_api::capabilities::{
     BlobSelector, RollupHeight, TransactionAuthenticator, UniquenessData,
@@ -390,7 +387,6 @@ where
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
-        tracing::debug!(%tx_hash, "Executing accept_tx");
 
         // Check if this transaction has a configured delay
         let mut state = self
@@ -400,9 +396,14 @@ where
 
         let (ip_and_addr, uniqueness, delay_ms) = {
             let (_, auth_data, call) =
-                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
-                    .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
-            let call = Rt::wrap_call(call);
+                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state).map_err(|e| {
+                    tracing::debug!(%tx_hash, discriminant = "unknown", "Executing accept_tx");
+
+                    pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e))
+                })?;
+            let call: <Rt as DispatchCall>::Decodable = Rt::wrap_call(call);
+            let call_repr = call_message_repr::<Rt>(&call);
+            tracing::debug!(%tx_hash, discriminant = call_repr, "Executing accept_tx");
             let delay_ms = self.runtime.get_transaction_delay_ms(&call);
             let uniqueness = auth_data.uniqueness;
             (
@@ -421,8 +422,6 @@ where
             tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
             tracing::debug!(%tx_hash, "Transaction delay completed, proceeding with processing");
         }
-
-        let tx_len = baked_tx.data.len();
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
             UniquenessData::Generation(_) => (
@@ -515,6 +514,7 @@ where
                     DoNewTxError::TxTooBig {
                         current_batch_size,
                         max_batch_size,
+                        tx_len,
                     } => return Err(cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
                     DoNewTxError::ExecutorError(err) => {
                         return Err(RollupBlockExecutorError::into_http_error(err));

@@ -4,7 +4,11 @@ use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
     FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt, TxProcessingError,
 };
-use sov_rollup_interface::{crypto::CredentialId, TxHash};
+use sov_rollup_interface::{
+    crypto::CredentialId,
+    node::{future_or_shutdown, FutureOrShutdownOutput},
+    TxHash,
+};
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::btree_map;
 use std::collections::hash_map;
@@ -264,17 +268,28 @@ struct TimeoutQueueTask<S: Spec, Rt: Runtime<S>> {
     output: mpsc::Sender<NonceBufferInput<S, Rt>>,
     /// The timeout duration for all transactions.
     timeout_duration: Duration,
+    /// Shutdown notification.
+    shutdown_receiver: watch::Receiver<()>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> TimeoutQueueTask<S, Rt> {
     async fn run(mut self) {
-        while let Some(req) = self.input.recv().await {
+        loop {
+            let req = match future_or_shutdown(self.input.recv(), &self.shutdown_receiver).await {
+                FutureOrShutdownOutput::Shutdown | FutureOrShutdownOutput::Output(None) => return,
+                FutureOrShutdownOutput::Output(Some(req)) => req,
+            };
             let elapsed = req.queued_at.elapsed();
             let remaining = self.timeout_duration.saturating_sub(elapsed);
 
             // Sleep until timeout is due
             if !remaining.is_zero() {
-                tokio::time::sleep(remaining).await;
+                match future_or_shutdown(tokio::time::sleep(remaining), &self.shutdown_receiver)
+                    .await
+                {
+                    FutureOrShutdownOutput::Shutdown => return,
+                    FutureOrShutdownOutput::Output(()) => {}
+                }
             }
 
             // Send timeout notification to main task
@@ -369,6 +384,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
 pub struct NonceBufferInputSender<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffer_sender_channel: mpsc::Sender<NonceBufferInput<S, Rt>>,
     execution_backend: E,
+    shutdown_receiver: watch::Receiver<()>,
 }
 
 pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
@@ -448,34 +464,78 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         }
     }
 
-    /// Wipe the entire queue, e.g. because the sequencer had to resync so the queued transactions
-    /// are no longer valid/relevant.
-    /// We explicitly reject all queued transactions with SequencerOverloaded503.
-    async fn wipe(&mut self) {
-        // Consume all buffers, explicitly rejecting all queued transactions
+    fn drain_and_reject_all_txs(&mut self, reject_error: fn() -> TransactionReceiverResult<S, Rt>) {
+        while let Ok(input) = self.buffer_input.try_recv() {
+            match input {
+                NonceBufferInput::NewTx { result_sender, .. } => {
+                    let _ = result_sender.send(reject_error());
+                }
+                NonceBufferInput::TxExecuted {
+                    tx_result,
+                    result_sender,
+                    ..
+                } => {
+                    let _ = result_sender.send(tx_result);
+                }
+                NonceBufferInput::TxTimedOut {
+                    credential_id,
+                    tx_nonce,
+                    tx_hash,
+                } => self.handle_tx_timed_out(credential_id, tx_nonce, tx_hash),
+                NonceBufferInput::TxPersisted { .. } => (),
+            }
+        }
+
         let buffers = std::mem::take(&mut self.buffers);
         for (_credential_id, queue) in buffers {
             for (_nonce, tx) in queue.txs {
-                let _ = tx.result_sender.send(wipe_reject_error());
+                let _ = tx.result_sender.send(reject_error());
             }
         }
-        let mut keep_messages = Vec::new();
-        while let Ok(m) = self.buffer_input.try_recv() {
-            match m {
-                exec @ NonceBufferInput::TxExecuted { .. } => keep_messages.push(exec),
-                NonceBufferInput::NewTx { .. }
-                | NonceBufferInput::TxPersisted { .. }
-                | NonceBufferInput::TxTimedOut { .. } => (),
+
+        // Flush metrics since we might not get another chance to report them.
+        self.timeout_metrics_batcher.flush();
+        self.main_queue_depth_batcher.flush();
+    }
+
+    fn handle_tx_timed_out(&mut self, credential_id: CredentialId, tx_nonce: u64, tx_hash: TxHash) {
+        let queue = self.buffers.entry(credential_id).or_default();
+        let user_nonce_for_prerequisites = queue
+            .non_persisted
+            .user_nonce_to_use_as_prerequisite_start()
+            .unwrap_or_else(|| {
+                self.execution_backend
+                    .get_current_nonce_for_user(&credential_id)
+            });
+        // Pre-requisite checks have been disabled to simplify.
+        // See the comments in the methods on NonPersisted for extra improvements on
+        // transactions with identical nonces that will make pre-requisite checks work
+        // reliably; additionally a time bound on execution would be needed (e.g. retry
+        // limit).
+        //
+        // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
+        //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
+        // }
+        match queue.txs.entry(tx_nonce) {
+            // If the hash doesn't match, it means the tx has been replaced. The
+            // `result_sender` is for the new tx and we shouldn't notify it.
+            btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
+                let tx = entry.remove();
+                let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
+                    tx_hash,
+                    tx_nonce,
+                    user_nonce_for_prerequisites,
+                    tx.nonce_when_queued,
+                    tx.queued_at,
+                    credential_id,
+                    InvalidNonceReason::Timeout,
+                ));
             }
-        }
-        for m in keep_messages {
-            // Try to keep and process all Executed messages.
-            // If the receiver has been dropped the sequencer is likely shutting down.
-            let _ = self.input_sender.send_to_main_queue(m).await;
+            _ => (),
         }
     }
 
-    async fn run(&mut self) {
+    async fn run(&mut self, shutdown_receiver: &mut watch::Receiver<()>) {
         let mut input_closed = false;
         let mut wipe_closed = false;
         loop {
@@ -483,6 +543,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                 return;
             }
             tokio::select! {
+                _ = shutdown_receiver.changed() => {
+                    tracing::info!("Nonce buffer task shutting down. Rejecting queued transactions.");
+                    self.drain_and_reject_all_txs(shutdown_reject_error::<S, Rt>);
+                    return;
+                }
                 input = self.buffer_input.recv(), if !input_closed => {
                     match input {
                         Some(input) => {
@@ -573,7 +638,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                 > original_tx_queue_id
                                             {
                                                 let _ = result_sender.send(wipe_reject_error());
-                                                self.wipe().await;
+                                                self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                                                 continue;
                                             }
                                             queue.non_persisted.mark_inflight(tx_nonce);
@@ -589,7 +654,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                         "nonce_queue_immediate",
                                                     )
                                                     .await;
-                                                let _ = input_sender
+                                                let send_result = input_sender
                                                     .send_to_main_queue(NonceBufferInput::TxExecuted {
                                                         credential_id: ip_addr_and_credential.credential_id,
                                                         tx_nonce,
@@ -597,6 +662,18 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                                         result_sender,
                                                     })
                                                     .await;
+                                                // If the main loop has already exited (e.g., shutdown),
+                                                // return the execution result directly to the caller.
+                                                if let Err(mpsc::error::SendError(
+                                                    NonceBufferInput::TxExecuted {
+                                                        tx_result,
+                                                        result_sender,
+                                                        ..
+                                                    },
+                                                )) = send_result
+                                                {
+                                                    let _ = result_sender.send(tx_result);
+                                                }
                                             });
                                         }
                                         Action::Reject => {
@@ -625,7 +702,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     // sequencer anyway so we wipe everything.
                                     if is_notready_error(&tx_result) {
                                         let _ = result_sender.send(tx_result);
-                                        self.wipe().await;
+                                        self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                                         continue;
                                     }
 
@@ -704,42 +781,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     credential_id,
                                     tx_nonce,
                                     tx_hash,
-                                } => {
-                                    let queue = self.buffers.entry(credential_id).or_default();
-                                    let user_nonce_for_prerequisites = queue
-                                        .non_persisted
-                                        .user_nonce_to_use_as_prerequisite_start()
-                                        .unwrap_or_else(|| {
-                                            self.execution_backend
-                                                .get_current_nonce_for_user(&credential_id)
-                                        });
-                                    // Pre-requisite checks have been disabled to simplify.
-                                    // See the comments in the methods on NonPersisted for extra improvements on
-                                    // transactions with identical nonces that will make pre-requisite checks work
-                                    // reliably; additionally a time bound on execution would be needed (e.g. retry
-                                    // limit).
-                                    //
-                                    // if queue.has_contiguity_between(user_nonce_for_prerequisites, tx_nonce) {
-                                    //     self.schedule_timeout(credential_id, tx_nonce, tx_hash);
-                                    // }
-                                    match queue.txs.entry(tx_nonce) {
-                                        // If the hash doesn't match, it means the tx has been replaced. The
-                                        // `result_sender` is for the new tx and we shouldn't notify it.
-                                        btree_map::Entry::Occupied(entry) if entry.get().tx_hash == tx_hash => {
-                                            let tx = entry.remove();
-                                            let _ = tx.result_sender.send(err_invalid_nonce::<S, Rt>(
-                                                tx_hash,
-                                                tx_nonce,
-                                                user_nonce_for_prerequisites,
-                                                tx.nonce_when_queued,
-                                                tx.queued_at,
-                                                credential_id,
-                                                InvalidNonceReason::Timeout,
-                                            ));
-                                        }
-                                        _ => (),
-                                    }
-                                }
+                                } => self.handle_tx_timed_out(credential_id, tx_nonce, tx_hash),
                             }
                         }
                         None => {
@@ -751,11 +793,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     match forced_tx_batch {
                         Ok(notification) => {
                             tracing::info!(?notification, "Wiping nonce buffer after forced batch execution");
-                            self.wipe().await;
+                            self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                         }
                         Err(broadcast::error::RecvError::Lagged(skipped)) => {
                             tracing::warn!(skipped, "Forced batch notifications lagged; wiping nonce buffer");
-                            self.wipe().await;
+                            self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             wipe_closed = true;
@@ -780,11 +822,13 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             input: timeout_receiver,
             output: buffer_sender_channel.clone(),
             timeout_duration: Duration::from_millis(future_nonce_transaction_timeout_millis),
+            shutdown_receiver: shutdown_receiver.clone(),
         };
 
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel,
             execution_backend: execution_backend.clone(),
+            shutdown_receiver: shutdown_receiver.clone(),
         };
 
         let mut main_task = NonceBufferTask {
@@ -801,9 +845,8 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 
         let handle = tokio::spawn(async move {
             tokio::select! {
-                _ = main_task.run() => {}
+                _ = main_task.run(&mut shutdown_receiver) => {}
                 _ = timeout_task.run() => {}
-                _ = shutdown_receiver.changed() => {}
             }
         });
         (handle, input_sender)
@@ -813,6 +856,10 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
 impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
     NonceBufferInputSender<E, S, Rt>
 {
+    fn is_shutting_down(&self) -> bool {
+        self.shutdown_receiver.has_changed().unwrap_or(true)
+    }
+
     /// Send a message to the main input queue with metrics tracking.
     /// Uses try_send first, falling back to blocking send if the channel is full.
     /// Returns Err if the channel is closed (shutdown in progress).
@@ -867,6 +914,9 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
         queue_receiver.await.unwrap_or_else(|_| {
             // The oneshot sender was dropped. This should normally only happen
             // on shutdown, or if there's a bug.
+            if self.is_shutting_down() {
+                return shutdown_reject_error::<S, Rt>();
+            }
             let current_nonce = self
                 .execution_backend
                 .get_current_nonce_for_user(&ip_addr_and_credential.credential_id);
@@ -951,6 +1001,10 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
 
 fn wipe_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
     Ok(Err(AcceptTxError::SequencerOverloaded503))
+}
+
+fn shutdown_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
+    Err(SequencerStateUpdatorError::Shutdown)
 }
 
 fn is_notready_error<S: Spec, Rt: Runtime<S>>(result: &TransactionReceiverResult<S, Rt>) -> bool {
@@ -1358,6 +1412,103 @@ mod tests {
         (backend, sender, shutdown_sender)
     }
 
+    type DrainTaskParts = (
+        NonceBufferTask<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
+        watch::Sender<()>,
+        watch::Receiver<()>,
+    );
+
+    fn build_task_with_channels(backend: MockTxExecutionBackend) -> DrainTaskParts {
+        let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
+        let (timeout_sender, _timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
+        let (shutdown_sender, shutdown_receiver) = watch::channel(());
+        let (_forced_tx_batch_notifier, forced_tx_batch_receiver) = broadcast::channel(1);
+        let input_sender = NonceBufferInputSender {
+            buffer_sender_channel: buffer_sender_channel.clone(),
+            execution_backend: backend.clone(),
+            shutdown_receiver: shutdown_sender.subscribe(),
+        };
+        let task = NonceBufferTask {
+            buffers: Default::default(),
+            buffer_input,
+            forced_tx_batch_receiver,
+            input_sender,
+            execution_backend: backend,
+            maximum_future_nonce_delta: DEFAULT_TEST_MAX_QUEUE_SIZE,
+            timeout_sender,
+            timeout_metrics_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
+            main_queue_depth_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
+        };
+        (
+            task,
+            buffer_sender_channel,
+            shutdown_sender,
+            shutdown_receiver,
+        )
+    }
+
+    async fn push_new_tx_input(
+        input_sender: &mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
+        nonce: u8,
+        hash: [u8; 32],
+    ) -> oneshot::Receiver<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        let queued = create_mock_queued_tx_with_hash(nonce, hash);
+        let (result_sender, result_receiver) = oneshot::channel();
+        input_sender
+            .send(NonceBufferInput::NewTx {
+                baked_tx: queued.baked_tx,
+                tx_hash: queued.tx_hash,
+                ip_addr_and_credential: queued.ip_addr_and_credential,
+                tx_nonce: nonce.into(),
+                original_tx_queue_id: queued.original_tx_queue_id,
+                result_sender,
+            })
+            .await
+            .unwrap();
+        result_receiver
+    }
+
+    async fn push_tx_executed_input(
+        input_sender: &mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
+        credential_id: CredentialId,
+        tx_nonce: u64,
+        tx_result: TransactionReceiverResult<TestSpec, TestRuntime>,
+    ) -> oneshot::Receiver<TransactionReceiverResult<TestSpec, TestRuntime>> {
+        let (result_sender, result_receiver) = oneshot::channel();
+        input_sender
+            .send(NonceBufferInput::TxExecuted {
+                credential_id,
+                tx_nonce,
+                tx_result,
+                result_sender,
+            })
+            .await
+            .unwrap();
+        result_receiver
+    }
+
+    fn insert_timed_out_tx(
+        task: &mut NonceBufferTask<MockTxExecutionBackend, TestSpec, TestRuntime>,
+        nonce: u8,
+        hash: [u8; 32],
+    ) -> (
+        oneshot::Receiver<TransactionReceiverResult<TestSpec, TestRuntime>>,
+        CredentialId,
+        TxHash,
+    ) {
+        let mut queued = create_mock_queued_tx_with_hash(nonce, hash);
+        let (result_sender, result_receiver) = oneshot::channel();
+        queued.result_sender = result_sender;
+        let credential_id = queued.ip_addr_and_credential.credential_id;
+        task.buffers
+            .entry(credential_id)
+            .or_default()
+            .txs
+            .insert(nonce.into(), queued);
+        (result_receiver, credential_id, TxHash::from(hash))
+    }
+
     /// Spawns a transaction submission as a concurrent task.
     /// Includes a short sleep to allow the task to enter the buffer, ensuring transactions are
     /// submitted to the buffer in the order submit_single_transaction is called.
@@ -1418,6 +1569,7 @@ mod tests {
         Revert,
         Invalidate503,
         NotFullySynced,
+        Shutdown,
         StfNonceReject(u8, u8),
     }
 
@@ -1523,6 +1675,12 @@ mod tests {
                     assert!(
                         matches!(err, AcceptTxError::NotFullySynced(_)),
                         "Tx {i}: Expected NotFullySynced rejection, got: {err:?}"
+                    );
+                }
+                Outcome::Shutdown => {
+                    assert!(
+                        matches!(result, Err(SequencerStateUpdatorError::Shutdown)),
+                        "Tx {i}: Expected shutdown error, got: {result:?}"
                     );
                 }
                 Outcome::StfNonceReject(expected, tx) => {
@@ -1941,5 +2099,159 @@ mod tests {
         .await;
         assert_eq!(backend.get_executed_nonces(), vec![0, 1]);
         assert_eq!(get_test_nonce(&backend), 2);
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_invalidates_buffer() {
+        let backend =
+            MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
+        let (sender, shutdown_sender) = test_buffer_task(&backend, Some(2000)); // Long timeout
+
+        let handles = submit_transactions(sender.clone(), (0..5).collect()).await;
+        tokio::time::sleep(Duration::from_millis(450)).await;
+        let _ = shutdown_sender.send(());
+        let results = collect_results(handles).await;
+        let executed = backend.get_executed_nonces().len();
+        assert!(
+            executed > 0 && executed < 5,
+            "Shutdown should interrupt queued transactions; executed={executed}"
+        );
+        let mut expected = Vec::with_capacity(5);
+        expected.extend(std::iter::repeat_n(Outcome::Ok, executed));
+        expected.extend(std::iter::repeat_n(Outcome::Shutdown, 5 - executed));
+        assert_on_results(results, expected).await;
+        let expected_nonces: Vec<u64> = (0..executed as u64).collect();
+        assert_eq!(backend.get_executed_nonces(), expected_nonces);
+    }
+
+    #[tokio::test]
+    async fn test_shutdown_drains_pending_messages() {
+        let backend = MockTxExecutionBackend::new();
+        let (mut task, input_sender, shutdown_sender, mut shutdown_receiver) =
+            build_task_with_channels(backend);
+
+        let new_tx_receiver = push_new_tx_input(&input_sender, 1, [1; 32]).await;
+        let (timed_out_receiver, credential_id, timed_out_hash) =
+            insert_timed_out_tx(&mut task, 2, [9; 32]);
+        input_sender
+            .send(NonceBufferInput::TxTimedOut {
+                credential_id,
+                tx_nonce: 2,
+                tx_hash: timed_out_hash,
+            })
+            .await
+            .unwrap();
+        let tx_result = Ok(Err(AcceptTxError::NotFullySynced(
+            SequencerNotReadyDetails::Syncing {
+                target_da_height: 100,
+                synced_da_height: 50,
+            },
+        )));
+        let executed_receiver =
+            push_tx_executed_input(&input_sender, CredentialId::from([1u8; 32]), 7, tx_result)
+                .await;
+        input_sender
+            .send(NonceBufferInput::TxPersisted {
+                credential_id: CredentialId::from([1u8; 32]),
+                tx_nonce: 7,
+            })
+            .await
+            .unwrap();
+        drop(input_sender);
+        let _ = shutdown_sender.send(());
+
+        let run_handle = tokio::spawn(async move {
+            task.run(&mut shutdown_receiver).await;
+        });
+        run_handle.await.unwrap();
+
+        let new_tx_result = new_tx_receiver.await.unwrap();
+        let timed_out_result = timed_out_receiver.await.unwrap();
+        let executed_result = executed_receiver.await.unwrap();
+        assert_on_results(
+            vec![new_tx_result, timed_out_result, executed_result],
+            vec![
+                Outcome::Shutdown,
+                Outcome::Err(InvalidNonceReason::Timeout),
+                Outcome::NotFullySynced,
+            ],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_wipe_drains_pending_messages() {
+        let backend = MockTxExecutionBackend::new().with_tx_queue_id(1);
+        let (mut task, input_sender, shutdown_sender, mut shutdown_receiver) =
+            build_task_with_channels(backend);
+
+        let trigger_new_tx_receiver = push_new_tx_input(&input_sender, 0, [1; 32]).await;
+        let queued_new_tx_receiver = push_new_tx_input(&input_sender, 1, [2; 32]).await;
+        let (timed_out_receiver, credential_id, timed_out_hash) =
+            insert_timed_out_tx(&mut task, 2, [7; 32]);
+        input_sender
+            .send(NonceBufferInput::TxTimedOut {
+                credential_id,
+                tx_nonce: 2,
+                tx_hash: timed_out_hash,
+            })
+            .await
+            .unwrap();
+        let tx_result = Ok(Err(AcceptTxError::NotFullySynced(
+            SequencerNotReadyDetails::Syncing {
+                target_da_height: 100,
+                synced_da_height: 50,
+            },
+        )));
+        let executed_receiver =
+            push_tx_executed_input(&input_sender, CredentialId::from([1u8; 32]), 9, tx_result)
+                .await;
+        input_sender
+            .send(NonceBufferInput::TxPersisted {
+                credential_id: CredentialId::from([1u8; 32]),
+                tx_nonce: 9,
+            })
+            .await
+            .unwrap();
+
+        let run_handle = tokio::spawn(async move {
+            task.run(&mut shutdown_receiver).await;
+        });
+
+        let trigger_result = tokio::time::timeout(Duration::from_secs(2), trigger_new_tx_receiver)
+            .await
+            .expect("Timed out waiting for trigger_result")
+            .unwrap();
+        let queued_result = tokio::time::timeout(Duration::from_secs(2), queued_new_tx_receiver)
+            .await
+            .expect("Timed out waiting for queued_result")
+            .unwrap();
+        let timed_out_result = tokio::time::timeout(Duration::from_secs(2), timed_out_receiver)
+            .await
+            .expect("Timed out waiting for timed_out_result")
+            .unwrap();
+        let executed_result = tokio::time::timeout(Duration::from_secs(2), executed_receiver)
+            .await
+            .expect("Timed out waiting for executed_result")
+            .unwrap();
+
+        assert_on_results(
+            vec![
+                trigger_result,
+                queued_result,
+                timed_out_result,
+                executed_result,
+            ],
+            vec![
+                Outcome::Invalidate503,
+                Outcome::Invalidate503,
+                Outcome::Err(InvalidNonceReason::Timeout),
+                Outcome::NotFullySynced,
+            ],
+        )
+        .await;
+
+        let _ = shutdown_sender.send(());
+        run_handle.await.unwrap();
     }
 }
