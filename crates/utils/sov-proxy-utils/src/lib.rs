@@ -336,7 +336,7 @@ impl NodeDiscovery {
             self.notifier.on_cluster_update(&info).await;
         }
 
-        tracing::debug!(info = ?info, "Last cluster info");
+        tracing::trace!(info = ?info, "Last cluster info");
 
         // Wait for at least one notification.
         listener.recv().await?;
@@ -387,7 +387,7 @@ async fn write_to_file_atomically(path: &Path, content: String) -> anyhow::Resul
     let dir = path.parent().context("Path has no parent directory")?;
 
     // Create temp file in same directory to ensure same filesystem for atomic rename.
-    let temp_path = dir.join(format!(".{}.tmp", std::process::id()));
+    let temp_path = dir.join(".tmp");
 
     // Write content to temp file.
     let mut file = tokio::fs::File::create(&temp_path)
