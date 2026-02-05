@@ -174,6 +174,14 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
                 "The node didn't crash, but it was expected to."
             );
         }
+
+        // Verify the crash was due to the expected CrashLocation panic, not some other bug.
+        test_rollup
+            .wait_for_rollup_to_crash_with_expected_panic(
+                Duration::from_secs(30),
+                &crash_moment.to_string(),
+            )
+            .await?;
     }
 
     // Give the OS time to clean up file handles after the crash.

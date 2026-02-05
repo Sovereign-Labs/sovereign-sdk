@@ -1,3 +1,5 @@
+# 2026-02-03
+- #2433 Updates tests in sov-demo-rollup.
 # 2026-02-02
 - #2360 **Breaking change**: sequencing data is now handled via rollup capabilities, replacing the sequencer-submitted timing-oracle transactions. Runtimes must implement `SequencingDataHandler` (or use `StandardProvenRollupCapabilities`, which now requires the `chain_state` module) and provide a sequencing-data type. Chain state now stores oracle time in nanoseconds (`oracle_time_nanos`) and derives millis via `get_oracle_time`; legacy `oracle_time` remains for layout compatibility but is no longer updated. Oracle time updates only from the preferred sequencer’s sequencing data.
 - #2421 **Added**: Configuration options `user_page_cache_upper_levels` and `kernel_page_cache_upper_levels` to `RollupDbConfig` for tuning NOMT storage performance on high-RAM machines.
