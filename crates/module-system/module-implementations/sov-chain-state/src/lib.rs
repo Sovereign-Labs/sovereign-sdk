@@ -639,6 +639,13 @@ impl<S: Spec> ChainState<S> {
 pub enum CallMessage {
     /// Terminates setup mode as of the next rollup block.
     TerminateSetupMode,
+    /// Sets the current time.
+    // Deprecated: This method is deprecated and will be removed in a future version. Left in place 
+    // for now to avoid chain hash changes
+    SetOracleTime {
+        /// The new time in milliseconds since the epoch
+        milliseconds_since_epoch: i64,
+    },
 }
 
 #[derive(
@@ -723,6 +730,9 @@ impl<S: Spec> Module for ChainState<S> {
                     "setup mode terminated at height {}",
                     termination_height.get()
                 );
+            }
+            CallMessage::SetOracleTime { .. } => {
+                anyhow::bail!("Setting oracle time is no longer supported.");
             }
         }
         Ok(())
