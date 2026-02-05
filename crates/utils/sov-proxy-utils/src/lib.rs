@@ -271,24 +271,12 @@ impl NodeDiscovery {
             .listen_all(["nodes_changes", "leader_changes"])
             .await?;
 
-        // Fetch initial cluster info.
-        match self.get_cluster_info().await {
-            Ok(info) => {
-                if let Err(error) = write_to_file_atomically(path, info.to_file_content()).await {
-                    tracing::warn!(?error, ?path, "Failed to update the cluster info file.");
-                } else {
-                    // Notify watchers that the file was saved successfully.
-                    self.notifier.on_cluster_update(&info).await;
-                }
-            }
-            Err(error) => {
-                tracing::warn!(?error, "Failed to fetch initial cluster info");
-            }
-        }
-
         tracing::info!("Subscribed to nodes_changes and leader_changes channels");
 
         let mut consecutive_errors: u32 = 0;
+
+        // On startup, write an empty file. If the cluster is not empty, the file will be populated on the first call to `handle_cluster_update`.
+        write_to_file_atomically(path, "".to_string()).await?;
 
         loop {
             match self.handle_cluster_update(&mut listener, path).await {
@@ -316,12 +304,6 @@ impl NodeDiscovery {
         listener: &mut PgListener,
         path: &std::path::Path,
     ) -> anyhow::Result<()> {
-        // Wait for at least one notification.
-        listener.recv().await?;
-
-        // Drain any additional pending notifications.
-        while listener.next_buffered().is_some() {}
-
         let info = self.get_cluster_info().await?;
         let leader_id = info.leader_id();
 
@@ -355,6 +337,12 @@ impl NodeDiscovery {
         }
 
         tracing::debug!(info = ?info, "Last cluster info");
+
+        // Wait for at least one notification.
+        listener.recv().await?;
+
+        // Drain any additional pending notifications.
+        while listener.next_buffered().is_some() {}
 
         Ok(())
     }
