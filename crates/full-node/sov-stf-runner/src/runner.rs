@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
@@ -6,6 +7,7 @@ use std::time::Duration;
 use anyhow::Context;
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
+use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use sov_metrics::RunnerMetrics;
@@ -133,6 +135,10 @@ where
     >,
 {
     /// Creates a new [`StateTransitionRunner`].
+    ///
+    /// The `storage_path` parameter is used to create the ProofManagerDb when
+    /// proof manager configuration is provided. It should point to the rollup's
+    /// storage directory (e.g., the same path used for ledger and state DBs).
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
         runner_config: RunnerConfig,
@@ -151,6 +157,7 @@ where
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
+        storage_path: Option<PathBuf>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -180,12 +187,19 @@ where
             "Initializing StfRunner");
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
+            let storage_path = storage_path.ok_or_else(|| {
+                anyhow::anyhow!("storage_path is required when proof_manager config is provided")
+            })?;
+
+            // Create ProofManagerDb for proof manager state persistence
+            let proof_manager_db =
+                ProofManagerDb::open(&storage_path).context("Failed to open ProofManagerDb")?;
+
             let channel = new_stf_info_channel(
-                ledger_db.clone(),
+                proof_manager_db,
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
-            )
-            .await?;
+            )?;
 
             (Some(channel.0), Some(channel.1))
         } else {

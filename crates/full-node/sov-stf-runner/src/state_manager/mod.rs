@@ -181,9 +181,16 @@ where
         if let Some(sender) = &mut self.stf_info_sender {
             // If this state manager uses a channel, it MUST be correctly
             // initialized before usage.
+            // Get ledger head for reconciliation - use genesis height if empty
+            let ledger_head = self
+                .ledger_db
+                .get_head_slot()?
+                .map(|(slot, _)| slot)
+                .unwrap_or(SlotNumber::GENESIS);
+
             sender
                 .startup_notify_about_infos_from_db(
-                    &self.ledger_db,
+                    ledger_head,
                     &*self.max_provable_slot_number_tracker,
                 )
                 .await?;
@@ -414,16 +421,15 @@ where
         }
 
         if let Some(stf_info_sender) = &self.stf_info_sender {
-            tracing::trace!("Going to materialize StateTransitionInfo");
+            tracing::trace!("Going to stage StateTransitionInfo in ProofManagerDb");
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
                 slot_number,
             };
-            let stf_info_schema = stf_info_sender
-                .materialize_stf_info(&stf_info, &self.ledger_db)
-                .await?;
-            ledger_change_set.merge(stf_info_schema);
-            tracing::trace!("StateTransitionInfo is materialized into Ledger ChangeSet");
+            // Stage STF info data before ledger commit. Metadata is updated only after
+            // the ledger commit succeeds to avoid advancing ProofManager beyond LedgerDb.
+            stf_info_sender.stage_stf_info(&stf_info).await?;
+            tracing::trace!("StateTransitionInfo is staged in ProofManagerDb");
         }
 
         for aggregated_proof in aggregated_proofs {
@@ -457,6 +463,9 @@ where
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
+            // Commit STF info metadata only after the ledger commit succeeds.
+            stf_info_sender.commit_stf_info(slot_number).await?;
+
             // Notify `StateTransitionInfo` consumers that the data is saved in the Db.
             let max_provable_slot_number = self
                 .max_provable_slot_number_tracker
@@ -465,9 +474,7 @@ where
                 ?max_provable_slot_number,
                 "Going to notify stf_info_sender about max provable slot"
             );
-            stf_info_sender
-                .notify(max_provable_slot_number, &self.ledger_db)
-                .await?;
+            stf_info_sender.notify(max_provable_slot_number).await?;
             tracing::trace!(
                 ?max_provable_slot_number,
                 "State transition info receiver has been notified about max provable slot number"

@@ -1,7 +1,6 @@
 use futures::StreamExt;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
-use sov_db::schema::types::StoredStfInfo;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
 use sov_mock_zkvm::MockZkvmHost;
 use sov_rollup_interface::common::{HexHash, IntoSlotNumber, SlotNumber};
@@ -118,45 +117,6 @@ async fn test_save_aggregated_proof() {
 
         assert_eq!(proof_from_db.proof, agg_proof);
     }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_stf_info() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
-    let ledger_storage = storage_manager.create_ledger_storage();
-
-    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
-
-    let original_stored_inf_info = StoredStfInfo {
-        data: vec![1, 2, 3],
-    };
-
-    let schema_batch = ledger_db
-        .materialize_stf_info(&original_stored_inf_info, SlotNumber::GENESIS)
-        .unwrap();
-
-    storage_manager.commit(&schema_batch);
-
-    let stored_stf_info = ledger_db
-        .get_stf_info(SlotNumber::GENESIS)
-        .unwrap()
-        .unwrap();
-    assert_eq!(original_stored_inf_info, stored_stf_info);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn next_slot_number_to_receive_is_none_at_startup() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
-    let ledger_storage = storage_manager.create_ledger_storage();
-
-    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
-    assert!(ledger_db
-        .get_stf_info_next_slot_number_to_receive()
-        .await
-        .unwrap()
-        .is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]

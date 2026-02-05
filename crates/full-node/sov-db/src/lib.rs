@@ -31,6 +31,12 @@ pub mod state_db;
 /// the JMT and does not contribute to proofs of execution.
 pub mod accessory_db;
 
+/// Implements a wrapper around RocksDB for storing proof manager state.
+/// This database persists proof-manager-specific data independently from the
+/// ledger commit loop, enabling immediate persistence of critical metadata.
+pub mod proof_manager_db;
+pub use proof_manager_db::ProofManagerDb;
+
 /// Define namespaces at the database level
 pub mod namespaces;
 

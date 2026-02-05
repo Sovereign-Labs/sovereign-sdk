@@ -59,6 +59,9 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
     EventByNumber::table_name(),
     ProofByUniqueId::table_name(),
     FinalizedSlots::table_name(),
+    // NOTE: STF info tables are kept for backward compatibility with existing LedgerDb
+    // instances, even though ProofManagerDb owns this data now.
+    // TODO(#1945): add in-place migration to drop these CFs.
     StfInfoByNumber::table_name(),
     StfInfoMetadata::table_name(),
 ];
@@ -71,6 +74,12 @@ pub const ACCESSORY_TABLES: &[ColumnFamilyName] = &[
     AccessoryKeysByVersion::table_name(),
     StateRootHashes::table_name(),
 ];
+
+/// A list of all tables used by the ProofManagerDb. These tables store
+/// proof-manager-specific data like STF info and metadata, persisted
+/// independently from the ledger commit loop.
+pub const PROOF_MANAGER_TABLES: &[ColumnFamilyName] =
+    &[StfInfoByNumber::table_name(), StfInfoMetadata::table_name()];
 
 /// Macro to define a table that implements [`rockbound::Schema`].
 /// `KeyCodec<Schema>` and `ValueCodec<Schema>` must be implemented separately.

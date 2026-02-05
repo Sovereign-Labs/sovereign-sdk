@@ -496,6 +496,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             da_sync_state.clone(),
             da_service_with_cache,
             genesis_da_height,
+            Some(rollup_config.storage.path.clone()),
         )
         .await?;
 

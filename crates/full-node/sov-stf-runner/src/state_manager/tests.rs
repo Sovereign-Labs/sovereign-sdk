@@ -7,6 +7,7 @@ use futures::StreamExt;
 use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
+use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
 use sov_mock_da::storable::StorableMockDaService;
@@ -172,12 +173,12 @@ async fn test_instant_finality() -> anyhow::Result<()> {
     let (mut state_manager, initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
+    let proof_manager_db = ProofManagerDb::open(tempdir.path())?;
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
-        state_manager.ledger_db.clone(),
+        proof_manager_db,
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
-    )
-    .await?;
+    )?;
     state_manager.stf_info_sender = Some(sender);
 
     let mut state_root = initial_state_root;

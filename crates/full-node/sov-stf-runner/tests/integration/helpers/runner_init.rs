@@ -271,6 +271,7 @@ pub async fn initialize_runner(
         da_sync_state,
         da_service_with_cache,
         0,
+        Some(path.to_path_buf()),
     )
     .await
     .unwrap();

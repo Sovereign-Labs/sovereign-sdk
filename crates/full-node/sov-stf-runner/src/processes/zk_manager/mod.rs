@@ -211,9 +211,11 @@ where
                 .publish_proof_blob_with_metadata(agg_proof)
                 .await?;
 
-            // Update the next height to receive
+            // Update and IMMEDIATELY persist the next height to receive.
+            // This fixes duplicate proof submission after restart by ensuring
+            // the persisted value is updated right after successful DA posting.
             self.stf_info_receiver
-                .inc_next_height_to_receive_by(num_proofs_to_create as u64);
+                .inc_next_height_to_receive_by_and_persist(num_proofs_to_create as u64)?;
         }
         Ok(())
     }
