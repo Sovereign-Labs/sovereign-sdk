@@ -396,11 +396,11 @@ where
 
         let (ip_and_addr, uniqueness, delay_ms) = {
             let (_, auth_data, call) =
-                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
-                    .map_err(|e| {
-                        tracing::debug!(%tx_hash, discriminant = "unknown", "Executing accept_tx");
+                <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state).map_err(|e| {
+                    tracing::debug!(%tx_hash, discriminant = "unknown", "Executing accept_tx");
 
-                        pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e))})?;
+                    pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e))
+                })?;
             let call: <Rt as DispatchCall>::Decodable = Rt::wrap_call(call);
             let call_repr = call_message_repr::<Rt>(&call);
             tracing::debug!(%tx_hash, discriminant = call_repr, "Executing accept_tx");
