@@ -276,7 +276,7 @@ impl NodeDiscovery {
         let mut consecutive_errors: u32 = 0;
 
         // On startup, write an empty file. If the cluster is not empty, the file will be populated on the first call to `handle_cluster_update`.
-        write_to_file_atomically(path, "".to_string()).await?;
+        write_to_file_atomically(path, "").await?;
 
         loop {
             match self.handle_cluster_update(&mut listener, path).await {
@@ -328,7 +328,10 @@ impl NodeDiscovery {
                 );
             }
 
-            write_to_file_atomically(path, info.to_file_content()).await?;
+            let content = info.to_file_content();
+            write_to_file_atomically(path, &content).await?;
+            tracing::info!(?path, content, "Cluster info file updated");
+
             self.prev_members = info.members.clone();
             self.prev_leader_id = leader_id;
 
@@ -383,7 +386,7 @@ impl NodeDiscovery {
 ///
 /// Uses write-to-temp-then-rename pattern to ensure the file is never
 /// partially written. The data is synced to disk before renaming.
-async fn write_to_file_atomically(path: &Path, content: String) -> anyhow::Result<()> {
+async fn write_to_file_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
     let dir = path.parent().context("Path has no parent directory")?;
 
     // Create temp file in same directory to ensure same filesystem for atomic rename.
