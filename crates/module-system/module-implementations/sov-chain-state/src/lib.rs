@@ -640,7 +640,7 @@ pub enum CallMessage {
     /// Terminates setup mode as of the next rollup block.
     TerminateSetupMode,
     /// Sets the current time.
-    // Deprecated: This method is deprecated and will be removed in a future version. Left in place 
+    // Deprecated: This method is deprecated and will be removed in a future version. Left in place
     // for now to avoid chain hash changes
     SetOracleTime {
         /// The new time in milliseconds since the epoch
