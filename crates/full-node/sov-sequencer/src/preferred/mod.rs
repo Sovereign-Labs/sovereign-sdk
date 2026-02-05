@@ -387,7 +387,6 @@ where
         let original_tx_queue_id = self.tx_queue_id.load(Ordering::Acquire);
 
         let tx_hash = Rt::Auth::compute_tx_hash(&baked_tx).map_err(generic_accept_tx_error)?;
-        tracing::debug!(%tx_hash, "Executing accept_tx");
 
         // Check if this transaction has a configured delay
         let mut state = self
@@ -398,8 +397,13 @@ where
         let (ip_and_addr, uniqueness, delay_ms) = {
             let (_, auth_data, call) =
                 <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state)
-                    .map_err(|e| pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e)))?;
-            let call = Rt::wrap_call(call);
+                    .map_err(|e| {
+                        tracing::debug!(%tx_hash, discriminant = "unknown", "Executing accept_tx");
+
+                        pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e))})?;
+            let call: <Rt as DispatchCall>::Decodable = Rt::wrap_call(call);
+            let call_repr = call_message_repr::<Rt>(&call);
+            tracing::debug!(%tx_hash, discriminant = call_repr, "Executing accept_tx");
             let delay_ms = self.runtime.get_transaction_delay_ms(&call);
             let uniqueness = auth_data.uniqueness;
             (
