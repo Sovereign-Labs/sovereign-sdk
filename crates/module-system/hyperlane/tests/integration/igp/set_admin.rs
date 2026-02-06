@@ -15,9 +15,7 @@ fn set_admin_by_current_admin() {
     let igp = InterchainGasPaymaster::<S>::default();
     runner.execute_transaction(TransactionTestCase {
         input: relayer.create_plain_message::<RT, InterchainGasPaymaster<S>>(
-            InterchainGasPaymasterCallMessage::SetAdmin {
-                new_admin,
-            },
+            InterchainGasPaymasterCallMessage::SetAdmin { new_admin },
         ),
         assert: Box::new(move |result, state| {
             assert!(
@@ -56,9 +54,7 @@ fn set_admin_by_non_admin_fails() {
 
     runner.execute_transaction(TransactionTestCase {
         input: user.create_plain_message::<RT, InterchainGasPaymaster<S>>(
-            InterchainGasPaymasterCallMessage::SetAdmin {
-                new_admin,
-            },
+            InterchainGasPaymasterCallMessage::SetAdmin { new_admin },
         ),
         assert: Box::new(move |result, _| {
             assert!(
