@@ -3,16 +3,17 @@
 //! This crate provides the [`Proxy`] struct to retrieve leader and follower
 //! IP addresses from the PostgreSQL database atomically.
 
+mod file_writer;
+
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use file_writer::write_to_file_atomically;
 use sqlx::postgres::{PgListener, PgPool};
 use sqlx::FromRow;
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::time::Duration;
 pub use time::OffsetDateTime;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
@@ -380,38 +381,6 @@ impl NodeDiscovery {
 
         Ok((leader_id, all_nodes))
     }
-}
-
-/// Atomically writes content to a file.
-///
-/// Uses write-to-temp-then-rename pattern to ensure the file is never
-/// partially written. The data is synced to disk before renaming.
-async fn write_to_file_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
-    let dir = path.parent().context("Path has no parent directory")?;
-
-    // Create temp file in same directory to ensure same filesystem for atomic rename.
-    let temp_path = dir.join(".tmp");
-
-    // Write content to temp file.
-    let mut file = tokio::fs::File::create(&temp_path)
-        .await
-        .with_context(|| format!("Failed to create temp file at {temp_path:?}"))?;
-
-    file.write_all(content.as_bytes())
-        .await
-        .with_context(|| format!("Failed to write to temp file at {temp_path:?}"))?;
-
-    // Sync to disk before renaming.
-    file.sync_all()
-        .await
-        .with_context(|| format!("Failed to sync temp file at {temp_path:?}"))?;
-
-    // Atomic rename.
-    tokio::fs::rename(&temp_path, path)
-        .await
-        .with_context(|| format!("Failed to rename {temp_path:?} to {path:?}"))?;
-
-    Ok(())
 }
 
 #[cfg(test)]
