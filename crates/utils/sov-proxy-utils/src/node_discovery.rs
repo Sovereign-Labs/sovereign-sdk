@@ -136,21 +136,21 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// This is the default implementation of [`ClusterUpdateNotifier`] that uses
 /// a [`tokio::sync::watch`] channel to notify waiters of cluster changes.
 pub struct SimpleClusterUpdateNotifier {
-    sender: watch::Sender<()>,
+    sender: watch::Sender<Option<ClusterInfo>>,
 }
 
 impl SimpleClusterUpdateNotifier {
     /// Creates a new notifier and its corresponding receiver.
-    pub fn new() -> (Self, watch::Receiver<()>) {
-        let (sender, receiver) = watch::channel(());
+    pub fn new() -> (Self, watch::Receiver<Option<ClusterInfo>>) {
+        let (sender, receiver) = watch::channel(None);
         (Self { sender }, receiver)
     }
 }
 
 #[async_trait]
 impl ClusterUpdateNotifier for SimpleClusterUpdateNotifier {
-    async fn on_cluster_update(&self, _cluster_info: &ClusterInfo) {
-        let _ = self.sender.send(());
+    async fn on_cluster_update(&self, cluster_info: &ClusterInfo) {
+        let _ = self.sender.send(Some(cluster_info.clone()));
     }
 }
 

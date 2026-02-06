@@ -165,7 +165,7 @@ struct ClusterInfoSubscription {
     _temp_dir: tempfile::TempDir,
     path: PathBuf,
     handle: JoinHandle<()>,
-    file_watcher: watch::Receiver<()>,
+    file_watcher: watch::Receiver<Option<ClusterInfo>>,
 }
 
 impl ClusterInfoSubscription {
