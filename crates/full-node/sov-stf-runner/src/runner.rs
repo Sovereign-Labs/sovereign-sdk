@@ -495,8 +495,13 @@ where
         let get_block_start = std::time::Instant::now();
         let filtered_block = if next_da_height <= self.sync_fetcher.last_finalized_height {
             // no reorg will happen for this height; it is safe to just pull it from the fetcher,
-            // which could have this block fetcher already
-            self.sync_fetcher.get_block_at(next_da_height).await?
+            // which could have this block fetched already
+            let block = self.sync_fetcher.get_block_at(next_da_height).await?;
+            // Pre-populate the finalized headers cache with this header to avoid
+            // a redundant network call in get_effective_finalized_header
+            self.finalized_headers_provider
+                .insert_header(block.header().clone());
+            block
         } else {
             // Requests height might re-org
             // It never returns a future height for requested
