@@ -52,7 +52,7 @@ impl ClusterRootHashChecker {
 
     /// Queries all nodes in the cluster for their latest slot's state root
     /// and checks whether they all agree.
-    pub async fn check_root_hashes(&self) -> Result<RootHashCheck> {
+    pub async fn check_root_hashes(&self) -> RootHashCheck {
         let cluster_info = self.receiver.borrow().clone();
         let mut all_nodes: Vec<(&str, SocketAddr)> = Vec::new();
 
@@ -96,7 +96,7 @@ impl ClusterRootHashChecker {
         let mut failed_nodes = Vec::new();
 
         for handle in handles {
-            let (node_id, result) = handle.await.context("Task join failed")?;
+            let (node_id, result) = handle.await.unwrap();
             match result {
                 Ok(slot) => {
                     tracing::debug!(
@@ -131,11 +131,11 @@ impl ClusterRootHashChecker {
             })
             .cloned();
 
-        Ok(RootHashCheck {
+        RootHashCheck {
             consistent_root,
             node_results,
             failed_nodes,
-        })
+        }
     }
 
     /// Periodically checks root hash consistency every 10 seconds.
@@ -144,22 +144,19 @@ impl ClusterRootHashChecker {
     /// Runs indefinitely.
     pub async fn run(&self) -> ! {
         let interval = Duration::from_secs(10);
+
         loop {
-            match self.check_root_hashes().await {
-                Ok(check) if check.is_consistent() => {
-                    tracing::debug!("Root hash check passed: all nodes consistent");
-                }
-                Ok(check) => {
-                    tracing::warn!(
-                        ?check.node_results,
-                        ?check.failed_nodes,
-                        "Root hash inconsistency detected across cluster nodes"
-                    );
-                }
-                Err(e) => {
-                    tracing::error!(error = %e, "Root hash check failed");
-                }
+            let check = self.check_root_hashes().await;
+            if check.is_consistent() {
+                tracing::debug!("Root hash check passed: all nodes consistent");
+            } else {
+                tracing::warn!(
+                ?check.node_results,
+                ?check.failed_nodes,
+                "Root hash inconsistency detected across cluster nodes"
+                );
             }
+
             tokio::time::sleep(interval).await;
         }
     }

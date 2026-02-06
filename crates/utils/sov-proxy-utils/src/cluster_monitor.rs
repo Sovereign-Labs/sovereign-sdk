@@ -24,8 +24,7 @@ impl ClusterMonitor {
         connection_string: &str,
         max_age: Duration,
     ) -> Result<(Self, watch::Receiver<ClusterInfo>)> {
-        let (node_discovery, receiver) =
-            NodeDiscovery::new(connection_string, max_age).await?;
+        let (node_discovery, receiver) = NodeDiscovery::new(connection_string, max_age).await?;
         let root_hash_checker = ClusterRootHashChecker::new(receiver.clone())?;
 
         Ok((
@@ -38,7 +37,7 @@ impl ClusterMonitor {
     }
 
     /// Checks root hash consistency across all nodes using the latest cluster info.
-    pub async fn check_root_hashes(&self) -> Result<RootHashCheck> {
+    pub async fn check_root_hashes(&self) -> RootHashCheck {
         self.root_hash_checker.check_root_hashes().await
     }
 
@@ -48,8 +47,6 @@ impl ClusterMonitor {
         &mut self,
         path: impl AsRef<std::path::Path>,
     ) -> anyhow::Result<()> {
-        self.node_discovery
-            .subscribe_cluster_info_loop(path)
-            .await
+        self.node_discovery.subscribe_cluster_info_loop(path).await
     }
 }
