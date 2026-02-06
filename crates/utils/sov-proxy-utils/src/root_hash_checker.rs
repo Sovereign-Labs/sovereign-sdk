@@ -1,11 +1,10 @@
+use crate::ClusterInfo;
+use anyhow::{Context, Result};
+use futures::future::join_all;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
-
-use anyhow::{Context, Result};
 use tokio::sync::watch;
-
-use crate::ClusterInfo;
 
 /// Response from the `/ledger/slots/latest` endpoint.
 /// Only the fields we need are deserialized.
@@ -50,53 +49,90 @@ impl ClusterRootHashChecker {
         Ok(Self { client, receiver })
     }
 
-    /// Queries all nodes in the cluster for their latest slot's state root
-    /// and checks whether they all agree.
-    pub async fn check_root_hashes(&self) -> RootHashCheck {
-        let cluster_info = self.receiver.borrow().clone();
-        let mut all_nodes: Vec<(&str, SocketAddr)> = Vec::new();
+    fn cluster_nodes(cluster_info: &ClusterInfo) -> Vec<(String, SocketAddr)> {
+        let mut nodes = Vec::new();
 
         if let Some(leader) = &cluster_info.leader {
-            all_nodes.push((&leader.node_id, leader.address));
+            nodes.push((leader.node_id.clone(), leader.address));
         }
 
         for follower in &cluster_info.followers {
             // Avoid duplicating the leader when it appears in followers (single-node cluster).
-            if !all_nodes.iter().any(|(id, _)| *id == follower.node_id) {
-                all_nodes.push((&follower.node_id, follower.address));
+            if !nodes
+                .iter()
+                .any(|(node_id, _)| node_id == &follower.node_id)
+            {
+                nodes.push((follower.node_id.clone(), follower.address));
             }
         }
 
-        let mut handles = Vec::with_capacity(all_nodes.len());
-        for (node_id, address) in &all_nodes {
-            let client = self.client.clone();
-            let url = format!("http://{address}/ledger/slots/latest");
-            let node_id = (*node_id).to_string();
-            handles.push(tokio::spawn(async move {
-                let result = client
-                    .get(&url)
-                    .send()
-                    .await
-                    .and_then(|r| r.error_for_status())
-                    .context(format!("HTTP request to {url} failed"));
+        nodes
+    }
 
-                let result = match result {
-                    Ok(response) => response
-                        .json::<SlotResponse>()
-                        .await
-                        .context("Failed to parse slot response"),
-                    Err(e) => Err(e),
-                };
+    async fn fetch_latest_slot(
+        client: reqwest::Client,
+        address: SocketAddr,
+    ) -> Result<SlotResponse> {
+        let url = format!("http://{address}/ledger/slots/latest");
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .with_context(|| format!("HTTP request to {url} failed"))?;
 
-                (node_id, result)
-            }));
+        response
+            .json::<SlotResponse>()
+            .await
+            .context("Failed to parse slot response")
+    }
+
+    fn consistent_root(
+        cluster_info: &ClusterInfo,
+        node_results: &HashMap<String, (u64, String)>,
+    ) -> Option<String> {
+        let reference_node_id = cluster_info
+            .leader
+            .as_ref()
+            .map(|leader| leader.node_id.as_str())
+            .or_else(|| {
+                cluster_info
+                    .followers
+                    .first()
+                    .map(|follower| follower.node_id.as_str())
+            })?;
+
+        let (_, reference_root) = node_results.get(reference_node_id)?;
+        if node_results
+            .values()
+            .all(|(_, other_root)| other_root == reference_root)
+        {
+            Some(reference_root.clone())
+        } else {
+            None
         }
+    }
+
+    /// Queries all nodes in the cluster for their latest slot's state root
+    /// and checks whether they all agree.
+    pub async fn check_root_hashes(&self) -> RootHashCheck {
+        let cluster_info = self.receiver.borrow().clone();
+        let fetches = Self::cluster_nodes(&cluster_info)
+            .into_iter()
+            .map(|(node_id, address)| {
+                let client = self.client.clone();
+                async move {
+                    let result = Self::fetch_latest_slot(client, address).await;
+                    (node_id, result)
+                }
+            });
+
+        let fetches = join_all(fetches).await;
 
         let mut node_results = HashMap::new();
         let mut failed_nodes = Vec::new();
 
-        for handle in handles {
-            let (node_id, result) = handle.await.unwrap();
+        for (node_id, result) in fetches {
             match result {
                 Ok(slot) => {
                     tracing::debug!(
@@ -107,29 +143,14 @@ impl ClusterRootHashChecker {
                     );
                     node_results.insert(node_id, (slot.number, slot.state_root));
                 }
-                Err(e) => {
-                    tracing::warn!(node_id, error = %e, "Failed to fetch root hash from node");
-                    failed_nodes.push((node_id, e.to_string()));
+                Err(error) => {
+                    tracing::warn!(node_id, error = %error, "Failed to fetch root hash from node");
+                    failed_nodes.push((node_id, error.to_string()));
                 }
             }
         }
 
-        // Use the leader's root hash as the reference, falling back to the first follower.
-        let reference_node_id = cluster_info
-            .leader
-            .as_ref()
-            .map(|l| &l.node_id)
-            .or_else(|| cluster_info.followers.first().map(|f| &f.node_id));
-
-        let consistent_root = reference_node_id
-            .and_then(|id| node_results.get(id.as_str()))
-            .map(|(_, root)| root)
-            .filter(|root| {
-                node_results
-                    .values()
-                    .all(|(_, other_root)| other_root == *root)
-            })
-            .cloned();
+        let consistent_root = Self::consistent_root(&cluster_info, &node_results);
 
         RootHashCheck {
             consistent_root,
