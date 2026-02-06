@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use sqlx::postgres::{PgListener, PgPool};
 use sqlx::FromRow;
 use std::collections::BTreeSet;
@@ -120,41 +119,6 @@ impl NodeInfo {
     }
 }
 
-/// Trait for receiving notifications when cluster state changes.
-///
-/// Implement this trait to define custom behavior when the cluster membership
-/// or leader changes. The notification is triggered after the cluster info file
-/// has been updated.
-#[async_trait]
-pub trait ClusterUpdateNotifier: Send + Sync + 'static {
-    /// Called when cluster membership or leadership changes.
-    async fn on_cluster_update(&self, cluster_info: &ClusterInfo);
-}
-
-/// A simple notifier that signals a watch channel when the cluster updates.
-///
-/// This is the default implementation of [`ClusterUpdateNotifier`] that uses
-/// a [`tokio::sync::watch`] channel to notify waiters of cluster changes.
-pub struct SimpleClusterUpdateNotifier {
-    sender: watch::Sender<ClusterInfo>,
-}
-
-impl SimpleClusterUpdateNotifier {
-    /// Creates a new notifier and its corresponding receiver.
-    pub fn new() -> (Self, watch::Receiver<ClusterInfo>) {
-        let (sender, mut receiver) = watch::channel(ClusterInfo::default());
-        receiver.mark_unchanged();
-        (Self { sender }, receiver)
-    }
-}
-
-#[async_trait]
-impl ClusterUpdateNotifier for SimpleClusterUpdateNotifier {
-    async fn on_cluster_update(&self, cluster_info: &ClusterInfo) {
-        let _ = self.sender.send(cluster_info.clone());
-    }
-}
-
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
     max_age: Duration,
@@ -162,7 +126,7 @@ pub struct NodeDiscovery {
     connection_string: String,
     prev_members: BTreeSet<String>,
     prev_leader_id: Option<String>,
-    notifier: Box<dyn ClusterUpdateNotifier>,
+    sender: watch::Sender<ClusterInfo>,
 }
 
 impl NodeDiscovery {
@@ -172,12 +136,11 @@ impl NodeDiscovery {
     /// its heartbeat before being filtered out of the cluster info.
     ///
     /// Returns the NodeDiscovery instance and a receiver that gets notified
-    /// whenever the cluster info file is successfully saved.
+    /// whenever the cluster info changes.
     pub async fn new(
         connection_string: &str,
         max_age: Duration,
-        notifier: Box<dyn ClusterUpdateNotifier>,
-    ) -> Result<Self> {
+    ) -> Result<(Self, watch::Receiver<ClusterInfo>)> {
         tracing::info!("Connecting to database.");
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
@@ -185,14 +148,20 @@ impl NodeDiscovery {
             .await?;
         tracing::info!("DB connection established.");
 
-        Ok(Self {
-            max_age,
-            pool,
-            connection_string: connection_string.to_string(),
-            prev_members: BTreeSet::new(),
-            prev_leader_id: None,
-            notifier,
-        })
+        let (sender, mut receiver) = watch::channel(ClusterInfo::default());
+        receiver.mark_unchanged();
+
+        Ok((
+            Self {
+                max_age,
+                pool,
+                connection_string: connection_string.to_string(),
+                prev_members: BTreeSet::new(),
+                prev_leader_id: None,
+                sender,
+            },
+            receiver,
+        ))
     }
 
     // Fetches cluster info atomically using a single transaction.
@@ -332,7 +301,7 @@ impl NodeDiscovery {
             self.prev_leader_id = leader_id;
 
             // Notify watchers that the cluster was updated.
-            self.notifier.on_cluster_update(&info).await;
+            let _ = self.sender.send(info.clone());
         }
 
         tracing::trace!(info = ?info, "Last cluster info");

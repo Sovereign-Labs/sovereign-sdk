@@ -18,7 +18,6 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki",
 time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
 tokio = { workspace = true, features = ["time", "sync"], default-features = false }
 tracing = { workspace = true }
-async-trait = { workspace = true }
 
 
 [lints]

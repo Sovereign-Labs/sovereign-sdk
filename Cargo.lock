@@ -11926,7 +11926,6 @@ name = "sov-proxy-utils"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "reqwest",
  "serde",
  "serde_json",

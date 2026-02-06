@@ -18,7 +18,6 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_proxy_utils::SimpleClusterUpdateNotifier;
 use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
@@ -220,10 +219,9 @@ impl NodeDiscoveryTestSetup {
 
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
-        let (notifier, file_watcher) = SimpleClusterUpdateNotifier::new();
         // Create NodeDiscovery to query the nodes table
-        let mut node_discovery =
-            NodeDiscovery::new(postgres.connection_string(), max_age, Box::new(notifier))
+        let (mut node_discovery, file_watcher) =
+            NodeDiscovery::new(postgres.connection_string(), max_age)
                 .await
                 .expect("Failed to create NodeDiscovery");
 
