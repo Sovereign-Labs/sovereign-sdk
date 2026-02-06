@@ -754,6 +754,22 @@ where
         ))
     }
 
+    fn maybe_iter_kernel_values_with_prefix(
+        &self,
+        prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        let iter = self
+            .historical_state
+            .iter_kernel_values_with_prefix(&prefix)?;
+        let Some(iter) = iter else {
+            return Ok(None);
+        };
+
+        Ok(Some(
+            iter.filter_map(|(key, value)| value.map(|v| (key, v))),
+        ))
+    }
+
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         self.pinned_cache.take()
     }

@@ -549,6 +549,14 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
     }
 
+    // JMT doesn't currently support iter_with_prefix, so we return None.
+    fn maybe_iter_kernel_values_with_prefix(
+        &self,
+        _prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
+    }
+
     // JMT doesn't currently support pinned cache, so we return None.
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         None

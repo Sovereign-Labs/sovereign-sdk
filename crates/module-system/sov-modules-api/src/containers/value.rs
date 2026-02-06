@@ -185,6 +185,56 @@ where
 }
 
 #[cfg(feature = "native")]
+impl<N, V, Codec> NamespacedStateValue<N, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V>,
+    N: CompileTimeNamespace,
+{
+    /// Gets the raw value bytes from state or returns None if the value is absent.
+    pub fn get_raw<Reader: StateReader<N>>(
+        &self,
+        state: &mut Reader,
+    ) -> Result<Option<Vec<u8>>, Reader::Error> {
+        let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
+        tracing::trace!(%key, "Getting raw state value");
+        state.get(&key).map(|value| value.map(|v| v.value().to_vec()))
+    }
+
+    /// Sets the raw value bytes in state.
+    pub fn set_raw<Writer>(
+        &mut self,
+        value: &[u8],
+        state: &mut Writer,
+    ) -> Result<(), Writer::Error>
+    where
+        Writer: StateWriter<N>,
+    {
+        let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
+        tracing::trace!(%key, "Setting raw state value");
+        state.set(&key, SlotValue::from(value.to_vec()))
+    }
+
+    /// Removes the raw value bytes from state, returning the previous bytes if present.
+    pub fn remove_raw<ReaderAndWriter>(
+        &mut self,
+        state: &mut ReaderAndWriter,
+    ) -> Result<Option<Vec<u8>>, <ReaderAndWriter as StateWriter<N>>::Error>
+    where
+        ReaderAndWriter: StateReaderAndWriter<N>,
+    {
+        let key = self.slot_key();
+        #[cfg(feature = "expensive-observability")]
+        tracing::trace!(%key, "Removing raw state value");
+        let value = state.get(&key)?;
+        state.delete(&key)?;
+        Ok(value.map(|v| v.value().to_vec()))
+    }
+}
+
+#[cfg(feature = "native")]
 mod proofs {
     use sov_state::namespaces::ProvableCompileTimeNamespace;
     use sov_state::{StateCodec, StateItemCodec, StateItemDecoder, Storage};
@@ -236,5 +286,65 @@ where {
                 })
                 .transpose()
         }
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use borsh::to_vec as borsh_to_vec;
+    use sov_mock_zkvm::MockZkvm;
+    use sov_rollup_interface::execution_mode::Native;
+    use sov_state::codec::BorshCodec;
+    use sov_state::Prefix;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
+    use sov_test_utils::MockDaSpec;
+    use unwrap_infallible::UnwrapInfallible;
+
+    use crate::capabilities::mocks::MockKernel;
+    use crate::{StateCheckpoint, StateValue};
+
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+
+    #[test]
+    fn state_value_raw_roundtrip_and_remove() {
+        let storage_manager = SimpleJmtStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(7, 7);
+        let mut value = StateValue::<u32>::with_codec(prefix, BorshCodec);
+
+        assert_eq!(value.get_raw(&mut state).unwrap_infallible(), None);
+
+        let raw = vec![1, 2, 3, 4, 5];
+        value.set_raw(&raw, &mut state).unwrap_infallible();
+        assert_eq!(value.get_raw(&mut state).unwrap_infallible(), Some(raw.clone()));
+        assert_eq!(
+            value.remove_raw(&mut state).unwrap_infallible(),
+            Some(raw.clone())
+        );
+        assert_eq!(value.get_raw(&mut state).unwrap_infallible(), None);
+    }
+
+    #[test]
+    fn state_value_raw_and_typed_compatibility() {
+        let storage_manager = SimpleJmtStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(8, 8);
+        let mut value = StateValue::<u32>::with_codec(prefix, BorshCodec);
+
+        value.set(&42, &mut state).unwrap_infallible();
+        assert_eq!(
+            value.get_raw(&mut state).unwrap_infallible(),
+            Some(borsh_to_vec(&42_u32).unwrap())
+        );
+
+        let typed_from_raw = borsh_to_vec(&100_u32).unwrap();
+        value.set_raw(&typed_from_raw, &mut state).unwrap_infallible();
+        assert_eq!(value.get(&mut state).unwrap_infallible(), Some(100_u32));
     }
 }
