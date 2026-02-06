@@ -35,7 +35,7 @@ impl NodeInfo {
 }
 
 /// Result of querying cluster node information.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ClusterInfo {
     /// The leader node, if one exists.
     pub leader: Option<NodeInfo>,
@@ -136,13 +136,14 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// This is the default implementation of [`ClusterUpdateNotifier`] that uses
 /// a [`tokio::sync::watch`] channel to notify waiters of cluster changes.
 pub struct SimpleClusterUpdateNotifier {
-    sender: watch::Sender<Option<ClusterInfo>>,
+    sender: watch::Sender<ClusterInfo>,
 }
 
 impl SimpleClusterUpdateNotifier {
     /// Creates a new notifier and its corresponding receiver.
-    pub fn new() -> (Self, watch::Receiver<Option<ClusterInfo>>) {
-        let (sender, receiver) = watch::channel(None);
+    pub fn new() -> (Self, watch::Receiver<ClusterInfo>) {
+        let (sender, mut receiver) = watch::channel(ClusterInfo::default());
+        receiver.mark_unchanged();
         (Self { sender }, receiver)
     }
 }
@@ -150,7 +151,7 @@ impl SimpleClusterUpdateNotifier {
 #[async_trait]
 impl ClusterUpdateNotifier for SimpleClusterUpdateNotifier {
     async fn on_cluster_update(&self, cluster_info: &ClusterInfo) {
-        let _ = self.sender.send(Some(cluster_info.clone()));
+        let _ = self.sender.send(cluster_info.clone());
     }
 }
 
