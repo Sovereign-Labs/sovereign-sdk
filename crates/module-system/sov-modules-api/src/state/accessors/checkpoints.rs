@@ -414,7 +414,7 @@ pub mod native {
         ///
         /// You can use this method when calling getters and setters on accessory
         /// state containers, like AccessoryStateMap.
-        pub fn accessory_state(&mut self) -> AccessoryStateCheckpoint<S> {
+        pub fn accessory_state(&mut self) -> AccessoryStateCheckpoint<'_, S> {
             AccessoryStateCheckpoint { checkpoint: self }
         }
     }

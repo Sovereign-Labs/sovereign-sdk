@@ -1,3 +1,4 @@
+use alloy_eips::BlockId;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use reth_primitives::{TxKind, U256};
@@ -9,7 +10,7 @@ use sov_modules_api::{ApiStateAccessor, RawTx, Spec};
 use sov_rpc_eth_types::EthApiError;
 use sov_sequencer::Sequencer;
 
-use crate::{to_jsonrpsee_error_object, Ethereum, ETH_RPC_ERROR};
+use crate::{rpc_internal_error, rpc_invalid_params, rpc_tx_rejected, Ethereum};
 
 fn config_chain_id() -> u64 {
     config_value!("CHAIN_ID")
@@ -38,14 +39,11 @@ where
             // get from, return error if none
             let from = transaction_request
                 .from
-                .ok_or(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR))?;
+                .ok_or_else(|| rpc_invalid_params("No from address"))?;
 
             // return error if not in signers
             if !ethereum.eth_signer.addresses().contains(&from) {
-                return Err(to_jsonrpsee_error_object(
-                    "From address not in signers",
-                    ETH_RPC_ERROR,
-                ));
+                return Err(rpc_invalid_params("From address not in signers"));
             }
 
             let raw_evm_tx = {
@@ -67,24 +65,21 @@ where
                 let signed_tx = ethereum
                     .eth_signer
                     .sign_transaction(transaction, &from)
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+                    .map_err(rpc_internal_error)?;
 
                 RlpEvmTransaction {
                     rlp: signed_tx.envelope_encoded().to_vec(),
                 }
             };
-            let (tx_hash, raw_message) = ethereum
-                .make_raw_tx(raw_evm_tx)
-                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
 
             let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
 
-            ethereum.sequencer.accept_tx(tx).await.map_err(|e| {
-                to_jsonrpsee_error_object(
-                    format!("{} - '{}' ({:?})", e.status, e.message, e.details),
-                    ETH_RPC_ERROR,
-                )
-            })?;
+            ethereum
+                .sequencer
+                .accept_tx(tx)
+                .await
+                .map_err(|e| rpc_tx_rejected(format!("{} - '{}' ({:?})", e.status, e.message, e.details)))?;
 
             Ok::<_, ErrorObjectOwned>(tx_hash)
         },
@@ -109,7 +104,7 @@ where
     let gas_price = transaction_request.gas_price.unwrap_or_default();
 
     if transaction_request.from.is_none() {
-        return Err(to_jsonrpsee_error_object("No from address", ETH_RPC_ERROR));
+        return Err(rpc_invalid_params("No from address"));
     }
 
     let estimated_gas = evm.eth_estimate_gas(
@@ -130,7 +125,7 @@ where
             max_fee_per_blob_gas: None,
             ..Default::default()
         },
-        Some("pending".to_string()),
+        Some(BlockId::pending()),
         state,
     )?;
 

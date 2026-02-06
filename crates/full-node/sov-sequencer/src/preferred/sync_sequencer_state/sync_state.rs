@@ -11,6 +11,7 @@ use crate::preferred::sync_sequencer_state::conditions_table::{
 use crate::preferred::sync_sequencer_state::ConditionsTable;
 use crate::preferred::sync_sequencer_state::{InitialStatus, Message};
 use crate::preferred::update_state::do_next_event;
+use crate::preferred::update_state::SequenceNumberMismatchError;
 use crate::preferred::AcceptTxError;
 use crate::preferred::DoNewTxError;
 use crate::preferred::Inner;
@@ -29,7 +30,7 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, HDTimestamp, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
@@ -381,7 +382,7 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    async fn get_inner_with_timing(&mut self, reason: &'static str) -> InnerGuard<S, Rt> {
+    async fn get_inner_with_timing(&mut self, reason: &'static str) -> InnerGuard<'_, S, Rt> {
         let channel_size = self.channel_size.fetch_sub(1, Ordering::Relaxed);
         InnerGuard::new(&mut self.inner, reason, channel_size)
     }
@@ -602,8 +603,14 @@ where
         node_state_root: <S::Storage as Storage>::Root,
         mut data: ProcessFinalCatchupData,
         reason: &'static str,
-    ) -> anyhow::Result<ProcessFinalCatchupData> {
+    ) -> Result<ProcessFinalCatchupData, SequenceNumberMismatchError> {
         let mut inner = self.get_inner_with_timing(reason).await;
+        let tx_cache_writer = inner.tx_cache_writer.clone();
+
+        let mut rt = Rt::default();
+        let next_sequence_number_according_to_node =
+            get_next_sequence_number_according_to_node(&info, &mut rt);
+
         // Some events might come in while we're waiting to grab the lock.
         // Replay them.
         while let Ok(event) = db_event_subscription.try_recv() {
@@ -613,7 +620,10 @@ where
             }
 
             do_next_event(
+                inner.seq_role,
+                next_sequence_number_according_to_node,
                 &mut executor,
+                &tx_cache_writer,
                 event,
                 &mut data.batches_count,
                 &mut data.transactions_count,
@@ -811,6 +821,8 @@ where
             .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
+        let mut baked_tx = baked_tx;
+        baked_tx.set_sequencing_metadata(&HDTimestamp::now());
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`

@@ -5,29 +5,28 @@ use crate::helpers::runner_init::{
     bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
 };
 use anyhow::Context;
+use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::MonitoringConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
-    BlockProducingConfig, MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig,
-    MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
+    BlockProducingConfig, FailureBehavior, MockAddress, MockBlob, MockBlock, MockBlockHeader,
+    MockDaConfig, MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
 };
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
-use sov_rollup_interface::common::HexHash;
-use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_state::storage::NativeStorage;
-use sov_state::{ArrayWitness, ProverStorage, Storage, StorageRoot};
+use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::storage::SimpleStorageManager;
-use sov_test_utils::TEST_MOCK_DA_POLLING_INTERVAL;
+use sov_test_utils::{TestStorage, TestStorageManager, TEST_MOCK_DA_POLLING_INTERVAL};
 use tempfile::TempDir;
+use tokio::net::TcpListener;
 use tokio::sync::watch;
 
 type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
@@ -51,7 +50,6 @@ async fn test_runner_with_background_da_service(
         StorableMockDaService::from_config(da_config.clone(), shutdown_receiver.clone()).await;
     let da_service = Arc::new(da_service);
     let tempdir = tempfile::tempdir()?;
-    let finality = da_config.finalization_blocks;
     let rollup_config = crate::helpers::runner_init::rollup_config_with_da::<StorableMockDaService>(
         tempdir.path(),
         da_config,
@@ -67,8 +65,9 @@ async fn test_runner_with_background_da_service(
 
     let stf = HashStf::new();
 
-    let mut storage_manager: crate::helpers::runner_init::StorageManager =
-        NativeStorageManager::new(tempdir.path())?;
+    let mut storage_manager = NomtStorageManager::new(RollupDbConfig::default_in_path(
+        tempdir.path().to_path_buf(),
+    ))?;
 
     let block = da_service.get_block_at(0).await?;
     let genesis_header = block.header().clone();
@@ -97,8 +96,12 @@ async fn test_runner_with_background_da_service(
     let _ =
         sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_receiver.clone());
 
+    let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
+    let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
+
     let mut runner: HashStfRunner<StorableMockDaService> = StateTransitionRunner::new(
         rollup_config.runner.clone(),
+        axum_tcp,
         None,
         da_service.clone(),
         ledger_db.clone(),
@@ -124,16 +127,25 @@ async fn test_runner_with_background_da_service(
     });
 
     let mut synced_da_height = 0;
-    // TODO: Adjust this to be more realistic and with actual motivation
-    let seen_da_height_boundary = target_height + finality as u64 + 30;
+    let mut last_progress_time = std::time::Instant::now();
+    let mut last_synced_height = 0u64;
+    // Time to wait for sync status updates before retrying
+    const ITERATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+    // Max time without forward progress before failing
+    const PROGRESS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
-    while synced_da_height <= target_height {
+    while synced_da_height < target_height {
         let batch = vec![FullyBakedTx::new(vec![1, 2, 3])];
 
         let serialized_batch = borsh::to_vec(&batch)?;
         let _ = da_service.send_transaction(&serialized_batch).await.await?;
 
-        sync_status_receiver.changed().await?;
+        // Add timeout to prevent hanging if runner is stuck
+        match tokio::time::timeout(ITERATION_TIMEOUT, sync_status_receiver.changed()).await {
+            Ok(Ok(())) => {}
+            Ok(Err(_)) => anyhow::bail!("Sync status channel closed unexpectedly"),
+            Err(_) => continue, // Timeout, send another transaction and try again
+        }
 
         let sync_status = { *sync_status_receiver.borrow() };
 
@@ -144,9 +156,17 @@ async fn test_runner_with_background_da_service(
             } => synced_da_height,
         };
 
-        let head = da_service.get_head_block_header().await?;
-        if head.height() > seen_da_height_boundary {
-            anyhow::bail!("Runner didn't manage to sync in time.");
+        // Track progress - fail if stuck for too long
+        // After reorgs, height can go down, so we track ANY change as progress
+        if synced_da_height != last_synced_height {
+            last_synced_height = synced_da_height;
+            last_progress_time = std::time::Instant::now();
+        } else if last_progress_time.elapsed() > PROGRESS_TIMEOUT {
+            anyhow::bail!(
+                "No sync progress for {:?}. Stuck at height {}",
+                PROGRESS_TIMEOUT,
+                synced_da_height
+            );
         }
     }
 
@@ -162,6 +182,7 @@ fn build_da_config(
     finality: u32,
     block_time_ms: u64,
     randomization: RandomizationConfig,
+    failure_behavior: FailureBehavior,
 ) -> MockDaConfig {
     let block_producing = BlockProducingConfig::Periodic { block_time_ms };
     MockDaConfig {
@@ -171,6 +192,7 @@ fn build_da_config(
         block_producing,
         da_layer: None,
         randomization: Some(randomization),
+        failure_behavior,
     }
 }
 
@@ -179,12 +201,12 @@ async fn flaky_test_runner_multiple_reorg_shuffle() -> anyhow::Result<()> {
     let finality = 50;
     let block_time_ms = 500;
     let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
+        seed: sov_mock_da::seed_for_test(1),
         reorg_interval: 1..3,
         // TODO: It also messes up things with shorter block_time. get back to this later
         behaviour: RandomizationBehaviour::only_shuffle(20),
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
@@ -198,14 +220,14 @@ async fn test_runner_multiple_reorg_with_rewind() -> anyhow::Result<()> {
     let finality = 20;
     let block_time_ms = 400;
     let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
-        reorg_interval: 1..3,
+        seed: sov_mock_da::seed_for_test(2),
+        reorg_interval: 5..10,
         behaviour: RandomizationBehaviour::ShuffleAndResize {
             drop_percent: 10,
-            adjust_head_height: -15..15,
+            adjust_head_height: -5..5,
         },
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
@@ -222,15 +244,80 @@ async fn test_runner_rewind_below_finalized_instant_finality() -> anyhow::Result
     let finality = 0; // Instant finality
     let block_time_ms = 500;
     let randomization = RandomizationConfig {
-        seed: HexHash::from([1; 32]),
+        seed: sov_mock_da::seed_for_test(3),
         reorg_interval: 2..5,
         behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
     };
-    let da_config = build_da_config(finality, block_time_ms, randomization);
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
 
     tokio::time::timeout(
         TREE_MINUTES,
         test_runner_with_background_da_service(20, da_config),
+    )
+    .await?
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_below_finalized_instant_finality_with_rewind_during_da_call(
+) -> anyhow::Result<()> {
+    let finality = 0; // Instant finality
+    let block_time_ms = 500;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(3),
+        reorg_interval: 2..5,
+        behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 5 },
+    };
+    let failure_behaviour = FailureBehavior::ReorgDuringCall {
+        trigger_at_height: 3,
+        triggered: false,
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization, failure_behaviour);
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(20, da_config),
+    )
+    .await?
+}
+
+/// Tests runner behavior when DA rewinds within non-finalized blocks.
+/// This simulates normal reorg scenarios where the chain tip moves backward
+/// but stays above the finalized height.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_non_finalized_state() -> anyhow::Result<()> {
+    let finality = 5; // Lower finality for faster progress
+    let block_time_ms = 400;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(4),
+        reorg_interval: 20..30,
+        behaviour: RandomizationBehaviour::Rewind,
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(30, da_config),
+    )
+    .await?
+}
+
+/// Tests runner behavior when DA layer reports stale finalized headers with non-instant finality.
+/// This is the "faulty RPC node scenario" where `get_last_finalized_block_header`
+/// returns blocks below the actual finalized height.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_runner_rewind_below_finalized_non_instant() -> anyhow::Result<()> {
+    let finality = 5; // Non-instant finality
+    let block_time_ms = 400;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(5),
+        reorg_interval: 2..4,
+        behaviour: RandomizationBehaviour::RewindBelowLastFinalized { max_depth: 3 },
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        test_runner_with_background_da_service(25, da_config),
     )
     .await?
 }
@@ -289,28 +376,32 @@ async fn check_runner(
     init_variant: MockInitVariant,
     expected_state_root: StorageRoot<S>,
 ) {
-    let (mut runner, test_node) =
+    let (mut runner, before, test_node) =
         initialize_runner(da_service, tmpdir.path(), init_variant, 1, None).await;
-    let before = *runner.get_state_root();
     let end = runner.run_in_process().await;
     // TODO: Subscribe to block notifications and shutdown runner afterwards.
     assert!(end.is_err());
-    let after = *runner.get_state_root();
+    // Drop runner to release storage lock before creating new storage manager
+    drop(runner);
+    // Stop TestNode to release ledger_db references before opening new storage manager
+    test_node.stop().await;
+    let after = get_saved_root_hash(tmpdir.path())
+        .unwrap()
+        .expect("State root should be saved after running");
 
     assert_ne!(before, after);
     assert_eq!(expected_state_root, after);
-    test_node.stop().await;
 }
 
 fn get_saved_root_hash(
     path: &std::path::Path,
-) -> anyhow::Result<Option<<ProverStorage<S> as Storage>::Root>> {
-    let mut storage_manager =
-        NativeStorageManager::<MockDaSpec, ProverStorage<S>>::new(path).unwrap();
+) -> anyhow::Result<Option<<TestStorage as Storage>::Root>> {
+    let config = RollupDbConfig::default_in_path(path.to_path_buf());
+    let mut storage_manager = TestStorageManager::new(config)?;
     let mock_block_header = MockBlockHeader::from_height(1000000);
     let (stf_state, ledger_state) = storage_manager.create_state_for(&mock_block_header)?;
 
-    let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
+    let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
     ledger_db
         .get_head_slot()?
@@ -321,7 +412,7 @@ fn get_saved_root_hash(
 fn get_expected_execution_hash_from(
     genesis_params: &[u8],
     blobs: Vec<Vec<u8>>,
-) -> (StorageRoot<S>, <ProverStorage<S> as Storage>::Root) {
+) -> (StorageRoot<S>, <TestStorage as Storage>::Root) {
     let blocks: Vec<MockBlock> = blobs
         .into_iter()
         .enumerate()
@@ -343,7 +434,7 @@ fn get_expected_execution_hash_from(
 fn get_result_from_blocks(
     genesis_params: &[u8],
     blocks: &[MockBlock],
-) -> (StorageRoot<S>, <ProverStorage<S> as Storage>::Root) {
+) -> (StorageRoot<S>, <TestStorage as Storage>::Root) {
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
 

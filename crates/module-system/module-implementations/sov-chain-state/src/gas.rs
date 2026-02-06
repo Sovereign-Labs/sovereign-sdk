@@ -107,7 +107,7 @@ impl<S: Spec> ChainState<S> {
     /// Computes the updated gas price following a block execution for a single dimension.
     /// This reproduces the logic of the EIP-1559 specification to compute the updated `base_fee_per_gas` (`<https://eips.ethereum.org/EIPS/eip-1559>`).
     /// Note that here we drop the `parent` prefix and call the state variables `gas_limit`, `gas_used` and `base_fee_per_gas`.
-    pub(crate) fn compute_base_fee_per_gas_unidimensional(
+    pub fn compute_base_fee_per_gas_unidimensional(
         gas_limit: u64,
         gas_used: u64,
         mut base_fee_per_gas: Amount,
@@ -117,8 +117,9 @@ impl<S: Spec> ChainState<S> {
         assert!((Self::config_base_fee_change_denominator().get() as u64).checked_mul(gas_target).is_some(), "Misconfiguration: The product of gas_target * baseconfig_base_fee_change_denominator must not excueed u64::MAX");
 
         if gas_used == gas_target {
-            // We reached the gas target, so we don't need to update the base fee
-            base_fee_per_gas
+            // We reached the gas target, so we don't need to update the base fee.
+            // However, we still enforce a minimum of 1 to prevent zero-fee transactions.
+            max(base_fee_per_gas, Amount(1))
         } else {
             // We need to update the base fee because we didn't reach the gas target.
 
@@ -184,9 +185,13 @@ impl<S: Spec> ChainState<S> {
 
                 base_fee_per_gas
             } else {
-                // Although unlikely, the `base_fee_per_gas` can reach zero. We cannot have a negative value for gas price
-                // so we saturate at zero.
-                base_fee_per_gas.saturating_sub(Amount::from(base_fee_per_gas_delta_normalized))
+                // Although unlikely, the `base_fee_per_gas` can reach zero.
+                // We cannot have a zero value for gas price so we saturate at 1.
+                std::cmp::max(
+                    base_fee_per_gas
+                        .saturating_sub(Amount::from(base_fee_per_gas_delta_normalized)),
+                    Amount(1),
+                )
             }
         }
     }

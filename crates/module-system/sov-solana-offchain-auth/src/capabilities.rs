@@ -7,7 +7,9 @@ use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec};
+use sov_modules_api::{
+    DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader,
+};
 
 /// Indicates that a runtime supports the `SolanaOffchain` transaction authenticator
 /// and provides suitable methods for encoding and decoding solana offchain message transactions.
@@ -68,7 +70,7 @@ where
         }
     }
 
-    fn authenticate<Accessor: ProvableStateReader<sov_state::User, Spec = S>>(
+    fn authenticate<Accessor: ProvableStateReader<sov_state::User, Spec = S> + VersionReader>(
         tx: &FullyBakedTx,
         state: &mut Accessor,
     ) -> Result<
@@ -120,20 +122,38 @@ where
         }
     }
 
-    fn authenticate_unregistered<Accessor: ProvableStateReader<sov_state::User, Spec = S>>(
+    fn authenticate_unregistered<
+        Accessor: ProvableStateReader<sov_state::User, Spec = S>
+            + sov_modules_api::GetGasPrice<Spec = S>
+            + sov_modules_api::VersionReader,
+    >(
         batch: &BatchFromUnregisteredSequencer,
         state: &mut Accessor,
     ) -> Result<
         sov_modules_api::capabilities::AuthenticationOutput<S, Self::Decodable>,
         UnregisteredAuthenticationError,
     > {
-        let Self::Input::Standard(input) = borsh::from_slice(&batch.tx.data)
+        match borsh::from_slice(&batch.tx.data)
             .map_err(|_| UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant)?
-        else {
-            return Err(UnregisteredAuthenticationError::InvalidAuthenticationDiscriminant);
-        };
-
-        sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(&input.data, state)
+        {
+            Self::Input::SolanaOffchain(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    crate::authentication::authenticate::<Accessor, S, Rt>(
+                        &tx.data,
+                        &Rt::CHAIN_HASH,
+                        config_value!("CHAIN_NAME"),
+                        state,
+                    )?;
+                Ok((tx_and_raw_hash, auth_data, runtime_call))
+            }
+            Self::Input::Standard(tx) => {
+                let (tx_and_raw_hash, auth_data, runtime_call) =
+                    sov_modules_api::capabilities::authenticate_unregistered::<_, S, Rt>(
+                        &tx.data, state,
+                    )?;
+                Ok((tx_and_raw_hash, auth_data, runtime_call))
+            }
+        }
     }
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {

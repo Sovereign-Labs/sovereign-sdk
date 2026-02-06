@@ -100,7 +100,8 @@ impl<S: Spec> Evm<S> {
         self.account_storage.get(&(address, index), state)
     }
 
-    /// Get the current block env.
+    /// Get the current block env. This corresponds to the pending block (i.e. the one that's currently being built).
+    /// It is set in the begin_rollup_block_hook.
     pub fn block_env<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
@@ -166,17 +167,6 @@ impl<S: Spec> Evm<S> {
             .unwrap_infallible()
     }
 
-    /// Lookup the height of an Ethereum block based on the supplied hash.
-    pub fn block_height<Accessor: AccessoryStateReader>(
-        &self,
-        block_hash: &B256,
-        state: &mut Accessor,
-    ) -> Option<u64> {
-        self.block_hash_to_number
-            .get(block_hash, state)
-            .unwrap_infallible()
-    }
-
     /// Get the currently pending head block.
     pub fn pending_head<Accessor: AccessoryStateReader>(
         &self,
@@ -195,6 +185,12 @@ impl<S: Spec> Evm<S> {
     ) -> RangeInclusive<u64> {
         let block_numbers = self.block_numbers.get(state).unwrap_infallible();
         block_numbers.expect("Block numbers must be set in genesis")
+    }
+
+    /// Check if there are pending transactions.
+    #[cfg(feature = "native")]
+    pub fn has_pending_block(&self, state: &mut ApiStateAccessor<S>) -> bool {
+        self.pending_transactions.len(state).unwrap_infallible() != 0
     }
 
     /// Get the Evm chain config.

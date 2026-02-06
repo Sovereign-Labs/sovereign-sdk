@@ -152,6 +152,38 @@
         }
       ]
     },
+    "ConfiguredNodeRole": {
+      "oneOf": [
+        {
+          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
+          "type": "string",
+          "enum": [
+            "Leader"
+          ]
+        },
+        {
+          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
+          "type": "string",
+          "enum": [
+            "Replica"
+          ]
+        },
+        {
+          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
+          "type": "string",
+          "enum": [
+            "ReplicaNoLeaderSync"
+          ]
+        },
+        {
+          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
+          "type": "string",
+          "enum": [
+            "DbElected"
+          ]
+        }
+      ]
+    },
     "CorsConfiguration": {
       "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
       "oneOf": [
@@ -168,6 +200,106 @@
           "enum": [
             "restrictive"
           ]
+        }
+      ]
+    },
+    "FailureBehavior": {
+      "description": "Configurable failure behavior for testing error handling in consumers of MockDa. This allows tests to inject failures at specific points during DA operations.",
+      "oneOf": [
+        {
+          "description": "No failures (default behavior).",
+          "type": "string",
+          "enum": [
+            "none"
+          ]
+        },
+        {
+          "description": "Fail `get_block_at` or `get_block_header_at` after N successful calls. The counter decrements on each call; when it reaches 0, failures may occur based on the configured probability.",
+          "type": "object",
+          "required": [
+            "fail_after_n_calls"
+          ],
+          "properties": {
+            "fail_after_n_calls": {
+              "type": "object",
+              "required": [
+                "remaining"
+              ],
+              "properties": {
+                "failure_probability": {
+                  "description": "Probability of failure (0-100). 100 = always fail, 0 = never fail.",
+                  "default": 100,
+                  "type": "integer",
+                  "format": "uint8",
+                  "minimum": 0.0
+                },
+                "remaining": {
+                  "description": "Number of successful calls remaining before failures may start.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Trigger a reorg (shuffle non-finalized blobs) when `get_block_at` or `get_block_header_at` is called for a specific height. After the reorg is triggered, subsequent calls proceed normally.",
+          "type": "object",
+          "required": [
+            "reorg_during_call"
+          ],
+          "properties": {
+            "reorg_during_call": {
+              "type": "object",
+              "required": [
+                "trigger_at_height"
+              ],
+              "properties": {
+                "trigger_at_height": {
+                  "description": "The height that triggers the reorg.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "description": "Add artificial delays to `get_block_at` or `get_block_header_at` after N calls. Useful for testing timeout handling and slow DA scenarios.",
+          "type": "object",
+          "required": [
+            "delay_after_n_calls"
+          ],
+          "properties": {
+            "delay_after_n_calls": {
+              "type": "object",
+              "required": [
+                "delay_range_ms",
+                "remaining"
+              ],
+              "properties": {
+                "delay_range_ms": {
+                  "description": "Range of delay in milliseconds. A random value from this range is used.",
+                  "allOf": [
+                    {
+                      "$ref": "#/definitions/Range_of_uint64"
+                    }
+                  ]
+                },
+                "remaining": {
+                  "description": "Number of calls before delays start.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0.0
+                }
+              }
+            }
+          },
+          "additionalProperties": false
         }
       ]
     },
@@ -209,6 +341,33 @@
             "string",
             "null"
           ]
+        }
+      }
+    },
+    "LeaderElectionConfig": {
+      "description": "Configuration for leader election timing.",
+      "type": "object",
+      "properties": {
+        "grace_period_millis": {
+          "description": "Minimum time in milliseconds after leader acquisition before another node can take over. Prevents rapid leader flapping.",
+          "default": 10000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "heartbeat_interval_millis": {
+          "description": "Interval in milliseconds between heartbeat updates.",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "leader_timeout_millis": {
+          "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
+          "default": 500,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
         }
       }
     },
@@ -263,6 +422,15 @@
           "description": "Connection string to the database for storing Da Data. - \"sqlite://demo_data/da.sqlite?mode=rwc\" - \"sqlite::memory:\" - \"postgresql://root:hunter2@aws.amazon.com/mock-da\"",
           "type": "string"
         },
+        "failure_behavior": {
+          "description": "Configures failure injection for testing. Defaults to `FailureBehavior::None` (no failures).",
+          "default": "none",
+          "allOf": [
+            {
+              "$ref": "#/definitions/FailureBehavior"
+            }
+          ]
+        },
         "finalization_blocks": {
           "description": "Defines how many blocks progress to finalization.",
           "default": 0,
@@ -289,7 +457,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "MonitoringConfig": {
       "description": "Configuration of Sovereign monitoring",
@@ -333,38 +502,6 @@
         }
       }
     },
-    "NodeRole": {
-      "oneOf": [
-        {
-          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
-          "type": "string",
-          "enum": [
-            "Leader"
-          ]
-        },
-        {
-          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
-          "type": "string",
-          "enum": [
-            "Replica"
-          ]
-        },
-        {
-          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
-          "type": "string",
-          "enum": [
-            "ReplicaNoLeaderSync"
-          ]
-        },
-        {
-          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
-          "type": "string",
-          "enum": [
-            "DbElected"
-          ]
-        }
-      ]
-    },
     "PostgresConfig": {
       "description": "Postgres DB config.",
       "type": "object",
@@ -374,12 +511,25 @@
         "postgres_connection_string"
       ],
       "properties": {
+        "leader_election": {
+          "description": "Configuration for leader election timing.",
+          "default": {
+            "grace_period_millis": 10000,
+            "heartbeat_interval_millis": 100,
+            "leader_timeout_millis": 500
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LeaderElectionConfig"
+            }
+          ]
+        },
         "node_id": {
           "description": "Id of the node.",
           "type": "string"
         },
         "node_role": {
-          "$ref": "#/definitions/NodeRole"
+          "$ref": "#/definitions/ConfiguredNodeRole"
         },
         "postgres_connection_string": {
           "description": "Connection string.",
@@ -483,18 +633,6 @@
           "allOf": [
             {
               "$ref": "#/definitions/RecoveryStrategy"
-            }
-          ]
-        },
-        "timing_oracle": {
-          "description": "Configuration for the timing oracle.",
-          "default": null,
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TimingOracleConfig"
-            },
-            {
-              "type": "null"
             }
           ]
         }
@@ -686,6 +824,25 @@
         }
       }
     },
+    "Range_of_uint64": {
+      "type": "object",
+      "required": [
+        "end",
+        "start"
+      ],
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "RecoveryStrategy": {
       "description": "Strategy for handling the scenario where the preferred sequencer finds itself close to or past deferred_slots_count in the past, i.e. risking its soft confirmations being invalidated due to the possibility of a non-preferred (deferred) batch having been included.",
       "oneOf": [
@@ -741,6 +898,15 @@
         },
         "kernel_page_cache_size": {
           "description": "Page cache size for kernel state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "kernel_page_cache_upper_levels": {
+          "description": "Page cache upper levels for kernel state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
@@ -831,6 +997,15 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "user_page_cache_upper_levels": {
+          "description": "Page cache upper levels for user state. More details at [`Options::page_cache_upper_levels`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "user_preallocate_ht": {
           "description": "Sets whether to preallocate the hashtable file for user db. More details at [`Options::preallocate_ht`]",
           "type": [
@@ -857,13 +1032,6 @@
         },
         "da_polling_interval_ms": {
           "description": "Polling interval for the DA service to check the sync status (in milliseconds).",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "da_total_timeout_secs": {
-          "description": "How much total time DA service has to provide block, including re-orgs, retries, etc. Exceeding this timeout will lead to rollup shutdown.",
-          "default": 600,
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
@@ -1124,41 +1292,6 @@
             {
               "$ref": "#/definitions/Transport"
             }
-          ]
-        }
-      }
-    },
-    "TimingOracleConfig": {
-      "type": "object",
-      "required": [
-        "interval_millis",
-        "max_fee",
-        "priority_fee_percentage"
-      ],
-      "properties": {
-        "interval_millis": {
-          "description": "The interval in milliseconds at which the timestamp oracle update tx is submitted.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "max_fee": {
-          "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "priority_fee_percentage": {
-          "description": "The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.",
-          "type": "integer",
-          "format": "uint8",
-          "minimum": 0.0
-        },
-        "private_key_hex": {
-          "description": "The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.",
-          "type": [
-            "string",
-            "null"
           ]
         }
       }

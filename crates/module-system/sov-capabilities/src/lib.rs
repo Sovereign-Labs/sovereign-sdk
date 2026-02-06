@@ -4,16 +4,18 @@ use std::convert::Infallible;
 use sov_attester_incentives::BondingProofServiceImpl;
 use sov_bank::utils::TokenHolder;
 use sov_bank::{config_gas_token_id, Coins, IntoPayable, Payable};
+use sov_chain_state::ChainState as ChainStateModule;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::{
     AuthorizationData, GasEnforcer, ProofProcessor, SequencerAuthorization, SequencerRemuneration,
-    TransactionAuthorizer,
+    SequencingDataHandler, TransactionAuthorizer,
 };
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
 use sov_modules_api::ExecutionContext;
+use sov_modules_api::HDTimestamp;
 use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
@@ -35,6 +37,7 @@ pub struct StandardProvenRollupCapabilities<'a, S: Spec, GasPayer = ()> {
     pub sequencer_registry: &'a mut SequencerRegistry<S>,
     pub accounts: &'a mut sov_accounts::Accounts<S>,
     pub uniqueness: &'a mut sov_uniqueness::Uniqueness<S>,
+    pub chain_state: &'a mut ChainStateModule<S>,
     pub operator_incentives: &'a mut sov_operator_incentives::OperatorIncentives<S>,
     pub prover_incentives: &'a mut sov_prover_incentives::ProverIncentives<S>,
     pub attester_incentives: &'a mut sov_attester_incentives::AttesterIncentives<S>,
@@ -224,6 +227,24 @@ impl<S: Spec, T> SequencerAuthorization<S> for StandardProvenRollupCapabilities<
         state: &mut impl InfallibleStateAccessor,
     ) -> bool {
         self.sequencer_registry.preferred_sequencer(state).as_ref() == Some(sequencer)
+    }
+}
+
+impl<S: Spec, T> SequencingDataHandler<S> for StandardProvenRollupCapabilities<'_, S, T> {
+    type SequencingData = HDTimestamp;
+
+    fn handle_sequencing_data(
+        &mut self,
+        data: Self::SequencingData,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        if !context.sequencer_is_preferred() {
+            return Ok(());
+        }
+
+        self.chain_state
+            .update_oracle_time_from_sequencing_data(data, state)
     }
 }
 

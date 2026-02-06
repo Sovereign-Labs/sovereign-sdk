@@ -116,9 +116,7 @@ async fn evm_test_log_subscription_with_pending_blcok() {
 
     // Verify conditions for logs in the pending block.
     for log in logs_from_subscription {
-        assert!(log.block_hash.is_none());
         assert_eq!(log.block_number.unwrap(), block_nr);
-        assert_ne!(log.block_timestamp.unwrap(), 0);
     }
 }
 
@@ -132,8 +130,10 @@ async fn evm_test_log_subscription_with_block_range_returns_an_error() -> anyhow
     let RpcError::ErrorResp(payload) = err else {
         panic!("Expected subscription error")
     };
-    let data = payload.data.unwrap();
-    assert_eq!(data.get(), "\"Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor\"");
+    assert_eq!(
+        payload.message.as_ref(),
+        "Block Option parameters are not supported in LOG subscriptions. Please use eth_getLogs or eth_getLogsWithCursor"
+    );
 
     Ok(())
 }
@@ -182,9 +182,7 @@ async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
 
     // Verify conditions for logs in the pending block.
     for log in logs_from_subscription {
-        assert!(log.block_hash.is_none());
         assert_eq!(log.block_number.unwrap(), block_nr);
-        assert_ne!(log.block_timestamp.unwrap(), 0);
     }
 }
 

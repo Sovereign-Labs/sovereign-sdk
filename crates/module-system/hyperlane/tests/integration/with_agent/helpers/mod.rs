@@ -1,6 +1,11 @@
 mod docker;
 mod evm;
 mod hyperlane_cli;
+pub mod metrics;
+pub mod wait;
+
+pub use docker::get_docker_gateway_ip;
+pub use hyperlane_cli::HyperlaneCliRunner;
 
 use std::env;
 
@@ -25,6 +30,8 @@ use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 
+use self::metrics::RelayerMetricsClient;
+
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
 pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 pub type PrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
@@ -42,9 +49,21 @@ pub const EVM_DOMAIN: u32 = 31337_90210;
 pub const EVM_CHAIN_ID: u32 = 31337;
 /// Address of the mailbox on evm counterparty chain.
 /// Derived from the deployer in hyperlane-cli
-/// 0x8a791620dd6260079bf849dc5567adc3f2fdc318
+/// 0x12975173B87F7595EE45dFFb2Ab812ECE596Bf84
 pub const EVM_MAILBOX: EthAddress = HexString([
     18, 151, 81, 115, 184, 127, 117, 149, 238, 69, 223, 251, 42, 184, 18, 236, 229, 150, 191, 132,
+]);
+/// Address of the merkle tree hook on evm counterparty chain.
+/// Derived from the deployer in hyperlane-cli
+/// 0x196dBCBb54b8ec4958c959D8949EBFE87aC2Aaaf
+pub const EVM_MERKLE_TREE_HOOK: EthAddress = HexString([
+    25, 109, 188, 187, 84, 184, 236, 73, 88, 201, 89, 216, 148, 158, 191, 232, 122, 194, 170, 175,
+]);
+/// Address of the test recipient on evm counterparty chain.
+/// Derived from the deployer in hyperlane-cli
+/// 0xc6B8FBF96CF7bbE45576417EC2163AcecFA88ECC
+pub const EVM_TEST_RECIPIENT: EthAddress = HexString([
+    198, 184, 251, 249, 108, 247, 187, 228, 85, 118, 65, 126, 194, 22, 58, 206, 207, 168, 142, 204,
 ]);
 /// Fixed Eth keys created by anvil. They don't change. Each address is funded 1000ETH
 // run `docker run --rm ghcr.io/foundry-rs/foundry:v1.1.0 anvil` to see all keys
@@ -285,6 +304,7 @@ impl HyperlaneBuilder {
         };
 
         // Start container with just basic env and no processes
+        let has_relayer = self.relayer.is_some();
         let builder = self
             .image
             // test runtime uses fixed value for chain hash, this lets relayer know
@@ -298,15 +318,27 @@ impl HyperlaneBuilder {
             )
             .with_env_var("CONFIG_FILES", "/agent-config.json")
             // a dummy command because we will populate services by execs appropriately
-            .with_cmd(["tail", "-f", "/dev/null"]);
+            .with_cmd(["tail", "-f", "/dev/null"])
+            // Expose metrics port when relayer is enabled
+            .with_mapped_port(0, RELAYER_METRICS_PORT.into());
 
         let container = builder
             .start()
             .await
             .expect("Failed starting hyperlane image");
 
+        // Create metrics client if relayer is enabled
+        let metrics_client = if has_relayer {
+            let metrics_host_port = container
+                .get_host_port_ipv4(RELAYER_METRICS_PORT)
+                .await
+                .expect("Failed to get metrics port");
+            Some(RelayerMetricsClient::new("127.0.0.1", metrics_host_port))
+        } else {
+            None
+        };
+
         // start all the hyperlane agents concurrently
-        let has_relayer = self.relayer.is_some();
         let maybe_relayer_fut = if has_relayer {
             let fut = start_relayer(
                 &container,
@@ -341,20 +373,30 @@ impl HyperlaneBuilder {
             evm_counter_party,
             relayer,
             validators: agents,
+            metrics_client,
         }
     }
 }
 
 pub struct Hyperlane {
-    // Keep ownership of the container, so it does not stopped before neeeded.
+    // Keep ownership of the container, so it does not stopped before needed.
     #[allow(dead_code)]
     pub container: Container,
     pub evm_counter_party: Option<EvmCounterParty>,
     pub relayer: Option<ExecResult>,
     pub validators: Vec<ExecResult>,
+    /// Metrics client for monitoring the relayer. Only available when relayer is running.
+    pub metrics_client: Option<RelayerMetricsClient>,
 }
 
 impl Hyperlane {
+    /// Returns a reference to the relayer metrics client.
+    pub fn metrics(&self) -> &RelayerMetricsClient {
+        self.metrics_client
+            .as_ref()
+            .expect("Relayer metrics client not configured")
+    }
+
     /// Send test message from evm counterparty to sov test recipient
     pub async fn dispatch_msg_from_counterparty(&self, recipient: HexHash) -> EvmDispatchWithId {
         self.evm_counter_party
@@ -366,7 +408,7 @@ impl Hyperlane {
 
     /// Searches the latest block on evm counterparty (where there's block per tx)
     /// and tries to extract the Mailbox Process event from it.
-    pub async fn latest_message_on_counterparty(&mut self) -> EvmProcessWithId {
+    pub async fn latest_message_on_counterparty(&mut self) -> Result<EvmProcessWithId, String> {
         self.evm_counter_party
             .as_mut()
             .expect("Called latest message on counterparty before its setup")
@@ -588,10 +630,14 @@ async fn start_validator(
 }
 
 // parses eth addr 0x(40 chars hex) into HexHash
-pub fn parse_eth_addr(addr: &str) -> HexHash {
-    // TODO: use sov-address with proper feature?
-    let address: EthAddress = addr.trim().parse().unwrap();
+pub fn eth_address_to_hexhash(address: EthAddress) -> HexHash {
     let mut res = [0; 32];
     res[12..].copy_from_slice(&address.0);
     res.into()
+}
+
+pub fn parse_eth_addr(addr: &str) -> HexHash {
+    // TODO: use sov-address with proper feature?
+    let address: EthAddress = addr.trim().parse().unwrap();
+    eth_address_to_hexhash(address)
 }

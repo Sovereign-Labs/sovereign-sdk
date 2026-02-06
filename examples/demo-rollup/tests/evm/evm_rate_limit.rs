@@ -39,7 +39,7 @@ async fn setup_test_rollup(
 ) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, 0, Some(EVM_EXTENSION), None, Some(rate_limiter)).await
+    start_node(config, 0, Some(EVM_EXTENSION), Some(rate_limiter)).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -83,13 +83,10 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
 }
 
 fn assert_err(err: RpcError<TransportErrorKind>) {
-    let err_str = err
-        .as_error_resp()
-        .unwrap()
-        .data
-        .as_ref()
-        .unwrap()
-        .to_string();
-
-    err_str.contains("X_FORWARDED_FOR");
+    let payload = err.as_error_resp().unwrap();
+    assert!(
+        payload.message.as_ref().contains(X_FORWARDED_FOR),
+        "expected error message to include IP: {X_FORWARDED_FOR}, but it was: {}",
+        payload.message,
+    );
 }

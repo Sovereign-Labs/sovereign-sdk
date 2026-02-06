@@ -17,10 +17,6 @@ pub const DEFAULT_CONCURRENT_SYNC_TASKS: u8 = 5;
 pub struct RunnerConfig {
     /// Polling interval for the DA service to check the sync status (in milliseconds).
     pub da_polling_interval_ms: u64,
-    /// How much total time DA service has to provide block, including re-orgs, retries, etc.
-    /// Exceeding this timeout will lead to rollup shutdown.
-    #[serde(default = "default_da_total_timeout_sec")]
-    pub da_total_timeout_secs: u64,
     /// HTTP Server configuration: On this socket REST API and RPC endpoints are going to listen.
     pub http_config: HttpServerConfig,
     /// How many concurrent tasks to prefetch DA block during sync.
@@ -34,10 +30,6 @@ pub struct RunnerConfig {
     /// Whether to save transaction bodies to the database.
     #[serde(default)]
     pub save_tx_bodies: bool,
-}
-
-fn default_da_total_timeout_sec() -> u64 {
-    600
 }
 
 fn default_concurrent_sync_tasks() -> u8 {
@@ -113,6 +105,14 @@ impl HttpServerConfig {
             public_address: None,
             cors: CorsConfiguration::Permissive,
         }
+    }
+
+    /// Creates socket address from this config.
+    pub fn socket_address(&self) -> anyhow::Result<std::net::SocketAddr> {
+        Ok(std::net::SocketAddr::new(
+            self.bind_host.parse()?,
+            self.bind_port,
+        ))
     }
 }
 

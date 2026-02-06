@@ -37,6 +37,7 @@ sov-sp1-adapter = { workspace = true, features = ["native"] }
 rustls = { workspace = true, features = ["ring"] }
 sov-full-node-configs = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
+sov-eth-dev-signer = { workspace = true }
 
 demo-stf = { workspace = true, features = ["native"] }
 
@@ -123,6 +124,7 @@ strum = { workspace = true }
 
 
 reqwest = { workspace = true }
+sov-proxy-utils = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

@@ -1,15 +1,17 @@
-use std::time::Instant;
-
 use sov_modules_api::{Runtime, Spec};
 use sov_rollup_interface::node::da::DaService;
 use sov_state::{NativeStorage, Storage};
+use std::time::Instant;
 
 use crate::metrics::PreferredSequencerUpdateStateMetrics;
+use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
     get_next_sequence_number_according_to_node, DbEvent, FetchBatches, Flow,
     PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
     StateUpdateInfo,
 };
+use crate::SequencerRole;
+use tracing::error;
 
 impl<S, Rt, Da> PreferredSequencer<S, Rt, Da>
 where
@@ -50,6 +52,7 @@ where
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
         // Total time to update the state for `replay_soft_confirmations_on_top_of_node_stat`e, including time spent in the `Message` channel.
         let mut total_message_processing_duration = std::time::Duration::ZERO;
+        let tx_cache_writer = self.transaction_cache.write_handle();
 
         // Now that we're not locking on the sequencer state anymore, we can replay all the batches.
 
@@ -122,6 +125,17 @@ where
         // Replay the in-progress batch if it exists.
         let mut batch_is_in_progress = false;
         if let Some(batch) = in_progress_batch {
+            if let Err(err) = validate_seq_nr_from_node(
+                batch.sequence_number,
+                next_sequence_number,
+                self.seq_role,
+            ) {
+                match err {
+                    SequenceNumberMismatchError::SkipStateUpdate => return Ok(()),
+                    SequenceNumberMismatchError::Other(err) => return Err(err),
+                }
+            }
+
             batches_count += 1;
             transactions_count += batch.txs.len();
             batch_is_in_progress = true;
@@ -146,15 +160,24 @@ where
                 return Ok(());
             }
             let event = db_event_subscription.try_recv().unwrap();
-            do_next_event(
+            if let Err(err) = do_next_event(
+                self.seq_role,
+                next_sequence_number,
                 &mut executor,
+                &tx_cache_writer,
                 event,
                 &mut batches_count,
                 &mut transactions_count,
                 &node_state_root,
                 &mut batch_is_in_progress,
             )
-            .await?;
+            .await
+            {
+                match err {
+                    SequenceNumberMismatchError::SkipStateUpdate => return Ok(()),
+                    SequenceNumberMismatchError::Other(err) => return Err(err),
+                }
+            }
         }
 
         let (maybe_data, message_processing_duration) = self
@@ -174,7 +197,11 @@ where
             .await
             .map_err(|e| e.into_state_update_error())?;
 
-        let data = maybe_data?;
+        let data = match maybe_data {
+            Ok(data) => data,
+            Err(SequenceNumberMismatchError::SkipStateUpdate) => return Ok(()),
+            Err(SequenceNumberMismatchError::Other(e)) => return Err(e),
+        };
 
         total_message_processing_duration += message_processing_duration;
 
@@ -222,32 +249,91 @@ where
     }
 }
 
+/// The sequencer number and node sequence number do not match.
+pub enum SequenceNumberMismatchError {
+    /// The sequence number mismatch can be resolved by skipping the `state_update`.
+    SkipStateUpdate,
+    /// The error cannot be resolved locally and must be propagated to the caller.
+    Other(anyhow::Error),
+}
+
+fn validate_seq_nr_from_node(
+    seq_nr_of_in_progress_batch: u64,
+    next_sequence_number_according_to_node: u64,
+    seq_role: SequencerRole,
+) -> Result<(), SequenceNumberMismatchError> {
+    if seq_nr_of_in_progress_batch < next_sequence_number_according_to_node {
+        match seq_role {
+            SequencerRole::PgSyncReplica => {
+                // If this occurs on replicas, we log the error and skip `update_state` for the batch received from the node.
+                // If the database slowdown is temporary, the issue will be resolved when the next `update_state` call succeeds.
+                // If the situation persists, the replica will eventually enter sync mode in that case that the database setup needs to be examined.
+                error!(seq_nr_of_in_progress_batch, next_sequence_number_according_to_node, "The replica has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node. 
+                    This indicate that Postgres notifications are delayed. In this case, the update from the node is ignored. 
+                    If this error occurs repeatedly, investigate the database stack in the deployment.");
+                return Err(SequenceNumberMismatchError::SkipStateUpdate);
+            }
+            SequencerRole::BatchProducer | SequencerRole::DaOnlyReplica => {
+                // For roles other than PgSyncReplica, we should never observe in-progress batches with sequence numbers lower than what the node expects (DaOnlyReplica doesn't create batches).
+                let err = anyhow::anyhow!(
+                    "sequencer_role: {seq_role:?},
+                    seq_nr_of_in_progress_batch: {seq_nr_of_in_progress_batch}, 
+                    next_sequence_number_according_to_node: {next_sequence_number_according_to_node},
+                    The sequencer has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node.
+                    This is a bug, please report it."
+                );
+
+                return Err(SequenceNumberMismatchError::Other(err));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Replay an event on the executor.
 #[tracing::instrument(skip_all, level = "warn", name = "update_state::do_next_event")]
 pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
+    seq_role: SequencerRole,
+    next_sequence_number_according_to_node: u64,
     executor: &mut RollupBlockExecutor<S, Rt>,
+    tx_cache_writer: &TxResultWriter<S, Rt>,
     event: DbEvent,
     batches_count: &mut u64,
     transactions_count: &mut usize,
     node_state_root: &<S::Storage as Storage>::Root,
     batch_is_in_progress: &mut bool,
-) -> anyhow::Result<()> {
+) -> Result<(), SequenceNumberMismatchError> {
     match event {
         DbEvent::TxAccepted(tx, hash) => {
             executor.replay_tx(hash, tx).await;
             *transactions_count += 1;
             *batch_is_in_progress = true;
         }
-        DbEvent::BatchClosed(_) => {
+        DbEvent::BatchClosed(sequence_number) => {
+            validate_seq_nr_from_node(
+                sequence_number,
+                next_sequence_number_according_to_node,
+                seq_role,
+            )?;
+
             tracing::trace!("Done replaying txs");
-            executor.end_rollup_block().await;
+            let forced_txs = executor.end_rollup_block().await;
+            for tx in forced_txs {
+                tx_cache_writer.insert(tx).await;
+            }
             *batch_is_in_progress = false;
         }
         DbEvent::BatchStarted {
-            sequence_number: _,
+            sequence_number,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
         } => {
+            validate_seq_nr_from_node(
+                sequence_number,
+                next_sequence_number_according_to_node,
+                seq_role,
+            )?;
+
             *batches_count += 1;
             executor
                 .start_rollup_block_for_replay(

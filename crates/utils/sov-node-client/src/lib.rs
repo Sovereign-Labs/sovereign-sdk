@@ -306,9 +306,15 @@ impl NodeClient {
         url: &str,
     ) -> anyhow::Result<R> {
         let url = format!("{}{}", self.base_url, url);
-        let response = self.http_client.get(url).send().await?;
-        let data = response.json::<R>().await?;
-        Ok(data)
+        let response = self.http_client.get(&url).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        if status.is_success() {
+            serde_json::from_str(&body)
+                .with_context(|| format!("failed to deserialize response: {body}"))
+        } else {
+            anyhow::bail!("Failed response {status} for {url}: {body}");
+        }
     }
 
     /// HTTP GET to the given endpoint, returning plain text.
@@ -335,7 +341,14 @@ impl NodeClient {
         );
 
         let response = self.http_client.get(url).send().await?;
-        if !response.status().is_success() {
+        let status = response.status();
+        // The SDK returns 404 if the item is not in the map.
+        // Unfortunately, there's no way to distinguish between a 404 for a missing endoint and a 404 because the item is None,
+        // so this could bite us if we ever change the endpoint.
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        if !status.is_success() {
             anyhow::bail!("Unsuccessful response {:?}", response);
         }
         let response = response

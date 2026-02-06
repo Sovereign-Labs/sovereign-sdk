@@ -1,7 +1,36 @@
-# 2026-01-17
+# 2026-02-06
 - #2353 **Breaking Change** IGP module now requires an `admin` address in genesis config. The `quote-dispatch` API no longer requires a relayer parameter - it falls back to the admin's relayer config when not specified.
+# 2026-02-03
+- #2433 Updates tests in sov-demo-rollup.
+# 2026-02-02
+- #2360 **Breaking change**: sequencing data is now handled via rollup capabilities, replacing the sequencer-submitted timing-oracle transactions. Runtimes must implement `SequencingDataHandler` (or use `StandardProvenRollupCapabilities`, which now requires the `chain_state` module) and provide a sequencing-data type. Chain state now stores oracle time in nanoseconds (`oracle_time_nanos`) and derives millis via `get_oracle_time`; legacy `oracle_time` remains for layout compatibility but is no longer updated. Oracle time updates only from the preferred sequencer’s sequencing data.
+- #2421 **Added**: Configuration options `user_page_cache_upper_levels` and `kernel_page_cache_upper_levels` to `RollupDbConfig` for tuning NOMT storage performance on high-RAM machines.
+
+# 2026-01-23
+- #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
+# 2026-01-14
+- #2329 Changes default storage in sov-test-utils's TestRollup to be NOMT. No impact for regular customers
+
 # 2026-01-16 
+# 2026-01-29
+- #2415 Non-breaking, but **important**. Config for MockDa rollup now stricter and prevents unknown fields. Previously there was incorrect `finalization` field instead of `finalization_blocks`
+
+# 2026-01-17
+- #2358 **Breaking change**: removes `Runtime::allow_unregistered_tx` - delete this method from your runtime implementation. Allows all transaction types (not just `SequencerRegistry::Register`) in unregistered sequencer batches.
+# 2026-01-25
+- #2398 makes fixes to the eth_feeHistory endpoint
+
+# 2026-01-24
+- #2397: ***Breaking Change*** adds `Sync` bound on module event types. Major rework of "pending" block handling. Now we treat each new EVM transaction as creating a new head block (rather than a pending block) and then getting reorged when the next tx is added. 
+
+# 2026-01-20
+- #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
+- #2380 EVM: Validate `eth_feeHistory` input parameters.
+
+# 2026-01-16
 - #2342 EVM: Populate the `gas_limit` for pending block.
+- #2338 **Infra only breaking change**: Removes `da_total_timeout_secs` from runner section in `rollup_config.toml`
+- #2349 Adds optional celestia params: `api_request_timeout_secs`, `tx_status_polling_millis` and `background_stat_polling_interval_secs`
 
 # 2026-01-14
 - #2326 Add `max_fee` validation to the EVM authenticator. Introduce `EVM_MAX_FEE_CHECK_HEIGHT` in `constants.toml` to specify the block height after which the max-fee check becomes active.

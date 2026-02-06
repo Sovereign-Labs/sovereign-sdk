@@ -26,7 +26,6 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
-use tokio_stream::StreamExt;
 
 use crate::utils::{
     tempdir_inside_codebase_dir, ModuleWithVersionedStateAccessInSlotHook,
@@ -103,15 +102,8 @@ async fn create_test_rollup(
     let test_rollup = builder.start().await.unwrap();
 
     // Set up the rollup the usual way. We need this in all our tests.
-    let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    for _ in 0..5 {
-        let _ = slot_subscription.next().await.unwrap().unwrap();
-    }
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     (test_rollup, admin)
 }

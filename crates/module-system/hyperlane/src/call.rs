@@ -205,6 +205,16 @@ where
         if delivery.is_some() {
             return Err(anyhow::anyhow!("Message {} already processed", message_id));
         }
+
+        // Backwards compatibility. Don't activate the counter until the configured height
+        if state.rollup_height_to_access().get()
+            > config_value!("HYPERLANE_METER_DELIVERY_COUNTER_AFTER_HEIGHT")
+        {
+            let mut count = self.deliveries_count.get(state)?.unwrap_or_default();
+            count += 1;
+            self.deliveries_count.set(&count, state)?;
+        }
+
         self.deliveries.set(
             &message_id,
             &Delivery {

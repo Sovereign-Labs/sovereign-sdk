@@ -1,0 +1,22 @@
+[package]
+name = "sov-proxy-utils"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish = false
+repository.workspace = true
+
+
+[dependencies]
+anyhow = { workspace = true }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "derive", "time"], default-features = false }
+time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
+tokio = { workspace = true, features = ["time", "sync"], default-features = false }
+tracing = { workspace = true }
+async-trait = { workspace = true }
+
+
+[lints]
+workspace = true

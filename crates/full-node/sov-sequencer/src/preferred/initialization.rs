@@ -1,16 +1,16 @@
-use crate::preferred::db::leadership_election::LeadershipElectionTask;
-use crate::preferred::db::SequencerRole;
-
 use super::*;
+use crate::preferred::db::heartbeat_task::HeartBeatTask;
+use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::rest::StateUpdateReceiver;
+use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 use tokio::task::JoinHandle;
 use tracing::debug;
 
@@ -53,6 +53,7 @@ where
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
+        bind_addr: SocketAddr,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
@@ -69,13 +70,8 @@ where
             "Instantiating the preferred sequencer"
         );
 
-        let mut config = self.config;
+        let config = self.config;
         let preferred_config = &config.sequencer_kind_config;
-
-        let maybe_oracle_config =
-            TimingOracleConfigWithPrivateKey::new(preferred_config.timing_oracle.clone())
-                .transpose()?;
-        maybe_add_oracle_to_admins(&mut config.admin_addresses, &maybe_oracle_config);
 
         let tx_status_manager = TxStatusManager::default();
 
@@ -87,6 +83,7 @@ where
             shutdown_sender.clone(),
             storage_path,
             &preferred_config.postgres_config,
+            bind_addr,
         )
         .await?;
 
@@ -128,12 +125,14 @@ where
 
         let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
+        let (forced_tx_batch_notifier, _) = broadcast::channel(1);
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
+            forced_tx_batch_notifier: forced_tx_batch_notifier.clone(),
         };
 
         let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
@@ -200,11 +199,13 @@ where
             execution_backend,
             preferred_config.maximum_future_nonce_delta,
             preferred_config.future_nonce_transaction_timeout_millis,
+            forced_tx_batch_notifier.subscribe(),
             shutdown_receiver.clone(),
         );
         handles.push(nonce_buffer_task);
 
         let seq = PreferredSequencer(Arc::new(PreferredSequencerFields {
+            seq_role,
             synchronized_state_updator: synchronized_state_updator.clone(),
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
@@ -218,11 +219,12 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_receiver,
+            test_only_forced_tx_batch_notification_receiver: forced_tx_batch_notifier.subscribe(),
             runtime: Rt::default(),
         }));
 
         // Launch replica sync task only for replicas.
-        if let SequencerRole::Replica = seq_role {
+        if let SequencerRole::PgSyncReplica = seq_role {
             if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task
                     .start(synchronized_state_updator, postgres_config)
@@ -232,19 +234,17 @@ where
             }
         }
 
-        // Launch leadership task for DbElected nodes
+        // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            if postgres_config.node_role == NodeRole::DbElected {
-                let election_task =
-                    LeadershipElectionTask::new(postgres_config, shutdown_sender.clone()).await?;
-
-                let leadership_handle = match seq_role {
-                    SequencerRole::Leader => election_task.spawn_leader_heartbeat_task(),
-                    SequencerRole::Replica => election_task.spawn_replica_election_task(),
-                    _ => unreachable!("DbElected should only result in Leader or Replica role"),
-                };
-                handles.push(leadership_handle);
-            }
+            let heartbeat_task = HeartBeatTask::new(
+                postgres_config.clone(),
+                shutdown_sender.clone(),
+                bind_addr,
+                postgres_config.leader_election.heartbeat_interval(),
+            )
+            .await?;
+            let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
+            handles.push(heartbeat_handle);
         }
 
         handles.push(tokio::spawn(update_state_task(
@@ -267,19 +267,6 @@ where
                 .await;
             }
         }));
-
-        if let Some(oracle_config) = maybe_oracle_config {
-            if let SequencerRole::Leader = seq_role {
-                if Rt::default().maybe_set_oracle_timestamp(0).is_some() {
-                    match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
-                        Ok(handle) => handles.push(handle),
-                        Err(e) => {
-                            error!(error = ?e, "Failed to start timestamp oracle task");
-                        }
-                    }
-                }
-            }
-        }
 
         Ok((seq, handles))
     }
@@ -307,20 +294,4 @@ where
         );
         (api_state, checkpoint_sender)
     }
-}
-
-fn maybe_add_oracle_to_admins<S: Spec>(
-    admins: &mut Vec<S::Address>,
-    oracle_config: &Option<TimingOracleConfigWithPrivateKey<S>>,
-) {
-    if let Some(oracle_config) = oracle_config {
-        let oracle = oracle_config.address();
-        if !admins.contains(&oracle) {
-            info!(
-                "Adding oracle address {} to sequencer's admin address list",
-                oracle
-            );
-            admins.push(oracle);
-        }
-    };
 }

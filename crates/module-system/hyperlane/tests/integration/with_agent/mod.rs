@@ -12,8 +12,9 @@
 //! For more information about the setup, check the [`HyperlaneBuilder`].
 
 use std::collections::HashMap;
+use std::io::Read;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
 
 use anyhow::Result;
 use base64::prelude::BASE64_STANDARD;
@@ -21,10 +22,11 @@ use base64::Engine;
 use futures::Stream;
 use helpers::{
     generate_setup, parse_eth_addr, setup_rollup, HyperlaneBuilder, ANVIL_ACCOUNTS,
-    DEFAULT_FINALIZATION_BLOCKS, EVM_DOMAIN,
+    DEFAULT_FINALIZATION_BLOCKS, EVM_CHAIN_ID, EVM_DOMAIN,
 };
 use preferred_sequencer_runtime::{TestRuntime, TestRuntimeCall};
-use serde_json::{Map, Value};
+use reqwest::Client as ReqwestClient;
+use serde_json::{json, Map, Value};
 use sov_api_spec::types::{self as api_types, IntOrHash, LedgerEvent, Slot};
 use sov_api_spec::Client;
 use sov_bank::Amount;
@@ -38,10 +40,13 @@ use sov_modules_api::{
     CryptoSpec, DispatchCall, HexHash, HexString, RawTx, Runtime, SafeVec, Spec,
 };
 use sov_test_utils::{default_test_signed_transaction, TestSpec, TestUser};
-use tokio::time::sleep;
+use testcontainers::runners::AsyncRunner;
+use testcontainers::ImageExt;
+use testcontainers_modules::anvil::AnvilNode;
 use tokio_stream::StreamExt;
 
 use crate::igp::{default_gas_hashmap_to_safe_vec, oracle_data_hashmap_to_safe_vec};
+use crate::with_agent::helpers::wait::{wait_for_messages_processed, RelayerWaitConfig};
 use crate::with_agent::helpers::RELAYER_ACCOUNT;
 
 mod configs;
@@ -366,15 +371,30 @@ async fn test_dispatch_message_to_evm_counterparty() {
                 .parse()
                 .unwrap();
 
-            // Find the dispatched message on counterparty
-            // TODO: How to do it more reliably? Check relayer metrics repeatedly, including error
-            // If error metrics increases, fail early and print logs.
+            // Wait for the relayer to process the message and submit to EVM
             tracing::info!("Waiting for relayer to submit transaction to EVM...");
-            sleep(Duration::from_secs(20)).await; // give relayer extra time to relay
+            if let Err(err) = wait_for_messages_processed(
+                hyperlane.metrics(),
+                "sovtest",
+                "ethtest",
+                1,
+                RelayerWaitConfig::default(),
+            )
+            .await
+            {
+                hyperlane.print_stdout().await;
+                panic!("Relayer metrics check failed: {err}");
+            }
 
-            // Check if relayer is healthy before checking for events
+            // Check for events on EVM
             tracing::info!("Checking for events on EVM counterparty...");
-            let evm_event = hyperlane.latest_message_on_counterparty().await;
+            let evm_event = match hyperlane.latest_message_on_counterparty().await {
+                Ok(event) => event,
+                Err(err) => {
+                    hyperlane.print_stdout().await;
+                    panic!("Failed to parse EVM Process logs: {err}");
+                }
+            };
             assert_eq!(
                 evm_event.origin_domain,
                 config_value!("HYPERLANE_BRIDGE_DOMAIN")
@@ -588,7 +608,19 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
             );
 
             // check if transfer was received by counterparty
-            sleep(Duration::from_secs(10)).await; // give relayer extra time to relay
+            tracing::info!("Waiting for warp transfer to be relayed to EVM...");
+            if let Err(err) = wait_for_messages_processed(
+                hyperlane.metrics(),
+                "sovtest",
+                "ethtest",
+                1,
+                RelayerWaitConfig::default(),
+            )
+            .await
+            {
+                hyperlane.print_stdout().await;
+                panic!("Relayer metrics check failed: {err}");
+            }
             let (origin_domain, recipient) = hyperlane
                 .latest_warp_transfer_on_counterparty(remote_route_id)
                 .await;
@@ -648,6 +680,59 @@ async fn test_warp_transfer_back_and_forth_with_evm_scaled_up() {
         Amount(1233),
     )
     .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual: regenerate fixtures/anvil_core_state.json"]
+async fn regenerate_anvil_core_state() {
+    let host_address = if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
+        "host.docker.internal".to_string()
+    } else {
+        helpers::get_docker_gateway_ip().await
+    };
+
+    let fixtures_dir =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/integration/with_agent/fixtures");
+    std::fs::create_dir_all(&fixtures_dir).expect("Failed to create fixtures directory");
+
+    let state_path = fixtures_dir.join("anvil_core_state.json");
+    let temp_state_path = fixtures_dir.join("anvil_core_state.json.tmp");
+    let _ = std::fs::remove_file(&temp_state_path);
+    let _ = std::fs::remove_file(&state_path);
+
+    let anvil = AnvilNode::default()
+        .with_chain_id(EVM_CHAIN_ID as u64)
+        .with_tag("v1.3.6")
+        .start()
+        .await
+        .expect("Failed to start anvil");
+    let anvil_port = anvil
+        .get_host_port_ipv4(8545)
+        .await
+        .expect("Failed to get anvil port");
+
+    let hyperlane_cli = helpers::HyperlaneCliRunner::new_core_deploy(anvil_port, &host_address);
+    let deployments = hyperlane_cli.deploy_core_with_output().await;
+
+    let mut keys: Vec<_> = deployments.keys().collect();
+    keys.sort();
+    println!("Core deployments (copy into configs.rs/helpers/mod.rs):");
+    for key in keys {
+        println!("  {key}: {}", deployments[key]);
+    }
+
+    let state = anvil_rpc_value(anvil_port, "anvil_dumpState", json!([])).await;
+    let state_bytes = maybe_decompress_gzip(rpc_result_to_bytes(state));
+
+    std::fs::write(&temp_state_path, &state_bytes).expect("Failed to write temp anvil state");
+    std::fs::rename(&temp_state_path, &state_path).expect("Failed to persist anvil state");
+
+    anvil.stop().await.expect("Failed to stop anvil");
+
+    let state_size = std::fs::metadata(&state_path)
+        .expect("Failed to stat anvil state")
+        .len();
+    assert!(state_size > 0, "Anvil state snapshot is empty");
 }
 
 fn tx_send_message(
@@ -748,4 +833,54 @@ fn tx_set_relayer_config(relayer: &TestUser<TestSpec>) -> RawTx {
 fn generation() -> u64 {
     static GENERATION: AtomicU64 = AtomicU64::new(0);
     GENERATION.fetch_add(1, Ordering::Relaxed)
+}
+
+async fn anvil_rpc_value(port: u16, method: &str, params: Value) -> Value {
+    let resp = ReqwestClient::new()
+        .post(format!("http://127.0.0.1:{port}"))
+        .json(&json!({
+            "id": 1,
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+        }))
+        .send()
+        .await
+        .expect("Failed to call anvil")
+        .json::<Value>()
+        .await
+        .expect("Failed to parse anvil response");
+
+    if let Some(error) = resp.get("error") {
+        panic!("Errors calling anvil json-rpc: {error:?}");
+    }
+
+    resp["result"].clone()
+}
+
+fn rpc_result_to_bytes(result: Value) -> Vec<u8> {
+    match result {
+        Value::String(text) => {
+            if let Some(hex_str) = text.strip_prefix("0x") {
+                hex::decode(hex_str).expect("Failed to decode hex state")
+            } else {
+                text.into_bytes()
+            }
+        }
+        other => serde_json::to_vec(&other).expect("Failed to serialize anvil state"),
+    }
+}
+
+// anvil_dumpState can return gzip-compressed bytes; keep flate2 to decode those snapshots.
+fn maybe_decompress_gzip(bytes: Vec<u8>) -> Vec<u8> {
+    if bytes.starts_with(&[0x1f, 0x8b]) {
+        let mut decoder = flate2::read::GzDecoder::new(bytes.as_slice());
+        let mut out = Vec::new();
+        decoder
+            .read_to_end(&mut out)
+            .expect("Failed to decompress anvil state");
+        out
+    } else {
+        bytes
+    }
 }

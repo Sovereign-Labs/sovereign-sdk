@@ -64,6 +64,10 @@ use tracing::{info_span, Instrument as _};
 /// batches and buffers them in a channel. Requests within this range are served from the buffer,
 /// while requests outside the range fall back to the underlying [`DaService`].
 ///
+/// The cache is going to be effectively invalidated, if blocks aren't called in order.
+/// This might happen in rare edge-case of requesting a DA block from RPC node
+/// that is lagging behind finalized height that we previously received
+///
 /// # Lifecycle
 ///
 /// 1. **Initialization**: Determines the range of blocks to pre-fetch based on `start_height`

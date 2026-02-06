@@ -58,7 +58,7 @@ use crate::db::DbAccount;
 pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{Block, PendingTransaction, TxSignedAndRecovered};
 
-pub use crate::evm::primitive_types::{Receipt, SealedBlock};
+pub use crate::evm::primitive_types::{Receipt, SealedBlock, SyntheticBlockWithoutRootsAndBloom};
 
 pub use conversions::convert_to_tx_signed;
 pub use conversions::create_tx_env;

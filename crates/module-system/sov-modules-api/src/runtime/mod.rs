@@ -120,13 +120,6 @@ pub trait Runtime<S: Spec>:
         auth_data: <Self::Auth as TransactionAuthenticator<S>>::Decodable,
     ) -> Self::Decodable;
 
-    /// Determines whether a transaction is allowed to be submitted on-chain by
-    /// someone other than a registered sequencer.
-    ///
-    /// This is a low level security mechanism. Your runtime SHOULD only allow
-    /// `sov_sequencer_registry::CallMessage::Register` transactions here.
-    fn allow_unregistered_tx(call: &Self::Decodable) -> bool;
-
     /// Gets the processing delay in milliseconds for a given transaction.
     /// Returns 0 if no delay is configured.
     ///
@@ -145,16 +138,7 @@ pub trait Runtime<S: Spec>:
         0
     }
 
-    /// Returns a call message to set the oracle timestamp if the runtime supports it.
-    fn maybe_set_oracle_timestamp(
-        &self,
-        _millis_since_epoch: i64,
-    ) -> Option<<Self as DispatchCall>::Decodable> {
-        None
-    }
-
-    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
-    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    /// Checks if a system transaction should be rejected based on the totality of its context.
     fn is_unauthorized_system_tx(
         &self,
         _call: &Self::Decodable,
@@ -228,15 +212,7 @@ pub trait Runtime<S: Spec>:
         auth_data: <Self::Auth as TransactionAuthenticator<S>>::Decodable,
     ) -> Self::Decodable;
 
-    /// Determines whether a transaction is allowed to be submitted on-chain by
-    /// someone other than a registered sequencer.
-    ///
-    /// This is a low level security mechanism. Your runtime SHOULD only allow
-    /// `sov_sequencer_registry::CallMessage::Register` transactions here.
-    fn allow_unregistered_tx(call: &Self::Decodable) -> bool;
-
-    /// Checks if a system transaction should be rejected based on the totality of its context. For example,
-    /// timing oracle updates that weren't submitted by the preferred sequencer should be rejected.
+    /// Checks if a system transaction should be rejected based on the totality of its context.
     fn is_unauthorized_system_tx(
         &self,
         _call: &Self::Decodable,

@@ -19,7 +19,6 @@ use sov_rollup_interface::node::{
 };
 use sov_rollup_interface::stf::{
     ExecutionContext, ProofOutcome, ProofReceipt, ProofReceiptContents, StateTransitionFunction,
-    StoredEvent,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -30,7 +29,8 @@ use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
-use crate::state_manager::StateManager;
+use crate::state_manager::{BlockCandidateResolution, StateManager};
+use tokio::net::TcpListener;
 
 type GenesisParams<ST, InnerVm, OuterVm, Da> =
     <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
@@ -49,11 +49,9 @@ where
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
-    da_total_timeout: Duration,
     da_service: Arc<Da>,
     stf: Stf,
     state_manager: StateManager<Stf::StateRoot, Stf::Witness, Sm, Da>,
-    listen_address_http: SocketAddr,
     stf_info_receiver: Option<Receiver<Stf::StateRoot, Stf::Witness, Da::Spec>>,
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
@@ -64,15 +62,7 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     save_tx_bodies: bool,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
-}
-
-struct DiscardEvents;
-impl TryFrom<(u64, &StoredEvent)> for DiscardEvents {
-    type Error = anyhow::Error;
-
-    fn try_from(_value: (u64, &StoredEvent)) -> Result<Self, Self::Error> {
-        Ok(Self)
-    }
+    axum_tcp: Option<TcpListener>,
 }
 
 /// Initializes rollup genesis.
@@ -146,6 +136,7 @@ where
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
         runner_config: RunnerConfig,
+        axum_tcp: TcpListener,
         pm_config: Option<ProofManagerConfig<Stf::Address>>,
         da_service: Arc<Da>,
         ledger_db: LedgerDb,
@@ -169,11 +160,6 @@ where
         // But when REST and RPC handlers start, sender is used to get another subscription.
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
-
-        let axum_config = &runner_config.http_config;
-
-        let listen_address_http =
-            SocketAddr::new(axum_config.bind_host.parse()?, axum_config.bind_port);
 
         let first_unprocessed_height_at_startup = sync_state
             .synced_da_height
@@ -207,7 +193,6 @@ where
         };
 
         let da_polling_interval = Duration::from_millis(runner_config.da_polling_interval_ms);
-        let da_total_timeout = Duration::from_secs(runner_config.da_total_timeout_secs);
 
         let state_manager = StateManager::new(
             storage_manager,
@@ -217,11 +202,10 @@ where
             stf_info_sender,
             state_height_tracker,
             sync_state.clone(),
-            da_total_timeout,
             da_service_with_cached_finalized_headers.clone(),
             genesis_da_height,
             last_processed_da_header,
-        )?;
+        );
 
         let (sync_fetcher, fetcher_background_handle) = FinalizedBlocksBulkFetcher::new(
             da_service.clone(),
@@ -236,11 +220,9 @@ where
         Ok(Self {
             first_unprocessed_height_at_startup,
             da_polling_interval,
-            da_total_timeout,
             da_service: da_service.clone(),
             stf,
             state_manager,
-            listen_address_http,
             sync_state,
             stf_info_receiver,
             sync_fetcher,
@@ -251,7 +233,21 @@ where
             stop_at_rollup_height,
             save_tx_bodies: runner_config.save_tx_bodies,
             finalized_headers_provider: da_service_with_cached_finalized_headers,
+            axum_tcp: Some(axum_tcp),
         })
+    }
+
+    /// Returns the socket address of the Axum server.
+    ///
+    /// This method must be called before [`StateTransitionRunner::run_in_process`], as the TCP listener
+    /// is consumed when the HTTP server starts. Calling this method after `run_in_process` will return
+    /// an error.
+    pub fn axum_socket_address(&self) -> anyhow::Result<SocketAddr> {
+        let axum_tcp = self
+            .axum_tcp
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("The axum tcp listener is not initialized."))?;
+        Ok(axum_tcp.local_addr()?)
     }
 
     /// Subscribes to this runner's [`StateUpdateInfo`] channel, if enabled.
@@ -275,9 +271,11 @@ where
         router: axum::Router<()>,
         methods: RpcModule<()>,
         cors_configuration: CorsConfiguration,
-    ) -> anyhow::Result<SocketAddr> {
-        let (http_task_handle, rest_address) = crate::http::start_http_server(
-            &self.listen_address_http,
+    ) -> anyhow::Result<()> {
+        let http_task_handle = crate::http::start_http_server(
+            self.axum_tcp
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("HTTP server already started."))?,
             router,
             methods,
             self.secondary_shutdown_sender.subscribe(),
@@ -287,7 +285,7 @@ where
 
         self.background_handles.push(http_task_handle);
 
-        Ok(rest_address)
+        Ok(())
     }
 
     /// Spawn a [`tokio::task`] that updates the sync status every `polling_interval`.
@@ -467,12 +465,11 @@ where
 
     async fn process_next_slot(
         &mut self,
-        mut next_da_height: NextDaHeightToProcess,
+        next_da_height: NextDaHeightToProcess,
         start_at_rollup_height: &Option<RollupHeight>,
         stop_at_rollup_height: &Option<RollupHeight>,
     ) -> anyhow::Result<Option<NextDaHeightToProcess>> {
         let loop_start = std::time::Instant::now();
-        let prev_state_root = self.get_state_root().clone();
         let span = tracing::info_span!("process_next_slot", next_da_height = next_da_height);
 
         if let Some(h) = start_at_rollup_height {
@@ -497,34 +494,49 @@ where
                 self.da_service.as_ref(),
                 self.sync_state.as_ref(),
                 next_da_height,
-                self.da_total_timeout,
             )
             .await?
         };
         let get_block_time = get_block_start.elapsed();
-        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, preparing storage");
+        assert!(
+            filtered_block.header().height() <= next_da_height,
+            "Bug in block fetching results, it returned future block"
+        );
+        tracing::trace!(time = ?get_block_time, header = %filtered_block.header().display(), "DA block has been fetched, checking continuation");
 
-        let (stf_pre_state, filtered_block) = self
+        // Check if this block is a valid continuation of the current chain.
+        // If not, early return with the height runner should fetch next.
+        let (stf_pre_state, pre_state_root, ledger_pre_state) = match self
             .state_manager
-            .prepare_storage(filtered_block, &self.da_service)
+            .check_continuation(filtered_block.header(), &self.da_service)
             .await
             .map_err(|e| {
-                tracing::warn!(?e, "Error during prepare_storage");
+                tracing::warn!(?e, "Error during is_good_continuation");
                 e
-            })?;
+            })? {
+            BlockCandidateResolution::KnownContinuation {
+                pre_state,
+                pre_state_root,
+                ledger_pre_state,
+            } => {
+                tracing::trace!(
+                    header = %filtered_block.header().display(),
+                    "Block is a valid continuation, proceeding with STF execution"
+                );
+                (pre_state, pre_state_root, ledger_pre_state)
+            }
+            BlockCandidateResolution::NoMatch { height_to_fetch } => {
+                debug!(
+                    requested_height = next_da_height,
+                    height_to_fetch,
+                    "Block is not a continuation, runner should fetch different height"
+                );
+                // Early return - runner's main loop will fetch the new height
+                return Ok(Some(height_to_fetch));
+            }
+        };
 
         let filtered_block_header = filtered_block.header().clone();
-        if next_da_height != filtered_block_header.height() {
-            debug!(
-                existing_next_da_height = next_da_height,
-                new_next_da_height = filtered_block_header.height(),
-                "Updating next_da_height after storage_manager, as reorg happened."
-            );
-            next_da_height = filtered_block_header.height();
-            tracing::Span::current().record("new_next_da_height", next_da_height);
-            self.sync_state
-                .update_synced(next_da_height.saturating_sub(1));
-        }
 
         // STF execution
         let stf_execution_start = std::time::Instant::now();
@@ -534,7 +546,7 @@ where
         debug!(
             batch_blobs_count = batch_blobs.len(),
             next_da_height,
-            current_state_root = hex::encode(prev_state_root.as_ref()),
+            current_state_root = hex::encode(pre_state_root.as_ref()),
             batch_blobs = ?batch_blobs
                 .iter()
                 .map(|b| format!(
@@ -558,7 +570,7 @@ where
 
         let apply_slot_start = std::time::Instant::now();
         let slot_result = self.stf.apply_slot(
-            self.state_manager.get_state_root(),
+            &pre_state_root,
             stf_pre_state,
             Default::default(),
             &filtered_block_header,
@@ -611,7 +623,7 @@ where
 
         let transition_data: StateTransitionWitness<Stf::StateRoot, Stf::Witness, Da::Spec> =
             StateTransitionWitness {
-                initial_state_root: self.get_state_root().clone(),
+                initial_state_root: pre_state_root,
                 final_state_root: slot_result.state_root.clone(),
                 da_block_header: filtered_block_header.clone(),
                 relevant_proofs,
@@ -626,6 +638,7 @@ where
         self.state_manager
             .process_stf_changes(
                 slot_result.change_set,
+                ledger_pre_state,
                 transition_data,
                 data_to_commit,
                 aggregated_proofs,
@@ -684,11 +697,6 @@ where
         }
 
         Ok(Some(next_da_height + 1))
-    }
-
-    /// Allows reading current state root
-    pub fn get_state_root(&self) -> &Stf::StateRoot {
-        self.state_manager.get_state_root()
     }
 
     /// Retrieve a handle for the underlying DA service

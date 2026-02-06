@@ -18,7 +18,8 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_sequencer::preferred::NodeRole;
+use sov_proxy_utils::SimpleClusterUpdateNotifier;
+use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
@@ -26,12 +27,15 @@ use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 mod db_elected;
 mod replica_gets_txs_from_master;
+mod replica_registers_in_db;
 mod start_stop;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
@@ -72,7 +76,7 @@ async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<(
 
 async fn start_rollup(
     addr: SocketAddr,
-    postgres: Option<(Arc<PostgresData>, String, NodeRole)>,
+    postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
 ) -> TestRollup<ExternalMockDemoRollup<Native>> {
     let genesis = test_genesis_source(OperatingMode::Operator);
     RollupBuilder::new_with_external_da(
@@ -148,5 +152,115 @@ async fn wait_for_all_events(
 ) {
     for _ in 0..nb_of_events {
         let _ = subscription.next().await.unwrap();
+    }
+}
+
+use sov_proxy_utils::ClusterInfo;
+use sov_proxy_utils::NodeDiscovery;
+
+type Rollup = ExternalMockDemoRollup<Native>;
+
+/// Holds resources for a cluster info subscription.
+struct ClusterInfoSubscription {
+    _temp_dir: tempfile::TempDir,
+    path: PathBuf,
+    handle: JoinHandle<()>,
+    file_watcher: watch::Receiver<()>,
+}
+
+impl ClusterInfoSubscription {
+    async fn wait_for_change(&mut self) -> ClusterInfo {
+        self.wait_for_change_with_timeout(Duration::from_secs(2))
+            .await
+    }
+
+    async fn wait_for_change_with_timeout(&mut self, timeout: Duration) -> ClusterInfo {
+        tokio::time::timeout(timeout, self.file_watcher.changed())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let content =
+            std::fs::read_to_string(self.path.clone()).expect("Failed to read file content");
+        ClusterInfo::parse(&content).expect("Failed to parse cluster info")
+    }
+
+    fn abort(self) {
+        self.handle.abort();
+    }
+}
+
+/// Test setup for DbElected tests with two nodes (leader and replica).
+struct NodeDiscoveryTestSetup {
+    postgres: Arc<PostgresData>,
+    da_addr: SocketAddr,
+    da_shutdown: watch::Sender<()>,
+    cluster_info_subscription: ClusterInfoSubscription,
+}
+
+const MAX_AGE: Duration = Duration::from_secs(10);
+
+impl NodeDiscoveryTestSetup {
+    /// Creates a new test setup with default max_age.
+    /// Returns None if Docker is not supported.
+    async fn new() -> Option<Self> {
+        Self::new_with_max_age(MAX_AGE).await
+    }
+
+    /// Creates a new test setup with custom max_age for NodeDiscovery.
+    /// Returns None if Docker is not supported.
+    async fn new_with_max_age(max_age: Duration) -> Option<Self> {
+        let postgres = match PostgresData::create_postgres().await {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return None,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
+
+        let (notifier, file_watcher) = SimpleClusterUpdateNotifier::new();
+        // Create NodeDiscovery to query the nodes table
+        let mut node_discovery =
+            NodeDiscovery::new(postgres.connection_string(), max_age, Box::new(notifier))
+                .await
+                .expect("Failed to create NodeDiscovery");
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("cluster_info.txt");
+        let path_clone = path.clone();
+
+        let handle = tokio::spawn(async move {
+            node_discovery
+                .subscribe_cluster_info_loop(path_clone)
+                .await
+                .unwrap();
+        });
+
+        let cluster_info_subscription = ClusterInfoSubscription {
+            _temp_dir: temp_dir,
+            path,
+            handle,
+            file_watcher,
+        };
+
+        Some(Self {
+            postgres,
+            da_shutdown,
+            da_addr,
+            cluster_info_subscription,
+        })
+    }
+
+    /// Start the node.
+    async fn start_node(&self, node_id: &str, role: ConfiguredNodeRole) -> TestRollup<Rollup> {
+        let node = Some((self.postgres.clone(), node_id.into(), role));
+        start_rollup(self.da_addr, node).await
+    }
+
+    async fn shutdown(self) {
+        self.cluster_info_subscription.abort();
+        let _ = self.da_shutdown.send(());
     }
 }
