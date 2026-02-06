@@ -32,16 +32,26 @@ impl RootHashCheck {
     }
 }
 
-/// Queries all nodes in the cluster for their latest slot's state root
-/// and checks whether they all agree.
-pub async fn check_root_hashes(cluster_info: &ClusterInfo) -> Result<RootHashCheck> {
-    let client = reqwest::ClientBuilder::new()
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(Duration::from_secs(10))
-        .build()
-        .context("Failed to build HTTP client")?;
+/// Client for checking root hash consistency across cluster nodes.
+pub struct RootHashChecker {
+    client: reqwest::Client,
+}
 
-    let mut all_nodes: Vec<(&str, SocketAddr)> = Vec::new();
+impl RootHashChecker {
+    /// Creates a new `RootHashChecker` with default timeouts.
+    pub fn new() -> Result<Self> {
+        let client = reqwest::ClientBuilder::new()
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(10))
+            .build()
+            .context("Failed to build HTTP client")?;
+        Ok(Self { client })
+    }
+
+    /// Queries all nodes in the cluster for their latest slot's state root
+    /// and checks whether they all agree.
+    pub async fn check_root_hashes(&self, cluster_info: &ClusterInfo) -> Result<RootHashCheck> {
+        let mut all_nodes: Vec<(&str, SocketAddr)> = Vec::new();
 
     if let Some(leader) = &cluster_info.leader {
         all_nodes.push((&leader.node_id, leader.address));
@@ -56,7 +66,7 @@ pub async fn check_root_hashes(cluster_info: &ClusterInfo) -> Result<RootHashChe
 
     let mut handles = Vec::with_capacity(all_nodes.len());
     for (node_id, address) in &all_nodes {
-        let client = client.clone();
+        let client = self.client.clone();
         let url = format!("http://{address}/ledger/slots/latest");
         let node_id = node_id.to_string();
         handles.push(tokio::spawn(async move {
@@ -118,4 +128,5 @@ pub async fn check_root_hashes(cluster_info: &ClusterInfo) -> Result<RootHashChe
         node_results,
         failed_nodes,
     })
+    }
 }
