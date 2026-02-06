@@ -18,6 +18,7 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
+use sov_proxy_utils::SimpleClusterUpdateNotifier;
 use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
@@ -26,7 +27,6 @@ use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -158,16 +158,6 @@ async fn wait_for_all_events(
 use sov_proxy_utils::ClusterInfo;
 use sov_proxy_utils::NodeDiscovery;
 
-async fn wait_for_file_change(path: &Path, file_watcher: &mut watch::Receiver<()>) -> ClusterInfo {
-    tokio::time::timeout(Duration::from_secs(2), file_watcher.changed())
-        .await
-        .unwrap()
-        .unwrap();
-
-    let content = std::fs::read_to_string(path).expect("Failed to read file content");
-    ClusterInfo::parse(&content).expect("Failed to parse cluster info")
-}
-
 type Rollup = ExternalMockDemoRollup<Native>;
 
 /// Holds resources for a cluster info subscription.
@@ -180,7 +170,19 @@ struct ClusterInfoSubscription {
 
 impl ClusterInfoSubscription {
     async fn wait_for_change(&mut self) -> ClusterInfo {
-        wait_for_file_change(&self.path, &mut self.file_watcher).await
+        self.wait_for_change_with_timeout(Duration::from_secs(2))
+            .await
+    }
+
+    async fn wait_for_change_with_timeout(&mut self, timeout: Duration) -> ClusterInfo {
+        tokio::time::timeout(timeout, self.file_watcher.changed())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let content =
+            std::fs::read_to_string(self.path.clone()).expect("Failed to read file content");
+        ClusterInfo::parse(&content).expect("Failed to parse cluster info")
     }
 
     fn abort(self) {
@@ -218,9 +220,10 @@ impl NodeDiscoveryTestSetup {
 
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
+        let (notifier, file_watcher) = SimpleClusterUpdateNotifier::new();
         // Create NodeDiscovery to query the nodes table
-        let (node_discovery, file_watcher) =
-            NodeDiscovery::new_with_max_age(postgres.connection_string(), max_age)
+        let mut node_discovery =
+            NodeDiscovery::new(postgres.connection_string(), max_age, Box::new(notifier))
                 .await
                 .expect("Failed to create NodeDiscovery");
 

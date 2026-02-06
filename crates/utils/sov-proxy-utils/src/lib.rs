@@ -3,20 +3,19 @@
 //! This crate provides the [`Proxy`] struct to retrieve leader and follower
 //! IP addresses from the PostgreSQL database atomically.
 
-use std::collections::HashSet;
+use anyhow::{Context, Result};
+use async_trait::async_trait;
+use sqlx::postgres::{PgListener, PgPool};
+use sqlx::FromRow;
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::time::Duration;
-
-use anyhow::{Context, Result};
-use sqlx::postgres::{PgListener, PgPool};
-use sqlx::FromRow;
 pub use time::OffsetDateTime;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::watch;
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 10;
-
-const MAX_AGE: Duration = Duration::from_secs(10);
 
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
@@ -47,6 +46,8 @@ pub struct ClusterInfo {
     pub leader: Option<NodeInfo>,
     /// All follower nodes.
     pub followers: Vec<NodeInfo>,
+    /// Set of all node IDs in the cluster, used to detect membership changes.
+    members: BTreeSet<String>,
 }
 
 impl ClusterInfo {
@@ -81,16 +82,29 @@ impl ClusterInfo {
     pub fn parse(content: &str) -> Result<Self> {
         let mut leader = None;
         let mut followers = Vec::new();
+        let mut members = BTreeSet::new();
 
         for line in content.lines() {
             if let Some(rest) = line.strip_prefix("leader=") {
-                leader = Some(NodeInfo::parse(rest)?);
+                let node = NodeInfo::parse(rest)?;
+                members.insert(node.node_id.clone());
+                leader = Some(node);
             } else if let Some(rest) = line.strip_prefix("follower=") {
-                followers.push(NodeInfo::parse(rest)?);
+                let node = NodeInfo::parse(rest)?;
+                members.insert(node.node_id.clone());
+                followers.push(node);
             }
         }
 
-        Ok(ClusterInfo { leader, followers })
+        Ok(ClusterInfo {
+            leader,
+            followers,
+            members,
+        })
+    }
+
+    fn leader_id(&self) -> Option<String> {
+        self.leader.as_ref().map(|l| l.node_id.clone())
     }
 }
 
@@ -111,23 +125,51 @@ impl NodeInfo {
     }
 }
 
+/// Trait for receiving notifications when cluster state changes.
+///
+/// Implement this trait to define custom behavior when the cluster membership
+/// or leader changes. The notification is triggered after the cluster info file
+/// has been updated.
+#[async_trait]
+pub trait ClusterUpdateNotifier: Send + Sync + 'static {
+    /// Called when cluster membership or leadership changes.
+    async fn on_cluster_update(&self, cluster_info: &ClusterInfo);
+}
+
+/// A simple notifier that signals a watch channel when the cluster updates.
+///
+/// This is the default implementation of [`ClusterUpdateNotifier`] that uses
+/// a [`tokio::sync::watch`] channel to notify waiters of cluster changes.
+pub struct SimpleClusterUpdateNotifier {
+    sender: watch::Sender<()>,
+}
+
+impl SimpleClusterUpdateNotifier {
+    /// Creates a new notifier and its corresponding receiver.
+    pub fn new() -> (Self, watch::Receiver<()>) {
+        let (sender, receiver) = watch::channel(());
+        (Self { sender }, receiver)
+    }
+}
+
+#[async_trait]
+impl ClusterUpdateNotifier for SimpleClusterUpdateNotifier {
+    async fn on_cluster_update(&self, _cluster_info: &ClusterInfo) {
+        let _ = self.sender.send(());
+    }
+}
+
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
     max_age: Duration,
     pool: PgPool,
     connection_string: String,
-    file_saved_sender: watch::Sender<()>,
+    prev_members: BTreeSet<String>,
+    prev_leader_id: Option<String>,
+    notifier: Box<dyn ClusterUpdateNotifier>,
 }
 
 impl NodeDiscovery {
-    /// Creates a new NodeDiscovery with a connection pool and default max_age.
-    ///
-    /// Returns the NodeDiscovery instance and a receiver that gets notified
-    /// whenever the cluster info file is successfully saved.
-    pub async fn new(connection_string: &str) -> Result<(Self, watch::Receiver<()>)> {
-        Self::new_with_max_age(connection_string, MAX_AGE).await
-    }
-
     /// Creates a new NodeDiscovery with a connection pool and custom max_age.
     ///
     /// The `max_age` parameter controls how long a node can go without updating
@@ -135,27 +177,26 @@ impl NodeDiscovery {
     ///
     /// Returns the NodeDiscovery instance and a receiver that gets notified
     /// whenever the cluster info file is successfully saved.
-    pub async fn new_with_max_age(
+    pub async fn new(
         connection_string: &str,
         max_age: Duration,
-    ) -> Result<(Self, watch::Receiver<()>)> {
+        notifier: Box<dyn ClusterUpdateNotifier>,
+    ) -> Result<Self> {
         tracing::info!("Connecting to database.");
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(5)
             .connect(connection_string)
             .await?;
         tracing::info!("DB connection established.");
-        let (file_saved_sender, file_saved_receiver) = watch::channel(());
 
-        Ok((
-            Self {
-                max_age,
-                pool,
-                connection_string: connection_string.to_string(),
-                file_saved_sender,
-            },
-            file_saved_receiver,
-        ))
+        Ok(Self {
+            max_age,
+            pool,
+            connection_string: connection_string.to_string(),
+            prev_members: BTreeSet::new(),
+            prev_leader_id: None,
+            notifier,
+        })
     }
 
     // Fetches cluster info atomically using a single transaction.
@@ -175,9 +216,9 @@ impl NodeDiscovery {
         let cap = all_nodes.capacity();
         let mut leader = None;
         let mut followers = Vec::with_capacity(cap);
-        let mut seen_node_ids: HashSet<String> = HashSet::with_capacity(cap);
+        let mut members = BTreeSet::new();
         for (node_id, address, last_updated) in all_nodes {
-            if !seen_node_ids.insert(node_id.clone()) {
+            if !members.insert(node_id.clone()) {
                 anyhow::bail!("Duplicate node id found in Nodes table: {node_id}");
             }
 
@@ -207,7 +248,11 @@ impl NodeDiscovery {
             }
         }
 
-        Ok(ClusterInfo { leader, followers })
+        Ok(ClusterInfo {
+            leader,
+            followers,
+            members,
+        })
     }
 
     /// Subscribes to PostgreSQL notifications for cluster changes and writes
@@ -215,7 +260,7 @@ impl NodeDiscovery {
     ///
     /// Listens on `nodes_changes` and `leader_changes` channels.
     pub async fn subscribe_cluster_info_loop(
-        &self,
+        &mut self,
         path: impl AsRef<std::path::Path>,
     ) -> anyhow::Result<()> {
         let path = path.as_ref();
@@ -228,22 +273,10 @@ impl NodeDiscovery {
 
         tracing::info!("Subscribed to nodes_changes and leader_changes channels");
 
-        // Fetch initial cluster info.
-        match self.get_cluster_info().await {
-            Ok(info) => {
-                if let Err(error) = write_to_file(path, info.to_file_content()).await {
-                    tracing::warn!(?error, ?path, "Failed to update the cluster info file.");
-                } else {
-                    // Notify watchers that the file was saved successfully.
-                    let _ = self.file_saved_sender.send(());
-                }
-            }
-            Err(error) => {
-                tracing::warn!(?error, "Failed to fetch initial cluster info");
-            }
-        }
-
         let mut consecutive_errors: u32 = 0;
+
+        // On startup, write an empty file. If the cluster is not empty, the file will be populated on the first call to `handle_cluster_update`.
+        write_to_file_atomically(path, "").await?;
 
         loop {
             match self.handle_cluster_update(&mut listener, path).await {
@@ -267,20 +300,53 @@ impl NodeDiscovery {
     }
 
     async fn handle_cluster_update(
-        &self,
+        &mut self,
         listener: &mut PgListener,
         path: &std::path::Path,
     ) -> anyhow::Result<()> {
+        let info = self.get_cluster_info().await?;
+        let leader_id = info.leader_id();
+
+        let membership_changed = self.prev_members != info.members;
+        let leader_changed = self.prev_leader_id != leader_id;
+
+        if membership_changed || leader_changed {
+            // Log membership changes
+            for node_id in info.members.difference(&self.prev_members) {
+                tracing::info!(node_id, "Node joined the cluster");
+            }
+            for node_id in self.prev_members.difference(&info.members) {
+                tracing::info!(node_id, "Node left the cluster");
+            }
+
+            // Log leader change
+            if leader_changed {
+                tracing::info!(
+                    old_leader = ?self.prev_leader_id,
+                    new_leader = ?leader_id,
+                    "Leader changed"
+                );
+            }
+
+            let content = info.to_file_content();
+            write_to_file_atomically(path, &content).await?;
+            tracing::info!(?path, content, "Cluster info file updated");
+
+            self.prev_members = info.members.clone();
+            self.prev_leader_id = leader_id;
+
+            // Notify watchers that the cluster was updated.
+            self.notifier.on_cluster_update(&info).await;
+        }
+
+        tracing::trace!(info = ?info, "Last cluster info");
+
         // Wait for at least one notification.
         listener.recv().await?;
 
         // Drain any additional pending notifications.
         while listener.next_buffered().is_some() {}
 
-        let info = self.get_cluster_info().await?;
-        write_to_file(path, info.to_file_content()).await?;
-        // Notify watchers that the file was saved successfully.
-        let _ = self.file_saved_sender.send(());
         Ok(())
     }
 
@@ -316,10 +382,34 @@ impl NodeDiscovery {
     }
 }
 
-async fn write_to_file(path: &Path, content: String) -> anyhow::Result<()> {
-    tokio::fs::write(path, content)
+/// Atomically writes content to a file.
+///
+/// Uses write-to-temp-then-rename pattern to ensure the file is never
+/// partially written. The data is synced to disk before renaming.
+async fn write_to_file_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
+    let dir = path.parent().context("Path has no parent directory")?;
+
+    // Create temp file in same directory to ensure same filesystem for atomic rename.
+    let temp_path = dir.join(".tmp");
+
+    // Write content to temp file.
+    let mut file = tokio::fs::File::create(&temp_path)
         .await
-        .with_context(|| format!("Failed to write cluster info to file at {path:?}"))?;
+        .with_context(|| format!("Failed to create temp file at {temp_path:?}"))?;
+
+    file.write_all(content.as_bytes())
+        .await
+        .with_context(|| format!("Failed to write to temp file at {temp_path:?}"))?;
+
+    // Sync to disk before renaming.
+    file.sync_all()
+        .await
+        .with_context(|| format!("Failed to sync temp file at {temp_path:?}"))?;
+
+    // Atomic rename.
+    tokio::fs::rename(&temp_path, path)
+        .await
+        .with_context(|| format!("Failed to rename {temp_path:?} to {path:?}"))?;
 
     Ok(())
 }
@@ -434,5 +524,27 @@ mod tests {
         assert!(err
             .to_string()
             .contains("Leader is missing from the Nodes table."));
+    }
+
+    #[test]
+    fn leader_change_detected_when_membership_unchanged() {
+        let ts = test_timestamp();
+        let nodes = vec![
+            ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
+            ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
+        ];
+
+        // Initial state: node1 is leader
+        let info1 = NodeDiscovery::cluster(Some("node1".to_string()), nodes.clone()).unwrap();
+
+        // New state: node2 becomes leader, same membership
+        let info2 = NodeDiscovery::cluster(Some("node2".to_string()), nodes).unwrap();
+
+        // Membership should be identical
+        assert_eq!(info1.members, info2.members, "Members should be unchanged");
+
+        // But leader_id should differ.
+        assert_eq!(info1.leader_id(), Some("node1".to_string()));
+        assert_eq!(info2.leader_id(), Some("node2".to_string()));
     }
 }
