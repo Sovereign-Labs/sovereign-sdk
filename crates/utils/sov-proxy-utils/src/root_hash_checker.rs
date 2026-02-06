@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
+use tokio::sync::watch;
 
 use crate::ClusterInfo;
 
@@ -35,22 +36,24 @@ impl RootHashCheck {
 /// Client for checking root hash consistency across cluster nodes.
 pub struct ClusterRootHashChecker {
     client: reqwest::Client,
+    receiver: watch::Receiver<ClusterInfo>,
 }
 
 impl ClusterRootHashChecker {
     /// Creates a new `ClusterRootHashChecker` with default timeouts.
-    pub fn new() -> Result<Self> {
+    pub fn new(receiver: watch::Receiver<ClusterInfo>) -> Result<Self> {
         let client = reqwest::ClientBuilder::new()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(10))
             .build()
             .context("Failed to build HTTP client")?;
-        Ok(Self { client })
+        Ok(Self { client, receiver })
     }
 
     /// Queries all nodes in the cluster for their latest slot's state root
     /// and checks whether they all agree.
-    pub async fn check_root_hashes(&self, cluster_info: &ClusterInfo) -> Result<RootHashCheck> {
+    pub async fn check_root_hashes(&self) -> Result<RootHashCheck> {
+        let cluster_info = self.receiver.borrow().clone();
         let mut all_nodes: Vec<(&str, SocketAddr)> = Vec::new();
 
         if let Some(leader) = &cluster_info.leader {
@@ -68,7 +71,7 @@ impl ClusterRootHashChecker {
         for (node_id, address) in &all_nodes {
             let client = self.client.clone();
             let url = format!("http://{address}/ledger/slots/latest");
-            let node_id = node_id.to_string();
+            let node_id = (*node_id).to_string();
             handles.push(tokio::spawn(async move {
                 let result = client
                     .get(&url)
