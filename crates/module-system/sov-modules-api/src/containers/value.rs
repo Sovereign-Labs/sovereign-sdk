@@ -199,15 +199,13 @@ where
         let key = self.slot_key();
         #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Getting raw state value");
-        state.get(&key).map(|value| value.map(|v| v.value().to_vec()))
+        state
+            .get(&key)
+            .map(|value| value.map(|v| v.value().to_vec()))
     }
 
     /// Sets the raw value bytes in state.
-    pub fn set_raw<Writer>(
-        &mut self,
-        value: &[u8],
-        state: &mut Writer,
-    ) -> Result<(), Writer::Error>
+    pub fn set_raw<Writer>(&mut self, value: &[u8], state: &mut Writer) -> Result<(), Writer::Error>
     where
         Writer: StateWriter<N>,
     {
@@ -319,7 +317,10 @@ mod tests {
 
         let raw = vec![1, 2, 3, 4, 5];
         value.set_raw(&raw, &mut state).unwrap_infallible();
-        assert_eq!(value.get_raw(&mut state).unwrap_infallible(), Some(raw.clone()));
+        assert_eq!(
+            value.get_raw(&mut state).unwrap_infallible(),
+            Some(raw.clone())
+        );
         assert_eq!(
             value.remove_raw(&mut state).unwrap_infallible(),
             Some(raw.clone())
@@ -344,7 +345,9 @@ mod tests {
         );
 
         let typed_from_raw = borsh_to_vec(&100_u32).unwrap();
-        value.set_raw(&typed_from_raw, &mut state).unwrap_infallible();
+        value
+            .set_raw(&typed_from_raw, &mut state)
+            .unwrap_infallible();
         assert_eq!(value.get(&mut state).unwrap_infallible(), Some(100_u32));
     }
 }

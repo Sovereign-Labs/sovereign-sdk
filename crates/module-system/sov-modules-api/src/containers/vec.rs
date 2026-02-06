@@ -769,12 +769,10 @@ mod test {
         );
 
         let typed_from_raw = borsh_to_vec(&100_u32).unwrap();
-        assert!(
-            state_vec
-                .set_raw(0, &typed_from_raw, &mut state)
-                .unwrap_infallible()
-                .is_ok()
-        );
+        assert!(state_vec
+            .set_raw(0, &typed_from_raw, &mut state)
+            .unwrap_infallible()
+            .is_ok());
         assert_eq!(state_vec.get(0, &mut state).unwrap_infallible(), Some(100));
 
         assert!(matches!(

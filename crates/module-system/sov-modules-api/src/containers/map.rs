@@ -59,6 +59,8 @@ pub enum StateMapError<N> {
 }
 
 type ValueOrError<V, N> = Result<V, StateMapError<N>>;
+#[cfg(feature = "native")]
+type RawMapEntry<K> = anyhow::Result<(K, Vec<u8>)>;
 
 /// A container that maps keys to values
 ///
@@ -371,7 +373,9 @@ where
         let key = self.slot_key(key);
         #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Getting raw map value");
-        state.get(&key).map(|value| value.map(|v| v.value().to_vec()))
+        state
+            .get(&key)
+            .map(|value| value.map(|v| v.value().to_vec()))
     }
 
     /// Inserts a key-value pair into the map where the value is already serialized bytes.
@@ -502,7 +506,7 @@ where
     pub fn iter_raw<'a, S>(
         &'a self,
         storage: &'a S,
-    ) -> anyhow::Result<Option<impl Iterator<Item = anyhow::Result<(K, Vec<u8>)>> + 'a>>
+    ) -> anyhow::Result<Option<impl Iterator<Item = RawMapEntry<K>> + 'a>>
     where
         S: NativeStorage,
     {
@@ -534,7 +538,7 @@ where
     pub fn iter_raw<'a, S>(
         &'a self,
         storage: &'a S,
-    ) -> anyhow::Result<Option<impl Iterator<Item = anyhow::Result<(K, Vec<u8>)>> + 'a>>
+    ) -> anyhow::Result<Option<impl Iterator<Item = RawMapEntry<K>> + 'a>>
     where
         S: NativeStorage,
     {
@@ -623,7 +627,10 @@ mod tests {
 
         let raw = vec![3, 1, 4, 1, 5];
         map.set_raw(&key, &raw, &mut state).unwrap_infallible();
-        assert_eq!(map.get_raw(&key, &mut state).unwrap_infallible(), Some(raw.clone()));
+        assert_eq!(
+            map.get_raw(&key, &mut state).unwrap_infallible(),
+            Some(raw.clone())
+        );
         assert_eq!(
             map.remove_raw(&key, &mut state).unwrap_infallible(),
             Some(raw.clone())
