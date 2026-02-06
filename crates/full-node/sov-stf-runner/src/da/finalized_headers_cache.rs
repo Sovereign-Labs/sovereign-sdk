@@ -157,6 +157,18 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
     ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
         self.da_service.get_head_block_header().await
     }
+
+    /// Inserts a block header into the recent headers cache.
+    ///
+    /// This allows external callers (e.g., sync_fetcher) to populate the cache
+    /// with headers they've already fetched, avoiding redundant network calls
+    /// when `get_block_header_at` is later called for the same height.
+    ///
+    /// The header is only inserted if it's not already present in the cache.
+    /// If the cache is full, the oldest entry is evicted.
+    pub fn insert_header(&self, header: <Da::Spec as DaSpec>::BlockHeader) {
+        self.headers_cache.insert_new_header(header);
+    }
 }
 
 #[derive(Debug)]
@@ -398,6 +410,47 @@ mod tests {
         // Request a header that's not in cache - should fall back to DA service
         let header_0 = cache.get_block_header_at(0).await?;
         assert_eq!(header_0.height(), 0);
+
+        sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_externally_inserted_header_is_cached() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        for _ in 0..5 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        // Get a header from the DA service directly
+        let header = da_service.get_block_header_at(3).await?;
+
+        // Verify the header is NOT in the internal cache before insertion
+        assert!(
+            cache.headers_cache.get_block_header_at(3).is_none(),
+            "Header should not be in cache before insert_header is called"
+        );
+
+        // Insert it into the cache
+        cache.insert_header(header.clone());
+
+        // Verify the header IS in the internal cache after insertion
+        let cached = cache
+            .headers_cache
+            .get_block_header_at(3)
+            .expect("Header should be in cache after insert_header");
+        assert_eq!(cached.height(), 3);
+        assert_eq!(cached.hash(), header.hash());
 
         sender.send(())?;
         Ok(())
