@@ -5,6 +5,7 @@ use sov_hyperlane_integration::igp::{DomainDefaultGas, DomainOracleData, Exchang
 use sov_modules_api::SafeVec;
 
 pub mod post_mailbox_send;
+pub mod set_admin;
 pub mod set_relayer_config;
 pub mod update_oracle_data;
 
