@@ -125,7 +125,7 @@ fn test_query_archival_state() {
 
 #[test]
 fn test_freeze_time() {
-    let (_, mut runner) = setup();
+    let (admin, mut runner) = setup();
     let chain_state = ChainState::<S>::default();
 
     runner.config.freeze_time = Some(Time::from_secs(200));
@@ -137,6 +137,29 @@ fn test_freeze_time() {
 
     let time = runner.query_state(|state| chain_state.get_time(state).unwrap_infallible());
     assert_eq!(time, Time::from_secs(200));
+    let oracle_time =
+        runner.query_state(|state| chain_state.get_oracle_time(state).unwrap_infallible());
+    assert_eq!(oracle_time, Time::from_secs(200));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(
+            sov_value_setter::CallMessage::SetValue {
+                value: 1,
+                gas: None,
+            },
+        ),
+        assert: Box::new(|result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    let oracle_time =
+        runner.query_state(|state| chain_state.get_oracle_time(state).unwrap_infallible());
+    assert_eq!(
+        oracle_time,
+        Time::from_secs(200),
+        "Oracle time should remain frozen during tx execution"
+    );
 
     runner.advance_slots(1);
     let time = runner.query_state(|state| chain_state.get_time(state).unwrap_infallible());
@@ -152,6 +175,24 @@ fn test_freeze_time() {
     let time = runner.query_state(|state| chain_state.get_time(state).unwrap_infallible());
     // frozen time is updated
     assert_eq!(time, Time::from_secs(5000));
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(
+            sov_value_setter::CallMessage::SetValue {
+                value: 2,
+                gas: None,
+            },
+        ),
+        assert: Box::new(|result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+    let oracle_time =
+        runner.query_state(|state| chain_state.get_oracle_time(state).unwrap_infallible());
+    assert_eq!(
+        oracle_time,
+        Time::from_secs(5000),
+        "Oracle time should remain frozen after changing freeze_time"
+    );
 
     // timestamps should revert to the current time
     runner.config.freeze_time = None;

@@ -44,6 +44,16 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
+const DISABLE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_DISABLE_HD_TIMESTAMPS";
+
+fn disable_hd_timestamps_for_tests() -> bool {
+    cfg!(debug_assertions)
+        && matches!(
+            std::env::var(DISABLE_HD_TIMESTAMPS_ENV_VAR),
+            Ok(value) if value == "1"
+        )
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
     priority: u64,
@@ -822,7 +832,9 @@ where
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
         let mut baked_tx = baked_tx;
-        baked_tx.set_sequencing_metadata(&HDTimestamp::now());
+        if !disable_hd_timestamps_for_tests() {
+            baked_tx.set_sequencing_metadata(&HDTimestamp::now());
+        }
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
