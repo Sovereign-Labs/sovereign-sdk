@@ -137,4 +137,30 @@ impl ClusterRootHashChecker {
             failed_nodes,
         })
     }
+
+    /// Periodically checks root hash consistency every 10 seconds.
+    ///
+    /// Logs warnings when nodes disagree and errors when checks fail.
+    /// Runs indefinitely.
+    pub async fn run(&self) -> ! {
+        let interval = Duration::from_secs(10);
+        loop {
+            match self.check_root_hashes().await {
+                Ok(check) if check.is_consistent() => {
+                    tracing::debug!("Root hash check passed: all nodes consistent");
+                }
+                Ok(check) => {
+                    tracing::warn!(
+                        ?check.node_results,
+                        ?check.failed_nodes,
+                        "Root hash inconsistency detected across cluster nodes"
+                    );
+                }
+                Err(e) => {
+                    tracing::error!(error = %e, "Root hash check failed");
+                }
+            }
+            tokio::time::sleep(interval).await;
+        }
+    }
 }
