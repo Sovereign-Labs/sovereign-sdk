@@ -111,17 +111,22 @@ impl ClusterRootHashChecker {
             }
         }
 
-        let consistent_root = if node_results.is_empty() {
-            None
-        } else {
-            let mut roots = node_results.values().map(|(_, root)| root);
-            let first = roots.next().unwrap();
-            if roots.all(|r| r == first) {
-                Some(first.clone())
-            } else {
-                None
-            }
-        };
+        // Use the leader's root hash as the reference, falling back to the first follower.
+        let reference_node_id = cluster_info
+            .leader
+            .as_ref()
+            .map(|l| &l.node_id)
+            .or_else(|| cluster_info.followers.first().map(|f| &f.node_id));
+
+        let consistent_root = reference_node_id
+            .and_then(|id| node_results.get(id.as_str()))
+            .map(|(_, root)| root)
+            .filter(|root| {
+                node_results
+                    .values()
+                    .all(|(_, other_root)| other_root == *root)
+            })
+            .cloned();
 
         Ok(RootHashCheck {
             consistent_root,
