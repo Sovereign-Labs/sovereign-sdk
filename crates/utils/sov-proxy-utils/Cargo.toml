@@ -11,6 +11,9 @@ repository.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "derive", "time"], default-features = false }
 time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
 tokio = { workspace = true, features = ["time", "sync"], default-features = false }
