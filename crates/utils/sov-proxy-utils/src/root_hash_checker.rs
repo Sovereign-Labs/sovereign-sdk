@@ -163,7 +163,7 @@ impl ClusterRootHashChecker {
     ///
     /// Logs warnings when nodes disagree and errors when checks fail.
     /// Runs indefinitely.
-    pub async fn run(&self) -> ! {
+    pub async fn run(&self) {
         let interval = Duration::from_secs(10);
 
         loop {
