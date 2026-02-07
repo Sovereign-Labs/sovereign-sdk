@@ -74,7 +74,7 @@ async fn test_db_elected_leader_failover() {
     node_2.wait_for_sequencer_ready().await.unwrap();
 
     let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
-    let cluster_info = setup.cluster_info_subscription.wait_for_change().await;
+    let cluster_info = setup.wait_for_cluster_change().await;
 
     tracing::info!(
         "Initial cluster state - BatchProducer: {:?}, Followers: {:?}",
@@ -95,7 +95,11 @@ async fn test_db_elected_leader_failover() {
         "Expected exactly one follower in nodes table"
     );
 
-    let initial_follower = &cluster_info.followers[0];
+    let initial_follower = cluster_info
+        .followers
+        .values()
+        .next()
+        .expect("Expected exactly one follower in nodes table");
 
     assert_ne!(
         initial_leader.node_id, initial_follower.node_id,
@@ -107,8 +111,8 @@ async fn test_db_elected_leader_failover() {
         "BatchProducer and follower should have different addresses"
     );
 
-    // Remember the follower's node_id - this should become the new leader after failover
-    let expected_new_leader = initial_follower.clone();
+    // Remember the follower's node_id - this should become the new leader after failover.
+    let expected_new_leader_id = initial_follower.node_id.clone();
 
     // Kill the leader
     let _ = leader.shutdown().await;
@@ -139,7 +143,7 @@ async fn test_db_elected_leader_failover() {
     );
 
     // Check final cluster state after failover
-    let cluster_info = setup.cluster_info_subscription.wait_for_change().await;
+    let cluster_info = setup.wait_for_cluster_change().await;
 
     // Verify the former follower is now the leader in the sequencer_leader table
     let new_leader = cluster_info
@@ -147,13 +151,13 @@ async fn test_db_elected_leader_failover() {
         .as_ref()
         .expect("Expected a leader after failover");
 
-    assert_eq!(new_leader.node_id, expected_new_leader.node_id);
+    assert_eq!(new_leader.node_id, expected_new_leader_id);
 
     let _ = restarted_rollup.shutdown().await;
     let _ = setup.shutdown().await;
 }
 
-/// Test that `subscribe_cluster_info_loop` receives PostgreSQL notifications
+/// Test that `NodeDiscovery` receives PostgreSQL notifications
 /// and writes updated cluster info to file when nodes register and leadership changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_subscribe_cluster_info_receives_notifications() {
@@ -168,7 +172,8 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     node_1.wait_for_sequencer_ready().await.unwrap();
 
     // Wait for file to be updated with leader info.
-    let file_content1 = setup.cluster_info_subscription.wait_for_change().await;
+    let cluster_info_1 = setup.wait_for_cluster_change().await;
+    assert!(cluster_info_1.followers.is_empty());
 
     // Start second node - it will become follower and trigger another notification
     let node_2 = setup
@@ -177,20 +182,18 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     node_2.wait_for_sequencer_ready().await.unwrap();
 
     // Wait for file to be updated with follower info.
-    let file_content2 = setup.cluster_info_subscription.wait_for_change().await;
+    let cluster_info_2 = setup.wait_for_cluster_change().await;
 
     // After replica joined, the leader didn't change (compare addresses since timestamps may differ).
     assert_eq!(
-        file_content1.leader.as_ref().unwrap().address,
-        file_content2.leader.as_ref().unwrap().address
+        cluster_info_1.leader.as_ref().unwrap().address,
+        cluster_info_2.leader.as_ref().unwrap().address
     );
 
-    // The followers list changed (node2 joined as follower).
-    // Note: When there's only a leader, it gets added to followers too, so both have len=1.
-    // But the follower addresses are different.
-    assert_ne!(
-        file_content1.followers[0].address,
-        file_content2.followers[0].address
+    // `node2` joined as the only follower.
+    assert_eq!(
+        cluster_info_2.followers.first_key_value().unwrap().0,
+        "node2"
     );
 
     // Cleanup

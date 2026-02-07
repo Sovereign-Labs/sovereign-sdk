@@ -18,7 +18,9 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_proxy_utils::SimpleClusterUpdateNotifier;
+use sov_proxy_utils::NoOp;
+use sov_proxy_utils::NodeDiscoveryTask;
+use sov_proxy_utils::NodeInfo;
 use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
@@ -26,11 +28,11 @@ use sov_test_utils::test_rollup::PostgresData;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 mod db_elected;
@@ -160,42 +162,14 @@ use sov_proxy_utils::NodeDiscovery;
 
 type Rollup = ExternalMockDemoRollup<Native>;
 
-/// Holds resources for a cluster info subscription.
-struct ClusterInfoSubscription {
-    _temp_dir: tempfile::TempDir,
-    path: PathBuf,
-    handle: JoinHandle<()>,
-    file_watcher: watch::Receiver<()>,
-}
-
-impl ClusterInfoSubscription {
-    async fn wait_for_change(&mut self) -> ClusterInfo {
-        self.wait_for_change_with_timeout(Duration::from_secs(2))
-            .await
-    }
-
-    async fn wait_for_change_with_timeout(&mut self, timeout: Duration) -> ClusterInfo {
-        tokio::time::timeout(timeout, self.file_watcher.changed())
-            .await
-            .unwrap()
-            .unwrap();
-
-        let content =
-            std::fs::read_to_string(self.path.clone()).expect("Failed to read file content");
-        ClusterInfo::parse(&content).expect("Failed to parse cluster info")
-    }
-
-    fn abort(self) {
-        self.handle.abort();
-    }
-}
-
 /// Test setup for DbElected tests with two nodes (leader and replica).
 struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
-    cluster_info_subscription: ClusterInfoSubscription,
+    node_discovery_task: NodeDiscoveryTask,
+    _temp_dir: tempfile::TempDir,
+    path: PathBuf,
 }
 
 const MAX_AGE: Duration = Duration::from_secs(10);
@@ -220,36 +194,28 @@ impl NodeDiscoveryTestSetup {
 
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
-        let (notifier, file_watcher) = SimpleClusterUpdateNotifier::new();
-        // Create NodeDiscovery to query the nodes table
-        let mut node_discovery =
-            NodeDiscovery::new(postgres.connection_string(), max_age, Box::new(notifier))
-                .await
-                .expect("Failed to create NodeDiscovery");
-
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("cluster_info.txt");
-        let path_clone = path.clone();
 
-        let handle = tokio::spawn(async move {
-            node_discovery
-                .subscribe_cluster_info_loop(path_clone)
-                .await
-                .unwrap();
-        });
+        // Create NodeDiscovery to query the nodes table
+        let node_discovery = NodeDiscovery::connect(
+            postgres.connection_string(),
+            max_age,
+            path.clone(),
+            Box::new(NoOp),
+        )
+        .await
+        .expect("Failed to create NodeDiscovery");
 
-        let cluster_info_subscription = ClusterInfoSubscription {
-            _temp_dir: temp_dir,
-            path,
-            handle,
-            file_watcher,
-        };
+        let node_discovery_task = node_discovery.spawn().await;
 
         Some(Self {
             postgres,
             da_shutdown,
             da_addr,
-            cluster_info_subscription,
+            node_discovery_task,
+            _temp_dir: temp_dir,
+            path,
         })
     }
 
@@ -260,7 +226,41 @@ impl NodeDiscoveryTestSetup {
     }
 
     async fn shutdown(self) {
-        self.cluster_info_subscription.abort();
+        self.node_discovery_task.handle.abort();
         let _ = self.da_shutdown.send(());
     }
+
+    async fn wait_for_cluster_change(&mut self) -> ClusterInfo {
+        self.wait_for_cluster_change_with_timeout(Duration::from_secs(2))
+            .await
+    }
+
+    async fn wait_for_cluster_change_with_timeout(&mut self, timeout: Duration) -> ClusterInfo {
+        tokio::time::timeout(timeout, self.node_discovery_task.receiver.changed())
+            .await
+            .unwrap()
+            .unwrap();
+
+        let content = std::fs::read_to_string(&self.path).expect("Failed to read file content");
+        parse_cluster_info(&content).expect("Failed to parse cluster info")
+    }
+}
+
+/// Parses cluster info from file content.
+/// Each line should be in the format `role=address,timestamp,node_id`.
+fn parse_cluster_info(content: &str) -> anyhow::Result<ClusterInfo> {
+    let mut leader = None;
+    let mut followers = BTreeMap::new();
+
+    for line in content.lines() {
+        if let Some(rest) = line.strip_prefix("leader=") {
+            let node = NodeInfo::parse(rest)?;
+            leader = Some(node);
+        } else if let Some(rest) = line.strip_prefix("follower=") {
+            let node = NodeInfo::parse(rest)?;
+            followers.insert(node.node_id.clone(), node);
+        }
+    }
+
+    Ok(ClusterInfo { leader, followers })
 }
