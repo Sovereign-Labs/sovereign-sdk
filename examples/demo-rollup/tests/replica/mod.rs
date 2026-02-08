@@ -18,7 +18,6 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_proxy_utils::NoOp;
 use sov_proxy_utils::NodeDiscoveryTask;
 use sov_proxy_utils::NodeInfo;
 use sov_sequencer::preferred::ConfiguredNodeRole;
@@ -202,7 +201,7 @@ impl NodeDiscoveryTestSetup {
             postgres.connection_string(),
             max_age,
             path.clone(),
-            Box::new(NoOp),
+            None,
         )
         .await
         .expect("Failed to create NodeDiscovery");

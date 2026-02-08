@@ -104,14 +104,6 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
     async fn on_cluster_update(&self, cluster_info: &ClusterInfo);
 }
 
-/// A notifier that intentionally does nothing.
-pub struct NoOp;
-
-#[async_trait]
-impl ClusterUpdateNotifier for NoOp {
-    async fn on_cluster_update(&self, _cluster_info: &ClusterInfo) {}
-}
-
 /// Handle returned when subscribing to cluster updates.
 pub struct NodeDiscoveryTask {
     pub receiver: watch::Receiver<ClusterInfo>,
@@ -126,7 +118,7 @@ pub struct NodeDiscovery {
     prev_followers: BTreeSet<String>,
     prev_leader_id: Option<String>,
     path: PathBuf,
-    notifier: Box<dyn ClusterUpdateNotifier>,
+    notifier: Option<Box<dyn ClusterUpdateNotifier>>,
 }
 
 impl NodeDiscovery {
@@ -140,7 +132,7 @@ impl NodeDiscovery {
         connection_string: &str,
         max_age: Duration,
         path: PathBuf,
-        notifier: Box<dyn ClusterUpdateNotifier>,
+        notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
         tracing::info!("Connecting to database.");
         let pool = sqlx::postgres::PgPoolOptions::new()
@@ -275,7 +267,9 @@ impl NodeDiscovery {
             self.prev_leader_id = leader_id;
 
             // Notify watchers that the cluster was updated.
-            self.notifier.on_cluster_update(&info).await;
+            if let Some(notifier) = &self.notifier {
+                notifier.on_cluster_update(&info).await;
+            }
             let _ = sender.send(info);
         }
 
