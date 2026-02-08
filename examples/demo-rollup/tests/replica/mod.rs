@@ -197,14 +197,10 @@ impl NodeDiscoveryTestSetup {
         let path = temp_dir.path().join("cluster_info.txt");
 
         // Create NodeDiscovery to query the nodes table
-        let node_discovery = NodeDiscovery::connect(
-            postgres.connection_string(),
-            max_age,
-            path.clone(),
-            None,
-        )
-        .await
-        .expect("Failed to create NodeDiscovery");
+        let node_discovery =
+            NodeDiscovery::connect(postgres.connection_string(), max_age, path.clone(), None)
+                .await
+                .expect("Failed to create NodeDiscovery");
 
         let node_discovery_task = node_discovery.spawn().await;
 
