@@ -170,7 +170,7 @@ where
                 &e
             {
                 if err_msg.contains("Only EIP1559") {
-                    return rpc_tx_rejected("transaction type not supported: {err_msg}");
+                    return rpc_tx_rejected(format!("transaction type not supported: {err_msg}"));
                 }
             };
             rpc_invalid_params(format!("Authentication failed: {e}"))
