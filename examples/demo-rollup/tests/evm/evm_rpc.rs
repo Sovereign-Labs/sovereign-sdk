@@ -451,8 +451,9 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
 
     let r1_log = r1.logs().first().unwrap();
     let r3_log = r3.logs().first().unwrap();
-    assert_log_matches_receipt(&r1, r1_log, r1_log.log_index.unwrap());
-    assert_log_matches_receipt(&r3, r3_log, r3_log.log_index.unwrap());
+    // TC24: logIndex is sequential across block (r1 has 1 log at index 0, r2 has 0, r3 has 1 log at index 1)
+    assert_log_matches_receipt(&r1, r1_log, 0);
+    assert_log_matches_receipt(&r3, r3_log, 1);
 
     let topic0 = keccak256(b"SimpleLog(address,uint256,uint256,uint256)");
     let mut got_logs = client
