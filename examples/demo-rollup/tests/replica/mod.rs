@@ -166,7 +166,6 @@ struct NodeDiscoveryTestSetup {
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
     cluster_info_service: ClusterInfoService,
-    root_hash_checks_receiver: watch::Receiver<RootHashCheck>,
     _temp_dir: tempfile::TempDir,
 }
 
@@ -199,14 +198,13 @@ impl NodeDiscoveryTestSetup {
             ClusterInfoService::spawn(postgres.connection_string(), max_age, path, None)
                 .await
                 .expect("Failed to create ClusterInfoService");
-        let root_hash_checks_receiver = cluster_info_service.subscribe_root_hash_checks();
 
         Some(Self {
             postgres,
             da_shutdown,
             da_addr,
             cluster_info_service,
-            root_hash_checks_receiver,
+
             _temp_dir: temp_dir,
         })
     }
@@ -236,12 +234,13 @@ impl NodeDiscoveryTestSetup {
 
     async fn wait_for_root_hash_check_with_timeout(&mut self, timeout: Duration) -> RootHashCheck {
         tokio::time::timeout(timeout, async {
-            self.root_hash_checks_receiver
+            let receiver = &mut self.cluster_info_service.root_hash_checker_task.receiver;
+            receiver
                 .changed()
                 .await
                 .expect("Root hash checker channel closed");
 
-            self.root_hash_checks_receiver.borrow().clone()
+            receiver.borrow().clone()
         })
         .await
         .expect("Timed out waiting for root hash checker update")

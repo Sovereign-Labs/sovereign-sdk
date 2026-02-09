@@ -4,16 +4,14 @@ use crate::node_discovery::NodeDiscovery;
 use crate::node_discovery::NodeDiscoveryTask;
 use crate::root_hash_checker::ClusterRootHashChecker;
 use crate::root_hash_checker::ClusterRootHashCheckerTask;
-use crate::root_hash_checker::RootHashCheck;
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::sync::watch;
 
 /// Service that keeps cluster info updated by running a [`NodeDiscovery`] task.
 pub struct ClusterInfoService {
-    node_discovery_task: NodeDiscoveryTask,
-    root_hash_checker_task: ClusterRootHashCheckerTask,
+    pub node_discovery_task: NodeDiscoveryTask,
+    pub root_hash_checker_task: ClusterRootHashCheckerTask,
 }
 
 impl ClusterInfoService {
@@ -35,16 +33,6 @@ impl ClusterInfoService {
             node_discovery_task,
             root_hash_checker_task,
         })
-    }
-
-    /// Returns a new watcher subscription for cluster info changes.
-    pub fn subscribe(&self) -> watch::Receiver<ClusterInfo> {
-        self.node_discovery_task.receiver.clone()
-    }
-
-    /// Returns a watcher subscription for root-hash check results.
-    pub fn subscribe_root_hash_checks(&self) -> watch::Receiver<RootHashCheck> {
-        self.root_hash_checker_task.receiver.clone()
     }
 
     /// Waits for the next cluster info update with timeout.
