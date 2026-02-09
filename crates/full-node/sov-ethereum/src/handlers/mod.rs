@@ -24,10 +24,11 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
-use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::{FatalError, HasKernel};
 #[cfg(feature = "local")]
 use sov_modules_api::macros::config_value;
+use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
@@ -165,8 +166,13 @@ where
     // This will also be moved into the sequencer, but for now is kept here.
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
-            .map_err(|e| rpc_invalid_params(format!("Authentication failed: {e}")))?;
+        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
+            // Check if this is a TxTypeNotSupported error and return proper RPC code
+            if let AuthenticationError::FatalError(FatalError::TxTypeNotSupported(msg), _) = &e {
+                return rpc_tx_rejected(format!("transaction type not supported: {msg}"));
+            }
+            rpc_invalid_params(format!("Authentication failed: {e}"))
+        })?;
         Ok(())
     }
 

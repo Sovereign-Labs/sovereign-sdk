@@ -1,4 +1,5 @@
 mod evm_account_abstraction;
+mod evm_tx_type;
 mod evm_balances;
 mod evm_block_hash;
 mod evm_block_number;

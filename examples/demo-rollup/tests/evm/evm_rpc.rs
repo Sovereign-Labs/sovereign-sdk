@@ -1,11 +1,13 @@
 use alloy_primitives::utils::parse_ether;
-use alloy_primitives::{Address, BlockHash};
+use alloy_primitives::{Address, BlockHash, U256};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockId;
 use alloy_rpc_types_eth::BlockNumberOrTag;
 use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
 use alloy_rpc_types_eth::Header;
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
 use sov_evm_test_utils::Erc20;
 use sov_evm_test_utils::Submit;
 
@@ -126,6 +128,47 @@ async fn block_size() -> anyhow::Result<()> {
     // Block size is 508 bytes with gas_limit = 100_000_000_000 (5-byte RLP encoding)
     // Previously was 507 bytes with gas_limit = 1_000_000_000 (4-byte RLP encoding)
     assert_eq!(header.size.unwrap().to::<u64>(), 508);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_storage_at_returns_32_byte_data_hex() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let client = crate::evm::evm_test_helper::create_simple_storage_client(
+        rollup.http_addr,
+        crate::evm::evm_test_helper::SENDER_PRIV_KEY,
+    )
+    .await;
+
+    let contract_address = crate::evm::evm_test_helper::deploy_contract_check(&client)
+        .await
+        .expect("contract deployment should succeed");
+    crate::evm::evm_test_helper::set_value_check(&client, contract_address, 1)
+        .await
+        .expect("setting storage should succeed");
+
+    // Query raw JSON-RPC output to assert Ethereum DATA shape (fixed 32-byte hex).
+    let raw: String = client
+        .rpc_client
+        .ws
+        .request(
+            "eth_getStorageAt",
+            rpc_params![contract_address, U256::from(0)],
+        )
+        .await?;
+
+    assert_eq!(
+        raw.len(),
+        66,
+        "eth_getStorageAt should return 0x-prefixed 32-byte hex data"
+    );
+    assert!(
+        raw.starts_with("0x"),
+        "eth_getStorageAt should return a hex string"
+    );
 
     Ok(())
 }
