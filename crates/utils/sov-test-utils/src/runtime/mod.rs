@@ -72,7 +72,7 @@ pub mod traits;
 use traits::MinimalGenesis;
 
 type NoncesMap<S> = HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64>;
-const DISABLE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_DISABLE_HD_TIMESTAMPS";
+const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
 
 /// Metadata about a blob.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -272,12 +272,13 @@ where
     <S::Storage as Storage>::Root: Clone,
 {
     fn sync_hd_timestamp_env_var_for_tests(&self) {
-        let value = if self.config.freeze_time.is_some() {
-            "1"
+        if let Some(freeze_time) = &self.config.freeze_time {
+            let time_millis: u128 = freeze_time.as_millis().try_into().unwrap();
+            let time_nanos = time_millis * 1000;
+            std::env::set_var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR, time_nanos.to_string());
         } else {
-            "0"
+            std::env::remove_var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR);
         };
-        std::env::set_var(DISABLE_HD_TIMESTAMPS_ENV_VAR, value);
     }
 
     /// Returns the runtime of the test runner.
