@@ -221,6 +221,12 @@ impl NodeDiscovery {
                     tracing::warn!(?error, "Cluster update failed");
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
+
+                // Wait for at least one notification.
+                self.listener.recv().await?;
+
+                // Drain any additional pending notifications.
+                while self.listener.next_buffered().is_some() {}
             }
         });
 
@@ -272,12 +278,6 @@ impl NodeDiscovery {
             }
             let _ = sender.send(info);
         }
-
-        // Wait for at least one notification.
-        self.listener.recv().await?;
-
-        // Drain any additional pending notifications.
-        while self.listener.next_buffered().is_some() {}
 
         Ok(())
     }
