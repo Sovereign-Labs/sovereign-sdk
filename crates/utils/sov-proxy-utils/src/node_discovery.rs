@@ -202,7 +202,7 @@ impl NodeDiscovery {
 
         if let Some(leader_id) = &leader_id {
             if leader.is_none() {
-                anyhow::bail!("Leader is missing from the Nodes table. leader_id: {leader_id}");
+                anyhow::bail!("Leader is missing from the Nodes table. leader_id: {leader_id}, followers: {followers:?}");
             }
         }
 
@@ -213,7 +213,7 @@ impl NodeDiscovery {
     /// cluster info to a file whenever the cluster state changes.
     ///
     /// Listens on `nodes_changes` and `leader_changes` channels.
-    pub async fn spawn(mut self) -> NodeDiscoveryTask {
+    pub fn spawn(mut self) -> NodeDiscoveryTask {
         let (sender, receiver) = watch::channel(ClusterInfo::default());
         let handle = tokio::spawn(async move {
             loop {
@@ -239,15 +239,15 @@ impl NodeDiscovery {
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
 
-        tracing::trace!(info = ?info, "Last cluster info");
+        tracing::trace!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
         if membership_changed || leader_changed {
             // Log membership changes
             for node_id in followers.difference(&self.prev_followers) {
-                tracing::info!(node_id, "Node joined the cluster");
+                tracing::info!(node_id, "Node joined the followers");
             }
             for node_id in self.prev_followers.difference(&followers) {
-                tracing::info!(node_id, "Node left the cluster");
+                tracing::info!(node_id, "Node left the followers");
             }
 
             // Log leader change
@@ -285,7 +285,7 @@ impl NodeDiscovery {
     async fn get_cluster_info_from_db(
         &self,
     ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime)>)> {
-        let max_age_secs = self.max_age.as_secs() as i64;
+        let max_age_secs: i64 = self.max_age.as_secs().try_into().unwrap();
 
         // Fetch nodes updated within max_age, always including the leader regardless of age.
         // The leader_id is included in each row via LEFT JOIN, allowing us to get it from the results.

@@ -202,7 +202,7 @@ impl NodeDiscoveryTestSetup {
                 .await
                 .expect("Failed to create NodeDiscovery");
 
-        let node_discovery_task = node_discovery.spawn().await;
+        let node_discovery_task = node_discovery.spawn();
 
         Some(Self {
             postgres,
