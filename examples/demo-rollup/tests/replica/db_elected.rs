@@ -1,8 +1,6 @@
 use super::*;
 use sov_sequencer::SequencerRole;
 
-type Rollup = ExternalMockDemoRollup<Native>;
-
 /// Test that when two DbElected nodes start, one becomes leader and the other becomes replica.
 /// The leader can process transactions while the replica receives them via PostgreSQL sync.
 #[tokio::test(flavor = "multi_thread")]
@@ -157,8 +155,8 @@ async fn test_db_elected_leader_failover() {
     let _ = setup.shutdown().await;
 }
 
-/// Test that `NodeDiscovery` receives PostgreSQL notifications
-/// and writes updated cluster info to file when nodes register and leadership changes.
+/// Test that cluster info updates are received from PostgreSQL notifications
+/// when nodes register and leadership changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_subscribe_cluster_info_receives_notifications() {
     let Some(mut setup) = NodeDiscoveryTestSetup::new().await else {
@@ -171,7 +169,7 @@ async fn test_subscribe_cluster_info_receives_notifications() {
         .await;
     node_1.wait_for_sequencer_ready().await.unwrap();
 
-    // Wait for file to be updated with leader info.
+    // Wait for leader info update.
     let cluster_info_1 = setup.wait_for_cluster_change().await;
     assert!(cluster_info_1.followers.is_empty());
 
@@ -181,7 +179,7 @@ async fn test_subscribe_cluster_info_receives_notifications() {
         .await;
     node_2.wait_for_sequencer_ready().await.unwrap();
 
-    // Wait for file to be updated with follower info.
+    // Wait for follower info update.
     let cluster_info_2 = setup.wait_for_cluster_change().await;
 
     // After replica joined, the leader didn't change (compare addresses since timestamps may differ).
@@ -200,24 +198,4 @@ async fn test_subscribe_cluster_info_receives_notifications() {
     let _ = node_1.shutdown().await;
     let _ = node_2.shutdown().await;
     setup.shutdown().await;
-}
-
-async fn establish_leader_and_replica(
-    node_1: TestRollup<Rollup>,
-    node_2: TestRollup<Rollup>,
-) -> (TestRollup<Rollup>, TestRollup<Rollup>) {
-    // Discover roles via the /sequencer/role endpoint
-    let role1 = node_1.sequencer_role().await.unwrap();
-    let role2 = node_2.sequencer_role().await.unwrap();
-
-    // Determine which node is the leader and which is the replica
-    let (leader, replica) = match (role1, role2) {
-        (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (node_1, node_2),
-        (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (node_2, node_1),
-        _ => {
-            panic!("Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}")
-        }
-    };
-
-    (leader, replica)
 }
