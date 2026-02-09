@@ -1,5 +1,5 @@
 use alloy_primitives::utils::parse_ether;
-use alloy_primitives::{Address, BlockHash, U256};
+use alloy_primitives::{Address, BlockHash, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockId;
@@ -168,6 +168,59 @@ async fn eth_get_storage_at_returns_32_byte_data_hex() -> anyhow::Result<()> {
     assert!(
         raw.starts_with("0x"),
         "eth_getStorageAt should return a hex string"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
+
+    let ws_client = crate::evm::evm_test_helper::create_simple_storage_client(
+        rollup.http_addr,
+        crate::evm::evm_test_helper::SENDER_PRIV_KEY,
+    )
+    .await;
+    ws_client.send_eth(Address::ZERO, U256::from(1)).await;
+
+    let client = alloy_client(rollup.http_addr);
+    let latest = by_number(&client, Latest)
+        .await?
+        .expect("latest block should exist");
+    let sealed_height = client.get_block_number().await?;
+    assert_eq!(
+        latest.number,
+        sealed_height + 1,
+        "latest should resolve to the pending synthetic block while tx is pending"
+    );
+
+    let by_hash: Option<U64> = ws_client
+        .rpc_client
+        .ws
+        .request(
+            "eth_getBlockTransactionCountByHash",
+            rpc_params![latest.hash],
+        )
+        .await?;
+    let by_number: Option<U64> = ws_client
+        .rpc_client
+        .ws
+        .request(
+            "eth_getBlockTransactionCountByNumber",
+            rpc_params!["latest"],
+        )
+        .await?;
+
+    assert_eq!(
+        by_hash, by_number,
+        "hash and number forms should agree for the same synthetic latest block"
+    );
+    assert!(
+        by_hash.is_some(),
+        "synthetic hash should be queryable by eth_getBlockTransactionCountByHash"
     );
 
     Ok(())
