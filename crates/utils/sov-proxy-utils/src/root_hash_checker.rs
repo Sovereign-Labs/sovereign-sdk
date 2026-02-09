@@ -176,7 +176,6 @@ impl ClusterRootHashChecker {
             tracing::trace!(
                 reference_node_id = %reference_node.node_id,
                 finalized_slot_number,
-                slot_number,
                 "No leader present; using first follower as root-hash reference node"
             );
         }
