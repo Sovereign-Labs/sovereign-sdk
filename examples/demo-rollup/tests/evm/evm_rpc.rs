@@ -207,6 +207,111 @@ async fn eth_get_transaction_receipt_fields() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+
+    rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
+
+    let deploy_tx = simple_storage
+        .deploy_contract()
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    // TC29, TC30: Pending receipt has blockHash and blockNumber set
+    let pending_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
+    let pending_block_hash = pending_receipt
+        .block_hash
+        .expect("TC29: pending receipt must have blockHash");
+    let pending_block_number = pending_receipt
+        .block_number
+        .expect("TC30: pending receipt must have blockNumber");
+
+    // Store other fields for comparison
+    let pending_gas_used = pending_receipt.gas_used;
+    let pending_from = pending_receipt.from;
+    let pending_status = pending_receipt.inner.status();
+
+    // Seal the block
+    rollup.resume_preferred_batches().await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let sealed_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
+
+    // TC31: blockHash changes from synthetic to real
+    let sealed_block_hash = sealed_receipt
+        .block_hash
+        .expect("sealed receipt must have blockHash");
+    assert_ne!(
+        sealed_block_hash, pending_block_hash,
+        "TC31: blockHash should change after sealing"
+    );
+
+    // TC32: blockNumber remains unchanged
+    assert_eq!(
+        sealed_receipt.block_number,
+        Some(pending_block_number),
+        "TC32: blockNumber should not change"
+    );
+
+    // TC33: All other fields remain unchanged
+    assert_eq!(
+        sealed_receipt.gas_used, pending_gas_used,
+        "TC33: gasUsed should not change"
+    );
+    assert_eq!(
+        sealed_receipt.from, pending_from,
+        "TC33: from should not change"
+    );
+    assert_eq!(
+        sealed_receipt.inner.status(),
+        pending_status,
+        "TC33: status should not change"
+    );
+
+    // TC30: After sealing, verify cross-endpoint consistency
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(pending_block_number))
+        .await?
+        .expect("sealed block should exist");
+    assert_eq!(
+        block.header.hash, sealed_block_hash,
+        "TC30: receipt blockHash must match eth_getBlockByNumber"
+    );
+
+    let tx = client
+        .get_transaction_by_hash(deploy_tx)
+        .await?
+        .expect("transaction should exist");
+    assert_eq!(
+        tx.block_hash,
+        Some(sealed_block_hash),
+        "TC30: tx blockHash consistency"
+    );
+    assert_eq!(
+        tx.block_number,
+        Some(pending_block_number),
+        "TC30: tx blockNumber consistency"
+    );
+
+    // Verify transactionIndex matches position in block
+    let block_hashes = block_tx_hashes(&block);
+    let tx_position = block_hashes
+        .iter()
+        .position(|h| *h == deploy_tx)
+        .expect("tx should be in block");
+    assert_eq!(
+        sealed_receipt.transaction_index,
+        Some(tx_position as u64),
+        "TC30: transactionIndex matches position in block"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 #[ignore = "L1 behavior: receipts for pending txs must be null. Sovereign currently returns pending receipts."]
 async fn eth_get_transaction_receipt_pending_is_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -274,6 +379,9 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     let r1 = fetch_receipt(&client, tx1).await?;
     let r2 = fetch_receipt(&client, tx2).await?;
     let r3 = fetch_receipt(&client, tx3).await?;
+    assert_eq!(r1.transaction_hash, tx1);
+    assert_eq!(r2.transaction_hash, tx2);
+    assert_eq!(r3.transaction_hash, tx3);
 
     let block_number = r1
         .block_number
@@ -314,6 +422,12 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     assert!(r1.gas_used > 0);
     assert!(r2.gas_used > 0);
     assert!(r3.gas_used > 0);
+    assert!(r1.status());
+    assert!(r2.status());
+    assert!(r3.status());
+    assert!(r1.effective_gas_price > 0);
+    assert!(r2.effective_gas_price > 0);
+    assert!(r3.effective_gas_price > 0);
     assert!(c1 >= r1.gas_used);
     assert!(c2 >= r2.gas_used);
     assert!(c3 >= r3.gas_used);
@@ -368,6 +482,68 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     assert_receipt_matches(&by_hash[&tx1], &r1);
     assert_receipt_matches(&by_hash[&tx2], &r2);
     assert_receipt_matches(&by_hash[&tx3], &r3);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_receipt_many_logs() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+
+    rollup.wait_for_next_blocks(1).await;
+
+    // Deploy contract
+    let deploy_tx = simple_storage
+        .deploy_contract()
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    rollup.wait_for_next_blocks(1).await;
+    let deploy_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
+    let contract_address = deploy_receipt.contract_address.unwrap();
+
+    // Emit 15 logs
+    let emit_tx = simple_storage
+        .alloy_emit_logs(contract_address, 0, 15)
+        .await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let receipt = client.get_transaction_receipt(emit_tx).await?.unwrap();
+
+    // TC40: 15 logs with correct sequential indices
+    assert_eq!(receipt.logs().len(), 15, "TC40: should have 15 logs");
+    for (i, log) in receipt.logs().iter().enumerate() {
+        assert_eq!(
+            log.log_index,
+            Some(i as u64),
+            "TC40: logIndex should be sequential"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_transaction_receipt_zero_address() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+
+    rollup.wait_for_next_blocks(1).await;
+
+    // Send to zero address
+    let tx = simple_storage.send_eth(Address::ZERO, U256::from(1)).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    let receipt = client.get_transaction_receipt(tx).await?.unwrap();
+
+    // TC41: to is zero address, not null
+    assert_eq!(
+        receipt.to,
+        Some(Address::ZERO),
+        "TC41: to should be zero address, not null"
+    );
 
     Ok(())
 }
