@@ -128,17 +128,17 @@ impl<S: Spec> StateCheckpoint<S> {
 
     /// Creates a new [`StateCheckpoint`] instance with the given intermediate state that will be checked before storage when a value isn't already present in the checkpoint.
     #[cfg(feature = "native")]
-    pub fn new_with_uncomitted_changes<K: Kernel<S>>(
+    pub fn new_with_uncommitted_changes<K: Kernel<S>>(
         inner: S::Storage,
         kernel: &K,
-        uncomitted_changes: Box<dyn StateGetter>,
+        uncommitted_changes: Box<dyn StateGetter>,
         pinned_cache: Option<PinnedCache>,
     ) -> Self {
-        Self::with_witness_and_uncomitted_changes(
+        Self::with_witness_and_uncommitted_changes(
             inner,
             Default::default(),
             kernel,
-            Some(uncomitted_changes),
+            Some(uncommitted_changes),
             pinned_cache,
         )
     }
@@ -158,9 +158,13 @@ impl<S: Spec> StateCheckpoint<S> {
     /// Replace the storage and intermediate state underlying the checkpoint in place. It is up to the caller
     /// to ensure that the intermediate state is compatible with the new storage.
     #[cfg(feature = "native")]
-    pub fn replace_storage(&mut self, inner: S::Storage, uncomitted_changes: Box<dyn StateGetter>) {
+    pub fn replace_storage(
+        &mut self,
+        inner: S::Storage,
+        uncommitted_changes: Box<dyn StateGetter>,
+    ) {
         self.delta.inner = inner;
-        self.delta.uncomitted_changes = Some(uncomitted_changes);
+        self.delta.uncommitted_changes = Some(uncommitted_changes);
     }
 
     /// Returns a reference to the storage underlying the state checkpoint.
@@ -197,7 +201,7 @@ impl<S: Spec> StateCheckpoint<S> {
         kernel: &K,
         pinned_cache: Option<PinnedCache>,
     ) -> Self {
-        Self::with_witness_and_uncomitted_changes(
+        Self::with_witness_and_uncommitted_changes(
             inner,
             witness,
             kernel,
@@ -209,17 +213,17 @@ impl<S: Spec> StateCheckpoint<S> {
 
     /// Creates a new [`StateCheckpoint`] instance without any changes, backed
     /// by the given [`Storage`] and witness.
-    fn with_witness_and_uncomitted_changes<K: Kernel<S>>(
+    fn with_witness_and_uncommitted_changes<K: Kernel<S>>(
         inner: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         kernel: &K,
-        #[cfg(feature = "native")] uncomitted_changes: Option<Box<dyn StateGetter>>,
+        #[cfg(feature = "native")] uncommitted_changes: Option<Box<dyn StateGetter>>,
         #[cfg_attr(not(feature = "native"), allow(unused))] pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut delta = Delta::with_witness(inner, witness);
         #[cfg(feature = "native")]
         {
-            delta.uncomitted_changes = uncomitted_changes;
+            delta.uncommitted_changes = uncommitted_changes;
             delta.user_cache.set_pinned_cache(pinned_cache);
         }
         let mut metrics = StateMetrics::default();
