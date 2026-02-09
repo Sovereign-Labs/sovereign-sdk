@@ -41,7 +41,8 @@ pub fn resolve_chain_hashes_for_height(
     height: u64,
     default_hash: [u8; 32],
 ) -> crate::runtime::ResolvedChainHashes {
-    #[allow(clippy::needless_borrow)] // We have slightly different types when static vs. dynamic constant resolution is enabled. We need an extra borrow in one case but not the other, so clippy complains.
+    #[allow(clippy::needless_borrow)]
+    // We have slightly different types when static vs. dynamic constant resolution is enabled. We need an extra borrow in one case but not the other, so clippy complains.
     let overrides: &[crate::ChainHashOverride] = &config_value_private!("CHAIN_HASH_OVERRIDES");
     crate::runtime::resolve_chain_hashes(height, overrides, default_hash)
 }
