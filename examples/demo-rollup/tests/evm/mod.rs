@@ -1,5 +1,4 @@
 mod evm_account_abstraction;
-mod evm_tx_type;
 mod evm_balances;
 mod evm_block_hash;
 mod evm_block_number;
@@ -20,4 +19,5 @@ pub(crate) mod evm_test_helper;
 mod evm_timestamp;
 mod evm_tracing;
 mod evm_tx;
+mod evm_tx_type;
 mod evm_ws_watch;

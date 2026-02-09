@@ -247,8 +247,8 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
 
     let type_tag = TransactionSigned::extract_type_byte(&mut &tx_data.rlp[..]).unwrap_or(0); // Reject as a legacy transaction by default
     if type_tag != EIP1559_TX_TYPE_ID {
-        return Err(FatalError::TxTypeNotSupported(
-            "Only EIP1559 is currently supported. If you need to use EIP7702, please reach out to the SDK developers for support.".to_string(),
+        return Err(FatalError::DeserializationFailed(
+            "Invalid transaction type: Only EIP1559 is currently supported. If you need to use EIP7702, please reach out to the SDK developers for support.".to_string(),
         ));
     }
     let tx = TransactionSigned::decode_2718_exact(&tx_data.rlp)

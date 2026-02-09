@@ -280,9 +280,6 @@ pub enum FatalError {
         /// The rollup's current base fee in wei
         rollup_base_fee: u128,
     },
-    /// The transaction type is not supported by this chain.
-    #[error("Transaction type not supported: {0}")]
-    TxTypeNotSupported(String),
     /// A variant to capture any other fatal error.
     #[error("Other: {0}")]
     Other(String),
