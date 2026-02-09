@@ -11,8 +11,6 @@ use tokio::task::JoinHandle;
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// Minimum slot distance between consecutive root-hash checks.
 const SLOT_QUERY_STEP: u64 = 5;
-/// Number of slots behind the latest finalized slot used for comparison.
-const ROOT_HASH_COMPARISON_LAG: u64 = 10;
 /// Period between iterations of the background root-hash checker task.
 const DEFAULT_ROOT_HASH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -173,7 +171,6 @@ impl ClusterRootHashChecker {
 
         let reference_finalized_slot = self.get_finalized_slot(reference_node).await?;
         let finalized_slot_number = reference_finalized_slot.number;
-        let slot_number = finalized_slot_number.saturating_sub(ROOT_HASH_COMPARISON_LAG);
 
         if cluster_info.leader.is_none() {
             tracing::trace!(
@@ -184,7 +181,7 @@ impl ClusterRootHashChecker {
             );
         }
 
-        Ok(slot_number)
+        Ok(finalized_slot_number)
     }
 
     fn should_query_slot(last_checked_slot_number: Option<u64>, slot_number: u64) -> bool {
