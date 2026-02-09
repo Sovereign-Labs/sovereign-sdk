@@ -294,18 +294,18 @@ mod tests {
     use sov_rollup_interface::execution_mode::Native;
     use sov_state::codec::BorshCodec;
     use sov_state::Prefix;
-    use sov_test_utils::storage::SimpleJmtStorageManager;
+    use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::MockDaSpec;
     use unwrap_infallible::UnwrapInfallible;
 
     use crate::capabilities::mocks::MockKernel;
     use crate::{StateCheckpoint, StateValue};
 
-    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn state_value_raw_roundtrip_and_remove() {
-        let storage_manager = SimpleJmtStorageManager::new();
+        let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
             StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn state_value_raw_and_typed_compatibility() {
-        let storage_manager = SimpleJmtStorageManager::new();
+        let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
             StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);

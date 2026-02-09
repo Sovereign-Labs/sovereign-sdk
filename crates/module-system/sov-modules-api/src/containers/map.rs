@@ -602,15 +602,17 @@ mod tests {
     use sov_mock_zkvm::MockZkvm;
     use sov_rollup_interface::execution_mode::Native;
     use sov_state::codec::BorshCodec;
-    use sov_state::Prefix;
-    use sov_test_utils::storage::SimpleJmtStorageManager;
+    use sov_state::{Prefix, Storage};
+    use sov_test_utils::storage::{SimpleJmtStorageManager, SimpleStorageManager};
     use sov_test_utils::MockDaSpec;
     use unwrap_infallible::UnwrapInfallible;
 
     use crate::capabilities::mocks::MockKernel;
-    use crate::{AccessoryStateMap, KernelStateMap, StateCheckpoint, StateMap};
+    use crate::{AccessoryStateMap, KernelStateMap, Spec, StateCheckpoint, StateMap};
 
     type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestNomtSpec =
+        crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn state_map_raw_roundtrip_and_remove() {
@@ -678,25 +680,46 @@ mod tests {
     }
 
     #[test]
-    fn state_map_iter_raw_kernel_namespace_returns_none_on_jmt() {
-        let storage_manager = SimpleJmtStorageManager::new();
+    fn state_map_iter_raw_kernel_namespace_on_nomt() {
+        let mut storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
-        let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage.clone(), &MockKernel::<TestSpec>::default(), None);
+        let mut state: StateCheckpoint<TestNomtSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestNomtSpec>::default(), None);
 
         let prefix = Prefix::new(13, 13);
         let mut map = KernelStateMap::<u64, u32>::with_codec(prefix, BorshCodec);
         map.set(&1_u64, &10_u32, &mut state).unwrap_infallible();
+        map.set(&2_u64, &20_u32, &mut state).unwrap_infallible();
 
-        assert!(map.iter_raw(&storage).unwrap().is_none());
+        // we iterate over storage, so we have to commit before are keys show up
+        let (_root, state_update, _accessory_delta, _witness, storage) = state
+            .materialize_update(<<TestNomtSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT);
+        storage_manager.commit(storage.materialize_changes(state_update));
+        let storage = storage_manager.create_storage();
+
+        let mut collected = map
+            .iter_raw(&storage)
+            .unwrap()
+            .expect("NOMT should support kernel prefix iteration")
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        collected.sort_by_key(|(key, _)| *key);
+
+        assert_eq!(
+            collected,
+            vec![
+                (1_u64, borsh_to_vec(&10_u32).unwrap()),
+                (2_u64, borsh_to_vec(&20_u32).unwrap())
+            ]
+        );
     }
 
     #[test]
     fn state_map_iter_raw_from_keys_accessory_namespace() {
-        let storage_manager = SimpleJmtStorageManager::new();
+        let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
-        let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+        let mut state: StateCheckpoint<TestNomtSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestNomtSpec>::default(), None);
 
         let prefix = Prefix::new(14, 14);
         let mut map = AccessoryStateMap::<u64, u32>::with_codec(prefix, BorshCodec);
