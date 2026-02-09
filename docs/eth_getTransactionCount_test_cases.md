@@ -127,7 +127,7 @@ Priority: P0 = must-have, P1 = high value, P2 = medium, P3 = optional.
 |----|-----|------|-------------|
 | 10 | P0 | `initial_nonce_is_zero` | Fresh address has nonce 0 |
 | 11 | P0 | `increments_by_one` | Each tx increases nonce by 1 |
-| 12 | P0 | `reverted_tx_consumes_nonce` | Revert still increments nonce |
+| 12 | P0 | `reverted_tx_does_not_consume_nonce` | Reverted tx is rejected at submission time and does NOT consume nonce |
 | 13 | P1 | `sequential_monotonicity` | No gaps in nonce sequence |
 | 14 | P1 | `per_address_isolation` | A/B nonces independent |
 

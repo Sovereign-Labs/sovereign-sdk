@@ -13,7 +13,13 @@ use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
 
 async fn setup_rollup() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    setup_rollup_with_finality(0).await
+}
+
+async fn setup_rollup_with_finality(
+    finalization_blocks: u32,
+) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
+    let (rollup, client, _) = setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
     (rollup, client)
 }
@@ -900,6 +906,64 @@ async fn eth_get_transaction_count_block_boundary() -> anyhow::Result<()> {
             "BUG: Nonce same at block boundary"
         );
     }
+
+    Ok(())
+}
+
+// ===========================================================================
+// Non-Instant Finality Tests
+// ===========================================================================
+
+/// Verify that with non-instant DA finality, the "finalized" tag returns an older
+/// nonce than "latest" until enough blocks are produced to finalize the tx block.
+///
+/// Currently, the EVM RPC maps "finalized" to the last sealed block (same as "latest"
+/// when no pending txs), ignoring DA-level finalization. This test documents the
+/// correct Ethereum semantics and will pass once the RPC is updated to track
+/// DA finalization height.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "Finalized tag does not yet track DA-level finalization"]
+async fn eth_get_transaction_count_finalized_lags_with_non_instant_finality() -> anyhow::Result<()>
+{
+    let finality_depth: u32 = 3;
+    let (rollup, client) = setup_rollup_with_finality(finality_depth).await;
+
+    let address = client.address();
+
+    // Record finalized nonce before the transaction
+    let nonce_finalized_before = nonce_at_tag(&client, address, "finalized").await;
+
+    // Send a transaction and wait for it to be sealed into a block
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0xF1A1)).await;
+    client.wait_for_finalized_receipt(tx_hash).await;
+    rollup.wait_for_next_blocks(1).await;
+
+    // "latest" should reflect the sealed transaction immediately
+    let nonce_latest = nonce_at_tag(&client, address, "latest").await;
+    assert_eq!(
+        nonce_latest,
+        nonce_finalized_before + 1,
+        "latest nonce should reflect the sealed transaction"
+    );
+
+    // "finalized" should still return the old nonce because the tx block
+    // has not yet been DA-finalized (fewer than finality_depth blocks since it)
+    let nonce_finalized_during = nonce_at_tag(&client, address, "finalized").await;
+    assert_eq!(
+        nonce_finalized_during, nonce_finalized_before,
+        "finalized nonce should lag behind latest before DA finalization"
+    );
+
+    // Produce enough blocks to push the tx block past the finalization threshold
+    rollup.wait_for_next_blocks(finality_depth as u64).await;
+
+    // Now "finalized" should have caught up
+    let nonce_finalized_after = nonce_at_tag(&client, address, "finalized").await;
+    assert_eq!(
+        nonce_finalized_after,
+        nonce_finalized_before + 1,
+        "finalized nonce should catch up after enough blocks are produced"
+    );
 
     Ok(())
 }
