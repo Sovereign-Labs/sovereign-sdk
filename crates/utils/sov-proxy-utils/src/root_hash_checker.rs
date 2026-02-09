@@ -40,6 +40,7 @@ pub struct RootHashCheck {
 
 impl RootHashCheck {
     /// Evaluates whether the observed root hashes are consistent.
+    /// Returns `AllMatch` event when only one node responded.
     pub fn all_match(&self) -> RootHashConsistency {
         let mut values = self.node_results.values();
         let Some(first) = values.next() else {
