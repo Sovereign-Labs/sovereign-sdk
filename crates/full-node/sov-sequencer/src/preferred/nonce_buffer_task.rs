@@ -543,6 +543,9 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                 return;
             }
             tokio::select! {
+                // If shutdown and another branch are both ready, prioritize shutdown so queued
+                // messages are drained with shutdown semantics deterministically.
+                biased;
                 _ = shutdown_receiver.changed() => {
                     tracing::info!("Nonce buffer task shutting down. Rejecting queued transactions.");
                     self.drain_and_reject_all_txs(shutdown_reject_error::<S, Rt>);
