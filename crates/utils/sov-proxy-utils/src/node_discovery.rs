@@ -247,37 +247,39 @@ impl NodeDiscovery {
 
         tracing::trace!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
-        if membership_changed || leader_changed {
-            // Log membership changes
-            for node_id in followers.difference(&self.prev_followers) {
-                tracing::info!(node_id, "Node joined the followers");
-            }
-            for node_id in self.prev_followers.difference(&followers) {
-                tracing::info!(node_id, "Node left the followers");
-            }
-
-            // Log leader change
-            if leader_changed {
-                tracing::info!(
-                    old_leader = ?self.prev_leader_id,
-                    new_leader = ?leader_id,
-                    "Leader changed"
-                );
-            }
-
-            let content = info.to_file_content();
-            write_to_file_atomically(&self.path, &content).await?;
-            tracing::info!(?self.path, content, "Cluster info file updated");
-
-            self.prev_followers = followers;
-            self.prev_leader_id = leader_id;
-
-            // Notify watchers that the cluster was updated.
-            if let Some(notifier) = &self.notifier {
-                notifier.on_cluster_update(&info).await;
-            }
-            let _ = sender.send(info);
+        if !(membership_changed || leader_changed) {
+            return Ok(());
         }
+
+        // Log membership changes
+        for node_id in followers.difference(&self.prev_followers) {
+            tracing::info!(node_id, "Node joined the followers");
+        }
+        for node_id in self.prev_followers.difference(&followers) {
+            tracing::info!(node_id, "Node left the followers");
+        }
+
+        // Log leader change
+        if leader_changed {
+            tracing::info!(
+                old_leader = ?self.prev_leader_id,
+                new_leader = ?leader_id,
+                "Leader changed"
+            );
+        }
+
+        let content = info.to_file_content();
+        write_to_file_atomically(&self.path, &content).await?;
+        tracing::info!(?self.path, content, "Cluster info file updated");
+
+        self.prev_followers = followers;
+        self.prev_leader_id = leader_id;
+
+        // Notify watchers that the cluster was updated.
+        if let Some(notifier) = &self.notifier {
+            notifier.on_cluster_update(&info).await;
+        }
+        let _ = sender.send(info);
 
         Ok(())
     }
@@ -285,7 +287,7 @@ impl NodeDiscovery {
     async fn get_cluster_info_from_db(
         &self,
     ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime)>)> {
-        let max_age_secs: i64 = self.max_age.as_secs().try_into().unwrap();
+        let max_age_secs: i64 = self.max_age.as_secs().try_into()?;
 
         // Fetch nodes updated within max_age, always including the leader regardless of age.
         // The leader_id is included in each row via LEFT JOIN, allowing us to get it from the results.
