@@ -274,7 +274,7 @@ where
     fn sync_hd_timestamp_env_var_for_tests(&self) {
         if let Some(freeze_time) = &self.config.freeze_time {
             let time_millis: u128 = freeze_time.as_millis().try_into().unwrap();
-            let time_nanos = time_millis * 1000;
+            let time_nanos = time_millis * 1_000_000;
             std::env::set_var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR, time_nanos.to_string());
         } else {
             std::env::remove_var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR);
