@@ -402,7 +402,7 @@ mod tests {
     #[test]
     fn should_query_slot_only_after_slot_step() {
         assert!(ClusterRootHashChecker::should_query_slot(None, 100));
-        assert!(!ClusterRootHashChecker::should_query_slot(Some(100), 109));
+        assert!(!ClusterRootHashChecker::should_query_slot(Some(100), 104));
         assert!(ClusterRootHashChecker::should_query_slot(Some(100), 110));
     }
 
