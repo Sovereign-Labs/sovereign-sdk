@@ -455,6 +455,16 @@ where
             "All finalized transitions are marked as finalized"
         );
 
+        // Evict all cached headers at or below the finalized height — they
+        // will never be looked up again and removing them prevents stale
+        // sync-height entries from accumulating and blocking the background
+        // poller.
+        self.finalized_headers_provider.remove_headers_below(
+            self.last_processed_finalized_header
+                .height()
+                .saturating_add(1),
+        );
+
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
             // Notify `StateTransitionInfo` consumers that the data is saved in the Db.
