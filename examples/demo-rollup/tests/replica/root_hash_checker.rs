@@ -70,8 +70,7 @@ async fn assert_consistent_root_hashes(setup: &mut NodeDiscoveryTestSetup, check
         assert_eq!(
             root_hashes.all_match(),
             RootHashConsistency::AllMatch,
-            "Expected matching root hashes, got: {:?}",
-            root_hashes
+            "Expected matching root hashes, got: {root_hashes:?}",
         );
     }
 }
