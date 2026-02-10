@@ -204,7 +204,6 @@ impl NodeDiscoveryTestSetup {
             da_shutdown,
             da_addr,
             cluster_info_service,
-
             _temp_dir: temp_dir,
         })
     }

@@ -25,8 +25,8 @@ pub enum RootHashConsistency {
     NoData,
 }
 
-#[derive(Debug, Default, Clone)]
 /// Result of one cluster-wide root-hash comparison at a specific slot.
+#[derive(Debug, Default, Clone)]
 pub struct RootHashCheck {
     /// Slot number requested for this root-hash check.
     pub slot_number: u64,
@@ -38,7 +38,7 @@ pub struct RootHashCheck {
 
 impl RootHashCheck {
     /// Evaluates whether the observed root hashes are consistent.
-    /// Returns `AllMatch` event when only one node responded.
+    /// Returns `AllMatch` even when only one node responded.
     pub fn all_match(&self) -> RootHashConsistency {
         let mut values = self.node_results.values();
         let Some(first) = values.next() else {

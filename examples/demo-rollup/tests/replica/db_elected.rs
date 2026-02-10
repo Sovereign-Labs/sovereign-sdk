@@ -1,5 +1,4 @@
 use super::*;
-use sov_sequencer::SequencerRole;
 
 /// Test that when two DbElected nodes start, one becomes leader and the other becomes replica.
 /// The leader can process transactions while the replica receives them via PostgreSQL sync.
