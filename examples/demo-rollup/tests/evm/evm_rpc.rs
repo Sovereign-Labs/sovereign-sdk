@@ -8,6 +8,11 @@ use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
 use alloy_rpc_types_eth::Header;
 use sov_evm_test_utils::Erc20;
 use sov_evm_test_utils::Submit;
+use alloy_rpc_types_eth::{Block, BlockId, BlockNumberOrTag, BlockTransactions, Filter};
+use alloy_rpc_types_eth::{Transaction, TransactionReceipt};
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
+use sov_evm_test_utils::{Erc20, LegacySimpleStorage, Submit};
 
 use crate::evm::evm_test_helper::alloy_client;
 use crate::evm::evm_test_helper::setup_test_rollup;

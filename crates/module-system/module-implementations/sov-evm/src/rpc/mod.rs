@@ -737,12 +737,11 @@ where
             .get_maybe_sealed_block_by_id(block_id, state)?
             .ok_or(EthApiError::UnknownBlock)?;
 
-        let mut block_env = match maybe_block {
+        let block_env = match maybe_block {
             MaybeSealedBlock::PendingSynthetic(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
             MaybeSealedBlock::PastSynthetic(synthetic_block) => BlockEnv::from(synthetic_block),
         };
-        block_env.basefee = 0;
         Ok(block_env)
     }
 }

@@ -75,10 +75,11 @@ where
         };
         let state = maybe_archival_state.deref_mut();
 
-        let mut block_env = self.block_env(state)?;
-        block_env.basefee = 0; // Set the base fee to zero for evm execution. Gas is paid for by the sov gas meter instead
+        let block_env = self.block_env(state)?;
         let cfg = self.cfg(state)?;
-        let cfg_env = get_cfg_env(&block_env, &cfg, None);
+        let mut cfg_env_template = CfgEnv::default();
+        cfg_env_template.disable_base_fee = true;
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(cfg_env_template));
 
         Ok((maybe_archival_state, transactions, block_env, cfg_env))
     }
