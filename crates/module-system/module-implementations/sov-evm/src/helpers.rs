@@ -62,7 +62,7 @@ pub(crate) fn from_recovered_with_block_context(
         block_hash,
         block_number: Some(block_number),
         index: Some(tx_index),
-        // Default value. Why hash is None? Where does it actually set?
+        // Default value, because hash is in the tx.
         hash: None,
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
