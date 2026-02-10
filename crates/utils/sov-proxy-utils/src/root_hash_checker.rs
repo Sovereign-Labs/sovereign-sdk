@@ -144,7 +144,7 @@ impl ClusterRootHashChecker {
                         );
                     }
                     RootHashConsistency::Mismatch => {
-                        tracing::warn!(
+                        tracing::error!(
                             slot_number = root_hash_check.slot_number,
                             root_hashes = ?root_hash_check.node_results,
                             "Cluster root hash mismatch detected"
