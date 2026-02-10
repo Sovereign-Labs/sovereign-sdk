@@ -20,3 +20,19 @@ async fn big_accessory_state_writes() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_revert_returns_error() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    let client = alloy_client(rollup.http_addr);
+    let contract = SimpleStorage::deploy(client).await?;
+
+    let estimate = contract.alwaysRevert().estimate_gas().await;
+    assert!(
+        estimate.is_err(),
+        "estimate_gas should return an error for a reverting call"
+    );
+
+    Ok(())
+}

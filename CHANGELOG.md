@@ -1,3 +1,5 @@
+# 2026-02-09
+- #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
 # 2026-02-03
 - #2391 EVM: Add RPC compatibility tests for eth_getBlockByNumber and eth_getBlockByHash
 - #2433 Updates tests in sov-demo-rollup.

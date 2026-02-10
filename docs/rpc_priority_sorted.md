@@ -101,6 +101,8 @@
    Minimal repro: call both endpoints; L1 typically returns non-zero.
 6. `eth_call` ignores `state_overrides` and `block_overrides` [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:268].  
    Minimal repro: pass overrides that would change state; expect no effect.
+7. Synthetic block state cache can grow quickly under high pending-tx churn (one accessor clone per synthetic hash; prune window is block-distance based, not count-based) [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:41] [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:69].  
+   Operational risk: transient memory spikes during sustained high tx-rate bursts and frequent pending-hash queries/subscriptions.
 
 ## Anti-flakiness
 - Use explicit block production controls (pause/resume).
