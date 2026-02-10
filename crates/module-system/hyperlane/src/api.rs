@@ -11,7 +11,6 @@ use sov_modules_api::rest::utils::{errors, json_obj, ApiResult, ErrorObject, Pat
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, CredentialId, HexHash, Spec};
 
-use crate::igp::RelayerWithDomainKey;
 use crate::{EthAddress, Ism, Mailbox, Recipient};
 
 fn deserialize_number_from_str<'de, D, T>(deserializer: D) -> Result<T, D::Error>
@@ -43,8 +42,6 @@ pub struct QuoteParams {
     /// Gas limit.
     #[serde(deserialize_with = "deserialize_number_from_str")]
     pub gas_limit: u128,
-    /// Recipient address.
-    pub recipient_address: HexHash,
 }
 
 /// Quote Dispatch rest response
@@ -156,24 +153,18 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
         Query(params): Query<QuoteParams>,
     ) -> ApiResult<QuoteDispatchResponse> {
         let relayer: Option<S::Address> = params.relayer.map(|r| r.into());
-        let relayer = match relayer {
-            Some(relayer) => relayer,
-            None => state
-                .with_default_relayer(relayer, &params.recipient_address, &accessor)
-                .map_err(|err| {
-                    errors::internal_server_error_response_500(format!(
-                        "Internal server error: Failed to get default relayer. Error {err}"
-                    ))
-                })?,
-        };
 
-        let key = RelayerWithDomainKey::new(relayer, params.destination_domain);
         let amount = state
             .interchain_gas_paymaster
-            .quote_gas_price(&key, Amount(params.gas_limit), &mut accessor)
+            .quote_gas_price_with_admin_fallback(
+                relayer,
+                params.destination_domain,
+                Amount(params.gas_limit),
+                &mut accessor,
+            )
             .map_err(|err| {
                 errors::internal_server_error_response_500(format!(
-                    "Internal server error: Failed to calculate gas price. Error {err}"
+                    "Failed to calculate gas price: {err}"
                 ))
             })?;
 
@@ -188,23 +179,16 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr as _;
-
     use sov_modules_api::prelude::axum::http::Uri;
 
     use super::*;
 
     #[test]
     fn test_quote_query_params_handles_u128() {
-        let uri = Uri::from_static("https://0.0.0.0:12346/modules/mailbox/quote_dispatch?destination_domain=1399811149&gas_limit=500&recipient_address=0x71c7656ec7ab88b098defb751b7401b5f6d8976fae23aeb2342aedac24843ead");
+        let uri = Uri::from_static("https://0.0.0.0:12346/modules/mailbox/quote_dispatch?destination_domain=1399811149&gas_limit=500");
         let query_params: Query<QuoteParams> =
             Query::try_from_uri(&uri).expect("Failed to parse query params");
         assert_eq!(query_params.destination_domain, 1399811149);
         assert_eq!(query_params.gas_limit, 500u128);
-        assert_eq!(
-            query_params.recipient_address,
-            HexHash::from_str("71c7656ec7ab88b098defb751b7401b5f6d8976fae23aeb2342aedac24843ead")
-                .unwrap()
-        );
     }
 }

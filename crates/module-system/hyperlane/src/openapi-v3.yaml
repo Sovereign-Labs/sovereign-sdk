@@ -74,12 +74,6 @@ paths:
           schema:
             type: integer
             format: uint128
-        - name: recipient_address
-          in: query
-          description: The address of the recipient.
-          required: true
-          schema:
-            $ref: "#/components/schemas/HyperlaneAddress"
       responses:
         "200":
           $ref: "#/components/responses/QuoteDispatchResponse"

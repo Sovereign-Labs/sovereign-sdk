@@ -1,3 +1,5 @@
+# 2026-02-06
+- #2353 **Breaking Change** IGP module now requires an `admin` address in genesis config. The `quote-dispatch` API no longer requires a relayer parameter - it falls back to the admin's relayer config when not specified.
 # 2026-02-03
 - #2433 Updates tests in sov-demo-rollup.
 # 2026-02-02
@@ -8,6 +10,7 @@
 - #2387 EVM: Add RPC compatibility tests for eth_feeHistory and eth_getLogs.
 # 2026-01-14
 - #2329 Changes default storage in sov-test-utils's TestRollup to be NOMT. No impact for regular customers
+
 # 2026-01-16 
 # 2026-01-29
 - #2415 Non-breaking, but **important**. Config for MockDa rollup now stricter and prevents unknown fields. Previously there was incorrect `finalization` field instead of `finalization_blocks`
