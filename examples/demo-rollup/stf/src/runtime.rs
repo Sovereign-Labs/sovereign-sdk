@@ -168,8 +168,8 @@ where
     ) -> Self::Decodable {
         match auth_data {
             EvmAndSolanaOffchainAuthenticatorInput::Evm(call) => Self::Decodable::Evm(call),
-            EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(call) => call,
-            EvmAndSolanaOffchainAuthenticatorInput::Standard(call) => call,
+            EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(call)
+            | EvmAndSolanaOffchainAuthenticatorInput::Standard(call) => call,
         }
     }
 
