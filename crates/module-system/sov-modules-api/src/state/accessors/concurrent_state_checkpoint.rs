@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use sov_rollup_interface::common::{RollupHeight, VisibleSlotNumber};
-use sov_state::{Namespace, SlotKey, SlotValue, StateGetter};
+use sov_rollup_interface::common::{RollupHeight, SlotNumber, VisibleSlotNumber};
+use sov_state::{Namespace, NativeStorage, SlotKey, SlotValue, StateGetter};
 
 use crate::{Spec, StateCheckpoint, TxChangeSet};
 
@@ -12,11 +12,30 @@ pub struct ConcurrentStateCheckpoint<S: Spec> {
     pub(crate) writes: Arc<concread::hashmap::HashMap<(SlotKey, Namespace), Option<SlotValue>>>,
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
+    pub(super) latest_finalized_slot_number: SlotNumber,
 }
 
 impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// Create a `ConcurrentStateCheckpoint` containing the same changes as the given `StateCheckpoint`.
-    pub fn from_state_checkpoint(mut state_checkpoint: StateCheckpoint<S>) -> Self {
+    ///
+    /// Note: this defaults the latest finalized slot to the most recent slot
+    /// available in storage. That effectively treats all known slots as
+    /// finalized. Call `from_state_checkpoint_with_finalized_slot` if you need
+    /// to preserve the node's true finalized slot semantics.
+    pub fn from_state_checkpoint(state_checkpoint: StateCheckpoint<S>) -> Self {
+        let latest_finalized_slot_number = state_checkpoint.delta.inner.latest_version();
+        Self::from_state_checkpoint_with_finalized_slot(
+            state_checkpoint,
+            latest_finalized_slot_number,
+        )
+    }
+
+    /// Create a `ConcurrentStateCheckpoint` containing the same changes as the given `StateCheckpoint`,
+    /// and with an explicit latest finalized slot number.
+    pub fn from_state_checkpoint_with_finalized_slot(
+        mut state_checkpoint: StateCheckpoint<S>,
+        latest_finalized_slot_number: SlotNumber,
+    ) -> Self {
         let map = concread::hashmap::HashMap::new();
         state_checkpoint.delta.commit_revertable_storage_cache();
         let mut writer = map.write();
@@ -31,12 +50,15 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
         }
         writer.commit();
 
+        let max_available_slot = state_checkpoint.delta.inner.latest_version();
+
         Self {
             storage: state_checkpoint.delta.inner,
             uncommitted_changes: state_checkpoint.delta.uncommitted_changes,
             writes: Arc::new(map),
             visible_slot_num: state_checkpoint.visible_slot_num,
             rollup_height: state_checkpoint.rollup_height,
+            latest_finalized_slot_number: latest_finalized_slot_number.min(max_available_slot),
         }
     }
 
@@ -61,5 +83,10 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// Get the rollup height to access.
     pub fn rollup_height_to_access(&self) -> RollupHeight {
         self.rollup_height
+    }
+
+    /// Get the latest finalized slot number available to this checkpoint.
+    pub fn latest_finalized_slot_number(&self) -> SlotNumber {
+        self.latest_finalized_slot_number
     }
 }
