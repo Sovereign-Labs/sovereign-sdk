@@ -58,12 +58,12 @@ pub(crate) fn from_recovered_with_block_context(
     base_fee: Option<u64>,
 ) -> alloy_rpc_types::Transaction {
     let tx_info = TransactionInfo {
+        base_fee,
         block_hash,
         block_number: Some(block_number),
         index: Some(tx_index),
-        // Default values
+        // Default value. Why hash is None? Where does it actually set?
         hash: None,
-        base_fee,
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }

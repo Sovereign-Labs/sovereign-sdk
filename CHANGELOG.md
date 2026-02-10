@@ -1,3 +1,6 @@
+# 2026-02-10
+- #2462 EVM: Include `base_fee` in Transaction RPC response.
+
 # 2026-02-03
 - #2433 Updates tests in sov-demo-rollup.
 # 2026-02-02
