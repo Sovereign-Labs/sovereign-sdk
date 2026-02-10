@@ -13,7 +13,7 @@ const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// Default timeout for establishing HTTP connections to node APIs.
 const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
 /// Minimum slot distance between consecutive root-hash checks.
-const SLOT_QUERY_STEP: u64 = 5;
+const SLOT_QUERY_STEP: u64 = 3;
 /// Period between iterations of the background root-hash checker task.
 const DEFAULT_ROOT_HASH_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 
