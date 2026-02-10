@@ -234,6 +234,7 @@ impl ClusterRootHashChecker {
             let node_id = node.node_id;
             let node_id_for_task = node_id.clone();
             let node_address = node.address;
+            let slot_hash = slot_hash.to_owned();
             let url = format!("http://{node_address}/ledger/slots/{slot_hash}");
 
             let task = tokio::spawn(async move {
@@ -246,13 +247,13 @@ impl ClusterRootHashChecker {
                 .await
                 .map_err(|timeout_err| {
                     format!(
-                        "Timed out getting slot from node {node_id_for_task} at {node_address}: {timeout_err}"
+                        "Timed out getting slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}: {timeout_err}"
                     )
                 })?;
 
                 let slot = slot_result.map_err(|err| {
                     format!(
-                        "Failed to get slot from node {node_id_for_task} at {node_address}: {err}"
+                        "Failed to get slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}: {err}"
                     )
                 })?;
 
