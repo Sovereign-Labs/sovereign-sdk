@@ -207,7 +207,7 @@ where
         }
 
         // Backwards compatibility. Don't activate the counter until the configured height
-        if state.current_visible_slot_number().get()
+        if state.rollup_height_to_access().get()
             > config_value!("HYPERLANE_METER_DELIVERY_COUNTER_AFTER_HEIGHT")
         {
             let mut count = self.deliveries_count.get(state)?.unwrap_or_default();
