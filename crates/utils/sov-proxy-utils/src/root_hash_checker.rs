@@ -93,17 +93,18 @@ impl ClusterRootHashChecker {
                 ticker.tick().await;
 
                 let cluster_info = self.cluster_info_receiver.borrow().clone();
-                let slot_number = match self
-                    .get_slot_number_for_root_hash_comparison(&cluster_info)
+                let reference_slot = match self
+                    .get_finalized_slot_for_comparison(&cluster_info)
                     .await
                 {
-                    Ok(slot_number) => slot_number,
+                    Ok(slot) => slot,
                     Err(error) => {
                         tracing::warn!(?error, "Failed to get comparison slot for root-hash check");
                         continue;
                     }
                 };
 
+                let slot_number = reference_slot.number;
                 if !Self::should_query_slot(last_checked_slot_number, slot_number) {
                     tracing::trace!(
                         ?last_checked_slot_number,
@@ -115,9 +116,10 @@ impl ClusterRootHashChecker {
                 }
 
                 let nodes = flatten_cluster_nodes(&cluster_info);
+                let slot_hash = &reference_slot.hash;
 
                 let root_hash_check = self
-                    .get_slot_root_hashes_in_parallel(nodes, slot_number)
+                    .get_slot_root_hashes_in_parallel(nodes, slot_hash, slot_number)
                     .await;
 
                 if !root_hash_check.failed_nodes.is_empty() {
@@ -159,10 +161,10 @@ impl ClusterRootHashChecker {
         ClusterRootHashCheckerTask { receiver, handle }
     }
 
-    async fn get_slot_number_for_root_hash_comparison(
+    async fn get_finalized_slot_for_comparison(
         &self,
         cluster_info: &ClusterInfo,
-    ) -> Result<u64> {
+    ) -> Result<types::Slot> {
         let reference_node = cluster_info
             .leader
             .as_ref()
@@ -170,17 +172,16 @@ impl ClusterRootHashChecker {
             .context("Cannot check root hash consistency because cluster has no nodes")?;
 
         let reference_finalized_slot = self.get_finalized_slot(reference_node).await?;
-        let finalized_slot_number = reference_finalized_slot.number;
 
         if cluster_info.leader.is_none() {
             tracing::trace!(
                 reference_node_id = %reference_node.node_id,
-                finalized_slot_number,
+                finalized_slot_number = reference_finalized_slot.number,
                 "No leader present; using first follower as root-hash reference node"
             );
         }
 
-        Ok(finalized_slot_number)
+        Ok(reference_finalized_slot)
     }
 
     fn should_query_slot(last_checked_slot_number: Option<u64>, slot_number: u64) -> bool {
@@ -222,6 +223,7 @@ impl ClusterRootHashChecker {
     async fn get_slot_root_hashes_in_parallel(
         &self,
         nodes: Vec<NodeInfo>,
+        slot_hash: &str,
         slot_number: u64,
     ) -> RootHashCheck {
         let mut query_tasks = Vec::with_capacity(nodes.len());
@@ -232,7 +234,7 @@ impl ClusterRootHashChecker {
             let node_id = node.node_id;
             let node_id_for_task = node_id.clone();
             let node_address = node.address;
-            let url = format!("http://{node_address}/ledger/slots/{slot_number}");
+            let url = format!("http://{node_address}/ledger/slots/{slot_hash}");
 
             let task = tokio::spawn(async move {
                 let slot_result = tokio::time::timeout(request_timeout, async {
@@ -244,17 +246,17 @@ impl ClusterRootHashChecker {
                 .await
                 .map_err(|timeout_err| {
                     format!(
-                        "Timed out getting slot {slot_number} from node {node_id_for_task} at {node_address}: Timeout {timeout_err}"
+                        "Timed out getting slot from node {node_id_for_task} at {node_address}: {timeout_err}"
                     )
                 })?;
 
                 let slot = slot_result.map_err(|err| {
                     format!(
-                        "Failed to get slot {slot_number} from node {node_id_for_task} at {node_address}: {err}"
+                        "Failed to get slot from node {node_id_for_task} at {node_address}: {err}"
                     )
                 })?;
 
-                Ok((slot.number, slot.state_root.to_string()))
+                Ok(slot.state_root.to_string())
             });
             query_tasks.push((node_id, task));
         }
@@ -263,16 +265,7 @@ impl ClusterRootHashChecker {
         let mut failed_nodes = Vec::new();
         for (node_id, task) in query_tasks {
             match task.await {
-                Ok(Ok((returned_slot_number, state_root))) => {
-                    if returned_slot_number != slot_number {
-                        failed_nodes.push((
-                            node_id,
-                            format!(
-                                "Node returned slot {returned_slot_number} while requested slot {slot_number}"
-                            ),
-                        ));
-                        continue;
-                    }
+                Ok(Ok(state_root)) => {
                     node_results.insert(node_id, state_root);
                 }
                 Ok(Err(error_message)) => {
