@@ -17,6 +17,7 @@ impl<S: Spec> Uniqueness<S> {
         &self,
         credential_id: &CredentialId,
         transaction_uniqueness: UniquenessData,
+        current_rollup_height: u64,
         transaction_hash: TxHash,
         execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
@@ -31,6 +32,13 @@ impl<S: Spec> Uniqueness<S> {
             UniquenessData::Generation(generation) => {
                 self.check_generation_uniqueness(credential_id, generation, transaction_hash, state)
             }
+            UniquenessData::Height(height) => self.check_height_uniqueness(
+                credential_id,
+                height,
+                current_rollup_height,
+                transaction_hash,
+                state,
+            ),
         }
     }
 
@@ -42,6 +50,7 @@ impl<S: Spec> Uniqueness<S> {
         &mut self,
         credential_id: &CredentialId,
         transaction_generation: UniquenessData,
+        current_rollup_height: u64,
         transaction_hash: TxHash,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
@@ -50,6 +59,13 @@ impl<S: Spec> Uniqueness<S> {
             UniquenessData::Generation(generation) => self.mark_generational_tx_attempted(
                 credential_id,
                 generation,
+                transaction_hash,
+                state,
+            ),
+            UniquenessData::Height(height) => self.mark_height_tx_attempted(
+                credential_id,
+                height,
+                current_rollup_height,
                 transaction_hash,
                 state,
             ),

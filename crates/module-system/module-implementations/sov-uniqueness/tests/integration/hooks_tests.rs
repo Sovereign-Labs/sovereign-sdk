@@ -1,6 +1,7 @@
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::VersionReader;
 use sov_modules_api::{CredentialId, HexHash, TxEffect};
 use sov_test_utils::{TransactionTestCase, TxProcessingError};
 use sov_uniqueness::Uniqueness;
@@ -94,6 +95,128 @@ fn send_tx_works_generation() {
                 6,
                 "The next available generation should update when a transaction with a higher generation is sent"
             );
+        }),
+    });
+}
+
+#[test]
+fn send_tx_works_height() {
+    let (admin, mut runner, evm_account) = setup();
+
+    let current_rollup_height =
+        runner.query_visible_state(|state| state.rollup_height_to_access().get());
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(
+            UniquenessData::Height(current_rollup_height),
+            &admin,
+            &evm_account,
+        ),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+}
+
+#[test]
+fn send_tx_bad_height_duplicate() {
+    let (admin, mut runner, evm_account) = setup();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(UniquenessData::Height(0), &admin, &evm_account),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(UniquenessData::Height(0), &admin, &evm_account),
+        assert: Box::new(move |ctx, _state| {
+            if let TxEffect::Skipped(skipped) = &ctx.tx_receipt {
+                assert!(matches!(
+                    skipped.error,
+                    TxProcessingError::CheckUniquenessFailed(_)
+                ));
+            } else {
+                panic!(
+                    "Expected Skipped error, but got a different TxEffect: {:?}",
+                    ctx.tx_receipt
+                );
+            }
+        }),
+    });
+}
+
+#[test]
+fn send_tx_bad_height_too_old() {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_PAST_TRANSACTION_HEIGHTS", "2");
+
+    let (admin, mut runner, evm_account) = setup();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(UniquenessData::Height(0), &admin, &evm_account),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    // Advance the rollup height enough so height 0 expires.
+    for generation in 1..=3 {
+        runner.execute_transaction(TransactionTestCase {
+            input: generate_default_tx(
+                UniquenessData::Generation(generation),
+                &admin,
+                &evm_account,
+            ),
+            assert: Box::new(move |ctx, _state| {
+                assert!(ctx.tx_receipt.is_successful());
+            }),
+        });
+    }
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(UniquenessData::Height(0), &admin, &evm_account),
+        assert: Box::new(move |ctx, _state| {
+            if let TxEffect::Skipped(skipped) = &ctx.tx_receipt {
+                assert!(matches!(
+                    skipped.error,
+                    TxProcessingError::CheckUniquenessFailed(_)
+                ));
+            } else {
+                panic!(
+                    "Expected Skipped error, but got a different TxEffect: {:?}",
+                    ctx.tx_receipt
+                );
+            }
+        }),
+    });
+}
+
+#[test]
+fn send_tx_bad_height_in_future() {
+    let (admin, mut runner, evm_account) = setup();
+
+    let current_rollup_height =
+        runner.query_visible_state(|state| state.rollup_height_to_access().get());
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(
+            UniquenessData::Height(current_rollup_height + 100),
+            &admin,
+            &evm_account,
+        ),
+        assert: Box::new(move |ctx, _state| {
+            if let TxEffect::Skipped(skipped) = &ctx.tx_receipt {
+                assert!(matches!(
+                    skipped.error,
+                    TxProcessingError::CheckUniquenessFailed(_)
+                ));
+            } else {
+                panic!(
+                    "Expected Skipped error, but got a different TxEffect: {:?}",
+                    ctx.tx_receipt
+                );
+            }
         }),
     });
 }

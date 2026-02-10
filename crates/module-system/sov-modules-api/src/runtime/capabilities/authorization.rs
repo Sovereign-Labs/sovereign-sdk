@@ -76,6 +76,10 @@ pub enum UniquenessData {
     /// Transactions older than this buffer are invalid, transactions falling within it or with a
     /// higher generation are valid but must have a unique hash within their generation
     Generation(u64),
+    /// Height-based uniqueness: a transaction is accepted only while the current rollup height is
+    /// within `PAST_TRANSACTION_HEIGHTS` of the provided height, and must have a unique hash
+    /// within that height bucket.
+    Height(u64),
 }
 
 /// Data required to authorize a sov-transaction.

@@ -280,7 +280,8 @@ pub enum TransactionBuilderError {
 /// Defines how transaction uniqueness is enforced to prevent replay attacks.
 ///
 /// The uniqueness mechanism ensures that each transaction can only be executed once
-/// on the blockchain. Two different strategies are supported: nonce-based and generation-based.
+/// on the blockchain. Three strategies are supported: nonce-based, generation-based, and
+/// height-based.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UniquenessData {
@@ -297,6 +298,11 @@ pub enum UniquenessData {
     /// hash within their generation. This allows for more flexible transaction
     /// ordering while still preventing replays.
     Generation(u64),
+    /// Height-based uniqueness using rollup height windows.
+    ///
+    /// Transactions are accepted for a bounded number of rollup heights after
+    /// the provided height and must have a unique hash in that height bucket.
+    Height(u64),
 }
 
 /// Type alias for runtime calls represented as JSON objects.

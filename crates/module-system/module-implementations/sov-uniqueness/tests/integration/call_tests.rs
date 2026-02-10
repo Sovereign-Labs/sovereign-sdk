@@ -1,10 +1,11 @@
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{CredentialId, TxEffect};
+use sov_modules_api::{CredentialId, TxEffect, VersionReader};
 use sov_test_utils::{BatchType, SlotInput, TransactionTestCase, TxProcessingError};
 use sov_uniqueness::Uniqueness;
 
 use crate::runtime::S;
-use crate::utils::{generate_value_setter_tx, setup};
+use crate::utils::{generate_value_setter_tx, generate_value_setter_tx_with_uniqueness, setup};
 
 /// This test verifies that the `MAX_STORED_TX_HASHES_PER_CREDENTIAL` limit is respected and that authentication succeeds when that limit is not exceeded.
 #[test]
@@ -18,6 +19,18 @@ fn test_max_stored_tx_hashes_per_credential_lite() {
         "11",
     );
     do_max_stored_tx_hashes_per_credential_test()
+}
+
+/// This test verifies that the `MAX_STORED_TX_HASHES_PER_CREDENTIAL` limit is respected for
+/// Height uniqueness and that advancing the rollup height prunes old buckets.
+#[test]
+fn test_max_stored_tx_hashes_per_credential_height_lite() {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_MAX_STORED_TX_HASHES_PER_CREDENTIAL",
+        "11",
+    );
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_PAST_TRANSACTION_HEIGHTS", "2");
+    do_max_stored_tx_hashes_per_credential_height_test()
 }
 
 #[test]
@@ -107,6 +120,88 @@ fn do_max_stored_tx_hashes_per_credential_test() {
     // Note that we need to add 1 to the number of generations because we have a strict inequality comparison for buckets.
     runner.execute_transaction(TransactionTestCase {
         input: generate_value_setter_tx(num_generations + 1, txs_per_generation as u32, &admin),
+        assert: Box::new(move |ctx, _| {
+            assert!(
+                ctx.tx_receipt.is_successful(),
+                "Transaction should be successful"
+            );
+        }),
+    });
+}
+
+fn do_max_stored_tx_hashes_per_credential_height_test() {
+    let (admin, mut runner, _) = setup();
+
+    let max_stored_tx_hashes_per_credential = config_value!("MAX_STORED_TX_HASHES_PER_CREDENTIAL");
+    let mut txs = vec![];
+
+    for i in 0..max_stored_tx_hashes_per_credential {
+        txs.push(generate_value_setter_tx_with_uniqueness(
+            UniquenessData::Height(0),
+            i as u32,
+            &admin,
+        ));
+    }
+
+    let batch = SlotInput::Batch(BatchType::from(txs));
+    let (slot, _) = runner.execute(batch);
+    assert_eq!(
+        slot.batch_receipts[0].tx_receipts.len(),
+        max_stored_tx_hashes_per_credential as usize
+    );
+    for (i, tx_receipt) in slot.batch_receipts[0].tx_receipts.iter().enumerate() {
+        assert!(
+            tx_receipt.receipt.is_successful(),
+            "Transaction {i} should be successful but failed"
+        );
+    }
+
+    // One more tx at the same height should overflow the per-credential cap.
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_tx_with_uniqueness(
+            UniquenessData::Height(0),
+            u32::MAX,
+            &admin,
+        ),
+        assert: Box::new(move |ctx, _| {
+            let TxEffect::Skipped(skipped) = ctx.tx_receipt else {
+                panic!("Transaction should be skipped");
+            };
+            match skipped.error {
+                TxProcessingError::CheckUniquenessFailed(reason) => {
+                    assert!(reason.contains("Too many transactions for credential_id"));
+                }
+                _ => {
+                    panic!("Transaction should be rejected because it's not unique");
+                }
+            }
+        }),
+    });
+
+    // Advance rollup height so height 0 gets pruned from Height buckets.
+    let past_transaction_heights = config_value!("PAST_TRANSACTION_HEIGHTS");
+    for generation in 1..=(past_transaction_heights + 1) {
+        runner.execute_transaction(TransactionTestCase {
+            input: generate_value_setter_tx(generation, generation as u32, &admin),
+            assert: Box::new(move |ctx, _| {
+                assert!(
+                    ctx.tx_receipt.is_successful(),
+                    "Transaction should be successful"
+                );
+            }),
+        });
+    }
+
+    let current_rollup_height =
+        runner.query_visible_state(|state| state.rollup_height_to_access().get());
+
+    // With old height buckets pruned, a new Height tx should be accepted again.
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_tx_with_uniqueness(
+            UniquenessData::Height(current_rollup_height),
+            4242,
+            &admin,
+        ),
         assert: Box::new(move |ctx, _| {
             assert!(
                 ctx.tx_receipt.is_successful(),
