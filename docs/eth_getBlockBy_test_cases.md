@@ -129,7 +129,7 @@ curl -X POST http://localhost:8545 \
 - Pending blocks use a **synthetic hash** (non-zero) and are resolvable via `eth_getBlockByHash`.
 - Pending block fields (logsBloom, roots, size, gasUsed) are computed from pending txs/receipts.
 
-### Known deviations vs Ethereum L1 (bugs to track)
+### Known and expected deviations vs Ethereum L1
 1. **`latest` == `pending`**: Both return the pending block. L1: `latest` = last sealed, `pending` = being constructed.
 2. **`safe`/`finalized` == latest finalized**: Both map to the latest finalized block. L1: `safe` and `finalized` can differ; here they are equal.
 3. **Pending hash is synthetic (non-null)**: L1 returns `null` for pending block hash.
