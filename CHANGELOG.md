@@ -1,3 +1,6 @@
+# 2026-02-10
+- #2463 EVM: Add support for BASEFEE opcode handling.
+
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
 # 2026-02-03
