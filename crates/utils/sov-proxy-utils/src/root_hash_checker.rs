@@ -39,7 +39,7 @@ pub struct RootHashCheck {
 impl RootHashCheck {
     /// Evaluates whether the observed root hashes are consistent.
     /// Returns `AllMatch` even when only one node responded.
-    pub fn all_match(&self) -> RootHashConsistency {
+    pub fn check_consistency(&self) -> RootHashConsistency {
         let mut values = self.node_results.values();
         let Some(first) = values.next() else {
             return RootHashConsistency::NoData;
@@ -58,7 +58,13 @@ pub struct ClusterRootHashCheckerTask {
     /// Subscription receiver for root-hash check results.
     pub receiver: watch::Receiver<RootHashCheck>,
     /// Join handle of the background root-hash checker task.
-    pub handle: JoinHandle<()>,
+    handle: JoinHandle<()>,
+}
+
+impl ClusterRootHashCheckerTask {
+    pub fn abort(&self) {
+        self.handle.abort();
+    }
 }
 
 /// Periodically checks that all cluster nodes agree on the same finalized root hash.
@@ -130,7 +136,7 @@ impl ClusterRootHashChecker {
                     );
                 }
 
-                match root_hash_check.all_match() {
+                match root_hash_check.check_consistency() {
                     RootHashConsistency::AllMatch => {
                         tracing::info!(
                             slot_number = root_hash_check.slot_number,
@@ -337,7 +343,7 @@ mod tests {
             failed_nodes: vec![],
         };
 
-        assert_eq!(snapshot.all_match(), RootHashConsistency::AllMatch);
+        assert_eq!(snapshot.check_consistency(), RootHashConsistency::AllMatch);
     }
 
     #[test]
@@ -358,7 +364,7 @@ mod tests {
             failed_nodes: vec![],
         };
 
-        assert_eq!(snapshot.all_match(), RootHashConsistency::Mismatch);
+        assert_eq!(snapshot.check_consistency(), RootHashConsistency::Mismatch);
     }
 
     #[test]
@@ -369,7 +375,7 @@ mod tests {
             failed_nodes: vec![],
         };
 
-        assert_eq!(snapshot.all_match(), RootHashConsistency::NoData);
+        assert_eq!(snapshot.check_consistency(), RootHashConsistency::NoData);
     }
 
     #[test]

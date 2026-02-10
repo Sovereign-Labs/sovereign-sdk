@@ -51,7 +51,7 @@ impl ClusterInfoService {
 
     /// Stops the background cluster-info task.
     pub fn shutdown(self) {
-        self.root_hash_checker_task.handle.abort();
-        self.node_discovery_task.handle.abort();
+        self.root_hash_checker_task.abort();
+        self.node_discovery_task.abort();
     }
 }

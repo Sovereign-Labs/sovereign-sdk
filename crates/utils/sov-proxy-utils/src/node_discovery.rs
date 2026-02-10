@@ -107,7 +107,13 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// Handle returned when subscribing to cluster updates.
 pub struct NodeDiscoveryTask {
     pub receiver: watch::Receiver<ClusterInfo>,
-    pub handle: JoinHandle<anyhow::Result<()>>,
+    handle: JoinHandle<anyhow::Result<()>>,
+}
+
+impl NodeDiscoveryTask {
+    pub fn abort(&self) {
+        self.handle.abort();
+    }
 }
 
 /// Client for querying cluster information from the database.
