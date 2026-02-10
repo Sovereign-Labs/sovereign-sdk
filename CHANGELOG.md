@@ -1,6 +1,10 @@
 # 2026-02-10
 - #2462 EVM: Include `base_fee` in Transaction RPC response.
 
+- #2463 EVM: Add support for BASEFEE opcode handling.
+
+# 2026-02-09
+- #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
 # 2026-02-03
 - #2433 Updates tests in sov-demo-rollup.
 # 2026-02-02
