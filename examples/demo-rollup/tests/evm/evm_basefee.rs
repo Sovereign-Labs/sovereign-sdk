@@ -53,9 +53,7 @@ async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
         base_fee_from_opcode,
         U256::from(expected_base_fee),
         "BASEFEE opcode should return the actual block base fee, not 0. \
-         Got {} from opcode but block header has {}",
-        base_fee_from_opcode,
-        expected_base_fee
+         Got {base_fee_from_opcode} from opcode but block header has {expected_base_fee}",
     );
 
     Ok(())
@@ -114,19 +112,18 @@ async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()>
         "Block base_fee_per_gas: {:?}",
         block.header.base_fee_per_gas
     );
-    println!("Transaction maxFeePerGas: {}", max_fee_per_gas);
-    println!("gasPrice from eth_getTransactionByHash: {}", gas_price);
-    println!("effectiveGasPrice from receipt: {}", effective_gas_price);
+    println!("Transaction maxFeePerGas: {max_fee_per_gas}");
+    println!("gasPrice from eth_getTransactionByHash: {gas_price}");
+    println!("effectiveGasPrice from receipt: {effective_gas_price}");
 
     // For EIP-1559 transactions, gasPrice should equal effectiveGasPrice
     // Currently this fails because gasPrice returns maxFeePerGas instead
     // due to base_fee: None being passed in helpers.rs:65
     assert_eq!(
         gas_price, effective_gas_price,
-        "Transaction gasPrice ({}) should match receipt effectiveGasPrice ({}). \
-         Instead it equals maxFeePerGas ({}), indicating base_fee is not being passed \
+        "Transaction gasPrice ({gas_price}) should match receipt effectiveGasPrice ({effective_gas_price}). \
+         Instead it equals maxFeePerGas ({max_fee_per_gas}), indicating base_fee is not being passed \
          when building the transaction RPC response.",
-        gas_price, effective_gas_price, max_fee_per_gas
     );
 
     Ok(())

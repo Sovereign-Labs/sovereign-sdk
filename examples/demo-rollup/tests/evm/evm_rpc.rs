@@ -2,17 +2,9 @@ use alloy_primitives::utils::parse_ether;
 use alloy_primitives::{Address, BlockHash};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
-use alloy_rpc_types_eth::BlockId;
-use alloy_rpc_types_eth::BlockNumberOrTag;
-use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
 use alloy_rpc_types_eth::Header;
-use sov_evm_test_utils::Erc20;
-use sov_evm_test_utils::Submit;
-use alloy_rpc_types_eth::{Block, BlockId, BlockNumberOrTag, BlockTransactions, Filter};
-use alloy_rpc_types_eth::{Transaction, TransactionReceipt};
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::rpc_params;
-use sov_evm_test_utils::{Erc20, LegacySimpleStorage, Submit};
+use alloy_rpc_types_eth::{BlockId, BlockNumberOrTag};
+use sov_evm_test_utils::{Erc20, Submit};
 
 use crate::evm::evm_test_helper::alloy_client;
 use crate::evm::evm_test_helper::setup_test_rollup;
@@ -34,9 +26,27 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
-    assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Pending).await?.unwrap().number, 0);
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Earliest)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Latest)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Pending)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
     assert_eq!(by_number(&client, 1).await?, None);
     assert_eq!(by_number(&client, 2).await?, None);
 
@@ -44,9 +54,27 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 1);
-    assert_eq!(by_number(&client, Pending).await?.unwrap().number, 1);
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Earliest)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Latest)
+            .await?
+            .unwrap()
+            .number,
+        1
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Pending)
+            .await?
+            .unwrap()
+            .number,
+        1
+    );
 
     assert_eq!(by_number(&client, 1).await?.unwrap().number, 1);
     assert_eq!(by_number(&client, 2).await?, None);
@@ -75,12 +103,18 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(2).await;
     rollup.pause_preferred_batches().await;
 
-    let latest_hash = by_number(&client, Latest).await?.unwrap().parent_hash;
+    let latest_hash = by_number(&client, BlockNumberOrTag::Latest)
+        .await?
+        .unwrap()
+        .parent_hash;
     let latest = by_hash(&client, latest_hash).await?.unwrap();
     assert_eq!(latest.hash, latest_hash);
     assert_eq!(latest.number, 1);
 
-    let pending_hash = by_number(&client, Latest).await?.unwrap().hash;
+    let pending_hash = by_number(&client, BlockNumberOrTag::Latest)
+        .await?
+        .unwrap()
+        .hash;
     assert_ne!(pending_hash, BlockHash::ZERO);
     // Because the hash of the pending block is fake - it can't be fetched by hash
     assert_ne!(by_hash(&client, pending_hash).await?, None);
