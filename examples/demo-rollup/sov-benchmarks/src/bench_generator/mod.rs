@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::prelude::arbitrary;
 use sov_modules_api::prelude::arbitrary::Unstructured;
+use sov_modules_api::Base58Address;
 use sov_modules_api::Spec;
 use sov_risc0_adapter::Risc0;
 use sov_transaction_generator::generators::basic::{
@@ -42,7 +43,7 @@ pub type RT = Runtime<S>;
 #[serde(bound = "S: Spec", rename_all = "snake_case")]
 pub enum BenchmarkData<S: Spec>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     Genesis(GenesisConfig<S>),
     Initialization(GeneratedBatch<S>),
@@ -56,7 +57,7 @@ where
 #[derive(Clone)]
 pub struct Benchmark<S: Spec>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     /// The name of the benchmark.
     pub name: String,
@@ -80,7 +81,7 @@ where
 
 impl<S: Spec> Benchmark<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
     S: Serialize + DeserializeOwned,
 {
     /// Generates the benchmark messages for a given batch.
@@ -216,7 +217,7 @@ mod tests {
     use std::sync::Arc;
 
     use demo_stf::genesis_config::EvmGenesisConfig;
-    use sov_address::MultiAddress;
+    use demo_stf::MultiAddressEvmSolana;
     use sov_modules_api::Address;
     use sov_test_modules::access_pattern::AccessPatternGenesisConfig;
     use sov_test_utils::runtime::genesis::zk::config::{
@@ -263,10 +264,10 @@ mod tests {
             initial_randomization_buffer_size: DEFAULT_RANDOMIZATION_BUFFER_SIZE,
             genesis_config: GenesisConfig::from_minimal_config(
                 MinimalZkGenesisConfig::from(HighLevelZkGenesisConfig::generate_with_additional_accounts_and_code_commitments(0, Default::default(), Default::default())),
-                EvmGenesisConfig::default_with_admin(MultiAddress::Standard(Address::from_const_slice([0; 28]))),
+                EvmGenesisConfig::default_with_admin(MultiAddressEvmSolana::Standard(Address::from_const_slice([0; 28]))),
                 Default::default(),
                 AccessPatternGenesisConfig {
-                    admin: MultiAddress::Standard(Address::from_const_slice([0; 28])),
+                    admin: MultiAddressEvmSolana::Standard(Address::from_const_slice([0; 28])),
                 }
             ),
         };

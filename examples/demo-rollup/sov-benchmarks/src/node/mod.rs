@@ -1,5 +1,5 @@
 use crate::{Roles, RT};
-use sov_address::{EthereumAddress, MultiAddress, MultiAddressEvm};
+use demo_stf::MultiAddressEvmSolana;
 use sov_mock_da::{MockBlob, MockDaSpec};
 use sov_modules_api::{Amount, BatchSequencerReceipt, CryptoSpec, PublicKey, Spec};
 use sov_rollup_interface::crypto::PrivateKey;
@@ -19,7 +19,7 @@ type BenchmarkMessages = Vec<RelevantBlobs<MockBlob>>;
 /// Builds a simple transfer transaction
 pub fn build_send_tx<S>(sender: &TestUser<S>, token_id: TokenId) -> TransactionType<RT<S>, S>
 where
-    S: Spec<Address = MultiAddress<EthereumAddress>>,
+    S: Spec<Address = MultiAddressEvmSolana>,
 {
     let priv_key = TestPrivateKey::generate();
     let to_address: <S as Spec>::Address = priv_key.pub_key().credential_id().into();
@@ -57,7 +57,7 @@ where
     S: Spec<
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {
@@ -120,7 +120,7 @@ where
     S: Spec<
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {
@@ -157,7 +157,7 @@ where
     S: Spec<
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {

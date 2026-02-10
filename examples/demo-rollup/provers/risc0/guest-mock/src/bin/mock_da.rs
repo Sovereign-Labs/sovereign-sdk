@@ -1,7 +1,7 @@
 #![no_main]
 use demo_stf::runtime::Runtime;
+use demo_stf::MultiAddressEvmSolana;
 use demo_stf::StfVerifier;
-use sov_address::MultiAddressEvm;
 use sov_mock_da::{MockDaSpec, MockDaVerifier};
 pub use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
@@ -19,7 +19,7 @@ fn cycles_per_block() {
     let storage = ZkStorage::new();
 
     let stf: StfBlueprint<
-        ConfigurableSpec<MockDaSpec, Risc0, MockZkvm, MultiAddressEvm, Zk>,
+        ConfigurableSpec<MockDaSpec, Risc0, MockZkvm, MultiAddressEvmSolana, Zk>,
         Runtime<_>,
     > = StfBlueprint::new();
 

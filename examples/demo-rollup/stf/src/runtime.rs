@@ -27,6 +27,7 @@
 //!    no module-specific state is updated (the transaction is reverted).
 #[cfg(feature = "native")]
 use sov_evm::execution_config::EvmExecutionConfig;
+use sov_solana_offchain_auth::SolanaOffchainAuthenticatorTrait;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
@@ -36,16 +37,19 @@ use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "native")]
 pub use sov_attester_incentives::BondingProofServiceImpl;
 use sov_capabilities::StandardProvenRollupCapabilities as StandardCapabilities;
-use sov_evm::{EthereumAuthenticator, EvmAuthenticatorInput};
+use sov_evm::EthereumAuthenticator;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
 use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, TransactionAuthenticator};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
-use sov_modules_api::prelude::*;
+use sov_modules_api::{prelude::*, Base58Address};
 use sov_modules_api::{DispatchCall, Event, Genesis, Hooks, MessageCodec, RawTx, Spec};
 
+use crate::authentication::{
+    EvmAndSolanaOffchainAuthenticator, EvmAndSolanaOffchainAuthenticatorInput,
+};
 #[cfg(feature = "native")]
 use crate::genesis_config::GenesisPaths;
 
@@ -92,7 +96,7 @@ where
 impl<S> sov_modules_stf_blueprint::Runtime<S> for Runtime<S>
 where
     S: Spec,
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
 
@@ -104,7 +108,7 @@ where
     #[cfg(feature = "native")]
     type ModuleExecutionConfig = EvmExecutionConfig;
 
-    type Auth = sov_evm::EvmAuthenticator<S, Self>;
+    type Auth = EvmAndSolanaOffchainAuthenticator<S, Self>;
 
     #[cfg(feature = "native")]
     fn endpoints(
@@ -163,8 +167,9 @@ where
         auth_data: <Self::Auth as TransactionAuthenticator<S>>::Decodable,
     ) -> Self::Decodable {
         match auth_data {
-            EvmAuthenticatorInput::Evm(call) => Self::Decodable::Evm(call),
-            EvmAuthenticatorInput::Standard(call) => call,
+            EvmAndSolanaOffchainAuthenticatorInput::Evm(call) => Self::Decodable::Evm(call),
+            EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(call) => call,
+            EvmAndSolanaOffchainAuthenticatorInput::Standard(call) => call,
         }
     }
 
@@ -204,7 +209,7 @@ where
 
 impl<S: Spec> HasCapabilities<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Capabilities<'a> = StandardCapabilities<'a, S, &'a mut sov_paymaster::Paymaster<S>>;
     fn capabilities(&mut self) -> Guard<Self::Capabilities<'_>> {
@@ -224,7 +229,7 @@ where
 
 impl<S: Spec> HasKernel<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Kernel<'a> = SoftConfirmationsKernel<'a, S>;
 
@@ -243,9 +248,18 @@ where
 
 impl<S: Spec> EthereumAuthenticator<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn add_ethereum_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
-        EvmAuthenticatorInput::Evm(tx)
+        EvmAndSolanaOffchainAuthenticatorInput::Evm(tx)
+    }
+}
+
+impl<S: Spec> SolanaOffchainAuthenticatorTrait<S> for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+{
+    fn add_solana_offchain_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
+        EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(tx)
     }
 }
