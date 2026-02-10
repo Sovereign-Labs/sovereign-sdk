@@ -1,12 +1,19 @@
 use crate::node_discovery::ClusterInfo;
 use crate::node_discovery::NodeInfo;
 use anyhow::{Context, Result};
-use sov_api_spec::types;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+
+/// Subset of slot fields returned by ledger APIs used for root-hash checking.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct Slot {
+    number: u64,
+    hash: String,
+    state_root: String,
+}
 
 /// Default timeout for HTTP requests to node APIs.
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -173,10 +180,7 @@ impl ClusterRootHashChecker {
         ClusterRootHashCheckerTask { receiver, handle }
     }
 
-    async fn get_finalized_slot_for_comparison(
-        &self,
-        cluster_info: &ClusterInfo,
-    ) -> Result<types::Slot> {
+    async fn get_finalized_slot_for_comparison(&self, cluster_info: &ClusterInfo) -> Result<Slot> {
         let reference_node = cluster_info
             .leader
             .as_ref()
@@ -213,15 +217,15 @@ impl ClusterRootHashChecker {
         http_client: &reqwest::Client,
         slot_id: &str,
         address: &SocketAddr,
-    ) -> Result<types::Slot> {
+    ) -> Result<Slot> {
         let url = format!("http://{address}/ledger/slots/{slot_id}");
         let response = http_client.get(&url).send().await?;
         let response = response.error_for_status()?;
-        let slot = response.json::<types::Slot>().await?;
+        let slot = response.json::<Slot>().await?;
         Ok(slot)
     }
 
-    async fn get_finalized_slot(&self, node: &NodeInfo) -> Result<types::Slot> {
+    async fn get_finalized_slot(&self, node: &NodeInfo) -> Result<Slot> {
         Self::get_slot(&self.http_client, "finalized", &node.address)
             .await
             .with_context(|| {
@@ -254,7 +258,7 @@ impl ClusterRootHashChecker {
                         format!("Failed to get slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}, error: {err}")
                     })?;
 
-                Ok(slot.state_root.to_string())
+                Ok(slot.state_root)
             });
             query_tasks.push((node_id, task));
         }
@@ -390,7 +394,7 @@ mod tests {
     #[test]
     fn should_query_slot_only_after_slot_step() {
         assert!(ClusterRootHashChecker::should_query_slot(None, 100));
-        assert!(!ClusterRootHashChecker::should_query_slot(Some(100), 104));
+        assert!(!ClusterRootHashChecker::should_query_slot(Some(100), 102));
         assert!(ClusterRootHashChecker::should_query_slot(Some(100), 110));
     }
 

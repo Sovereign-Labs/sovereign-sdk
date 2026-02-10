@@ -16,7 +16,7 @@ time = { version = "0.3", default-features = false, features = ["formatting", "p
 tokio = { workspace = true, features = ["time", "sync"], default-features = false }
 tracing = { workspace = true }
 async-trait = { workspace = true }
-sov-api-spec = { workspace = true }
+serde = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 
 

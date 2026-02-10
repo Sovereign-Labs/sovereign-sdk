@@ -11928,7 +11928,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "reqwest",
- "sov-api-spec",
+ "serde",
  "sqlx",
  "time",
  "tokio",
