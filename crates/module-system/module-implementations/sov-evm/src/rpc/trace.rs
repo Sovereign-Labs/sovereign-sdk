@@ -77,9 +77,7 @@ where
 
         let block_env = self.block_env(state)?;
         let cfg = self.cfg(state)?;
-        let mut cfg_env_template = CfgEnv::default();
-        cfg_env_template.disable_base_fee = true;
-        let cfg_env = get_cfg_env(&block_env, &cfg, Some(cfg_env_template));
+        let cfg_env = get_cfg_env(&block_env, &cfg, None);
 
         Ok((maybe_archival_state, transactions, block_env, cfg_env))
     }

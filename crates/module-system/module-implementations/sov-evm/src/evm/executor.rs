@@ -37,6 +37,8 @@ pub(crate) fn get_cfg_env(
             .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
     );
     cfg_env.tx_chain_id_check = false;
+    // Set the base fee to zero for evm execution. Gas is paid for by the sov gas meter instead
+    cfg_env.disable_base_fee = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
 }
@@ -151,7 +153,6 @@ mod tests {
 
         let mut template_cfg_env = CfgEnv::default();
         template_cfg_env.chain_id = 2;
-        template_cfg_env.disable_base_fee = true;
 
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(template_cfg_env));
 
