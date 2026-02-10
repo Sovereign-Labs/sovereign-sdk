@@ -143,7 +143,7 @@ impl ClusterRootHashChecker {
                 // TODO: Add a metric for root hash consistency check.
                 match root_hash_check.check_consistency() {
                     RootHashConsistency::AllMatch => {
-                        tracing::info!(
+                        tracing::debug!(
                             slot_number = root_hash_check.slot_number,
                             "Cluster root hashes are consistent"
                         );
