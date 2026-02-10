@@ -3,6 +3,7 @@ use crate::node_discovery::NodeInfo;
 use anyhow::{Context, Result};
 use sov_api_spec::types;
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -12,7 +13,7 @@ const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// Minimum slot distance between consecutive root-hash checks.
 const SLOT_QUERY_STEP: u64 = 5;
 /// Period between iterations of the background root-hash checker task.
-const DEFAULT_ROOT_HASH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+const DEFAULT_ROOT_HASH_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Result of evaluating root-hash consistency for one check.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,20 +71,20 @@ impl ClusterRootHashCheckerTask {
 /// Periodically checks that all cluster nodes agree on the same finalized root hash.
 pub struct ClusterRootHashChecker {
     cluster_info_receiver: watch::Receiver<ClusterInfo>,
-    check_interval: Duration,
-    request_timeout: Duration,
     http_client: reqwest::Client,
 }
 
 impl ClusterRootHashChecker {
     /// Creates a checker that reads cluster members from `cluster_info_receiver`.
-    pub fn new(cluster_info_receiver: watch::Receiver<ClusterInfo>) -> Self {
-        Self {
+    pub fn new(cluster_info_receiver: watch::Receiver<ClusterInfo>) -> anyhow::Result<Self> {
+        let http_client = reqwest::Client::builder()
+            .timeout(DEFAULT_REQUEST_TIMEOUT)
+            .build()?;
+
+        Ok(Self {
             cluster_info_receiver,
-            check_interval: DEFAULT_ROOT_HASH_CHECK_INTERVAL,
-            request_timeout: DEFAULT_REQUEST_TIMEOUT,
-            http_client: reqwest::Client::new(),
-        }
+            http_client,
+        })
     }
 
     /// Spawns a task that periodically queries all nodes and verifies root-hash consistency.
@@ -91,7 +92,7 @@ impl ClusterRootHashChecker {
         let (sender, receiver) = watch::channel(RootHashCheck::default());
 
         let handle: JoinHandle<()> = tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(self.check_interval);
+            let mut ticker = tokio::time::interval(DEFAULT_ROOT_HASH_CHECK_INTERVAL);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             let mut last_checked_slot_number = None;
 
@@ -204,27 +205,27 @@ impl ClusterRootHashChecker {
         slot_number - last_checked_slot_number >= SLOT_QUERY_STEP
     }
 
+    async fn get_slot(
+        http_client: &reqwest::Client,
+        slot_id: &str,
+        address: &SocketAddr,
+    ) -> Result<types::Slot> {
+        let url = format!("http://{}/ledger/slots/{slot_id}", address);
+        let response = http_client.get(&url).send().await?;
+        let response = response.error_for_status()?;
+        let slot = response.json::<types::Slot>().await?;
+        Ok(slot)
+    }
+
     async fn get_finalized_slot(&self, node: &NodeInfo) -> Result<types::Slot> {
-        let url = format!("http://{}/ledger/slots/finalized", node.address);
-        tokio::time::timeout(self.request_timeout, async {
-            let response = self.http_client.get(&url).send().await?;
-            let response = response.error_for_status()?;
-            let slot = response.json::<types::Slot>().await?;
-            Ok::<types::Slot, anyhow::Error>(slot)
-        })
-        .await
-        .with_context(|| {
-            format!(
-                "Timed out getting finalized slot from node {} at {}",
-                node.node_id, node.address
-            )
-        })?
-        .with_context(|| {
-            format!(
-                "Failed to get finalized slot from node {} at {}",
-                node.node_id, node.address
-            )
-        })
+        Self::get_slot(&self.http_client, "finalized", &node.address)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to get finalized slot from node {} at {}",
+                    node.node_id, node.address
+                )
+            })
     }
 
     async fn get_slot_root_hashes_in_parallel(
@@ -237,32 +238,20 @@ impl ClusterRootHashChecker {
 
         for node in nodes {
             let http_client = self.http_client.clone();
-            let request_timeout = self.request_timeout;
             let node_id = node.node_id;
             let node_id_for_task = node_id.clone();
             let node_address = node.address;
             let slot_hash = slot_hash.to_owned();
-            let url = format!("http://{node_address}/ledger/slots/{slot_hash}");
 
             let task = tokio::spawn(async move {
-                let slot_result = tokio::time::timeout(request_timeout, async {
-                    let response = http_client.get(&url).send().await?;
-                    let response = response.error_for_status()?;
-                    let slot = response.json::<types::Slot>().await?;
-                    Ok::<types::Slot, anyhow::Error>(slot)
-                })
-                .await
-                .map_err(|timeout_err| {
-                    format!(
-                        "Timed out getting slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}: {timeout_err}"
-                    )
-                })?;
-
-                let slot = slot_result.map_err(|err| {
-                    format!(
-                        "Failed to get slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}: {err}"
-                    )
-                })?;
+                let slot = Self::get_slot(&http_client, &slot_hash, &node_address)
+                    .await
+                    .map_err(|err| {
+                        format!(
+                            "Failed to get slot {slot_number} ({slot_hash}) from node {} at {}, error: {err}",
+                            node_id_for_task, node_address
+                        )
+                    })?;
 
                 Ok(slot.state_root.to_string())
             });

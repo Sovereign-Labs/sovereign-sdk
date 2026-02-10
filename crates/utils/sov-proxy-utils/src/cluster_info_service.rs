@@ -24,10 +24,11 @@ impl ClusterInfoService {
     ) -> Result<Self> {
         let node_discovery =
             NodeDiscovery::connect(connection_string, max_age, path, notifier).await?;
+
         let node_discovery_task = node_discovery.spawn();
 
         let root_hash_checker_task =
-            ClusterRootHashChecker::new(node_discovery_task.receiver.clone()).spawn();
+            ClusterRootHashChecker::new(node_discovery_task.receiver.clone())?.spawn();
 
         Ok(Self {
             node_discovery_task,
