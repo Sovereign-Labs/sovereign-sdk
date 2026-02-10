@@ -136,7 +136,7 @@ impl ClusterRootHashChecker {
                     tracing::warn!(
                         slot_number = root_hash_check.slot_number,
                         failed_nodes = ?root_hash_check.failed_nodes,
-                        "Failed to fetch root hash from some cluster nodes"
+                        "Failed to fetch root hash from some cluster nodes, will compare root hash from the remaining"
                     );
                 }
 
