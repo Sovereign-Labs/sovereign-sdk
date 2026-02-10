@@ -153,6 +153,7 @@ impl ClusterRootHashChecker {
                     }
                 }
 
+                // Update the last checked slot number no matter what is the result of root_hash_check.
                 last_checked_slot_number = Some(root_hash_check.slot_number);
                 let _ = sender.send(root_hash_check);
             }
