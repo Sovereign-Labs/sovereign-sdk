@@ -496,18 +496,24 @@ async fn eth_get_transaction_receipt_many_logs() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
 
     // Deploy contract
+    rollup.pause_preferred_batches().await;
+    assert_pending_block_empty(&client).await?;
     let deploy_tx = simple_storage
         .deploy_contract()
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
+    rollup.resume_preferred_batches().await;
     rollup.wait_for_next_blocks(1).await;
     let deploy_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
     let contract_address = deploy_receipt.contract_address.unwrap();
 
     // Emit 15 logs
+    rollup.pause_preferred_batches().await;
+    assert_pending_block_empty(&client).await?;
     let emit_tx = simple_storage
         .alloy_emit_logs(contract_address, 0, 15)
         .await;
+    rollup.resume_preferred_batches().await;
     rollup.wait_for_next_blocks(1).await;
 
     let receipt = client.get_transaction_receipt(emit_tx).await?.unwrap();
@@ -534,7 +540,10 @@ async fn eth_get_transaction_receipt_zero_address() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
 
     // Send to zero address
+    rollup.pause_preferred_batches().await;
+    assert_pending_block_empty(&client).await?;
     let tx = simple_storage.send_eth(Address::ZERO, U256::from(1)).await;
+    rollup.resume_preferred_batches().await;
     rollup.wait_for_next_blocks(1).await;
 
     let receipt = client.get_transaction_receipt(tx).await?.unwrap();
