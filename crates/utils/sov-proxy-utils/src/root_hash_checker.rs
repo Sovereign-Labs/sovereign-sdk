@@ -58,7 +58,7 @@ pub struct ClusterRootHashCheckerTask {
     /// Subscription receiver for root-hash check results.
     pub receiver: watch::Receiver<RootHashCheck>,
     /// Join handle of the background root-hash checker task.
-    handle: JoinHandle<()>,
+    pub(crate) handle: JoinHandle<()>,
 }
 
 impl ClusterRootHashCheckerTask {

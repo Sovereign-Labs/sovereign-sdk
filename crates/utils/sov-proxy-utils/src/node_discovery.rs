@@ -107,7 +107,7 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// Handle returned when subscribing to cluster updates.
 pub struct NodeDiscoveryTask {
     pub receiver: watch::Receiver<ClusterInfo>,
-    handle: JoinHandle<anyhow::Result<()>>,
+    pub(crate) handle: JoinHandle<anyhow::Result<()>>,
 }
 
 impl NodeDiscoveryTask {
