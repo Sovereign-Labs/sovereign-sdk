@@ -394,18 +394,19 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
     let tx_hash = simple_storage.set_value(contract_address, 3000).await;
     simple_storage.wait_for_receipt(tx_hash).await;
     // Wait until the pending block is visible to avoid flakiness.
+    // Use .full() to get full transaction objects for block_hash verification.
     let pending_block = {
-        let mut block = client.get_block_by_number(Pending).await?.unwrap();
+        let mut block = client.get_block_by_number(Pending).full().await?.unwrap();
         for _ in 0..100 {
             if block.header.number == sealed_head_number + 1 {
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-            block = client.get_block_by_number(Pending).await?.unwrap();
+            block = client.get_block_by_number(Pending).full().await?.unwrap();
         }
         block
     };
-    let latest_block = client.get_block_by_number(Latest).await?.unwrap();
+    let latest_block = client.get_block_by_number(Latest).full().await?.unwrap();
 
     // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)
     assert_ne!(
@@ -417,10 +418,8 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
         pending_block.header.hash, latest_block.header.hash,
         "pending block hash should be non-zero and equal to the latest"
     );
-    let pending_by_hash = client
-        .get_block_by_hash(pending_block.header.hash)
-        .await?
-        .unwrap();
+    let synthetic_hash = pending_block.header.hash;
+    let pending_by_hash = client.get_block_by_hash(synthetic_hash).await?.unwrap();
     assert_eq!(
         pending_by_hash.header.number, pending_block.header.number,
         "pending block hash should be resolvable via eth_getBlockByHash"
@@ -451,6 +450,104 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
         pending_block.header.gas_used > 0,
         "pending block gasUsed should be non-zero when pending txs exist"
     );
+
+    let txs = pending_block
+        .transactions
+        .as_transactions()
+        .expect("Should have full transactions");
+
+    for tx in txs {
+        let tx_block_hash = tx.block_hash.expect("tx should have block hash");
+        assert_eq!(
+            synthetic_hash, tx_block_hash,
+            "Tx block hash should match requested"
+        );
+    }
+
+    Ok(())
+}
+
+/// Synthetic hash query returns transactions with correct block_hash
+///
+/// Verifies that when fetching pending blocks by synthetic hash:
+/// - Each tx in the block has block_hash matching the queried synthetic hash
+/// - Transaction accumulation works correctly (1, 2, 3 txs)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
+    use alloy_rpc_types_eth::BlockTransactions;
+
+    let (rollup, simple_storage, contract_address) = setup_with_contract().await;
+    let client = alloy_client(rollup.http_addr);
+    // Wait for a block to ensure the deploy tx is sealed before we pause
+    rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
+
+    let sealed_head_number = client.get_block_number().await?;
+
+    // Send 3 transactions, capturing synthetic hash after each
+    let mut synthetic_hashes = Vec::new();
+
+    for i in 0..3 {
+        let tx_hash = simple_storage
+            .set_value(contract_address, 1000 * (i + 1))
+            .await;
+        simple_storage.wait_for_receipt(tx_hash).await;
+
+        // Wait for pending block to reflect the new transaction
+        let pending_block = {
+            let mut block = client.get_block_by_number(Pending).await?.unwrap();
+            for _ in 0..100 {
+                if block.header.number == sealed_head_number + 1 {
+                    let tx_count = match &block.transactions {
+                        BlockTransactions::Hashes(h) => h.len(),
+                        BlockTransactions::Full(f) => f.len(),
+                        BlockTransactions::Uncle => 0,
+                    };
+                    if tx_count == (i + 1) as usize {
+                        break;
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                block = client.get_block_by_number(Pending).await?.unwrap();
+            }
+            block
+        };
+
+        synthetic_hashes.push(pending_block.header.hash);
+    }
+
+    // All 3 synthetic hashes should be different
+    assert_ne!(synthetic_hashes[0], synthetic_hashes[1]);
+    assert_ne!(synthetic_hashes[1], synthetic_hashes[2]);
+    assert_ne!(synthetic_hashes[0], synthetic_hashes[2]);
+
+    // Query each synthetic hash and verify tx.block_hash matches
+    for (i, synthetic_hash) in synthetic_hashes.iter().enumerate() {
+        let block = client
+            .get_block_by_hash(*synthetic_hash)
+            .full()
+            .await?
+            .expect("synthetic hash should be resolvable");
+
+        let txs = block.transactions.as_transactions().expect("expected full transactions");
+
+        // Verify transaction count matches expected (i+1 txs)
+        assert_eq!(
+            txs.len(),
+            i + 1,
+            "block from synthetic hash {i} should have {} txs",
+            i + 1
+        );
+
+        // Verify all transactions have block_hash matching the synthetic hash we queried
+        for (j, tx) in txs.iter().enumerate() {
+            assert_eq!(
+                tx.block_hash,
+                Some(*synthetic_hash),
+                "tx {j} in block from synthetic hash {i} should have block_hash matching the queried synthetic hash"
+            );
+        }
+    }
 
     Ok(())
 }
@@ -719,11 +816,10 @@ async fn test_get_block_by_hash_full_transactions() -> anyhow::Result<()> {
         .await?
         .unwrap();
 
+    let queried_hash = block_by_number_full.header.hash;
+
     // Default (details=false) should return hashes
-    let block_by_hash_hashes = client
-        .get_block_by_hash(block_by_number_full.header.hash)
-        .await?
-        .unwrap();
+    let block_by_hash_hashes = client.get_block_by_hash(queried_hash).await?.unwrap();
     match &block_by_hash_hashes.transactions {
         BlockTransactions::Hashes(_) => {}
         _ => panic!("expected hashes mode from eth_getBlockByHash"),
@@ -731,7 +827,7 @@ async fn test_get_block_by_hash_full_transactions() -> anyhow::Result<()> {
 
     // details=true should return full transactions
     let block_by_hash_full = client
-        .get_block_by_hash(block_by_number_full.header.hash)
+        .get_block_by_hash(queried_hash)
         .full()
         .await?
         .unwrap();
@@ -752,6 +848,28 @@ async fn test_get_block_by_hash_full_transactions() -> anyhow::Result<()> {
         expected_count,
         "full tx count should match block by number"
     );
+    assert_eq!(
+        block_by_hash_full.header.hash, queried_hash,
+        "eth_getBlockByHash should return block matching queried hash"
+    );
+
+    for (i, tx) in full_txs.iter().enumerate() {
+        assert_eq!(
+            tx.block_hash,
+            Some(queried_hash),
+            "eth_getBlockByHash: tx {i} blockHash should match queried hash"
+        );
+        assert_eq!(
+            tx.block_number,
+            Some(block_by_hash_full.header.number),
+            "eth_getBlockByHash: tx {i} blockNumber should match returned block"
+        );
+        assert_eq!(
+            tx.transaction_index,
+            Some(i as u64),
+            "eth_getBlockByHash: tx {i} transactionIndex should be sequential"
+        );
+    }
 
     // Cross-check: hashes[i] == full[i].hash
     for (i, hash) in hashes.iter().enumerate() {
