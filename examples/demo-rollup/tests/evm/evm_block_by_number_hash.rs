@@ -529,7 +529,10 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
             .await?
             .expect("synthetic hash should be resolvable");
 
-        let txs = block.transactions.as_transactions().expect("expected full transactions");
+        let txs = block
+            .transactions
+            .as_transactions()
+            .expect("expected full transactions");
 
         // Verify transaction count matches expected (i+1 txs)
         assert_eq!(
