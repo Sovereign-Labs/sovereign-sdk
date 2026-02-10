@@ -239,7 +239,7 @@ impl NodeDiscoveryTestSetup {
                 .await
                 .expect("Root hash checker channel closed");
 
-            receiver.borrow_and_update().clone();
+            receiver.borrow_and_update().clone()
         })
         .await
         .expect("Timed out waiting for root hash checker update")
