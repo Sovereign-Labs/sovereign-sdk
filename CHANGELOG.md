@@ -16,6 +16,8 @@
 - #2476 EVM: Fix `eth_getBlockByNumber` to return correct the same block as `eth_getBlockByNumnber(latest)` for RPC cross endpoint consistency
 - #2463 **Breaking change**: EVM now returns actual non-zero value for BASEFEE opcode.
   Any EVM rollup that had transactions that relied on this opcode will have consensus breaking change.
+# 2026-02-10
+- #2460 Internal sov-demo-rollup updates to support Solana-based signing. Can be used as an example of integrating combined Solana and Ethereum authentication into a single rollup.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
