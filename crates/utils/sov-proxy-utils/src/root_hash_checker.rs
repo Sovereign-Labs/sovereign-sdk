@@ -214,7 +214,7 @@ impl ClusterRootHashChecker {
         slot_id: &str,
         address: &SocketAddr,
     ) -> Result<types::Slot> {
-        let url = format!("http://{}/ledger/slots/{slot_id}", address);
+        let url = format!("http://{address}/ledger/slots/{slot_id}");
         let response = http_client.get(&url).send().await?;
         let response = response.error_for_status()?;
         let slot = response.json::<types::Slot>().await?;
@@ -251,10 +251,7 @@ impl ClusterRootHashChecker {
                 let slot = Self::get_slot(&http_client, &slot_hash, &node_address)
                     .await
                     .map_err(|err| {
-                        format!(
-                            "Failed to get slot {slot_number} ({slot_hash}) from node {} at {}, error: {err}",
-                            node_id_for_task, node_address
-                        )
+                        format!("Failed to get slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}, error: {err}")
                     })?;
 
                 Ok(slot.state_root.to_string())
