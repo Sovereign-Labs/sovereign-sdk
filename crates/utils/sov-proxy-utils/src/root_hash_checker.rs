@@ -10,6 +10,8 @@ use tokio::task::JoinHandle;
 
 /// Default timeout for HTTP requests to node APIs.
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// Default timeout for establishing HTTP connections to node APIs.
+const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
 /// Minimum slot distance between consecutive root-hash checks.
 const SLOT_QUERY_STEP: u64 = 5;
 /// Period between iterations of the background root-hash checker task.
@@ -78,6 +80,7 @@ impl ClusterRootHashChecker {
     /// Creates a checker that reads cluster members from `cluster_info_receiver`.
     pub fn new(cluster_info_receiver: watch::Receiver<ClusterInfo>) -> anyhow::Result<Self> {
         let http_client = reqwest::Client::builder()
+            .connect_timeout(DEFAULT_CONNECTION_TIMEOUT)
             .timeout(DEFAULT_REQUEST_TIMEOUT)
             .build()?;
 
