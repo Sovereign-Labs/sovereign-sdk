@@ -916,6 +916,14 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             .latest_finalized_slot_number()
     }
 
+    /// Returns the latest slot number available in the checkpoint storage.
+    pub fn latest_available_slot_number(&self) -> SlotNumber {
+        self.checkpoint_and_read_txn
+            .state_checkpoint
+            .storage()
+            .latest_version()
+    }
+
     /// Maps a true slot number to its associated rollup height, if known.
     pub fn rollup_height_for_true_slot(&mut self, slot_number: SlotNumber) -> Option<RollupHeight> {
         let kernel = self.kernel.clone();
