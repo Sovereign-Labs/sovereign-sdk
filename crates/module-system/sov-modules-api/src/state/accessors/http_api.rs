@@ -565,19 +565,6 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         )
     }
 
-    /// Builds an archival accessor at the given slot number, using the same
-    /// checkpoint and kernel as this accessor.
-    pub fn build_archival_at_slot(
-        &self,
-        slot_number: SlotNumber,
-    ) -> Result<Self, ApiStateAccessorError> {
-        Self::new_archival_with_true_slot_number(
-            self.checkpoint_and_read_txn.state_checkpoint.clone(),
-            self.kernel.clone(),
-            slot_number,
-        )
-    }
-
     /// Creates a fully initialized [`ApiStateAccessor`] from a [`StateCheckpoint`] and a [`RollupHeight`], if the requested
     /// height is available in storage.
     ///
@@ -909,25 +896,33 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         )
     }
 
+    /// Returns an accessor suitable for `finalized`-tag RPC reads.
+    ///
+    /// For checkpoints where finalized intentionally tracks the storage head
+    /// (preferred sequencer semantics), this returns the current-state view.
+    /// Otherwise it returns an archival accessor at the explicit finalized slot
+    /// (standard sequencer semantics).
+    pub fn build_finalized_state(&self) -> Result<ApiStateAccessor<S>, ApiStateAccessorError> {
+        if self
+            .checkpoint_and_read_txn
+            .state_checkpoint
+            .finalized_slot_tracks_storage_head()
+        {
+            return Ok(self.clone_without_local_writes());
+        }
+
+        Self::new_archival_with_true_slot_number(
+            self.checkpoint_and_read_txn.state_checkpoint.clone(),
+            self.kernel.clone(),
+            self.latest_finalized_slot_number(),
+        )
+    }
+
     /// Returns the latest finalized slot number available to this accessor.
     pub fn latest_finalized_slot_number(&self) -> SlotNumber {
         self.checkpoint_and_read_txn
             .state_checkpoint
             .latest_finalized_slot_number()
-    }
-
-    /// Returns the latest slot number available in the checkpoint storage.
-    pub fn latest_available_slot_number(&self) -> SlotNumber {
-        self.checkpoint_and_read_txn
-            .state_checkpoint
-            .storage()
-            .latest_version()
-    }
-
-    /// Maps a true slot number to its associated rollup height, if known.
-    pub fn rollup_height_for_true_slot(&mut self, slot_number: SlotNumber) -> Option<RollupHeight> {
-        let kernel = self.kernel.clone();
-        kernel.true_slot_number_to_rollup_height(slot_number, self)
     }
 
     /// Get the true slot number being used for queries.

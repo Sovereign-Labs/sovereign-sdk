@@ -13,6 +13,7 @@ pub struct ConcurrentStateCheckpoint<S: Spec> {
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
     pub(super) latest_finalized_slot_number: SlotNumber,
+    pub(super) finalized_slot_tracks_storage_head: bool,
 }
 
 impl<S: Spec> ConcurrentStateCheckpoint<S> {
@@ -24,10 +25,12 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// to preserve the node's true finalized slot semantics.
     pub fn from_state_checkpoint(state_checkpoint: StateCheckpoint<S>) -> Self {
         let latest_finalized_slot_number = state_checkpoint.delta.inner.latest_version();
-        Self::from_state_checkpoint_with_finalized_slot(
+        let mut checkpoint = Self::from_state_checkpoint_with_finalized_slot(
             state_checkpoint,
             latest_finalized_slot_number,
-        )
+        );
+        checkpoint.finalized_slot_tracks_storage_head = true;
+        checkpoint
     }
 
     /// Create a `ConcurrentStateCheckpoint` containing the same changes as the given `StateCheckpoint`,
@@ -59,6 +62,7 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
             visible_slot_num: state_checkpoint.visible_slot_num,
             rollup_height: state_checkpoint.rollup_height,
             latest_finalized_slot_number: latest_finalized_slot_number.min(max_available_slot),
+            finalized_slot_tracks_storage_head: false,
         }
     }
 
@@ -88,5 +92,10 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// Get the latest finalized slot number available to this checkpoint.
     pub fn latest_finalized_slot_number(&self) -> SlotNumber {
         self.latest_finalized_slot_number
+    }
+
+    /// Returns true when this checkpoint treats the storage head as finalized.
+    pub fn finalized_slot_tracks_storage_head(&self) -> bool {
+        self.finalized_slot_tracks_storage_head
     }
 }

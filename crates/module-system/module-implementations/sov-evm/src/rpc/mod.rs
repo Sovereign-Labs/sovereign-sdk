@@ -371,24 +371,12 @@ where
 
     fn finalized_block_number(&self, state: &mut ApiStateAccessor<S>) -> u64 {
         let current_end = *self.block_numbers(state).end();
-        let finalized_slot = state.latest_finalized_slot_number();
-        let latest_available_slot = state.latest_available_slot_number();
-
-        // Preferred sequencer semantics: when finalized equals latest available,
-        // finalized/safe should resolve to the current head.
-        if finalized_slot == latest_available_slot {
-            return current_end;
-        }
-
-        // Standard sequencer semantics: when finalized lags, resolve via archival
-        // state at the true finalized slot.
-        match state.build_archival_at_slot(finalized_slot) {
+        match state.build_finalized_state() {
             Ok(mut archival) => *self.block_numbers(&mut archival).end(),
             Err(error) => {
                 tracing::debug!(
-                    slot = finalized_slot.get(),
                     ?error,
-                    "Archival state failed for finalized block, using current head"
+                    "Failed to build finalized state, using current head"
                 );
                 current_end
             }

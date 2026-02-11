@@ -10,6 +10,8 @@ use alloy_rpc_types_eth::BlockNumberOrTag::{
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde_json::json;
+use std::future::Future;
+use std::time::Duration;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, setup_test_rollup,
@@ -20,6 +22,9 @@ use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
+
+const MAX_POLL_ATTEMPTS: usize = 100;
+const POLL_INTERVAL_MS: u64 = 25;
 
 // =============================================================================
 // Setup Helpers
@@ -80,6 +85,27 @@ async fn assert_safe_finalized_consistent(
     );
 
     Ok((safe_block, finalized_block))
+}
+
+async fn poll_until<T, F, Fut, P>(
+    mut fetch: F,
+    mut predicate: P,
+    failure_msg: &str,
+) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = anyhow::Result<T>>,
+    P: FnMut(&T) -> bool,
+{
+    let mut value = fetch().await?;
+    for _ in 0..MAX_POLL_ATTEMPTS {
+        if predicate(&value) {
+            return Ok(value);
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+        value = fetch().await?;
+    }
+    anyhow::bail!("{failure_msg}")
 }
 
 // =============================================================================
@@ -199,17 +225,17 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
 
     // TC04: pending returns pending block
     // Wait until the pending block is visible to avoid flakiness.
-    let pending_block_1 = {
-        let mut block = client.get_block_by_number(Pending).await?.unwrap();
-        for _ in 0..100 {
-            if block.header.number == sealed_head_number + 1 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-            block = client.get_block_by_number(Pending).await?.unwrap();
-        }
-        block
-    };
+    let pending_block_1 = poll_until(
+        || async {
+            client
+                .get_block_by_number(Pending)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
+        },
+        |block| block.header.number == sealed_head_number + 1,
+        "pending block number did not advance to sealed_head + 1",
+    )
+    .await?;
 
     // TC14: Verify we have a real pending block (not fallback to sealed)
     assert_eq!(
@@ -395,17 +421,18 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
     simple_storage.wait_for_receipt(tx_hash).await;
     // Wait until the pending block is visible to avoid flakiness.
     // Use .full() to get full transaction objects for block_hash verification.
-    let pending_block = {
-        let mut block = client.get_block_by_number(Pending).full().await?.unwrap();
-        for _ in 0..100 {
-            if block.header.number == sealed_head_number + 1 {
-                break;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-            block = client.get_block_by_number(Pending).full().await?.unwrap();
-        }
-        block
-    };
+    let pending_block = poll_until(
+        || async {
+            client
+                .get_block_by_number(Pending)
+                .full()
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
+        },
+        |block| block.header.number == sealed_head_number + 1,
+        "pending block number did not advance to sealed_head + 1",
+    )
+    .await?;
     let latest_block = client.get_block_by_number(Latest).full().await?.unwrap();
 
     // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)
@@ -494,24 +521,28 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
         simple_storage.wait_for_receipt(tx_hash).await;
 
         // Wait for pending block to reflect the new transaction
-        let pending_block = {
-            let mut block = client.get_block_by_number(Pending).await?.unwrap();
-            for _ in 0..100 {
-                if block.header.number == sealed_head_number + 1 {
-                    let tx_count = match &block.transactions {
-                        BlockTransactions::Hashes(h) => h.len(),
-                        BlockTransactions::Full(f) => f.len(),
-                        BlockTransactions::Uncle => 0,
-                    };
-                    if tx_count == (i + 1) as usize {
-                        break;
-                    }
+        let expected_tx_count = (i + 1) as usize;
+        let pending_block = poll_until(
+            || async {
+                client
+                    .get_block_by_number(Pending)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
+            },
+            |block| {
+                if block.header.number != sealed_head_number + 1 {
+                    return false;
                 }
-                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-                block = client.get_block_by_number(Pending).await?.unwrap();
-            }
-            block
-        };
+                let tx_count = match &block.transactions {
+                    BlockTransactions::Hashes(h) => h.len(),
+                    BlockTransactions::Full(f) => f.len(),
+                    BlockTransactions::Uncle => 0,
+                };
+                tx_count == expected_tx_count
+            },
+            "pending block did not reflect expected transaction count",
+        )
+        .await?;
 
         synthetic_hashes.push(pending_block.header.hash);
     }
@@ -596,8 +627,6 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
     use alloy_primitives::Address;
     use alloy_rpc_types_eth::BlockTransactions;
     use sov_evm_test_utils::{Erc20, Submit};
-    use std::time::Duration;
-
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(1).await;
@@ -610,22 +639,21 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
 
     // TC22: Get pending block with hashes only (default)
     // Wait for the mint tx to appear in the pending block
-    let block_hashes = {
-        let mut block = client.get_block_by_number(Pending).await?.unwrap();
-        for _ in 0..100 {
-            let tx_count = match &block.transactions {
-                BlockTransactions::Hashes(h) => h.len(),
-                BlockTransactions::Full(f) => f.len(),
-                BlockTransactions::Uncle => 0,
-            };
-            if tx_count > 0 {
-                break;
-            }
-            tokio::time::sleep(Duration::from_millis(25)).await;
-            block = client.get_block_by_number(Pending).await?.unwrap();
-        }
-        block
-    };
+    let block_hashes = poll_until(
+        || async {
+            client
+                .get_block_by_number(Pending)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
+        },
+        |block| match &block.transactions {
+            BlockTransactions::Hashes(h) => !h.is_empty(),
+            BlockTransactions::Full(f) => !f.is_empty(),
+            BlockTransactions::Uncle => false,
+        },
+        "pending block did not include transactions in time",
+    )
+    .await?;
 
     // TC23: Get pending block with full transactions
     let block_full = client.get_block_by_number(Pending).full().await?.unwrap();

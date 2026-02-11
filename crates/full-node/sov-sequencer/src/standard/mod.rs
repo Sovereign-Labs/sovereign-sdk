@@ -134,9 +134,12 @@ where
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
         let latest_state_update = state_update_receiver.borrow().clone();
-        let checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
-        ));
+        let checkpoint = Arc::new(
+            ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
+                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
+                latest_state_update.latest_finalized_slot_number,
+            ),
+        );
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
         let api_state = ApiState::build(
