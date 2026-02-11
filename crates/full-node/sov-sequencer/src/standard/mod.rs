@@ -281,7 +281,7 @@ where
         let pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(gas_meter);
         let metrics = AuthAndProcessMetrics::new(
             mempool_tx.hash.into(),
-            AuthAndProcessTimings::new_with_defaults(ExecutionContext::SEQUENCER),
+            AuthAndProcessTimings::new_with_defaults(execution_context.str()),
         );
         let (res, tx_scratchpad, _gas_meter) = process_tx_and_reward_prover(
             &mut runtime,
