@@ -95,7 +95,9 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
         preferred_sequencer_publish_reverted_txs,
     );
 
-    let result = contract.alwaysRevert().send().await;
+    // Set explicit gas to avoid pre-submit `eth_estimateGas`, which now correctly
+    // errors on reverting calls.
+    let result = contract.alwaysRevert().gas(300_000).send().await;
     let nonce = client.get_transaction_count(signer.address()).await?;
     if preferred_sequencer_publish_reverted_txs {
         let pending_tx = result?;
