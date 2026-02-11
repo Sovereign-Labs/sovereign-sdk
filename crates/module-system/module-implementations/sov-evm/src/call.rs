@@ -72,8 +72,7 @@ where
         TxSignedAndRecovered,
         u64,
     )> {
-        let mut block_env = self.block_env(state)?;
-        block_env.basefee = 0; // Set fee to zero for evm execution. Gas is paid for by the sov gas meter instead
+        let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
