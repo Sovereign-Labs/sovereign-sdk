@@ -9,9 +9,7 @@ use crate::setup::{register_warp_route_with_ism_and_token_source, setup, SetupPa
 #[test]
 fn test_ism_returns_warp_route_ism_over_default() {
     let SetupParams {
-        mut runner,
-        admin,
-        ..
+        mut runner, admin, ..
     } = setup();
 
     // The default ISM from genesis is AlwaysTrust.
@@ -21,8 +19,12 @@ fn test_ism_returns_warp_route_ism_over_default() {
         threshold: 1,
     };
 
-    let route_id =
-        register_warp_route_with_ism_and_token_source(&mut runner, &admin, route_ism.clone(), TokenKind::Native);
+    let route_id = register_warp_route_with_ism_and_token_source(
+        &mut runner,
+        &admin,
+        route_ism.clone(),
+        TokenKind::Native,
+    );
 
     runner.query_state(|state| {
         let module = sov_hyperlane_register_module::SolanaRegistration::default();

@@ -181,11 +181,7 @@ impl<S: Spec> Recipient<S> for SolanaRegistration<S>
 where
     S::Address: HyperlaneAddress,
 {
-    fn ism(
-        &self,
-        recipient: &HexHash,
-        state: &mut impl TxState<S>,
-    ) -> anyhow::Result<Option<Ism>> {
+    fn ism(&self, recipient: &HexHash, state: &mut impl TxState<S>) -> anyhow::Result<Option<Ism>> {
         if let Some(ism) = self.warp.ism(recipient, state)? {
             return Ok(Some(ism));
         }
