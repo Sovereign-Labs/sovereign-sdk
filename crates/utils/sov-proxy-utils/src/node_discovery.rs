@@ -107,7 +107,13 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// Handle returned when subscribing to cluster updates.
 pub struct NodeDiscoveryTask {
     pub receiver: watch::Receiver<ClusterInfo>,
-    pub handle: JoinHandle<anyhow::Result<()>>,
+    pub(crate) handle: JoinHandle<anyhow::Result<()>>,
+}
+
+impl NodeDiscoveryTask {
+    pub fn abort(&self) {
+        self.handle.abort();
+    }
 }
 
 /// Client for querying cluster information from the database.
@@ -119,6 +125,8 @@ pub struct NodeDiscovery {
     prev_leader_id: Option<String>,
     path: PathBuf,
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
+    sender: watch::Sender<ClusterInfo>,
+    pub(crate) receiver: watch::Receiver<ClusterInfo>,
 }
 
 impl NodeDiscovery {
@@ -150,6 +158,8 @@ impl NodeDiscovery {
             .await?;
         tracing::info!("Subscribed to nodes_changes and leader_changes channels");
 
+        let (sender, receiver) = watch::channel(ClusterInfo::default());
+
         Ok(Self {
             max_age,
             pool,
@@ -158,6 +168,8 @@ impl NodeDiscovery {
             prev_leader_id: None,
             path,
             notifier,
+            sender,
+            receiver,
         })
     }
 
@@ -214,10 +226,10 @@ impl NodeDiscovery {
     ///
     /// Listens on `nodes_changes` and `leader_changes` channels.
     pub fn spawn(mut self) -> NodeDiscoveryTask {
-        let (sender, receiver) = watch::channel(ClusterInfo::default());
+        let receiver = self.receiver.clone();
         let handle = tokio::spawn(async move {
             loop {
-                if let Err(error) = self.handle_cluster_update(&sender).await {
+                if let Err(error) = self.handle_cluster_update().await {
                     tracing::warn!(?error, "Cluster update failed");
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
@@ -233,10 +245,7 @@ impl NodeDiscovery {
         NodeDiscoveryTask { receiver, handle }
     }
 
-    async fn handle_cluster_update(
-        &mut self,
-        sender: &watch::Sender<ClusterInfo>,
-    ) -> anyhow::Result<()> {
+    async fn handle_cluster_update(&mut self) -> anyhow::Result<()> {
         let info = self.get_cluster_info().await?;
         let leader_id = info.leader_id();
 
@@ -279,7 +288,7 @@ impl NodeDiscovery {
         if let Some(notifier) = &self.notifier {
             notifier.on_cluster_update(&info).await;
         }
-        let _ = sender.send(info);
+        let _ = self.sender.send(info);
 
         Ok(())
     }
