@@ -33,7 +33,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
+use sov_modules_api::{Amount, ApiStateAccessor, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
 
@@ -307,7 +307,10 @@ where
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let (receipt, time) = self.receipt(number, state)?;
-        Some(build_rpc_receipt(block, tx, number, receipt, time))
+        let fee_paid = self.receipt_fee(number, state);
+        Some(build_rpc_receipt(
+            block, tx, number, receipt, time, fee_paid,
+        ))
     }
 
     fn get_receipts(
@@ -767,6 +770,7 @@ pub(crate) fn build_rpc_receipt(
     tx_number: u64,
     receipt: Receipt,
     time: Time,
+    fee_paid: Option<Amount>,
 ) -> TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>> {
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
@@ -812,13 +816,17 @@ pub(crate) fn build_rpc_receipt(
         TxKind::Call(addr) => (None, Some(Address(*addr))),
     };
 
-    // EIP-1559 effective gas price calculation (https://github.com/ethereum/EIPs/blob/0d31c18725202ae8bbfb82b8d3d028ad1810d360/EIPS/eip-1559.md?plain=1#L222-L224):
-    //   priority_fee_per_gas = min(transaction.max_priority_fee_per_gas,
-    //                              transaction.max_fee_per_gas - block.base_fee_per_gas)
-    //   effective_gas_price = priority_fee_per_gas + block.base_fee_per_gas
-    let effective_gas_price = transaction
-        .inner()
-        .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
+    // Prefer the fee paid in the Sovereign gas meter when available.
+    // This keeps receipt fee semantics aligned with balance deltas.
+    let effective_gas_price = match (fee_paid, receipt.gas_used) {
+        (Some(fee_paid), gas_used) if gas_used > 0 => fee_paid.0 / u128::from(gas_used),
+        _ => {
+            // Fallback to EIP-1559 formula for historical receipts that don't have fee metadata.
+            transaction
+                .inner()
+                .effective_gas_price(block.maybe_partial_header().base_fee_per_gas)
+        }
+    };
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),

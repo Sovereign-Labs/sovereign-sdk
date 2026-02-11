@@ -11,6 +11,7 @@ use revm::Database;
 use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_bank::Amount;
 use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
@@ -312,10 +313,17 @@ where
         save_elapsed!(get_head_time SINCE get_head_t);
 
         #[cfg(feature = "native")]
+        let tx_fee_paid = state
+            .try_as_basic_gas_meter()
+            .expect("TxState should have BasicGasMeter")
+            .gas_info()
+            .gas_value;
+
+        #[cfg(feature = "native")]
         let set_accessory_state_time = {
             start_timer!(set_accessory_state);
             // Since we just inserted tx above, we need to increment `pending_len`` by 1.
-            self.set_accessory_state(head, &pending_tx, pending_len + 1, state)
+            self.set_accessory_state(head, &pending_tx, pending_len + 1, tx_fee_paid, state)
                 .unwrap_infallible();
             set_accessory_state.elapsed()
         };
@@ -461,6 +469,7 @@ where
         head: crate::Block,
         pending_transaction: &PendingTransaction,
         pending_tx_len: u64,
+        tx_fee_paid: Amount,
         state: &mut impl TxState<S>,
     ) -> Result<(), Infallible> {
         assert!(pending_tx_len > 0);
@@ -481,6 +490,7 @@ where
             ),
             state,
         )?;
+        self.receipt_fees.set(&tx_index, &tx_fee_paid, state)?;
 
         let hash = pending_transaction.transaction.signed_transaction.hash();
         self.transaction_hashes.set(hash, &tx_index, state)?;

@@ -144,6 +144,10 @@ pub struct Evm<S: Spec> {
     #[state]
     pub receipts: AccessoryStateMap<u64, (Receipt, Time), BcsCodec>,
 
+    /// Used only by the RPC: actual gas-token fee paid per tx index.
+    #[state]
+    pub receipt_fees: AccessoryStateMap<u64, Amount, BcsCodec>,
+
     /// Used only by the RPC: block_hash => block_number mapping.
     #[state]
     pub block_hash_to_number: AccessoryStateMap<B256, u64, BcsCodec>,

@@ -9,7 +9,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
-    AccessoryStateReader, AccessoryStateReaderAndWriter, InfallibleStateAccessor,
+    AccessoryStateReader, AccessoryStateReaderAndWriter, Amount, InfallibleStateAccessor,
     InfallibleStateReaderAndWriter, Spec, StateReader,
 };
 #[cfg(feature = "native")]
@@ -145,6 +145,15 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> Option<(Receipt, Time)> {
         self.receipts.get(&index, state).unwrap_infallible()
+    }
+
+    /// Access the actual gas-token fee paid for the Ethereum transaction by number.
+    pub fn receipt_fee<Accessor: AccessoryStateReader>(
+        &self,
+        index: u64,
+        state: &mut Accessor,
+    ) -> Option<Amount> {
+        self.receipt_fees.get(&index, state).unwrap_infallible()
     }
 
     /// Access the Ethereum transaction by number.

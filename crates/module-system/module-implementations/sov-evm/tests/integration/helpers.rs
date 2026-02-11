@@ -131,6 +131,25 @@ pub(crate) fn create_transfer_tx(
     create_tx(from, tx)
 }
 
+pub(crate) fn create_transfer_tx_with_fee_params(
+    nonce: u64,
+    from: &EvmAccount,
+    to: &EvmAccount,
+    value: u128,
+    max_fee_per_gas: u128,
+    max_priority_fee_per_gas: u128,
+) -> TxWithNonceAndHash {
+    let tx = TxEip1559 {
+        to: TxKind::Call(to.address()),
+        value: U256::from(value),
+        nonce,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        ..Default::default()
+    };
+    create_tx(from, tx)
+}
+
 #[derive(Clone)]
 pub(crate) struct TxWithNonceAndHash {
     pub(crate) nonce: u64,
