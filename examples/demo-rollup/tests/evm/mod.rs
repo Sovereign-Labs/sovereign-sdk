@@ -20,4 +20,5 @@ pub(crate) mod evm_test_helper;
 mod evm_timestamp;
 mod evm_tracing;
 mod evm_tx;
+mod evm_tx_type;
 mod evm_ws_watch;
