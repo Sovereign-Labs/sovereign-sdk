@@ -742,7 +742,7 @@ where
                     {
                         save_elapsed!(processing_time SINCE start_batch_processing);
                         let transactions_count = batch_receipt.tx_receipts.len();
-                        let ignored_transactions_count = batch_receipt.tx_receipts.len();
+                        let ignored_transactions_count = batch_receipt.ignored_tx_receipts.len();
 
                         sov_metrics::track_metrics(|tracker| {
                             tracker.submit(sov_metrics::BatchMetrics {
