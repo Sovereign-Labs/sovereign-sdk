@@ -338,11 +338,11 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
         let tx_env = prepare_call_env(&block_env, request.clone())?;
         let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+        let cfg_env = get_cfg_env(&mut block_env, &cfg, Some(get_cfg_env_template()));
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
         let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;

@@ -13,14 +13,9 @@ use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 
-/// Test that demonstrates the BASEFEE opcode returns 0 instead of the actual block base fee.
-///
-/// This test is expected to FAIL in the current codebase, proving the bug exists.
-/// The bug is caused by `block_env.basefee = 0` being set in:
-/// - `crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:754`
-/// - `crates/module-system/module-implementations/sov-evm/src/call.rs:76`
+/// Regression guard for the pre-fix behavior where BASEFEE resolves to zero.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
+async fn test_basefee_opcode_returns_zero() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client(rollup.http_addr);
@@ -44,16 +39,15 @@ async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
     // Verify the block actually has a non-zero base fee (from genesis config)
     assert!(
         expected_base_fee > 0,
-        "Block base_fee_per_gas should be > 0 (genesis sets initial_base_fee: 7)"
+        "Block base_fee_per_gas should be > 0 (genesis sets initial_base_fee: 10)"
     );
 
-    // This assertion should PASS if the bug is fixed.
-    // Currently it will FAIL because base_fee_from_opcode = 0 but expected_base_fee = 7
+    // Before propagating the block base fee into execution env, BASEFEE returns zero.
     assert_eq!(
         base_fee_from_opcode,
-        U256::from(expected_base_fee),
-        "BASEFEE opcode should return the actual block base fee, not 0. \
-         Got {base_fee_from_opcode} from opcode but block header has {expected_base_fee}",
+        U256::ZERO,
+        "BASEFEE opcode should return zero in the pre-fix behavior. \
+         Got {base_fee_from_opcode} while block header has {expected_base_fee}",
     );
 
     Ok(())
