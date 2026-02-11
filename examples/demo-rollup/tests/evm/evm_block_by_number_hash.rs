@@ -245,6 +245,7 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
         "pending block number did not advance to sealed_head + 1",
     )
     .await?;
+    let eth_block_number_with_pending = client.get_block_number().await?;
 
     // TC14: Verify we have a real pending block (not fallback to sealed)
     assert_eq!(
@@ -274,6 +275,10 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     assert_eq!(
         pending_by_hash_1.header.number, pending_block_1.header.number,
         "pending block hash should be resolvable via eth_getBlockByHash"
+    );
+    assert_eq!(
+        eth_block_number_with_pending, pending_block_1.header.number,
+        "eth_blockNumber should align with latest/pending block number when pending txs exist"
     );
 
     // New tx changes pending header's hash, but not number

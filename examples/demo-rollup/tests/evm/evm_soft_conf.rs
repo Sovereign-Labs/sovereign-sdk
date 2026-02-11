@@ -39,12 +39,19 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
         {
             let rec = evm_client.receipt(tx_hash).await.unwrap();
             let tx = evm_client.transaction(tx_hash).await.unwrap();
+            let rpc_block_number = evm_client.block_number().await;
 
             assert!(rec.block_hash.is_some());
             assert!(tx.block_hash.is_some());
 
+            assert_eq!(
+                rpc_block_number, expected_block_nr,
+                "eth_blockNumber should align with pending head while tx is pending"
+            );
             assert_eq!(rec.block_number.unwrap(), expected_block_nr);
             assert_eq!(tx.block_number.unwrap(), expected_block_nr);
+            assert_eq!(rec.block_number.unwrap(), rpc_block_number);
+            assert_eq!(tx.block_number.unwrap(), rpc_block_number);
         }
 
         // Verify the `pending_block` asserts after inserting the transaction.
