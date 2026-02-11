@@ -11,14 +11,16 @@ use alloy_rpc_types::{
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
-use revm::context::result::ResultAndState;
+use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
-use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
+use sov_rpc_eth_types::{
+    EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
+};
 use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use tracing::trace;
 
@@ -123,7 +125,7 @@ where
         index: U256,
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U256> {
+    ) -> RpcResult<B256> {
         trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
         let mut state = self.resolve_state_for_block_id(block_id, state)?;
@@ -133,7 +135,7 @@ where
             .unwrap_infallible()
             .unwrap_or_default();
 
-        Ok(storage_slot)
+        Ok(storage_slot.to_be_bytes::<32>().into())
     }
 
     /// Handler for: `eth_getTransactionCount`
@@ -306,14 +308,23 @@ where
             result,
             state: changes,
         } = self.call(request, block_id, state)?;
+
+        let (gas_used, logs) = match result {
+            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
+            ExecutionResult::Revert { output, .. } => {
+                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
+            }
+            ExecutionResult::Halt { reason, gas_used } => {
+                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
+            }
+        };
+
         self.db(state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");
-        let gas_used = result.gas_used();
 
         // Charge for logs storage in the receipt
         // Other receipt fields are small and covered by the constant margin
-        let logs = result.logs();
         let logs_size = self
             .receipts
             .codec()
@@ -452,20 +463,17 @@ where
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
-        let block_number = self
-            .block_hash_to_number
-            .get(&block_hash, state)
-            .unwrap_infallible();
-        match block_number {
-            Some(number) => {
-                let block = self.get_maybe_synthetic_block_for_rpc(
-                    Some(BlockId::Number(BlockNumberOrTag::Number(number))),
-                    false.into(),
-                    state,
-                )?;
-                Ok(block.map(|b| U64::from(b.transactions.len())))
-            }
-            None => Ok(None),
-        }
+        let block = match self.get_maybe_synthetic_block_for_rpc(
+            Some(BlockId::Hash(block_hash.into())),
+            false.into(),
+            state,
+        ) {
+            Ok(block) => block,
+            // ByHash count endpoints return null for not found blocks.
+            Err(EthApiError::HeaderNotFound(_)) => None,
+            Err(err) => return Err(err.into()),
+        };
+
+        Ok(block.map(|b| U64::from(b.transactions.len())))
     }
 }

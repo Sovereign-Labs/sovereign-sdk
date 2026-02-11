@@ -2289,22 +2289,12 @@ async fn events_are_returned_in_tx_response() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 7);
-    let response = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    let response = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
     assert_eq!(response.events.len(), 1);
 }
