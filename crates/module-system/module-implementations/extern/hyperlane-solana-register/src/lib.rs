@@ -183,9 +183,12 @@ where
 {
     fn ism(
         &self,
-        _recipient: &HexHash,
+        recipient: &HexHash,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<Option<Ism>> {
+        if let Some(ism) = self.warp.ism(recipient, state)? {
+            return Ok(Some(ism));
+        }
         self.default_ism(state)
     }
 
