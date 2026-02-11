@@ -33,7 +33,7 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
         let set_arg = 1;
         let tx_hash = evm_client.set_value(contract_address, set_arg).await;
 
-        let expected_block_nr = evm_client.block_number().await + 1;
+        let expected_block_nr = evm_client.block_number().await;
 
         // Verify the `receipt & transaction` asserts.
         {

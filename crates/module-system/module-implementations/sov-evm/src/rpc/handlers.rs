@@ -282,8 +282,9 @@ where
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
-        let block_number_range = self.block_numbers(state);
-        Ok(U256::from(*block_number_range.end()))
+        Ok(U256::from(
+            self.resolve_block_number(BlockNumberOrTag::Latest, state),
+        ))
     }
 
     /// Handler for: `eth_estimateGas`
