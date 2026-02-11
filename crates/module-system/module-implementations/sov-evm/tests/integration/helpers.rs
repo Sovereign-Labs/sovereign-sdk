@@ -30,6 +30,14 @@ pub(crate) fn set_max_fee_check_height(height: u64) {
     );
 }
 
+/// Sets the block height after which receipt effective gas price is derived from actual charged fee.
+pub(crate) fn set_receipt_actual_fee_height(height: u64) {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_EVM_RECEIPT_ACTUAL_FEE_HEIGHT",
+        height.to_string(),
+    );
+}
+
 pub(crate) struct EvmAccount(SecretKey);
 
 impl EvmAccount {

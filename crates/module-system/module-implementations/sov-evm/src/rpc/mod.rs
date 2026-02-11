@@ -816,16 +816,27 @@ pub(crate) fn build_rpc_receipt(
         TxKind::Call(addr) => (None, Some(Address(*addr))),
     };
 
-    // Prefer the fee paid in the Sovereign gas meter when available.
+    // EIP-1559 effective gas price calculation (https://github.com/ethereum/EIPs/blob/0d31c18725202ae8bbfb82b8d3d028ad1810d360/EIPS/eip-1559.md?plain=1#L222-L224):
+    //   priority_fee_per_gas = min(transaction.max_priority_fee_per_gas,
+    //                              transaction.max_fee_per_gas - block.base_fee_per_gas)
+    //   effective_gas_price = priority_fee_per_gas + block.base_fee_per_gas
+    let eip_1559_effective_gas_price = transaction
+        .inner()
+        .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
+
+    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+    let use_actual_fee = block.number() > apply_actual_fee_after_height;
+
+    // Once activated, prefer the fee paid in the Sovereign gas meter when available.
     // This keeps receipt fee semantics aligned with balance deltas.
-    let effective_gas_price = match (fee_paid, receipt.gas_used) {
-        (Some(fee_paid), gas_used) if gas_used > 0 => fee_paid.0 / u128::from(gas_used),
-        _ => {
-            // Fallback to EIP-1559 formula for historical receipts that don't have fee metadata.
-            transaction
-                .inner()
-                .effective_gas_price(block.maybe_partial_header().base_fee_per_gas)
+    let effective_gas_price = if use_actual_fee {
+        match (fee_paid, receipt.gas_used) {
+            (Some(fee_paid), gas_used) if gas_used > 0 => fee_paid.0 / u128::from(gas_used),
+            // Keep compatibility for historical data where metadata may be missing.
+            _ => eip_1559_effective_gas_price,
         }
+    } else {
+        eip_1559_effective_gas_price
     };
 
     TransactionReceipt {
