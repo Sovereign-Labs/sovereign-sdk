@@ -72,7 +72,7 @@ where
         TxSignedAndRecovered,
         u64,
     )> {
-        let mut block_env = self.block_env(state)?;
+        let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -88,7 +88,7 @@ where
         // The uniqueness check was performed before the call was dispatched.
         let account_nonce = self.get_account_nonce(signer, state)?;
         let cfg = self.cfg(state)?;
-        let cfg_env = get_cfg_env(&mut block_env, &cfg, None);
+        let cfg_env = get_cfg_env(&block_env, &cfg, None);
         let gas_limit = self.gas_limit(state, &cfg.chain_spec);
         let tx_env = create_tx_env(&tx, signer, account_nonce, gas_limit);
         let tx = TxSignedAndRecovered::new(signer, tx, block_env.number.to::<u64>());

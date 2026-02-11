@@ -13,9 +13,9 @@ use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 
-/// Regression guard for the pre-fix behavior where BASEFEE resolves to zero.
+/// Test that demonstrates the BASEFEE opcode returns the actual block base fee.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_basefee_opcode_returns_zero() -> anyhow::Result<()> {
+async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client(rollup.http_addr);
@@ -42,12 +42,12 @@ async fn test_basefee_opcode_returns_zero() -> anyhow::Result<()> {
         "Block base_fee_per_gas should be > 0 (genesis sets initial_base_fee: 10)"
     );
 
-    // Before propagating the block base fee into execution env, BASEFEE returns zero.
+    // BASEFEE should match the block header value.
     assert_eq!(
         base_fee_from_opcode,
-        U256::ZERO,
-        "BASEFEE opcode should return zero in the pre-fix behavior. \
-         Got {base_fee_from_opcode} while block header has {expected_base_fee}",
+        U256::from(expected_base_fee),
+        "BASEFEE opcode should return the actual block base fee. \
+         Got {base_fee_from_opcode} from opcode but block header has {expected_base_fee}",
     );
 
     Ok(())
