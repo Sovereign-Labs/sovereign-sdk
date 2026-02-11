@@ -54,16 +54,6 @@ type MaterializedUpdate<S> = (
     <S as Storage>::ChangeSet,
 );
 
-#[cfg(feature = "native")]
-#[inline]
-fn execution_context_str(execution_context: ExecutionContext) -> &'static str {
-    match execution_context {
-        ExecutionContext::SequencerWarmUp => ExecutionContext::SEQUENCER_WARM_UP,
-        ExecutionContext::Sequencer => ExecutionContext::SEQUENCER,
-        ExecutionContext::Node => ExecutionContext::NODE,
-    }
-}
-
 /// The result of applying a transaction to the state.
 /// This is the value returned when [`process_tx_and_reward_prover`] succeeds.
 /// It contains the new transaction checkpoint, transaction receipt and the amount of gas tokens that the sequencer should be rewarded.
@@ -608,7 +598,7 @@ where
                         blobs_selection_time: blob_selection_time,
                         slot_finalization_time,
                         da_height: slot_header.height(),
-                        execution_context: execution_context_str(execution_context),
+                        execution_context: execution_context.str(),
                         visible_slot_number: visible_slot_number.get(),
                         gas_used: total_gas.as_ref().to_vec(),
                     });
@@ -834,7 +824,7 @@ where
                     begin_block_hook_time,
                     blobs_processing_time: blob_processing_time,
                     visible_slot_number: state.current_visible_slot_number().get(),
-                    execution_context: execution_context_str(execution_context),
+                    execution_context: execution_context.str(),
                     end_block_hook_time,
                     gas_used: total_gas,
                 });

@@ -22,15 +22,6 @@ use crate::{ApplyTxResult, AuthTxOutput, Runtime, TxReceiptContents};
 
 type TxAndError = (TxProcessingError, FullyBakedTx);
 
-#[inline]
-fn execution_context_str(execution_context: ExecutionContext) -> &'static str {
-    match execution_context {
-        ExecutionContext::SequencerWarmUp => ExecutionContext::SEQUENCER_WARM_UP,
-        ExecutionContext::Sequencer => ExecutionContext::SEQUENCER,
-        ExecutionContext::Node => ExecutionContext::NODE,
-    }
-}
-
 /// Executes the entire transaction lifecycle.
 ///
 /// The caller is responsible for penalizing the sequencer if this method returns an error. If the tx can be attempted,
@@ -143,7 +134,7 @@ fn track_transaction_metrics<S: Spec>(
         let transaction_metrics = sov_metrics::TransactionProcessingMetrics {
             execution_time,
             tx_effect,
-            execution_context: execution_context_str(execution_context),
+            execution_context: execution_context.str(),
             visible_slot_number: visible_slot_number.get(),
             sequencer_address: sequencer_address.to_string(),
             call_message: message_discriminant,
@@ -714,8 +705,7 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
-    let mut timings =
-        AuthAndProcessTimings::new_with_defaults(execution_context_str(execution_context));
+    let mut timings = AuthAndProcessTimings::new_with_defaults(execution_context.str());
     timings.total_timer.start();
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
