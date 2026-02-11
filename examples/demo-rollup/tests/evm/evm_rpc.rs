@@ -3,9 +3,9 @@ use alloy_primitives::{Address, BlockHash, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::Header;
+use alloy_rpc_types_eth::{BlockId, BlockNumberOrTag};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
-use alloy_rpc_types_eth::{BlockId, BlockNumberOrTag};
 use sov_evm_test_utils::{Erc20, Submit};
 
 use crate::evm::evm_test_helper::alloy_client;
@@ -226,7 +226,7 @@ async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> any
     ws_client.send_eth(Address::ZERO, U256::from(1)).await;
 
     let client = alloy_client(rollup.http_addr);
-    let latest = by_number(&client, Latest)
+    let latest = by_number(&client, BlockNumberOrTag::Latest)
         .await?
         .expect("latest block should exist");
     let sealed_height = client.get_block_number().await?;
