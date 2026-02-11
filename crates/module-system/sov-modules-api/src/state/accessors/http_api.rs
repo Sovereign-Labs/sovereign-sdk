@@ -565,6 +565,19 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         )
     }
 
+    /// Builds an archival accessor at the given slot number, using the same
+    /// checkpoint and kernel as this accessor.
+    pub fn build_archival_at_slot(
+        &self,
+        slot_number: SlotNumber,
+    ) -> Result<Self, ApiStateAccessorError> {
+        Self::new_archival_with_true_slot_number(
+            self.checkpoint_and_read_txn.state_checkpoint.clone(),
+            self.kernel.clone(),
+            slot_number,
+        )
+    }
+
     /// Creates a fully initialized [`ApiStateAccessor`] from a [`StateCheckpoint`] and a [`RollupHeight`], if the requested
     /// height is available in storage.
     ///

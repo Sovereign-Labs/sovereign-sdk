@@ -370,16 +370,24 @@ where
     }
 
     fn finalized_block_number(&self, state: &mut ApiStateAccessor<S>) -> u64 {
-        let sealed_numbers = self.block_numbers(state);
-        let start = *sealed_numbers.start();
-        let end = *sealed_numbers.end();
+        let current_end = *self.block_numbers(state).end();
+        let finalized_slot = state.latest_finalized_slot_number();
 
-        let finalized_slot_number = state.latest_finalized_slot_number();
-        let finalized_height = state
-            .rollup_height_for_true_slot(finalized_slot_number)
-            .unwrap_or(RollupHeight::GENESIS);
-
-        finalized_height.get().clamp(start, end)
+        // Build archival state at finalized slot and read block_numbers.end()
+        match state.build_archival_at_slot(finalized_slot) {
+            Ok(mut archival) => {
+                let archival_end = *self.block_numbers(&mut archival).end();
+                archival_end.min(current_end) // safety clamp
+            }
+            Err(error) => {
+                tracing::debug!(
+                    slot = finalized_slot.get(),
+                    ?error,
+                    "Archival state failed for finalized block, using current head"
+                );
+                current_end
+            }
+        }
     }
 
     fn block_tag_to_pending_or_block(
