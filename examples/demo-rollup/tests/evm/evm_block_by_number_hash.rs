@@ -586,6 +586,91 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Synthetic hash query returns receipts with matching block_hash
+///
+/// Verifies that receipts returned by `eth_getBlockReceipts` for synthetic hashes
+/// use the queried synthetic hash as `receipt.block_hash`.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<()> {
+    use alloy_rpc_types_eth::{BlockId, BlockTransactions};
+
+    let (rollup, simple_storage, contract_address) = setup_with_contract().await;
+    let client = alloy_client(rollup.http_addr);
+    // Wait for a block to ensure the deploy tx is sealed before we pause
+    rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
+
+    let sealed_head_number = client.get_block_number().await?;
+
+    // Send 2 transactions, capturing synthetic hash after each
+    let mut synthetic_hashes = Vec::new();
+    for i in 0..2 {
+        let tx_hash = simple_storage
+            .set_value(contract_address, 2000 * (i + 1))
+            .await;
+        simple_storage.wait_for_receipt(tx_hash).await;
+
+        // Wait for pending block to reflect the new transaction
+        let expected_tx_count = (i + 1) as usize;
+        let pending_block = poll_until(
+            || async {
+                client
+                    .get_block_by_number(Pending)
+                    .await?
+                    .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
+            },
+            |block| {
+                if block.header.number != sealed_head_number + 1 {
+                    return false;
+                }
+                let tx_count = match &block.transactions {
+                    BlockTransactions::Hashes(h) => h.len(),
+                    BlockTransactions::Full(f) => f.len(),
+                    BlockTransactions::Uncle => 0,
+                };
+                tx_count == expected_tx_count
+            },
+            "pending block did not reflect expected transaction count",
+        )
+        .await?;
+
+        synthetic_hashes.push((pending_block.header.hash, expected_tx_count));
+    }
+
+    assert_ne!(
+        synthetic_hashes[0].0, synthetic_hashes[1].0,
+        "synthetic hashes should differ as pending tx set grows"
+    );
+
+    for (i, (synthetic_hash, expected_len)) in synthetic_hashes.iter().enumerate() {
+        let receipts = client
+            .get_block_receipts(BlockId::from(*synthetic_hash))
+            .await?
+            .expect("synthetic hash receipts should be resolvable");
+
+        assert_eq!(
+            receipts.len(),
+            *expected_len,
+            "synthetic hash {i} should have {expected_len} receipts"
+        );
+
+        for (j, receipt) in receipts.iter().enumerate() {
+            assert_eq!(
+                receipt.block_hash,
+                Some(*synthetic_hash),
+                "receipt {j} in synthetic block {i} should match queried synthetic hash"
+            );
+            assert_eq!(
+                receipt.block_number,
+                Some(sealed_head_number + 1),
+                "receipt {j} in synthetic block {i} should stay in pending block number"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// TC17, TC19: Pending block without txs falls back to latest sealed block
 #[tokio::test(flavor = "multi_thread")]
 async fn test_pending_without_txs_falls_back_to_sealed() -> anyhow::Result<()> {

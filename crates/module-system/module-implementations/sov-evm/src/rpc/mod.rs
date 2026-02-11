@@ -299,6 +299,17 @@ where
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let (receipt, time) = self.receipt(number, state)?;
+        Some(build_rpc_receipt(&block, tx, number, receipt, time))
+    }
+
+    fn get_receipt_by_index_in_block(
+        &self,
+        number: u64,
+        block: &MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
+        let tx = self.transaction(number, state)?;
+        let (receipt, time) = self.receipt(number, state)?;
         Some(build_rpc_receipt(block, tx, number, receipt, time))
     }
 
@@ -314,13 +325,14 @@ where
         let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
             return Ok(None);
         };
-        let Some(receipts) = block
-            .tx_range()
-            .map(|index| self.get_receipt_by_index(index, state))
-            .collect::<Option<Vec<_>>>()
-        else {
-            return Ok(None);
-        };
+        let mut receipts =
+            Vec::with_capacity((block.transactions_end() - block.transactions_start()) as usize);
+        for index in block.tx_range() {
+            let Some(receipt) = self.get_receipt_by_index_in_block(index, &block, state) else {
+                return Ok(None);
+            };
+            receipts.push(receipt);
+        }
         Ok(Some(receipts))
     }
 
@@ -772,7 +784,7 @@ fn get_cfg_env_template() -> CfgEnv {
 
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
-    block: MaybeSealedBlock,
+    block: &MaybeSealedBlock,
     tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
