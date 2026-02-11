@@ -5630,8 +5630,8 @@ dependencies = [
  "anyhow",
  "bincode",
  "derive-new",
+ "hex",
  "serde",
- "sov-rollup-interface",
  "sp1-lib 5.2.4",
 ]
 
