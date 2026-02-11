@@ -3,12 +3,11 @@ use alloy_primitives::utils::parse_ether;
 use alloy_primitives::{keccak256, Address, BlockHash, Bloom, B256, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
-use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
 use alloy_rpc_types_eth::Header;
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::rpc_params;
 use alloy_rpc_types_eth::{Block, BlockId, BlockNumberOrTag, BlockTransactions, Filter};
 use alloy_rpc_types_eth::{Transaction, TransactionReceipt};
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
 use sov_evm_test_utils::{Erc20, LegacySimpleStorage, Submit};
 
 use crate::evm::evm_test_helper::{
@@ -410,9 +409,7 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     // Build a block with multiple txs (two logs, one plain transfer).
     assert_pending_block_empty(&client).await?;
     let tx1 = simple_storage.set_value(contract_address, 10).await;
-    let receiver: Address = "0x000000000000000000000000000000000000dEaD"
-        .parse()
-        .unwrap();
+    let receiver: Address = "0x000000000000000000000000000000000000dEaD".parse()?;
     let tx2 = simple_storage.send_eth(receiver, U256::from(1)).await;
     let tx3 = simple_storage.set_value(contract_address, 11).await;
 
@@ -793,7 +790,7 @@ async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> any
     ws_client.send_eth(Address::ZERO, U256::from(1)).await;
 
     let client = alloy_client(rollup.http_addr);
-    let latest = by_number(&client, Latest)
+    let latest = by_number(&client, BlockNumberOrTag::Latest)
         .await?
         .expect("latest block should exist");
     let sealed_height = client.get_block_number().await?;
