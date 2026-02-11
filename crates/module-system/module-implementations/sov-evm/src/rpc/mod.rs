@@ -154,6 +154,7 @@ where
                             Some(block.header.hash()),
                             block.number,
                             pos as u64,
+                            block.header.base_fee_per_gas,
                         ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -210,6 +211,7 @@ where
                                     Some(header.hash),
                                     header.number,
                                     tx_idx as u64,
+                                    header.base_fee_per_gas,
                                 )
                             })
                             .collect(),
@@ -278,7 +280,13 @@ where
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let index = tx_number - block.transactions_start();
-        let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
+        let tx = from_recovered_with_block_context(
+            tx.into(),
+            block.hash(),
+            block.number(),
+            index,
+            block.maybe_partial_header().base_fee_per_gas,
+        );
         Some(tx)
     }
 
