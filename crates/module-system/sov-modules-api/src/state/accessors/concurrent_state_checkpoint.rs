@@ -5,6 +5,23 @@ use sov_state::{Namespace, NativeStorage, SlotKey, SlotValue, StateGetter};
 
 use crate::{Spec, StateCheckpoint, TxChangeSet};
 
+/// How `finalized` RPC reads should be resolved for this checkpoint.
+///
+/// This policy has to be explicit because the finalized slot number alone is
+/// not enough to infer semantics:
+/// - In preferred sequencer mode, finalized intentionally follows the storage head.
+/// - In standard sequencer mode, finalized is the node-reported finalized slot.
+///
+/// Both modes can have the same numeric slot at a given instant, so callers
+/// cannot safely infer the intended behavior from slot equality.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FinalizedSlotPolicy {
+    /// `finalized` should track whatever slot is currently at the storage head.
+    TrackStorageHead,
+    /// `finalized` should use an explicit slot provided by the node.
+    UseExplicit(SlotNumber),
+}
+
 /// An analogue of `StateCheckpoint` that can be safely written while concurrent reads are happening.
 pub struct ConcurrentStateCheckpoint<S: Spec> {
     pub(super) storage: S::Storage,
@@ -12,8 +29,7 @@ pub struct ConcurrentStateCheckpoint<S: Spec> {
     pub(crate) writes: Arc<concread::hashmap::HashMap<(SlotKey, Namespace), Option<SlotValue>>>,
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
-    pub(super) latest_finalized_slot_number: SlotNumber,
-    pub(super) finalized_slot_tracks_storage_head: bool,
+    pub(super) finalized_slot_policy: FinalizedSlotPolicy,
 }
 
 impl<S: Spec> ConcurrentStateCheckpoint<S> {
@@ -29,7 +45,7 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
             state_checkpoint,
             latest_finalized_slot_number,
         );
-        checkpoint.finalized_slot_tracks_storage_head = true;
+        checkpoint.finalized_slot_policy = FinalizedSlotPolicy::TrackStorageHead;
         checkpoint
     }
 
@@ -54,6 +70,7 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
         writer.commit();
 
         let max_available_slot = state_checkpoint.delta.inner.latest_version();
+        let latest_finalized_slot_number = latest_finalized_slot_number.min(max_available_slot);
 
         Self {
             storage: state_checkpoint.delta.inner,
@@ -61,8 +78,7 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
             writes: Arc::new(map),
             visible_slot_num: state_checkpoint.visible_slot_num,
             rollup_height: state_checkpoint.rollup_height,
-            latest_finalized_slot_number: latest_finalized_slot_number.min(max_available_slot),
-            finalized_slot_tracks_storage_head: false,
+            finalized_slot_policy: FinalizedSlotPolicy::UseExplicit(latest_finalized_slot_number),
         }
     }
 
@@ -91,11 +107,14 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
 
     /// Get the latest finalized slot number available to this checkpoint.
     pub fn latest_finalized_slot_number(&self) -> SlotNumber {
-        self.latest_finalized_slot_number
+        match self.finalized_slot_policy {
+            FinalizedSlotPolicy::TrackStorageHead => self.storage.latest_version(),
+            FinalizedSlotPolicy::UseExplicit(slot) => slot,
+        }
     }
 
-    /// Returns true when this checkpoint treats the storage head as finalized.
-    pub fn finalized_slot_tracks_storage_head(&self) -> bool {
-        self.finalized_slot_tracks_storage_head
+    /// Returns how `finalized` should be resolved for reads on this checkpoint.
+    pub fn finalized_slot_policy(&self) -> FinalizedSlotPolicy {
+        self.finalized_slot_policy
     }
 }

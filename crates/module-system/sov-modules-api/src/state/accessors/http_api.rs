@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use super::FinalizedSlotPolicy;
 use crate::state::traits::PinnedCacheAccessor;
 use crate::ConcurrentStateCheckpoint;
 use crate::GasMeteringError;
@@ -898,24 +899,28 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
 
     /// Returns an accessor suitable for `finalized`-tag RPC reads.
     ///
-    /// For checkpoints where finalized intentionally tracks the storage head
-    /// (preferred sequencer semantics), this returns the current-state view.
-    /// Otherwise it returns an archival accessor at the explicit finalized slot
-    /// (standard sequencer semantics).
+    /// The checkpoint carries explicit finalized policy because both preferred
+    /// and standard sequencer modes can temporarily have the same finalized
+    /// slot number while requiring different behavior:
+    /// - preferred mode: finalized should follow the storage head;
+    /// - standard mode: finalized should use the node-reported finalized slot.
+    ///
+    /// We therefore branch on policy, not on slot-number equality.
     pub fn build_finalized_state(&self) -> Result<ApiStateAccessor<S>, ApiStateAccessorError> {
-        if self
+        match self
             .checkpoint_and_read_txn
             .state_checkpoint
-            .finalized_slot_tracks_storage_head()
+            .finalized_slot_policy()
         {
-            return Ok(self.clone_without_local_writes());
+            FinalizedSlotPolicy::TrackStorageHead => Ok(self.clone_without_local_writes()),
+            FinalizedSlotPolicy::UseExplicit(slot_number) => {
+                Self::new_archival_with_true_slot_number(
+                    self.checkpoint_and_read_txn.state_checkpoint.clone(),
+                    self.kernel.clone(),
+                    slot_number,
+                )
+            }
         }
-
-        Self::new_archival_with_true_slot_number(
-            self.checkpoint_and_read_txn.state_checkpoint.clone(),
-            self.kernel.clone(),
-            self.latest_finalized_slot_number(),
-        )
     }
 
     /// Returns the latest finalized slot number available to this accessor.
