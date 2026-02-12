@@ -312,15 +312,14 @@ where
         save_elapsed!(get_head_time SINCE get_head_t);
 
         #[cfg(feature = "native")]
-        let tx_fee_paid = state
-            .try_as_basic_gas_meter()
-            .expect("TxState should have BasicGasMeter")
-            .gas_info()
-            .gas_value;
-
-        #[cfg(feature = "native")]
         let set_accessory_state_time = {
             start_timer!(set_accessory_state);
+            // Places this after timer, so we don't have unmetered parts
+            let tx_fee_paid = state
+                .try_as_basic_gas_meter()
+                .expect("TxState should have BasicGasMeter")
+                .gas_info()
+                .gas_value;
             // Since we just inserted tx above, we need to increment `pending_len`` by 1.
             self.set_accessory_state(head, &pending_tx, pending_len + 1, tx_fee_paid, state)
                 .unwrap_infallible();
