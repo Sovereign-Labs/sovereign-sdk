@@ -1,16 +1,15 @@
+use std::any::Any;
 use std::collections::{BTreeMap, VecDeque};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{
-    BlobSelector, BlobSelectorOutput, ChainState, FatalError, RollupHeight,
-    TransactionAuthenticator,
+    BlobSelector, BlobSelectorOutput, ChainState, FatalError, RollupHeight, SequencingDataHandler, TransactionAuthenticator
 };
 use sov_modules_api::macros::config_value;
-use sov_modules_api::CryptoSpec;
+use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_api::{
     call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
     GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
@@ -166,7 +165,7 @@ where
     /// The nonce buffer task can get out of sync with state when non-preferred batches are executed.
     /// We communicate that via this channel, which is also exposed to test utils.
     forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
-    phantom: PhantomData<Rt>,
+    pub(super) runtime: Rt,
 }
 
 /// RollupBlockExecutorError along with the resources consumed by that transaction.
@@ -256,7 +255,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
             forced_tx_batch_notifier,
-            phantom: PhantomData,
+            runtime: rt,
         }
     }
 
@@ -295,13 +294,14 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub async fn apply_tx_to_in_progress_batch(
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
+        timestamp: Option<HDTimestamp>,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorErrorWithBudget<S>>
     {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
             Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                let accepted_tx = self.process_tx_receipt(&receipt);
+                let accepted_tx = self.process_tx_receipt(&receipt, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
@@ -487,7 +487,16 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         let tx = FullyBakedTxWithMaybeChangeSet::new(tx);
-        match self.apply_tx_to_in_progress_batch(tx).await {
+        let maybe_timestamp = if let Some(data) = tx.tx.sequencing_data.as_ref() {
+           let data = self.runtime.sequencing_data_handler().decode_sequencing_data(data).expect("Invalid sequencing data. This is a bug in the sequencer, please report it.");
+           let any_timestamp = &data as &dyn Any;
+           any_timestamp.downcast_ref::<HDTimestamp>().cloned()
+        } else {
+            None
+        };
+
+        
+        match self.apply_tx_to_in_progress_batch(tx, maybe_timestamp).await {
             Ok((output, _tx_changes)) => {
                 if tx_hash != output.accepted_tx.tx_hash {
                     tracing::error!(
@@ -630,6 +639,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     fn process_tx_receipt(
         &mut self,
         tx_receipt: &TransactionReceipt<S>,
+        timestamp: Option<HDTimestamp>,
     ) -> AcceptedTx<Confirmation<S, Rt>> {
         let tx_number = self.next_tx_number;
         let events = tx_receipt
@@ -644,6 +654,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             .collect::<anyhow::Result<Vec<_>>>()
             .expect("Supposedly infallible conversion failed; this is a bug, please report it");
 
+
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;
         AcceptedTx {
@@ -656,6 +667,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 events,
                 receipt: tx_receipt.receipt.clone().into(),
                 tx_number,
+                timestamp_nanos: timestamp,
             },
         }
     }
@@ -775,7 +787,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 continue;
             }
             for tx_receipt in batch_receipt.tx_receipts {
-                let accepted_tx = self.process_tx_receipt(&tx_receipt);
+                let accepted_tx = self.process_tx_receipt(&tx_receipt, None);
                 forced_txs.push(accepted_tx);
             }
         }

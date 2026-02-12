@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -5,7 +6,8 @@ use std::sync::Arc;
 use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
+use sov_modules_api::capabilities::SequencingDataHandler;
+use sov_modules_api::{HDTimestamp, HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -133,6 +135,7 @@ pub(crate) struct TransactionCache<S: Spec, Rt: Runtime<S>> {
     ledger_db: LedgerDb,
     // A receiver we can clone so that we don't have to acquire the lock to subscribe
     tx_response_receiver: broadcast::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
+    runtime: Rt,
 }
 
 impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
@@ -156,6 +159,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             })),
             ledger_db,
             tx_response_receiver,
+            runtime: Rt::default(),
         }
     }
 
@@ -251,6 +255,12 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         else {
             return Ok(None);
         };
+        let maybe_timestamp = tx.body.as_ref().and_then(|body| body.sequencing_data.as_ref().and_then(|data| {
+            let data = self.runtime.sequencing_data_handler().decode_sequencing_data(data.as_ref()).expect("Invalid sequencing data. This is a bug in the sequencer, please report it.");
+            let any_timestamp = &data as &dyn Any;
+            any_timestamp.downcast_ref::<HDTimestamp>().cloned()
+        }));
+
         Ok(Some(AcceptedTx {
             tx: tx.body.unwrap_or_default(),
             tx_hash,
@@ -260,6 +270,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                     .expect("TxResponse::events cannot be None when query mode is Full"),
                 receipt: tx.receipt.into(),
                 tx_number,
+                timestamp_nanos: maybe_timestamp,
             },
         }))
     }
@@ -375,6 +386,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
     /// Returns a tuple of the next chunk of transactions and an optional subscription to the broadcast channel. The subscription is `None` unless
     /// we'll be caught up after this chunk.
     async fn get_next_chunk(
+        mut rt: Rt,
         starting_from: u64,
         tx_cache: ArcInner<S, Rt>,
         ledger_db: LedgerDb,
@@ -454,7 +466,13 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
             .into_iter()
             .flatten()
             .enumerate()
-            .map(|(idx, tx)| ApiAcceptedTx {
+            .map(|(idx, tx)| {
+                let timestamp_nanos = tx.body.as_ref().and_then(|body| body.sequencing_data.as_ref().and_then(|data| {
+                    let data = rt.sequencing_data_handler().decode_sequencing_data(data.as_ref()).expect("Invalid sequencing data. This is a bug in the sequencer, please report it.");
+                    let any_timestamp = &data as &dyn Any;
+                    any_timestamp.downcast_ref::<HDTimestamp>().cloned()
+                }));
+                ApiAcceptedTx {
                 tx: tx.body.unwrap_or_default(),
                 id: HexString(tx.hash),
                 confirmation: Confirmation {
@@ -463,7 +481,8 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                         .expect("TxResponse::events cannot be None when query mode is Full"),
                     receipt: tx.receipt.into(),
                     tx_number: starting_from + idx as u64,
-                },
+                    timestamp_nanos,
+                }}
             });
         let num_txs_from_cache = txs_from_cache.len();
         let output = txs.chain(txs_from_cache).collect::<Vec<_>>();
@@ -529,6 +548,7 @@ impl<S: Spec, Rt: Runtime<S>> Stream for AcceptedTxStream<S, Rt> {
         // transactions from cache/DB. This call will return a subscription if this chunk brings us up to date.
         let mut pending = self.pending_get_next_chunk.take().unwrap_or_else(|| {
             Box::pin(Self::get_next_chunk(
+                Rt::default(),
                 self.starting_from,
                 self.inner.clone(),
                 self.ledger_db.clone(),
@@ -604,6 +624,7 @@ mod tests {
                     },
                 },
                 tx_number,
+                timestamp_nanos: None,
             },
         }
     }

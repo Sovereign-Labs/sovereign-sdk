@@ -1375,6 +1375,7 @@ mod tests {
                             },
                         },
                         tx_number: 0,
+                        timestamp_nanos: None,
                     },
                 });
             });

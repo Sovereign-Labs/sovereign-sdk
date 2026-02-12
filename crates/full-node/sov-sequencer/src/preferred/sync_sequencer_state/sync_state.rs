@@ -836,7 +836,10 @@ where
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
         let mut baked_tx = baked_tx;
-        baked_tx.set_sequencing_metadata(&get_hd_timestamp_with_maybe_override());
+        let timestamp = get_hd_timestamp_with_maybe_override();
+        // Important: we read the timestamp from the baked tx inside do_new_tx (motivation explained there)
+        // so this must not be moved without updating do_new_tx.
+        baked_tx.set_sequencing_metadata(&timestamp);
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
