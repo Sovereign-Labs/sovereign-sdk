@@ -11,7 +11,6 @@ use revm::Database;
 use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_bank::Amount;
 use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 #[cfg(feature = "native")]
@@ -469,7 +468,7 @@ where
         head: crate::Block,
         pending_transaction: &PendingTransaction,
         pending_tx_len: u64,
-        tx_fee_paid: Amount,
+        tx_fee_paid: sov_bank::Amount,
         state: &mut impl TxState<S>,
     ) -> Result<(), Infallible> {
         assert!(pending_tx_len > 0);
