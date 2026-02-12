@@ -1,5 +1,11 @@
 # @sovereign-sdk/web3
 
+## 0.12.6
+
+### Patch Changes
+
+-   ff01be7: Fix shape of submitted payload to match convention from other authenticators
+
 ## 0.12.5
 
 ### Patch Changes

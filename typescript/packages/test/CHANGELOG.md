@@ -1,5 +1,12 @@
 # @sovereign-sdk/test
 
+## 0.1.20
+
+### Patch Changes
+
+-   Updated dependencies [ff01be7]
+    -   @sovereign-sdk/web3@0.12.6
+
 ## 0.1.19
 
 ### Patch Changes
