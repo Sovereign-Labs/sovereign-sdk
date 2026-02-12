@@ -1,5 +1,6 @@
 use crate::node_discovery::ClusterInfo;
 use crate::node_discovery::NodeInfo;
+use crate::root_hash_check_metric::RootHashCheckMetric;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -147,8 +148,15 @@ impl ClusterRootHashChecker {
                     );
                 }
 
-                // TODO: Add a metric for root hash consistency check.
-                match root_hash_check.check_consistency() {
+                let consistency = root_hash_check.check_consistency();
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(RootHashCheckMetric::from_check(
+                        &root_hash_check,
+                        consistency,
+                    ));
+                });
+
+                match consistency {
                     RootHashConsistency::AllMatch => {
                         tracing::debug!(
                             slot_number = root_hash_check.slot_number,

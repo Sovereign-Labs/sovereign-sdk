@@ -10,6 +10,7 @@ repository.workspace = true
 
 
 [dependencies]
+sov-metrics = { workspace = true, features = ["native"] }
 anyhow = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "derive", "time"], default-features = false }
 time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
