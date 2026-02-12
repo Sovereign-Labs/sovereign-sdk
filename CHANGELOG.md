@@ -4,6 +4,8 @@
 - #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
 # 2026-02-10
 - #2462 EVM: Include `base_fee` in Transaction RPC response.
+# 2026-02-12
+- #2476 EVM: Fix `eth_getBlockByNumber` to return correct the same block as `eth_getBlockByNumnber(latest)` for RPC cross endpoint consistency
 
 # 2026-02-03
 - #2391 EVM: Add RPC compatibility tests for eth_getBlockByNumber and eth_getBlockByHash
