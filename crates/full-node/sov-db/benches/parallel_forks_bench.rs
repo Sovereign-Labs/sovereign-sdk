@@ -171,6 +171,8 @@ fn verify_nomt(stf_storage: &TestNomtStorage, expected_values: &[(u64, MockHash)
 // Generic setup shared by both backends
 // ---------------------------------------------------------------------------
 
+type ForkReaders<S> = Vec<(S, DeltaReader, Vec<(u64, MockHash)>)>;
+
 const SUB_FORKS_COUNT: usize = 7;
 const MAIN_FORK_LEN: u8 = 30;
 
@@ -198,10 +200,7 @@ fn build_fork_map() -> ForkMap {
 fn setup_native(
     path: &std::path::Path,
     fork_map: &ForkMap,
-) -> (
-    NativeSm,
-    Vec<(TestNativeStorage, DeltaReader, Vec<(u64, MockHash)>)>,
-) {
+) -> (NativeSm, ForkReaders<TestNativeStorage>) {
     let mut sm: NativeSm = NativeStorageManager::new(path).unwrap();
     fill_storage_manager(&mut sm, fork_map, materialize_native);
     let readers = prepare_readers(&mut sm, fork_map);
@@ -211,10 +210,7 @@ fn setup_native(
 fn setup_nomt(
     path: &std::path::Path,
     fork_map: &ForkMap,
-) -> (
-    NomtSm,
-    Vec<(TestNomtStorage, DeltaReader, Vec<(u64, MockHash)>)>,
-) {
+) -> (NomtSm, ForkReaders<TestNomtStorage>) {
     let config = RollupDbConfig::default_in_path(path.to_path_buf());
     let mut sm: NomtSm = NomtStorageManager::new(config).unwrap();
     fill_storage_manager(&mut sm, fork_map, materialize_nomt);
@@ -244,10 +240,7 @@ where
     }
 }
 
-fn prepare_readers<Sm>(
-    sm: &mut Sm,
-    fork_map: &ForkMap,
-) -> Vec<(Sm::StfState, DeltaReader, Vec<(u64, MockHash)>)>
+fn prepare_readers<Sm>(sm: &mut Sm, fork_map: &ForkMap) -> ForkReaders<Sm::StfState>
 where
     Sm: HierarchicalStorageManager<MockDaSpec, LedgerState = DeltaReader>,
 {
