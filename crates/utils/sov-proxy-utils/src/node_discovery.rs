@@ -101,7 +101,7 @@ impl NodeInfo {
 #[async_trait]
 pub trait ClusterUpdateNotifier: Send + Sync + 'static {
     /// Called when cluster membership or leadership changes.
-    async fn on_cluster_update(&mut self, cluster_info: &ClusterInfo);
+    async fn on_cluster_update(&mut self, cluster_info: &ClusterInfo) -> anyhow::Result<()>;
 }
 
 /// Handle returned when subscribing to cluster updates.
@@ -286,7 +286,7 @@ impl NodeDiscovery {
 
         // Notify watchers that the cluster was updated.
         if let Some(notifier) = &mut self.notifier {
-            notifier.on_cluster_update(&info).await;
+            notifier.on_cluster_update(&info).await?;
         }
         let _ = self.sender.send(info);
 
