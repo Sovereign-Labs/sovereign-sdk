@@ -149,13 +149,26 @@ where
                     .enumerate()
                     .map(|(pos, idx)| {
                         let tx = self.tx(idx, state)?;
-                        Ok::<_, EthApiError>(from_recovered_with_block_context(
+                        let mut tx_rpc = from_recovered_with_block_context(
                             tx.into(),
                             Some(block.header.hash()),
                             block.number,
                             pos as u64,
                             block.header.base_fee_per_gas,
-                        ))
+                        );
+                        let fee_paid = self.receipt_fee(idx, state);
+                        if let Some((receipt, _)) = self.receipt(idx, state) {
+                            if let Some(actual_effective_gas_price) =
+                                maybe_actual_effective_gas_price(
+                                    block.number,
+                                    receipt.gas_used,
+                                    fee_paid,
+                                )
+                            {
+                                tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
+                            }
+                        }
+                        Ok::<_, EthApiError>(tx_rpc)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Full(txs)
@@ -200,19 +213,35 @@ where
             }
             // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
             MaybeSealedBlock::PendingSynthetic(block) | MaybeSealedBlock::PastSynthetic(block) => {
+                let tx_range_start = block.transactions.start;
                 let (header, txs) = self.get_synthetic_block_contents_slow(block, state)?;
                 let txs = match kind {
                     BlockTransactionsKind::Full => BlockTransactions::Full(
                         txs.into_iter()
                             .enumerate()
-                            .map(|(tx_idx, tx)| {
-                                from_recovered_with_block_context(
+                            .map(|(pos, tx)| {
+                                let mut tx_rpc = from_recovered_with_block_context(
                                     tx.into(),
                                     Some(header.hash),
                                     header.number,
-                                    tx_idx as u64,
+                                    pos as u64,
                                     header.base_fee_per_gas,
-                                )
+                                );
+                                let tx_idx = tx_range_start + pos as u64;
+                                let fee_paid = self.receipt_fee(tx_idx, state);
+                                if let Some((receipt, _)) = self.receipt(tx_idx, state) {
+                                    if let Some(actual_effective_gas_price) =
+                                        maybe_actual_effective_gas_price(
+                                            header.number,
+                                            receipt.gas_used,
+                                            fee_paid,
+                                        )
+                                    {
+                                        tx_rpc.effective_gas_price =
+                                            Some(actual_effective_gas_price);
+                                    }
+                                }
+                                tx_rpc
                             })
                             .collect(),
                     ),
@@ -280,13 +309,21 @@ where
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let index = tx_number - block.transactions_start();
-        let tx = from_recovered_with_block_context(
+        let mut tx = from_recovered_with_block_context(
             tx.into(),
             block.hash(),
             block.number(),
             index,
             block.maybe_partial_header().base_fee_per_gas,
         );
+        let fee_paid = self.receipt_fee(tx_number, state);
+        if let Some((receipt, _)) = self.receipt(tx_number, state) {
+            if let Some(actual_effective_gas_price) =
+                maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
+            {
+                tx.effective_gas_price = Some(actual_effective_gas_price);
+            }
+        }
         Some(tx)
     }
 
@@ -763,6 +800,19 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env
 }
 
+fn maybe_actual_effective_gas_price(
+    block_number: u64,
+    gas_used: u64,
+    fee_paid: Option<Amount>,
+) -> Option<u128> {
+    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+    if block_number <= apply_actual_fee_after_height || gas_used == 0 {
+        return None;
+    }
+
+    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+}
+
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
     block: MaybeSealedBlock,
@@ -824,20 +874,12 @@ pub(crate) fn build_rpc_receipt(
         .inner()
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
 
-    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
-    let use_actual_fee = block.number() > apply_actual_fee_after_height;
-
     // Once activated, prefer the fee paid in the Sovereign gas meter when available.
     // This keeps receipt fee semantics aligned with balance deltas.
-    let effective_gas_price = if use_actual_fee {
-        match (fee_paid, receipt.gas_used) {
-            (Some(fee_paid), gas_used) if gas_used > 0 => fee_paid.0 / u128::from(gas_used),
+    let effective_gas_price =
+        maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
             // Keep compatibility for historical data where metadata may be missing.
-            _ => eip_1559_effective_gas_price,
-        }
-    } else {
-        eip_1559_effective_gas_price
-    };
+            .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),

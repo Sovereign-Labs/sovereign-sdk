@@ -338,6 +338,11 @@ fn test_executing_eth_transactions_several_blocks() {
                     assert_eq!(tx.hash, receipt_from_evm.transaction_hash);
                     assert_eq!(block.nr, receipt_from_evm.block_number.unwrap());
                     assert_eq!(tx_index, receipt_from_evm.transaction_index.unwrap());
+                    assert_eq!(
+                        tx_from_evm.effective_gas_price,
+                        Some(receipt_from_evm.effective_gas_price),
+                        "transaction gas price should match receipt effective gas price",
+                    );
                 }
             }),
         });
