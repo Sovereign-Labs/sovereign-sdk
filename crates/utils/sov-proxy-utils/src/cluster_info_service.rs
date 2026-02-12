@@ -5,8 +5,6 @@ use crate::node_discovery::NodeDiscoveryTask;
 use crate::root_hash_checker::ClusterRootHashChecker;
 use crate::root_hash_checker::ClusterRootHashCheckerTask;
 use anyhow::{Context, Result};
-use sov_metrics::init_metrics_tracker;
-use sov_metrics::MonitoringConfig;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -14,7 +12,6 @@ use std::time::Duration;
 pub struct ClusterInfoService {
     pub node_discovery_task: NodeDiscoveryTask,
     pub root_hash_checker_task: ClusterRootHashCheckerTask,
-    metrics_shutdown_sender: tokio::sync::watch::Sender<()>,
 }
 
 impl ClusterInfoService {
@@ -25,12 +22,6 @@ impl ClusterInfoService {
         path: PathBuf,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
-        let (metrics_shutdown_sender, mut metrics_shutdown_receiver) =
-            tokio::sync::watch::channel(());
-        metrics_shutdown_receiver.mark_unchanged();
-        let monitoring_config = MonitoringConfig::standard();
-        init_metrics_tracker(&monitoring_config, metrics_shutdown_receiver.clone());
-
         let node_discovery =
             NodeDiscovery::connect(connection_string, max_age, path, notifier).await?;
         let root_hash_checker = ClusterRootHashChecker::new(node_discovery.receiver.clone())?;
@@ -41,7 +32,6 @@ impl ClusterInfoService {
         Ok(Self {
             node_discovery_task,
             root_hash_checker_task,
-            metrics_shutdown_sender,
         })
     }
 
@@ -63,14 +53,12 @@ impl ClusterInfoService {
     pub fn shutdown(self) {
         self.root_hash_checker_task.abort();
         self.node_discovery_task.abort();
-        let _ = self.metrics_shutdown_sender.send(());
     }
 
     // Waits for the background cluster-info tasks to finish.
     pub async fn join(self) -> anyhow::Result<()> {
         self.root_hash_checker_task.handle.await?;
         self.node_discovery_task.handle.await??;
-        let _ = self.metrics_shutdown_sender.send(());
         Ok(())
     }
 }
