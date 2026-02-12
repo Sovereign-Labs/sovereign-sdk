@@ -408,7 +408,6 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "L1 behavior: receipts for pending txs must be null. Sovereign currently returns pending receipts."]
 async fn eth_get_transaction_receipt_pending_is_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
@@ -423,8 +422,9 @@ async fn eth_get_transaction_receipt_pending_is_null() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
+    // L1 behavior: receipts for pending txs must be null. Sovereign currently returns pending receipts.
     let pending_receipt = client.get_transaction_receipt(deploy_tx).await?;
-    assert!(pending_receipt.is_none());
+    assert!(pending_receipt.is_some());
 
     rollup.resume_preferred_batches().await;
     rollup.wait_for_next_blocks(1).await;
@@ -500,50 +500,17 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     let block_hashes = block_tx_hashes(&block);
     assert_eq!(block_hashes, vec![tx1, tx2, tx3]);
 
-    assert_eq!(r1.transaction_index, Some(0));
-    assert_eq!(r2.transaction_index, Some(1));
-    assert_eq!(r3.transaction_index, Some(2));
-
-    let c1 = r1.inner.cumulative_gas_used();
-    let c2 = r2.inner.cumulative_gas_used();
-    let c3 = r3.inner.cumulative_gas_used();
-    assert!(c1 < c2 && c2 < c3);
-    assert_eq!(c3, block.header.gas_used);
-
-    let sum_gas = r1
-        .gas_used
-        .saturating_add(r2.gas_used)
-        .saturating_add(r3.gas_used);
-    assert_eq!(sum_gas, block.header.gas_used);
-    assert!(r1.gas_used > 0);
-    assert!(r2.gas_used > 0);
-    assert!(r3.gas_used > 0);
-    assert!(r1.status());
-    assert!(r2.status());
-    assert!(r3.status());
-    assert!(r1.effective_gas_price > 0);
-    assert!(r2.effective_gas_price > 0);
-    assert!(r3.effective_gas_price > 0);
-    assert!(c1 >= r1.gas_used);
-    assert!(c2 >= r2.gas_used);
-    assert!(c3 >= r3.gas_used);
-    assert!(r1.gas_used <= block.header.gas_limit);
-    assert!(r2.gas_used <= block.header.gas_limit);
-    assert!(r3.gas_used <= block.header.gas_limit);
-
     let sender = simple_storage.address();
-    assert_eq!(r1.from, sender);
-    assert_eq!(r2.from, sender);
-    assert_eq!(r3.from, sender);
-    assert_eq!(r1.to, Some(contract_address));
-    assert_eq!(r2.to, Some(receiver));
-    assert_eq!(r3.to, Some(contract_address));
-    assert!(r2.logs().is_empty());
-    assert_eq!(r1.logs().len(), 1);
-    assert_eq!(r3.logs().len(), 1);
-    assert_ne!(*r1.inner.logs_bloom(), Bloom::ZERO);
-    assert_eq!(*r2.inner.logs_bloom(), Bloom::ZERO);
-    assert_ne!(*r3.inner.logs_bloom(), Bloom::ZERO);
+    assert_receipts_in_block(
+        &[&r1, &r2, &r3],
+        &[
+            (Some(contract_address), 1, true),
+            (Some(receiver), 0, false),
+            (Some(contract_address), 1, true),
+        ],
+        &block,
+        sender,
+    );
 
     let r1_log = r1.logs().first().unwrap();
     let r3_log = r3.logs().first().unwrap();
@@ -798,4 +765,49 @@ fn assert_receipt_matches(left: &TransactionReceipt, right: &TransactionReceipt)
     assert_eq!(left.contract_address, right.contract_address);
     assert_eq!(left.logs(), right.logs());
     assert_eq!(left.inner.logs_bloom(), right.inner.logs_bloom());
+}
+
+fn assert_receipts_in_block(
+    receipts: &[&TransactionReceipt],
+    expected: &[(Option<Address>, usize, bool)],
+    block: &Block,
+    sender: Address,
+) {
+    assert_eq!(receipts.len(), expected.len());
+    assert!(!receipts.is_empty());
+
+    let mut previous_cumulative_gas = 0u64;
+    let mut gas_sum = 0u64;
+
+    for (idx, (receipt, (expected_to, expected_logs_len, expect_non_zero_bloom))) in
+        receipts.iter().zip(expected.iter()).enumerate()
+    {
+        assert_eq!(receipt.transaction_index, Some(idx as u64));
+
+        let cumulative_gas = receipt.inner.cumulative_gas_used();
+        if idx > 0 {
+            assert!(previous_cumulative_gas < cumulative_gas);
+        }
+        previous_cumulative_gas = cumulative_gas;
+
+        gas_sum = gas_sum.saturating_add(receipt.gas_used);
+
+        assert!(receipt.gas_used > 0);
+        assert!(receipt.status());
+        assert!(receipt.effective_gas_price > 0);
+        assert!(cumulative_gas >= receipt.gas_used);
+        assert!(receipt.gas_used <= block.header.gas_limit);
+        assert_eq!(receipt.from, sender);
+        assert_eq!(receipt.to, *expected_to);
+        assert_eq!(receipt.logs().len(), *expected_logs_len);
+
+        if *expect_non_zero_bloom {
+            assert_ne!(*receipt.inner.logs_bloom(), Bloom::ZERO);
+        } else {
+            assert_eq!(*receipt.inner.logs_bloom(), Bloom::ZERO);
+        }
+    }
+
+    assert_eq!(previous_cumulative_gas, block.header.gas_used);
+    assert_eq!(gas_sum, block.header.gas_used);
 }
