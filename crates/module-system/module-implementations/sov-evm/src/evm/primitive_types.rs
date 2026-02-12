@@ -9,7 +9,7 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844, TxReceipt, EMPTY_ROOT_HASH};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_primitives::private::alloy_rlp::Encodable;
-use alloy_primitives::{Address, Sealable, Sealed, B256};
+use alloy_primitives::{Address, BlockHash, Sealable, Sealed, B256};
 use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
 use derive_more::{Deref, DerefMut, From};
@@ -242,7 +242,7 @@ impl SyntheticBlockWithoutRootsAndBloom {
     /// Finishes the synthetic block and seals it. Returns the sealed synthetic block and the transactions that were added to the block.
     /// This function is relatively heavy, since it computes the tx and receipts roots.
     ///
-    /// We pass the transactions as an owned type and return it rather than using a referene since some reth helpers requrie constructing types
+    /// We pass the transactions as an owned type and return it rather than using a reference since some reth helpers require constructing types
     /// with Vec<Tx>.
     pub fn finish_and_seal(
         mut self,
@@ -400,12 +400,12 @@ pub enum MaybeSealedBlock {
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
     /// Hash of the block.
-    pub fn hash(&self) -> Option<B256> {
-        match self {
-            Self::Sealed(block) => Some(block.header.hash()),
-            Self::PendingSynthetic(block) => Some(block.hash()),
-            Self::PastSynthetic(block) => Some(block.hash()),
-        }
+    pub fn hash(&self) -> Option<BlockHash> {
+        Some(match self {
+            Self::Sealed(block) => block.header.hash(),
+            Self::PendingSynthetic(block) => block.hash(),
+            Self::PastSynthetic(block) => block.hash(),
+        })
     }
 
     /// The block number.

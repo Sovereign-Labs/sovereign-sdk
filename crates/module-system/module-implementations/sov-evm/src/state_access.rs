@@ -183,6 +183,8 @@ impl<S: Spec> Evm<S> {
     ) -> Option<Block> {
         self.pending_head.get(state).unwrap_infallible()
     }
+
+    // TODO: Move it here
 }
 
 /// Reads on accessory state set in genesis
