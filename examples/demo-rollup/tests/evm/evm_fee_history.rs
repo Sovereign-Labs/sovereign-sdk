@@ -276,32 +276,81 @@ async fn get_block_base_fee(client: &DynProvider, block_num: u64) -> anyhow::Res
 }
 
 /// Shared validation logic for finalized/safe block tags.
-/// Both tags map to the latest sealed block in this rollup.
+/// Both tags map to the latest finalized block visible to the RPC.
 async fn verify_fee_history_for_sealed_tag(
     client: &DynProvider,
     tag: BlockNumberOrTag,
     block_count: u64,
+    expected_finalized_end_block: Option<u64>,
 ) -> anyhow::Result<()> {
-    let fee_history = client.get_fee_history(block_count, tag, &[]).await?;
+    let (fee_history, matched_tag_block_number) = {
+        let mut last_expected_end = 0u64;
+        let mut last_observed_end = 0u64;
+        let mut last_oldest = 0u64;
+        let mut matched = None;
+        for _ in 0..100 {
+            let fee_history = client.get_fee_history(block_count, tag, &[]).await?;
+            let tag_block = client
+                .get_block_by_number(tag)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("{tag:?} block should exist"))?;
+            if fee_history.gas_used_ratio.is_empty() {
+                last_expected_end = tag_block.header.number;
+                last_observed_end = fee_history.oldest_block;
+                last_oldest = fee_history.oldest_block;
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                continue;
+            }
+
+            let end_block = fee_history.oldest_block + fee_history.gas_used_ratio.len() as u64 - 1;
+            last_expected_end = tag_block.header.number;
+            last_observed_end = end_block;
+            last_oldest = fee_history.oldest_block;
+            if end_block == tag_block.header.number {
+                matched = Some((fee_history, tag_block.header.number));
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        }
+        if let Some(matched) = matched {
+            matched
+        } else {
+            anyhow::bail!(
+                "{tag:?} feeHistory end block mismatch: expected {last_expected_end}, got {last_observed_end} (oldest {last_oldest})"
+            )
+        }
+    };
 
     assert_eq!(
         fee_history.base_fee_per_gas.len(),
-        (block_count + 1) as usize
+        fee_history.gas_used_ratio.len() + 1
     );
-    assert_eq!(fee_history.gas_used_ratio.len(), block_count as usize);
+    assert!(
+        fee_history.gas_used_ratio.len() as u64 <= block_count,
+        "gas_used_ratio length should not exceed requested block_count"
+    );
     assert!(fee_history.reward.is_none(), "reward should be omitted");
-
-    let latest = client.get_block_number().await?;
-    let expected_oldest = latest.saturating_sub(block_count - 1);
-    assert_eq!(
-        fee_history.oldest_block, expected_oldest,
-        "{tag:?} range should end at latest sealed block"
+    assert!(
+        !fee_history.gas_used_ratio.is_empty(),
+        "{tag:?} feeHistory should include at least one block"
     );
+
+    let end_block = fee_history.oldest_block + fee_history.gas_used_ratio.len() as u64 - 1;
+    assert_eq!(
+        end_block, matched_tag_block_number,
+        "{tag:?} range should end at latest finalized block"
+    );
+    if let Some(expected_finalized_end_block) = expected_finalized_end_block {
+        assert_eq!(
+            end_block, expected_finalized_end_block,
+            "{tag:?} should end at eth_blockNumber with instant finality"
+        );
+    }
 
     let oldest = fee_history.oldest_block;
-    let end_block = oldest + fee_history.gas_used_ratio.len() as u64;
+    let end_block_exclusive = oldest + fee_history.gas_used_ratio.len() as u64;
     let genesis = load_evm_genesis_config();
-    let base_fees = base_fee_series_from_genesis(client, end_block, &genesis).await?;
+    let base_fees = base_fee_series_from_genesis(client, end_block_exclusive, &genesis).await?;
     let gas_limit = genesis.chain_spec.block_gas_limit;
 
     for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
@@ -321,18 +370,18 @@ async fn verify_fee_history_for_sealed_tag(
         );
     }
 
-    let predicted_base_fee = base_fees[end_block as usize];
+    let predicted_base_fee = base_fees[end_block_exclusive as usize];
     assert_eq!(
         fee_history.base_fee_per_gas[fee_history.base_fee_per_gas.len() - 1],
         predicted_base_fee,
-        "predicted next base fee mismatch for block {end_block}"
+        "predicted next base fee mismatch for block {end_block_exclusive}"
     );
 
-    let latest_base_fee = get_block_base_fee(client, latest).await?;
+    let latest_base_fee = get_block_base_fee(client, end_block).await?;
     assert_eq!(
-        fee_history.base_fee_per_gas[(block_count - 1) as usize],
+        fee_history.base_fee_per_gas[fee_history.gas_used_ratio.len() - 1],
         latest_base_fee,
-        "baseFeePerGas should match latest sealed block header"
+        "baseFeePerGas should match end block header"
     );
 
     assert_gas_ratios_valid(&fee_history.gas_used_ratio);
@@ -624,13 +673,27 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_tag() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(3).await;
-    verify_fee_history_for_sealed_tag(&client, BlockNumberOrTag::Finalized, 2).await
+    let expected_finalized_end_block = client.get_block_number().await?;
+    verify_fee_history_for_sealed_tag(
+        &client,
+        BlockNumberOrTag::Finalized,
+        2,
+        Some(expected_finalized_end_block),
+    )
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_safe_tag() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(3).await;
-    verify_fee_history_for_sealed_tag(&client, BlockNumberOrTag::Safe, 2).await
+    let expected_finalized_end_block = client.get_block_number().await?;
+    verify_fee_history_for_sealed_tag(
+        &client,
+        BlockNumberOrTag::Safe,
+        2,
+        Some(expected_finalized_end_block),
+    )
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1489,7 +1552,7 @@ async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
         .get_fee_history(3, BlockNumberOrTag::Safe, &[25.0, 75.0])
         .await?;
 
-    // In this rollup, finalized and safe both map to latest sealed block
+    // In this rollup, finalized and safe both map to latest finalized block
     assert_eq!(
         finalized.oldest_block, safe.oldest_block,
         "finalized and safe should return same oldest_block"
