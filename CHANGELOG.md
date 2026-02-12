@@ -1,5 +1,7 @@
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+- #2458 **Infra only breaking change**: for EVM rollups only: added new constant `EVM_RECEIPT_ACTUAL_FEE_HEIGHT` that should be set to 0 for new rollups, or some future height for existing rollups.
+
 # 2026-01-29
 - #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
 # 2026-02-10
