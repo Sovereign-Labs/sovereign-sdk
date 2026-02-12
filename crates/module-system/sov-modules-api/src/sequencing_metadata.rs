@@ -6,7 +6,18 @@ use std::{
 use borsh::{BorshDeserialize, BorshSerialize};
 
 /// High definition execution timestamp, in nanoseconds since the unix epoch.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, BorshSerialize, BorshDeserialize, serde::Serialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    BorshSerialize,
+    BorshDeserialize,
+    serde::Serialize,
+)]
 #[serde(transparent)]
 pub struct HDTimestamp(u128);
 

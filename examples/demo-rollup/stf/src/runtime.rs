@@ -207,6 +207,8 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     type Capabilities<'a> = StandardCapabilities<'a, S, &'a mut sov_paymaster::Paymaster<S>>;
+    type SequencingData = sov_modules_api::HDTimestamp;
+
     fn capabilities(&mut self) -> Guard<Self::Capabilities<'_>> {
         Guard::new(StandardCapabilities {
             bank: &mut self.bank,

@@ -1,21 +1,24 @@
 use std::any::Any;
 use std::collections::{BTreeMap, VecDeque};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
+use borsh::BorshDeserialize;
 use sov_modules_api::capabilities::{
-    BlobSelector, BlobSelectorOutput, ChainState, FatalError, RollupHeight, SequencingDataHandler, TransactionAuthenticator
+    BlobSelector, BlobSelectorOutput, ChainState, FatalError, HasCapabilities, RollupHeight,
+    TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_api::{
     call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
     GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
     RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
     StateUpdateInfo, TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
+use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
 use sov_state::pinned_cache::PinnedCache;
@@ -165,7 +168,7 @@ where
     /// The nonce buffer task can get out of sync with state when non-preferred batches are executed.
     /// We communicate that via this channel, which is also exposed to test utils.
     forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
-    pub(super) runtime: Rt,
+    phantom: PhantomData<Rt>,
 }
 
 /// RollupBlockExecutorError along with the resources consumed by that transaction.
@@ -255,7 +258,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
             forced_tx_batch_notifier,
-            runtime: rt,
+            phantom: PhantomData,
         }
     }
 
@@ -487,16 +490,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         let tx = FullyBakedTxWithMaybeChangeSet::new(tx);
-        let maybe_timestamp = if let Some(data) = tx.tx.sequencing_data.as_ref() {
-           let data = self.runtime.sequencing_data_handler().decode_sequencing_data(data).expect("Invalid sequencing data. This is a bug in the sequencer, please report it.");
-           let any_timestamp = &data as &dyn Any;
-           any_timestamp.downcast_ref::<HDTimestamp>().cloned()
-        } else {
-            None
-        };
+        let maybe_timestamp = tx.tx.sequencing_data.as_ref().and_then(|data| {
+            let data = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data).expect(
+                "Invalid sequencing data. This is a bug in the sequencer, please report it.",
+            );
+            (&data as &dyn Any).downcast_ref::<HDTimestamp>().cloned()
+        });
 
-        
-        match self.apply_tx_to_in_progress_batch(tx, maybe_timestamp).await {
+        match self
+            .apply_tx_to_in_progress_batch(tx, maybe_timestamp)
+            .await
+        {
             Ok((output, _tx_changes)) => {
                 if tx_hash != output.accepted_tx.tx_hash {
                     tracing::error!(
@@ -653,7 +657,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             })
             .collect::<anyhow::Result<Vec<_>>>()
             .expect("Supposedly infallible conversion failed; this is a bug, please report it");
-
 
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;

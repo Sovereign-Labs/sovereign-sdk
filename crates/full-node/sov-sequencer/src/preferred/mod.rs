@@ -912,7 +912,7 @@ where
     tx_number: u64,
     /// The timestamp of the transaction.
     #[serde(skip_serializing_if = "Option::is_none")]
-    timestamp_nanos: Option<HDTimestamp>
+    timestamp_nanos: Option<HDTimestamp>,
 }
 
 impl<S, Rt> Confirmation<S, Rt>

@@ -22,13 +22,14 @@ use crate::preferred::{
     PreferredSequencerFetchBatchesToReplayMetrics, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
+use borsh::BorshDeserialize;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
-use sov_modules_api::{Gas, HDTimestamp};
+use sov_modules_api::capabilities::{HasCapabilities, RollupHeight};
 use sov_modules_api::{
     FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
     VersionReader, VisibleSlotNumber,
 };
+use sov_modules_api::{Gas, HDTimestamp};
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::{NativeStorage, Storage};
 use std::any::Any;
@@ -704,16 +705,17 @@ where
         // Extract the timestamp from the sequencing data. We do this even though we could pass the timestamp directly from the place where it is generated
         // for symmetry with the replicas. Replicas have to extract the timestamp from the sequencing data, but they can only do so if the runtime is using the standard
         // sequencing data handler. Doing it the same way here ensures that the replica and the master agree on the timestamp in all cases.
-        let maybe_timestamp = if let Some(data) = baked_tx.sequencing_data.as_ref() {
-            let data = executor.runtime.sequencing_data_handler().decode_sequencing_data(data).expect("Invalid sequencing data. This is a bug in the sequencer, please report it.");
-            let any_timestamp = &data as &dyn Any;
-            any_timestamp.downcast_ref::<HDTimestamp>().cloned()
-        } else {
-            None
-        };
+        let maybe_timestamp = baked_tx.sequencing_data.as_ref().and_then(|data| {
+            let data = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data).expect(
+                "Invalid sequencing data. This is a bug in the sequencer, please report it.",
+            );
+            (&data as &dyn Any).downcast_ref::<HDTimestamp>().cloned()
+        });
 
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx, maybe_timestamp).await;
+        let apply_tx_res = executor
+            .apply_tx_to_in_progress_batch(baked_tx, maybe_timestamp)
+            .await;
 
         let (
             AcceptedTxWithBudgetInfo {
