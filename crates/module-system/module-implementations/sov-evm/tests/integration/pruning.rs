@@ -56,7 +56,7 @@ fn test_pruning() {
                 check_blocks(0, block_number, &evm, state);
 
                 for index in 0..block_number * TX_COUNT_PER_BLOCK {
-                    check_transaction(index, &evm, state);
+                    assert!(check_transaction(index, &evm, state).is_some());
                 }
             }),
         });
@@ -71,7 +71,7 @@ fn test_pruning() {
 
             // Since the genesis block had no transactions, none were removed.
             for index in 0..(block_pruning_threshold - 1) * TX_COUNT_PER_BLOCK {
-                check_transaction(index, &evm, state);
+                assert!(check_transaction(index, &evm, state).is_some());
             }
         }),
     });
@@ -90,11 +90,12 @@ fn test_pruning() {
             for _ in 0..TX_COUNT_PER_BLOCK {
                 assert!(evm.transaction(index, state).is_none());
                 assert!(evm.receipt(index, state).is_none());
+                index += 1;
             }
 
             // Transactions for all the other blocks are still in the state.
-            for _ in TX_COUNT_PER_BLOCK..block_pruning_threshold * TX_COUNT_PER_BLOCK + 1 {
-                check_transaction(index, &evm, state);
+            for _ in TX_COUNT_PER_BLOCK..(block_pruning_threshold - 1) * TX_COUNT_PER_BLOCK + 1 {
+                assert!(check_transaction(index, &evm, state).is_some());
                 index += 1;
             }
 
