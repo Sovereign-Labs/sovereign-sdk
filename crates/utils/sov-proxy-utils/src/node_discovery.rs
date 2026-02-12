@@ -281,13 +281,13 @@ impl NodeDiscovery {
         write_to_file_atomically(&self.path, &content).await?;
         tracing::info!(?self.path, content, "Cluster info file updated");
 
-        self.prev_followers = followers;
-        self.prev_leader_id = leader_id;
-
         // Notify watchers that the cluster was updated.
         if let Some(notifier) = &mut self.notifier {
             notifier.on_cluster_update(&info).await?;
         }
+
+        self.prev_followers = followers;
+        self.prev_leader_id = leader_id;
         let _ = self.sender.send(info);
 
         Ok(())
