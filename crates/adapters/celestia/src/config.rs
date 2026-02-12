@@ -1,7 +1,6 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
 use std::num::NonZero;
 
-use bincode::config;
 use celestia_client::Endpoint;
 use schemars::JsonSchema;
 use std::fmt;
