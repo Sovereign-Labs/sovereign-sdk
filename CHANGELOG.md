@@ -4,8 +4,8 @@
 - #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
 # 2026-02-10
 - #2462 EVM: Include `base_fee` in Transaction RPC response.
-
-- #2463 EVM: Add support for BASEFEE opcode handling.
+- #2463 **Breaking change**: EVM now returns actual non-zero value for BASEFEE opcode.
+  Any EVM rollup that had transactions that relied on this opcode will have consensus breaking change.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
