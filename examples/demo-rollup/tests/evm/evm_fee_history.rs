@@ -361,7 +361,7 @@ async fn verify_fee_history_for_sealed_tag(
 
     let latest_base_fee = get_block_base_fee(client, end_block).await?;
     assert_eq!(
-        fee_history.base_fee_per_gas[(block_count - 1) as usize],
+        fee_history.base_fee_per_gas[fee_history.gas_used_ratio.len() - 1],
         latest_base_fee,
         "baseFeePerGas should match end block header"
     );

@@ -61,6 +61,7 @@ async fn setup_with_contract() -> (
 async fn assert_safe_finalized_consistent(
     client: &dyn Provider,
     sealed_head_number: u64,
+    expected_finalized_number: Option<u64>,
 ) -> anyhow::Result<(alloy_rpc_types_eth::Block, alloy_rpc_types_eth::Block)> {
     let safe_block = client
         .get_block_by_number(Safe)
@@ -83,6 +84,12 @@ async fn assert_safe_finalized_consistent(
         finalized_block.header.number <= sealed_head_number,
         "finalized block should not exceed sealed head"
     );
+    if let Some(expected_finalized_number) = expected_finalized_number {
+        assert_eq!(
+            finalized_block.header.number, expected_finalized_number,
+            "finalized block should match expected finalized height"
+        );
+    }
 
     Ok((safe_block, finalized_block))
 }
@@ -131,7 +138,8 @@ async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
 
     // TC05: safe returns latest finalized rollup height (within the RPC snapshot)
     let (safe_block, finalized_block) =
-        assert_safe_finalized_consistent(&client, sealed_head_number).await?;
+        assert_safe_finalized_consistent(&client, sealed_head_number, Some(sealed_head_number))
+            .await?;
     assert_ne!(
         safe_block.header.hash,
         BlockHash::ZERO,
@@ -165,7 +173,8 @@ async fn test_finalized_block_with_non_instant_finality_config() -> anyhow::Resu
 
     let eth_block_number = client.get_block_number().await?;
     let latest = client.get_block_by_number(Latest).await?.unwrap();
-    let (safe, finalized) = assert_safe_finalized_consistent(&client, latest.header.number).await?;
+    let (safe, finalized) =
+        assert_safe_finalized_consistent(&client, latest.header.number, None).await?;
     let _ = client.get_block_by_number(Pending).await?.unwrap();
 
     // Latest should still equal eth_blockNumber
@@ -312,7 +321,7 @@ async fn test_block_number_consistency() -> anyhow::Result<()> {
 
     let eth_block_number = client.get_block_number().await?;
     let (safe_block, finalized_block) =
-        assert_safe_finalized_consistent(&client, eth_block_number).await?;
+        assert_safe_finalized_consistent(&client, eth_block_number, Some(eth_block_number)).await?;
 
     // safe and finalized should be identical
     assert_eq!(
