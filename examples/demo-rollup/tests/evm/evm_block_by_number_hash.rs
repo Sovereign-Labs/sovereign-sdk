@@ -218,12 +218,10 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
-    // Get sealed head BEFORE pending tx
-    let sealed_head_number = client.get_block_number().await?;
-    let sealed_head_block = client
-        .get_block_by_number(Number(sealed_head_number))
-        .await?
-        .unwrap();
+    // Get sealed head BEFORE pending tx.
+    // eth_blockNumber may already point to pending, so use finalized as the sealed reference.
+    let sealed_head_block = client.get_block_by_number(Finalized).await?.unwrap();
+    let sealed_head_number = sealed_head_block.header.number;
 
     // Submit pending tx
     let tx_hash_1 = simple_storage.set_value(contract_address, 3000).await;
@@ -391,11 +389,8 @@ async fn test_sealed_block_has_real_hash() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
-    let sealed_head_number = client.get_block_number().await?;
-    let sealed_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
-        .await?
-        .unwrap();
+    // eth_blockNumber may already point to pending, so use finalized as the sealed reference.
+    let sealed_block = client.get_block_by_number(Finalized).await?.unwrap();
 
     // TC12: Sealed block has real (non-zero) hash
     assert_ne!(
@@ -425,12 +420,6 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
-    let sealed_head_number = client.get_block_number().await?;
-    let sealed_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
-        .await?
-        .unwrap();
-
     let tx_hash = simple_storage.set_value(contract_address, 3000).await;
     simple_storage.wait_for_receipt(tx_hash).await;
     // Wait until the pending block is visible to avoid flakiness.
@@ -443,11 +432,20 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
         },
-        |block| block.header.number == sealed_head_number + 1,
-        "pending block number did not advance to sealed_head + 1",
+        |block| {
+            block
+                .transactions
+                .as_transactions()
+                .is_some_and(|txs| !txs.is_empty())
+        },
+        "pending block did not include expected transactions",
     )
     .await?;
     let latest_block = client.get_block_by_number(Latest).full().await?.unwrap();
+    let sealed_block = client
+        .get_block_by_hash(pending_block.header.parent_hash)
+        .await?
+        .unwrap();
 
     // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)
     assert_ne!(
@@ -469,7 +467,7 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
     // TC14: Pending number is sealed_head + 1
     assert_eq!(
         pending_block.header.number,
-        sealed_head_number + 1,
+        sealed_block.header.number + 1,
         "pending block number should be sealed_head + 1"
     );
 

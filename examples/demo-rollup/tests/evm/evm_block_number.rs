@@ -36,7 +36,13 @@ async fn block_number_matches_latest_when_pending_exists() -> anyhow::Result<()>
         .map_err(|err| anyhow::anyhow!(err.to_string()))?;
     rollup.pause_preferred_batches().await;
 
-    let sealed_head_number = client.get_block_number().await?;
+    // eth_blockNumber may already point to pending, so use finalized as the sealed reference.
+    let sealed_head_number = client
+        .get_block_by_number(BlockNumberOrTag::Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
     let tx_hash = simple_storage.set_value(contract_address, 1).await;
     simple_storage.wait_for_receipt(tx_hash).await;
 
@@ -58,7 +64,7 @@ async fn block_number_matches_latest_when_pending_exists() -> anyhow::Result<()>
     assert_eq!(
         eth_block_number,
         sealed_head_number + 1,
-        "eth_blockNumber should advance to the pending head when a pending tx exists"
+        "eth_blockNumber should point to the pending head (sealed + 1) when pending tx exists"
     );
 
     Ok(())
