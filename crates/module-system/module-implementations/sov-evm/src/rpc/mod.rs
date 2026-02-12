@@ -382,17 +382,10 @@ where
     }
 
     fn finalized_block_number(&self, state: &mut ApiStateAccessor<S>) -> u64 {
-        let current_end = *self.block_numbers(state).end();
-        match state.build_finalized_state() {
-            Ok(mut archival) => *self.block_numbers(&mut archival).end(),
-            Err(error) => {
-                tracing::debug!(
-                    ?error,
-                    "Failed to build finalized state, using current head"
-                );
-                current_end
-            }
-        }
+        let mut archival = state
+            .build_finalized_state()
+            .expect("Bug: wrong slot number has been passed");
+        *self.block_numbers(&mut archival).end()
     }
 
     fn block_tag_to_pending_or_block(
@@ -442,6 +435,7 @@ where
     }
 
     /// Converts BlockNumberOrTag into number.
+    /// Can panic if passed ApiStateAccessor has been constructed with wrong finalized_slot_height.
     pub fn resolve_block_number(
         &self,
         block: BlockNumberOrTag,
@@ -467,6 +461,7 @@ where
     }
 
     /// Retrieve a block by its id.
+    /// Can panic if passed ApiStateAccessor has been constructed with wrong finalized_slot_height.
     pub fn get_maybe_sealed_block_by_id(
         &self,
         block_id: BlockId,
