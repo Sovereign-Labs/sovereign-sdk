@@ -316,14 +316,14 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    // TC29, TC30: Pending receipt has blockHash and blockNumber set
+    // Pending receipt has blockHash and blockNumber set
     let pending_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
     let pending_block_hash = pending_receipt
         .block_hash
-        .expect("TC29: pending receipt must have blockHash");
+        .expect("pending receipt must have blockHash");
     let pending_block_number = pending_receipt
         .block_number
-        .expect("TC30: pending receipt must have blockNumber");
+        .expect("pending receipt must have blockNumber");
 
     // Store other fields for comparison
     let pending_gas_used = pending_receipt.gas_used;
@@ -336,45 +336,42 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
 
     let sealed_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
 
-    // TC31: blockHash changes from synthetic to real
+    // blockHash changes from synthetic to real
     let sealed_block_hash = sealed_receipt
         .block_hash
         .expect("sealed receipt must have blockHash");
     assert_ne!(
         sealed_block_hash, pending_block_hash,
-        "TC31: blockHash should change after sealing"
+        "blockHash should change after sealing"
     );
 
-    // TC32: blockNumber remains unchanged
+    // blockNumber remains unchanged
     assert_eq!(
         sealed_receipt.block_number,
         Some(pending_block_number),
-        "TC32: blockNumber should not change"
+        "blockNumber should not change"
     );
 
-    // TC33: All other fields remain unchanged
+    // All other fields remain unchanged
     assert_eq!(
         sealed_receipt.gas_used, pending_gas_used,
-        "TC33: gasUsed should not change"
+        "gasUsed should not change"
     );
-    assert_eq!(
-        sealed_receipt.from, pending_from,
-        "TC33: from should not change"
-    );
+    assert_eq!(sealed_receipt.from, pending_from, "from should not change");
     assert_eq!(
         sealed_receipt.inner.status(),
         pending_status,
-        "TC33: status should not change"
+        "status should not change"
     );
 
-    // TC30: After sealing, verify cross-endpoint consistency
+    // After sealing, verify cross-endpoint consistency
     let block = client
         .get_block_by_number(BlockNumberOrTag::Number(pending_block_number))
         .await?
         .expect("sealed block should exist");
     assert_eq!(
         block.header.hash, sealed_block_hash,
-        "TC30: receipt blockHash must match eth_getBlockByNumber"
+        "receipt blockHash must match eth_getBlockByNumber"
     );
 
     let tx = client
@@ -384,12 +381,12 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
     assert_eq!(
         tx.block_hash,
         Some(sealed_block_hash),
-        "TC30: tx blockHash consistency"
+        "tx blockHash consistency"
     );
     assert_eq!(
         tx.block_number,
         Some(pending_block_number),
-        "TC30: tx blockNumber consistency"
+        "tx blockNumber consistency"
     );
 
     // Verify transactionIndex matches position in block
@@ -401,7 +398,7 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
     assert_eq!(
         sealed_receipt.transaction_index,
         Some(tx_position as u64),
-        "TC30: transactionIndex matches position in block"
+        "transactionIndex matches position in block"
     );
 
     Ok(())
@@ -514,7 +511,7 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
 
     let r1_log = r1.logs().first().unwrap();
     let r3_log = r3.logs().first().unwrap();
-    // TC24: logIndex is sequential across block (r1 has 1 log at index 0, r2 has 0, r3 has 1 log at index 1)
+    // logIndex is sequential across block (r1 has 1 log at index 0, r2 has 0, r3 has 1 log at index 1)
     assert_log_matches_receipt(&r1, r1_log, 0);
     assert_log_matches_receipt(&r3, r3_log, 1);
 
@@ -581,13 +578,13 @@ async fn eth_get_transaction_receipt_many_logs() -> anyhow::Result<()> {
 
     let receipt = client.get_transaction_receipt(emit_tx).await?.unwrap();
 
-    // TC40: 15 logs with correct sequential indices
-    assert_eq!(receipt.logs().len(), 15, "TC40: should have 15 logs");
+    // 15 logs with correct sequential indices
+    assert_eq!(receipt.logs().len(), 15, "should have 15 logs");
     for (i, log) in receipt.logs().iter().enumerate() {
         assert_eq!(
             log.log_index,
             Some(i as u64),
-            "TC40: logIndex should be sequential"
+            "logIndex should be sequential"
         );
     }
 
@@ -611,11 +608,11 @@ async fn eth_get_transaction_receipt_zero_address() -> anyhow::Result<()> {
 
     let receipt = client.get_transaction_receipt(tx).await?.unwrap();
 
-    // TC41: to is zero address, not null
+    // to is zero address, not null
     assert_eq!(
         receipt.to,
         Some(Address::ZERO),
-        "TC41: to should be zero address, not null"
+        "to should be zero address, not null"
     );
 
     Ok(())
@@ -692,16 +689,17 @@ async fn assert_receipt_common(
         receipt.inner.status_or_post_state(),
         Eip658Value::Eip658(_)
     ));
-
-    // Note: receipt.effective_gas_price is derived from actual Sovereign gas meter fee,
-    // not the EIP-1559 formula, so it may differ from tx.effective_gas_price().
-    // We verify it's positive (line 719) and consistent with gas accounting.
+    assert_eq!(
+        tx.effective_gas_price,
+        Some(receipt.effective_gas_price),
+        "transaction effective_gas_price should match receipt effective_gas_price",
+    );
 
     let cumulative = receipt.inner.cumulative_gas_used();
     assert_eq!(cumulative, receipt.gas_used);
     assert_eq!(block.header.gas_used, receipt.gas_used);
 
-    // TC42: logsBloom is valid (256 bytes, non-zero for tx with logs).
+    // logsBloom is valid (256 bytes, non-zero for tx with logs).
     // The bloom filter contains log data. Full derivation test is out of scope.
     if !receipt.logs().is_empty() {
         assert_ne!(*receipt.inner.logs_bloom(), Bloom::ZERO);

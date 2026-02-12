@@ -34,7 +34,6 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
         .await
         .ok_or_else(|| anyhow::anyhow!("missing transaction response for {tx_hash:?}"))?;
 
-    // Transaction response uses EIP-1559 formula for effective_gas_price
     assert!(
         tx_response.effective_gas_price.is_some(),
         "eth_getTransactionByHash should include effective_gas_price"
@@ -43,12 +42,14 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
         tx_response.effective_gas_price.unwrap() > 0,
         "effective_gas_price should be positive"
     );
-
-    // Receipt derives effective_gas_price from actual Sovereign gas meter fee.
-    // This may differ from tx_response.effective_gas_price (which uses EIP-1559 formula).
     assert!(
         receipt.effective_gas_price > 0,
         "receipt effective_gas_price should be positive"
+    );
+    assert_eq!(
+        tx_response.effective_gas_price,
+        Some(receipt.effective_gas_price),
+        "eth_getTransactionByHash effective_gas_price should match receipt"
     );
 
     let block_number = receipt
@@ -70,7 +71,6 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
         }
     };
 
-    // Block transaction uses EIP-1559 formula for effective_gas_price
     assert!(
         block_tx.effective_gas_price.is_some(),
         "eth_getBlockByNumber(full) tx should include effective_gas_price"
@@ -79,10 +79,11 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
         block_tx.effective_gas_price.unwrap() > 0,
         "block tx effective_gas_price should be positive"
     );
-
-    // Note: block_tx.effective_gas_price uses EIP-1559 formula, while
-    // receipt.effective_gas_price uses actual Sovereign gas meter fee.
-    // These may differ, so we don't assert equality.
+    assert_eq!(
+        block_tx.effective_gas_price,
+        Some(receipt.effective_gas_price),
+        "eth_getBlockByNumber(full) tx effective_gas_price should match receipt"
+    );
 
     Ok(())
 }
