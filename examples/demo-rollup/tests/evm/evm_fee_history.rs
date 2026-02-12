@@ -281,30 +281,39 @@ async fn verify_fee_history_for_sealed_tag(
     client: &DynProvider,
     tag: BlockNumberOrTag,
     block_count: u64,
+    expected_finalized_end_block: Option<u64>,
 ) -> anyhow::Result<()> {
-    let fee_history = {
+    let (fee_history, matched_tag_block_number) = {
         let mut last_expected_end = 0u64;
         let mut last_observed_end = 0u64;
         let mut last_oldest = 0u64;
         let mut matched = None;
         for _ in 0..100 {
             let fee_history = client.get_fee_history(block_count, tag, &[]).await?;
-            let end_block = fee_history.oldest_block + fee_history.gas_used_ratio.len() as u64 - 1;
             let tag_block = client
                 .get_block_by_number(tag)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("{tag:?} block should exist"))?;
+            if fee_history.gas_used_ratio.is_empty() {
+                last_expected_end = tag_block.header.number;
+                last_observed_end = fee_history.oldest_block;
+                last_oldest = fee_history.oldest_block;
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+                continue;
+            }
+
+            let end_block = fee_history.oldest_block + fee_history.gas_used_ratio.len() as u64 - 1;
             last_expected_end = tag_block.header.number;
             last_observed_end = end_block;
             last_oldest = fee_history.oldest_block;
             if end_block == tag_block.header.number {
-                matched = Some(fee_history);
+                matched = Some((fee_history, tag_block.header.number));
                 break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(25)).await;
         }
-        if let Some(fee_history) = matched {
-            fee_history
+        if let Some(matched) = matched {
+            matched
         } else {
             anyhow::bail!(
                 "{tag:?} feeHistory end block mismatch: expected {last_expected_end}, got {last_observed_end} (oldest {last_oldest})"
@@ -321,13 +330,22 @@ async fn verify_fee_history_for_sealed_tag(
         "gas_used_ratio length should not exceed requested block_count"
     );
     assert!(fee_history.reward.is_none(), "reward should be omitted");
+    assert!(
+        !fee_history.gas_used_ratio.is_empty(),
+        "{tag:?} feeHistory should include at least one block"
+    );
 
     let end_block = fee_history.oldest_block + fee_history.gas_used_ratio.len() as u64 - 1;
-    let expected_oldest = end_block.saturating_sub(fee_history.gas_used_ratio.len() as u64 - 1);
     assert_eq!(
-        fee_history.oldest_block, expected_oldest,
+        end_block, matched_tag_block_number,
         "{tag:?} range should end at latest finalized block"
     );
+    if let Some(expected_finalized_end_block) = expected_finalized_end_block {
+        assert_eq!(
+            end_block, expected_finalized_end_block,
+            "{tag:?} should end at eth_blockNumber with instant finality"
+        );
+    }
 
     let oldest = fee_history.oldest_block;
     let end_block_exclusive = oldest + fee_history.gas_used_ratio.len() as u64;
@@ -655,13 +673,27 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_tag() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(3).await;
-    verify_fee_history_for_sealed_tag(&client, BlockNumberOrTag::Finalized, 2).await
+    let expected_finalized_end_block = client.get_block_number().await?;
+    verify_fee_history_for_sealed_tag(
+        &client,
+        BlockNumberOrTag::Finalized,
+        2,
+        Some(expected_finalized_end_block),
+    )
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_safe_tag() -> anyhow::Result<()> {
     let (_rollup, client) = setup_fee_history_test(3).await;
-    verify_fee_history_for_sealed_tag(&client, BlockNumberOrTag::Safe, 2).await
+    let expected_finalized_end_block = client.get_block_number().await?;
+    verify_fee_history_for_sealed_tag(
+        &client,
+        BlockNumberOrTag::Safe,
+        2,
+        Some(expected_finalized_end_block),
+    )
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
