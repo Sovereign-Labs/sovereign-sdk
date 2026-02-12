@@ -104,3 +104,59 @@ fn test_pruning() {
         }),
     });
 }
+
+#[test]
+fn test_pruning_tolerates_missing_receipt_fees() {
+    // Adjust the global variables to speed up the test.
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_BLOCK_PRUNING_THRESHOLD", "5");
+    let block_pruning_threshold = config_value!("EVM_BLOCK_PRUNING_THRESHOLD");
+
+    let (mut runner, from, to, _) = setup();
+    let value = 1;
+    let mut nonce = 0;
+
+    // Fill enough blocks to start pruning.
+    for _ in 1..block_pruning_threshold {
+        let transfer_tx = create_transfer_tx(nonce, &from, &to, value).tx;
+        nonce += 1;
+
+        runner.execute_batch(BatchTestCase {
+            input: vec![transfer_tx].into(),
+            assert: Box::new(move |_ctx, _state| {}),
+        });
+    }
+
+    // Evict genesis block and then remove one receipt_fees entry to simulate
+    // transactions that were stored before the accessory map was introduced.
+    let evm = Evm::<S>::default();
+    runner.execute_batch(BatchTestCase {
+        input: vec![].into(),
+        assert: Box::new(move |_ctx, state| {
+            check_blocks(1, block_pruning_threshold, &evm, state);
+
+            assert!(evm.transaction(0, state).is_some());
+            assert!(evm.receipt(0, state).is_some());
+            assert!(evm.receipt_fee(0, state).is_some());
+
+            let removed = evm.receipt_fees.remove(&0, state).unwrap_infallible();
+            assert!(removed.is_some());
+            assert!(evm.receipt_fee(0, state).is_none());
+        }),
+    });
+
+    // Prune the first non-empty block. This used to panic because prune_tx
+    // expected receipt_fees to always exist.
+    let evm = Evm::<S>::default();
+    let transfer_tx = create_transfer_tx(nonce, &from, &to, value).tx;
+    runner.execute_batch(BatchTestCase {
+        input: vec![transfer_tx].into(),
+        assert: Box::new(move |_ctx, state| {
+            check_blocks(2, block_pruning_threshold + 1, &evm, state);
+
+            // First non-empty block was pruned.
+            assert!(evm.transaction(0, state).is_none());
+            assert!(evm.receipt(0, state).is_none());
+            assert!(evm.receipt_fee(0, state).is_none());
+        }),
+    });
+}

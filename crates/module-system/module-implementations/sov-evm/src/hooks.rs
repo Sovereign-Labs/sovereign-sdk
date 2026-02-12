@@ -277,7 +277,7 @@ impl<S: Spec> Evm<S> {
             .remove(tx_hash, state)
             .unwrap_infallible()?;
         self.receipts.remove(&idx, state).unwrap_infallible()?;
-        self.receipt_fees.remove(&idx, state).unwrap_infallible()?;
+        self.receipt_fees.delete(&idx, state).unwrap_infallible();
         Some(())
     }
 }
