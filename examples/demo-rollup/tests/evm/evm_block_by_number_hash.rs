@@ -130,7 +130,12 @@ async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
-    let sealed_head_number = client.get_block_number().await?;
+    let sealed_head_number = client
+        .get_block_by_number(Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
 
     // TC01: earliest returns genesis
     let earliest = client.get_block_by_number(Earliest).await?.unwrap();
@@ -521,7 +526,12 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    let sealed_head_number = client.get_block_number().await?;
+    let sealed_head_number = client
+        .get_block_by_number(Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
 
     // Send 3 transactions, capturing synthetic hash after each
     let mut synthetic_hashes = Vec::new();
@@ -689,7 +699,12 @@ async fn test_pending_without_txs_falls_back_to_sealed() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
-    let sealed_head_number = client.get_block_number().await?;
+    let sealed_head_number = client
+        .get_block_by_number(Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
     let sealed_block = client
         .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
         .await?
@@ -1270,7 +1285,7 @@ async fn test_timestamp_monotonicity() -> anyhow::Result<()> {
             block.header.timestamp >= prev_timestamp,
             "block {n} timestamp {} should be >= block {} timestamp {prev_timestamp}",
             block.header.timestamp,
-            n - 1,
+            n.saturating_sub(1),
         );
 
         // TC141: Timestamp should be reasonable (non-zero after genesis)
