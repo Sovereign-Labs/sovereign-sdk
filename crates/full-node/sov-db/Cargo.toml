@@ -44,6 +44,8 @@ serde_with = { workspace = true }
 derivative = { workspace = true }
 digest = { workspace = true }
 sov-db-types = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"], optional = true }
+sha2 = { workspace = true, optional = true }
 strum = { workspace = true, features = ["derive"], optional = true }
 
 [dev-dependencies]
@@ -76,7 +78,7 @@ arbitrary = [
 	"uuid/arbitrary",
 	"sov-db-types/arbitrary"
 ]
-test-utils = ["dep:rand", "strum"]
+test-utils = ["dep:rand", "strum", "dep:sov-mock-da", "dep:sha2"]
 
 [[bench]]
 name = "state_db_single_snapshot"
@@ -94,5 +96,11 @@ required-features = ["test-utils"]
 [[bench]]
 name = "pruner"
 path = "benches/pruner_bench.rs"
+harness = false
+required-features = ["test-utils"]
+
+[[bench]]
+name = "parallel_forks"
+path = "benches/parallel_forks_bench.rs"
 harness = false
 required-features = ["test-utils"]

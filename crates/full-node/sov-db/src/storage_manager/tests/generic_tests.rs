@@ -1,8 +1,6 @@
 #![allow(missing_docs)]
 use std::collections::VecDeque;
 use std::fmt::Debug;
-use std::sync::{Arc, Barrier};
-use std::time::Duration;
 
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
@@ -11,7 +9,6 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use tokio::time::Instant;
 
 use super::data_helpers::{
     get_expected_chain_values, materialize_ledger_changes, verify_ledger_storage,
@@ -432,164 +429,6 @@ where
     let da_header = MockBlockHeader::from_height(to_height);
     storage_manager.finalize(&da_header).unwrap();
     assert!(&storage_manager.is_empty());
-}
-/// Blocks relation is the following:
-/// 1 -> 2 -> ... -> n-1 -> n
-///                  / -> E
-/// A -> B -> ... -> C -> D
-///                  \ -> F
-///                      ...
-///                   ... X
-/// E, H, G, etc. are moved to a separate thread.
-/// They read data from each snapshot all the time,
-/// checking that data from each for is present.
-/// Validation:
-/// First test measures how much time on average it takes
-/// to do such validation single threaded without any concurrent readings
-/// Then it starts X threads for each "fork" to do the same validation.
-/// Each thread does 2 iterations of reading:
-/// just concurrent reading and then concurrent reading while blocks are finalized.
-/// Then test checks
-/// that avg time each thread spent on these is not more than 3 times a single reading.
-pub fn parallel_forks_reading_while_finalization_is_happening<Sm: TestableStorageManager>()
-where
-    <Sm as HierarchicalStorageManager<MockDaSpec>>::StfState: TestableStorage<ChangeSet = <Sm as HierarchicalStorageManager<MockDaSpec>>::StfChangeSet>
-        + 'static
-        + Send,
-    <Sm as HierarchicalStorageManager<MockDaSpec>>::StfChangeSet: Default,
-{
-    // this is X.
-    // So the total value of concurrent threads will be 8,
-    // which is a comfortable choice for many machines.
-    let sub_forks_count = 7;
-    // this is n
-    // Enough blocks will be written on disk during the finalization phase.
-    let main_fork_len = 30;
-    let sub_fork_start = (main_fork_len - 1) as u64;
-    let fork_description = ForkDescription {
-        start_height: 1,
-        length: main_fork_len,
-        child_forks: vec![
-            ForkDescription {
-                start_height: sub_fork_start,
-                length: 1,
-                child_forks: Vec::new(),
-            };
-            sub_forks_count
-        ],
-    };
-
-    let fork_map = ForkMap::from(fork_description);
-    assert_eq!(
-        sub_forks_count + main_fork_len as usize,
-        fork_map.blocks_count()
-    );
-
-    let tmpdir = tempfile::tempdir().unwrap();
-    let mut storage_manager = Sm::new(tmpdir.path());
-
-    // fill storage manager
-    let start = fork_map.get_start().expect("Empty chain-map");
-    let mut next_blocks = VecDeque::new();
-    next_blocks.push_back(start);
-    while let Some(block_hash) = next_blocks.pop_front() {
-        for child in fork_map.get_child_hashes(&block_hash) {
-            next_blocks.push_back(child);
-        }
-        let da_header = fork_map.get_block_header(&block_hash).unwrap();
-        let (stf_storage, _) = storage_manager
-            .create_state_for(da_header)
-            .expect("Creating storage failed");
-        let stf_changes = stf_storage.materialize_from_block(da_header);
-        let ledger_changes = materialize_ledger_changes(da_header);
-        storage_manager
-            .save_change_set(da_header, stf_changes, ledger_changes)
-            .expect("Saving change set has failed");
-    }
-
-    let mut prepare_for_reading = |fork_id: u64| {
-        let block_hash = get_block_hash(fork_id, main_fork_len as u64);
-        let block_header = fork_map.get_block_header(&block_hash).unwrap();
-        let this_chain = fork_map.get_chain_up_to(block_header.clone());
-        let expected_values = get_expected_chain_values(&this_chain[..this_chain.len()]);
-        let (stf_storage, ledger_storage) = storage_manager
-            .create_state_after(block_header)
-            .expect("Creating storage failed");
-
-        (stf_storage, ledger_storage, expected_values)
-    };
-
-    let reading_count = 1000;
-
-    let record_reading =
-        move |stf: &Sm::StfState, ledger: &DeltaReader, expected: &[(u64, MockHash)]| -> Duration {
-            let mut spent_reading = Duration::default();
-            for _ in 0..reading_count {
-                let start_validation = Instant::now();
-                Sm::verify_stf_storage(stf, expected);
-                verify_ledger_storage(ledger, expected);
-                spent_reading += start_validation.elapsed();
-            }
-            spent_reading / reading_count
-        };
-
-    // Record how much it takes to do a round of reading from the main fork without any concurrency.
-    let average_reading_time_single_access = {
-        let (stf_storage, ledger_storage, expected_values) = prepare_for_reading(1);
-        record_reading(&stf_storage, &ledger_storage, &expected_values[..])
-    };
-
-    let avg_reading_time_threshold = average_reading_time_single_access.checked_mul(3).unwrap();
-
-    let total_forks = sub_forks_count + 1; // main fork
-    let barrier = Arc::new(Barrier::new(total_forks));
-
-    let mut handles = vec![];
-    // Starting fork readers
-    for fork_id in 1..total_forks {
-        let (stf_storage, ledger_storage, expected_values) = prepare_for_reading(fork_id as u64);
-
-        let barrier = Arc::clone(&barrier);
-
-        // Each fork counts how many reads it completed.
-        handles.push(std::thread::spawn(move || -> (Duration, Duration) {
-            // First, we record how much time each thread took reading concurrently;
-            let spent_reading_concurrently =
-                record_reading(&stf_storage, &ledger_storage, &expected_values[..]);
-
-            // Then we wait for finalization to start
-            barrier.wait();
-
-            let spent_reading_during_finalization =
-                record_reading(&stf_storage, &ledger_storage, &expected_values[..]);
-            (
-                spent_reading_concurrently,
-                spent_reading_during_finalization,
-            )
-        }));
-    }
-
-    barrier.wait();
-    let mut finalization_duration = Duration::default();
-    for height in 1..main_fork_len {
-        let start = Instant::now();
-        let block_hash = get_block_hash(1, height as u64);
-        let block_header = fork_map.get_block_header(&block_hash).unwrap();
-        storage_manager.finalize(block_header).unwrap();
-        finalization_duration += start.elapsed();
-    }
-    for handle in handles {
-        let (spent_reading_concurrently, spent_reading_finalization) =
-            handle.join().expect("Thread panicked");
-        assert!(
-            spent_reading_concurrently < avg_reading_time_threshold,
-            "Concurrent reading {spent_reading_concurrently:?} is worse than max allowed {avg_reading_time_threshold:?}"
-        );
-        assert!(
-            spent_reading_finalization < avg_reading_time_threshold,
-            "Concurrent reading during finalization {spent_reading_finalization:?} is worse than max allowed {avg_reading_time_threshold:?}"
-        );
-    }
 }
 
 /// At each height there happens x forks.
