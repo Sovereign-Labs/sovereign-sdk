@@ -61,15 +61,16 @@ impl ClusterInfoService {
 
     /// Stops the background cluster-info task.
     pub fn shutdown(self) {
-        self.metrics_shutdown_sender.send(()).unwrap();
         self.root_hash_checker_task.abort();
         self.node_discovery_task.abort();
+        let _ = self.metrics_shutdown_sender.send(());
     }
 
     // Waits for the background cluster-info tasks to finish.
     pub async fn join(self) -> anyhow::Result<()> {
         self.root_hash_checker_task.handle.await?;
         self.node_discovery_task.handle.await??;
+        let _ = self.metrics_shutdown_sender.send(());
         Ok(())
     }
 }
