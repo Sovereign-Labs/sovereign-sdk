@@ -1,6 +1,8 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
 use std::num::NonZero;
 
+use bincode::config;
+use celestia_client::Endpoint;
 use schemars::JsonSchema;
 use std::fmt;
 
@@ -186,10 +188,11 @@ impl CelestiaConfig {
         }
         // Submission section.
         if let Some(grpc_url) = &self.grpc_url {
-            builder = builder.grpc_url(grpc_url);
+            let mut endpoint = Endpoint::new(grpc_url.clone());
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
-                builder = builder.grpc_metadata("x-token", grpc_auth_token);
+                endpoint = endpoint.metadata("x-token", grpc_auth_token);
             }
+            builder = builder.grpc_endpoint(endpoint);
             if let Some(signer_key_hex) = &self.signer_private_key {
                 builder = builder.private_key_hex(signer_key_hex);
             }
