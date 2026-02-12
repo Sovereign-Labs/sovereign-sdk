@@ -135,9 +135,10 @@ where
         SequencerStateUpdatorError,
     > {
         let (resp, recv) = oneshot::channel();
+        let baked_tx = baked_tx.clone();
         self.send(Message::AcceptTx {
             resp,
-            baked_tx: baked_tx.clone(),
+            baked_tx,
             tx_hash,
             original_tx_queue_id,
             ip_and_credential,

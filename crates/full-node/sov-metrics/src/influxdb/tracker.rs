@@ -4,8 +4,6 @@ use std::fmt::Debug;
 use std::io::Write;
 use std::sync::OnceLock;
 
-use sov_rollup_interface::common::VisibleSlotNumber;
-
 use crate::influxdb::KnownMetric;
 use crate::influxdb::{
     publisher, safe_telegraf_string, Metric, SubmittableMetric, SubmittableMetricKind,
@@ -234,7 +232,7 @@ pub struct RunnerProcessStfChangesMetrics {
     pub sending_stf_info_time_to_prover_time: std::time::Duration,
 }
 
-/// Simplified version of [`sov_rollup_interface::stf::TxEffect`]
+/// Simplified version of a transaction effect.
 #[derive(Debug)]
 pub enum TransactionEffect {
     /// The transaction was skipped.
@@ -245,30 +243,17 @@ pub enum TransactionEffect {
     Successful,
 }
 
-impl<T: sov_rollup_interface::stf::TxReceiptContents> From<&sov_rollup_interface::stf::TxEffect<T>>
-    for TransactionEffect
-{
-    fn from(value: &sov_rollup_interface::stf::TxEffect<T>) -> Self {
-        match value {
-            sov_rollup_interface::stf::TxEffect::Skipped(_) => TransactionEffect::Skipped,
-            sov_rollup_interface::stf::TxEffect::Reverted(_) => TransactionEffect::Reverted,
-            sov_rollup_interface::stf::TxEffect::Successful(_) => TransactionEffect::Successful,
-        }
-    }
-}
-
 /// Collection of metrics related to transaction processing.
 #[derive(Debug)]
 pub struct TransactionProcessingMetrics {
     /// Time it took a transaction to be executed
     pub execution_time: std::time::Duration,
-    /// The effect of the transaction,
-    /// simplified version of [`sov_rollup_interface::stf::TxEffect`]
+    /// The effect of the transaction.
     pub tx_effect: TransactionEffect,
-    /// [`sov_rollup_interface::stf::ExecutionContext`]
-    pub execution_context: sov_rollup_interface::stf::ExecutionContext,
+    /// Execution context.
+    pub execution_context: &'static str,
     /// Height at which transaction is being executed
-    pub visible_slot_number: VisibleSlotNumber,
+    pub visible_slot_number: u64,
     /// Human-readable address of sequencer.
     pub sequencer_address: String,
     /// Call message
@@ -291,10 +276,10 @@ pub struct SlotProcessingMetrics {
     pub da_height: u64,
 
     /// Visible slot number at given slot.
-    pub visible_slot_number: VisibleSlotNumber,
+    pub visible_slot_number: u64,
 
-    /// [`sov_rollup_interface::stf::ExecutionContext`]
-    pub execution_context: sov_rollup_interface::stf::ExecutionContext,
+    /// Execution context.
+    pub execution_context: &'static str,
 
     /// Gas used during slot processing, expressed in gas units
     pub gas_used: Vec<u64>,
@@ -313,10 +298,10 @@ pub struct UserSpaceSlotProcessingMetrics {
     pub end_block_hook_time: std::time::Duration,
 
     /// The visible slot number associated with these metrics.
-    pub visible_slot_number: VisibleSlotNumber,
+    pub visible_slot_number: u64,
 
-    /// [`sov_rollup_interface::stf::ExecutionContext`]
-    pub execution_context: sov_rollup_interface::stf::ExecutionContext,
+    /// Execution context.
+    pub execution_context: &'static str,
 
     /// Gas used during slot processing, expressed in gas units
     pub gas_used: Vec<u64>,
@@ -412,7 +397,7 @@ impl Metric for TransactionProcessingMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},status={:?},context={:?},call_message={},sequencer={} value={},rollup_height={}",
+            "{},status={:?},context={},call_message={},sequencer={} value={},rollup_height={}",
             self.measurement_name(),
             // tags
             self.tx_effect,
@@ -449,7 +434,7 @@ impl Metric for SlotProcessingMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},context={:?} blobs_selection={},finalization={},visible_slot_number={},da_height={}",
+            "{},context={} blobs_selection={},finalization={},visible_slot_number={},da_height={}",
             self.measurement_name(),
             // Tags
             self.execution_context,
@@ -478,7 +463,7 @@ impl Metric for UserSpaceSlotProcessingMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},context={:?} begin_hooks={},blobs_processing={},end_hooks={},rollup_height={}",
+            "{},context={} begin_hooks={},blobs_processing={},end_hooks={},rollup_height={}",
             self.measurement_name(),
             // Tags
             self.execution_context,
@@ -593,6 +578,8 @@ pub struct HttpMetrics {
     /// Time it took for the inner handler to finish processing.
     /// Does not include request reading and response writing.
     pub handler_processing_time: std::time::Duration,
+    /// Whether this request came through a WebSocket connection.
+    pub is_ws: bool,
 }
 
 impl Metric for HttpMetrics {
@@ -603,12 +590,13 @@ impl Metric for HttpMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},req_method={},resp_status={},path={} processing_time_us={},response_body_bytes={}",
+            "{},req_method={},resp_status={},path={},is_ws={} processing_time_us={},response_body_bytes={}",
             self.measurement_name(),
             // Tags
             self.request_method,
             self.response_status.as_u16(),
             self.request_uri.path(),
+            self.is_ws,
             // Fields
             self.handler_processing_time.as_micros(),
             self.response_body_size,

@@ -132,6 +132,15 @@ impl ExecutionContext {
             Self::Node => false,
         }
     }
+
+    /// Converts `ExecutionContext` to `&' static str`
+    pub fn str(&self) -> &'static str {
+        match self {
+            ExecutionContext::SequencerWarmUp => ExecutionContext::SEQUENCER_WARM_UP,
+            ExecutionContext::Sequencer => ExecutionContext::SEQUENCER,
+            ExecutionContext::Node => ExecutionContext::NODE,
+        }
+    }
 }
 
 /// The error returned when the proof that was processed is invalid.

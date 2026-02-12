@@ -9,6 +9,7 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+CHAIN_HASH_OVERRIDES = []
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
@@ -136,6 +137,7 @@ ELASTICITY_MULTIPLIER = 2
 
 # --- Hyperlane constants ---
 HYPERLANE_BRIDGE_DOMAIN = 5555
+HYPERLANE_METER_DELIVERY_COUNTER_AFTER_HEIGHT = 0
 # --- End Hyperlane constants ---
 
 CONST_TOKEN_ID = { const = { bech32 = "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm", type = "MyTokenId" } }

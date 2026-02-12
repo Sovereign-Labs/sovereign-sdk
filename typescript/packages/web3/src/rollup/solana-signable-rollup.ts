@@ -125,7 +125,8 @@ export class SolanaSignableRollup<RuntimeCall> {
     return await this.inner.http.post<SovereignClient.Sequencer.TxCreateResponse>(
       this.solanaEndpoint,
       {
-        body: Base64.fromUint8Array(serializedMessage),
+        // Match AcceptTx shape used by standard sequencer endpoints.
+        body: { body: Base64.fromUint8Array(serializedMessage) },
       },
     );
   }

@@ -157,6 +157,27 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
     ) -> Result<<Da::Spec as DaSpec>::BlockHeader, Da::Error> {
         self.da_service.get_head_block_header().await
     }
+
+    /// Inserts a block header into the recent headers cache.
+    ///
+    /// This allows external callers (e.g., sync_fetcher) to populate the cache
+    /// with headers they've already fetched, avoiding redundant network calls
+    /// when `get_block_header_at` is later called for the same height.
+    ///
+    /// The header is only inserted if it's not already present in the cache.
+    /// If the cache is full, the oldest entry is evicted.
+    pub fn insert_header(&self, header: <Da::Spec as DaSpec>::BlockHeader) {
+        self.headers_cache.insert_new_header(header);
+    }
+
+    /// Removes all cached headers strictly below the given height.
+    ///
+    /// Called after a block is fully processed to evict headers that will never
+    /// be looked up again. This prevents stale sync-height entries from
+    /// accumulating and blocking the background poller from inserting.
+    pub fn remove_headers_below(&self, height: u64) {
+        self.headers_cache.remove_headers_below(height);
+    }
 }
 
 #[derive(Debug)]
@@ -188,6 +209,40 @@ impl<Da: DaService> FinalizedDaHeadersCacheContainer<Da> {
             }
             tracing::trace!(finalized_height = %height, "Updated cached recent headers");
         }
+    }
+
+    /// Inserts a header from the background poller, but only if the height gap
+    /// between this header and the lowest cached entry doesn't exceed the cache size.
+    /// This prevents tip-height entries from evicting sync-height entries during
+    /// initial sync, where `pop_first()` would always target the lower sync entries.
+    fn try_insert_background_header(&self, header: <Da::Spec as DaSpec>::BlockHeader) {
+        let height = header.height();
+        let max_size = self.max_size.load(Ordering::Relaxed);
+        let mut cache = self.recent_headers.write().expect(RECENT_HEADERS_POISONED);
+        if let Some((&lowest_height, _)) = cache.first_key_value() {
+            if height.saturating_sub(lowest_height) > max_size as u64 {
+                tracing::trace!(
+                    height,
+                    lowest_height,
+                    max_size,
+                    "Skipping background header insertion: height gap exceeds cache size"
+                );
+                return;
+            }
+        }
+        if let std::collections::btree_map::Entry::Vacant(e) = cache.entry(height) {
+            e.insert(header);
+            if cache.len() > max_size {
+                cache.pop_first();
+            }
+        }
+    }
+
+    fn remove_headers_below(&self, height: u64) {
+        let mut cache = self.recent_headers.write().expect(RECENT_HEADERS_POISONED);
+        // `split_off` returns everything >= height, leaving everything < height behind.
+        // We keep the right half and drop the left.
+        *cache = cache.split_off(&height);
     }
 
     fn get_block_header_at(&self, height: u64) -> Option<<Da::Spec as DaSpec>::BlockHeader> {
@@ -229,7 +284,7 @@ async fn background_header_fetch_task<Da: DaService>(
                             tracing::info!("All DA header receivers dropped, shutting down");
                             break;
                         }
-                        recent_headers.insert_new_header(finalized_header);
+                        recent_headers.try_insert_background_header(finalized_header);
                     }
                     FutureOrShutdownOutput::Output(Err(error)) => {
                         // DaService should do all retries, so we just stop and fail.
@@ -319,7 +374,7 @@ mod tests {
         let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
 
         // Produce more blocks than MAX_RECENT_HEADERS
-        for _ in 0..40 {
+        for _ in 0..110 {
             da_service.send_transaction(&[1; 32]).await.await??;
         }
 
@@ -404,6 +459,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_externally_inserted_header_is_cached() -> anyhow::Result<()> {
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+
+        for _ in 0..5 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        let (sender, receiver) = tokio::sync::watch::channel(());
+        let da_service = Arc::new(da_service);
+        let cache = DaServiceWithCachedFinalizedHeaders::new(
+            da_service.clone(),
+            receiver,
+            Duration::from_millis(100),
+        )
+        .await?;
+
+        // Get a header from the DA service directly
+        let header = da_service.get_block_header_at(3).await?;
+
+        // Verify the header is NOT in the internal cache before insertion
+        assert!(
+            cache.headers_cache.get_block_header_at(3).is_none(),
+            "Header should not be in cache before insert_header is called"
+        );
+
+        // Insert it into the cache
+        cache.insert_header(header.clone());
+
+        // Verify the header IS in the internal cache after insertion
+        let cached = cache
+            .headers_cache
+            .get_block_header_at(3)
+            .expect("Header should be in cache after insert_header");
+        assert_eq!(cached.height(), 3);
+        assert_eq!(cached.hash(), header.hash());
+
+        sender.send(())?;
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_task_failure_is_detected() -> anyhow::Result<()> {
         let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
 
@@ -432,6 +528,49 @@ mod tests {
         );
 
         let _ = sender.send(());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_background_header_skipped_when_gap_exceeds_cache_size() -> anyhow::Result<()> {
+        let container = FinalizedDaHeadersCacheContainer::<StorableMockDaService>::new();
+        // Override max_size to a small value for testing
+        container.max_size.store(5, Ordering::Relaxed);
+
+        let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
+        // Produce blocks so we have headers at heights 0..20
+        for _ in 0..20 {
+            da_service.send_transaction(&[1; 32]).await.await??;
+        }
+
+        // Insert a sync-height header at height 3
+        let sync_header = da_service.get_block_header_at(3).await?;
+        container.insert_new_header(sync_header);
+
+        // Try to insert a background header far away (height 15, gap = 12 > max_size 5)
+        let far_header = da_service.get_block_header_at(15).await?;
+        container.try_insert_background_header(far_header);
+
+        // The far header should NOT have been inserted
+        assert!(
+            container.get_block_header_at(15).is_none(),
+            "Background header with gap exceeding cache size should not be inserted"
+        );
+        // The sync header should still be there
+        assert!(
+            container.get_block_header_at(3).is_some(),
+            "Sync header should be preserved"
+        );
+
+        // Insert a background header within range (height 7, gap = 4 <= max_size 5)
+        let near_header = da_service.get_block_header_at(7).await?;
+        container.try_insert_background_header(near_header);
+
+        assert!(
+            container.get_block_header_at(7).is_some(),
+            "Background header within range should be inserted"
+        );
+
         Ok(())
     }
 }

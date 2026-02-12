@@ -54,7 +54,7 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             key_and_address.clone(),
             receiver_addr,
-            &test_rollup,
+            test_rollup.api_client().clone(),
         )
         .await;
 
@@ -100,7 +100,7 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             key_and_address.clone(),
             receiver_addr,
-            &test_rollup,
+            test_rollup.api_client().clone(),
         )
         .await;
 
@@ -154,7 +154,7 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             key_and_address.clone(),
             receiver_addr,
-            &test_rollup,
+            test_rollup.api_client().clone(),
         )
         .await;
 
@@ -212,7 +212,7 @@ async fn test_replica_start_stop() {
             nb_of_txs,
             key_and_address.clone(),
             receiver_addr,
-            &test_rollup,
+            test_rollup.api_client().clone(),
         )
         .await;
 
@@ -294,7 +294,7 @@ async fn test_replica_start_stop_many_times() {
             nb_of_txs,
             key_and_address.clone(),
             receiver_addr,
-            &test_rollup,
+            test_rollup.api_client().clone(),
         )
         .await;
 

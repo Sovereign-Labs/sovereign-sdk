@@ -1,9 +1,10 @@
 //! Tasks responsible for actual metrics submission.
 
+use std::future::Future;
 use std::net::SocketAddr;
 
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::io::AsyncWriteExt;
+use tokio::sync::watch;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
 use crate::influxdb::tracker::DroppedMetrics;
@@ -11,6 +12,25 @@ use crate::influxdb::SubmittableMetric;
 use crate::{Metric, TelegrafSocketConfig};
 
 const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
+
+enum FutureOrShutdownOutput<O> {
+    Output(O),
+    Shutdown,
+}
+
+async fn future_or_shutdown<T>(
+    inner: T,
+    shutdown: &watch::Receiver<()>,
+) -> FutureOrShutdownOutput<T::Output>
+where
+    T: Future,
+{
+    let mut shutdown = shutdown.clone();
+    tokio::select! {
+        res = inner => FutureOrShutdownOutput::Output(res),
+        _ = shutdown.changed() => FutureOrShutdownOutput::Shutdown,
+    }
+}
 
 enum PublisherTransport {
     Tcp(tokio::net::TcpStream),

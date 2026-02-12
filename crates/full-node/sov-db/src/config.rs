@@ -28,6 +28,9 @@ pub struct RollupDbConfig {
     /// Leaf cache size for user state.
     /// More details at [`Options::leaf_cache_size`]
     pub user_leaf_cache_size: Option<usize>,
+    /// Page cache upper levels for user state.
+    /// More details at [`Options::page_cache_upper_levels`]
+    pub user_page_cache_upper_levels: Option<usize>,
 
     // Kernel state configuration
     /// Number of concurrent commit workers for the kernel state.
@@ -45,6 +48,9 @@ pub struct RollupDbConfig {
     /// Leaf cache size for kernel state.
     /// More details at [`Options::leaf_cache_size`]
     pub kernel_leaf_cache_size: Option<usize>,
+    /// Page cache upper levels for kernel state.
+    /// More details at [`Options::page_cache_upper_levels`]
+    pub kernel_page_cache_upper_levels: Option<usize>,
 
     /// Pruner
     /// Defines how often pruner is going to be started.
@@ -72,11 +78,13 @@ impl RollupDbConfig {
             user_preallocate_ht: Some(false),
             user_page_cache_size: Some(16),
             user_leaf_cache_size: Some(16),
+            user_page_cache_upper_levels: None,
             kernel_commit_concurrency: Some(2),
             kernel_hashtable_buckets: None,
             kernel_preallocate_ht: Some(false),
             kernel_page_cache_size: Some(16),
             kernel_leaf_cache_size: Some(16),
+            kernel_page_cache_upper_levels: None,
             pruner_block_interval: None,
             pruner_versions_to_keep: Some(20),
             pruner_max_batch_size: None,
@@ -114,6 +122,9 @@ impl RollupDbConfig {
         if let Some(leaf_cache_size) = self.kernel_leaf_cache_size {
             opts.leaf_cache_size(leaf_cache_size);
         }
+        if let Some(page_cache_upper_levels) = self.kernel_page_cache_upper_levels {
+            opts.page_cache_upper_levels(page_cache_upper_levels);
+        }
 
         opts.path(self.path.join("kernel_nomt_db"));
 
@@ -141,6 +152,9 @@ impl RollupDbConfig {
         }
         if let Some(leaf_cache_size) = self.user_leaf_cache_size {
             opts.leaf_cache_size(leaf_cache_size);
+        }
+        if let Some(page_cache_upper_levels) = self.user_page_cache_upper_levels {
+            opts.page_cache_upper_levels(page_cache_upper_levels);
         }
 
         opts.path(self.path.join("user_nomt_db"));

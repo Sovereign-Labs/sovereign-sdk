@@ -635,18 +635,6 @@
               "$ref": "#/definitions/RecoveryStrategy"
             }
           ]
-        },
-        "timing_oracle": {
-          "description": "Configuration for the timing oracle.",
-          "default": null,
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TimingOracleConfig"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "additionalProperties": false
@@ -917,6 +905,15 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "kernel_page_cache_upper_levels": {
+          "description": "Page cache upper levels for kernel state. More details at [`Options::page_cache_upper_levels`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "kernel_preallocate_ht": {
           "description": "Sets whether to preallocate the hashtable file for kernel db. More details at [`Options::preallocate_ht`]",
           "type": [
@@ -993,6 +990,15 @@
         },
         "user_page_cache_size": {
           "description": "Page cache size for user state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_page_cache_upper_levels": {
+          "description": "Page cache upper levels for user state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
@@ -1286,41 +1292,6 @@
             {
               "$ref": "#/definitions/Transport"
             }
-          ]
-        }
-      }
-    },
-    "TimingOracleConfig": {
-      "type": "object",
-      "required": [
-        "interval_millis",
-        "max_fee",
-        "priority_fee_percentage"
-      ],
-      "properties": {
-        "interval_millis": {
-          "description": "The interval in milliseconds at which the timestamp oracle update tx is submitted.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "max_fee": {
-          "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "priority_fee_percentage": {
-          "description": "The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.",
-          "type": "integer",
-          "format": "uint8",
-          "minimum": 0.0
-        },
-        "private_key_hex": {
-          "description": "The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.",
-          "type": [
-            "string",
-            "null"
           ]
         }
       }

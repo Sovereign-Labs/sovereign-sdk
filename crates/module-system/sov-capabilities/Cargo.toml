@@ -23,6 +23,7 @@ sov-sequencer-registry = { workspace = true }
 sov-operator-incentives = { workspace = true }
 sov-prover-incentives = { workspace = true }
 sov-attester-incentives = { workspace = true }
+sov-chain-state = { workspace = true }
 sov-state = { workspace = true }
 
 [lints]
@@ -41,5 +42,6 @@ native = [
 	"sov-sequencer-registry/native",
 	"sov-rollup-interface/native",
 	"sov-paymaster/native",
-	"sov-operator-incentives/native"
+	"sov-operator-incentives/native",
+	"sov-chain-state/native"
 ]
