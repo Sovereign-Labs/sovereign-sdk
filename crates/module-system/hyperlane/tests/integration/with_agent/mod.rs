@@ -285,6 +285,20 @@ async fn test_process_message_from_evm_counterparty() {
     // finalize the block with a dispatched message
     hyperlane.mine_next_block_on_counterparty().await;
 
+    tracing::info!("Waiting for relayer to process inbound message...");
+    if let Err(err) = wait_for_messages_processed(
+        hyperlane.metrics(),
+        "ethtest",
+        "sovtest",
+        1,
+        RelayerWaitConfig::default(),
+    )
+    .await
+    {
+        hyperlane.print_stdout().await;
+        panic!("Relayer metrics check failed for inbound message: {err}");
+    }
+
     // look for `process` event
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
@@ -528,6 +542,21 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         )
         .await;
     hyperlane.mine_next_block_on_counterparty().await;
+
+    // Wait for the relayer to process the inbound EVM→Sovereign message
+    tracing::info!("Waiting for relayer to process inbound warp transfer...");
+    if let Err(err) = wait_for_messages_processed(
+        hyperlane.metrics(),
+        "ethtest",
+        "sovtest",
+        1,
+        RelayerWaitConfig::default(),
+    )
+    .await
+    {
+        hyperlane.print_stdout().await;
+        panic!("Relayer metrics check failed for inbound transfer: {err}");
+    }
 
     let mut transfer_received = false;
     for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
