@@ -9,7 +9,7 @@ use alloy_consensus::{
 use alloy_consensus::{EthereumTxEnvelope, TxEip4844, TxReceipt, EMPTY_ROOT_HASH};
 use alloy_eips::{Encodable2718, Typed2718};
 use alloy_primitives::private::alloy_rlp::Encodable;
-use alloy_primitives::{Address, BlockHash, Sealable, Sealed, B256};
+use alloy_primitives::{Address, Sealable, Sealed, B256};
 use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
 use derive_more::{Deref, DerefMut, From};
@@ -400,7 +400,7 @@ pub enum MaybeSealedBlock {
 #[cfg(feature = "native")]
 impl MaybeSealedBlock {
     /// Hash of the block.
-    pub fn hash(&self) -> Option<BlockHash> {
+    pub fn hash(&self) -> Option<B256> {
         Some(match self {
             Self::Sealed(block) => block.header.hash(),
             Self::PendingSynthetic(block) => block.hash(),
