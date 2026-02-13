@@ -128,3 +128,23 @@ fn sequencer_safety_of_modules() {
         "second test struct uses default sequencer safety"
     );
 }
+
+#[test]
+fn state_item_discriminant_constants_are_exposed() {
+    assert_eq!(
+        test_module::TestStruct::<ZkTestSpec>::TEST_STATE_1_ITEM_DISCRIMINANT,
+        0
+    );
+    assert_eq!(
+        test_module::TestStruct::<ZkTestSpec>::TEST_STATE_2_ITEM_DISCRIMINANT,
+        1
+    );
+    assert_eq!(
+        test_module::TestStruct::<ZkTestSpec>::TEST_STATE_3_ITEM_DISCRIMINANT,
+        2
+    );
+    assert_eq!(
+        second_test_module::SecondTestStruct::<ZkTestSpec>::STATE_IN_SECOND_STRUCT_1_ITEM_DISCRIMINANT,
+        0
+    );
+}
