@@ -61,9 +61,7 @@ export function getTokenId(
 ): Uint8Array {
   const nameBytes = new TextEncoder().encode(tokenName);
 
-  const buffer = new Uint8Array(
-    originator.length + nameBytes.length + 1,
-  );
+  const buffer = new Uint8Array(originator.length + nameBytes.length + 1);
   buffer.set(originator, 0);
   buffer.set(nameBytes, originator.length);
   buffer[originator.length + nameBytes.length] = decimals;
