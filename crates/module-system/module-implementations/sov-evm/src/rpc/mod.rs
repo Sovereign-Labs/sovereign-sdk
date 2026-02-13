@@ -347,7 +347,8 @@ where
         let fee_paid = self.receipt_fee(number, state);
         Some(build_rpc_receipt(
             &block, tx, number, receipt, time, fee_paid,
-        ))}
+        ))
+    }
 
     fn get_receipt_by_index_in_block(
         &self,
@@ -357,7 +358,10 @@ where
     ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let tx = self.transaction(number, state)?;
         let (receipt, time) = self.receipt(number, state)?;
-        Some(build_rpc_receipt(block, tx, number, receipt, time))
+        let fee_paid = self.receipt_fee(number, state);
+        Some(build_rpc_receipt(
+            block, tx, number, receipt, time, fee_paid,
+        ))
     }
 
     fn get_receipts(
