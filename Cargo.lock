@@ -10991,6 +10991,7 @@ dependencies = [
  "bincode",
  "borsh",
  "celestia-client",
+ "celestia-rpc",
  "celestia-types",
  "derive_more 1.0.0",
  "futures",
@@ -11927,6 +11928,9 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "reqwest",
+ "serde",
+ "sov-metrics",
  "sqlx",
  "time",
  "tokio",
