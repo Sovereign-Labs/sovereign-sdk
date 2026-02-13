@@ -404,6 +404,12 @@ pub trait NativeStorage: Storage {
         prefix: SlotKey,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>;
 
+    /// Iterate over all current kernel k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
+    fn maybe_iter_kernel_values_with_prefix(
+        &self,
+        prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>;
+
     /// Takes the pinned cache if one is present in this storage. See [`PinnedCache`] for more details.
     ///
     /// In the full node only, the pinned cache is passed from block to block through the storage manager.
