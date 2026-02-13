@@ -23,6 +23,10 @@ sov-metrics = { workspace = true, features = ["native"] }
 
 # Sovereign crates
 sov-bank = { workspace = true, features = ["native"] }
+sov-blob-storage = { workspace = true, features = ["native"], optional = true }
+sov-chain-state = { workspace = true, features = ["native"], optional = true }
+sov-paymaster = { workspace = true, features = ["native"], optional = true }
+sov-sequencer-registry = { workspace = true, features = ["native"], optional = true }
 sov-cli = { workspace = true }
 sov-db = { workspace = true }
 sov-ethereum = { workspace = true, features = ["local"] }
@@ -66,6 +70,7 @@ tokio = { workspace = true, features = [
 ] }
 tokio-stream = { workspace = true }
 tracing = { workspace = true }
+rockbound = { workspace = true, optional = true }
 prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
@@ -147,6 +152,14 @@ sov-ethereum = { workspace = true }
 default = []
 # Used for using different encoding between host and guest
 bincode = ["risc0/bincode", "sov-risc0-adapter/bincode"]
+migration-script = [
+  "dep:sov-blob-storage",
+  "dep:rockbound",
+  "dep:sov-chain-state",
+  "dep:sov-paymaster",
+  "dep:sov-sequencer-registry",
+  "sov-db/migration-script",
+]
 
 [[bin]]
 name = "sov-cli"
@@ -159,3 +172,8 @@ path = "src/main.rs"
 [[bin]]
 name = "demo-celestia-tester"
 path = "src/da_tester/demo_celestia_tester.rs"
+
+[[bin]]
+name = "mockda-to-celestia-migrate"
+path = "src/migrations/mockda_to_celestia.rs"
+required-features = ["migration-script"]
