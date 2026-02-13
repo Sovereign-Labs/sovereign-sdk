@@ -154,6 +154,7 @@ where
                             Some(block.header.hash()),
                             block.number,
                             pos as u64,
+                            block.header.base_fee_per_gas,
                         ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
@@ -210,6 +211,7 @@ where
                                     Some(header.hash),
                                     header.number,
                                     tx_idx as u64,
+                                    header.base_fee_per_gas,
                                 )
                             })
                             .collect(),
@@ -278,7 +280,13 @@ where
         let tx = self.transaction(tx_number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let index = tx_number - block.transactions_start();
-        let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
+        let tx = from_recovered_with_block_context(
+            tx.into(),
+            block.hash(),
+            block.number(),
+            index,
+            block.maybe_partial_header().base_fee_per_gas,
+        );
         Some(tx)
     }
 
@@ -299,6 +307,17 @@ where
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let (receipt, time) = self.receipt(number, state)?;
+        Some(build_rpc_receipt(&block, tx, number, receipt, time))
+    }
+
+    fn get_receipt_by_index_in_block(
+        &self,
+        number: u64,
+        block: &MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
+        let tx = self.transaction(number, state)?;
+        let (receipt, time) = self.receipt(number, state)?;
         Some(build_rpc_receipt(block, tx, number, receipt, time))
     }
 
@@ -314,13 +333,14 @@ where
         let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
             return Ok(None);
         };
-        let Some(receipts) = block
-            .tx_range()
-            .map(|index| self.get_receipt_by_index(index, state))
-            .collect::<Option<Vec<_>>>()
-        else {
-            return Ok(None);
-        };
+        let mut receipts =
+            Vec::with_capacity((block.transactions_end() - block.transactions_start()) as usize);
+        for index in block.tx_range() {
+            let Some(receipt) = self.get_receipt_by_index_in_block(index, &block, state) else {
+                return Ok(None);
+            };
+            receipts.push(receipt);
+        }
         Ok(Some(receipts))
     }
 
@@ -369,18 +389,27 @@ where
         None
     }
 
+    fn finalized_block_number(&self, state: &mut ApiStateAccessor<S>) -> u64 {
+        let mut archival = state
+            .build_finalized_state()
+            .expect("Bug: wrong slot number has been passed");
+        *self.block_numbers(&mut archival).end()
+    }
+
     fn block_tag_to_pending_or_block(
         &self,
         block: BlockNumberOrTag,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
-        let block_numbers = self.block_numbers(state);
         match block {
-            BlockNumberOrTag::Earliest => PendingOrBlock::Number(*block_numbers.start()),
+            BlockNumberOrTag::Earliest => {
+                let block_numbers = self.block_numbers(state);
+                PendingOrBlock::Number(*block_numbers.start())
+            }
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => PendingOrBlock::Pending,
             BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                PendingOrBlock::Number(*block_numbers.end())
+                PendingOrBlock::Number(self.finalized_block_number(state))
             }
             BlockNumberOrTag::Number(number) => PendingOrBlock::Number(number),
         }
@@ -414,6 +443,7 @@ where
     }
 
     /// Converts BlockNumberOrTag into number.
+    /// Can panic if passed ApiStateAccessor has been constructed with wrong finalized_slot_height.
     pub fn resolve_block_number(
         &self,
         block: BlockNumberOrTag,
@@ -422,7 +452,9 @@ where
         let block_numbers = self.block_numbers(state);
         let block_number = match block {
             BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                self.finalized_block_number(state)
+            }
             BlockNumberOrTag::Number(nr) => nr,
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
@@ -437,6 +469,7 @@ where
     }
 
     /// Retrieve a block by its id.
+    /// Can panic if passed ApiStateAccessor has been constructed with wrong finalized_slot_height.
     pub fn get_maybe_sealed_block_by_id(
         &self,
         block_id: BlockId,
@@ -754,7 +787,7 @@ fn get_cfg_env_template() -> CfgEnv {
 
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
-    block: MaybeSealedBlock,
+    block: &MaybeSealedBlock,
     tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,

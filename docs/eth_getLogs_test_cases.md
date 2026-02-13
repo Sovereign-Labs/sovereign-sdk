@@ -179,7 +179,7 @@ Behavior varies across Ethereum clients (Geth, Erigon, Nethermind, Reth):
 ## Rollup-specific semantics (current implementation)
 - `latest` and `pending` resolve to the pending head (block number = sealed head + 1).
 - Pending logs include `blockNumber` and `blockTimestamp`, but `blockHash` is `null` (pending blocks are not sealed).
-- `safe` and `finalized` map to the last sealed (canonical) head and exclude pending logs.
+- `safe` and `finalized` map to the latest finalized block (may lag head) and exclude pending logs.
 - `removed` is always `false` in `eth_getLogs` responses.
 - Responses include non-standard `blockTimestamp` and `timeExecutedMs` fields.
 - Error-shape and invalid-param tests are out of scope for this PR.
