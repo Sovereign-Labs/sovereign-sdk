@@ -61,6 +61,8 @@ pub enum StateMapError<N> {
 type ValueOrError<V, N> = Result<V, StateMapError<N>>;
 #[cfg(feature = "native")]
 type RawMapEntry<K> = anyhow::Result<(K, Vec<u8>)>;
+#[cfg(feature = "native")]
+type RawMapEntriesVec<K> = Vec<(K, Option<Vec<u8>>)>;
 
 /// A container that maps keys to values
 ///
@@ -422,7 +424,7 @@ where
         &self,
         keys: I,
         state: &mut Reader,
-    ) -> Result<Vec<(Kq, Option<Vec<u8>>)>, Reader::Error>
+    ) -> Result<RawMapEntriesVec<Kq>, Reader::Error>
     where
         I: IntoIterator<Item = Kq>,
         Codec::KeyCodec: EncodeLike<Kq, K>,
