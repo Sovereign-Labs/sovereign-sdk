@@ -464,17 +464,32 @@ where
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
-        let block = match self.get_maybe_synthetic_block_for_rpc(
-            Some(BlockId::Hash(block_hash.into())),
-            false.into(),
-            state,
-        ) {
-            Ok(block) => block,
-            // ByHash count endpoints return null for not found blocks.
-            Err(EthApiError::HeaderNotFound(_)) => None,
-            Err(err) => return Err(err.into()),
-        };
+        // let block = match self.get_maybe_synthetic_block_for_rpc(
+        //     Some(BlockId::Hash(block_hash.into())),
+        //     false.into(),
+        //     state,
+        // ) {
+        //     Ok(block) => block,
+        //     // ByHash count endpoints return null for not found blocks.
+        //     Err(EthApiError::HeaderNotFound(_)) => None,
+        //     Err(err) => return Err(err.into()),
+        // };
+        // Ok(block.map(|b| U64::from(b.transactions.len())))
+        let maybe_block =
+            match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
+                Ok(block) => block,
+                // For synthetic hashes that are not in cache, this endpoint should behave
+                // like unknown block hash and return `null` instead of an RPC error.
+                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
+                Err(err) => return Err(err.into()),
+            };
 
-        Ok(block.map(|b| U64::from(b.transactions.len())))
+        Ok(maybe_block.map(|block| {
+            U64::from(
+                block
+                    .transactions_end()
+                    .saturating_sub(block.transactions_start()),
+            )
+        }))
     }
 }

@@ -5,11 +5,13 @@ use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockId;
 use alloy_rpc_types_eth::BlockNumberOrTag;
 use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
+use alloy_rpc_types_eth::BlockTransactions;
 use alloy_rpc_types_eth::Header;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use sov_evm_test_utils::Erc20;
 use sov_evm_test_utils::Submit;
+use std::time::Duration;
 
 use crate::evm::evm_test_helper::alloy_client;
 use crate::evm::evm_test_helper::setup_test_rollup;
@@ -64,6 +66,29 @@ async fn by_hash(client: &DynProvider, hash: BlockHash) -> anyhow::Result<Option
         .map(|block| block.header))
 }
 
+async fn wait_for_latest_with_min_txs(
+    client: &DynProvider,
+    min_txs: usize,
+) -> anyhow::Result<(BlockHash, u64)> {
+    for _ in 0..50 {
+        let latest = client
+            .get_block_by_number(Latest)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("latest block should exist"))?;
+        let tx_count = match latest.transactions {
+            BlockTransactions::Hashes(hashes) => hashes.len(),
+            BlockTransactions::Full(txs) => txs.len(),
+            BlockTransactions::Uncle => 0,
+        };
+        if tx_count >= min_txs {
+            return Ok((latest.header.hash, tx_count as u64));
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    anyhow::bail!("latest block did not include the expected pending transactions")
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -81,6 +106,31 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     assert_ne!(pending_hash, BlockHash::ZERO);
     // Because the hash of the pending block is fake - it can't be fetched by hash
     assert_ne!(by_hash(&client, pending_hash).await?, None);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.wait_for_next_blocks(1).await;
+    rollup.pause_preferred_batches().await;
+
+    let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
+    usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
+    usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
+
+    let (latest_hash, latest_tx_count) = wait_for_latest_with_min_txs(&client, 3).await?;
+    let by_hash_count = client
+        .get_block_transaction_count_by_hash(latest_hash)
+        .await?;
+
+    assert_eq!(
+        by_hash_count,
+        Some(latest_tx_count),
+        "latest should resolve to the pending synthetic block while txs are pending"
+    );
 
     Ok(())
 }
