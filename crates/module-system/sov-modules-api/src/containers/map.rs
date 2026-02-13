@@ -422,7 +422,7 @@ where
         &self,
         keys: I,
         state: &mut Reader,
-    ) -> Result<impl Iterator<Item = (Kq, Option<Vec<u8>>)>, Reader::Error>
+    ) -> Result<Vec<(Kq, Option<Vec<u8>>)>, Reader::Error>
     where
         I: IntoIterator<Item = Kq>,
         Codec::KeyCodec: EncodeLike<Kq, K>,
@@ -433,7 +433,26 @@ where
             let value = self.get_raw(&key, state)?;
             entries.push((key, value));
         }
-        Ok(entries.into_iter())
+        Ok(entries)
+    }
+
+    fn decode_raw_iter<'a>(
+        &'a self,
+        maybe_iter: Option<impl Iterator<Item = (SlotKey, SlotValue)> + 'a>,
+        namespace_name: &'static str,
+    ) -> Option<impl Iterator<Item = RawMapEntry<K>> + 'a> {
+        maybe_iter.map(move |iter| {
+            iter.map(move |(key, value)| {
+                let decoded_key = self
+                    .codec()
+                    .key_codec()
+                    .try_decode(key.without_prefix())
+                    .map_err(|e| {
+                        anyhow::anyhow!("Failed to decode {namespace_name} map key: {:?}", e)
+                    })?;
+                Ok((decoded_key, value.value().to_vec()))
+            })
+        })
     }
 }
 
@@ -512,16 +531,7 @@ where
     {
         let prefix = SlotKey::singleton(self.prefix());
         let maybe_iter = storage.maybe_iter_user_values_with_prefix(prefix)?;
-        Ok(maybe_iter.map(move |iter| {
-            iter.map(move |(key, value)| {
-                let decoded_key = self
-                    .codec()
-                    .key_codec()
-                    .try_decode(key.without_prefix())
-                    .map_err(|e| anyhow::anyhow!("Failed to decode user map key: {:?}", e))?;
-                Ok((decoded_key, value.value().to_vec()))
-            })
-        }))
+        Ok(self.decode_raw_iter(maybe_iter, "user"))
     }
 }
 
@@ -544,16 +554,7 @@ where
     {
         let prefix = SlotKey::singleton(self.prefix());
         let maybe_iter = storage.maybe_iter_kernel_values_with_prefix(prefix)?;
-        Ok(maybe_iter.map(move |iter| {
-            iter.map(move |(key, value)| {
-                let decoded_key = self
-                    .codec()
-                    .key_codec()
-                    .try_decode(key.without_prefix())
-                    .map_err(|e| anyhow::anyhow!("Failed to decode kernel map key: {:?}", e))?;
-                Ok((decoded_key, value.value().to_vec()))
-            })
-        }))
+        Ok(self.decode_raw_iter(maybe_iter, "kernel"))
     }
 }
 
@@ -733,8 +734,7 @@ mod tests {
         let keys = vec![1_u64, 2_u64, 3_u64];
         let collected = map
             .iter_raw_from_keys(keys, &mut accessory_state)
-            .unwrap_infallible()
-            .collect::<Vec<_>>();
+            .unwrap_infallible();
 
         assert_eq!(collected[0], (1_u64, Some(borsh_to_vec(&10_u32).unwrap())));
         assert_eq!(collected[1], (2_u64, Some(vec![0xAA, 0xBB])));
