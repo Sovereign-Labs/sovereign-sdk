@@ -18,18 +18,19 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_proxy_utils::NodeDiscoveryTask;
-use sov_proxy_utils::NodeInfo;
+use sov_proxy_utils::ClusterInfo;
+use sov_proxy_utils::ClusterInfoService;
+use sov_proxy_utils::RootHashCheck;
+use sov_proxy_utils::RootHashConsistency;
 use sov_sequencer::preferred::ConfiguredNodeRole;
+use sov_sequencer::SequencerRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
-use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
@@ -37,6 +38,7 @@ use tokio::time::Duration;
 mod db_elected;
 mod replica_gets_txs_from_master;
 mod replica_registers_in_db;
+mod root_hash_checker;
 mod start_stop;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
@@ -104,7 +106,7 @@ async fn send_transfers(
     count: u64,
     key_and_address: PrivateKeyAndAddress<S>,
     receiver: <S as Spec>::Address,
-    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
+    client: sov_api_spec::client::Client,
 ) {
     for n in 0..count {
         let tx = build_transfer_token_tx::<S>(
@@ -117,7 +119,7 @@ async fn send_transfers(
         let mut retry_duration = Duration::from_millis(100);
         // Send the tx with retries, up to 7 attempts (about 30 seconds)
         for attempt in 1..=7 {
-            match test_rollup.send_tx_to_sequencer(&tx).await {
+            match client.send_tx_to_sequencer(&tx).await {
                 Ok(_) => break,
                 Err(e) => {
                     if e.to_string().contains("The node fell out of sync") {
@@ -156,9 +158,6 @@ async fn wait_for_all_events(
     }
 }
 
-use sov_proxy_utils::ClusterInfo;
-use sov_proxy_utils::NodeDiscovery;
-
 type Rollup = ExternalMockDemoRollup<Native>;
 
 /// Test setup for DbElected tests with two nodes (leader and replica).
@@ -166,9 +165,8 @@ struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
-    node_discovery_task: NodeDiscoveryTask,
+    cluster_info_service: ClusterInfoService,
     _temp_dir: tempfile::TempDir,
-    path: PathBuf,
 }
 
 const MAX_AGE: Duration = Duration::from_secs(10);
@@ -180,7 +178,7 @@ impl NodeDiscoveryTestSetup {
         Self::new_with_max_age(MAX_AGE).await
     }
 
-    /// Creates a new test setup with custom max_age for NodeDiscovery.
+    /// Creates a new test setup with custom max_age for cluster info updates.
     /// Returns None if Docker is not supported.
     async fn new_with_max_age(max_age: Duration) -> Option<Self> {
         let postgres = match PostgresData::create_postgres().await {
@@ -196,21 +194,17 @@ impl NodeDiscoveryTestSetup {
         let temp_dir = tempfile::tempdir().unwrap();
         let path = temp_dir.path().join("cluster_info.txt");
 
-        // Create NodeDiscovery to query the nodes table
-        let node_discovery =
-            NodeDiscovery::connect(postgres.connection_string(), max_age, path.clone(), None)
+        let cluster_info_service =
+            ClusterInfoService::spawn(postgres.connection_string(), max_age, path, None)
                 .await
-                .expect("Failed to create NodeDiscovery");
-
-        let node_discovery_task = node_discovery.spawn();
+                .expect("Failed to create ClusterInfoService");
 
         Some(Self {
             postgres,
             da_shutdown,
             da_addr,
-            node_discovery_task,
+            cluster_info_service,
             _temp_dir: temp_dir,
-            path,
         })
     }
 
@@ -221,7 +215,7 @@ impl NodeDiscoveryTestSetup {
     }
 
     async fn shutdown(self) {
-        self.node_discovery_task.handle.abort();
+        self.cluster_info_service.shutdown();
         let _ = self.da_shutdown.send(());
     }
 
@@ -231,31 +225,43 @@ impl NodeDiscoveryTestSetup {
     }
 
     async fn wait_for_cluster_change_with_timeout(&mut self, timeout: Duration) -> ClusterInfo {
-        tokio::time::timeout(timeout, self.node_discovery_task.receiver.changed())
+        self.cluster_info_service
+            .wait_for_update_with_timeout(timeout)
             .await
-            .unwrap()
-            .unwrap();
+            .expect("Failed to receive cluster info update")
+    }
 
-        let content = std::fs::read_to_string(&self.path).expect("Failed to read file content");
-        parse_cluster_info(&content).expect("Failed to parse cluster info")
+    async fn wait_for_root_hash_check_with_timeout(&mut self, timeout: Duration) -> RootHashCheck {
+        tokio::time::timeout(timeout, async {
+            let receiver = &mut self.cluster_info_service.root_hash_checker_task.receiver;
+            receiver
+                .changed()
+                .await
+                .expect("Root hash checker channel closed");
+
+            receiver.borrow_and_update().clone()
+        })
+        .await
+        .expect("Timed out waiting for root hash checker update")
     }
 }
 
-/// Parses cluster info from file content.
-/// Each line should be in the format `role=address,timestamp,node_id`.
-fn parse_cluster_info(content: &str) -> anyhow::Result<ClusterInfo> {
-    let mut leader = None;
-    let mut followers = BTreeMap::new();
+async fn establish_leader_and_replica(
+    node_1: TestRollup<Rollup>,
+    node_2: TestRollup<Rollup>,
+) -> (TestRollup<Rollup>, TestRollup<Rollup>) {
+    // Discover roles via the /sequencer/role endpoint
+    let role1 = node_1.sequencer_role().await.unwrap();
+    let role2 = node_2.sequencer_role().await.unwrap();
 
-    for line in content.lines() {
-        if let Some(rest) = line.strip_prefix("leader=") {
-            let node = NodeInfo::parse(rest)?;
-            leader = Some(node);
-        } else if let Some(rest) = line.strip_prefix("follower=") {
-            let node = NodeInfo::parse(rest)?;
-            followers.insert(node.node_id.clone(), node);
+    // Determine which node is the leader and which is the replica
+    let (leader, replica) = match (role1, role2) {
+        (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (node_1, node_2),
+        (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (node_2, node_1),
+        _ => {
+            panic!("Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}")
         }
-    }
+    };
 
-    Ok(ClusterInfo { leader, followers })
+    (leader, replica)
 }

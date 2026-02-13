@@ -4028,10 +4028,10 @@ dependencies = [
  "anyhow",
  "bincode",
  "derive-new",
+ "hex",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
- "sov-rollup-interface",
 ]
 
 [[package]]

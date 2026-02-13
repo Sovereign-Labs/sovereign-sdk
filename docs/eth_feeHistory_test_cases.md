@@ -61,7 +61,7 @@ Let `returnedBlockCount = number of blocks actually returned` (<= `blockCount`).
 ## Implementation notes and deviations
 Rollup-specific behavior (intended):
 - `latest` resolves to `pending` (tooling compatibility).
-- `finalized` and `safe` both resolve to the latest sealed block.
+- `finalized` and `safe` both resolve to the latest finalized block (may lag head when `finalization_blocks > 0`).
 - `reward` values are zeros (preferred sequencer model, no priority fee auction).
 - Blob gas fields (`baseFeePerBlobGas`, `blobGasUsedRatio`) return empty arrays (EIP-4844 not implemented).
 - Percentile validation allows `<=` (monotonically non-decreasing).
@@ -87,7 +87,7 @@ Priority legend: P0 = must-have correctness, P1 = high value, P2 = medium value,
 | TC03 | P0 | `safe` returns valid data (same behavior as `finalized` in this rollup). |
 | TC04 | P1 | `earliest` with blockCount=2 returns oldest_block=0 (graceful underflow handling). |
 | TC05 | P1 | Specific block number (e.g., `Number(7)`) returns correct oldest_block = 7 - blockCount + 1. |
-| TC06 | P2 | `finalized` and `safe` return same results (both map to latest sealed). |
+| TC06 | P2 | `finalized` and `safe` return same results (both map to latest finalized). |
 
 ### Parameter validation
 

@@ -157,6 +157,16 @@ fn parse_constant_inner(value: &toml::Value, span: Span) -> syn::Result<AllowedT
 }
 
 fn parse_constant(value: &toml::Value, span: Span) -> syn::Result<ParsedConstant> {
+    // Arrays and non-table types should always be handled by parse_constant_inner directly.
+    // We only try struct deserialization for TOML tables, because the toml serde deserializer
+    // can spuriously unwrap single-element arrays into structs with one field.
+    if !value.is_table() {
+        return Ok(ParsedConstant {
+            value: parse_constant_inner(value, span)?,
+            make_const: false,
+        });
+    }
+
     // Is it a `{ const = ... }` value?
     if let Ok(with_custom_override) = value.clone().try_into::<TomlConstValue>() {
         Ok(ParsedConstant {

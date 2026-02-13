@@ -115,7 +115,17 @@ fn track_transaction_metrics<S: Spec>(
     }
     sov_metrics::track_metrics(|metrics_tracker| {
         let tx_effect = match result {
-            Ok(tx_result) => sov_metrics::TransactionEffect::from(&tx_result.receipt.receipt),
+            Ok(tx_result) => match &tx_result.receipt.receipt {
+                sov_rollup_interface::stf::TxEffect::Skipped(_) => {
+                    sov_metrics::TransactionEffect::Skipped
+                }
+                sov_rollup_interface::stf::TxEffect::Reverted(_) => {
+                    sov_metrics::TransactionEffect::Reverted
+                }
+                sov_rollup_interface::stf::TxEffect::Successful(_) => {
+                    sov_metrics::TransactionEffect::Successful
+                }
+            },
             Err(_) => sov_metrics::TransactionEffect::Skipped,
         };
 
@@ -124,8 +134,8 @@ fn track_transaction_metrics<S: Spec>(
         let transaction_metrics = sov_metrics::TransactionProcessingMetrics {
             execution_time,
             tx_effect,
-            execution_context,
-            visible_slot_number,
+            execution_context: execution_context.str(),
+            visible_slot_number: visible_slot_number.get(),
             sequencer_address: sequencer_address.to_string(),
             call_message: message_discriminant,
             gas_used: gas_used.as_ref().to_vec(),
@@ -695,7 +705,7 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
-    let mut timings = AuthAndProcessTimings::new_with_defaults(execution_context);
+    let mut timings = AuthAndProcessTimings::new_with_defaults(execution_context.str());
     timings.total_timer.start();
     // CHECKS:
     // 1. `max_tx_check_costs` will not cause an overflow when converted to a token value.
@@ -819,7 +829,7 @@ where
         Some(raw_tx_hash),
         "Sanity check failed. The transaction hash computed by the authenticator does not match the hash computed by the dedicated tx hash calculation utility method. This is a bug, please report it."
     );
-    let metrics = AuthAndProcessMetrics::new(raw_tx_hash, timings);
+    let metrics = AuthAndProcessMetrics::new(raw_tx_hash.into(), timings);
 
     // Process the transaction and reward the sequencer if everything went well. Responsibility for
     // penalizing the sequencer if the transaction cannot be executed due to sequencer error is with the caller.

@@ -63,7 +63,7 @@ pub enum CallMessage<S: Spec> {
 #[derive(Debug, PartialEq, Eq, Clone, derivative::Derivative, JsonSchema, UniversalWallet)]
 #[serialize(Borsh, Serde)]
 #[serde(bound = "S: Spec", rename_all = "snake_case")]
-#[schemars(bound = "S: Spec", rename = "CallMessage")]
+#[schemars(bound = "S: Spec", rename = "policy_update")]
 #[derivative(Default(bound = ""))]
 pub struct PolicyUpdate<S: Spec> {
     sequencer_update: Option<SequencerSetUpdate<S::Da>>,

@@ -53,7 +53,7 @@ async fn test_multiple_replicas_register_in_nodes_table() {
 
 /// Tests that stale nodes are filtered out from cluster info based on max_age.
 ///
-/// This test verifies the recent NodeDiscovery changes:
+/// This test verifies cluster-info update behavior:
 /// 1. Nodes whose `last_updated` timestamp exceeds `max_age` are filtered out
 /// 2. The leader is always included regardless of its age
 /// 3. Active nodes continue to appear in the cluster info
@@ -67,13 +67,14 @@ async fn test_stale_nodes_are_filtered_from_cluster_info() {
 
     // Start a leader node that will keep sending heartbeats.
     let leader = setup.start_node("leader", ConfiguredNodeRole::Leader).await;
-
     leader.wait_for_sequencer_ready().await.unwrap();
 
     // Start a replica node.
     let replica = setup
         .start_node("replica", ConfiguredNodeRole::Replica)
         .await;
+
+    replica.wait_for_sequencer_ready().await.unwrap();
 
     // Wait for both nodes to appear in cluster info.
     let cluster_info = setup.wait_for_cluster_change().await;
