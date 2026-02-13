@@ -329,28 +329,28 @@ async fn flaky_test_archival_state_is_immediately_available() {
         .await
         .unwrap();
 
-        let current_height = test_rollup.height().await.get();
+        let current_height = highest_accessible_rollup_height(&test_rollup, height_at_start)
+            .await
+            .unwrap();
 
-        for past_height in height_at_start..current_height {
+        for past_height in height_at_start..=current_height {
             if let Some(expected_value) = expected_value_by_height.get(&past_height).copied() {
-                query_set_value(&test_rollup, Some(past_height), Some(expected_value))
+                query_set_value_with_retry(&test_rollup, Some(past_height), Some(expected_value))
                     .await
                     .with_context(|| {
                         format!("past height = {past_height}, expected value = {expected_value}")
                     })
                     .unwrap();
             } else {
-                let found_value =
-                    query_set_value_raw(&test_rollup, Some(format!("rollup_height={past_height}")))
-                        .await
-                        .with_context(|| {
-                            format!("failed to query archival value at height {past_height}")
-                        })
-                        .unwrap()
-                        .with_context(|| {
-                            format!("archival value is missing at height {past_height}")
-                        })
-                        .unwrap();
+                let found_value = query_set_value_raw_with_retry(
+                    &test_rollup,
+                    Some(format!("rollup_height={past_height}")),
+                )
+                .await
+                .with_context(|| format!("failed to query archival value at height {past_height}"))
+                .unwrap()
+                .with_context(|| format!("archival value is missing at height {past_height}"))
+                .unwrap();
 
                 expected_value_by_height.insert(past_height, found_value);
             }
@@ -3542,6 +3542,70 @@ async fn query_set_value_helper(
     let found_value = query_set_value_raw(test_rollup, query_param).await?;
     anyhow::ensure!(found_value == expected);
     Ok(())
+}
+
+fn archival_query_backoff() -> backon::ExponentialBuilder {
+    backon::ExponentialBuilder::default()
+        .with_factor(1.5)
+        .with_min_delay(Duration::from_millis(20))
+        .with_max_delay(Duration::from_millis(500))
+        .with_max_times(30)
+}
+
+fn is_retryable_archival_query_error(error: &anyhow::Error) -> bool {
+    let msg = format!("{error:#}");
+    msg.contains("invalid rollup height")
+        || msg.contains("HeightNotAccessible")
+        || msg.contains("404 Not Found")
+        || msg.contains("Impossible to get the rollup state at the specified height")
+}
+
+async fn highest_accessible_rollup_height(
+    test_rollup: &TestRollup<TestBlueprint>,
+    min_height: u64,
+) -> anyhow::Result<u64> {
+    let tip_height = test_rollup.height().await.get();
+    for height in (min_height..=tip_height).rev() {
+        match query_set_value_raw(test_rollup, Some(format!("rollup_height={height}"))).await {
+            Ok(_) => return Ok(height),
+            Err(err) if is_retryable_archival_query_error(&err) => {
+                continue;
+            }
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("failed while probing accessible archival height at {height}")
+                });
+            }
+        }
+    }
+
+    Ok(min_height)
+}
+
+async fn query_set_value_with_retry(
+    test_rollup: &TestRollup<TestBlueprint>,
+    rollup_height: Option<u64>,
+    expected: Option<u64>,
+) -> anyhow::Result<()> {
+    let query = || async { query_set_value(test_rollup, rollup_height, expected).await };
+    query
+        .retry(archival_query_backoff())
+        .when(is_retryable_archival_query_error)
+        .await
+}
+
+async fn query_set_value_raw_with_retry(
+    test_rollup: &TestRollup<TestBlueprint>,
+    query_param: Option<String>,
+) -> anyhow::Result<Option<u64>> {
+    let query = || {
+        let query_param = query_param.clone();
+        async move { query_set_value_raw(test_rollup, query_param).await }
+    };
+    query
+        .retry(archival_query_backoff())
+        .when(is_retryable_archival_query_error)
+        .await
 }
 
 async fn query_set_value_raw(
