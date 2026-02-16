@@ -48,6 +48,11 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 # Default: 30
 #background_stat_polling_interval_secs = 30
 
+# Verify fetched namespace data against the DA header before returning from get_block_at.
+# Disable only if you explicitly want to skip this integrity check.
+# Default: true
+#verify_on_fetch = true
+
 # Options are "Low", "Medium" and "High"
 # Defines a priority of rollup blob transactions. Set it to "High" for faster inclusion.
 # Default: High for better blob inclusion.
