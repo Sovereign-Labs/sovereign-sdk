@@ -44,6 +44,9 @@ pub(super) struct StateLayer<S: Spec> {
     /// Gas consumed in this layer.
     /// TODO: Currently incremented in `GasMeter::charge_gas()` but never read.
     /// Add getter methods for per-layer gas accounting.
+    /// DESIGN: When a layer reverts, the gas payer (B) should still pay for gas
+    /// consumed in their layer. Bill `gas_consumed` to `gas_payer` before restoring
+    /// the snapshot in `revert_layer_mut()`.
     #[allow(dead_code)]
     gas_consumed: S::Gas,
     /// Gas snapshot to restore on revert (if layer has a gas payer)
