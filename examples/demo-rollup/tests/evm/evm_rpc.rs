@@ -4,14 +4,12 @@ use alloy_primitives::{keccak256, Address, BlockHash, Bloom, B256, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
-use alloy_rpc_types_eth::BlockTransactions;
 use alloy_rpc_types_eth::Header;
 use alloy_rpc_types_eth::{Block, BlockId, BlockNumberOrTag, BlockTransactions, Filter};
 use alloy_rpc_types_eth::{Transaction, TransactionReceipt};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use sov_evm_test_utils::{Erc20, LegacySimpleStorage, Submit};
-use std::time::Duration;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
@@ -64,29 +62,6 @@ async fn by_hash(client: &DynProvider, hash: BlockHash) -> anyhow::Result<Option
         .get_block_by_hash(hash)
         .await?
         .map(|block| block.header))
-}
-
-async fn wait_for_latest_with_min_txs(
-    client: &DynProvider,
-    min_txs: usize,
-) -> anyhow::Result<(BlockHash, u64)> {
-    for _ in 0..50 {
-        let latest = client
-            .get_block_by_number(Latest)
-            .await?
-            .ok_or_else(|| anyhow::anyhow!("latest block should exist"))?;
-        let tx_count = match latest.transactions {
-            BlockTransactions::Hashes(hashes) => hashes.len(),
-            BlockTransactions::Full(txs) => txs.len(),
-            BlockTransactions::Uncle => 0,
-        };
-        if tx_count >= min_txs {
-            return Ok((latest.header.hash, tx_count as u64));
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-
-    anyhow::bail!("latest block did not include the expected pending transactions")
 }
 
 #[tokio::test(flavor = "multi_thread")]
