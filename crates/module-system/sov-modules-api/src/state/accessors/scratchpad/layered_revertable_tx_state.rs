@@ -87,9 +87,11 @@ impl<S: Spec> StateLayer<S> {
 /// Changes can be committed or reverted layer by layer via [`LayeredRevertableTxState::commit_layer`]
 /// and [`LayeredRevertableTxState::revert_layer`].
 ///
-/// ## Usage note
-/// This structure tracks gas consumed outside of the transaction lifecycle without explicitly consuming a finite resource.
-/// This should only be used in infallible methods.
+/// ## Gas tracking
+/// When layers have a gas payer set via [`LayeredRevertableTxState::add_revertable_layer_with_gas_payer`],
+/// gas state is snapshotted and restored on revert. For layers without a gas payer (created via
+/// [`LayeredRevertableTxState::add_revertable_layer`]), gas consumption is delegated to the inner
+/// state and not restored on revert.
 pub struct LayeredRevertableTxState<'a, S: Spec, State> {
     pub(super) inner: &'a mut State,
     pub(super) layers: Vec<StateLayer<S>>,
