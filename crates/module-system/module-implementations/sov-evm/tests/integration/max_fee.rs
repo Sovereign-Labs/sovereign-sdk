@@ -110,7 +110,8 @@ fn test_disable_max_fee_check_does_not_mint_value() {
                 .get_transaction_receipt(tx_hash, state)
                 .unwrap()
                 .expect("receipt should exist");
-            let implied_fee = U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
+            let implied_fee =
+                U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
 
             assert!(
                 actual_fee >= implied_fee,
