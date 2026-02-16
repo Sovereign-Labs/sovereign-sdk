@@ -37,7 +37,9 @@ pub(crate) fn get_cfg_env(
             .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
     );
     cfg_env.tx_chain_id_check = false;
-    // Set the base fee to zero for evm execution. Gas is paid for by the sov gas meter instead
+    // We intentionally execute with tx.gas_price=0 and charge fees via rollup metering.
+    // Keep block_env.basefee intact for BASEFEE opcode semantics, but disable revm's
+    // base-fee admission check for EIP-1559 validation in this execution mode.
     cfg_env.disable_base_fee = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
     cfg_env.with_spec(spec)
