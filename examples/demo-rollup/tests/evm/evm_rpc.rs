@@ -3,7 +3,7 @@ use alloy_primitives::utils::parse_ether;
 use alloy_primitives::{keccak256, Address, BlockHash, Bloom, B256, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
-use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
+use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Finalized, Latest, Pending};
 use alloy_rpc_types_eth::Header;
 use alloy_rpc_types_eth::{Block, BlockId, BlockNumberOrTag, BlockTransactions, Filter};
 use alloy_rpc_types_eth::{Transaction, TransactionReceipt};
@@ -184,16 +184,19 @@ async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> any
         crate::evm::evm_test_helper::SENDER_PRIV_KEY,
     )
     .await;
-    ws_client.send_eth(Address::ZERO, U256::from(1)).await;
+    let tx_hash = ws_client.send_eth(Address::ZERO, U256::from(1)).await;
+    ws_client.wait_for_receipt(tx_hash).await;
 
     let client = alloy_client(rollup.http_addr);
     let latest = by_number(&client, Latest)
         .await?
         .expect("latest block should exist");
-    let sealed_height = client.get_block_number().await?;
+    let finalized = by_number(&client, Finalized)
+        .await?
+        .expect("finalized block should exist");
     assert_eq!(
         latest.number,
-        sealed_height + 1,
+        finalized.number + 1,
         "latest should resolve to the pending synthetic block while tx is pending"
     );
 
