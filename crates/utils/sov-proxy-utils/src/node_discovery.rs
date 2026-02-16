@@ -1,13 +1,11 @@
 //! Utilities for discovering cluster nodes from PostgreSQL and persisting snapshots.
-use crate::file_writer::write_to_file_atomically;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use sqlx::postgres::{PgListener, PgPool};
 use sqlx::FromRow;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::time::Duration;
 pub use time::OffsetDateTime;
 use tokio::sync::watch;
@@ -22,17 +20,6 @@ pub struct NodeInfo {
     pub address: SocketAddr,
     /// The last time the node updated its heartbeat.
     pub last_updated: OffsetDateTime,
-}
-
-impl NodeInfo {
-    fn to_file_line(&self, role: &str) -> String {
-        let ts = self
-            .last_updated
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap_or_else(|e| panic!("Failed to format timestamp: {e}"));
-
-        format!("{role}={},{ts},{}", self.address, self.node_id)
-    }
 }
 
 /// Result of querying cluster node information.
@@ -55,41 +42,8 @@ impl ClusterInfo {
         self.followers.contains_key(node_id)
     }
 
-    /// Formats the cluster info as a string suitable for writing to a file.
-    /// Each node is written on a separate line in the format `role=address,timestamp,node_id`.
-    pub fn to_file_content(&self) -> String {
-        let mut lines = Vec::new();
-
-        if let Some(leader) = &self.leader {
-            lines.push(leader.to_file_line("leader"));
-        }
-
-        for follower in self.followers.values() {
-            lines.push(follower.to_file_line("follower"));
-        }
-
-        lines.join("\n")
-    }
-
     fn leader_id(&self) -> Option<String> {
         self.leader.as_ref().map(|l| l.node_id.clone())
-    }
-}
-
-impl NodeInfo {
-    /// Parses a node info from a string in the format `address,timestamp,node_id`.
-    pub fn parse(s: &str) -> Result<Self> {
-        let mut parts = s.split(',');
-        let addr = parts.next().context("Missing address")?;
-        let ts = parts.next().context("Missing timestamp")?;
-        let node_id = parts.next().context("Missing node_id")?;
-
-        Ok(NodeInfo {
-            node_id: node_id.to_string(),
-            address: addr.parse().context("Invalid address")?,
-            last_updated: OffsetDateTime::parse(ts, &time::format_description::well_known::Rfc3339)
-                .context("Invalid timestamp")?,
-        })
     }
 }
 
@@ -123,7 +77,6 @@ pub struct NodeDiscovery {
     listener: PgListener,
     prev_followers: BTreeSet<String>,
     prev_leader_id: Option<String>,
-    path: PathBuf,
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
@@ -139,7 +92,6 @@ impl NodeDiscovery {
     pub async fn connect(
         connection_string: &str,
         max_age: Duration,
-        path: PathBuf,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
         tracing::info!("Connecting to database.");
@@ -148,9 +100,6 @@ impl NodeDiscovery {
             .connect(connection_string)
             .await?;
         tracing::info!("DB connection established.");
-
-        // On startup, write an empty file. If the cluster is not empty, the file will be populated on the first call to `handle_cluster_update`.
-        write_to_file_atomically(&path, "").await?;
 
         let mut listener = PgListener::connect(connection_string).await?;
         listener
@@ -166,7 +115,6 @@ impl NodeDiscovery {
             listener,
             prev_followers: BTreeSet::new(),
             prev_leader_id: None,
-            path,
             notifier,
             sender,
             receiver,
@@ -277,10 +225,6 @@ impl NodeDiscovery {
             );
         }
 
-        let content = info.to_file_content();
-        write_to_file_atomically(&self.path, &content).await?;
-        tracing::info!(?self.path, content, "Cluster info file updated");
-
         // Notify watchers that the cluster was updated.
         if let Some(notifier) = &mut self.notifier {
             notifier.on_cluster_update(&info).await?;
@@ -331,58 +275,6 @@ mod tests {
 
     fn test_timestamp() -> OffsetDateTime {
         OffsetDateTime::UNIX_EPOCH
-    }
-
-    const TEST_TIME_STAMP: &str = "1970-01-01T00:00:00Z";
-
-    #[test]
-    fn cluster_with_leader_and_followers() {
-        let ts = test_timestamp();
-        let info = NodeDiscovery::cluster(
-            Some("node1".to_string()),
-            vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
-                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
-                ("node3".to_string(), "127.0.0.1:8002".to_string(), ts),
-            ],
-        )
-        .unwrap();
-
-        assert_eq!(
-            info.to_file_content(),
-            format!(
-                "leader=127.0.0.1:8000,{TEST_TIME_STAMP},node1\n\
-                 follower=127.0.0.1:8001,{TEST_TIME_STAMP},node2\n\
-                 follower=127.0.0.1:8002,{TEST_TIME_STAMP},node3"
-            ),
-        );
-    }
-
-    #[test]
-    fn cluster_with_no_leader() {
-        let ts = test_timestamp();
-        let info = NodeDiscovery::cluster(
-            None,
-            vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
-                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
-            ],
-        )
-        .unwrap();
-
-        assert_eq!(
-            info.to_file_content(),
-            format!(
-                "follower=127.0.0.1:8000,{TEST_TIME_STAMP},node1\n\
-                 follower=127.0.0.1:8001,{TEST_TIME_STAMP},node2"
-            ),
-        );
-    }
-
-    #[test]
-    fn cluster_empty() {
-        let info = NodeDiscovery::cluster(None, vec![]).unwrap();
-        assert_eq!(info.to_file_content(), "");
     }
 
     #[test]
