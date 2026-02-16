@@ -5,7 +5,6 @@ use crate::node_discovery::NodeDiscoveryTask;
 use crate::root_hash_checker::ClusterRootHashChecker;
 use crate::root_hash_checker::ClusterRootHashCheckerTask;
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 use std::time::Duration;
 
 /// Service that keeps cluster info updated by running a [`NodeDiscovery`] task.
@@ -19,11 +18,9 @@ impl ClusterInfoService {
     pub async fn spawn(
         connection_string: &str,
         max_age: Duration,
-        path: PathBuf,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
-        let node_discovery =
-            NodeDiscovery::connect(connection_string, max_age, path, notifier).await?;
+        let node_discovery = NodeDiscovery::connect(connection_string, max_age, notifier).await?;
         let root_hash_checker = ClusterRootHashChecker::new(node_discovery.receiver.clone())?;
 
         let node_discovery_task = node_discovery.spawn();

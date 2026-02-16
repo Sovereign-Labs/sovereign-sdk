@@ -4,6 +4,7 @@ mod node_discovery;
 mod root_hash_check_metric;
 mod root_hash_checker;
 pub use cluster_info_service::*;
+pub use file_writer::*;
 pub use node_discovery::*;
 pub use root_hash_check_metric::*;
 pub use root_hash_checker::*;

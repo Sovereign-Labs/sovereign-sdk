@@ -166,7 +166,6 @@ struct NodeDiscoveryTestSetup {
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
     cluster_info_service: ClusterInfoService,
-    _temp_dir: tempfile::TempDir,
 }
 
 const MAX_AGE: Duration = Duration::from_secs(10);
@@ -191,11 +190,8 @@ impl NodeDiscoveryTestSetup {
 
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
-        let temp_dir = tempfile::tempdir().unwrap();
-        let path = temp_dir.path().join("cluster_info.txt");
-
         let cluster_info_service =
-            ClusterInfoService::spawn(postgres.connection_string(), max_age, path, None)
+            ClusterInfoService::spawn(postgres.connection_string(), max_age, None)
                 .await
                 .expect("Failed to create ClusterInfoService");
 
@@ -204,7 +200,6 @@ impl NodeDiscoveryTestSetup {
             da_shutdown,
             da_addr,
             cluster_info_service,
-            _temp_dir: temp_dir,
         })
     }
 

@@ -6,7 +6,7 @@ use tokio::io::AsyncWriteExt;
 ///
 /// Uses write-to-temp-then-rename pattern to ensure the file is never
 /// partially written. The data is synced to disk before renaming.
-pub(crate) async fn write_to_file_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
+pub async fn write_to_file_atomically(path: &Path, content: &str) -> anyhow::Result<()> {
     let dir = path.parent().context("Path has no parent directory")?;
 
     // Create temp file in same directory to ensure same filesystem for atomic rename.
