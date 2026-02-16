@@ -37,10 +37,13 @@ pub(super) struct StateLayer<S: Spec> {
     temp_cache: TempCache,
     writes: HashMap<(Namespace, SlotKey), Option<SlotValue>>,
     /// The gas payer for this layer (if different from outer layer).
-    /// Used for tracking and future expansion (e.g., billing different accounts).
+    /// TODO: Currently stored but never read. Add getter methods for per-layer
+    /// gas payer introspection (e.g., debugging, billing different accounts).
     #[allow(dead_code)]
     gas_payer: Option<S::Address>,
-    /// Gas consumed in this layer
+    /// Gas consumed in this layer.
+    /// TODO: Currently incremented in `GasMeter::charge_gas()` but never read.
+    /// Add getter methods for per-layer gas accounting.
     #[allow(dead_code)]
     gas_consumed: S::Gas,
     /// Gas snapshot to restore on revert (if layer has a gas payer)
