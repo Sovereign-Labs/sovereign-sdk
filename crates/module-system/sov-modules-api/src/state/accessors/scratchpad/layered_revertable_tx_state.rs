@@ -14,27 +14,59 @@ use crate::module::Spec;
 use crate::state::traits::delegate_version_reader;
 use crate::state::traits::PerBlockCache;
 use crate::{
-    AccessoryStateWriter, BasicGasMeter, GasMeter, GasMeteringError, ProvableStateReader,
-    ProvableStateWriter, TxState,
+    AccessoryStateWriter, Amount, BasicGasMeter, GasArray, GasMeter, GasMeteringError,
+    ProvableStateReader, ProvableStateWriter, TxState,
 };
 
 #[cfg(feature = "test-utils")]
 use crate::AccessoryStateReader;
 
+/// A snapshot of gas state for restoration on layer revert.
+#[derive(Clone, Debug)]
+pub struct GasSnapshot<S: Spec> {
+    /// Remaining gas at snapshot time
+    pub remaining_gas: S::Gas,
+    /// Remaining funds at snapshot time (if any)
+    pub remaining_funds: Option<Amount>,
+}
+
 /// A single layer of state changes that can be committed or reverted.
 #[derive(Debug)]
-pub(super) struct StateLayer {
+pub(super) struct StateLayer<S: Spec> {
     events: Vec<TypeErasedEvent>,
     temp_cache: TempCache,
     writes: HashMap<(Namespace, SlotKey), Option<SlotValue>>,
+    /// The gas payer for this layer (if different from outer layer).
+    /// Used for tracking and future expansion (e.g., billing different accounts).
+    #[allow(dead_code)]
+    gas_payer: Option<S::Address>,
+    /// Gas consumed in this layer
+    #[allow(dead_code)]
+    gas_consumed: S::Gas,
+    /// Gas snapshot to restore on revert (if layer has a gas payer)
+    gas_snapshot: Option<GasSnapshot<S>>,
 }
 
-impl StateLayer {
+impl<S: Spec> StateLayer<S> {
     fn new() -> Self {
         Self {
             events: Vec::new(),
             temp_cache: TempCache::new(),
             writes: HashMap::new(),
+            gas_payer: None,
+            gas_consumed: S::Gas::ZEROED,
+            gas_snapshot: None,
+        }
+    }
+
+    fn new_with_gas_payer(gas_payer: S::Address, gas_snapshot: GasSnapshot<S>) -> Self {
+        Self {
+            events: Vec::new(),
+            temp_cache: TempCache::new(),
+            writes: HashMap::new(),
+            gas_payer: Some(gas_payer),
+            gas_consumed: S::Gas::ZEROED,
+            gas_snapshot: Some(gas_snapshot),
         }
     }
 }
@@ -54,7 +86,7 @@ impl StateLayer {
 /// This should only be used in infallible methods.
 pub struct LayeredRevertableTxState<'a, S: Spec, State> {
     pub(super) inner: &'a mut State,
-    pub(super) layers: Vec<StateLayer>,
+    pub(super) layers: Vec<StateLayer<S>>,
     pub(super) phantom: PhantomData<S>,
 }
 
@@ -86,6 +118,36 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
     /// This pushes a new layer onto the layers stack.
     pub fn add_revertable_layer(&mut self) -> &mut Self {
         self.layers.push(StateLayer::new());
+        self
+    }
+
+    /// Adds a new revertable layer with a different gas payer on top of the current layers.
+    ///
+    /// When this layer is reverted, the gas state will be restored to the snapshot taken
+    /// at layer creation time. This allows nested operations with different gas payers
+    /// where inner layer gas consumption can be isolated and reverted independently.
+    ///
+    /// # Arguments
+    /// * `gas_payer` - The address of the account paying for gas in this layer
+    ///
+    /// # Use Case
+    /// User A's transaction triggers User B's conditional order. User B pays for their
+    /// execution. If User B runs out of gas, only their layer reverts (not User A's outer transaction).
+    pub fn add_revertable_layer_with_gas_payer(&mut self, gas_payer: S::Address) -> &mut Self {
+        let gas_snapshot = if let Some(meter) = self.inner.try_as_basic_gas_meter() {
+            GasSnapshot {
+                remaining_gas: meter.remaining_gas,
+                remaining_funds: meter.remaining_funds,
+            }
+        } else {
+            GasSnapshot {
+                remaining_gas: S::Gas::MAX,
+                remaining_funds: None,
+            }
+        };
+
+        self.layers
+            .push(StateLayer::new_with_gas_payer(gas_payer, gas_snapshot));
         self
     }
 
@@ -180,6 +242,9 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
 
     /// Reverts and discards the top layer.
     ///
+    /// If the layer had a gas payer with a gas snapshot, the gas state is restored
+    /// to the snapshot values, effectively undoing any gas consumption in this layer.
+    ///
     /// # Panics
     /// Panics if there are no layers to revert.
     ///
@@ -190,11 +255,23 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
             panic!("Cannot revert layer: no layers exist");
         }
 
-        self.layers.pop();
+        let layer = self.layers.pop().unwrap();
+
+        // Restore gas from snapshot if layer had one
+        if let Some(snapshot) = layer.gas_snapshot {
+            if let Some(meter) = self.inner.try_as_basic_gas_meter() {
+                meter.remaining_gas = snapshot.remaining_gas;
+                meter.remaining_funds = snapshot.remaining_funds;
+            }
+        }
+
         self
     }
 
     /// Reverts and discards the top layer.
+    ///
+    /// If the layer had a gas payer with a gas snapshot, the gas state is restored
+    /// to the snapshot values, effectively undoing any gas consumption in this layer.
     ///
     /// This is a variant that takes `&mut self` instead of consuming `self`.
     ///
@@ -205,7 +282,15 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
             panic!("Cannot revert layer: no layers exist");
         }
 
-        self.layers.pop();
+        let layer = self.layers.pop().unwrap();
+
+        // Restore gas from snapshot if layer had one
+        if let Some(snapshot) = layer.gas_snapshot {
+            if let Some(meter) = self.inner.try_as_basic_gas_meter() {
+                meter.remaining_gas = snapshot.remaining_gas;
+                meter.remaining_funds = snapshot.remaining_funds;
+            }
+        }
     }
 
     /// Gets the current number of layers.
@@ -216,7 +301,7 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
 
     /// Gets the current top layer for write operations.
     /// Panics if no layers exist (should only be called when layers are present).
-    fn current_layer_mut(&mut self) -> &mut StateLayer {
+    fn current_layer_mut(&mut self) -> &mut StateLayer<S> {
         self.layers
             .last_mut()
             .expect("LayeredRevertableTxState should have at least one layer")
@@ -359,6 +444,14 @@ impl<S: Spec, I: TxState<S>> GasMeter for LayeredRevertableTxState<'_, S, I> {
     type Spec = S;
 
     fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+        // Track gas consumption in current layer (if any)
+        if let Some(layer) = self.layers.last_mut() {
+            layer.gas_consumed = layer.gas_consumed.checked_combine(amount).ok_or_else(|| {
+                GasMeteringError::Overflow("Gas consumption overflow in layer".to_string())
+            })?;
+        }
+
+        // Delegate to inner for actual metering
         self.inner.charge_gas(amount)
     }
 
@@ -371,6 +464,17 @@ impl<S: Spec, I: TxState<S>> GasMeter for LayeredRevertableTxState<'_, S, I> {
         amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
+        // Calculate total amount for tracking
+        if let Some(layer) = self.layers.last_mut() {
+            if let Some(total) = amount.checked_scalar_product(parameter as u64) {
+                layer.gas_consumed =
+                    layer.gas_consumed.checked_combine(total).ok_or_else(|| {
+                        GasMeteringError::Overflow("Gas consumption overflow in layer".to_string())
+                    })?;
+            }
+        }
+
+        // Delegate to inner for actual metering
         self.inner.charge_linear_gas(amount, parameter)
     }
 
@@ -1124,6 +1228,175 @@ mod tests {
         assert_eq!(
             layered_state.get_value(namespace, &key, &mut metric),
             Some(value3)
+        );
+    }
+
+    #[test]
+    fn test_gas_payer_layer_creation() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+
+        // Create a layered state
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+
+        // Create a dummy gas payer address
+        let gas_payer = <TestSpec as crate::Spec>::Address::from([1u8; 28]);
+
+        // Add layer with gas payer
+        layered_state.add_revertable_layer_with_gas_payer(gas_payer.clone());
+
+        assert_eq!(layered_state.layer_depth(), 1);
+
+        // Verify the layer has a gas payer
+        let layer = &layered_state.layers[0];
+        assert!(layer.gas_payer.is_some());
+        assert_eq!(layer.gas_payer.as_ref().unwrap(), &gas_payer);
+        assert!(layer.gas_snapshot.is_some());
+    }
+
+    #[test]
+    fn test_gas_payer_layer_state_operations() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+
+        let namespace = User::NAMESPACE;
+        let key = SlotKey::from_slice(b"test_key");
+        let value = SlotValue::from("test_value");
+
+        // Add layer with gas payer
+        let gas_payer = <TestSpec as crate::Spec>::Address::from([1u8; 28]);
+        layered_state.add_revertable_layer_with_gas_payer(gas_payer);
+
+        // Write data in gas payer layer
+        layered_state.set_value(namespace, &key, value.clone());
+
+        // Verify data is visible
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(
+            layered_state.get_value(namespace, &key, &mut metric),
+            Some(value.clone())
+        );
+
+        // Revert the layer
+        layered_state.revert_layer_mut();
+
+        // Data should be gone
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None);
+    }
+
+    #[test]
+    fn test_nested_gas_payer_layers() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+
+        let namespace = User::NAMESPACE;
+        let outer_key = SlotKey::from_slice(b"outer_key");
+        let inner_key = SlotKey::from_slice(b"inner_key");
+        let outer_value = SlotValue::from("outer_value");
+        let inner_value = SlotValue::from("inner_value");
+
+        // Add outer layer (regular)
+        layered_state.add_revertable_layer();
+        layered_state.set_value(namespace, &outer_key, outer_value.clone());
+
+        // Add inner layer with gas payer
+        let gas_payer = <TestSpec as crate::Spec>::Address::from([2u8; 28]);
+        layered_state.add_revertable_layer_with_gas_payer(gas_payer);
+        layered_state.set_value(namespace, &inner_key, inner_value.clone());
+
+        assert_eq!(layered_state.layer_depth(), 2);
+
+        // Both values should be visible
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(
+            layered_state.get_value(namespace, &outer_key, &mut metric),
+            Some(outer_value.clone())
+        );
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(
+            layered_state.get_value(namespace, &inner_key, &mut metric),
+            Some(inner_value.clone())
+        );
+
+        // Revert inner layer (with gas payer)
+        layered_state.revert_layer_mut();
+        assert_eq!(layered_state.layer_depth(), 1);
+
+        // Inner value should be gone, outer should remain
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(layered_state.get_value(namespace, &inner_key, &mut metric), None);
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(
+            layered_state.get_value(namespace, &outer_key, &mut metric),
+            Some(outer_value)
+        );
+    }
+
+    #[test]
+    fn test_gas_payer_layer_commit() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+
+        let namespace = User::NAMESPACE;
+        let key = SlotKey::from_slice(b"test_key");
+        let value = SlotValue::from("test_value");
+
+        // Add layer with gas payer
+        let gas_payer = <TestSpec as crate::Spec>::Address::from([1u8; 28]);
+        layered_state.add_revertable_layer_with_gas_payer(gas_payer);
+
+        // Write data
+        layered_state.set_value(namespace, &key, value.clone());
+
+        // Commit the layer
+        layered_state.commit_layer_mut();
+        assert_eq!(layered_state.layer_depth(), 0);
+
+        // Data should still be visible (committed to inner state)
+        let mut metric = StateAccessMetric::new_read();
+        assert_eq!(
+            layered_state.get_value(namespace, &key, &mut metric),
+            Some(value)
+        );
+    }
+
+    #[test]
+    fn test_gas_consumed_tracking_in_layer() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+
+        let mut layered_state = LayeredRevertableTxState::new(&mut working_set);
+
+        // Add layer with gas payer
+        let gas_payer = <TestSpec as crate::Spec>::Address::from([1u8; 28]);
+        layered_state.add_revertable_layer_with_gas_payer(gas_payer);
+
+        // Initially, gas_consumed should be ZEROED
+        assert_eq!(
+            layered_state.layers[0].gas_consumed,
+            <TestSpec as crate::Spec>::Gas::ZEROED
         );
     }
 }
