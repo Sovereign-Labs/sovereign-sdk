@@ -543,23 +543,28 @@ mod tests {
             Some(value.clone())
         );
 
-        // Commit should panic since there are no layers
-        // (Changes were applied directly to inner state, no commit needed)
+        // Changes were applied directly to inner state, no commit needed
         // Verify the value is already in inner state
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(
             layered_state.get_value(namespace, &key, &mut metric),
-            Some(value.clone())
+            Some(value)
         );
+    }
 
-        // Trying to commit with no layers should panic
-        let result = std::panic::catch_unwind(|| {
-            layered_state.commit_layer();
-        });
-        assert!(
-            result.is_err(),
-            "Expected panic when committing with no layers"
-        );
+    #[test]
+    #[should_panic(expected = "Cannot commit layer: no layers exist")]
+    fn test_commit_with_no_layers_panics() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+
+        let mut working_set =
+            WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
+
+        let layered_state = LayeredRevertableTxState::new(&mut working_set);
+
+        // This should panic - no layers to commit
+        layered_state.commit_layer();
     }
 
     #[test]
@@ -596,7 +601,7 @@ mod tests {
         );
 
         // Revert the layer - should return LayeredRevertableTxState with no layers
-        let layered_state = layered_state.revert_layer();
+        let mut layered_state = layered_state.revert_layer();
         // Should have no layers now
         assert_eq!(layered_state.layer_depth(), 0);
         // Should see value1 from inner (direct write before layer was added)
@@ -615,8 +620,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create layered state
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add a layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         // Write some data
         let namespace = User::NAMESPACE;
@@ -626,7 +632,7 @@ mod tests {
         layered_state.set_value(namespace, &key, value.clone());
 
         // Commit the layer
-        let layered_state = layered_state.commit_layer();
+        let mut layered_state = layered_state.commit_layer();
         // Should have no layers now and value should be in inner state
         assert_eq!(layered_state.layer_depth(), 0);
         let mut metric = StateAccessMetric::new_read();
@@ -644,8 +650,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create layered state
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add a layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         // Write some data
         let namespace = User::NAMESPACE;
@@ -655,7 +662,7 @@ mod tests {
         layered_state.set_value(namespace, &key, value.clone());
 
         // Revert the layer - should return LayeredRevertableTxState with no layers
-        let layered_state = layered_state.revert_layer();
+        let mut layered_state = layered_state.revert_layer();
         // Should have no layers now
         assert_eq!(layered_state.layer_depth(), 0);
         // The write should be gone (it was in the layer)
@@ -671,8 +678,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create first layer
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         let namespace = User::NAMESPACE;
         let key1 = SlotKey::from_slice(b"key1");
@@ -709,7 +717,7 @@ mod tests {
         );
 
         // Commit first layer - should return LayeredRevertableTxState with no layers
-        let layered_state = layered_state.commit_layer();
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 0);
         // Verify final state through the layered state
         let mut metric = StateAccessMetric::new_read();
@@ -734,8 +742,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create first layer
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         let namespace = User::NAMESPACE;
         let key1 = SlotKey::from_slice(b"key1");
@@ -772,7 +781,7 @@ mod tests {
         );
 
         // Commit first layer
-        let layered_state = layered_state.commit_layer();
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 0);
         // Verify final state through the layered state
         let mut metric = StateAccessMetric::new_read();
@@ -797,8 +806,12 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create first layer
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state (starts with 0 layers)
+        let mut layered_state = working_set.to_revertable_layered();
+        assert_eq!(layered_state.layer_depth(), 0);
+
+        // Add first layer
+        layered_state.add_revertable_layer();
         assert_eq!(layered_state.layer_depth(), 1);
 
         // Add second layer
@@ -818,8 +831,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create first layer
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
         layered_state.add_event("test", "event1");
 
         // Add second layer
@@ -843,8 +857,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create first layer
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
         let cache_key = SlotKey::from_slice(b"cache_key");
         layered_state.put_cached(Some(cache_key.clone()), "cached_value1".to_string());
 
@@ -876,8 +891,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        // Create layered state
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add a layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         let namespace = User::NAMESPACE;
         let key = SlotKey::from_slice(b"test_key");
@@ -901,7 +917,7 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None);
 
         // Commit and verify delete is persisted
-        let layered_state = layered_state.commit_layer();
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 0);
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(
@@ -919,7 +935,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         let namespace = User::NAMESPACE;
         let key = SlotKey::from_slice(b"test_key");
@@ -967,7 +985,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         let namespace = User::NAMESPACE;
         let key = SlotKey::from_slice(b"test_key");
@@ -1027,7 +1047,7 @@ mod tests {
         StateWriter::<User>::set(&mut working_set, &key, value.clone()).unwrap();
 
         // Create layered state
-        let mut layered_state = working_set.add_revertable_layer();
+        let mut layered_state = working_set.to_revertable_layered();
 
         // Should be able to read from inner state
         let mut metric = StateAccessMetric::new_read();
@@ -1053,10 +1073,11 @@ mod tests {
         use crate::StateWriter;
         StateWriter::<User>::set(&mut working_set, &key, value.clone()).unwrap();
 
-        // Create layered state
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add a layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
-        // Verify it exists
+        // Verify it exists (readable from inner state)
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(
             layered_state.get_value(namespace, &key, &mut metric),
@@ -1071,7 +1092,7 @@ mod tests {
         assert_eq!(layered_state.get_value(namespace, &key, &mut metric), None);
 
         // Commit and verify delete is persisted
-        let layered_state = layered_state.commit_layer();
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 0);
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(
@@ -1089,7 +1110,7 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        let mut layered_state = working_set.add_revertable_layer();
+        let mut layered_state = working_set.to_revertable_layered();
         let cache_key = SlotKey::from_slice(b"cache_key");
 
         // Put value in cache
@@ -1115,7 +1136,7 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        let mut layered_state = working_set.add_revertable_layer();
+        let mut layered_state = working_set.to_revertable_layered();
         let cache_key = SlotKey::from_slice(b"cache_key");
 
         // Put value1 in layer1
@@ -1147,7 +1168,7 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        let mut layered_state = working_set.add_revertable_layer();
+        let mut layered_state = working_set.to_revertable_layered();
 
         let namespace = User::NAMESPACE;
         let key = SlotKey::from_slice(b"test_key");
@@ -1173,7 +1194,9 @@ mod tests {
         let mut working_set =
             WorkingSet::<TestSpec>::new_with_kernel(storage, &MockKernel::<TestSpec>::default());
 
-        let mut layered_state = working_set.add_revertable_layer();
+        // Create layered state and add first layer
+        let mut layered_state = working_set.to_revertable_layered();
+        layered_state.add_revertable_layer();
 
         let namespace = User::NAMESPACE;
         let key = SlotKey::from_slice(b"test_key");
@@ -1213,7 +1236,7 @@ mod tests {
         );
 
         // Commit layer1 -> inner state
-        let layered_state = layered_state.commit_layer();
+        let mut layered_state = layered_state.commit_layer();
         assert_eq!(layered_state.layer_depth(), 0);
         let mut metric = StateAccessMetric::new_read();
         assert_eq!(
