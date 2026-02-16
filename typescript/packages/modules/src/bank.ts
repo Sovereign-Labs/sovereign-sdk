@@ -1,3 +1,4 @@
+import { sha256 } from "@noble/hashes/sha2";
 import { type Rollup, SovereignClient } from "@sovereign-sdk/web3";
 import { bech32m } from "bech32";
 import type { ErrorResponse } from "./types";
@@ -40,6 +41,35 @@ type BalancePayload = {
   amount: string;
   token_id: string;
 };
+
+/**
+ * Derives a token ID from the originator, token name, and decimals.
+ *
+ * Matches the Rust `get_token_id` implementation: SHA-256 hash of
+ * originator bytes + token name bytes + decimals byte, with the
+ * last byte of the hash replaced by the decimals value.
+ *
+ * @param originator - The raw bytes of the token originator (e.g. decoded address bytes)
+ * @param tokenName - The name of the token
+ * @param decimals - The number of decimal places for the token
+ * @returns The 32-byte token ID
+ */
+export function getTokenId(
+  originator: Uint8Array,
+  tokenName: string,
+  decimals: number,
+): Uint8Array {
+  const nameBytes = new TextEncoder().encode(tokenName);
+
+  const buffer = new Uint8Array(originator.length + nameBytes.length + 1);
+  buffer.set(originator, 0);
+  buffer.set(nameBytes, originator.length);
+  buffer[originator.length + nameBytes.length] = decimals;
+
+  const hash = sha256(buffer);
+  hash[31] = decimals;
+  return hash;
+}
 
 /**
  * Bank class for interacting with the Sovereign SDK Bank module.
