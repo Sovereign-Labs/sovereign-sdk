@@ -252,49 +252,27 @@ async fn test_transaction_priority() {
     }
 }
 
-/// Regression test for historical state visibility in the preferred sequencer path.
-///
-/// ## What this test validates
-///
-/// For every historical rollup height that is currently queryable through the REST API,
-/// `/modules/value-setter/state/value?rollup_height=<h>` returns:
-/// 1. a value (not an API-level height error), and
-/// 2. a stable value for that height across repeated checks.
-///
-/// We intentionally submit one `set_value` transaction per loop and keep querying previously
-/// seen heights, so each iteration validates "historical state is available immediately after
-/// new progress" from a client perspective.
-///
-/// ## Why this cannot use index-based expectations
-///
-/// Preferred sequencing may produce empty preferred batches (0 tx) that still advance rollup
-/// height. Those heights do not change `value-setter` state, so deriving expectations from loop
-/// index (`expected = j + 1`) is wrong and leads to off-by-one mismatches.
-///
-/// Instead, this test records the first observed value per historical height and asserts
-/// immutability for that height on subsequent iterations.
-///
-/// ## Why we probe the highest *accessible* height
-///
-/// Rollup tip height can momentarily be ahead of archival API accessibility during asynchronous
-/// state/notification propagation. Querying every `h <= tip` can therefore transiently return
-/// `404 invalid rollup height` for some recent heights.
-///
-/// To avoid asserting on non-guaranteed timing windows while still stress-testing the API, we:
-/// 1. wait until latest state reflects the newly submitted tx,
-/// 2. probe downwards from tip to find the highest archival-queryable height, and
-/// 3. run historical assertions up to that accessible bound.
-///
-/// Retry helpers only retry known transient "height not accessible yet" errors.
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_archival_state_is_immediately_available() {
-    let (test_rollup, admin) = create_test_rollup(
+async fn test_archival_state_is_immediately_available() {
+    let (genesis_params, admin) = create_genesis_params();
+    let dir = tempdir_inside_codebase_dir();
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+        dir.clone(),
+        genesis_params
+            .runtime
+            .sequencer_registry
+            .sequencer_config
+            .seq_da_address,
+        genesis_params,
         0,
+        false, // automatic_batch_production — disabled to prevent empty batches from advancing height
         TEST_MAX_BATCH_SIZE,
+        BlockProducingConfig::Manual,
+        None,
         TEST_BLOB_PROCESSING_TIMEOUT,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
+        None,
         0,
-        BlockProducingConfig::Manual,
     )
     .await;
     test_rollup.produce_enough_finalized_slots().await;
@@ -315,16 +293,15 @@ async fn flaky_test_archival_state_is_immediately_available() {
     test_rollup.wait_for_node_synced().await.unwrap();
     // Height after the first value has been set, we don't care much about before that.
     let height_at_start = test_rollup.height().await.get();
-    let mut expected_value_by_height = HashMap::new();
-    expected_value_by_height.insert(height_at_start, 1_u64);
 
     // Now the archival state for each block should immediately be available (as soon as the previous block is closed).
     // Let's test this in a loop
-    for i in 0..=10 {
+    let final_height = height_at_start + 10;
+
+    for (i, height) in (height_at_start..=final_height).enumerate() {
         // Send a transaction to ensure the previous batch is closed.
-        // Why generation was zero?
-        let value_to_set = (i + 2) as u64;
-        let tx = tx_set_value(&admin.private_key, generation, value_to_set);
+        let value_to_set = i + 2;
+        let tx = tx_set_value(&admin.private_key, generation, value_to_set as u64);
         test_rollup
             .api_client()
             .send_raw_tx_to_sequencer(&tx)
@@ -343,51 +320,14 @@ async fn flaky_test_archival_state_is_immediately_available() {
         for _ in 0..extra_blocks {
             let _slot = slots.next().await.unwrap().unwrap();
         }
-        // Wait until the latest state reflects this transaction before checking historical values.
-        let backoff = backon::ExponentialBuilder::default()
-            .with_factor(1.5)
-            .with_min_delay(Duration::from_millis(20))
-            .with_max_delay(Duration::from_millis(500))
-            .with_max_times(30);
-        (|| async {
-            let latest_value = query_set_value_raw(&test_rollup, None)
+        for (j, past_height) in (height_at_start..height).enumerate() {
+            let expected_value = (j + 1) as u64;
+            query_set_value(&test_rollup, Some(past_height), Some(expected_value))
                 .await
-                .context("failed to query latest value")?;
-            anyhow::ensure!(
-                latest_value == Some(value_to_set),
-                "latest value not updated yet (expected {value_to_set}, found {latest_value:?})"
-            );
-            Ok::<(), anyhow::Error>(())
-        })
-        .retry(backoff)
-        .await
-        .unwrap();
-
-        let current_height = highest_accessible_rollup_height(&test_rollup, height_at_start)
-            .await
-            .unwrap();
-
-        for past_height in height_at_start..=current_height {
-            if let Some(expected_value) = expected_value_by_height.get(&past_height).copied() {
-                query_set_value_with_retry(&test_rollup, Some(past_height), Some(expected_value))
-                    .await
-                    .with_context(|| {
-                        format!("past height = {past_height}, expected value = {expected_value}")
-                    })
-                    .unwrap();
-            } else {
-                let found_value = query_set_value_raw_with_retry(
-                    &test_rollup,
-                    Some(format!("rollup_height={past_height}")),
-                )
-                .await
-                .with_context(|| format!("failed to query archival value at height {past_height}"))
-                .unwrap()
-                .with_context(|| format!("archival value is missing at height {past_height}"))
+                .with_context(|| {
+                    format!("past height = {past_height}, expected value = {expected_value}")
+                })
                 .unwrap();
-
-                expected_value_by_height.insert(past_height, found_value);
-            }
         }
     }
 }
@@ -3573,79 +3513,6 @@ async fn query_set_value_helper(
     query_param: Option<String>,
     expected: Option<u64>,
 ) -> anyhow::Result<()> {
-    let found_value = query_set_value_raw(test_rollup, query_param).await?;
-    anyhow::ensure!(found_value == expected);
-    Ok(())
-}
-
-fn archival_query_backoff() -> backon::ExponentialBuilder {
-    backon::ExponentialBuilder::default()
-        .with_factor(1.5)
-        .with_min_delay(Duration::from_millis(20))
-        .with_max_delay(Duration::from_millis(500))
-        .with_max_times(30)
-}
-
-fn is_retryable_archival_query_error(error: &anyhow::Error) -> bool {
-    let msg = format!("{error:#}");
-    msg.contains("invalid rollup height")
-        || msg.contains("HeightNotAccessible")
-        || msg.contains("404 Not Found")
-        || msg.contains("Impossible to get the rollup state at the specified height")
-}
-
-async fn highest_accessible_rollup_height(
-    test_rollup: &TestRollup<TestBlueprint>,
-    min_height: u64,
-) -> anyhow::Result<u64> {
-    let tip_height = test_rollup.height().await.get();
-    for height in (min_height..=tip_height).rev() {
-        match query_set_value_raw(test_rollup, Some(format!("rollup_height={height}"))).await {
-            Ok(_) => return Ok(height),
-            Err(err) if is_retryable_archival_query_error(&err) => {
-                continue;
-            }
-            Err(err) => {
-                return Err(err).with_context(|| {
-                    format!("failed while probing accessible archival height at {height}")
-                });
-            }
-        }
-    }
-
-    Ok(min_height)
-}
-
-async fn query_set_value_with_retry(
-    test_rollup: &TestRollup<TestBlueprint>,
-    rollup_height: Option<u64>,
-    expected: Option<u64>,
-) -> anyhow::Result<()> {
-    let query = || async { query_set_value(test_rollup, rollup_height, expected).await };
-    query
-        .retry(archival_query_backoff())
-        .when(is_retryable_archival_query_error)
-        .await
-}
-
-async fn query_set_value_raw_with_retry(
-    test_rollup: &TestRollup<TestBlueprint>,
-    query_param: Option<String>,
-) -> anyhow::Result<Option<u64>> {
-    let query = || {
-        let query_param = query_param.clone();
-        async move { query_set_value_raw(test_rollup, query_param).await }
-    };
-    query
-        .retry(archival_query_backoff())
-        .when(is_retryable_archival_query_error)
-        .await
-}
-
-async fn query_set_value_raw(
-    test_rollup: &TestRollup<TestBlueprint>,
-    query_param: Option<String>,
-) -> anyhow::Result<Option<u64>> {
     let url = format!(
         "/modules/value-setter/state/value{}",
         if let Some(query_param) = query_param {
@@ -3664,7 +3531,11 @@ async fn query_set_value_raw(
     }
 
     debug!(?response, "Queried state value");
-    Ok(response["value"].as_u64())
+    let found_value = response["value"].as_u64();
+
+    anyhow::ensure!(found_value == expected);
+
+    Ok(())
 }
 
 pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_set: u64) -> RawTx {
