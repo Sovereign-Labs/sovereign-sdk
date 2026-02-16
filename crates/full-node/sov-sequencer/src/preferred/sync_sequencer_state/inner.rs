@@ -236,7 +236,7 @@ where
         &mut self,
         info: StateUpdateInfo<S::Storage>,
         new_executor: RollupBlockExecutor<S, Rt>,
-    ) {
+    ) -> oneshot::Receiver<()> {
         tracing::trace!(?info, "Overwriting preferred sequencer internal state");
 
         // Replace known info
@@ -250,7 +250,7 @@ where
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None); // The api state doesn't need a copy of the pinned cache.
         self.executor_events_sender
             .force_update_api_state(checkpoint)
-            .await;
+            .await
     }
 
     pub(crate) async fn trigger_recovery(&mut self, info: &StateUpdateInfo<S::Storage>) {
@@ -275,7 +275,10 @@ where
         // Since we'll replace the executor when we exit recovery, we don't need to populate the pinned cache.
         let recovery_executor = self.new_executor_with_empty_uncommitted_changes(info, None);
 
-        self.force_overwrite_state(info.clone(), recovery_executor)
+        // trigger_recovery does not call update_api_ledger, so no ordering concern.
+        // Dropping the ack receiver is fine — the side-effects handler uses `let _ =`.
+        let _ack = self
+            .force_overwrite_state(info.clone(), recovery_executor)
             .await;
 
         info!(?info, current_visible_slot_number = %current_visible_slot_number_according_to_node::<S,Rt>(info), "Beginning sequencer recovery");

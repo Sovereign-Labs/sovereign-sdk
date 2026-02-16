@@ -181,10 +181,15 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
-    pub(crate) async fn force_update_api_state(&mut self, checkpoint: StateCheckpoint<S>) {
+    pub(crate) async fn force_update_api_state(
+        &mut self,
+        checkpoint: StateCheckpoint<S>,
+    ) -> oneshot::Receiver<()> {
+        let (sender, receiver) = oneshot::channel();
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::ForceUpdateApiState(checkpoint))
+        self.send(ExecutorEvent::ForceUpdateApiState(checkpoint, sender))
             .await;
+        receiver
     }
 
     /// Fetch the in-progress batch from the database.
@@ -228,10 +233,15 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         .await;
     }
 
-    pub(crate) async fn update_state_for_recovery(&mut self, checkpoint: StateCheckpoint<S>) {
+    pub(crate) async fn update_state_for_recovery(
+        &mut self,
+        checkpoint: StateCheckpoint<S>,
+    ) -> oneshot::Receiver<()> {
+        let (sender, receiver) = oneshot::channel();
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::UpdateStateForRecovery(checkpoint))
+        self.send(ExecutorEvent::UpdateStateForRecovery(checkpoint, sender))
             .await;
+        receiver
     }
 
     pub(crate) fn fetch_completed_blobs_by_sequence(
@@ -324,7 +334,7 @@ where
     /// Insert an accepted transaction into the database and send out the confirmation
     AcceptedTx(AcceptedTxEventContents<S, Rt>),
     /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery
-    ForceUpdateApiState(StateCheckpoint<S>),
+    ForceUpdateApiState(StateCheckpoint<S>, oneshot::Sender<()>),
     /// Prune the database up to the given sequence number.
     PruneDb(SequenceNumber),
     /// Enter recovery mode.
@@ -337,7 +347,7 @@ where
         batch_to_close: Option<ReadBatch>,
     },
     /// During recovery mode, we periodically update the state to the node's state.
-    UpdateStateForRecovery(StateCheckpoint<S>),
+    UpdateStateForRecovery(StateCheckpoint<S>, oneshot::Sender<()>),
     /// Flush transactions cache
     FlushTransactionsCache {
         next_tx_number: u64,

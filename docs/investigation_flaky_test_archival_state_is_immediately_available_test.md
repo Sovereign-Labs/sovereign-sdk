@@ -117,3 +117,115 @@ So stale-checkpoint behavior is still possible via initialization timing/order, 
    - Disable opportunistic automatic batch production for this test scenario.
 3. Track checkpoint-vs-notification ordering as a separate issue:
    - Good production hardening, but currently not required to resolve this flake.
+
+
+# Runner-Side Ordering Issue
+The issue is a missing ordering guarantee between:
+
+1. API checkpoint update (checkpoint_receiver path), and
+2. slot notification emission (api_ledger_db path).
+
+Today these happen on different async paths without an ack barrier.
+
+Where it happens
+
+1. Sequencer sync path enqueues checkpoint update event, then immediately sends ledger notifications:
+
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs:660
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs:666
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs:670
+
+2. force_update_api_state is only an async send to event queue:
+
+- crates/full-node/sov-sequencer/src/preferred/executor_events.rs:184
+
+3. Side-effects task applies checkpoint later when event is processed:
+
+- crates/full-node/sov-sequencer/src/preferred/side_effects.rs:214
+- crates/full-node/sov-sequencer/src/preferred/side_effects.rs:215
+- Queue is batched/drained and can delay this event under load:
+- crates/full-node/sov-sequencer/src/preferred/side_effects.rs:246
+- crates/full-node/sov-sequencer/src/preferred/side_effects.rs:261
+
+4. Ledger notifications are sent immediately in update_api_ledger:
+
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/inner.rs:456
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/inner.rs:470
+
+5. REST builds accessor from current checkpoint snapshot; stale checkpoint can yield HeightNotAccessible:
+
+- crates/module-system/sov-modules-api/src/rest/mod.rs:236
+- crates/module-system/sov-modules-api/src/state/accessors/http_api.rs:696
+- mapped to HTTP 404 "invalid rollup height":
+- crates/module-system/sov-modules-api/src/rest/mod.rs:370
+- crates/module-system/sov-modules-api/src/state/accessors/http_api.rs:530
+
+6. Same pattern also exists in recovery overwrite flow:
+
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs:703
+- crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs:706
+
+Concrete timeline
+
+1. New node state info arrives.
+2. Sequencer enqueues ForceUpdateApiState(checkpoint) (not applied yet).
+3. Sequencer immediately replaces ledger reader and emits slot notifications.
+4. Client receives slot WS update and queries historical state.
+5. REST still sees previous checkpoint and returns HeightNotAccessible => 404.
+6. Shortly after, side-effects applies checkpoint and same query succeeds.
+
+This is exactly a transient API visibility gap.
+
+———
+
+On the reviewer concerns
+Both concerns are correct.
+
+1. highest_accessible_rollup_height can mask immediate-availability failures
+
+- In current test, inaccessible latest heights are skipped:
+- crates/full-node/sov-sequencer/tests/integration/preferred_end_to_end.rs:3597
+- That means the test can pass while most recent notified heights are still not queryable.
+
+2. Retries changed semantics from “immediate” to “eventual”
+
+- Current test retries on 404/HeightNotAccessible:
+- crates/full-node/sov-sequencer/tests/integration/preferred_end_to_end.rs:3581
+- crates/full-node/sov-sequencer/tests/integration/preferred_end_to_end.rs:3619
+- So it now tolerates propagation delay and does not strictly enforce “immediate”.
+
+So yes: current version is better as an eventual consistency + immutability test, not a strict immediate-availability contract test.
+
+———
+
+What runner-side hardening should do
+The core fix is to create a happens-before guarantee:
+
+1. Add an acked checkpoint-update event (oneshot ack from side-effects after checkpoint_sender.send).
+2. In sync path, await this ack before update_api_ledger(...send_notifications_for_slot...).
+3. Apply same ordering in recovery path.
+
+After that, slot notification implies checkpoint is already updated for API queries.
+
+
+```
+ Context
+
+ There is a race condition in the sequencer's API state update path. When new node state arrives, the sync path:
+ 1. Enqueues a checkpoint update via mpsc to the side-effects task
+ 2. Immediately sends slot notifications to WebSocket clients
+
+ The side-effects task applies the checkpoint to a watch::Sender asynchronously. If a client receives the WS notification and queries the REST API before the checkpoint is applied, the query fails with HeightNotAccessible (404).
+
+ This is a transient API visibility gap — the same query succeeds moments later. It affects three code paths in sync_state.rs: common_for_final_catchup_and_new_storage, process_force_overwrite_state_for_recovery, and
+ process_wait_for_node_resync.
+
+ Race timeline:
+ SyncState                   SideEffects                 Client
+   |                            |                           |
+   |-- mpsc: ForceUpdateApi --> |                           |
+   |-- broadcast: slot notif ---|-------------------------> |
+   |                            |                           |-- REST query (404!)
+   |                            |-- watch: apply checkpoint |
+   |                            |                           |-- REST query (200 ok)
+```

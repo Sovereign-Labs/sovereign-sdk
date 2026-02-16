@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::time::Duration;
 
 use anyhow::Result;
 use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
@@ -39,6 +40,20 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    async fn maybe_delay_api_state_update_for_tests() {
+        const ENV_VAR: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
+        let Ok(raw_ms) = std::env::var(ENV_VAR) else {
+            return;
+        };
+        let Ok(ms) = raw_ms.parse::<u64>() else {
+            warn!(%ENV_VAR, %raw_ms, "Invalid delay value, expected u64 milliseconds");
+            return;
+        };
+        if ms > 0 {
+            tokio::time::sleep(Duration::from_millis(ms)).await;
+        }
+    }
+
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
@@ -211,14 +226,18 @@ where
                     .publish_proof(data, sequence_number, blob_id)
                     .await?;
             }
-            ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
+            ExecutorEvent::ForceUpdateApiState(new_checkpoint, ack_sender) => {
+                Self::maybe_delay_api_state_update_for_tests().await;
                 self.update_api_state(new_checkpoint);
+                let _ = ack_sender.send(());
             }
             ExecutorEvent::PruneDb(sequence_number) => {
                 self.db.prune_db(sequence_number).await?;
             }
-            ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
+            ExecutorEvent::UpdateStateForRecovery(checkpoint, ack_sender) => {
+                Self::maybe_delay_api_state_update_for_tests().await;
                 self.update_api_state(checkpoint);
+                let _ = ack_sender.send(());
             }
             ExecutorEvent::FlushTransactionsCache {
                 next_tx_number,
