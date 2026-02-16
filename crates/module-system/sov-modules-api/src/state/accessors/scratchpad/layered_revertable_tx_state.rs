@@ -294,6 +294,17 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
         self.layers.len()
     }
 
+    /// Tracks gas consumption in the current layer (if any).
+    /// This is a helper used by GasMeter implementations.
+    fn track_gas_in_layer(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+        if let Some(layer) = self.layers.last_mut() {
+            layer.gas_consumed = layer.gas_consumed.checked_combine(amount).ok_or_else(|| {
+                GasMeteringError::Overflow("Gas consumption overflow in layer".to_string())
+            })?;
+        }
+        Ok(())
+    }
+
     /// Gets the current top layer for write operations.
     /// Panics if no layers exist (should only be called when layers are present).
     fn current_layer_mut(&mut self) -> &mut StateLayer<S> {
@@ -439,14 +450,7 @@ impl<S: Spec, I: TxState<S>> GasMeter for LayeredRevertableTxState<'_, S, I> {
     type Spec = S;
 
     fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
-        // Track gas consumption in current layer (if any)
-        if let Some(layer) = self.layers.last_mut() {
-            layer.gas_consumed = layer.gas_consumed.checked_combine(amount).ok_or_else(|| {
-                GasMeteringError::Overflow("Gas consumption overflow in layer".to_string())
-            })?;
-        }
-
-        // Delegate to inner for actual metering
+        self.track_gas_in_layer(amount)?;
         self.inner.charge_gas(amount)
     }
 
@@ -459,17 +463,9 @@ impl<S: Spec, I: TxState<S>> GasMeter for LayeredRevertableTxState<'_, S, I> {
         amount: <Self::Spec as Spec>::Gas,
         parameter: u32,
     ) -> anyhow::Result<(), GasMeteringError<<Self::Spec as Spec>::Gas>> {
-        // Calculate total amount for tracking
-        if let Some(layer) = self.layers.last_mut() {
-            if let Some(total) = amount.checked_scalar_product(parameter as u64) {
-                layer.gas_consumed =
-                    layer.gas_consumed.checked_combine(total).ok_or_else(|| {
-                        GasMeteringError::Overflow("Gas consumption overflow in layer".to_string())
-                    })?;
-            }
+        if let Some(total) = amount.checked_scalar_product(parameter as u64) {
+            self.track_gas_in_layer(total)?;
         }
-
-        // Delegate to inner for actual metering
         self.inner.charge_linear_gas(amount, parameter)
     }
 
