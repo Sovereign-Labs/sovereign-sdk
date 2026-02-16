@@ -1,3 +1,7 @@
+# 2026-02-16
+- #2489 Non-breaking, but **important**: Celestia adapter now by default validates blocks fetched from RPC node.
+  This adds performance overhead. It can be disabled by setting `verify_on_fetch = false` in `da` section of rollup_config.toml. Do on your own risk.
+
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
 # 2026-01-29

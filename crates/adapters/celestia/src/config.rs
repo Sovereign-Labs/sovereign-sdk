@@ -59,6 +59,8 @@ pub struct CelestiaConfig {
     #[serde(default = "default_background_stat_polling_interval_secs")]
     pub background_stat_polling_interval_secs: u64,
     /// Whether to verify fetched namespace data against block DAH before returning from `get_block_at`.
+    /// Disable only if you explicitly want to skip this integrity check for performance reasons.
+    /// Disabling it might lead to silent consensus breaking fork if connected RPC node returns corrupted data.
     /// Default: true.
     #[serde(default = "default_verify_on_fetch")]
     pub verify_on_fetch: bool,

@@ -48,9 +48,10 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 # Default: 30
 #background_stat_polling_interval_secs = 30
 
-# Verify fetched namespace data against the DA header before returning from get_block_at.
-# Disable only if you explicitly want to skip this integrity check.
-# Default: true
+# Whether to verify fetched namespace data against block DAH before returning from `get_block_at`.
+# Disable only if you explicitly want to skip this integrity check for performance reasons.
+# Disabling it might lead to silent consensus breaking fork if connected RPC node returns corrupted data.
+# Default: true.
 #verify_on_fetch = true
 
 # Options are "Low", "Medium" and "High"
