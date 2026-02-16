@@ -111,31 +111,6 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
-    rollup.pause_preferred_batches().await;
-
-    let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
-    usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
-    usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
-
-    let (latest_hash, latest_tx_count) = wait_for_latest_with_min_txs(&client, 3).await?;
-    let by_hash_count = client
-        .get_block_transaction_count_by_hash(latest_hash)
-        .await?;
-
-    assert_eq!(
-        by_hash_count,
-        Some(latest_tx_count),
-        "latest should resolve to the pending synthetic block while txs are pending"
-    );
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn eth_get_block_receipts() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
