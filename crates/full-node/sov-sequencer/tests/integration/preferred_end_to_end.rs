@@ -252,6 +252,40 @@ async fn test_transaction_priority() {
     }
 }
 
+/// Regression test for historical state visibility in the preferred sequencer path.
+///
+/// ## What this test validates
+///
+/// For every historical rollup height that is currently queryable through the REST API,
+/// `/modules/value-setter/state/value?rollup_height=<h>` returns:
+/// 1. a value (not an API-level height error), and
+/// 2. a stable value for that height across repeated checks.
+///
+/// We intentionally submit one `set_value` transaction per loop and keep querying previously
+/// seen heights, so each iteration validates "historical state is available immediately after
+/// new progress" from a client perspective.
+///
+/// ## Why this cannot use index-based expectations
+///
+/// Preferred sequencing may produce empty preferred batches (0 tx) that still advance rollup
+/// height. Those heights do not change `value-setter` state, so deriving expectations from loop
+/// index (`expected = j + 1`) is wrong and leads to off-by-one mismatches.
+///
+/// Instead, this test records the first observed value per historical height and asserts
+/// immutability for that height on subsequent iterations.
+///
+/// ## Why we probe the highest *accessible* height
+///
+/// Rollup tip height can momentarily be ahead of archival API accessibility during asynchronous
+/// state/notification propagation. Querying every `h <= tip` can therefore transiently return
+/// `404 invalid rollup height` for some recent heights.
+///
+/// To avoid asserting on non-guaranteed timing windows while still stress-testing the API, we:
+/// 1. wait until latest state reflects the newly submitted tx,
+/// 2. probe downwards from tip to find the highest archival-queryable height, and
+/// 3. run historical assertions up to that accessible bound.
+///
+/// Retry helpers only retry known transient "height not accessible yet" errors.
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_archival_state_is_immediately_available() {
     let (test_rollup, admin) = create_test_rollup(
