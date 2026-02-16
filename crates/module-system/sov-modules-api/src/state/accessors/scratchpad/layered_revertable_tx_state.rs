@@ -259,20 +259,7 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
     /// Returns `LayeredRevertableTxState` with the layer removed.
     /// If this was the last layer, returns `LayeredRevertableTxState` with no layers.
     pub fn revert_layer(mut self) -> Self {
-        if self.layers.is_empty() {
-            panic!("Cannot revert layer: no layers exist");
-        }
-
-        let layer = self.layers.pop().unwrap();
-
-        // Restore gas from snapshot if layer had one
-        if let Some(snapshot) = layer.gas_snapshot {
-            if let Some(meter) = self.inner.try_as_basic_gas_meter() {
-                meter.remaining_gas = snapshot.remaining_gas;
-                meter.remaining_funds = snapshot.remaining_funds;
-            }
-        }
-
+        self.revert_layer_mut();
         self
     }
 
