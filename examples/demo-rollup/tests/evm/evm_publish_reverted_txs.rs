@@ -6,7 +6,6 @@ use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockNomtDemoRollup;
 use sov_evm::execution_config::EvmExecutionConfigContents;
 use sov_evm_test_utils::SimpleStorage;
-use sov_evm_test_utils::Submit;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_risc0_adapter::Risc0;
@@ -98,10 +97,16 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
 
     // Set explicit gas to avoid pre-submit `eth_estimateGas`, which now correctly
     // errors on reverting calls.
-    let result = contract.alwaysRevert().gas(300_000).submit().await;
+    let result = contract.alwaysRevert().gas(300_000).send().await;
     let nonce = client.get_transaction_count(signer.address()).await?;
     if preferred_sequencer_publish_reverted_txs {
-        assert!(result.is_ok());
+        let pending_tx = result?;
+        let receipt = pending_tx.get_receipt().await?;
+        // TC05: Reverted transaction receipt must have status=0x0
+        assert!(
+            !receipt.status(),
+            "reverted transaction must have status=0x0"
+        );
         assert_eq!(nonce, 2);
     } else {
         assert!(result.is_err());

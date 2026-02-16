@@ -276,6 +276,16 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
     }
 
+    fn maybe_iter_kernel_values_with_prefix(
+        &self,
+        _prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        unimplemented!("The ZkStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+        // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
+        #[allow(unreachable_code)]
+        Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
+    }
+
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         unimplemented!("The ZkStorage does not support `take_pinned_cache`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }

@@ -11930,6 +11930,7 @@ dependencies = [
  "async-trait",
  "reqwest",
  "serde",
+ "sov-metrics",
  "sqlx",
  "time",
  "tokio",

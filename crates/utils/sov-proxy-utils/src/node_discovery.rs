@@ -101,7 +101,7 @@ impl NodeInfo {
 #[async_trait]
 pub trait ClusterUpdateNotifier: Send + Sync + 'static {
     /// Called when cluster membership or leadership changes.
-    async fn on_cluster_update(&self, cluster_info: &ClusterInfo);
+    async fn on_cluster_update(&mut self, cluster_info: &ClusterInfo) -> anyhow::Result<()>;
 }
 
 /// Handle returned when subscribing to cluster updates.
@@ -281,13 +281,13 @@ impl NodeDiscovery {
         write_to_file_atomically(&self.path, &content).await?;
         tracing::info!(?self.path, content, "Cluster info file updated");
 
+        // Notify watchers that the cluster was updated.
+        if let Some(notifier) = &mut self.notifier {
+            notifier.on_cluster_update(&info).await?;
+        }
+
         self.prev_followers = followers;
         self.prev_leader_id = leader_id;
-
-        // Notify watchers that the cluster was updated.
-        if let Some(notifier) = &self.notifier {
-            notifier.on_cluster_update(&info).await;
-        }
         let _ = self.sender.send(info);
 
         Ok(())
