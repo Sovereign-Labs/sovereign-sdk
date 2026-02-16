@@ -123,13 +123,14 @@ where
 ///
 /// Verifies:
 /// - `earliest` returns genesis (block 0)
-/// - `safe` and `finalized` return the latest finalized rollup height
+/// - `safe` and `finalized` return the latest finalized rollup height, aka the latest sealed soft confirmed block.
 /// - `safe` == `finalized`
 #[tokio::test(flavor = "multi_thread")]
 async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
+    // Here we rely on the semantics that Finalized returns the latest sealed soft confirmed block.
     let sealed_head_number = client
         .get_block_by_number(Finalized)
         .await?

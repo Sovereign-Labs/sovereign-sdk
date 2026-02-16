@@ -278,7 +278,9 @@ where
         Ok(ensure_success(result)?)
     }
 
-    /// Handler for: `eth_blockNumber`
+    /// Handler for: `eth_blockNumber`.
+    /// Returns pending block if it has any transactions.
+    /// This is in line with sovereign rollup `pending` == `latest` semantics.
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
