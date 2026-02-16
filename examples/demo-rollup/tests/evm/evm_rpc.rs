@@ -3,7 +3,6 @@ use alloy_primitives::utils::parse_ether;
 use alloy_primitives::{keccak256, Address, BlockHash, Bloom, B256, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider;
-use alloy_rpc_types_eth::BlockNumberOrTag::{Earliest, Latest, Pending};
 use alloy_rpc_types_eth::Header;
 use alloy_rpc_types_eth::{Block, BlockId, BlockNumberOrTag, BlockTransactions, Filter};
 use alloy_rpc_types_eth::{Transaction, TransactionReceipt};
