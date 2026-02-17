@@ -18,7 +18,12 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
+use sov_proxy_utils::ClusterInfo;
+use sov_proxy_utils::ClusterInfoService;
+use sov_proxy_utils::RootHashCheck;
+use sov_proxy_utils::RootHashConsistency;
 use sov_sequencer::preferred::ConfiguredNodeRole;
+use sov_sequencer::SequencerRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::PostgresData;
@@ -26,16 +31,14 @@ use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
-use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 mod db_elected;
 mod replica_gets_txs_from_master;
 mod replica_registers_in_db;
+mod root_hash_checker;
 mod start_stop;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
@@ -103,7 +106,7 @@ async fn send_transfers(
     count: u64,
     key_and_address: PrivateKeyAndAddress<S>,
     receiver: <S as Spec>::Address,
-    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
+    client: sov_api_spec::client::Client,
 ) {
     for n in 0..count {
         let tx = build_transfer_token_tx::<S>(
@@ -116,7 +119,7 @@ async fn send_transfers(
         let mut retry_duration = Duration::from_millis(100);
         // Send the tx with retries, up to 7 attempts (about 30 seconds)
         for attempt in 1..=7 {
-            match test_rollup.send_tx_to_sequencer(&tx).await {
+            match client.send_tx_to_sequencer(&tx).await {
                 Ok(_) => break,
                 Err(e) => {
                     if e.to_string().contains("The node fell out of sync") {
@@ -155,45 +158,14 @@ async fn wait_for_all_events(
     }
 }
 
-use sov_proxy_utils::ClusterInfo;
-use sov_proxy_utils::NodeDiscovery;
-
-async fn wait_for_file_change(path: &Path, file_watcher: &mut watch::Receiver<()>) -> ClusterInfo {
-    tokio::time::timeout(Duration::from_secs(2), file_watcher.changed())
-        .await
-        .unwrap()
-        .unwrap();
-
-    let content = std::fs::read_to_string(path).expect("Failed to read file content");
-    ClusterInfo::parse(&content).expect("Failed to parse cluster info")
-}
-
 type Rollup = ExternalMockDemoRollup<Native>;
-
-/// Holds resources for a cluster info subscription.
-struct ClusterInfoSubscription {
-    _temp_dir: tempfile::TempDir,
-    path: PathBuf,
-    handle: JoinHandle<()>,
-    file_watcher: watch::Receiver<()>,
-}
-
-impl ClusterInfoSubscription {
-    async fn wait_for_change(&mut self) -> ClusterInfo {
-        wait_for_file_change(&self.path, &mut self.file_watcher).await
-    }
-
-    fn abort(self) {
-        self.handle.abort();
-    }
-}
 
 /// Test setup for DbElected tests with two nodes (leader and replica).
 struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
-    cluster_info_subscription: ClusterInfoSubscription,
+    cluster_info_service: ClusterInfoService,
 }
 
 const MAX_AGE: Duration = Duration::from_secs(10);
@@ -205,7 +177,7 @@ impl NodeDiscoveryTestSetup {
         Self::new_with_max_age(MAX_AGE).await
     }
 
-    /// Creates a new test setup with custom max_age for NodeDiscovery.
+    /// Creates a new test setup with custom max_age for cluster info updates.
     /// Returns None if Docker is not supported.
     async fn new_with_max_age(max_age: Duration) -> Option<Self> {
         let postgres = match PostgresData::create_postgres().await {
@@ -218,35 +190,16 @@ impl NodeDiscoveryTestSetup {
 
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
-        // Create NodeDiscovery to query the nodes table
-        let (node_discovery, file_watcher) =
-            NodeDiscovery::new_with_max_age(postgres.connection_string(), max_age)
+        let cluster_info_service =
+            ClusterInfoService::spawn(postgres.connection_string(), max_age, None)
                 .await
-                .expect("Failed to create NodeDiscovery");
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let path = temp_dir.path().join("cluster_info.txt");
-        let path_clone = path.clone();
-
-        let handle = tokio::spawn(async move {
-            node_discovery
-                .subscribe_cluster_info_loop(path_clone)
-                .await
-                .unwrap();
-        });
-
-        let cluster_info_subscription = ClusterInfoSubscription {
-            _temp_dir: temp_dir,
-            path,
-            handle,
-            file_watcher,
-        };
+                .expect("Failed to create ClusterInfoService");
 
         Some(Self {
             postgres,
             da_shutdown,
             da_addr,
-            cluster_info_subscription,
+            cluster_info_service,
         })
     }
 
@@ -257,7 +210,53 @@ impl NodeDiscoveryTestSetup {
     }
 
     async fn shutdown(self) {
-        self.cluster_info_subscription.abort();
+        self.cluster_info_service.shutdown();
         let _ = self.da_shutdown.send(());
     }
+
+    async fn wait_for_cluster_change(&mut self) -> ClusterInfo {
+        self.wait_for_cluster_change_with_timeout(Duration::from_secs(2))
+            .await
+    }
+
+    async fn wait_for_cluster_change_with_timeout(&mut self, timeout: Duration) -> ClusterInfo {
+        self.cluster_info_service
+            .wait_for_update_with_timeout(timeout)
+            .await
+            .expect("Failed to receive cluster info update")
+    }
+
+    async fn wait_for_root_hash_check_with_timeout(&mut self, timeout: Duration) -> RootHashCheck {
+        tokio::time::timeout(timeout, async {
+            let receiver = &mut self.cluster_info_service.root_hash_checker_task.receiver;
+            receiver
+                .changed()
+                .await
+                .expect("Root hash checker channel closed");
+
+            receiver.borrow_and_update().clone()
+        })
+        .await
+        .expect("Timed out waiting for root hash checker update")
+    }
+}
+
+async fn establish_leader_and_replica(
+    node_1: TestRollup<Rollup>,
+    node_2: TestRollup<Rollup>,
+) -> (TestRollup<Rollup>, TestRollup<Rollup>) {
+    // Discover roles via the /sequencer/role endpoint
+    let role1 = node_1.sequencer_role().await.unwrap();
+    let role2 = node_2.sequencer_role().await.unwrap();
+
+    // Determine which node is the leader and which is the replica
+    let (leader, replica) = match (role1, role2) {
+        (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (node_1, node_2),
+        (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (node_2, node_1),
+        _ => {
+            panic!("Expected one BatchProducer and one PgSyncReplica, got {role1:?} and {role2:?}")
+        }
+    };
+
+    (leader, replica)
 }
