@@ -3,6 +3,7 @@
 mod call;
 mod capability;
 pub mod derived_holder;
+mod gas_billing;
 #[cfg(feature = "test-utils")]
 mod test_utils;
 

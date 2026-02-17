@@ -1,3 +1,4 @@
+mod biller;
 mod error;
 mod impl_macros;
 mod metered_utils;
@@ -9,6 +10,7 @@ mod unit;
 #[cfg(test)]
 mod tests;
 
+pub use biller::{GasBiller, GasBillingError};
 pub use error::GasMeteringError;
 pub(crate) use impl_macros::*;
 pub use metered_utils::{
