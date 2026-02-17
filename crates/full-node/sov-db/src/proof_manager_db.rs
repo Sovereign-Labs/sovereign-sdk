@@ -9,8 +9,10 @@ use std::sync::Arc;
 use rockbound::{SchemaBatch, DB};
 use sov_rollup_interface::common::SlotNumber;
 
+use crate::ledger_db::LedgerDb;
 use crate::schema::tables::{StfInfoByNumber, StfInfoMetadata, PROOF_MANAGER_TABLES};
 use crate::schema::types::{StfInfoUniqueId, StoredStfInfo};
+use crate::schema::DeltaReader;
 use crate::DbOptions;
 
 /// DB key for the latest height of the written STF info.
@@ -174,20 +176,107 @@ impl ProofManagerDb {
         Ok(())
     }
 
+    // ==================== Startup Checks ====================
+
+    /// Ensures startup is safe for the given `ledger_head` without backfilling legacy state.
+    ///
+    /// Rules:
+    /// - If `ledger_head` is genesis, startup is allowed.
+    /// - If ProofManagerDb already has STF state/metadata, startup is allowed.
+    /// - If `ledger_head` is above genesis and ProofManagerDb is empty, startup fails fast.
+    ///
+    /// By design this does not migrate STF state from legacy LedgerDb tables.
+    pub fn ensure_initialized_for_ledger_head(
+        &self,
+        ledger_db: &LedgerDb,
+        ledger_head: SlotNumber,
+    ) -> anyhow::Result<()> {
+        if ledger_head <= SlotNumber::GENESIS {
+            return Ok(());
+        }
+
+        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
+        let proof_manager_has_data = self.get_write_height()?.is_some()
+            || self.get_next_height_to_receive()?.is_some()
+            || self.get_oldest_height()?.is_some()
+            || proof_manager_reader
+                .get_largest::<StfInfoByNumber>()?
+                .is_some();
+        if proof_manager_has_data {
+            return Ok(());
+        }
+
+        let legacy_reader = ledger_db.clone_reader();
+        let ledger_has_legacy_stf_state = legacy_reader
+            .get::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)?
+            .is_some()
+            || legacy_reader
+                .get::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID)?
+                .is_some()
+            || legacy_reader
+                .get::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID)?
+                .is_some()
+            || legacy_reader.get_largest::<StfInfoByNumber>()?.is_some();
+
+        if ledger_has_legacy_stf_state {
+            anyhow::bail!(
+                "ProofManagerDb is empty while ledger head is {ledger_head}. Legacy STF state exists in LedgerDb, but no backfill is performed by design. Please initialize or restore ProofManagerDb before startup."
+            );
+        }
+
+        anyhow::bail!(
+            "ProofManagerDb is empty while ledger head is {ledger_head}. Startup is blocked to avoid reopening from slot 1. Please initialize or restore ProofManagerDb before startup."
+        );
+    }
+
     // ==================== Startup Validation ====================
 
     /// Validate ProofManagerDb state against the ledger head on startup and
     /// recover `write_height` if metadata lagged behind actual stored STF info.
     ///
     /// Enforces the invariant: proof_manager_write_height <= ledger_head.
-    /// If the invariant is violated, return an error to fail fast.
+    /// If the invariant is violated, truncate ProofManagerDb to `ledger_head`.
     pub fn validate_and_recover_write_height(&self, ledger_head: SlotNumber) -> anyhow::Result<()> {
         let maybe_write_height = self.get_write_height()?;
-        let write_height = maybe_write_height.unwrap_or(SlotNumber::GENESIS);
+        let mut write_height = maybe_write_height.unwrap_or(SlotNumber::GENESIS);
 
         if write_height > ledger_head {
-            anyhow::bail!(
-                "ProofManagerDb ahead of LedgerDb. This is a bug. ledger_head={ledger_head}, proof_manager_write_height={write_height}"
+            let old_write_height = write_height;
+            let mut batch = SchemaBatch::new();
+
+            // Remove STF infos beyond current ledger head.
+            if let Some(first_to_remove) = ledger_head.checked_add(1) {
+                for slot in first_to_remove.range_inclusive(old_write_height) {
+                    batch.delete::<StfInfoByNumber>(&slot)?;
+                }
+            }
+
+            // Clamp metadata to ledger view.
+            batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &ledger_head)?;
+
+            if let Some(next_height) = self.get_next_height_to_receive()? {
+                let max_next_height = ledger_head.saturating_add(1);
+                if next_height > max_next_height {
+                    batch.put::<StfInfoMetadata>(
+                        &NEXT_SLOT_NUMBER_TO_RECEIVE_ID,
+                        &max_next_height,
+                    )?;
+                }
+            }
+
+            if let Some(oldest_height) = self.get_oldest_height()? {
+                if oldest_height > ledger_head {
+                    batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &ledger_head)?;
+                }
+            }
+
+            self.write_batch(&batch)?;
+            write_height = ledger_head;
+
+            tracing::warn!(
+                %ledger_head,
+                old_proof_manager_write_height = %old_write_height,
+                "ProofManagerDb was ahead of LedgerDb. Truncated ProofManagerDb to ledger head"
             );
         }
 
@@ -226,10 +315,29 @@ impl ProofManagerDb {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use rockbound::SchemaBatch;
+    use sov_rollup_interface::common::SlotNumber;
+
+    use crate::ledger_db::LedgerDb;
+    use crate::schema::DeltaReader;
+
     use super::*;
 
     fn create_test_db(path: impl AsRef<std::path::Path>) -> ProofManagerDb {
         ProofManagerDb::open(path).expect("Failed to open ProofManagerDb")
+    }
+
+    fn create_test_ledger_db(path: impl AsRef<std::path::Path>) -> (LedgerDb, Arc<DB>) {
+        let raw_ledger_db = Arc::new(
+            LedgerDb::get_rockbound_options()
+                .default_setup_db_in_path(path)
+                .expect("Failed to open LedgerDb"),
+        );
+        let ledger_reader = DeltaReader::new(raw_ledger_db.clone(), Vec::new());
+        let ledger_db = LedgerDb::with_reader(ledger_reader).expect("Failed to create LedgerDb");
+        (ledger_db, raw_ledger_db)
     }
 
     fn make_stf_info(slot: u64) -> StoredStfInfo {
@@ -342,15 +450,26 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_errors_when_ahead() {
+    fn test_validate_truncates_when_ahead() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
+        for slot in 1..=10 {
+            let slot = SlotNumber::new(slot);
+            db.put_stf_info(slot, &make_stf_info(slot.get())).unwrap();
+        }
         db.set_write_height(SlotNumber::new(10)).unwrap();
-        let err = db
-            .validate_and_recover_write_height(SlotNumber::new(7))
-            .unwrap_err();
-        assert!(err.to_string().contains("ProofManagerDb ahead of LedgerDb"));
+        db.set_next_height_to_receive(SlotNumber::new(12)).unwrap();
+
+        db.validate_and_recover_write_height(SlotNumber::new(7))
+            .unwrap();
+
+        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(7)));
+        assert!(db.get_stf_info(SlotNumber::new(8)).unwrap().is_none());
+        assert_eq!(
+            db.get_next_height_to_receive().unwrap(),
+            Some(SlotNumber::new(8))
+        );
     }
 
     #[test]
@@ -395,5 +514,60 @@ mod tests {
                 Some(SlotNumber::new(3))
             );
         }
+    }
+
+    #[test]
+    fn test_ensure_initialized_for_ledger_head_allows_non_empty_proof_manager_db() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let (ledger_db, _raw_ledger_db) = create_test_ledger_db(temp_dir.path());
+        let proof_manager_db = create_test_db(temp_dir.path());
+        proof_manager_db
+            .set_write_height(SlotNumber::new(2))
+            .unwrap();
+
+        proof_manager_db
+            .ensure_initialized_for_ledger_head(&ledger_db, SlotNumber::new(3))
+            .unwrap();
+    }
+
+    #[test]
+    fn test_ensure_initialized_for_ledger_head_fails_when_empty_and_ledger_non_genesis() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let (ledger_db, _raw_ledger_db) = create_test_ledger_db(temp_dir.path());
+        let proof_manager_db = create_test_db(temp_dir.path());
+
+        let err = proof_manager_db
+            .ensure_initialized_for_ledger_head(&ledger_db, SlotNumber::new(3))
+            .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("Startup is blocked to avoid reopening from slot 1"));
+        assert!(proof_manager_db.get_write_height().unwrap().is_none());
+    }
+
+    #[test]
+    fn test_ensure_initialized_for_ledger_head_fails_when_legacy_stf_state_exists() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let (ledger_db, raw_ledger_db) = create_test_ledger_db(temp_dir.path());
+        let proof_manager_db = create_test_db(temp_dir.path());
+
+        let mut legacy_batch = SchemaBatch::new();
+        legacy_batch
+            .put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &SlotNumber::new(5))
+            .unwrap();
+        raw_ledger_db.write_schemas(&legacy_batch).unwrap();
+
+        let err = proof_manager_db
+            .ensure_initialized_for_ledger_head(&ledger_db, SlotNumber::new(3))
+            .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("Legacy STF state exists in LedgerDb"));
+        assert!(proof_manager_db
+            .get_next_height_to_receive()
+            .unwrap()
+            .is_none());
     }
 }

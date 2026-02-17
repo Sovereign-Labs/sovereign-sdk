@@ -102,7 +102,129 @@ where
 
         tracing::debug!(%slot_number, %attestation_height, "Submitting attestation to DA");
 
-        self.stf_info_receiver.inc_next_height_to_receive();
+        self.stf_info_receiver
+            .inc_next_height_to_receive_by_and_persist(1)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::num::NonZero;
+
+    use async_trait::async_trait;
+    use sov_db::proof_manager_db::ProofManagerDb;
+    use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
+    use sov_modules_api::da::Time;
+    use sov_rollup_interface::common::SlotNumber;
+    use sov_rollup_interface::da::{DaProof, RelevantBlobs, RelevantProofs};
+    use sov_rollup_interface::optimistic::{ProofOfBond, SerializedChallenge};
+    use sov_rollup_interface::stf::ProofSender;
+    use sov_rollup_interface::zk::StateTransitionWitness;
+    use tokio::sync::watch;
+
+    use super::*;
+    use crate::processes::{new_stf_info_channel, StateTransitionInfo};
+
+    struct TestBondingProofService;
+
+    impl BondingProofService for TestBondingProofService {
+        type StateProof = ();
+
+        fn get_bonding_proof(
+            &self,
+            slot_number: SlotNumber,
+        ) -> Option<ProofOfBond<Self::StateProof>> {
+            Some(ProofOfBond {
+                claimed_slot_number: slot_number,
+                proof: (),
+            })
+        }
+    }
+
+    struct NoopProofSender;
+
+    #[async_trait]
+    impl ProofSender for NoopProofSender {
+        async fn publish_proof_blob_with_metadata(
+            &self,
+            _serialized_proof: sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn publish_attestation_blob_with_metadata(
+            &self,
+            _serialized_attestation: SerializedAttestation,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+
+        async fn publish_challenge_blob_with_metadata(
+            &self,
+            _serialized_challenge: SerializedChallenge,
+            _slot_height: SlotNumber,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_attestation_processing_persists_next_height_to_receive() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
+
+        let (_sender, receiver) = new_stf_info_channel::<Vec<u8>, Vec<u8>, MockDaSpec>(
+            proof_manager_db.clone(),
+            NonZero::new(4).unwrap(),
+            NonZero::new(4).unwrap(),
+        )?;
+
+        let (_shutdown_sender, shutdown_receiver) = watch::channel(());
+        let mut manager = AttestationsManager::new(
+            receiver,
+            TestBondingProofService,
+            Box::new(NoopProofSender),
+            shutdown_receiver,
+        );
+
+        manager.process_stf_info(make_stf_info(1)).await?;
+
+        assert_eq!(
+            proof_manager_db.get_next_height_to_receive()?,
+            Some(SlotNumber::new(2))
+        );
+        Ok(())
+    }
+
+    fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
+        StateTransitionInfo::new(
+            StateTransitionWitness {
+                initial_state_root: vec![1, 2, 3],
+                final_state_root: vec![3, 4, 5],
+                da_block_header: MockBlockHeader {
+                    prev_hash: [0; 32].into(),
+                    hash: MockHash([height as u8; 32]),
+                    height,
+                    time: Time::now(),
+                },
+                relevant_proofs: RelevantProofs {
+                    batch: DaProof {
+                        inclusion_proof: Default::default(),
+                        completeness_proof: Default::default(),
+                    },
+                    proof: DaProof {
+                        inclusion_proof: Default::default(),
+                        completeness_proof: Default::default(),
+                    },
+                },
+                relevant_blobs: RelevantBlobs {
+                    proof_blobs: vec![],
+                    batch_blobs: vec![],
+                },
+                witness: vec![],
+            },
+            SlotNumber::new(height),
+        )
     }
 }

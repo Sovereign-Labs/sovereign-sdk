@@ -111,34 +111,44 @@ impl<
         self.proof_manager_db
             .validate_and_recover_write_height(ledger_head)?;
 
+        // Re-sync in-memory cursors from DB after recovery, because validation may
+        // have rewritten metadata (for example when ProofManagerDb was ahead).
+        let maybe_db_next_height_to_receive = self.proof_manager_db.get_next_height_to_receive()?;
+        let db_next_height_to_receive = maybe_db_next_height_to_receive.unwrap_or(SlotNumber::ONE);
+        self.next_height_to_receive
+            .store(db_next_height_to_receive.get(), Ordering::SeqCst);
+        self.next_height_to_send = db_next_height_to_receive;
+
         let maybe_write_rollup_height = self.proof_manager_db.get_write_height()?;
-        let next_rollup_height_to_receive = self.next_height_to_receive.load(Ordering::SeqCst);
+        let next_rollup_height_to_receive = db_next_height_to_receive.get();
 
         let max_provable_slot_number = max_provable_slot_number.max_provable_slot_number();
 
         match maybe_write_rollup_height {
             Some(write_rollup_height) => {
-                let db_next_height_to_receive = self
-                    .proof_manager_db
-                    .get_next_height_to_receive()?
-                    .unwrap_or(SlotNumber::ONE);
-
                 assert_eq!(
                     db_next_height_to_receive.get(),
                     next_rollup_height_to_receive,
                     "The next height to receive should be the same as the one stored in the db"
                 );
 
-                // Sanity check for `write_rollup_height & next_rollup_height_to_receive`
+                // Sanity check for `write_rollup_height & next_rollup_height_to_receive`.
+                // `next_rollup_height_to_receive` may be `write_rollup_height + 1` when the receiver
+                // has fully caught up and persisted progress immediately.
                 assert!(
-                    write_rollup_height.get() >= next_rollup_height_to_receive,
-                    "The `write_rollup_height` should always be greater than the `next_rollup_height_to_receive`"
+                    next_rollup_height_to_receive <= write_rollup_height.get().saturating_add(1),
+                    "The `next_rollup_height_to_receive` should be <= write_rollup_height + 1"
                 );
 
                 assert!(
-                    (write_rollup_height.get() - next_rollup_height_to_receive) <= self.max_nb_of_infos_in_db.get(),
+                    write_rollup_height
+                        .get()
+                        .saturating_sub(next_rollup_height_to_receive)
+                        <= self.max_nb_of_infos_in_db.get(),
                     "Too many STF infos in the db: {}, vs max allowed {} last_submitted={} write={}",
-                    write_rollup_height.get() - next_rollup_height_to_receive,
+                    write_rollup_height
+                        .get()
+                        .saturating_sub(next_rollup_height_to_receive),
                     self.max_nb_of_infos_in_db,
                     next_rollup_height_to_receive,
                     write_rollup_height,
@@ -146,10 +156,7 @@ impl<
             }
             // Db is empty
             None => {
-                assert!(self
-                    .proof_manager_db
-                    .get_next_height_to_receive()?
-                    .is_none());
+                assert!(maybe_db_next_height_to_receive.is_none());
                 assert!(self.proof_manager_db.get_oldest_height()?.is_none());
             }
         }
@@ -458,14 +465,16 @@ where
         &self,
         amount: u64,
     ) -> anyhow::Result<SlotNumber> {
-        let old_value = self
-            .next_height_to_receive
-            .fetch_add(amount, Ordering::SeqCst);
+        let old_value = self.next_height_to_receive.load(Ordering::SeqCst);
         let new_value = SlotNumber::new_dangerous(old_value + amount);
 
-        // Immediately persist to disk
+        // Persist to disk BEFORE advancing the in-memory atomic.
+        // If the write fails, in-memory state remains consistent with disk.
         self.proof_manager_db
             .set_next_height_to_receive(new_value)?;
+
+        self.next_height_to_receive
+            .store(old_value + amount, Ordering::SeqCst);
 
         Ok(SlotNumber::new_dangerous(old_value))
     }
@@ -656,7 +665,7 @@ mod tests {
         Ok(())
     }
 
-    #[allow(dead_code)]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_stf_info_drop_sender() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
@@ -888,6 +897,85 @@ mod tests {
                 4
             );
         }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_startup_allows_next_height_to_receive_one_ahead_of_write_height(
+    ) -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        {
+            let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                SlotNumber::ONE,
+            )
+            .await?;
+
+            let stf_info = make_stf_info(1);
+            sender.stage_stf_info(&stf_info).await?;
+            sender.commit_stf_info(stf_info.slot_number).await?;
+            sender.notify(stf_info.slot_number).await?;
+
+            let received = receiver.read_next().await?.unwrap();
+            assert_eq!(received.slot_number, SlotNumber::ONE);
+            receiver.inc_next_height_to_receive_by_and_persist(1)?;
+        }
+
+        {
+            let (_proof_manager_db, sender, receiver) = setup_with_startup(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                SlotNumber::ONE,
+            )
+            .await?;
+
+            assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(2));
+            assert_eq!(sender.next_height_to_send, SlotNumber::new(2));
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_startup_resyncs_in_memory_next_height_after_recovery() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        {
+            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
+            proof_manager_db.set_write_height(SlotNumber::new(10))?;
+            proof_manager_db.set_next_height_to_receive(SlotNumber::new(12))?;
+        }
+
+        // Re-open channel so stale value is read from db before startup recovery runs.
+        let (proof_manager_db, mut sender, receiver) =
+            setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(12));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(12));
+
+        // Recovery truncates write_height to 7 and next_height_to_receive to 8.
+        sender
+            .startup_notify_about_infos_from_db(SlotNumber::new(7), &InfiniteHeight)
+            .await?;
+
+        assert_eq!(
+            proof_manager_db.get_write_height()?,
+            Some(SlotNumber::new(7))
+        );
+        assert_eq!(
+            proof_manager_db.get_next_height_to_receive()?,
+            Some(SlotNumber::new(8))
+        );
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(8));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(8));
 
         Ok(())
     }

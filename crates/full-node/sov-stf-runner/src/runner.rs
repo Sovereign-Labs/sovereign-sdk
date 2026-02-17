@@ -195,6 +195,14 @@ where
             let proof_manager_db =
                 ProofManagerDb::open(&storage_path).context("Failed to open ProofManagerDb")?;
 
+            let ledger_head = ledger_db
+                .get_head_slot()?
+                .map(|(slot, _)| slot)
+                .unwrap_or(SlotNumber::GENESIS);
+            proof_manager_db
+                .ensure_initialized_for_ledger_head(&ledger_db, ledger_head)
+                .context("Failed to validate ProofManagerDb startup state")?;
+
             let channel = new_stf_info_channel(
                 proof_manager_db,
                 config.max_number_of_transitions_in_memory,

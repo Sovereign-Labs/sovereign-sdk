@@ -397,28 +397,32 @@ where
             "Initial Ledger ChangeSet is materialized"
         );
 
-        if let Some(finalized_transition) = finalized_transitions.iter().last() {
-            let last_processed_finalized_header = &finalized_transition.block_header;
-            let last_finalized_slot_number = SlotNumber::new_dangerous(
-                last_processed_finalized_header
-                    .height()
-                    .saturating_sub(self.genesis_da_height),
-            );
-            tracing::trace!(
-                ?last_finalized_slot_number,
-                "Going to materialize last finalized slot number"
-            );
-            let last_finalized_slot_update = self
-                .ledger_db
-                .materialize_latest_finalize_slot(slot_number, last_finalized_slot_number)?;
+        let last_finalized_slot_number =
+            if let Some(finalized_transition) = finalized_transitions.iter().last() {
+                let last_processed_finalized_header = &finalized_transition.block_header;
+                let last_finalized_slot_number = SlotNumber::new_dangerous(
+                    last_processed_finalized_header
+                        .height()
+                        .saturating_sub(self.genesis_da_height),
+                );
+                tracing::trace!(
+                    ?last_finalized_slot_number,
+                    "Going to materialize last finalized slot number"
+                );
+                let last_finalized_slot_update = self
+                    .ledger_db
+                    .materialize_latest_finalize_slot(slot_number, last_finalized_slot_number)?;
 
-            ledger_change_set.merge(last_finalized_slot_update);
-            tracing::trace!(
-                ?last_finalized_slot_number,
-                current_slot_number = ?slot_number,
-                "Last finalized slot is materialized into LedgerDb ChangeSet"
-            );
-        }
+                ledger_change_set.merge(last_finalized_slot_update);
+                tracing::trace!(
+                    ?last_finalized_slot_number,
+                    current_slot_number = ?slot_number,
+                    "Last finalized slot is materialized into LedgerDb ChangeSet"
+                );
+                Some(last_finalized_slot_number)
+            } else {
+                None
+            };
 
         if let Some(stf_info_sender) = &self.stf_info_sender {
             tracing::trace!("Going to stage StateTransitionInfo in ProofManagerDb");
@@ -463,8 +467,12 @@ where
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
-            // Commit STF info metadata only after the ledger commit succeeds.
-            stf_info_sender.commit_stf_info(slot_number).await?;
+            // Only advance write_height for slots actually finalized to LedgerDb disk.
+            // Staged STF data for non-finalized slots is recovered by
+            // validate_and_recover_write_height on restart.
+            if let Some(finalized_slot) = last_finalized_slot_number {
+                stf_info_sender.commit_stf_info(finalized_slot).await?;
+            }
 
             // Notify `StateTransitionInfo` consumers that the data is saved in the Db.
             let max_provable_slot_number = self
