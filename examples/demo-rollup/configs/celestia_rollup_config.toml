@@ -2,7 +2,7 @@
 # The address of the Celestia RPC server to interact with.
 # Example for local: ws://127.0.0.1:26658
 # Example for QuickNode: wss://a-b-c.celestia-mocha.quiknode.pro/YOUR_ENDPOINT_ID
-# Default value: ws://127.0.0.1:26658
+# Required. If not specified in the config, it must be provided via `SOV_CELESTIA_RPC_URL`.
 rpc_url = "ws://127.0.0.1:26658"
 
 # JWT token for RPC server.
@@ -12,6 +12,7 @@ rpc_url = "ws://127.0.0.1:26658"
 
 # The address of the Celestia gRPC server for submitting blobs.
 # Example: http://127.0.0.1:9090
+# If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_URL` environment variable.
 # Optional. Set only if DaService needs to submit blobs.
 grpc_url = "http://127.0.0.1:9090"
 
