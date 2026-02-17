@@ -305,7 +305,6 @@ pub(crate) const fn default_verify_on_fetch() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::{validate_rpc_url, CelestiaConfig};
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
