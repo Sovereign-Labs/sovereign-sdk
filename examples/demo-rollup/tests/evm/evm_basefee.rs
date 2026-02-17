@@ -69,12 +69,6 @@ async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()>
     let receipt = tx.get_receipt().await?;
     let tx_hash = receipt.transaction_hash;
 
-    // Get the block to access its base_fee_per_gas
-    let block = client
-        .get_block_by_number(BlockNumberOrTag::Number(receipt.block_number.unwrap()))
-        .await?
-        .expect("Block should exist");
-
     // Make a raw JSON-RPC call to get the transaction and check the gasPrice field
     let tx_json: Value = ws_client
         .ws
