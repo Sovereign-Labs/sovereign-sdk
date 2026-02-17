@@ -119,7 +119,12 @@ impl NodeHeightSpread {
     }
 
     fn diff(&self) -> u64 {
-        self.max.1 - self.min.1
+        self.max.1.checked_sub(self.min.1).unwrap_or_else(|| {
+            panic!(
+                "NodeHeightSpread: Impossible the min height {} > max height {}",
+                self.min.1, self.max.1,
+            )
+        })
     }
 }
 
