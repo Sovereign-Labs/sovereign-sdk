@@ -17,11 +17,10 @@ impl sov_metrics::Metric for LatestHeightCheckMetric {
         let stats = &self.stats;
         write!(
             buffer,
-            "{} nodes_ok={},nodes_failed={},unique_latest_heights={},height_diff={}",
+            "{} nodes_ok={},nodes_failed={},height_diff={}",
             self.measurement_name(),
             stats.nodes_ok,
             stats.nodes_failed,
-            stats.unique_latest_heights,
             stats.height_diff,
         )
     }

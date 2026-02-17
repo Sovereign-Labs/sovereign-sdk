@@ -1,11 +1,9 @@
-#![allow(dead_code)]
 use crate::node_check_metric::LatestHeightCheckMetric;
 use crate::node_check_metric::RootHashCheckMetric;
 use crate::node_discovery::ClusterInfo;
 use crate::node_discovery::NodeInfo;
 use anyhow::{Context, Result};
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::watch;
@@ -30,8 +28,8 @@ struct CurrentHeightsResponse {
 const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 /// Default timeout for establishing HTTP connections to node APIs.
 const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
-/// Minimum slot distance between consecutive root-hash checks.
-const SLOT_QUERY_STEP: u64 = 3;
+/// Minimum slot distance between queries.
+const SLOT_QUERY_STEP: u64 = 1;
 /// Period between iterations of the background root-hash checker task.
 const DEFAULT_ROOT_HASH_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -46,7 +44,7 @@ pub enum RootHashConsistency {
     NoData,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct NodeCheckOutput {
     /// Root-hash check results for the queried reference slot.
     pub root_hash_check: RootHashCheck,
@@ -58,7 +56,7 @@ pub struct NodeCheckOutput {
 pub struct LatestHeightCheckStats {
     pub nodes_ok: u64,
     pub nodes_failed: u64,
-    pub unique_latest_heights: u64,
+    pub spread: Option<NodeHeightSpread>,
     pub height_diff: u64,
 }
 
@@ -80,11 +78,11 @@ impl LatestHeightCheckStats {
         }
 
         tracing::debug!(
-            nodes_ok = self.nodes_ok,
-            nodes_failed = self.nodes_failed,
-            unique_latest_heights = self.unique_latest_heights,
-            height_diff = self.height_diff,
-            "Cluster latest heights differ across nodes."
+            ?self.nodes_ok,
+            ?self.nodes_failed,
+            ?self.height_diff,
+            ?self.spread,
+            "Cluster latest heights."
         );
     }
 }
@@ -93,36 +91,66 @@ impl LatestHeightCheckStats {
 #[derive(Debug, Default, Clone)]
 pub struct LatestHeightCheck {
     /// Per-node results: node_id -> current rollup height.
-    pub(crate) node_results: HashMap<String, u64>,
+    pub(crate) node_results: BTreeMap<String, u64>,
     /// Nodes that failed to return latest height `(node_id, error_message)`.
     pub(crate) failed_nodes: Vec<(String, String)>,
+}
+
+/// Tracks the lowest and highest observed rollup height across responding nodes.
+#[derive(Debug, Clone)]
+pub struct NodeHeightSpread {
+    // `(node_id, height)` tuple for the lowest observed height.
+    min: (String, u64),
+    // `(node_id, height)` tuple for the highest observed height.
+    max: (String, u64),
+}
+
+impl NodeHeightSpread {
+    fn update_max(&mut self, node_id: String, height: u64) {
+        if height > self.max.1 {
+            self.max = (node_id, height);
+        }
+    }
+
+    fn update_min(&mut self, node_id: String, height: u64) {
+        if height < self.min.1 {
+            self.min = (node_id, height);
+        }
+    }
+
+    fn diff(&self) -> u64 {
+        self.max.1 - self.min.1
+    }
 }
 
 impl LatestHeightCheck {
     pub(crate) fn stats(&self) -> LatestHeightCheckStats {
         let nodes_ok = self.node_results.len() as u64;
         let nodes_failed = self.failed_nodes.len() as u64;
-        let mut unique_latest_heights = HashSet::new();
-        let mut latest_height_min = u64::MAX;
-        let mut latest_height_max = u64::MIN;
 
-        for &height in self.node_results.values() {
-            unique_latest_heights.insert(height);
-            latest_height_min = latest_height_min.min(height);
-            latest_height_max = latest_height_max.max(height);
+        let mut spread: Option<NodeHeightSpread> = None;
+
+        for (node_id, &height) in &self.node_results {
+            match spread.as_mut() {
+                Some(spread) => {
+                    spread.update_min(node_id.clone(), height);
+                    spread.update_max(node_id.clone(), height);
+                }
+                None => {
+                    spread = Some(NodeHeightSpread {
+                        min: (node_id.clone(), height),
+                        max: (node_id.clone(), height),
+                    });
+                }
+            }
         }
 
-        if self.node_results.is_empty() {
-            latest_height_min = 0;
-            latest_height_max = 0;
-        }
-
-        let height_diff = latest_height_max.saturating_sub(latest_height_min);
+        let height_diff = spread.as_ref().map(|e| e.diff()).unwrap_or_default();
 
         LatestHeightCheckStats {
             nodes_ok,
             nodes_failed,
-            unique_latest_heights: unique_latest_heights.len() as u64,
+            spread,
             height_diff,
         }
     }
@@ -135,17 +163,25 @@ impl LatestHeightCheck {
         http_client: reqwest::Client,
         node_id: String,
         node_address: SocketAddr,
-    ) -> JoinHandle<std::result::Result<u64, String>> {
+    ) -> JoinHandle<Result<u64, String>> {
         tokio::spawn(async move {
+            let start = tokio::time::Instant::now();
             let height = NodeChecker::get_latest_height(&http_client, &node_address)
                 .await
                 .map_err(|err| {
                     format!(
                         "Failed to get latest heights from node {node_id} at {node_address}, error: {err}"
                     )
-                })?;
+                });
 
-            Ok(height)
+            let elapsed = start.elapsed();
+
+            tracing::trace!(
+                %node_id,
+                ?elapsed,
+                "Duration of the rollup height query");
+
+            height
         })
     }
 }
@@ -156,7 +192,7 @@ pub struct RootHashCheck {
     /// Slot number requested for this root-hash check.
     pub(crate) slot_number: u64,
     /// Per-node results: node_id -> state_root.
-    pub(crate) node_results: HashMap<String, String>,
+    pub(crate) node_results: BTreeMap<String, String>,
     /// Nodes that failed to return a root hash `(node_id, error_message)`.
     pub(crate) failed_nodes: Vec<(String, String)>,
 }
@@ -168,17 +204,25 @@ impl RootHashCheck {
         node_address: SocketAddr,
         slot_hash: String,
         slot_number: u64,
-    ) -> JoinHandle<std::result::Result<String, String>> {
+    ) -> JoinHandle<Result<String, String>> {
         tokio::spawn(async move {
-            let slot = NodeChecker::get_slot(&http_client, &slot_hash, &node_address)
-                .await
+            let start = tokio::time::Instant::now();
+            let state_root = NodeChecker::get_slot(&http_client, &slot_hash, &node_address)
+                .await.map(|slot|slot.state_root)
                 .map_err(|err| {
                     format!(
                         "Failed to get slot {slot_number} ({slot_hash}) from node {node_id} at {node_address}, error: {err}"
                     )
-                })?;
+                });
 
-            Ok(slot.state_root)
+            let elapsed = start.elapsed();
+
+            tracing::trace!(
+                %node_id,
+                ?elapsed,
+                "Duration of the root hash query");
+
+            state_root
         })
     }
 
@@ -427,12 +471,12 @@ impl NodeChecker {
 
         let mut root_hash_check = RootHashCheck {
             slot_number,
-            node_results: HashMap::new(),
+            node_results: BTreeMap::new(),
             failed_nodes: Vec::new(),
         };
 
         let mut latest_height_check = LatestHeightCheck {
-            node_results: HashMap::new(),
+            node_results: BTreeMap::new(),
             failed_nodes: Vec::new(),
         };
 
@@ -464,7 +508,7 @@ impl NodeChecker {
 fn record_task_result<T>(
     node_id: String,
     task_result: Result<Result<T, String>, JoinError>,
-    node_results: &mut HashMap<String, T>,
+    node_results: &mut BTreeMap<String, T>,
     failed_nodes: &mut Vec<(String, String)>,
     join_error_label: &str,
 ) {
@@ -512,7 +556,7 @@ mod tests {
 
     #[test]
     fn all_match_returns_true_when_all_hashes_are_equal() {
-        let mut node_results = HashMap::new();
+        let mut node_results = BTreeMap::new();
         node_results.insert(
             "node1".to_string(),
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
@@ -533,7 +577,7 @@ mod tests {
 
     #[test]
     fn all_match_returns_false_when_hashes_differ() {
-        let mut node_results = HashMap::new();
+        let mut node_results = BTreeMap::new();
         node_results.insert(
             "node1".to_string(),
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
@@ -556,7 +600,7 @@ mod tests {
     fn all_match_returns_no_data_when_no_hashes_are_collected() {
         let snapshot = RootHashCheck {
             slot_number: 12,
-            node_results: HashMap::new(),
+            node_results: BTreeMap::new(),
             failed_nodes: vec![],
         };
 
@@ -592,5 +636,74 @@ mod tests {
     #[test]
     fn should_query_slot_when_slot_moves_backwards() {
         assert!(NodeChecker::should_query_slot(Some(100), 99));
+    }
+
+    #[test]
+    fn node_height_spread_update_min_and_max_and_diff() {
+        let mut spread = NodeHeightSpread {
+            min: ("node-start".to_string(), 10),
+            max: ("node-start".to_string(), 10),
+        };
+
+        spread.update_min("node-low".to_string(), 3);
+        spread.update_max("node-high".to_string(), 25);
+
+        assert_eq!(spread.min, ("node-low".to_string(), 3));
+        assert_eq!(spread.max, ("node-high".to_string(), 25));
+        assert_eq!(spread.diff(), 22);
+    }
+
+    #[test]
+    fn node_height_spread_ignore_equal_heights() {
+        let mut spread = NodeHeightSpread {
+            min: ("node-a".to_string(), 10),
+            max: ("node-b".to_string(), 20),
+        };
+
+        spread.update_min("node-c".to_string(), 10);
+        spread.update_max("node-d".to_string(), 20);
+
+        assert_eq!(spread.min, ("node-a".to_string(), 10));
+        assert_eq!(spread.max, ("node-b".to_string(), 20));
+    }
+
+    #[test]
+    fn latest_height_stats_sets_spread_and_diff() {
+        let mut node_results = BTreeMap::new();
+        node_results.insert("node-a".to_string(), 15);
+        node_results.insert("node-b".to_string(), 9);
+        node_results.insert("node-c".to_string(), 28);
+
+        let check = LatestHeightCheck {
+            node_results,
+            failed_nodes: vec![("node-x".to_string(), "timeout".to_string())],
+        };
+        let stats = check.stats();
+
+        assert_eq!(stats.nodes_ok, 3);
+        assert_eq!(stats.nodes_failed, 1);
+        assert_eq!(stats.height_diff, 19);
+        assert_eq!(
+            stats.spread.as_ref().map(|e| e.min.clone()),
+            Some(("node-b".to_string(), 9))
+        );
+        assert_eq!(
+            stats.spread.as_ref().map(|e| e.max.clone()),
+            Some(("node-c".to_string(), 28))
+        );
+    }
+
+    #[test]
+    fn latest_height_stats_with_no_results_has_no_spread() {
+        let check = LatestHeightCheck {
+            node_results: BTreeMap::new(),
+            failed_nodes: vec![("node-x".to_string(), "timeout".to_string())],
+        };
+        let stats = check.stats();
+
+        assert_eq!(stats.nodes_ok, 0);
+        assert_eq!(stats.nodes_failed, 1);
+        assert_eq!(stats.height_diff, 0);
+        assert!(stats.spread.is_none());
     }
 }
