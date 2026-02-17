@@ -85,9 +85,13 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
     test_rollup.wait_for_next_blocks(1).await;
     let client = alloy_client_with_signer(test_rollup.http_addr, SENDER_PRIV_KEY);
 
+    let rpc_nonce_before = client.get_transaction_count(signer.address()).await?;
     let contract = SimpleStorage::deploy(client.clone()).await?;
     let nonce = client.get_transaction_count(signer.address()).await?;
+    let rpc_nonce_after_deploy = client.get_transaction_count(signer.address()).await?;
+    assert_eq!(rpc_nonce_before, 0);
     assert_eq!(nonce, 1);
+    assert_eq!(rpc_nonce_after_deploy, 1);
     let exec_config: EvmExecutionConfigContents =
         serde_json::from_str(&std::fs::read_to_string(&exec_config_path)?)?;
     assert_eq!(
@@ -99,6 +103,7 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
     // errors on reverting calls.
     let result = contract.alwaysRevert().gas(300_000).send().await;
     let nonce = client.get_transaction_count(signer.address()).await?;
+    let rpc_nonce_after_revert = client.get_transaction_count(signer.address()).await?;
     if preferred_sequencer_publish_reverted_txs {
         let pending_tx = result?;
         let receipt = pending_tx.get_receipt().await?;
@@ -108,9 +113,11 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
             "reverted transaction must have status=0x0"
         );
         assert_eq!(nonce, 2);
+        assert_eq!(rpc_nonce_after_revert, 2);
     } else {
         assert!(result.is_err());
         assert_eq!(nonce, 1);
+        assert_eq!(rpc_nonce_after_revert, 1);
     }
     Ok(())
 }
