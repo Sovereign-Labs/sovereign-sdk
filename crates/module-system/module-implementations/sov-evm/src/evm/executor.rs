@@ -30,13 +30,13 @@ pub(crate) fn get_cfg_env(
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
     cfg_env.chain_id = config_value!("CHAIN_ID");
-    cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
+    cfg_env.tx_chain_id_check = false;
+    cfg_env.memory_limit = 50 * 1024 * 1024; // 50MiB
     cfg_env.limit_contract_code_size = Some(
         cfg.chain_spec
             .limit_contract_code_size
             .unwrap_or(DEFAULT_MAX_CONTRACT_CODE_SIZE),
     );
-    cfg_env.tx_chain_id_check = false;
     // We intentionally execute with tx.gas_price=0 and charge fees via rollup metering.
     // Keep block_env.basefee intact for BASEFEE opcode semantics, but disable revm's
     // base-fee admission check for EIP-1559 validation in this execution mode.

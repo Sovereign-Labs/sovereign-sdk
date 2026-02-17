@@ -54,10 +54,6 @@ async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
 }
 
 /// Test that verifies the transaction gasPrice field matches effectiveGasPrice for EIP-1559 txs.
-///
-/// This test is expected to FAIL in the current codebase because `base_fee: None`
-/// is passed to TransactionInfo in helpers.rs:65, causing gasPrice to be maxFeePerGas
-/// instead of the effective gas price.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -110,14 +106,11 @@ async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()>
     println!("gasPrice from eth_getTransactionByHash: {gas_price}");
     println!("effectiveGasPrice from receipt: {effective_gas_price}");
 
-    // For EIP-1559 transactions, gasPrice should equal effectiveGasPrice
-    // Currently this fails because gasPrice returns maxFeePerGas instead
-    // due to base_fee: None being passed in helpers.rs:65
+    // For EIP-1559 transactions, gasPrice should equal effectiveGasPrice.
     assert_eq!(
         gas_price, effective_gas_price,
         "Transaction gasPrice ({gas_price}) should match receipt effectiveGasPrice ({effective_gas_price}). \
-         Instead it equals maxFeePerGas ({max_fee_per_gas}), indicating base_fee is not being passed \
-         when building the transaction RPC response.",
+         maxFeePerGas was {max_fee_per_gas}.",
     );
 
     Ok(())
