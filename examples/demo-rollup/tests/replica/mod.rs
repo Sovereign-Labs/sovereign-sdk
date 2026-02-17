@@ -228,13 +228,13 @@ impl NodeDiscoveryTestSetup {
 
     async fn wait_for_root_hash_check_with_timeout(&mut self, timeout: Duration) -> RootHashCheck {
         tokio::time::timeout(timeout, async {
-            let receiver = &mut self.cluster_info_service.root_hash_checker_task.receiver;
+            let receiver = &mut self.cluster_info_service.node_checker_task.receiver;
             receiver
                 .changed()
                 .await
                 .expect("Root hash checker channel closed");
 
-            receiver.borrow_and_update().clone()
+            receiver.borrow_and_update().clone().root_hash_check
         })
         .await
         .expect("Timed out waiting for root hash checker update")

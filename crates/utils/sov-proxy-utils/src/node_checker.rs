@@ -1,11 +1,15 @@
+#![allow(dead_code)]
+use crate::node_check_metric::LatestHeightCheckMetric;
+use crate::node_check_metric::RootHashCheckMetric;
 use crate::node_discovery::ClusterInfo;
 use crate::node_discovery::NodeInfo;
-use crate::root_hash_check_metric::RootHashCheckMetric;
 use anyhow::{Context, Result};
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::sync::watch;
+use tokio::task::JoinError;
 use tokio::task::JoinHandle;
 
 /// Subset of slot fields returned by ledger APIs used for root-hash checking.
@@ -14,6 +18,12 @@ struct Slot {
     number: u64,
     hash: String,
     state_root: String,
+}
+
+/// Response payload returned by the chain-state current-heights endpoint.
+#[derive(Debug, serde::Deserialize)]
+struct CurrentHeightsResponse {
+    value: (u64, u64),
 }
 
 /// Default timeout for HTTP requests to node APIs.
@@ -36,18 +46,142 @@ pub enum RootHashConsistency {
     NoData,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct NodeCheckOutput {
+    /// Root-hash check results for the queried reference slot.
+    pub root_hash_check: RootHashCheck,
+    /// Latest rollup-height check results collected from all nodes.
+    pub latest_height_check: LatestHeightCheck,
+}
+
+#[derive(Debug)]
+pub struct LatestHeightCheckStats {
+    pub nodes_ok: u64,
+    pub nodes_failed: u64,
+    pub unique_latest_heights: u64,
+    pub height_diff: u64,
+}
+
+impl LatestHeightCheckStats {
+    fn log_check_height_stats(&self) {
+        if self.nodes_failed > 0 {
+            tracing::warn!(
+                nodes_failed = self.nodes_failed,
+                "Failed to fetch latest height from some cluster nodes, will compare latest heights from the remaining"
+            );
+        }
+
+        if self.nodes_ok == 0 {
+            tracing::warn!(
+                nodes_failed = self.nodes_failed,
+                "No latest heights collected from cluster nodes"
+            );
+            return;
+        }
+
+        tracing::debug!(
+            nodes_ok = self.nodes_ok,
+            nodes_failed = self.nodes_failed,
+            unique_latest_heights = self.unique_latest_heights,
+            height_diff = self.height_diff,
+            "Cluster latest heights differ across nodes."
+        );
+    }
+}
+
+/// Result of one cluster-wide latest-height collection round.
+#[derive(Debug, Default, Clone)]
+pub struct LatestHeightCheck {
+    /// Per-node results: node_id -> current rollup height.
+    pub(crate) node_results: HashMap<String, u64>,
+    /// Nodes that failed to return latest height `(node_id, error_message)`.
+    pub(crate) failed_nodes: Vec<(String, String)>,
+}
+
+impl LatestHeightCheck {
+    pub(crate) fn stats(&self) -> LatestHeightCheckStats {
+        let nodes_ok = self.node_results.len() as u64;
+        let nodes_failed = self.failed_nodes.len() as u64;
+        let mut unique_latest_heights = HashSet::new();
+        let mut latest_height_min = u64::MAX;
+        let mut latest_height_max = u64::MIN;
+
+        for &height in self.node_results.values() {
+            unique_latest_heights.insert(height);
+            latest_height_min = latest_height_min.min(height);
+            latest_height_max = latest_height_max.max(height);
+        }
+
+        if self.node_results.is_empty() {
+            latest_height_min = 0;
+            latest_height_max = 0;
+        }
+
+        let height_diff = latest_height_max.saturating_sub(latest_height_min);
+
+        LatestHeightCheckStats {
+            nodes_ok,
+            nodes_failed,
+            unique_latest_heights: unique_latest_heights.len() as u64,
+            height_diff,
+        }
+    }
+}
+
+impl LatestHeightCheck {
+    /// Spawns a task that queries one node for `/modules/chain-state/state/current-heights`
+    /// and returns the rollup height component.
+    fn spawn(
+        http_client: reqwest::Client,
+        node_id: String,
+        node_address: SocketAddr,
+    ) -> JoinHandle<std::result::Result<u64, String>> {
+        tokio::spawn(async move {
+            let height = NodeChecker::get_latest_height(&http_client, &node_address)
+                .await
+                .map_err(|err| {
+                    format!(
+                        "Failed to get latest heights from node {node_id} at {node_address}, error: {err}"
+                    )
+                })?;
+
+            Ok(height)
+        })
+    }
+}
+
 /// Result of one cluster-wide root-hash comparison at a specific slot.
 #[derive(Debug, Default, Clone)]
 pub struct RootHashCheck {
     /// Slot number requested for this root-hash check.
-    pub slot_number: u64,
+    pub(crate) slot_number: u64,
     /// Per-node results: node_id -> state_root.
-    pub node_results: HashMap<String, String>,
+    pub(crate) node_results: HashMap<String, String>,
     /// Nodes that failed to return a root hash `(node_id, error_message)`.
-    pub failed_nodes: Vec<(String, String)>,
+    pub(crate) failed_nodes: Vec<(String, String)>,
 }
 
 impl RootHashCheck {
+    fn spawn(
+        http_client: reqwest::Client,
+        node_id: String,
+        node_address: SocketAddr,
+        slot_hash: String,
+        slot_number: u64,
+    ) -> JoinHandle<std::result::Result<String, String>> {
+        tokio::spawn(async move {
+            let slot = NodeChecker::get_slot(&http_client, &slot_hash, &node_address)
+                .await
+                .map_err(|err| {
+                    format!(
+                        "Failed to get slot {slot_number} ({slot_hash}) from node {node_id} at {node_address}, error: {err}"
+                    )
+                })?;
+
+            Ok(slot.state_root)
+        })
+    }
+
     /// Evaluates whether the observed root hashes are consistent.
     /// Returns `AllMatch` even when only one node responded.
     pub fn check_consistency(&self) -> RootHashConsistency {
@@ -62,29 +196,64 @@ impl RootHashCheck {
             RootHashConsistency::Mismatch
         }
     }
+
+    fn log_consistency(&self) {
+        let consistency = self.check_consistency();
+
+        if !self.failed_nodes.is_empty() {
+            tracing::warn!(
+                slot_number = self.slot_number,
+                failed_nodes = ?self.failed_nodes,
+                "Failed to fetch root hash from some cluster nodes, will compare root hash from the remaining"
+            );
+        }
+
+        match consistency {
+            RootHashConsistency::AllMatch => {
+                tracing::debug!(
+                    slot_number = self.slot_number,
+                    "Cluster root hashes are consistent"
+                );
+            }
+            RootHashConsistency::Mismatch => {
+                tracing::error!(
+                    slot_number = self.slot_number,
+                    root_hashes = ?self.node_results,
+                    "Cluster root hash mismatch detected"
+                );
+            }
+            RootHashConsistency::NoData => {
+                tracing::warn!(
+                    slot_number = self.slot_number,
+                    failed_nodes = ?self.failed_nodes,
+                    "No root hashes collected from cluster nodes"
+                );
+            }
+        }
+    }
 }
 
-/// Task returned when spawning the root-hash checker.
-pub struct ClusterRootHashCheckerTask {
+/// Task returned when spawning the node checker loop.
+pub struct NodeCheckerTask {
     /// Subscription receiver for root-hash check results.
-    pub receiver: watch::Receiver<RootHashCheck>,
-    /// Join handle of the background root-hash checker task.
+    pub receiver: watch::Receiver<NodeCheckOutput>,
+    /// Join handle of the background checker task.
     pub(crate) handle: JoinHandle<()>,
 }
 
-impl ClusterRootHashCheckerTask {
+impl NodeCheckerTask {
     pub fn abort(&self) {
         self.handle.abort();
     }
 }
 
-/// Periodically checks that all cluster nodes agree on the same finalized root hash.
-pub struct ClusterRootHashChecker {
+/// Periodically checks cluster-node root-hash consistency and collects latest heights.
+pub struct NodeChecker {
     cluster_info_receiver: watch::Receiver<ClusterInfo>,
     http_client: reqwest::Client,
 }
 
-impl ClusterRootHashChecker {
+impl NodeChecker {
     /// Creates a checker that reads cluster members from `cluster_info_receiver`.
     pub fn new(cluster_info_receiver: watch::Receiver<ClusterInfo>) -> anyhow::Result<Self> {
         let http_client = reqwest::Client::builder()
@@ -98,9 +267,11 @@ impl ClusterRootHashChecker {
         })
     }
 
-    /// Spawns a task that periodically queries all nodes and verifies root-hash consistency.
-    pub fn spawn(self) -> ClusterRootHashCheckerTask {
-        let (sender, receiver) = watch::channel(RootHashCheck::default());
+    /// Spawns a task that periodically queries all nodes for:
+    /// - root hash at a reference finalized slot, and
+    /// - latest rollup height from chain-state.
+    pub fn spawn(self) -> NodeCheckerTask {
+        let (sender, receiver) = watch::channel(NodeCheckOutput::default());
 
         let handle: JoinHandle<()> = tokio::spawn(async move {
             let mut ticker = tokio::time::interval(DEFAULT_ROOT_HASH_CHECK_INTERVAL);
@@ -136,56 +307,31 @@ impl ClusterRootHashChecker {
                 let nodes = flatten_cluster_nodes(&cluster_info);
                 let slot_hash = &reference_slot.hash;
 
-                let root_hash_check = self
-                    .get_slot_root_hashes_in_parallel(nodes, slot_hash, slot_number)
+                let node_check_output = self
+                    .query_nodes_in_parallel(nodes, slot_hash, slot_number)
                     .await;
 
-                if !root_hash_check.failed_nodes.is_empty() {
-                    tracing::warn!(
-                        slot_number = root_hash_check.slot_number,
-                        failed_nodes = ?root_hash_check.failed_nodes,
-                        "Failed to fetch root hash from some cluster nodes, will compare root hash from the remaining"
-                    );
-                }
+                let height_check_stats = node_check_output.latest_height_check.stats();
 
-                let consistency = root_hash_check.check_consistency();
+                height_check_stats.log_check_height_stats();
+                node_check_output.root_hash_check.log_consistency();
+
                 sov_metrics::track_metrics(|tracker| {
                     tracker.submit(RootHashCheckMetric::from_check(
-                        &root_hash_check,
-                        consistency,
+                        &node_check_output.root_hash_check,
                     ));
+                    tracker.submit(LatestHeightCheckMetric {
+                        stats: height_check_stats,
+                    });
                 });
 
-                match consistency {
-                    RootHashConsistency::AllMatch => {
-                        tracing::debug!(
-                            slot_number = root_hash_check.slot_number,
-                            "Cluster root hashes are consistent"
-                        );
-                    }
-                    RootHashConsistency::Mismatch => {
-                        tracing::error!(
-                            slot_number = root_hash_check.slot_number,
-                            root_hashes = ?root_hash_check.node_results,
-                            "Cluster root hash mismatch detected"
-                        );
-                    }
-                    RootHashConsistency::NoData => {
-                        tracing::warn!(
-                            slot_number = root_hash_check.slot_number,
-                            failed_nodes = ?root_hash_check.failed_nodes,
-                            "No root hashes collected from cluster nodes"
-                        );
-                    }
-                }
-
                 // Update the last checked slot number no matter what is the result of root_hash_check.
-                last_checked_slot_number = Some(root_hash_check.slot_number);
-                let _ = sender.send(root_hash_check);
+                last_checked_slot_number = Some(node_check_output.root_hash_check.slot_number);
+                let _ = sender.send(node_check_output);
             }
         });
 
-        ClusterRootHashCheckerTask { receiver, handle }
+        NodeCheckerTask { receiver, handle }
     }
 
     async fn get_finalized_slot_for_comparison(&self, cluster_info: &ClusterInfo) -> Result<Slot> {
@@ -244,56 +390,93 @@ impl ClusterRootHashChecker {
             })
     }
 
-    async fn get_slot_root_hashes_in_parallel(
+    async fn get_latest_height(http_client: &reqwest::Client, address: &SocketAddr) -> Result<u64> {
+        let url = format!("http://{address}/modules/chain-state/state/current-heights");
+        let response = http_client.get(&url).send().await?;
+        let response = response.error_for_status()?;
+        let heights = response.json::<CurrentHeightsResponse>().await?;
+        Ok(heights.value.0)
+    }
+
+    async fn query_nodes_in_parallel(
         &self,
         nodes: Vec<NodeInfo>,
         slot_hash: &str,
         slot_number: u64,
-    ) -> RootHashCheck {
+    ) -> NodeCheckOutput {
         let mut query_tasks = Vec::with_capacity(nodes.len());
 
         for node in nodes {
-            let http_client = self.http_client.clone();
             let node_id = node.node_id;
-            let node_id_for_task = node_id.clone();
             let node_address = node.address;
             let slot_hash = slot_hash.to_owned();
 
-            let task = tokio::spawn(async move {
-                let slot = Self::get_slot(&http_client, &slot_hash, &node_address)
-                    .await
-                    .map_err(|err| {
-                        format!("Failed to get slot {slot_number} ({slot_hash}) from node {node_id_for_task} at {node_address}, error: {err}")
-                    })?;
+            let root_hash_check_task = RootHashCheck::spawn(
+                self.http_client.clone(),
+                node_id.clone(),
+                node_address,
+                slot_hash,
+                slot_number,
+            );
 
-                Ok(slot.state_root)
-            });
-            query_tasks.push((node_id, task));
+            let latest_height_check_task =
+                LatestHeightCheck::spawn(self.http_client.clone(), node_id.clone(), node_address);
+
+            query_tasks.push((node_id, root_hash_check_task, latest_height_check_task));
         }
 
-        let mut node_results = HashMap::new();
-        let mut failed_nodes = Vec::new();
-        for (node_id, task) in query_tasks {
-            match task.await {
-                Ok(Ok(state_root)) => {
-                    node_results.insert(node_id, state_root);
-                }
-                Ok(Err(error_message)) => {
-                    failed_nodes.push((node_id, error_message));
-                }
-                Err(join_error) => {
-                    failed_nodes.push((
-                        node_id,
-                        format!("Root-hash query task failed to join: {join_error}"),
-                    ));
-                }
-            }
-        }
-
-        RootHashCheck {
+        let mut root_hash_check = RootHashCheck {
             slot_number,
-            node_results,
-            failed_nodes,
+            node_results: HashMap::new(),
+            failed_nodes: Vec::new(),
+        };
+
+        let mut latest_height_check = LatestHeightCheck {
+            node_results: HashMap::new(),
+            failed_nodes: Vec::new(),
+        };
+
+        for (node_id, root_hash_check_task, latest_height_check_task) in query_tasks {
+            record_task_result(
+                node_id.clone(),
+                root_hash_check_task.await,
+                &mut root_hash_check.node_results,
+                &mut root_hash_check.failed_nodes,
+                "Root-hash query task failed to join",
+            );
+
+            record_task_result(
+                node_id,
+                latest_height_check_task.await,
+                &mut latest_height_check.node_results,
+                &mut latest_height_check.failed_nodes,
+                "Node height query task failed to join",
+            );
+        }
+
+        NodeCheckOutput {
+            root_hash_check,
+            latest_height_check,
+        }
+    }
+}
+
+fn record_task_result<T>(
+    node_id: String,
+    task_result: Result<Result<T, String>, JoinError>,
+    node_results: &mut HashMap<String, T>,
+    failed_nodes: &mut Vec<(String, String)>,
+    join_error_label: &str,
+) {
+    match task_result {
+        Ok(Ok(value)) => {
+            node_results.insert(node_id, value);
+        }
+        Ok(Err(error_message)) => {
+            failed_nodes.push((node_id, error_message));
+        }
+        Err(join_error) => {
+            failed_nodes.push((node_id, format!("{join_error_label}: {join_error}")));
         }
     }
 }
@@ -401,13 +584,13 @@ mod tests {
 
     #[test]
     fn should_query_slot_only_after_slot_step() {
-        assert!(ClusterRootHashChecker::should_query_slot(None, 100));
-        assert!(!ClusterRootHashChecker::should_query_slot(Some(100), 102));
-        assert!(ClusterRootHashChecker::should_query_slot(Some(100), 110));
+        assert!(NodeChecker::should_query_slot(None, 100));
+        assert!(!NodeChecker::should_query_slot(Some(100), 102));
+        assert!(NodeChecker::should_query_slot(Some(100), 110));
     }
 
     #[test]
     fn should_query_slot_when_slot_moves_backwards() {
-        assert!(ClusterRootHashChecker::should_query_slot(Some(100), 99));
+        assert!(NodeChecker::should_query_slot(Some(100), 99));
     }
 }

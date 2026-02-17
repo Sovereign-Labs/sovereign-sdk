@@ -1,4 +1,5 @@
 //! Utilities for discovering cluster nodes from PostgreSQL and persisting snapshots.
+use crate::node_discovery_metrics::ClusterUpdateFailureMetric;
 use anyhow::Result;
 use async_trait::async_trait;
 use sqlx::postgres::{PgListener, PgPool};
@@ -67,6 +68,23 @@ pub struct NodeDiscoveryTask {
 impl NodeDiscoveryTask {
     pub fn abort(&self) {
         self.handle.abort();
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum HandleClusterUpdateError {
+    #[error("Failed to fetch cluster info")]
+    GetClusterInfo(#[source] anyhow::Error),
+    #[error("Failed to notify on cluster update")]
+    Notify(#[source] anyhow::Error),
+}
+
+impl HandleClusterUpdateError {
+    fn stage(&self) -> &'static str {
+        match self {
+            Self::GetClusterInfo(_) => "get_cluster_info",
+            Self::Notify(_) => "notify",
+        }
     }
 }
 
@@ -178,7 +196,12 @@ impl NodeDiscovery {
         let handle = tokio::spawn(async move {
             loop {
                 if let Err(error) = self.handle_cluster_update().await {
-                    tracing::warn!(?error, "Cluster update failed");
+                    let stage = error.stage();
+
+                    tracing::warn!(stage, ?error, "Cluster update failed");
+                    sov_metrics::track_metrics(|tracker| {
+                        tracker.submit(ClusterUpdateFailureMetric { stage });
+                    });
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
 
@@ -193,8 +216,11 @@ impl NodeDiscovery {
         NodeDiscoveryTask { receiver, handle }
     }
 
-    async fn handle_cluster_update(&mut self) -> anyhow::Result<()> {
-        let info = self.get_cluster_info().await?;
+    async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {
+        let info = self
+            .get_cluster_info()
+            .await
+            .map_err(HandleClusterUpdateError::GetClusterInfo)?;
         let leader_id = info.leader_id();
 
         let followers: BTreeSet<_> = info.followers.keys().cloned().collect();
@@ -227,7 +253,10 @@ impl NodeDiscovery {
 
         // Notify watchers that the cluster was updated.
         if let Some(notifier) = &mut self.notifier {
-            notifier.on_cluster_update(&info).await?;
+            notifier
+                .on_cluster_update(&info)
+                .await
+                .map_err(HandleClusterUpdateError::Notify)?;
         }
 
         self.prev_followers = followers;
