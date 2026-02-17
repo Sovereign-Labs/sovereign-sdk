@@ -25,11 +25,13 @@ async fn setup_rollup_with_finality(
 }
 
 async fn nonce_at_tag(client: &SimpleStorageClient, address: Address, tag: &str) -> u64 {
-    get_tx_count(client, address, tag).await
+    try_get_tx_count(client, address, tag).await.unwrap()
 }
 
 async fn nonce_at_number(client: &SimpleStorageClient, address: Address, number: u64) -> u64 {
-    get_tx_count(client, address, format!("0x{number:x}")).await
+    try_get_tx_count(client, address, format!("0x{number:x}"))
+        .await
+        .unwrap()
 }
 
 async fn nonce_at_hash(
@@ -42,7 +44,7 @@ async fn nonce_at_hash(
         "blockHash": format!("{:#x}", hash),
         "requireCanonical": require_canonical
     });
-    get_tx_count(client, address, selector).await
+    try_get_tx_count(client, address, selector).await.unwrap()
 }
 
 async fn assert_equal_nonces_for_tags(
@@ -59,23 +61,6 @@ async fn assert_equal_nonces_for_tags(
         }
         previous = Some((tag, nonce));
     }
-}
-
-// ===========================================================================
-// Helper Functions
-// ===========================================================================
-
-async fn get_tx_count<P: Serialize>(
-    client: &SimpleStorageClient,
-    address: Address,
-    block: P,
-) -> u64 {
-    let count: U64 = client
-        .ws
-        .request("eth_getTransactionCount", rpc_params![address, block])
-        .await
-        .unwrap();
-    count.to::<u64>()
 }
 
 async fn try_get_tx_count<P: Serialize>(
