@@ -170,11 +170,13 @@ impl Client {
                     // Details in https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/2799
                     Error::InvalidResponsePayload(bytes, _error) => {
                         let response_body = bytes.as_ref();
-                        if contains_subslice(response_body, STOP_HEIGHT_ERROR_MARKER) {
-                            return false;
-                        }
-                        // All non-HTTP 4** are retried.
-                        !contains_subslice(response_body, HTTP_4XX_STATUS_MARKER)
+                        // We don't retry HTTP 4** errors, and we don't retry "reached the stop
+                        // height" errors since that means the rollup has shut down.
+                        let is_non_retryable = contains_subslice(
+                            response_body,
+                            STOP_HEIGHT_ERROR_MARKER,
+                        ) || contains_subslice(response_body, HTTP_4XX_STATUS_MARKER);
+                        !is_non_retryable
                     }
                 }
             })
