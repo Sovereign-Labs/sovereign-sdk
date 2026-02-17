@@ -52,7 +52,6 @@ pub(super) struct StateLayer<S: Spec> {
     #[allow(dead_code)]
     gas_consumed: S::Gas,
     /// Gas snapshot taken at layer creation time for tracking/debugging.
-    /// NOT restored on revert - gas consumption is permanent (EVM behavior).
     #[allow(dead_code)]
     gas_snapshot: Option<GasSnapshot<S>>,
 }
@@ -92,7 +91,7 @@ impl<S: Spec> StateLayer<S> {
 /// and [`LayeredRevertableTxState::revert_layer`].
 ///
 /// ## Gas tracking
-/// Gas consumption is permanent and NOT restored on revert, matching EVM behavior.
+/// Gas consumption is permanent and NOT restored on revert.
 /// This prevents DoS attacks where users could consume gas and then revert to avoid payment.
 /// When layers have a gas payer set via [`LayeredRevertableTxState::add_revertable_layer_with_gas_payer`],
 /// the gas payer must have sufficient gas/funds validated upfront before the layer is created.
@@ -136,8 +135,7 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
     /// Adds a new revertable layer with a different gas payer on top of the current layers.
     ///
     /// Validates upfront that the gas payer has sufficient gas and funds for the specified
-    /// gas limit before creating the layer. This matches EVM behavior where gas availability
-    /// is checked before execution begins.
+    /// gas limit before creating the layer.
     ///
     /// # Arguments
     /// * `gas_payer` - The address of the account paying for gas in this layer
@@ -151,13 +149,24 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
     /// # Use Case
     /// User A's transaction triggers User B's conditional order. User B pays for their
     /// execution. If User B doesn't have enough gas/funds, the layer creation fails fast.
-    /// If User B runs out of gas during execution, their layer reverts but gas is NOT refunded.
     pub fn add_revertable_layer_with_gas_payer(
         &mut self,
         gas_payer: S::Address,
         gas_limit: S::Gas,
     ) -> Result<&mut Self, GasMeteringError<S::Gas>> {
-        // Validate gas limit upfront
+        let gas_snapshot = self.validate_gas_limit_and_snapshot(gas_limit)?;
+        self.layers
+            .push(StateLayer::new_with_gas_payer(gas_payer, gas_snapshot));
+        Ok(self)
+    }
+
+    /// Validates gas limit and returns a snapshot of the current gas state.
+    ///
+    /// Returns `Ok(GasSnapshot)` if validation passes, or an error if insufficient gas/funds.
+    fn validate_gas_limit_and_snapshot(
+        &mut self,
+        gas_limit: S::Gas,
+    ) -> Result<GasSnapshot<S>, GasMeteringError<S::Gas>> {
         if let Some(meter) = self.inner.try_as_basic_gas_meter() {
             // Check if there's enough gas
             if meter.remaining_gas.checked_sub(gas_limit).is_none() {
@@ -180,23 +189,17 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
                     });
                 }
             }
-        }
 
-        let gas_snapshot = if let Some(meter) = self.inner.try_as_basic_gas_meter() {
-            GasSnapshot {
+            Ok(GasSnapshot {
                 remaining_gas: meter.remaining_gas,
                 remaining_funds: meter.remaining_funds,
-            }
+            })
         } else {
-            GasSnapshot {
+            Ok(GasSnapshot {
                 remaining_gas: S::Gas::MAX,
                 remaining_funds: None,
-            }
-        };
-
-        self.layers
-            .push(StateLayer::new_with_gas_payer(gas_payer, gas_snapshot));
-        Ok(self)
+            })
+        }
     }
 
     /// Commits the top layer to the layer below it, or to the inner state if this is the last layer.
@@ -290,9 +293,6 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
 
     /// Reverts and discards the top layer.
     ///
-    /// State changes in the layer are discarded, but gas consumption is permanent.
-    /// This matches EVM behavior where users pay for consumed gas even if execution reverts.
-    ///
     /// # Panics
     /// Panics if there are no layers to revert.
     ///
@@ -305,9 +305,6 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
 
     /// Reverts and discards the top layer.
     ///
-    /// State changes in the layer are discarded, but gas consumption is permanent.
-    /// This matches EVM behavior where users pay for consumed gas even if execution reverts.
-    ///
     /// This is a variant that takes `&mut self` instead of consuming `self`.
     ///
     /// # Panics
@@ -317,9 +314,7 @@ impl<'a, S: Spec, I: TxState<S>> LayeredRevertableTxState<'a, S, I> {
             panic!("Cannot revert layer: no layers exist");
         }
 
-        // Gas is NOT restored on revert - user pays for consumed gas (EVM behavior)
-        // State changes revert, but gas consumption is permanent
-        let _layer = self.layers.pop().unwrap();
+        self.layers.pop();
     }
 
     /// Gets the current number of layers.
@@ -1544,7 +1539,7 @@ mod tests {
         let expected_after_charge = initial_funds.checked_sub(Amount::new(20)).unwrap(); // 10*1 + 10*1 = 20
         assert_eq!(meter.remaining_funds, Some(expected_after_charge));
 
-        // Now revert the layer - funds should NOT be restored (EVM behavior)
+        // Now revert the layer - funds should NOT be restored
         println!("Reverting layer...");
         layered_state.revert_layer_mut();
         println!("Layer reverted, depth: {}", layered_state.layer_depth());
@@ -1555,7 +1550,7 @@ mod tests {
         assert_eq!(
             meter.remaining_funds,
             Some(expected_after_charge),
-            "Funds should NOT be restored after revert (EVM behavior)"
+            "Funds should NOT be restored after revert"
         );
         println!("=== PASSED ===\n");
     }
