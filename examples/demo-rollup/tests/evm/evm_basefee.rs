@@ -98,14 +98,6 @@ async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()>
         .expect("Transaction should exist");
     let max_fee_per_gas = rpc_tx.max_fee_per_gas();
 
-    println!(
-        "Block base_fee_per_gas: {:?}",
-        block.header.base_fee_per_gas
-    );
-    println!("Transaction maxFeePerGas: {max_fee_per_gas}");
-    println!("gasPrice from eth_getTransactionByHash: {gas_price}");
-    println!("effectiveGasPrice from receipt: {effective_gas_price}");
-
     // For EIP-1559 transactions, gasPrice should equal effectiveGasPrice.
     assert_eq!(
         gas_price, effective_gas_price,
