@@ -29,13 +29,24 @@ pub extern crate tokio_tungstenite;
 pub type WsSubscription<T> = Result<BoxStream<'static, anyhow::Result<T>>, WsError>;
 
 /// Message substring returned by the sequencer when it reached the configured stop height.
-const STOP_HEIGHT_ERROR_MARKER: &str = "The preferred sequencer has reached the stop height ";
+const STOP_HEIGHT_ERROR_MARKER: &[u8] = b"The preferred sequencer has reached the stop height ";
+const HTTP_4XX_STATUS_MARKER: &[u8] = b"\"status\":4";
+
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
 
 /// Checks whether an API client error indicates that the preferred sequencer reached stop height.
 pub fn is_stop_height_error(err: &Error<types::ApiError>) -> bool {
     matches!(
         err,
-        Error::ErrorResponse(response) if response.message.contains(STOP_HEIGHT_ERROR_MARKER)
+        Error::ErrorResponse(response)
+            if contains_subslice(response.message.as_bytes(), STOP_HEIGHT_ERROR_MARKER)
     )
 }
 
@@ -158,12 +169,12 @@ impl Client {
                     // This needs further improvement on the generated client.
                     // Details in https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/2799
                     Error::InvalidResponsePayload(bytes, _error) => {
-                        let response_body = std::str::from_utf8(bytes.as_ref()).unwrap_or("");
-                        if response_body.contains(STOP_HEIGHT_ERROR_MARKER) {
+                        let response_body = bytes.as_ref();
+                        if contains_subslice(response_body, STOP_HEIGHT_ERROR_MARKER) {
                             return false;
                         }
                         // All non-HTTP 4** are retried.
-                        !response_body.contains("\"status\":4")
+                        !contains_subslice(response_body, HTTP_4XX_STATUS_MARKER)
                     }
                 }
             })
