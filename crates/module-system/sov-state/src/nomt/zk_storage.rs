@@ -8,6 +8,7 @@ use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
+use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
@@ -106,7 +107,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = ();
+    type Proof = NomtMultiProof;
     type Root = StorageRoot<S>;
     type StateUpdate = ();
     type ChangeSet = ();
@@ -160,10 +161,10 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     fn materialize_changes(self, _state_update: Self::StateUpdate) -> Self::ChangeSet {}
 
     fn open_proof(
-        _state_root: Self::Root,
-        _proof: StorageProof<Self::Proof>,
+        state_root: Self::Root,
+        proof: StorageProof<Self::Proof>,
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-        unimplemented!("The NomtZkStorage does not support `open_proof` yet.");
+        crate::nomt::verify_storage_proof::<S>(state_root, proof)
     }
 }
 
@@ -178,22 +179,6 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
 
     fn latest_version_unbound(&self) -> SlotNumber {
         unimplemented!("Latest unbound version is not available for NomtVerifierStorage.");
-    }
-
-    fn get_with_proof<N: crate::namespaces::ProvableCompileTimeNamespace>(
-        &self,
-        _key: SlotKey,
-        _version: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>> {
-        unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
-    }
-
-    fn get_accessory_historical(
-        &self,
-        _key: &SlotKey,
-        _version: Option<SlotNumber>,
-    ) -> anyhow::Result<Option<SlotValue>> {
-        unimplemented!("The NomtVerifierStorage does not support `get_accessory_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
     fn get_historical<N: ProvableCompileTimeNamespace>(
@@ -214,6 +199,22 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         unimplemented!("The NomtVerifierStorage does not support `get_leaf_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
+    fn get_accessory_historical(
+        &self,
+        _key: &SlotKey,
+        _version: Option<SlotNumber>,
+    ) -> anyhow::Result<Option<SlotValue>> {
+        unimplemented!("The NomtVerifierStorage does not support `get_accessory_historical`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
+    fn get_with_proof<N: crate::namespaces::ProvableCompileTimeNamespace>(
+        &self,
+        _key: SlotKey,
+        _version: Option<SlotNumber>,
+    ) -> anyhow::Result<StorageProof<Self::Proof>> {
+        unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
         self.get_root_hash_unbound(version)
     }
@@ -227,6 +228,16 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
     }
 
     fn maybe_iter_user_values_with_prefix(
+        &self,
+        _prefix: SlotKey,
+    ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
+        unimplemented!("The NomtVerifierStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+        // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
+        #[allow(unreachable_code)]
+        Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
+    }
+
+    fn maybe_iter_kernel_values_with_prefix(
         &self,
         _prefix: SlotKey,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {

@@ -73,5 +73,6 @@ pub async fn config_from_postgres_container(
         postgres_connection_string,
         node_id,
         node_role,
+        leader_election: Default::default(),
     })
 }

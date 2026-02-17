@@ -30,6 +30,7 @@ sov-rollup-interface = { workspace = true }
 sov-revenue-share = { path = ".", features = ["native"] }
 sov-test-utils = { workspace = true }
 sov-bank = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["native"] }
 strum = { workspace = true }
 serde_json = { workspace = true }
 sov-mock-da = { workspace = true }
@@ -48,5 +49,6 @@ native = [
 	"sov-mock-da/native",
 	"sov-mock-zkvm/native",
 	"sov-rollup-interface/native",
-	"sov-sequencer-registry/native"
+	"sov-sequencer-registry/native",
+	"sov-state/native"
 ]

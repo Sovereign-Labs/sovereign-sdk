@@ -9,7 +9,7 @@
 //! invariants and we'd rather have an application crash due to broken
 //! invariants than to have bugs that result in subtle state inconsistencies.
 
-pub mod leadership_election;
+pub mod heartbeat_task;
 pub mod postgres;
 pub mod rocksdb;
 use crate::preferred::PostgresBackend;
@@ -445,27 +445,21 @@ impl PreferredSequencerDb {
         let (backend, role): (Option<Box<dyn DbBackend>>, _) = {
             if let Some(postgres_config) = &postgres_config {
                 match postgres_config.node_role {
-                    ConfiguredNodeRole::ReplicaNoLeaderSync => {
-                        // Connect and register the node without attempting leader election.
-                        // The backend is dropped after registration since replicas don't need it.
-                        PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
-                        (None, SequencerRole::DaOnlyReplica)
-                    }
-                    ConfiguredNodeRole::Replica => {
-                        // Connect and register the node without attempting leader election.
-                        // The backend is dropped after registration since replicas don't need it.
-                        PostgresBackend::connect_as_replica(postgres_config, bind_addr).await?;
-                        (None, SequencerRole::PgSyncReplica)
-                    }
+                    ConfiguredNodeRole::ReplicaNoLeaderSync => (None, SequencerRole::DaOnlyReplica),
+                    ConfiguredNodeRole::Replica => (None, SequencerRole::PgSyncReplica),
                     ConfiguredNodeRole::Leader => {
-                        let (backend, _) =
-                            PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        let _ = backend
+                            .heartbeat(Some(postgres_config.leader_election))
+                            .await?;
+
                         (Some(Box::new(backend)), SequencerRole::BatchProducer)
                     }
                     ConfiguredNodeRole::DbElected => {
-                        // Connect and attempt to acquire leadership
-                        let (backend, maybe_leader) =
-                            PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        let maybe_leader = backend
+                            .heartbeat(Some(postgres_config.leader_election))
+                            .await?;
 
                         let is_leader = maybe_leader
                             .map(|leader| leader.node_id == postgres_config.node_id)

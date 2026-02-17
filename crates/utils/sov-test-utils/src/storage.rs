@@ -35,7 +35,7 @@ use crate::TestSlotHash;
 
 /// Implementation of [`HierarchicalStorageManager`] that provides [`ProverStorage`]
 /// and commits changes directly to the underlying database.
-pub struct SimpleStorageManager<S: MerkleProofSpec> {
+pub struct SimpleJmtStorageManager<S: MerkleProofSpec> {
     state: Arc<rockbound::DB>,
     accessory: Arc<rockbound::DB>,
     phantom_mp_spec: PhantomData<S>,
@@ -44,13 +44,13 @@ pub struct SimpleStorageManager<S: MerkleProofSpec> {
     root: StorageRoot<S>,
 }
 
-impl<S: MerkleProofSpec> Default for SimpleStorageManager<S> {
+impl<S: MerkleProofSpec> Default for SimpleJmtStorageManager<S> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<S: MerkleProofSpec> SimpleStorageManager<S> {
+impl<S: MerkleProofSpec> SimpleJmtStorageManager<S> {
     /// Initialize new instance in temporary folder.
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
@@ -155,7 +155,7 @@ impl SimpleLedgerStorageManager {
 
 /// Implementation of [`HierarchicalStorageManager`] that provides [`NomtProverStorage`]
 /// and commits changes directly to the underlying database.
-pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
+pub struct SimpleStorageManager<S: MerkleProofSpec> {
     // Holds ownership of [`Tempdir`] so it is not removed prematurely
     _dir: TempDir,
     state: Arc<sov_db::state_db_nomt::NomtStateDb<S::Hasher>>,
@@ -166,8 +166,8 @@ pub struct SimpleNomtStorageManager<S: MerkleProofSpec> {
     pinned_cache: Mutex<Option<PinnedCache>>,
 }
 
-impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
-    /// Initialize a new instance of [`SimpleNomtStorageManager`] in a temporary directory.
+impl<S: MerkleProofSpec> SimpleStorageManager<S> {
+    /// Initialize a new instance of [`SimpleStorageManager`] in a temporary directory.
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
@@ -234,7 +234,6 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
 
     /// Commit [`NomtChangeSet`] to disk.
     pub fn commit(&mut self, stf_change_set: NomtChangeSet) {
-        tracing::trace!("Committing changes to disk");
         let NomtChangeSet {
             state,
             historical_state,
@@ -243,18 +242,14 @@ impl<S: MerkleProofSpec> SimpleNomtStorageManager<S> {
         } = stf_change_set;
 
         self.state.commit_change_set(state).unwrap();
-        tracing::trace!("Committed state changes to disk");
         self.accessory.write_schemas(&accessory).unwrap();
-        tracing::trace!("Committed accessory changes to disk");
         self.historical_state.commit(historical_state).unwrap();
 
         *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
-        tracing::trace!("Committed historical state changes to disk");
-        tracing::trace!("Committed all changes to disk");
     }
 }
 
-impl<S: MerkleProofSpec> Default for SimpleNomtStorageManager<S> {
+impl<S: MerkleProofSpec> Default for SimpleStorageManager<S> {
     fn default() -> Self {
         Self::new()
     }
@@ -293,7 +288,7 @@ pub trait ForklessStorageManager {
     );
 }
 
-impl<S: MerkleProofSpec> ForklessStorageManager for SimpleStorageManager<S> {
+impl<S: MerkleProofSpec> ForklessStorageManager for SimpleJmtStorageManager<S> {
     type Storage = ProverStorage<S>;
 
     fn new_in_tempdir() -> Self {
@@ -318,7 +313,7 @@ impl<S: MerkleProofSpec> ForklessStorageManager for SimpleStorageManager<S> {
     }
 }
 
-impl<S: MerkleProofSpec> ForklessStorageManager for SimpleNomtStorageManager<S> {
+impl<S: MerkleProofSpec> ForklessStorageManager for SimpleStorageManager<S> {
     type Storage = NomtProverStorage<S, TestSlotHash>;
 
     fn new_in_tempdir() -> Self {
@@ -367,12 +362,17 @@ where
     }
 }
 
-/// Using [`HierarchicalStorageManager`] to mimic [`SimpleStorageManager`],
-/// but instead of commiting all data on disk, it just appends it to the following block.
-/// Emulates fork-less DA without finality.
-pub struct NonCommitingStorageManager<
+/// Using [`HierarchicalStorageManager`] to mimic [`SimpleJmtStorageManager`],
+/// but instead of committing all data on disk, it just appends it to the following block.
+/// Emulates fork-less DA.
+///
+/// The `FINALIZE` const generic controls whether blocks are finalized after saving:
+/// - `false`: Only saves change sets (emulates DA without finality)
+/// - `true`: Saves and finalizes (emulates DA with instant finality)
+pub struct HierarchicalForklessStorageManager<
     H: HierarchicalStorageManager<MockDaSpec, StfState = S> + PathInitializer,
     S: Storage,
+    const FINALIZE: bool,
 > {
     _dir: TempDir,
     // It holds mutex over the inner storage manager, for compatibility with the testing framework.
@@ -381,13 +381,19 @@ pub struct NonCommitingStorageManager<
     root: S::Root,
 }
 
-impl<H, S> NonCommitingStorageManager<H, S>
+/// Storage manager that does not finalize blocks - emulates fork-less DA without finality.
+pub type NonCommitingStorageManager<H, S> = HierarchicalForklessStorageManager<H, S, false>;
+
+/// Storage manager that finalizes blocks - emulates MockDa with instant finality.
+pub type CommitingStorageManager<H, S> = HierarchicalForklessStorageManager<H, S, true>;
+
+impl<H, S, const FINALIZE: bool> HierarchicalForklessStorageManager<H, S, FINALIZE>
 where
     H: HierarchicalStorageManager<MockDaSpec, StfState = S> + PathInitializer,
     S: NativeStorage,
 {
-    /// Create the new [`NonCommitingStorageManager`].
-    /// Passing [`TempDir`] allows keeping the directory from deletion.
+    /// Create a new [`HierarchicalForklessStorageManager`].
+    /// Creates a temporary directory that is kept alive for the lifetime of the manager.
     pub fn new() -> Self {
         let dir = TempDir::new().unwrap();
         let storage_manager = H::new_in_path(dir.path());
@@ -401,7 +407,7 @@ where
     }
 }
 
-impl<H, S> Default for NonCommitingStorageManager<H, S>
+impl<H, S, const FINALIZE: bool> Default for HierarchicalForklessStorageManager<H, S, FINALIZE>
 where
     H: HierarchicalStorageManager<MockDaSpec, StfState = S> + PathInitializer,
     S: NativeStorage,
@@ -411,7 +417,8 @@ where
     }
 }
 
-impl<H, S> ForklessStorageManager for NonCommitingStorageManager<H, S>
+impl<H, S, const FINALIZE: bool> ForklessStorageManager
+    for HierarchicalForklessStorageManager<H, S, FINALIZE>
 where
     H: HierarchicalStorageManager<MockDaSpec, StfState = S, StfChangeSet = S::ChangeSet>
         + PathInitializer,
@@ -453,111 +460,16 @@ where
         change_set: <Self::Storage as Storage>::ChangeSet,
         new_root: <Self::Storage as Storage>::Root,
     ) {
-        // Here is the trick, we don't commit, but chain it to the last block
-        self.root = new_root;
-        self.storage_manager
-            .lock()
-            .unwrap()
-            .save_change_set(&self.last_block, change_set, Default::default())
-            .expect("Failed to save change set");
-        self.last_block =
-            MockBlockHeader::from_height(self.last_block.height().checked_add(1).unwrap());
-    }
-}
-
-/// Storage manager that encapsulates MockDa with instant finality
-pub struct CommitingStorageManager<
-    H: HierarchicalStorageManager<MockDaSpec, StfState = S> + PathInitializer,
-    S: Storage,
-> {
-    _dir: TempDir,
-    // It holds mutex over the inner storage manager, for compatibility with the testing framework.
-    storage_manager: Mutex<H>,
-    last_block: MockBlockHeader,
-    root: S::Root,
-}
-
-impl<H, S> CommitingStorageManager<H, S>
-where
-    H: HierarchicalStorageManager<MockDaSpec, StfState = S> + PathInitializer,
-    S: NativeStorage,
-{
-    /// Create the new [`CommitingStorageManager`].
-    /// Passing [`TempDir`] allows keeping the directory from deletion.
-    pub fn new() -> Self {
-        let dir = TempDir::new().unwrap();
-        let storage_manager = H::new_in_path(dir.path());
-        let initial_block_header = MockBlockHeader::from_height(0);
-        Self {
-            _dir: dir,
-            storage_manager: Mutex::new(storage_manager),
-            last_block: initial_block_header,
-            root: S::PRE_GENESIS_ROOT,
-        }
-    }
-}
-
-impl<H, S> Default for CommitingStorageManager<H, S>
-where
-    H: HierarchicalStorageManager<MockDaSpec, StfState = S> + PathInitializer,
-    S: NativeStorage,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<H, S> ForklessStorageManager for CommitingStorageManager<H, S>
-where
-    H: HierarchicalStorageManager<MockDaSpec, StfState = S, StfChangeSet = S::ChangeSet>
-        + PathInitializer,
-    <H as HierarchicalStorageManager<MockDaSpec>>::LedgerChangeSet: Default,
-    S: NativeStorage,
-{
-    type Storage = S;
-
-    fn new_in_tempdir() -> Self {
-        Self::new()
-    }
-
-    fn current_root(&self) -> <Self::Storage as Storage>::Root {
-        self.root.clone()
-    }
-
-    fn create_prover_storage(&self) -> Self::Storage {
-        let (prover_storage, _) = self
-            .storage_manager
-            .lock()
-            .unwrap()
-            .create_state_for(&self.last_block)
-            .expect("Failed to create storage");
-        prover_storage
-    }
-
-    fn create_api_storage(&self) -> Self::Storage {
-        let (prover_storage, _) = self
-            .storage_manager
-            .lock()
-            .unwrap()
-            .create_state_after(&self.last_block)
-            .expect("Failed to create storage");
-        prover_storage
-    }
-
-    fn commit_change_set(
-        &mut self,
-        change_set: <Self::Storage as Storage>::ChangeSet,
-        new_root: <Self::Storage as Storage>::Root,
-    ) {
-        // Here is the trick, we don't commit, but chain it to the last block
         self.root = new_root;
         let mut storage_manager = self.storage_manager.lock().unwrap();
         storage_manager
             .save_change_set(&self.last_block, change_set, Default::default())
             .expect("Failed to save change set");
-        storage_manager
-            .finalize(&self.last_block)
-            .expect("Failed to finalize storage manager");
+        if FINALIZE {
+            storage_manager
+                .finalize(&self.last_block)
+                .expect("Failed to finalize storage manager");
+        }
         self.last_block =
             MockBlockHeader::from_height(self.last_block.height().checked_add(1).unwrap());
     }

@@ -141,12 +141,18 @@ importers:
 
   packages/modules:
     dependencies:
+      '@noble/hashes':
+        specifier: ^1.5.0
+        version: 1.8.0
       '@sovereign-sdk/utils':
         specifier: workspace:^
         version: link:../utils
       '@sovereign-sdk/web3':
         specifier: workspace:^
         version: link:../web3
+      bech32:
+        specifier: ^2.0.0
+        version: 2.0.0
     devDependencies:
       '@sovereign-sdk/signers':
         specifier: workspace:^

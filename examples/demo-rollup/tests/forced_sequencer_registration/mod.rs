@@ -4,7 +4,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use alloy::consensus::{TxEip1559, TypedTransaction};
-use alloy::eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy::eips::eip2718::Encodable2718;
 use alloy::network::TransactionBuilder;
 use alloy::providers::Provider;
@@ -311,8 +310,8 @@ fn build_evm_transfer_tx(to: Address, value: U256, nonce: u64) -> TxEip1559 {
         to: TxKind::Call(to),
         value,
         nonce,
-        gas_limit: 1_000_000, // Use larger gas limit like integration tests
-        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 100_000_000, // Use larger gas limit like integration tests
+        max_fee_per_gas: config_value!("INITIAL_BASE_FEE_PER_GAS")[0] as u128 * 2,
         chain_id: config_value!("CHAIN_ID"),
         ..Default::default()
     }
@@ -325,8 +324,8 @@ fn build_evm_contract_call_tx(contract_address: Address, calldata: Bytes, nonce:
         value: U256::ZERO,
         input: calldata,
         nonce,
-        gas_limit: 1_000_000, // Use larger gas limit like other tests
-        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 100_000_000, // Use larger gas limit like other tests
+        max_fee_per_gas: config_value!("INITIAL_BASE_FEE_PER_GAS")[0] as u128 * 2,
         chain_id: config_value!("CHAIN_ID"),
         ..Default::default()
     }
@@ -891,20 +890,20 @@ async fn evm_contract_call_unregistered_test_case(
     wait_for_forced_tx_batch(&mut forced_tx_batches).await?;
     let provider = alloy_client(http_addr);
 
-    // Verify the contract state was updated by calling getValue
+    // Verify the contract state was updated by calling getValue. The forced batch notification
+    // comes from the sequencer; the node may apply the batch shortly after, so poll until visible.
     let get_calldata = Bytes::from(contract_for_calldata.get().to_vec());
     let call_request = TransactionRequest::default()
         .with_to(contract_address)
         .with_input(get_calldata);
 
-    let result = provider.call(call_request).await?;
-    let resp_array: [u8; 32] = result.to_vec().try_into().unwrap();
-    let value = U256::from_be_bytes(resp_array);
-    assert_eq!(
-        value,
-        U256::from(set_value),
-        "Contract value should match set value"
-    );
+    poll_until("contract value update", || async {
+        let result = provider.call(call_request.clone()).await?;
+        let resp_array: [u8; 32] = result.to_vec().try_into().unwrap();
+        let value = U256::from_be_bytes(resp_array);
+        Ok((value == U256::from(set_value)).then_some(()))
+    })
+    .await?;
 
     Ok(())
 }

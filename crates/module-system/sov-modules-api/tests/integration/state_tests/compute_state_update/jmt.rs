@@ -1,13 +1,13 @@
 // This is a reference point to validate that there are no errors in test
 
 use sov_state::ZkStorage;
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleJmtStorageManager;
 
 use crate::state_tests::compute_state_update::{run_test, TestCase};
 use crate::state_tests::StorageSpec;
 
 fn run_jmt_test(test_case: TestCase) {
-    let mut sm = SimpleStorageManager::new();
+    let mut sm = SimpleJmtStorageManager::new();
     sm.genesis();
     run_test(test_case, sm, ZkStorage::<StorageSpec>::new());
 }

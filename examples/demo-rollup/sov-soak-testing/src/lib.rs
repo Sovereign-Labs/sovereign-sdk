@@ -126,6 +126,7 @@ pub async fn setup_rollup(
         postgres_connection_string: url,
         node_id: "Primary".to_string(),
         node_role: ConfiguredNodeRole::Leader,
+        leader_election: Default::default(),
     });
 
     let rollup_builder = TestRollupBuilder::new_with_storage_path(

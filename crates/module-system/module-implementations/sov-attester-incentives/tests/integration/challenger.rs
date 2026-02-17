@@ -145,6 +145,7 @@ fn setup_with_wrong_attestation() -> (
 /// This tests the happy path of challenge processing.
 
 #[test]
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_valid_challenge() -> Result<(), Infallible> {
     let (mut runner, _, bonded_challenger, expected_reward) = setup_with_wrong_attestation();
     let bonded_challenger_address = bonded_challenger.user_info.address();
@@ -257,6 +258,7 @@ fn test_invalid_challenge_helper(
 }
 
 #[test]
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_invalid_challenge_initial_state_root() {
     let (mut runner, _, bonded_challenger, expected_reward) = setup_with_wrong_attestation();
     let bonded_challenger_address = bonded_challenger.user_info.address();
@@ -283,7 +285,7 @@ fn test_invalid_challenge_initial_state_root() {
 }
 
 #[test]
-
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_invalid_challenge_transition() {
     let (mut runner, _, bonded_challenger, expected_reward) = setup_with_wrong_attestation();
     let bonded_challenger_address = bonded_challenger.user_info.address();
@@ -310,6 +312,7 @@ fn test_invalid_challenge_transition() {
 }
 
 #[test]
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_invalid_challenge_proof() {
     let (mut runner, _, bonded_challenger, expected_reward) = setup_with_wrong_attestation();
     let bonded_challenger_address = bonded_challenger.user_info.address();

@@ -306,9 +306,15 @@ impl NodeClient {
         url: &str,
     ) -> anyhow::Result<R> {
         let url = format!("{}{}", self.base_url, url);
-        let response = self.http_client.get(url).send().await?;
-        let data = response.json::<R>().await?;
-        Ok(data)
+        let response = self.http_client.get(&url).send().await?;
+        let status = response.status();
+        let body = response.text().await?;
+        if status.is_success() {
+            serde_json::from_str(&body)
+                .with_context(|| format!("failed to deserialize response: {body}"))
+        } else {
+            anyhow::bail!("Failed response {status} for {url}: {body}");
+        }
     }
 
     /// HTTP GET to the given endpoint, returning plain text.

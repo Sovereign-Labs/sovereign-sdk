@@ -55,6 +55,7 @@ use tokio_stream::StreamExt;
 use tracing::{debug, info};
 
 const DELAYED_TX_DELAY_MS: u64 = 2500;
+const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 generate_optimistic_runtime_with_kernel!(
     TestRuntime <=
@@ -141,11 +142,19 @@ impl DaLayerWithSubscription {
         let subscription = self.slot_subscription.as_mut().unwrap();
         while self.back_slot_notifications > 1 {
             self.back_slot_notifications -= 1;
-            subscription.next().await.unwrap().unwrap();
+            tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+                .await
+                .expect("timeout waiting for slot notification")
+                .unwrap()
+                .unwrap();
         }
 
         self.back_slot_notifications -= 1;
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for slot notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Gets the next state update notification, clearing any *known* updates from the queue first.
@@ -154,7 +163,11 @@ impl DaLayerWithSubscription {
     /// how many state update notifications we should ultimately be receiving.
     pub async fn next_state_update_notification(&mut self) -> StateUpdateNotification {
         let subscription = self.state_update_subscription.as_mut().unwrap();
-        subscription.next().await.unwrap().unwrap()
+        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            .await
+            .expect("timeout waiting for state update notification")
+            .unwrap()
+            .unwrap()
     }
 
     /// Produces a slot and waits for the state update and slot notifications.
@@ -545,7 +558,7 @@ async fn test_tx_ws_submission() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test covers pruning behavior, which is only relevant for NOMT. Enable it when we switch to NOMT for the sequencer tests."]
+#[ignore = "This test covers pruning behavior, which is currently disabled."]
 async fn test_archival_state_with_pruning() {
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -1171,7 +1184,6 @@ async fn max_batch_size() {
     // The transaction is rejected because it is too large.
     {
         let tx = tx_set_many_values(&admin.private_key, 0, vec![0; 1024]);
-
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
     }
@@ -1186,10 +1198,12 @@ async fn max_batch_size() {
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
 
-        let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 512]);
+        // Fully baked txs include auth wrapper + sequencing metadata + borsh overhead.
+        // 480 bytes keeps two medium txs below the 99% comfortable size limit for a 1024 batch.
+        let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 480]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 480]);
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
     }
@@ -1208,7 +1222,7 @@ async fn max_batch_size() {
     test_rollup.pause_preferred_batches().await;
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 480]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }
@@ -2275,22 +2289,12 @@ async fn events_are_returned_in_tx_response() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 7);
-    let response = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    let response = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
     assert_eq!(response.events.len(), 1);
 }
@@ -2335,9 +2339,24 @@ async fn test_no_crashes_on_resync_with_transactions() {
 
     let rollup_storage_path = builder.storage_path();
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
-    // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
-        std::fs::remove_dir_all(rollup_storage_path.path().join(path)).unwrap();
+    // doesn't interfere.
+    // NOMT uses different directories than JMT:
+    // - user_nomt_db, kernel_nomt_db (NOMT state)
+    // - state-db, archival-state-db (FlatStateDb)
+    // - accessory, ledger, blob_sender (common to both)
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
+        let full_path = rollup_storage_path.path().join(path);
+        if full_path.exists() {
+            std::fs::remove_dir_all(full_path).unwrap();
+        }
     }
 
     let test_rollup = builder.start().await.unwrap();

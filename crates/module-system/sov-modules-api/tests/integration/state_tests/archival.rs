@@ -7,21 +7,21 @@ use sov_modules_api::{
     ApiStateAccessor, ConcurrentStateCheckpoint, KernelStateValue, StateCheckpoint,
 };
 use sov_state::{BorshCodec, Prefix};
-use sov_test_utils::storage::{SimpleNomtStorageManager, SimpleStorageManager};
-use sov_test_utils::TestNomtSpec;
+use sov_test_utils::storage::{SimpleJmtStorageManager, SimpleStorageManager};
+use sov_test_utils::{TestJmtSpec, TestSpec};
 
 use crate::state_tests::*;
 
 #[test]
 fn test_jmt_archival_state_updates_correctly() -> Result<(), Infallible> {
-    let storage_manager = SimpleStorageManager::new();
-    archival_state_updates_correctly::<TestSpec, _>(storage_manager)
+    let storage_manager = SimpleJmtStorageManager::new();
+    archival_state_updates_correctly::<TestJmtSpec, _>(storage_manager)
 }
 
 #[test]
 fn test_nomt_archival_state_updates_correctly() -> Result<(), Infallible> {
-    let storage_manager = SimpleNomtStorageManager::new();
-    archival_state_updates_correctly::<TestNomtSpec, _>(storage_manager)
+    let storage_manager = SimpleStorageManager::new();
+    archival_state_updates_correctly::<TestSpec, _>(storage_manager)
 }
 
 /// Tests that the archival state is correctly retrieved from the DB and updates to the head state don't interfere

@@ -1,13 +1,13 @@
 use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::{ArrayWitness, NodeLeaf, SlotKey, SlotValue, Storage};
-use sov_test_utils::storage::SimpleNomtStorageManager;
+use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::TestHasher;
 
 use crate::state_tests::compute_state_update::{run_test, ForklessStorageManager, TestCase};
 use crate::state_tests::StorageSpec;
 
 fn run_nomt_test(test_case: TestCase) {
-    let sm = SimpleNomtStorageManager::new();
+    let sm = SimpleStorageManager::new();
     run_test(test_case, sm, NomtVerifierStorage::<StorageSpec>::new());
 }
 
@@ -90,7 +90,7 @@ fn test_modified_read_to_none() {
 ///  - we don't test extra or missing writes, because all writes originate from within ZKVM
 ///  - we don't test extra proof for reads, because zk guest only cares about reads it made.
 fn check_malicious_case(native_case: TestCase, zk_case: TestCase, expected_error: &str) {
-    let mut sm = SimpleNomtStorageManager::new();
+    let mut sm = SimpleStorageManager::new();
 
     for (native_state_accesses, zk_state_accesses) in native_case
         .rounds

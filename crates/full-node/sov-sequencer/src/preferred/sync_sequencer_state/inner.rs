@@ -53,6 +53,7 @@ pub(crate) enum DoNewTxError<S: Spec> {
     TxTooBig {
         current_batch_size: usize,
         max_batch_size: usize,
+        tx_len: usize,
     },
     ExecutorError(RollupBlockExecutorError<S>),
     Shutdown,
@@ -693,6 +694,7 @@ where
                 Err(DoNewTxError::TxTooBig {
                     current_batch_size: batch_size_tracker.current_batch_size,
                     max_batch_size: batch_size_tracker.max_batch_size,
+                    tx_len,
                 }),
                 request_used,
             );

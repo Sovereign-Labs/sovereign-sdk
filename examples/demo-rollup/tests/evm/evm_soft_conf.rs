@@ -26,8 +26,8 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
                 .eth_get_block_by_number(Some("pending".to_string()))
                 .await;
 
+            // When there are no pending txs, pending falls back to the latest sealed block.
             assert_eq!(latest_block, pending_block);
-            assert!(pending_block.transactions.is_empty());
         }
 
         let set_arg = 1;

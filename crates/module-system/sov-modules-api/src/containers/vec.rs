@@ -328,6 +328,103 @@ where
     }
 }
 
+#[cfg(feature = "native")]
+impl<N: CompileTimeNamespace, V, Codec: Clone> NamespacedStateVec<N, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+{
+    /// Returns raw value bytes for the given index.
+    pub fn get_raw<Reader: StateReader<N>>(
+        &self,
+        index: u64,
+        state: &mut Reader,
+    ) -> Result<Option<Vec<u8>>, Reader::Error> {
+        self.elems().get_raw(&index, state)
+    }
+
+    /// Sets raw bytes at the given index.
+    /// If the index is out of bounds, returns an error.
+    pub fn set_raw<ReaderAndWriter>(
+        &mut self,
+        index: u64,
+        value: &[u8],
+        state: &mut ReaderAndWriter,
+    ) -> Result<Result<(), StateVecError<N>>, <ReaderAndWriter as StateWriter<N>>::Error>
+    where
+        ReaderAndWriter: StateReaderAndWriter<N>,
+    {
+        let len = self.len(state)?;
+
+        Ok(if index < len {
+            self.elems_mut().set_raw(&index, value, state)?;
+            Ok(())
+        } else {
+            Err(StateVecError::IndexOutOfBounds(index))
+        })
+    }
+
+    /// Pushes raw bytes to the end of the vector.
+    pub fn push_raw<ReaderAndWriter>(
+        &mut self,
+        value: &[u8],
+        state: &mut ReaderAndWriter,
+    ) -> Result<(), <ReaderAndWriter as StateWriter<N>>::Error>
+    where
+        ReaderAndWriter: StateReaderAndWriter<N>,
+    {
+        let len = self.len(state)?;
+        self.elems_mut().set_raw(&len, value, state)?;
+        self.set_len(
+            len.checked_add(1).expect(
+                "Overflowed u64 while pushing to a state vec. This should be impossible in the lifetime of the universe.",
+            ),
+            state,
+        )?;
+        Ok(())
+    }
+
+    /// Pops raw bytes from the end of the vector.
+    pub fn pop_raw<ReaderAndWriter>(
+        &mut self,
+        state: &mut ReaderAndWriter,
+    ) -> Result<Option<Vec<u8>>, <ReaderAndWriter as StateWriter<N>>::Error>
+    where
+        ReaderAndWriter: StateReaderAndWriter<N>,
+    {
+        let len = self.len(state)?;
+        let Some(last_i) = len.checked_sub(1) else {
+            return Ok(None);
+        };
+
+        let Some(elem) = self.elems().remove_raw(&last_i, state)? else {
+            return Ok(None);
+        };
+
+        self.set_len(last_i, state)?;
+        Ok(Some(elem))
+    }
+
+    /// Returns an iterator over all raw values in the vector.
+    pub fn iter_raw<'a, 'ws, W>(
+        &'a self,
+        state: &'ws mut W,
+    ) -> Result<StateVecRawIter<'a, 'ws, N, V, Codec, W>, <W as StateWriter<N>>::Error>
+    where
+        W: StateReaderAndWriter<N>,
+    {
+        let len = self.len(state)?;
+        Ok(StateVecRawIter {
+            state_vec: self,
+            state,
+            len,
+            next_i: 0,
+            _phantom: PhantomData,
+        })
+    }
+}
+
 impl<V, Codec> NamespacedStateVec<Accessory, V, Codec>
 where
     Codec: StateCodec,
@@ -445,10 +542,98 @@ where
     }
 }
 
+/// An [`Iterator`] over raw bytes in a state vector.
+#[cfg(feature = "native")]
+pub struct StateVecRawIter<'a, 'ws, N, V, Codec, W>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+    N: CompileTimeNamespace,
+    W: StateReaderAndWriter<N>,
+{
+    state_vec: &'a NamespacedStateVec<N, V, Codec>,
+    state: &'ws mut W,
+    len: u64,
+    next_i: u64,
+    _phantom: std::marker::PhantomData<(N, V, Codec)>,
+}
+
+#[cfg(feature = "native")]
+impl<N, V, Codec, W> Iterator for StateVecRawIter<'_, '_, N, V, Codec, W>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+    N: CompileTimeNamespace,
+    W: StateReaderAndWriter<N>,
+{
+    type Item = Result<Vec<u8>, <W as StateWriter<N>>::Error>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_i >= self.len {
+            return None;
+        }
+        match self.state_vec.get_raw(self.next_i, self.state) {
+            Err(e) => Some(Err(e)),
+            Ok(None) => None,
+            Ok(Some(elem)) => {
+                self.next_i += 1;
+                Some(Ok(elem))
+            }
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+impl<N, V, Codec, W> ExactSizeIterator for StateVecRawIter<'_, '_, N, V, Codec, W>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+    N: CompileTimeNamespace,
+    W: InfallibleStateReaderAndWriter<N>,
+{
+    fn len(&self) -> usize {
+        (self.len - self.next_i).try_into().unwrap()
+    }
+}
+
+#[cfg(feature = "native")]
+impl<N, V, Codec, W> FusedIterator for StateVecRawIter<'_, '_, N, V, Codec, W>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+    N: CompileTimeNamespace,
+    W: InfallibleStateReaderAndWriter<N>,
+{
+}
+
+#[cfg(feature = "native")]
+impl<N, V, Codec, W> DoubleEndedIterator for StateVecRawIter<'_, '_, N, V, Codec, W>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V> + StateItemCodec<u64>,
+    Codec::KeyCodec: StateItemCodec<u64>,
+    N: CompileTimeNamespace,
+    W: StateReaderAndWriter<N>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.len == self.next_i {
+            return None;
+        }
+
+        self.len -= 1;
+        self.state_vec.get_raw(self.len, self.state).transpose()
+    }
+}
+
 #[cfg(all(test, feature = "native"))]
 mod test {
     use std::fmt::Debug;
 
+    use borsh::to_vec as borsh_to_vec;
     use sov_mock_zkvm::MockZkvm;
     use sov_rollup_interface::execution_mode::Native;
     use sov_state::codec::BorshCodec;
@@ -461,7 +646,7 @@ mod test {
     use crate::capabilities::mocks::MockKernel;
     use crate::StateCheckpoint;
 
-    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn double_ended_iterator_from_back() {
@@ -522,6 +707,81 @@ mod test {
             check_test_case_action(&mut state_vec, test_case_action, &mut state);
         }
     }
+
+    #[test]
+    fn state_vec_raw_roundtrip_and_iter() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(3, 3);
+        let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
+
+        let first = vec![1, 2];
+        let second = vec![3, 4, 5];
+
+        state_vec.push_raw(&first, &mut state).unwrap_infallible();
+        state_vec.push_raw(&second, &mut state).unwrap_infallible();
+
+        assert_eq!(state_vec.len(&mut state).unwrap_infallible(), 2);
+        assert_eq!(
+            state_vec.get_raw(0, &mut state).unwrap_infallible(),
+            Some(first.clone())
+        );
+        assert_eq!(
+            state_vec.get_raw(1, &mut state).unwrap_infallible(),
+            Some(second.clone())
+        );
+
+        let collected: Vec<Vec<u8>> = state_vec
+            .iter_raw(&mut state)
+            .unwrap_infallible()
+            .map(|entry| entry.unwrap_infallible())
+            .collect();
+        assert_eq!(collected, vec![first.clone(), second.clone()]);
+
+        assert_eq!(
+            state_vec.pop_raw(&mut state).unwrap_infallible(),
+            Some(second.clone())
+        );
+        assert_eq!(state_vec.len(&mut state).unwrap_infallible(), 1);
+        assert_eq!(
+            state_vec.get_raw(0, &mut state).unwrap_infallible(),
+            Some(first)
+        );
+    }
+
+    #[test]
+    fn state_vec_raw_and_typed_compatibility() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(4, 4);
+        let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
+
+        state_vec.push(&42, &mut state).unwrap_infallible();
+        assert_eq!(
+            state_vec.get_raw(0, &mut state).unwrap_infallible(),
+            Some(borsh_to_vec(&42_u32).unwrap())
+        );
+
+        let typed_from_raw = borsh_to_vec(&100_u32).unwrap();
+        assert!(state_vec
+            .set_raw(0, &typed_from_raw, &mut state)
+            .unwrap_infallible()
+            .is_ok());
+        assert_eq!(state_vec.get(0, &mut state).unwrap_infallible(), Some(100));
+
+        assert!(matches!(
+            state_vec.set_raw(1, &[9], &mut state).unwrap_infallible(),
+            Err(StateVecError::IndexOutOfBounds(1))
+        ));
+        assert_eq!(state_vec.len(&mut state).unwrap_infallible(), 1);
+    }
+
     enum TestCaseAction<T> {
         Push(T),
         Pop(T),

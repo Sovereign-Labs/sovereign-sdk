@@ -72,6 +72,7 @@ pub mod traits;
 use traits::MinimalGenesis;
 
 type NoncesMap<S> = HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64>;
+const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
 
 /// Metadata about a blob.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -270,6 +271,16 @@ where
     S: Spec<Storage = Sm::Storage, Da = MockDaSpec>,
     <S::Storage as Storage>::Root: Clone,
 {
+    fn sync_hd_timestamp_env_var_for_tests(&self) {
+        if let Some(freeze_time) = &self.config.freeze_time {
+            let time_millis: u128 = freeze_time.as_millis().try_into().unwrap();
+            let time_nanos = time_millis * 1_000_000;
+            std::env::set_var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR, time_nanos.to_string());
+        } else {
+            std::env::remove_var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR);
+        };
+    }
+
     /// Returns the runtime of the test runner.
     pub fn runtime(&self) -> &RT {
         self.stf.runtime()
@@ -511,6 +522,7 @@ where
         };
 
         runner.synchronize_storage_channel();
+        runner.sync_hd_timestamp_env_var_for_tests();
 
         runner
     }
@@ -626,6 +638,7 @@ where
         execution_context: ExecutionContext,
         cf: CF,
     ) -> (TestApplySlotOutput<RT, S>, RelevantBlobInfo, NoncesMap<S>) {
+        self.sync_hd_timestamp_env_var_for_tests();
         let block_header = self.next_header();
         let stf_state = self.storage_manager.create_prover_storage();
         let slot_input: SlotInput<RT, S> = input.into();
@@ -723,6 +736,7 @@ where
     /// any transactions.
     pub fn advance_slots(&mut self, slots_to_advance: usize) -> &mut Self {
         for _ in 0..slots_to_advance {
+            self.sync_hd_timestamp_env_var_for_tests();
             let block_header = self.next_header();
             let stf_state = self.storage_manager.create_prover_storage();
             let mut blobs = RelevantBlobs {
@@ -1002,7 +1016,7 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
 }
 
 // This replicate logic from `AsyncBatchResponder`.
-// And all modifications mede there shold be replicated.
+// And all modifications mede there should be replicated.
 #[derive(Clone)]
 struct SeqControlFlow;
 

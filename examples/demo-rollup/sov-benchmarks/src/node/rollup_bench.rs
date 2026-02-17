@@ -9,7 +9,7 @@ use sov_benchmarks::{setup_with_runner, BenchSpec, NomtBenchSpec};
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::Spec;
 use sov_test_utils::storage::{
-    ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
+    ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
 };
 use sov_test_utils::MockZkvm;
 
@@ -66,13 +66,13 @@ fn stf_apply_slot_bench(c: &mut Criterion) {
         bench_after_blocks * senders_count
     );
 
-    run_spec::<BenchSpec<MockZkvm>, SimpleStorageManager<_>>(
+    run_spec::<BenchSpec<MockZkvm>, SimpleJmtStorageManager<_>>(
         c,
         "jmt",
         senders_count,
         bench_after_blocks,
     );
-    run_spec::<NomtBenchSpec, SimpleNomtStorageManager<_>>(
+    run_spec::<NomtBenchSpec, SimpleStorageManager<_>>(
         c,
         "nomt",
         senders_count,

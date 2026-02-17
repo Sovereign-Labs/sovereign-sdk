@@ -31,10 +31,11 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
 use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, HDTimestamp, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,6 +45,19 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
+
+const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
+
+fn get_hd_timestamp_with_maybe_override() -> HDTimestamp {
+    if cfg!(debug_assertions) {
+        let Ok(timestamp) = std::env::var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR) else {
+            return HDTimestamp::now();
+        };
+        HDTimestamp::from_str(&timestamp).unwrap_or_else(|_| HDTimestamp::now())
+    } else {
+        HDTimestamp::now()
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
@@ -847,6 +861,8 @@ where
             .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
+        let mut baked_tx = baked_tx;
+        baked_tx.set_sequencing_metadata(&get_hd_timestamp_with_maybe_override());
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
