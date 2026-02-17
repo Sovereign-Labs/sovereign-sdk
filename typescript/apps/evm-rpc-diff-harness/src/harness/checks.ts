@@ -44,6 +44,22 @@ interface CheckDefinition {
   compare?: (anvil: EndpointObservation, rollup: EndpointObservation) => ComparisonResult;
 }
 
+interface DecodedHarnessLogEntry {
+  event: string;
+  args?: unknown;
+  txHash: string | null;
+  topics?: unknown;
+  data?: string;
+}
+
+interface LogsFiltersCheckObservation {
+  targetTxHash: string;
+  byAddress: DecodedHarnessLogEntry[];
+  byTopic0: DecodedHarnessLogEntry[];
+  byIndexedTopic: DecodedHarnessLogEntry[];
+  byRange: DecodedHarnessLogEntry[];
+}
+
 function normalizeAddress(address: string, runtime: EndpointRuntime): string {
   const lower = address.toLowerCase();
   if (lower === runtime.wallet.address.toLowerCase()) {
@@ -1028,21 +1044,28 @@ const checks: CheckDefinition[] = [
         }
       }
 
-      function decodeLogs(raw: unknown): unknown[] {
+      function decodeLogs(raw: unknown): DecodedHarnessLogEntry[] {
         if (!Array.isArray(raw)) {
           return [];
         }
 
-        const entries: unknown[] = [];
+        const entries: DecodedHarnessLogEntry[] = [];
         for (const item of raw) {
           if (!item || typeof item !== "object") {
             continue;
           }
 
-          const log = item as { topics?: unknown; data?: unknown; address?: unknown };
+          const log = item as {
+            topics?: unknown;
+            data?: unknown;
+            address?: unknown;
+            transactionHash?: unknown;
+          };
           if (!Array.isArray(log.topics) || typeof log.data !== "string" || typeof log.address !== "string") {
             continue;
           }
+
+          const txHash = typeof log.transactionHash === "string" ? log.transactionHash : null;
 
           try {
             const parsed = iface.parseLog({
@@ -1050,12 +1073,14 @@ const checks: CheckDefinition[] = [
               data: log.data
             });
             entries.push({
-              event: parsed?.name,
-              args: normalizeRuntimeValue(namedArgs(parsed?.args), runtime)
+              event: parsed?.name ?? "UNKNOWN",
+              args: normalizeRuntimeValue(namedArgs(parsed?.args), runtime),
+              txHash
             });
           } catch {
             entries.push({
               event: "UNKNOWN",
+              txHash,
               topics: log.topics,
               data: log.data
             });
@@ -1068,6 +1093,7 @@ const checks: CheckDefinition[] = [
       return {
         observation: {
           normalized: {
+            targetTxHash: tx.txHash,
             byAddress: decodeLogs(byAddress.ok ? byAddress.result : null),
             byTopic0: decodeLogs(byTopic0.ok ? byTopic0.result : null),
             byIndexedTopic: decodeLogs(byIndexedTopic.ok ? byIndexedTopic.result : null),
@@ -1075,6 +1101,76 @@ const checks: CheckDefinition[] = [
           }
         },
         requests: [byAddress.request, byTopic0.request, byIndexedTopic.request, byRange.request]
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: {
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as LogsFiltersCheckObservation;
+      const right = rollup.normalized as LogsFiltersCheckObservation;
+      const failures: string[] = [];
+      const expectedTxEvents = ["ComplexEvent", "SecondaryEvent"];
+
+      function eventsForTx(entries: DecodedHarnessLogEntry[], txHash: string): string[] {
+        const normalizedTxHash = txHash.toLowerCase();
+        return entries
+          .filter((entry) => typeof entry.txHash === "string" && entry.txHash.toLowerCase() === normalizedTxHash)
+          .map((entry) => entry.event);
+      }
+
+      function pushIfMismatched(label: string, actual: string[], expected: string[]): void {
+        if (actual.length !== expected.length || actual.some((eventName, idx) => eventName !== expected[idx])) {
+          failures.push(
+            `${label} expected tx events [${expected.join(", ")}], got [${actual.join(", ")}]`
+          );
+        }
+      }
+
+      function pushIfNotSingle(label: string, entries: DecodedHarnessLogEntry[], expectedEvent: string): void {
+        const events = entries.map((entry) => entry.event);
+        if (events.length !== 1 || events[0] !== expectedEvent) {
+          failures.push(`${label} expected [${expectedEvent}], got [${events.join(", ")}]`);
+        }
+      }
+
+      pushIfMismatched("anvil.byAddress", eventsForTx(left.byAddress, left.targetTxHash), expectedTxEvents);
+      pushIfMismatched("rollup.byAddress", eventsForTx(right.byAddress, right.targetTxHash), expectedTxEvents);
+      pushIfMismatched("anvil.byRange", eventsForTx(left.byRange, left.targetTxHash), expectedTxEvents);
+      pushIfMismatched("rollup.byRange", eventsForTx(right.byRange, right.targetTxHash), expectedTxEvents);
+
+      pushIfNotSingle("anvil.byTopic0", left.byTopic0, "ComplexEvent");
+      pushIfNotSingle("rollup.byTopic0", right.byTopic0, "ComplexEvent");
+      pushIfNotSingle("anvil.byIndexedTopic", left.byIndexedTopic, "ComplexEvent");
+      pushIfNotSingle("rollup.byIndexedTopic", right.byIndexedTopic, "ComplexEvent");
+
+      if (failures.length === 0) {
+        return { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: left,
+          rollup: right
+        }
       };
     }
   },
