@@ -1,3 +1,6 @@
+# 2026-02-17
+- #2493 Non-breaking, but **important**: CelestiaConfig `rpc_url` param is now mandatory. You can use `SOV_CELESTIA_RPC_URL` for setup.
+
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
 - #2458 **Infra only breaking change**: for EVM rollups only: added new constant `EVM_RECEIPT_ACTUAL_FEE_HEIGHT` that should be set to 0 for new rollups, or some future height for existing rollups.
