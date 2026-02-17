@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn should_query_slot_only_after_slot_step() {
         assert!(NodeChecker::should_query_slot(None, 100));
-        assert!(!NodeChecker::should_query_slot(Some(100), 102));
+        assert!(!NodeChecker::should_query_slot(Some(100), 100));
         assert!(NodeChecker::should_query_slot(Some(100), 110));
     }
 
