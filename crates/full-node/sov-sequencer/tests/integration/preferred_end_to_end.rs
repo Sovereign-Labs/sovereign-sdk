@@ -339,18 +339,33 @@ async fn test_archival_state_is_immediately_available() {
 /// application. The ordering fix (oneshot ack in ForceUpdateApiState) ensures that slot
 /// notifications are only sent after the checkpoint is applied, so queries should never see
 /// `HeightNotAccessible` regardless of the delay.
+///
+/// Automatic batch production is disabled to prevent empty batches from advancing rollup height
+/// through a separate code path, which would confound the checkpoint ordering test.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update() {
     const DELAY_ENV: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
     std::env::set_var(DELAY_ENV, "750");
 
-    let (test_rollup, admin) = create_test_rollup(
+    let (genesis_params, admin) = create_genesis_params();
+    let dir = Arc::new(tempfile::tempdir().unwrap());
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+        dir.clone(),
+        genesis_params
+            .runtime
+            .sequencer_registry
+            .sequencer_config
+            .seq_da_address,
+        genesis_params,
         0,
+        false, // automatic_batch_production — disabled to isolate checkpoint ordering
         TEST_MAX_BATCH_SIZE,
+        BlockProducingConfig::Manual,
+        None,
         TEST_BLOB_PROCESSING_TIMEOUT,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
+        None,
         0,
-        BlockProducingConfig::Manual,
     )
     .await;
     test_rollup.produce_enough_finalized_slots().await;

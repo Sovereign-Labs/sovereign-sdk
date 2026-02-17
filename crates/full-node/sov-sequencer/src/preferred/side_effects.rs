@@ -41,16 +41,18 @@ where
     Da: DaService<Spec = S::Da>,
 {
     async fn maybe_delay_api_state_update_for_tests() {
-        const ENV_VAR: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
-        let Ok(raw_ms) = std::env::var(ENV_VAR) else {
-            return;
-        };
-        let Ok(ms) = raw_ms.parse::<u64>() else {
-            warn!(%ENV_VAR, %raw_ms, "Invalid delay value, expected u64 milliseconds");
-            return;
-        };
-        if ms > 0 {
-            tokio::time::sleep(Duration::from_millis(ms)).await;
+        if cfg!(debug_assertions) {
+            const ENV_VAR: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
+            let Ok(raw_ms) = std::env::var(ENV_VAR) else {
+                return;
+            };
+            let Ok(ms) = raw_ms.parse::<u64>() else {
+                warn!(%ENV_VAR, %raw_ms, "Invalid delay value, expected u64 milliseconds");
+                return;
+            };
+            if ms > 0 {
+                tokio::time::sleep(Duration::from_millis(ms)).await;
+            }
         }
     }
 
