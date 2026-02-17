@@ -35,7 +35,7 @@ fn decode_ledger_item(item: (EventNumber, StoredEvent)) -> (u64, MockHash) {
 pub fn materialize_ledger_changes(da_header: &MockBlockHeader) -> SchemaBatch {
     let mut change_set = SchemaBatch::default();
     let key = &EventNumber(da_header.height());
-    let value = StoredEvent::new(&da_header.hash().0, &da_header.hash().0, da_header.hash().0);
+    let value = StoredEvent::new(&da_header.hash().0, &da_header.hash().0, da_header.hash().0, 0);
 
     change_set.put::<EventByNumber>(key, &value).unwrap();
 

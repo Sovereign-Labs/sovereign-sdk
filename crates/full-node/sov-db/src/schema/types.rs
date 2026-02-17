@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -6,7 +7,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::node::ledger_api::{BatchResponse, TxResponse};
 use sov_rollup_interface::stf::{
-    DiscardedBlob, FullyBakedTx, StoredEvent, TransactionReceipt, TxReceiptContents,
+    DiscardedBlob, EventKey, FullyBakedTx, StoredEvent, TransactionReceipt, TxReceiptContents,
 };
 
 pub use sov_db_types as slot_key;
@@ -164,10 +165,14 @@ impl<R: TxReceiptContents, E> TryFrom<StoredTransaction> for TxResponse<R, E> {
 
 /// Split a [`TransactionReceipt`] into a [`StoredTransaction`] and a list of
 /// [`StoredEvent`]s for storage in the database.
+///
+/// `event_key_counts` tracks the running per-key counter across the entire slot.
+/// Each event's `event_key_number` is assigned by incrementing the count for its key.
 pub fn split_tx_for_storage<T: TxReceiptContents>(
     tx: TransactionReceipt<T>,
     batch_number: BatchNumber,
     event_offset: u64,
+    event_key_counts: &mut HashMap<EventKey, u64>,
 ) -> (StoredTransaction, Vec<StoredEvent>) {
     let event_range =
         EventNumber(event_offset)..EventNumber(event_offset.saturating_add(tx.events.len() as u64));
@@ -185,10 +190,16 @@ pub fn split_tx_for_storage<T: TxReceiptContents>(
         .events
         .into_iter()
         .map(|event| {
+            let count = event_key_counts
+                .entry(event.key().clone())
+                .or_insert(0);
+            *count += 1;
+            let event_key_number = *count;
             StoredEvent::new(
                 event.key().inner(),
                 event.value().inner(),
                 tx.tx_hash.into(),
+                event_key_number,
             )
         })
         .collect();
@@ -277,4 +288,5 @@ u64_wrapper!(TxNumber);
 u64_wrapper!(EventNumber);
 u64_wrapper!(ProofUniqueId);
 u64_wrapper!(StfInfoUniqueId);
+u64_wrapper!(EventKeyNumber);
 u64_wrapper!(StateRootHashId);

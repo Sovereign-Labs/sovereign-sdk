@@ -115,6 +115,7 @@ where
                 )
                 .expect("unable to serialize event"),
                 tx_hash,
+                0, // Placeholder: real event_key_number is assigned in split_tx_for_storage
             )
         })
         .collect()

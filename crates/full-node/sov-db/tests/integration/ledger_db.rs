@@ -339,8 +339,8 @@ fn create_slot_schema_batch(slot_num: u64, ledger_db: &LedgerDb) -> SchemaBatch 
             let tx_hash = TxHash::new(out);
 
             let events = vec![
-                StoredEvent::new("k1".as_bytes(), "v1".as_bytes(), tx_hash.0),
-                StoredEvent::new("k2".as_bytes(), "v2".as_bytes(), tx_hash.0),
+                StoredEvent::new("k1".as_bytes(), "v1".as_bytes(), tx_hash.0, 0),
+                StoredEvent::new("k2".as_bytes(), "v2".as_bytes(), tx_hash.0, 0),
             ];
 
             tx_receipts.push(TransactionReceipt {

@@ -8,15 +8,19 @@ pub struct StoredEvent {
     key: EventKey,
     value: EventValue,
     tx_hash: [u8; 32],
+    /// Per-key sequential counter: how many events with this same key have been emitted
+    /// up to and including this one (1-based).
+    event_key_number: u64,
 }
 
 impl StoredEvent {
-    /// Create a new event with the given key, value, and transaction hash.
-    pub fn new(key: &[u8], value: &[u8], tx_hash: [u8; 32]) -> Self {
+    /// Create a new event with the given key, value, transaction hash, and per-key sequence number.
+    pub fn new(key: &[u8], value: &[u8], tx_hash: [u8; 32], event_key_number: u64) -> Self {
         Self {
             key: EventKey(key.to_vec()),
             value: EventValue(value.to_vec()),
             tx_hash,
+            event_key_number,
         }
     }
 
@@ -33,6 +37,11 @@ impl StoredEvent {
     /// Get the transaction hash that emitted this event.
     pub fn tx_hash(&self) -> &[u8; 32] {
         &self.tx_hash
+    }
+
+    /// Get the per-key sequential event number (1-based).
+    pub fn event_key_number(&self) -> u64 {
+        self.event_key_number
     }
 }
 

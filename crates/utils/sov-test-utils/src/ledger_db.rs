@@ -89,11 +89,13 @@ fn events(number: u64) -> Vec<StoredEvent> {
             format!("foo{number}").as_bytes(),
             &borsh::to_vec(&event_value1).unwrap(),
             [0; 32],
+            0, // Placeholder: real event_key_number is assigned in split_tx_for_storage
         ),
         StoredEvent::new(
             format!("bar{number}").as_bytes(),
             &borsh::to_vec(&event_value2).unwrap(),
             [0; 32],
+            0, // Placeholder: real event_key_number is assigned in split_tx_for_storage
         ),
     ]
 }

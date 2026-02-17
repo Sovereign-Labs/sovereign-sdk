@@ -57,6 +57,9 @@ pub struct ModuleRef {
 pub struct RuntimeEventResponse<E> {
     /// A global identifier for the event. Event numbers are handed out in sequential order.
     pub number: u64,
+    /// Per-key sequential counter: how many events with this same key have been emitted
+    /// up to and including this one (1-based).
+    pub event_key_number: u64,
     /// Event key that was emitted along with this event
     pub key: String,
     /// A value representing the module event
@@ -92,6 +95,7 @@ where
 
         Ok(Self {
             number: event_number,
+            event_key_number: stored_event.event_key_number(),
             key: key_str,
             value: runtime_event,
             module: ModuleRef { name: module_name },
