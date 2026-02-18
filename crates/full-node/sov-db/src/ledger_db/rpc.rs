@@ -202,7 +202,12 @@ impl LedgerRpcReader {
     async fn get_event_key_counts(&self) -> anyhow::Result<Vec<(String, u64)>> {
         use sov_rollup_interface::stf::EventKey;
 
-        let range = EventKey::new(&[])..EventKey::new(&[255u8; 4096]);
+        let Some((max_key, _)) = self.db.get_largest_async::<EventCountByKey>().await? else {
+            return Ok(Vec::new());
+        };
+        let mut upper_bytes = max_key.inner().clone();
+        upper_bytes.push(0x00);
+        let range = EventKey::new(&[])..EventKey::new(&upper_bytes);
         let entries = self
             .db
             .collect_in_range_async::<EventCountByKey, EventKey>(range)
