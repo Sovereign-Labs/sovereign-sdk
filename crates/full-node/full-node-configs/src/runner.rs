@@ -1,5 +1,5 @@
 use std::num::NonZero;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
@@ -117,7 +117,7 @@ impl HttpServerConfig {
 }
 
 /// Prover service configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Copy, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ProofManagerConfig<Address> {
     /// The "distance" measured in the number of blocks between two consecutive aggregated proofs.
     pub aggregated_proof_block_jump: NonZero<usize>,
@@ -129,6 +129,11 @@ pub struct ProofManagerConfig<Address> {
     /// A number of state transition info entries are allowed to be kept in memory.
     /// If the number is exceeded, rollup execution will be blocked until provers cathes up.
     pub max_number_of_transitions_in_memory: NonZero<u64>,
+    /// Path to the storage directory for the proof manager database.
+    /// Populated at runtime from the rollup storage config; not deserialized from TOML.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub storage_path: PathBuf,
 }
 
 /// Rollup Configuration

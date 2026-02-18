@@ -250,14 +250,18 @@ pub async fn initialize_runner(
         });
 
     let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
+    let pm_config = if nb_of_prover_threads.is_some() {
+        let mut pm = rollup_config.proof_manager.clone();
+        pm.storage_path = path.to_path_buf();
+        Some(pm)
+    } else {
+        None
+    };
+
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         axum_tcp,
-        if nb_of_prover_threads.is_some() {
-            Some(rollup_config.proof_manager)
-        } else {
-            None
-        },
+        pm_config,
         da_service.clone(),
         ledger_db.clone(),
         stf,
@@ -271,7 +275,6 @@ pub async fn initialize_runner(
         da_sync_state,
         da_service_with_cache,
         0,
-        Some(path.to_path_buf()),
     )
     .await
     .unwrap();
@@ -431,6 +434,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             prover_address: MockAddress::new([0u8; 32]),
             max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
             max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
+            storage_path: path.to_path_buf(),
         },
         sequencer: SequencerConfig {
             automatic_batch_production: true,
