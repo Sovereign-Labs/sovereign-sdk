@@ -389,16 +389,29 @@ where
 
     fn call(
         &self,
-        request: TransactionRequest,
+        mut request: TransactionRequest,
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let tx_env = prepare_call_env(&block_env, request.clone())?;
-        let caller = tx_env.caller;
         let cfg = self.cfg_infallible(state);
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+
+        // For simulation parity with real execution, omitted nonce defaults to the
+        // caller's current EVM account nonce (not zero).
+        if let (None, Some(from)) = (request.nonce, request.from) {
+            let account_nonce = self
+                .accounts
+                .get(&from, maybe_archival_state.deref_mut())
+                .unwrap_infallible()
+                .map(|acc| acc.nonce)
+                .unwrap_or_default();
+            request.nonce = Some(account_nonce);
+        }
+
+        let tx_env = prepare_call_env(&block_env, request)?;
+        let caller = tx_env.caller;
         let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
         verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
