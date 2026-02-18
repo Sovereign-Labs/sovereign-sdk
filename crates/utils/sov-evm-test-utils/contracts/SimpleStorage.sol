@@ -88,4 +88,9 @@ contract SimpleStorage {
         }
         return result;
     }
+
+    // Returns the current block's base fee (BASEFEE opcode)
+    function getBaseFee() public view returns (uint256) {
+        return block.basefee;
+    }
 }
