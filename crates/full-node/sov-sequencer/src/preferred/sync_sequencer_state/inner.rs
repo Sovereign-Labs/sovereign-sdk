@@ -18,7 +18,7 @@ use crate::preferred::RollupBlockExecutorConfig;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
-    Confirmation, LedgerDb, PreferredBatchToReplay, PreferredSequencerConfig,
+    Confirmation, PreferredBatchToReplay, PreferredSequencerConfig,
     PreferredSequencerFetchBatchesToReplayMetrics, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
@@ -68,11 +68,6 @@ where
     Rt: Runtime<S>,
 {
     pub(crate) seq_role: SequencerRole,
-    // This ledgerdb is used specifically for REST API and websocket subscriptions.
-    // The sequencer controls when it is updated to solve inconsistency issues,
-    // See [`LedgerDb::with_shared_notifications`] for more details.
-    pub(crate) api_ledger_db: LedgerDb,
-
     pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) shutdown_receiver: watch::Receiver<()>,
     pub(crate) shutdown_sender: watch::Sender<()>,
@@ -236,7 +231,7 @@ where
         &mut self,
         info: StateUpdateInfo<S::Storage>,
         new_executor: RollupBlockExecutor<S, Rt>,
-    ) -> oneshot::Receiver<()> {
+    ) {
         tracing::trace!(?info, "Overwriting preferred sequencer internal state");
 
         // Replace known info
@@ -250,7 +245,7 @@ where
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None); // The api state doesn't need a copy of the pinned cache.
         self.executor_events_sender
             .force_update_api_state(checkpoint)
-            .await
+            .await;
     }
 
     pub(crate) async fn trigger_recovery(&mut self, info: &StateUpdateInfo<S::Storage>) {
@@ -275,10 +270,7 @@ where
         // Since we'll replace the executor when we exit recovery, we don't need to populate the pinned cache.
         let recovery_executor = self.new_executor_with_empty_uncommitted_changes(info, None);
 
-        // trigger_recovery does not call update_api_ledger, so no ordering concern.
-        // Dropping the ack receiver is fine — the side-effects handler uses `let _ =`.
-        let _ack = self
-            .force_overwrite_state(info.clone(), recovery_executor)
+        self.force_overwrite_state(info.clone(), recovery_executor)
             .await;
 
         info!(?info, current_visible_slot_number = %current_visible_slot_number_according_to_node::<S,Rt>(info), "Beginning sequencer recovery");
@@ -454,30 +446,6 @@ where
 
     pub(crate) fn is_replica_role(&self) -> bool {
         self.seq_role == SequencerRole::PgSyncReplica
-    }
-
-    pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
-        let start = std::time::Instant::now();
-        tracing::trace!(
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "Starting LedgerAPI storage update");
-        self.api_ledger_db
-            .replace_reader(info.ledger_reader.clone());
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "LedgerDb reader is replaced, sending notifications for the slot");
-        self.api_ledger_db
-            .send_notifications_for_slot(info.slot_number);
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "LedgerAPI storage updated, notification has been sent");
-
-        self.tx_cache_writer.prune(info.next_tx_number).await;
     }
 
     /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.

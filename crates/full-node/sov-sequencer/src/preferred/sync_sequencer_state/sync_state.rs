@@ -649,6 +649,10 @@ where
     ) {
         let node_sequence_number =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
+        let ledger_reader = info.ledger_reader.clone();
+        let slot_number = info.slot_number;
+        let latest_finalized_slot_number = info.latest_finalized_slot_number;
+        let next_tx_number = info.next_tx_number;
 
         if node_sequence_number > inner.sequence_number_of_next_blob {
             inner.sequence_number_of_next_blob = node_sequence_number;
@@ -661,19 +665,19 @@ where
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
-        let ack = inner
+        inner
             .executor_events_sender
             .force_update_api_state(checkpoint)
             .await;
-        // Wait for the side-effects task to apply the checkpoint before sending
-        // slot notifications, so that clients querying after receiving a WS
-        // notification will see the updated state.
-        if ack.await.is_err() {
-            tracing::debug!("Checkpoint ack dropped; the side-effects task has likely shut down");
-        }
-
-        let info = &inner.latest_info;
-        inner.update_api_ledger(info).await;
+        inner
+            .executor_events_sender
+            .update_api_ledger(
+                ledger_reader,
+                slot_number,
+                latest_finalized_slot_number,
+                next_tx_number,
+            )
+            .await;
     }
 
     async fn process_prune_sequencer_db(&mut self, reason: &'static str) {
@@ -706,15 +710,13 @@ where
         // We don't need to populate the pinned cache because we'll replace the executor when we exit recovery before going back to normal operation.
         let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info, None);
 
-        let ack = inner
+        inner
             .force_overwrite_state(info.clone(), recovery_executor)
             .await;
-        // Wait for the side-effects task to apply the checkpoint before sending
-        // slot notifications.
-        if ack.await.is_err() {
-            tracing::debug!("Checkpoint ack dropped; the side-effects task has likely shut down");
-        }
-        inner.update_api_ledger(&info).await;
+        inner
+            .executor_events_sender
+            .update_api_ledger_from_info(&info)
+            .await;
     }
 
     async fn process_wait_for_node_resync(
@@ -742,17 +744,14 @@ where
         inner.latest_info = info.clone();
         // We update the API state, so users can query node state as it syncs.
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
-        let ack = inner
+        inner
             .executor_events_sender
             .update_state_for_recovery(checkpoint)
             .await;
-        // Wait for the side-effects task to apply the checkpoint before sending
-        // slot notifications.
-        if ack.await.is_err() {
-            tracing::debug!("Checkpoint ack dropped; the side-effects task has likely shut down");
-        }
-
-        inner.update_api_ledger(&info).await;
+        inner
+            .executor_events_sender
+            .update_api_ledger_from_info(&info)
+            .await;
     }
 
     /// Closes the current batch

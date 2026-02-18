@@ -1,9 +1,12 @@
 use std::num::NonZero;
 use std::sync::Arc;
 
+use rockbound::cache::delta_reader::DeltaReader;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet, VisibleSlotNumber};
+use sov_modules_api::{
+    Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxChangeSet, VisibleSlotNumber,
+};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -13,6 +16,7 @@ use crate::preferred::db::{BlobsCache, ReadBatch};
 use crate::preferred::{
     exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
 };
+use crate::SlotNumber;
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 
@@ -181,15 +185,36 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
-    pub(crate) async fn force_update_api_state(
-        &mut self,
-        checkpoint: StateCheckpoint<S>,
-    ) -> oneshot::Receiver<()> {
-        let (sender, receiver) = oneshot::channel();
+    pub(crate) async fn force_update_api_state(&mut self, checkpoint: StateCheckpoint<S>) {
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::ForceUpdateApiState(checkpoint, sender))
+        self.send(ExecutorEvent::ForceUpdateApiState(checkpoint))
             .await;
-        receiver
+    }
+
+    pub(crate) async fn update_api_ledger(
+        &mut self,
+        ledger_reader: DeltaReader,
+        slot_number: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
+        next_tx_number: u64,
+    ) {
+        self.send(ExecutorEvent::UpdateApiLedger {
+            ledger_reader,
+            slot_number,
+            latest_finalized_slot_number,
+            next_tx_number,
+        })
+        .await;
+    }
+
+    pub(crate) async fn update_api_ledger_from_info(&mut self, info: &StateUpdateInfo<S::Storage>) {
+        self.update_api_ledger(
+            info.ledger_reader.clone(),
+            info.slot_number,
+            info.latest_finalized_slot_number,
+            info.next_tx_number,
+        )
+        .await;
     }
 
     /// Fetch the in-progress batch from the database.
@@ -233,15 +258,10 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         .await;
     }
 
-    pub(crate) async fn update_state_for_recovery(
-        &mut self,
-        checkpoint: StateCheckpoint<S>,
-    ) -> oneshot::Receiver<()> {
-        let (sender, receiver) = oneshot::channel();
+    pub(crate) async fn update_state_for_recovery(&mut self, checkpoint: StateCheckpoint<S>) {
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::UpdateStateForRecovery(checkpoint, sender))
+        self.send(ExecutorEvent::UpdateStateForRecovery(checkpoint))
             .await;
-        receiver
     }
 
     pub(crate) fn fetch_completed_blobs_by_sequence(
@@ -334,7 +354,14 @@ where
     /// Insert an accepted transaction into the database and send out the confirmation
     AcceptedTx(AcceptedTxEventContents<S, Rt>),
     /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery
-    ForceUpdateApiState(StateCheckpoint<S>, oneshot::Sender<()>),
+    ForceUpdateApiState(StateCheckpoint<S>),
+    /// Update the ledger reader and send slot notifications for API/WebSocket consistency.
+    UpdateApiLedger {
+        ledger_reader: DeltaReader,
+        slot_number: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
+        next_tx_number: u64,
+    },
     /// Prune the database up to the given sequence number.
     PruneDb(SequenceNumber),
     /// Enter recovery mode.
@@ -347,7 +374,7 @@ where
         batch_to_close: Option<ReadBatch>,
     },
     /// During recovery mode, we periodically update the state to the node's state.
-    UpdateStateForRecovery(StateCheckpoint<S>, oneshot::Sender<()>),
+    UpdateStateForRecovery(StateCheckpoint<S>),
     /// Flush transactions cache
     FlushTransactionsCache {
         next_tx_number: u64,
