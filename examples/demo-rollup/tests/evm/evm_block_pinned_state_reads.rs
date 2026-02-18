@@ -93,6 +93,16 @@ fn hash_selector(hash: B256) -> serde_json::Value {
     })
 }
 
+/// In tests, pausing preferred batches is signaled via an env var checked by the update-state loop.
+/// One in-flight update may still land, so we tolerate `head` or `head + 1` here.
+fn assert_pause_window_height(observed: u64, head_before_pause: u64) {
+    assert!(
+        observed == head_before_pause || observed == head_before_pause + 1,
+        "Unexpected block advance after pause: observed={observed}, expected={head_before_pause} or {}",
+        head_before_pause + 1
+    );
+}
+
 // =========================================================================
 // Tests
 // =========================================================================
@@ -114,11 +124,7 @@ async fn block_pinned_nonce_excludes_pending() {
     rollup.pause_preferred_batches().await;
     let _tx = client.send_eth(Address::ZERO, U256::from(0x1234)).await;
 
-    assert_eq!(
-        client.block_number().await,
-        head_number,
-        "Block number must not advance while batches are paused"
-    );
+    assert_pause_window_height(client.block_number().await, head_number);
 
     assert_eq!(
         nonce_at(&client, address, number_selector(head_number)).await,
@@ -166,11 +172,7 @@ async fn block_pinned_balance_excludes_pending() {
     rollup.pause_preferred_batches().await;
     let transfer_amount = U256::from(0x1_0000_0000u64);
     let _tx = client.send_eth(receiver, transfer_amount).await;
-    assert_eq!(
-        client.block_number().await,
-        head_number,
-        "Block number must not advance while batches are paused"
-    );
+    assert_pause_window_height(client.block_number().await, head_number);
 
     assert_eq!(
         balance_at(&client, receiver, number_selector(head_number)).await,
@@ -211,11 +213,7 @@ async fn block_pinned_code_excludes_pending() {
     let deploy_tx = client.deploy_contract().await.unwrap();
     let receipt = client.wait_for_receipt(deploy_tx).await;
     let contract_address = receipt.contract_address.unwrap();
-    assert_eq!(
-        client.block_number().await,
-        head_number,
-        "Block number must not advance while batches are paused"
-    );
+    assert_pause_window_height(client.block_number().await, head_number);
 
     assert!(
         code_at(&client, contract_address, number_selector(head_number))
@@ -266,11 +264,7 @@ async fn block_pinned_storage_excludes_pending() {
     rollup.pause_preferred_batches().await;
     let new_value = 0x5678u32;
     let _tx = client.set_value(contract_addr, new_value).await;
-    assert_eq!(
-        client.block_number().await,
-        head_number,
-        "Block number must not advance while batches are paused"
-    );
+    assert_pause_window_height(client.block_number().await, head_number);
 
     assert_eq!(
         storage_at(
@@ -325,11 +319,7 @@ async fn block_pinned_eth_call_excludes_pending() {
     rollup.pause_preferred_batches().await;
     let new_value = 0x5678u32;
     let _tx = client.set_value(contract_addr, new_value).await;
-    assert_eq!(
-        client.block_number().await,
-        head_number,
-        "Block number must not advance while batches are paused"
-    );
+    assert_pause_window_height(client.block_number().await, head_number);
 
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, number_selector(head_number)).await),
@@ -372,29 +362,30 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     // Baseline at sealed state (slot is still zero): set(non-zero) pays higher SSTORE cost.
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
 
-    let baseline = estimate_gas_at(&client, &set_tx, "latest").await;
+    let baseline_number = estimate_gas_at(&client, &set_tx, number_selector(head_number)).await;
+    let baseline_hash = estimate_gas_at(&client, &set_tx, hash_selector(head_hash)).await;
     assert!(
-        baseline > U256::ZERO,
+        baseline_number > U256::ZERO,
         "Baseline gas estimate must be positive"
+    );
+    assert_eq!(
+        baseline_number, baseline_hash,
+        "Pinned baseline by number and hash should match"
     );
 
     rollup.pause_preferred_batches().await;
     // Pending mutation makes slot non-zero in current state, lowering cost for the same call.
     let _tx = client.set_value(contract_addr, 0x1234).await;
-    assert_eq!(
-        client.block_number().await,
-        head_number,
-        "Block number must not advance while batches are paused"
-    );
+    assert_pause_window_height(client.block_number().await, head_number);
 
     assert_eq!(
         estimate_gas_at(&client, &set_tx, number_selector(head_number)).await,
-        baseline,
+        baseline_number,
         "Gas estimate at block number N must match sealed baseline"
     );
     assert_eq!(
         estimate_gas_at(&client, &set_tx, hash_selector(head_hash)).await,
-        baseline,
+        baseline_hash,
         "Gas estimate at block hash H must match sealed baseline"
     );
 
@@ -404,7 +395,7 @@ async fn block_pinned_estimate_gas_excludes_pending() {
         "Pending gas estimate must be positive"
     );
     assert_ne!(
-        pending_estimate, baseline,
+        pending_estimate, baseline_number,
         "Pending estimate should differ after pending state mutation"
     );
     let latest_estimate = estimate_gas_at(&client, &set_tx, "latest").await;
