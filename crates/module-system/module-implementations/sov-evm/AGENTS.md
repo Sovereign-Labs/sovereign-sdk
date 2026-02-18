@@ -1,122 +1,126 @@
 # AGENTS.md - sov-evm
 
-> See also: root `<repo>/AGENTS.md` for build commands, test runner, and general conventions.
+> See repository `AGENTS.md` for global rules. This file adds crate-specific guidance only.
 
-## Crate Purpose
+## Mission
 
-EVM execution module for Sovereign rollups. Stores EVM state, executes transactions, and serves JSON-RPC queries. The core type is `Evm<S>` which is generic over `Spec` (the Sovereign module specification trait). This crate owns all EVM state and is the authoritative source for block/tx/receipt data and gas estimation.
+`sov-evm` is the source of truth for EVM execution state and EVM JSON-RPC state queries. Most production RPC correctness bugs originate here, especially around block/tag resolution, fee context, and cross-endpoint consistency.
 
-## Key Files
+## Ownership Boundary
 
-| File | Why it matters |
-|------|----------------|
-| `src/rpc/mod.rs` | **Hotspot**: block resolution, response assembly, synthetic blocks, fee computation. Changed in 8/10 audit PRs. |
-| `src/rpc/handlers.rs` | Where new JSON-RPC methods are added (via `#[rpc_method]`). |
-| `src/rpc/error.rs` | Error code mapping — pitfall zone (see PR #2378). |
-| `src/helpers.rs` | Response builders (`prepare_call_env`, `from_recovered_with_block_context`) — pitfall zone for base fee bugs. |
-| `src/hooks.rs` | Begin/end block hooks: block sealing, base fee update. |
-| `src/evm/primitive_types.rs` | Core types including synthetic block hash encoding. |
-| `src/state_access.rs` | State reads, `block_env` construction — source of truth for BASEFEE. |
-| `src/evm/executor.rs` | REVM execution wrappers, `get_cfg_env`, gas rebate. |
+- Own here: EVM state, block/tx/receipt/log assembly, `eth_call`, `eth_estimateGas`, `eth_feeHistory`, tracing.
+- Do not own here: transport concerns, RPC method stubs, WebSocket plumbing, sequencer submission UX wrappers. Those belong to `crates/full-node/sov-ethereum`.
 
-## Sovereign EVM Semantics (DO NOT flag as bugs)
+## Shared RPC Semantics (Intentional)
 
-These behaviors are intentional and differ from standard Ethereum:
+These are by-design repo semantics. Do not flag as bugs unless a concrete tooling workflow breaks.
 
-- `latest` and `pending` map to the same pending head block.
-- Pending/soft-confirmed data may appear in block/tx/receipt/log responses with non-null block fields.
-- `eth_blockNumber` tracks the pending head.
-- `safe` and `finalized` resolve to the same finalized block (no distinct safe semantics).
-- `eth_gasPrice` returns 0 (fees handled by rollup gas meter, not EVM).
-- `eth_maxPriorityFeePerGas` returns 0.
-- `eth_call`/`eth_estimateGas` run with `gas_price=0` and `disable_base_fee=true` in CfgEnv.
-- `state_overrides` and `block_overrides` are accepted but ignored.
-- Only EIP-1559 transactions are supported; non-1559 tx types are rejected at submission.
-- Gas metering is "Rollup" mode by default: actual fees are charged by the Sovereign gas meter, not by EVM's built-in fee mechanism.
-- Synthetic blocks provide instant-finality UX: each tx gets its own synthetic block before DA confirmation.
+- `latest` and `pending` resolve to the same pending head view for block/tag resolution.
+- Pending/soft-confirmed data may appear in block/tx/receipt/log responses.
+- `safe` and `finalized` both resolve to the latest finalized block.
+- `eth_getTransactionCount(..., "latest")` may include pending-inclusive nonce effects.
+- `eth_getLogs` with `toBlock: "latest"` may include pending-head logs.
+- `newHeads` may surface synthetic/pending-head style headers.
+- `eth_blockNumber` returns latest sealed block number, not synthetic pending height.
+- `eth_gasPrice` returns current `block_env.basefee`.
+- `eth_maxPriorityFeePerGas` returns `0`.
+- `eth_call` accepts `state_overrides`/`block_overrides` but currently ignores them.
+- EIP-1898 `requireCanonical` is accepted but effectively a no-op in no-reorg semantics.
 
-## Critical Invariants (MUST be maintained)
+## High-Risk Hotspots
 
-### Base fee consistency
+| Path | Why it matters |
+| --- | --- |
+| `src/rpc/mod.rs` | Block/tag resolution, synthetic block cache, tx/receipt assembly, fee linkage |
+| `src/rpc/handlers.rs` | Public JSON-RPC method behavior and parameter types |
+| `src/rpc/fee_history.rs` | Fee history shape, validation, and base-fee progression |
+| `src/helpers.rs` | Tx response construction and `effectiveGasPrice` derivation paths |
+| `src/state_access.rs` | Historical/pending state reads and block-env lookup |
+| `src/evm/executor.rs` | EVM cfg/env flags (`disable_base_fee`, call environment) |
+| `src/rpc/trace.rs` | Debug trace parity with block/context resolution |
 
-The base fee must flow correctly through ALL surfaces:
-- `block_env.basefee` (for the BASEFEE opcode, EIP-3198)
-- `TransactionInfo.base_fee` (for tx response `effectiveGasPrice`)
+## Critical Invariants
+
+### 1. Fee/BaseFee coherence
+
+If you touch fee context, validate all of these together:
+
+- Pending/sealed block header `base_fee_per_gas`
+- Call/trace `BlockEnv.basefee`
+- Tx response `effectiveGasPrice`
 - Receipt `effective_gas_price`
-- `eth_feeHistory` response
+- `eth_feeHistory` base-fee series
 
-Past bugs: PRs #2462, #2463, #2387, #2458.
+### 2. Cross-endpoint value consistency
 
-### Cross-endpoint consistency
+For the same tx/block, values must agree across:
 
-The same value (e.g., `effectiveGasPrice`, `gasUsed`, `blockHash`) must be identical across:
 - `eth_getTransactionByHash`
 - `eth_getTransactionReceipt`
-- `eth_getBlockByNumber` (full txs mode)
+- `eth_getBlockByNumber`/`eth_getBlockByHash` (full tx mode)
 - `eth_getBlockReceipts`
 
-Past bug: PR #2462.
+### 3. Block selector consistency
 
-### Error codes
+- Prefer `BlockId` over ad-hoc string parsing.
+- Keep `BlockId::Hash` and `BlockId::Number` paths behaviorally aligned.
+- Ensure historical lookup and synthetic lookup errors are deterministic and consistent.
 
-Must use standard JSON-RPC / EIP-1474 error codes. Never invent codes. See `sov-ethereum/src/lib.rs` for the canonical constants. Past bug: PR #2378.
+### 4. Encoding correctness
 
-### Response encoding
+- QUANTITY: `0x` prefixed, no leading zeros.
+- DATA: fixed-width where required (for example `eth_getStorageAt` as 32-byte data).
+- Nullability must match tooling expectations for each endpoint.
 
-Quantity fields use `0x`-prefix with no leading zeros. DATA fields are fixed-width, zero-padded. Example: `eth_getStorageAt` returns 32-byte `B256` DATA, not stripped `U256`. Past bug: PR #2459.
+### 5. Determinism and replay safety
 
-### Activation heights
+- Do not introduce non-deterministic state access in module/core logic.
+- Avoid hidden behavior drift between native and proof-relevant paths.
 
-Behavior changes are gated behind configurable block heights in `<repo>/constants.toml` (e.g., `EVM_RECEIPT_ACTUAL_FEE_HEIGHT`). Historical data must remain consistent; new behavior activates only at/after the configured height.
+## Failure Pattern Matrix (PR Lessons)
 
-### Gas estimation must error on revert
+| Pattern | Repeated in PR(s) | Typical root cause | What to verify before merge |
+| --- | --- | --- | --- |
+| Error-code drift | `#2378`, `#2459` | Invalid params / rejected tx / not-found mapped inconsistently | Invalid-param, revert, and not-found paths return stable expected code families |
+| Block-id regression | `#2379`, `#2391` | Using tag strings instead of `BlockId`/EIP-1898 paths | All relevant methods accept and correctly route `BlockId` variants |
+| Missing endpoint consistency | `#2381`, `#2391` | New methods added but behavior not aligned with existing fields | New endpoint values match existing tx/receipt/block data contracts |
+| Fee history and pending surface drift | `#2387` | Base-fee or pending range assumptions diverge across endpoints | `eth_feeHistory`, block headers, and tx/receipt fee fields stay coherent |
+| Nonce/receipt lifecycle mismatch | `#2395`, `#2458` | Pending/soft-confirmed state not reflected consistently | Nonce, tx lookup, and receipt lookup agree during pending-to-sealed transitions |
+| Estimation/call behavior mismatch | `#2459` | Revert and gas estimation paths do not mirror real execution constraints | `eth_estimateGas` errors on revert with revert payload; no success value on revert |
+| Effective-gas-price mismatch | `#2462` | Fee context dropped while building tx response | `effectiveGasPrice` aligns across tx object and receipt for same tx |
+| BASEFEE opcode mismatch | `#2463` | `BlockEnv.basefee` set inconsistently in call/trace contexts | `BASEFEE` opcode result matches block header base fee in same context |
 
-`eth_estimateGas` must return an RPC error (with revert data) when the call reverts, not a gas value. Past bug: PR #2459.
+## Change Workflow
 
-## Common Pitfalls (learned from audit)
+1. Identify whether the change is state/query logic (`sov-evm`) or wrapper/transport (`sov-ethereum`).
+2. For any RPC field change, enumerate every endpoint that returns the same conceptual value.
+3. Update behavior docs if semantics changed: `docs/rpc_inventory.md` and relevant `docs/eth_*_test_cases.md`.
+4. Add or update tests before merge for at least one pending and one sealed scenario.
 
-| Don't | Do instead |
-|-------|------------|
-| Pass `None`/`0` for base_fee in response builders | Always propagate `block_env.basefee` from `get_block_env()` |
-| Set `block_env.basefee = 0` to "disable" fees | Use `CfgEnv::disable_base_fee` flag — keeps BASEFEE opcode (EIP-3198) correct |
-| Use `saturating_sub` in fee calculations | Use checked arithmetic; underflow means a bug, not a value to clamp |
-| Compute `effectiveGasPrice` with EIP-1559 formula | Use `receipt_fees` accessory state for actual values (Sovereign gas meter charges differently) |
-| Accept block identifiers as `String` | Use `BlockId` from alloy, which handles EIP-1898 `{blockHash:..}` objects |
-| Add a new RPC method only in this crate | Also add a corresponding stub in `sov-ethereum/src/lib.rs` |
+## Pre-Merge Checklist
 
-## Testing
+1. If touching fees/base fee, validate all fee surfaces in one run.
+2. If touching tx/receipt fields, cross-check all four endpoint families listed above.
+3. If touching block tags/block id, test `earliest/latest/pending/safe/finalized/number/hash` selectors.
+4. If touching `eth_call` or `eth_estimateGas`, test success, revert, and halt paths.
+5. If touching response encoding, verify QUANTITY vs DATA shape for affected fields.
+6. If adding or changing a method contract, confirm `sov-ethereum` stub/registration expectations remain correct.
+
+## Minimal Audit Notes (P0/P1)
+
+When doing static production-readiness sweeps, prioritize:
+
+1. Wallet send flow: nonce, estimation, submission, receipt polling.
+2. SDK decoding stability: ethers/viem/web3 parsing of tx/receipt/block/log shapes.
+3. Internal coherence: same tx hash gives non-contradictory fields across endpoints.
+4. Gas UX safety: no impossible fee combinations that mislead fee selection logic.
+
+## Fast Commands
 
 ```bash
-# Integration tests (no rollup needed, fast)
-cargo nextest run -p sov-evm <test_name>
-
-# E2E tests (requires full rollup, slower)
-cargo nextest run -p sov-demo-rollup <test_name>
-
-# List all tests
-cargo nextest run -p sov-evm --list
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-evm
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_rpc
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_fee_history
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_effective_gas_price
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_basefee
 ```
-
-| Location | Purpose |
-|----------|---------|
-| `tests/integration/` | Module-level tests without full rollup |
-| `<repo>/examples/demo-rollup/tests/evm/` | E2E tests — each file covers one RPC concern |
-| `<repo>/docs/eth_*_test_cases.md` | Spec-first test case documents |
-| `<repo>/crates/utils/sov-evm-test-utils/` | Test helpers and contracts |
-
-**Patterns:**
-- Write test case doc first (`<repo>/docs/eth_*_test_cases.md`), then implement.
-- Mark unfixed bugs as `#[ignore]` with an explanation comment.
-- Use sequencer pause/resume for determinism. Avoid wall-clock timing assertions.
-- Always verify the same value across all endpoints that return it (cross-endpoint assertions).
-
-## Configuration
-
-See `<repo>/constants.toml` for all config values. EVM-specific keys: `EVM_BLOCK_PRUNING_THRESHOLD`, `EVM_GAS_METERING_MODE`, `EVM_MAX_FEE_CHECK_HEIGHT`, `EVM_RECEIPT_ACTUAL_FEE_HEIGHT`, `INITIAL_BASE_FEE_PER_GAS`. Note: `INITIAL_BASE_FEE_PER_GAS` is `[10, 10]` — 2-dimensional (compute, storage).
-
-## Reference Docs
-
-- `<repo>/docs/rpc_inventory.md` — Complete RPC method inventory with status
-- `<repo>/docs/rpc_priority_sorted.md` — Prioritized testing plan
-- `<repo>/docs/ethereum-rpc-compliance-findings.md` — Compliance audit findings
-- [Ethereum Execution APIs](https://ethereum.github.io/execution-apis/) — Upstream spec
