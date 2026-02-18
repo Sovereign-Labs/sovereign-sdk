@@ -1,5 +1,4 @@
 use std::env;
-use std::time::Duration;
 
 use futures::StreamExt;
 use sov_blob_sender::BlobSelectorStatus;
@@ -117,8 +116,8 @@ async fn test_blobs_are_send_after_rollup_resync() {
     for _ in 0..10 {
         da.produce_block_now().await.unwrap();
         header_subscription.next().await.unwrap().unwrap();
-        tokio::time::sleep(Duration::from_millis(300)).await;
     }
+    test_rollup.wait_for_node_synced().await.unwrap();
 
     let builder = test_rollup.shutdown().await.unwrap();
 

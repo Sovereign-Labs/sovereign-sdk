@@ -824,6 +824,8 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     test_rollup.da_service.produce_block_now().await.unwrap();
     while test_rollup.is_sequencer_ready().await {
         let _ = da_layer.produce_block().await;
+        // DA block production above is asynchronous with respect to sequencer state updates.
+        // Sleep briefly so readiness checks observe the new state instead of busy-looping.
         sleep(Duration::from_millis(30)).await;
     }
     test_rollup.wait_for_node_synced().await.unwrap();
@@ -848,7 +850,8 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     tracing::info!("Producing DA blocks to let the sequencer resync.");
     while !test_rollup.is_sequencer_ready().await {
         let _ = da_layer.produce_block().await;
-        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
+        // DA notifications are unreliable while recovering, so we use a short poll interval.
+        sleep(Duration::from_millis(50)).await;
     }
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -862,8 +865,8 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     tracing::info!("Producing final run of blocks to include the last tx and confirm the rollup is running normally");
     for _ in 0..10 {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(50)).await; // have the node process them
     }
+    test_rollup.wait_for_node_synced().await.unwrap();
 
     // Assert that the earlier transactions sent just before the sequencer went into recovery was
     // flushed and processed by the node
@@ -918,12 +921,11 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     .await;
 
     let client = test_rollup.api_client().clone();
-    // Sleep for the rollup to start up
-    sleep(Duration::from_millis(500)).await;
 
     // Finalise some blocks
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(8).await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Sanity check tx that the rollup works
     let tx_update_one = tx_set_value(&admin.private_key, 0, 8);
@@ -969,7 +971,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     test_rollup.wait_for_node_synced().await.unwrap();
     // Now on the next state update, the sequencer should always enter recovery
     test_rollup.da_service.produce_block_now().await.unwrap();
-    sleep(Duration::from_millis(50)).await;
+    test_rollup.wait_for_sequencer_not_ready().await.unwrap();
     assert!(!test_rollup.is_sequencer_ready().await);
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
@@ -991,7 +993,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     tracing::info!("Producing DA blocks to let the sequencer resync.");
     while !test_rollup.is_sequencer_ready().await {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(50)).await;
+        test_rollup.wait_for_node_synced().await.unwrap();
     }
 
     // Submit the same transaction to the now-working sequencer
@@ -1005,8 +1007,8 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     tracing::info!("Producing final run of blocks to include the last tx and confirm the rollup is running normally");
     for _ in 0..10 {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(50)).await;
     }
+    test_rollup.wait_for_node_synced().await.unwrap();
 
     // Assert that the earlier transaction sent before shutdown was processed
     let response = test_rollup
@@ -1586,6 +1588,8 @@ async fn flaky_max_batch_execution_time() {
     let _ = client.send_raw_tx_to_sequencer(&tx_1).await.unwrap();
     let _ = client.send_raw_tx_to_sequencer(&tx_2).await.unwrap();
     let _ = client.send_raw_tx_to_sequencer(&tx_3).await.unwrap();
+    // Wait until tx_2 and tx_3 have accumulated execution time in the current batch.
+    // This creates the intended boundary before sending tx_4..tx_6.
     tokio::time::sleep(std::time::Duration::from_millis(
         max_batch_exec_time_millis / 2,
     ))
@@ -1740,6 +1744,7 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
     if let Some(sleep_time) =
         TestRollup::<TestBlueprint>::POLLING_TIMEOUT.checked_sub(total_waiting_time)
     {
+        // Wait for delayed blobs to age through the configured delay window before checking sync.
         tokio::time::sleep(sleep_time).await;
     }
     test_rollup.wait_for_node_synced().await.unwrap();
@@ -1982,6 +1987,7 @@ async fn sequencer_back_pressure() {
     let end_padding_blocks = 30;
     for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
+        // Give the node time to ingest each padding block so debug output reflects progress.
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         print_blobs_at_head(&test_rollup.da_service).await;
     }
@@ -2239,7 +2245,9 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
         .await
         .unwrap();
     test_rollup.force_close_batch().await.unwrap();
-    sleep(Duration::from_millis(300)).await; // Sleep to make sure the batch is published before we produce a block. If this gets flaky, we'll need to add a blob_sender subscription.
+    // Wait for blob publication after force_close_batch; without this pause the next block can be
+    // produced before the batch is visible in DA.
+    sleep(Duration::from_millis(300)).await;
     da_layer.produce_and_wait_for_slot().await;
 
     // Note: The exact number height asserted here is not important, as long as it's correct
@@ -2261,7 +2269,9 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
 
     // Close the batch and submit to DA
     test_rollup.force_close_batch().await.unwrap();
-    tokio::time::sleep(Duration::from_millis(500)).await; // Sleep to make sure the batch is published before we produce a block. If this gets flaky, we'll need to add a blob_sender subscription.
+    // Wait for blob publication after force_close_batch; without this pause the next block can be
+    // produced before the batch is visible in DA.
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Ensure that the sequencer has time to see the updated state and submit its batch containing the transaction to DA.
     let next = da_layer.produce_and_wait_for_slot().await;
@@ -2361,8 +2371,9 @@ async fn test_no_crashes_on_resync_with_transactions() {
 
     let test_rollup = builder.start().await.unwrap();
 
-    // Let it resync
-    tokio::time::sleep(Duration::from_secs(15)).await;
+    // Wait deterministically for both components after restart instead of using a fixed delay.
+    test_rollup.wait_for_node_synced().await.unwrap();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Verify accepting actions works
     let actions = vec![
@@ -2520,6 +2531,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
             let client = client.clone();
             async move { client.send_raw_tx_to_sequencer(&delayed_tx).await }
         });
+        // Allow the delayed transaction to enter its speedbump path before submitting the second tx.
         tokio::time::sleep(time_for_seq_to_accept_and_delay).await;
         let set_value_and_sleep_result =
             client.send_raw_tx_to_sequencer(&set_value_and_sleep).await;
@@ -2920,12 +2932,8 @@ async fn flaky_test_hooks_state_is_visible() {
         .unwrap()
     };
 
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(8)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // By the time we query here, the sequencer has *started* the next slot, so it has run the begin slot hook a second time.
     let client = NodeClient::new(test_rollup.api_client().baseurl())
@@ -2953,9 +2961,7 @@ async fn flaky_test_hooks_state_is_visible() {
         for tx in txs {
             client
                 .client
-                .accept_tx(&api_types::AcceptTxBody {
-                    body: BASE64_STANDARD.encode(&tx.raw_tx),
-                })
+                .send_raw_tx_to_sequencer(&tx.raw_tx)
                 .await
                 .unwrap();
         }
@@ -2976,7 +2982,7 @@ async fn flaky_test_hooks_state_is_visible() {
         .produce_n_blocks_now(10)
         .await
         .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.wait_for_node_synced().await.unwrap();
 
     let begin_slot_count = query_hook_counter("begin-rollup-block").await;
     assert_eq!(begin_slot_count, 1);
@@ -3355,6 +3361,7 @@ pub(crate) async fn run_action_against_test_rollup(
     match action {
         TestingAction::PauseUpdateStateExecution(v) => pause_update_state::set(v),
         TestingAction::Sleep { duration_ms } => {
+            // This action intentionally models time passing in scenario-driven tests.
             sleep(Duration::from_millis(duration_ms)).await;
         }
         TestingAction::Restart => {
@@ -3362,7 +3369,7 @@ pub(crate) async fn run_action_against_test_rollup(
             // startup until a StateUpdateInfo from the node has been processed.
             let test_rollup = test_rollup.restart().await?;
             test_rollup.da_service.produce_block_now().await?;
-            sleep(Duration::from_millis(1500)).await;
+            test_rollup.wait_for_sequencer_ready().await?;
             return Ok(test_rollup);
         }
         TestingAction::TryAcceptBadTx { invalid_reason } => {
