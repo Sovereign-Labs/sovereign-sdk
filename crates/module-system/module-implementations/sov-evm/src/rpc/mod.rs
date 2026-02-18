@@ -29,6 +29,7 @@ use alloy_rpc_types::{BlockTransactionsKind, Header};
 use maybe_archival_state::MaybeArchivalState;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
+use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
@@ -129,6 +130,39 @@ pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError>
         .checked_mul(3)
         .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
         .ok_or(RpcInvalidTransactionError::GasUintOverflow)
+}
+
+fn call_upfront_cost(
+    request: &TransactionRequest,
+    block_env: &BlockEnv,
+) -> Result<Option<U256>, EthApiError> {
+    if request.gas_price.is_some()
+        && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
+    {
+        return Err(EthApiError::ConflictingFeeFieldsInRequest);
+    }
+
+    if let (Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) =
+        (request.max_fee_per_gas, request.max_priority_fee_per_gas)
+    {
+        if max_priority_fee_per_gas > max_fee_per_gas {
+            return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
+        }
+    }
+
+    let Some(fee_per_gas) = request.gas_price.or(request.max_fee_per_gas) else {
+        return Ok(None);
+    };
+
+    let gas_limit = request.gas.unwrap_or(block_env.gas_limit);
+    let gas_cost = U256::from(gas_limit)
+        .checked_mul(U256::from(fee_per_gas))
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
+    let value = request.value.unwrap_or_default();
+    let total_cost = gas_cost
+        .checked_add(value)
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
+    Ok(Some(total_cost))
 }
 
 impl<S: Spec> Evm<S>
@@ -410,9 +444,23 @@ where
             request.nonce = Some(account_nonce);
         }
 
-        let tx_env = prepare_call_env(&block_env, request)?;
-        let caller = tx_env.caller;
         let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+        let caller = request.from.unwrap_or_default();
+        if let Some(total_cost) = call_upfront_cost(&request, &block_env)? {
+            let balance = evm_db
+                .basic(caller)?
+                .map(|account| account.balance)
+                .unwrap_or_default();
+            if balance < total_cost {
+                return Err(RpcInvalidTransactionError::InsufficientFunds {
+                    cost: total_cost,
+                    balance,
+                }
+                .into());
+            }
+        }
+
+        let tx_env = prepare_call_env(&block_env, request)?;
         let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
         verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
