@@ -23,8 +23,14 @@ Checks implemented:
 - C: `eth_estimateGas` sanity and revert behavior
 - D: `eth_getLogs` filtering and decoded content checks
 - E: Block shape conformance + chain fields (`eth_chainId`, `net_version`, `web3_clientVersion`)
-- F: JSON-RPC error convention checks
+- F: JSON-RPC error convention checks (with explicit expected vs actual error payloads)
 - G: Batch request support + response shape checks
+- H: `eth_blockNumber` / latest block consistency
+- I: Block-tag state-read semantics for `eth_call` (latest/pending/hex tags)
+- J: Pending-to-sealed transaction/receipt transition checks
+- K: `eth_getBlockByHash` + block transaction count API consistency
+- L: `eth_feeHistory` shape and invalid-tag behavior
+- M: `eth_getBlockReceipts` support/shape consistency
 
 ## Prerequisites
 
@@ -83,8 +89,8 @@ Each check is labeled with one outcome:
 - `FAIL`: mismatch with baseline/shape expectations
 - `NOT_SUPPORTED`: method/path unsupported; exact JSON-RPC error is recorded
 
-For `FAIL`, the report includes a normalized minimal diff.
-For `NOT_SUPPORTED`, the report includes exact captured `error.code`, `error.message`, and `error.data` when present.
+For `FAIL`, the report includes normalized diffs plus explicit `Expected (Anvil)` and `Actual (Rollup)` payload blocks.
+For `NOT_SUPPORTED`, the report includes exact captured `error.code`, `error.message`, `error.data`, and raw response payloads when present.
 
 ## Notes
 

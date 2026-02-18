@@ -26,10 +26,40 @@ function summarize(checks: CheckResult[]): ReportSummary {
 }
 
 function markdownTable(checks: CheckResult[]): string {
-  const header = "| Check | Library | Outcome |";
-  const divider = "|---|---|---|";
-  const rows = checks.map((check) => `| ${check.name} | ${check.library} | ${check.outcome} |`);
+  const header = "| Check | Library | Outcome | RPC Methods |";
+  const divider = "|---|---|---|---|";
+  const rows = checks.map(
+    (check) => `| ${check.name} | ${check.library} | ${check.outcome} | ${check.rpcMethods.join(", ")} |`
+  );
   return [header, divider, ...rows].join("\n");
+}
+
+function stringify(value: unknown): string {
+  if (value === undefined) {
+    return "undefined";
+  }
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderRequests(check: CheckResult): string {
+  return [
+    "#### Requests (Anvil)",
+    "",
+    "```json",
+    stringify(check.requests.anvil),
+    "```",
+    "",
+    "#### Requests (Rollup)",
+    "",
+    "```json",
+    stringify(check.requests.rollup),
+    "```"
+  ].join("\n");
 }
 
 function renderFailures(checks: CheckResult[]): string {
@@ -41,8 +71,42 @@ function renderFailures(checks: CheckResult[]): string {
   return failures
     .slice(0, 10)
     .map((check) => {
-      const diff = check.diff ? JSON.stringify(check.diff, null, 2) : "No diff captured.";
-      return [`### ${check.name}`, "", "```json", diff, "```"].join("\n");
+      const blocks: string[] = [
+        `### ${check.name}`,
+        "",
+        `- Library: ${check.library}`,
+        `- RPC methods: ${check.rpcMethods.join(", ")}`,
+        "",
+        "#### Diff",
+        "",
+        "```json",
+        stringify(check.diff ?? "No diff captured."),
+        "```",
+        "",
+        "#### Expected (Anvil)",
+        "",
+        "```json",
+        stringify({
+          normalized: check.anvil.normalized,
+          error: check.anvil.error,
+          raw: check.anvil.raw
+        }),
+        "```",
+        "",
+        "#### Actual (Rollup)",
+        "",
+        "```json",
+        stringify({
+          normalized: check.rollup.normalized,
+          error: check.rollup.error,
+          raw: check.rollup.raw
+        }),
+        "```",
+        "",
+        renderRequests(check)
+      ];
+
+      return blocks.join("\n");
     })
     .join("\n\n");
 }
@@ -55,8 +119,17 @@ function renderNotSupported(checks: CheckResult[]): string {
 
   return unsupported
     .map((check) => {
-      const error = check.rollup.error ? JSON.stringify(check.rollup.error, null, 2) : "No error payload captured.";
-      return [`### ${check.name}`, "", "```json", error, "```"].join("\n");
+      return [
+        `### ${check.name}`,
+        "",
+        "```json",
+        stringify({
+          rollupError: check.rollup.error,
+          rollupRaw: check.rollup.raw,
+          diff: check.diff
+        }),
+        "```"
+      ].join("\n");
     })
     .join("\n\n");
 }

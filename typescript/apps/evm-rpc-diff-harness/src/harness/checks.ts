@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import {
   AbiCoder,
   Contract,
@@ -16,7 +17,6 @@ import {
   deepEqualNormalized,
   minimalJsonDiff,
   normalizeForComparison,
-  summarizeErrorShape,
   validateBlockShape
 } from "./normalize";
 import { JsonRpcClient, isNotSupportedError } from "./rpc";
@@ -59,6 +59,18 @@ interface LogsFiltersCheckObservation {
   byIndexedTopic: DecodedHarnessLogEntry[];
   byRange: DecodedHarnessLogEntry[];
 }
+
+type ErrorConventionCase =
+  | { ok: true }
+  | {
+      ok: false;
+      code: number | null;
+      message: string;
+      hasMessage: boolean;
+      hasData: boolean;
+      data: unknown;
+      raw: RpcErrorShape;
+    };
 
 function normalizeAddress(address: string, runtime: EndpointRuntime): string {
   const lower = address.toLowerCase();
@@ -279,6 +291,69 @@ function hasMessage(error: unknown): boolean {
 
 function toHexQuantity(value: number): string {
   return `0x${value.toString(16)}`;
+}
+
+function parseHexQuantity(value: unknown): bigint | null {
+  if (typeof value !== "string" || !/^0x[0-9a-fA-F]+$/.test(value)) {
+    return null;
+  }
+
+  try {
+    return BigInt(value);
+  } catch {
+    return null;
+  }
+}
+
+function toErrorConventionCase(call: { ok: boolean; error?: RpcErrorShape }): ErrorConventionCase {
+  if (call.ok || !call.error) {
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    code: call.error.code,
+    message: call.error.message,
+    hasMessage: typeof call.error.message === "string" && call.error.message.length > 0,
+    hasData: call.error.data !== undefined,
+    data: call.error.data,
+    raw: call.error
+  };
+}
+
+function decodeUintFromCallResult(
+  iface: Interface,
+  method: string,
+  result: unknown
+): { ok: true; value: string } | { ok: false; reason: string } {
+  if (typeof result !== "string") {
+    return { ok: false, reason: "eth_call result is not a hex string" };
+  }
+
+  try {
+    const decoded = iface.decodeFunctionResult(method, result);
+    const first = decoded[0];
+    if (typeof first === "bigint") {
+      return { ok: true, value: first.toString() };
+    }
+    return { ok: false, reason: "Decoded value is not uint256" };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function isLikely1559Unsupported(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("1559") ||
+    normalized.includes("maxfeepergas") ||
+    normalized.includes("transaction type") ||
+    normalized.includes("unsupported transaction")
+  );
 }
 
 const checks: CheckDefinition[] = [
@@ -1420,16 +1495,10 @@ const checks: CheckDefinition[] = [
       const calls = [missingMethod, badParams, invalidTag];
       const requests = calls.map((call) => call.request);
 
-      const observation = {
-        missingMethod: missingMethod.ok
-          ? { ok: true }
-          : { ok: false, ...summarizeErrorShape(missingMethod.error), raw: missingMethod.error },
-        badParams: badParams.ok
-          ? { ok: true }
-          : { ok: false, ...summarizeErrorShape(badParams.error), raw: badParams.error },
-        invalidTag: invalidTag.ok
-          ? { ok: true }
-          : { ok: false, ...summarizeErrorShape(invalidTag.error), raw: invalidTag.error }
+      const observation: Record<string, ErrorConventionCase> = {
+        missingMethod: toErrorConventionCase(missingMethod),
+        badParams: toErrorConventionCase(badParams),
+        invalidTag: toErrorConventionCase(invalidTag)
       };
 
       return {
@@ -1455,10 +1524,10 @@ const checks: CheckDefinition[] = [
         };
       }
 
-      const left = anvil.normalized as Record<string, { ok: boolean; code?: number | null; hasMessage?: boolean; hasData?: boolean }>;
+      const left = anvil.normalized as Record<string, ErrorConventionCase>;
       const right = rollup.normalized as typeof left;
 
-      const mismatches: Array<{ case: string; reason: string; anvil: unknown; rollup: unknown }> = [];
+      const mismatches: Array<{ case: string; reason: string; expected: unknown; actual: unknown }> = [];
 
       for (const key of ["missingMethod", "badParams", "invalidTag"]) {
         const a = left[key];
@@ -1468,8 +1537,8 @@ const checks: CheckDefinition[] = [
           mismatches.push({
             case: key,
             reason: "Missing case in normalized observations",
-            anvil: a,
-            rollup: b
+            expected: a,
+            actual: b
           });
           continue;
         }
@@ -1478,36 +1547,57 @@ const checks: CheckDefinition[] = [
           mismatches.push({
             case: key,
             reason: "Expected JSON-RPC error but received success",
-            anvil: a,
-            rollup: b
+            expected: a,
+            actual: b
           });
           continue;
         }
 
-        if (a.code !== b.code) {
+        const anvilCase = a as Exclude<ErrorConventionCase, { ok: true }>;
+        const rollupCase = b as Exclude<ErrorConventionCase, { ok: true }>;
+
+        if (anvilCase.code !== rollupCase.code) {
           mismatches.push({
             case: key,
             reason: "Error code mismatch",
-            anvil: a.code,
-            rollup: b.code
+            expected: {
+              code: anvilCase.code,
+              message: anvilCase.message
+            },
+            actual: {
+              code: rollupCase.code,
+              message: rollupCase.message
+            }
           });
         }
 
-        if (!b.hasMessage) {
+        if (!rollupCase.hasMessage) {
           mismatches.push({
             case: key,
             reason: "Rollup error missing message string",
-            anvil: a.hasMessage,
-            rollup: b.hasMessage
+            expected: {
+              hasMessage: anvilCase.hasMessage,
+              message: anvilCase.message
+            },
+            actual: {
+              hasMessage: rollupCase.hasMessage,
+              message: rollupCase.message
+            }
           });
         }
 
-        if (a.hasData !== b.hasData) {
+        if (anvilCase.hasData !== rollupCase.hasData) {
           mismatches.push({
             case: key,
             reason: "Error data presence mismatch",
-            anvil: a.hasData,
-            rollup: b.hasData
+            expected: {
+              hasData: anvilCase.hasData,
+              data: anvilCase.data
+            },
+            actual: {
+              hasData: rollupCase.hasData,
+              data: rollupCase.data
+            }
           });
         }
       }
@@ -1518,7 +1608,11 @@ const checks: CheckDefinition[] = [
 
       return {
         outcome: "FAIL",
-        diff: mismatches
+        diff: {
+          mismatches,
+          expectedBaseline: left,
+          actualRollup: right
+        }
       };
     }
   },
@@ -1658,6 +1752,1099 @@ const checks: CheckDefinition[] = [
         diff: {
           failures,
           responses: normalized.responses
+        }
+      };
+    }
+  },
+  {
+    name: "H.block_number_consistency_raw",
+    library: "raw",
+    rpcMethods: ["eth_blockNumber", "eth_getBlockByNumber"],
+    runEndpoint: async (runtime) => {
+      const rpc = new JsonRpcClient(runtime.rpcUrl);
+      const blockNumberA = await rpc.call("eth_blockNumber", []);
+      const latestBlock = await rpc.call("eth_getBlockByNumber", ["latest", false]);
+      const blockNumberB = await rpc.call("eth_blockNumber", []);
+
+      const requests = [blockNumberA.request, latestBlock.request, blockNumberB.request];
+
+      if (!blockNumberA.ok || !latestBlock.ok || !blockNumberB.ok) {
+        const failing = !blockNumberA.ok ? blockNumberA : !latestBlock.ok ? latestBlock : blockNumberB;
+        if (failing.ok) {
+          throw new Error("Expected block number failure branch to contain failed RPC call");
+        }
+
+        return {
+          observation: {
+            error: failing.error,
+            unsupported: isNotSupportedError(failing.error),
+            raw: {
+              blockNumberA: blockNumberA.response,
+              latestBlock: latestBlock.response,
+              blockNumberB: blockNumberB.response
+            }
+          },
+          requests
+        };
+      }
+
+      const latest = latestBlock.result as Record<string, unknown>;
+      const parsedA = parseHexQuantity(blockNumberA.result);
+      const parsedLatest = parseHexQuantity(latest.number);
+      const parsedB = parseHexQuantity(blockNumberB.result);
+
+      return {
+        observation: {
+          normalized: {
+            blockNumberA: {
+              raw: blockNumberA.result,
+              parsed: parsedA !== null ? parsedA.toString() : null,
+              validHexQuantity: parsedA !== null
+            },
+            latestBlockNumber: {
+              raw: latest.number,
+              parsed: parsedLatest !== null ? parsedLatest.toString() : null,
+              validHexQuantity: parsedLatest !== null
+            },
+            blockNumberB: {
+              raw: blockNumberB.result,
+              parsed: parsedB !== null ? parsedB.toString() : null,
+              validHexQuantity: parsedB !== null
+            },
+            checks: {
+              nonDecreasing: parsedA !== null && parsedB !== null ? parsedB >= parsedA : false,
+              latestWithinRange:
+                parsedA !== null && parsedLatest !== null && parsedB !== null
+                  ? parsedLatest >= parsedA && parsedLatest <= parsedB
+                  : false
+            }
+          },
+          raw: {
+            blockNumberA: blockNumberA.result,
+            latestBlock: latestBlock.result,
+            blockNumberB: blockNumberB.result
+          }
+        },
+        requests
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: { rollupError: rollup.error }
+        };
+      }
+
+      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as {
+        checks: { nonDecreasing: boolean; latestWithinRange: boolean };
+        blockNumberA: { validHexQuantity: boolean };
+        latestBlockNumber: { validHexQuantity: boolean };
+        blockNumberB: { validHexQuantity: boolean };
+      };
+      const right = rollup.normalized as typeof left;
+
+      const failures: string[] = [];
+      if (!left.blockNumberA.validHexQuantity || !left.latestBlockNumber.validHexQuantity || !left.blockNumberB.validHexQuantity) {
+        failures.push("Anvil baseline returned invalid block number quantity shape");
+      }
+      if (!right.blockNumberA.validHexQuantity || !right.latestBlockNumber.validHexQuantity || !right.blockNumberB.validHexQuantity) {
+        failures.push("Rollup returned invalid block number quantity shape");
+      }
+      if (!left.checks.nonDecreasing || !left.checks.latestWithinRange) {
+        failures.push("Anvil baseline block number sequence is inconsistent");
+      }
+      if (!right.checks.nonDecreasing || !right.checks.latestWithinRange) {
+        failures.push("Rollup block number sequence is inconsistent");
+      }
+
+      if (failures.length === 0) {
+        return { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: left,
+          rollup: right
+        }
+      };
+    }
+  },
+  {
+    name: "I.block_tag_state_reads_raw",
+    library: "raw",
+    rpcMethods: ["eth_call", "eth_sendRawTransaction", "eth_getTransactionReceipt"],
+    runEndpoint: async (runtime, context) => {
+      const rpc = new JsonRpcClient(runtime.rpcUrl);
+      const iface = new Interface(context.contracts.kitchenSink.abi);
+      const firstValue = 91_001n;
+      const secondValue = 91_002n;
+
+      const firstTx = await sendContractTransactionWithFallback(
+        runtime,
+        context.contracts.kitchenSink,
+        runtime.deployment.kitchenSink,
+        "setSimpleValue",
+        [firstValue]
+      );
+      const firstReceipt = await runtime.provider.getTransactionReceipt(firstTx.txHash);
+
+      const secondTx = await sendContractTransactionWithFallback(
+        runtime,
+        context.contracts.kitchenSink,
+        runtime.deployment.kitchenSink,
+        "setSimpleValue",
+        [secondValue]
+      );
+      const secondReceipt = await runtime.provider.getTransactionReceipt(secondTx.txHash);
+
+      if (!firstReceipt || !secondReceipt) {
+        throw new Error("Missing receipt for block tag state-read check");
+      }
+
+      const callData = iface.encodeFunctionData("simpleValue", []);
+
+      async function callAtTag(tag: string): Promise<{
+        request: unknown;
+        summary:
+          | { ok: true; value: string }
+          | { ok: false; error?: RpcErrorShape; decodeError?: string };
+      }> {
+        const result = await rpc.call("eth_call", [{ to: runtime.deployment.kitchenSink, data: callData }, tag]);
+        if (!result.ok) {
+          return {
+            request: result.request,
+            summary: {
+              ok: false,
+              error: result.error
+            }
+          };
+        }
+
+        const decoded = decodeUintFromCallResult(iface, "simpleValue", result.result);
+        if (!decoded.ok) {
+          return {
+            request: result.request,
+            summary: {
+              ok: false,
+              decodeError: decoded.reason
+            }
+          };
+        }
+
+        return {
+          request: result.request,
+          summary: {
+            ok: true,
+            value: decoded.value
+          }
+        };
+      }
+
+      const firstTag = toHexQuantity(firstReceipt.blockNumber);
+      const secondTag = toHexQuantity(secondReceipt.blockNumber);
+      const byFirst = await callAtTag(firstTag);
+      const bySecond = await callAtTag(secondTag);
+      const byLatest = await callAtTag("latest");
+      const byPending = await callAtTag("pending");
+
+      const historicalComparable = firstReceipt.blockNumber < secondReceipt.blockNumber;
+
+      const atFirstMatches = byFirst.summary.ok && byFirst.summary.value === firstValue.toString();
+      const atSecondMatches = bySecond.summary.ok && bySecond.summary.value === secondValue.toString();
+      const latestMatches = byLatest.summary.ok && byLatest.summary.value === secondValue.toString();
+
+      return {
+        observation: {
+          normalized: {
+            expected: {
+              firstValue: firstValue.toString(),
+              secondValue: secondValue.toString()
+            },
+            blocks: {
+              firstTag,
+              secondTag,
+              firstBlockNumber: firstReceipt.blockNumber,
+              secondBlockNumber: secondReceipt.blockNumber,
+              historicalComparable,
+              sameBlock: firstReceipt.blockNumber === secondReceipt.blockNumber
+            },
+            reads: {
+              atFirst: byFirst.summary,
+              atSecond: bySecond.summary,
+              latest: byLatest.summary,
+              pending: byPending.summary
+            },
+            checks: {
+              atSecondMatchesExpected: atSecondMatches,
+              latestMatchesExpected: latestMatches,
+              atFirstMatchesExpectedWhenComparable: historicalComparable ? atFirstMatches : null,
+              pendingHasMessageIfErrored:
+                byPending.summary.ok ||
+                (typeof byPending.summary.error?.message === "string" && byPending.summary.error.message.length > 0)
+            }
+          }
+        },
+        requests: [
+          {
+            method: "eth_sendRawTransaction",
+            payload: {
+              to: runtime.deployment.kitchenSink,
+              function: "setSimpleValue",
+              args: [firstValue.toString()]
+            }
+          },
+          {
+            method: "eth_sendRawTransaction",
+            payload: {
+              to: runtime.deployment.kitchenSink,
+              function: "setSimpleValue",
+              args: [secondValue.toString()]
+            }
+          },
+          byFirst.request,
+          bySecond.request,
+          byLatest.request,
+          byPending.request
+        ]
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: { rollupError: rollup.error }
+        };
+      }
+
+      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as {
+        blocks: { historicalComparable: boolean; sameBlock: boolean };
+        checks: {
+          atSecondMatchesExpected: boolean;
+          latestMatchesExpected: boolean;
+          atFirstMatchesExpectedWhenComparable: boolean | null;
+          pendingHasMessageIfErrored: boolean;
+        };
+      };
+      const right = rollup.normalized as typeof left;
+
+      const failures: string[] = [];
+
+      if (!left.checks.atSecondMatchesExpected || !left.checks.latestMatchesExpected) {
+        failures.push("Anvil baseline failed latest/second block-tag expectations");
+      }
+      if (left.blocks.historicalComparable && left.checks.atFirstMatchesExpectedWhenComparable !== true) {
+        failures.push("Anvil baseline failed historical block-tag expectation");
+      }
+
+      if (!right.checks.atSecondMatchesExpected) {
+        failures.push("Rollup eth_call at second block tag returned unexpected value");
+      }
+      if (!right.checks.latestMatchesExpected) {
+        failures.push("Rollup eth_call at latest returned unexpected value");
+      }
+      if (right.blocks.historicalComparable && right.checks.atFirstMatchesExpectedWhenComparable !== true) {
+        failures.push("Rollup eth_call at first block tag did not return historical value");
+      }
+      if (!right.checks.pendingHasMessageIfErrored) {
+        failures.push("Rollup pending-tag eth_call errored without message string");
+      }
+
+      if (failures.length === 0) {
+        const notes: string[] = [];
+        if (right.blocks.sameBlock) {
+          notes.push("Rollup sealed both writes in one block; historical tag assertion was skipped.");
+        }
+        if (left.blocks.sameBlock) {
+          notes.push("Anvil sealed both writes in one block; historical baseline assertion was skipped.");
+        }
+
+        return notes.length > 0 ? { outcome: "PASS", notes } : { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: anvil.normalized,
+          rollup: rollup.normalized
+        }
+      };
+    }
+  },
+  {
+    name: "J.pending_to_sealed_tx_raw",
+    library: "raw",
+    rpcMethods: ["eth_sendRawTransaction", "eth_getTransactionByHash", "eth_getTransactionReceipt"],
+    runEndpoint: async (runtime, context) => {
+      const rpc = new JsonRpcClient(runtime.rpcUrl);
+      const kitchen = new Contract(runtime.deployment.kitchenSink, context.contracts.kitchenSink.abi, runtime.wallet);
+      const calldata = kitchen.interface.encodeFunctionData("setSimpleValue", [92_001n]);
+
+      const nonce = await runtime.provider.getTransactionCount(runtime.wallet.address, "pending");
+      const feeData = await runtime.provider.getFeeData();
+      const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? feeData.gasPrice ?? 1_000_000_000n;
+      const maxFeePerGas = feeData.maxFeePerGas ?? maxPriorityFeePerGas * 2n;
+
+      let txTypeUsed: "eip1559" | "legacy" = "eip1559";
+      let txHash: string;
+
+      try {
+        const response = await runtime.wallet.sendTransaction({
+          to: runtime.deployment.kitchenSink,
+          data: calldata,
+          nonce,
+          gasLimit: 300_000n,
+          chainId: runtime.chainId,
+          type: 2,
+          maxFeePerGas,
+          maxPriorityFeePerGas
+        });
+        txHash = response.hash;
+      } catch (error) {
+        if (!isLikely1559Unsupported(error)) {
+          throw error;
+        }
+
+        const gasPrice = feeData.gasPrice ?? 1_000_000_000n;
+        txTypeUsed = "legacy";
+
+        const response = await runtime.wallet.sendTransaction({
+          to: runtime.deployment.kitchenSink,
+          data: calldata,
+          nonce,
+          gasLimit: 300_000n,
+          chainId: runtime.chainId,
+          type: 0,
+          gasPrice
+        });
+        txHash = response.hash;
+      }
+
+      const txImmediate = await rpc.call("eth_getTransactionByHash", [txHash]);
+      let receiptInitial = await rpc.call("eth_getTransactionReceipt", [txHash]);
+      const receiptRequests: unknown[] = [receiptInitial.request];
+
+      let receiptFinal = receiptInitial;
+      for (let i = 0; i < 80; i += 1) {
+        if (!receiptFinal.ok || receiptFinal.result !== null) {
+          break;
+        }
+
+        await delay(250);
+        receiptFinal = await rpc.call("eth_getTransactionReceipt", [txHash]);
+        receiptRequests.push(receiptFinal.request);
+      }
+
+      const txFinal = await rpc.call("eth_getTransactionByHash", [txHash]);
+
+      if (!txImmediate.ok || !receiptInitial.ok || !receiptFinal.ok || !txFinal.ok) {
+        const failing = !txImmediate.ok
+          ? txImmediate
+          : !receiptInitial.ok
+            ? receiptInitial
+            : !receiptFinal.ok
+              ? receiptFinal
+              : txFinal;
+
+        if (failing.ok) {
+          throw new Error("Expected tx/receipt failure branch to contain failed RPC call");
+        }
+
+        return {
+          observation: {
+            error: failing.error,
+            unsupported: isNotSupportedError(failing.error),
+            raw: {
+              txImmediate: txImmediate.response,
+              receiptInitial: receiptInitial.response,
+              receiptFinal: receiptFinal.response,
+              txFinal: txFinal.response
+            }
+          },
+          requests: [txImmediate.request, ...receiptRequests, txFinal.request]
+        };
+      }
+
+      const txImmediateObj =
+        txImmediate.result && typeof txImmediate.result === "object"
+          ? (txImmediate.result as Record<string, unknown>)
+          : null;
+      const txFinalObj =
+        txFinal.result && typeof txFinal.result === "object"
+          ? (txFinal.result as Record<string, unknown>)
+          : null;
+      const receiptInitialObj =
+        receiptInitial.result && typeof receiptInitial.result === "object"
+          ? (receiptInitial.result as Record<string, unknown>)
+          : null;
+      const receiptFinalObj =
+        receiptFinal.result && typeof receiptFinal.result === "object"
+          ? (receiptFinal.result as Record<string, unknown>)
+          : null;
+
+      const receiptStatus = receiptFinalObj ? parseHexQuantity(receiptFinalObj.status) : null;
+
+      return {
+        observation: {
+          normalized: {
+            txTypeUsed,
+            txHash,
+            txLookupImmediate: {
+              found: txImmediateObj !== null,
+              hasBlockHash: txImmediateObj !== null && typeof txImmediateObj.blockHash === "string",
+              hasBlockNumber: txImmediateObj !== null && typeof txImmediateObj.blockNumber === "string"
+            },
+            txLookupFinal: {
+              found: txFinalObj !== null,
+              hasBlockHash: txFinalObj !== null && typeof txFinalObj.blockHash === "string",
+              hasBlockNumber: txFinalObj !== null && typeof txFinalObj.blockNumber === "string"
+            },
+            receiptImmediateWasNull: receiptInitial.result === null,
+            receiptInitialFound: receiptInitialObj !== null,
+            receiptFinal: {
+              found: receiptFinalObj !== null,
+              status: receiptStatus !== null ? receiptStatus.toString() : null,
+              hasBlockHash: receiptFinalObj !== null && typeof receiptFinalObj.blockHash === "string",
+              hasBlockNumber: receiptFinalObj !== null && typeof receiptFinalObj.blockNumber === "string"
+            },
+            checks: {
+              txFoundEventually: txFinalObj !== null,
+              receiptFoundEventually: receiptFinalObj !== null,
+              receiptHasStatus: receiptStatus !== null,
+              receiptHashMatches:
+                receiptFinalObj !== null && typeof receiptFinalObj.transactionHash === "string"
+                  ? receiptFinalObj.transactionHash.toLowerCase() === txHash.toLowerCase()
+                  : false
+            }
+          },
+          raw: {
+            txImmediate: txImmediate.result,
+            txFinal: txFinal.result,
+            receiptInitial: receiptInitial.result,
+            receiptFinal: receiptFinal.result
+          }
+        },
+        requests: [
+          {
+            method: "eth_sendRawTransaction",
+            payload: {
+              to: runtime.deployment.kitchenSink,
+              function: "setSimpleValue",
+              args: ["92001"],
+              nonce,
+              txTypeUsed
+            }
+          },
+          txImmediate.request,
+          ...receiptRequests,
+          txFinal.request
+        ]
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: { rollupError: rollup.error }
+        };
+      }
+
+      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as {
+        checks: {
+          txFoundEventually: boolean;
+          receiptFoundEventually: boolean;
+          receiptHasStatus: boolean;
+          receiptHashMatches: boolean;
+        };
+      };
+      const right = rollup.normalized as typeof left;
+
+      const failures: string[] = [];
+      const baselineChecks = [
+        left.checks.txFoundEventually,
+        left.checks.receiptFoundEventually,
+        left.checks.receiptHasStatus,
+        left.checks.receiptHashMatches
+      ];
+      if (baselineChecks.some((entry) => !entry)) {
+        failures.push("Anvil baseline tx/receipt transition assertions failed");
+      }
+
+      if (!right.checks.txFoundEventually) {
+        failures.push("Rollup tx lookup never returned transaction object");
+      }
+      if (!right.checks.receiptFoundEventually) {
+        failures.push("Rollup receipt lookup never returned a mined receipt");
+      }
+      if (!right.checks.receiptHasStatus) {
+        failures.push("Rollup receipt missing status");
+      }
+      if (!right.checks.receiptHashMatches) {
+        failures.push("Rollup receipt transactionHash does not match sent tx hash");
+      }
+
+      if (failures.length === 0) {
+        return { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: anvil.normalized,
+          rollup: rollup.normalized
+        }
+      };
+    }
+  },
+  {
+    name: "K.block_lookup_and_tx_count_raw",
+    library: "raw",
+    rpcMethods: [
+      "eth_getBlockByHash",
+      "eth_getBlockByNumber",
+      "eth_getBlockTransactionCountByNumber",
+      "eth_getBlockTransactionCountByHash"
+    ],
+    runEndpoint: async (runtime) => {
+      const rpc = new JsonRpcClient(runtime.rpcUrl);
+
+      const latestByNumber = await rpc.call("eth_getBlockByNumber", ["latest", false]);
+      if (!latestByNumber.ok) {
+        return {
+          observation: {
+            error: latestByNumber.error,
+            unsupported: isNotSupportedError(latestByNumber.error),
+            raw: latestByNumber.response
+          },
+          requests: [latestByNumber.request]
+        };
+      }
+
+      const latestObj = latestByNumber.result as Record<string, unknown>;
+      const latestHash = typeof latestObj.hash === "string" ? latestObj.hash : null;
+      if (!latestHash) {
+        return {
+          observation: {
+            error: {
+              code: null,
+              message: "Latest block did not include hash"
+            },
+            raw: latestByNumber.result
+          },
+          requests: [latestByNumber.request]
+        };
+      }
+
+      const byHashShort = await rpc.call("eth_getBlockByHash", [latestHash, false]);
+      const byHashFull = await rpc.call("eth_getBlockByHash", [latestHash, true]);
+      const txCountByNumber = await rpc.call("eth_getBlockTransactionCountByNumber", ["latest"]);
+      const txCountByHash = await rpc.call("eth_getBlockTransactionCountByHash", [latestHash]);
+      const invalidHash = await rpc.call("eth_getBlockByHash", ["0x0000000000000000000000000000000000000000000000000000000000000000", false]);
+
+      const requests = [
+        latestByNumber.request,
+        byHashShort.request,
+        byHashFull.request,
+        txCountByNumber.request,
+        txCountByHash.request,
+        invalidHash.request
+      ];
+
+      if (!byHashShort.ok || !byHashFull.ok) {
+        const failing = !byHashShort.ok ? byHashShort : byHashFull;
+        if (failing.ok) {
+          throw new Error("Expected block lookup failure branch to contain failed RPC call");
+        }
+
+        return {
+          observation: {
+            error: failing.error,
+            unsupported: isNotSupportedError(failing.error),
+            raw: {
+              latestByNumber: latestByNumber.result,
+              byHashShort: byHashShort.response,
+              byHashFull: byHashFull.response
+            }
+          },
+          requests
+        };
+      }
+
+      const txCountUnsupported =
+        (!txCountByNumber.ok && isNotSupportedError(txCountByNumber.error)) ||
+        (!txCountByHash.ok && isNotSupportedError(txCountByHash.error));
+
+      if ((!txCountByNumber.ok || !txCountByHash.ok) && !txCountUnsupported) {
+        const failing = !txCountByNumber.ok ? txCountByNumber : txCountByHash;
+        if (failing.ok) {
+          throw new Error("Expected tx-count failure branch to contain failed RPC call");
+        }
+
+        return {
+          observation: {
+            error: failing.error,
+            raw: {
+              txCountByNumber: txCountByNumber.response,
+              txCountByHash: txCountByHash.response
+            }
+          },
+          requests
+        };
+      }
+
+      const latestShortShape = validateBlockShape(latestByNumber.result, false);
+      const hashShortShape = validateBlockShape(byHashShort.result, false);
+      const hashFullShape = validateBlockShape(byHashFull.result, true);
+
+      const byHashShortObj = byHashShort.result as Record<string, unknown>;
+      const byHashFullObj = byHashFull.result as Record<string, unknown>;
+
+      const latestTxs = Array.isArray(latestObj.transactions) ? latestObj.transactions : null;
+      const txCountByNumberParsed = txCountByNumber.ok ? parseHexQuantity(txCountByNumber.result) : null;
+      const txCountByHashParsed = txCountByHash.ok ? parseHexQuantity(txCountByHash.result) : null;
+
+      return {
+        observation: {
+          normalized: {
+            shapes: {
+              latestByNumber: latestShortShape,
+              byHashShort: hashShortShape,
+              byHashFull: hashFullShape
+            },
+            linkage: {
+              hashMatchesByHash: byHashShortObj.hash === latestObj.hash,
+              numberMatchesByHash: byHashShortObj.number === latestObj.number,
+              hashMatchesFull: byHashFullObj.hash === latestObj.hash
+            },
+            txCount: {
+              supported: !txCountUnsupported,
+              byNumberRaw: txCountByNumber.ok ? txCountByNumber.result : null,
+              byHashRaw: txCountByHash.ok ? txCountByHash.result : null,
+              byNumberParsed: txCountByNumberParsed !== null ? txCountByNumberParsed.toString() : null,
+              byHashParsed: txCountByHashParsed !== null ? txCountByHashParsed.toString() : null,
+              validHex:
+                txCountUnsupported ||
+                (txCountByNumber.ok && txCountByHash.ok && txCountByNumberParsed !== null && txCountByHashParsed !== null),
+              equalsEachOther:
+                txCountUnsupported ||
+                (txCountByNumberParsed !== null && txCountByHashParsed !== null
+                  ? txCountByNumberParsed === txCountByHashParsed
+                  : false),
+              matchesLatestArrayLength:
+                txCountUnsupported ||
+                (latestTxs !== null && txCountByHashParsed !== null
+                  ? txCountByHashParsed === BigInt(latestTxs.length)
+                  : false),
+              unsupportedError: txCountUnsupported
+                ? (!txCountByNumber.ok ? txCountByNumber.error : !txCountByHash.ok ? txCountByHash.error : undefined)
+                : undefined
+            },
+            invalidHashBehavior: {
+              returnedNull: invalidHash.ok ? invalidHash.result === null : false,
+              error: invalidHash.ok ? null : invalidHash.error
+            }
+          },
+          raw: {
+            latestByNumber: latestByNumber.result,
+            byHashShort: byHashShort.result,
+            byHashFull: byHashFull.result,
+            txCountByNumber: txCountByNumber.ok ? txCountByNumber.result : txCountByNumber.response,
+            txCountByHash: txCountByHash.ok ? txCountByHash.result : txCountByHash.response,
+            invalidHash: invalidHash.ok ? invalidHash.result : invalidHash.response
+          }
+        },
+        requests
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as {
+        shapes: {
+          latestByNumber: { ok: boolean };
+          byHashShort: { ok: boolean };
+          byHashFull: { ok: boolean };
+        };
+        linkage: { hashMatchesByHash: boolean; numberMatchesByHash: boolean; hashMatchesFull: boolean };
+        txCount: {
+          supported: boolean;
+          validHex: boolean;
+          equalsEachOther: boolean;
+          matchesLatestArrayLength: boolean;
+          unsupportedError?: RpcErrorShape;
+        };
+        invalidHashBehavior: { returnedNull: boolean; error: RpcErrorShape | null };
+      };
+      const right = rollup.normalized as typeof left;
+
+      if (!right.txCount.supported && isNotSupportedError(right.txCount.unsupportedError)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: {
+            rollupError: right.txCount.unsupportedError
+          }
+        };
+      }
+
+      const failures: string[] = [];
+
+      if (!left.shapes.latestByNumber.ok || !left.shapes.byHashShort.ok || !left.shapes.byHashFull.ok) {
+        failures.push("Anvil baseline block shape failed for block-by-hash/number lookups");
+      }
+      if (!right.shapes.latestByNumber.ok || !right.shapes.byHashShort.ok || !right.shapes.byHashFull.ok) {
+        failures.push("Rollup block shape failed for block-by-hash/number lookups");
+      }
+
+      if (!right.linkage.hashMatchesByHash || !right.linkage.numberMatchesByHash || !right.linkage.hashMatchesFull) {
+        failures.push("Rollup block-by-hash lookups are inconsistent with latest block");
+      }
+
+      if (!right.txCount.supported) {
+        failures.push("Rollup does not support block transaction count methods");
+      } else {
+        if (!right.txCount.validHex) {
+          failures.push("Rollup block transaction count methods returned invalid hex quantity");
+        }
+        if (!right.txCount.equalsEachOther) {
+          failures.push("Rollup block transaction count by hash/number mismatch");
+        }
+        if (!right.txCount.matchesLatestArrayLength) {
+          failures.push("Rollup tx count does not match latest block transactions length");
+        }
+      }
+
+      if (!right.invalidHashBehavior.returnedNull && right.invalidHashBehavior.error === null) {
+        failures.push("Rollup invalid block hash lookup neither returned null nor error");
+      }
+
+      if (failures.length === 0) {
+        return { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: left,
+          rollup: right
+        }
+      };
+    }
+  },
+  {
+    name: "L.fee_history_raw",
+    library: "raw",
+    rpcMethods: ["eth_feeHistory"],
+    runEndpoint: async (runtime) => {
+      const rpc = new JsonRpcClient(runtime.rpcUrl);
+
+      const history = await rpc.call("eth_feeHistory", [toHexQuantity(5), "latest", [10, 50, 90]]);
+      const invalidTag = await rpc.call("eth_feeHistory", [toHexQuantity(2), "invalid-tag", [50]]);
+
+      const requests = [history.request, invalidTag.request];
+
+      if (!history.ok) {
+        return {
+          observation: {
+            error: history.error,
+            unsupported: isNotSupportedError(history.error),
+            raw: {
+              history: history.response,
+              invalidTag: invalidTag.response
+            }
+          },
+          requests
+        };
+      }
+
+      const feeHistory = history.result as Record<string, unknown>;
+      const baseFees = Array.isArray(feeHistory.baseFeePerGas) ? feeHistory.baseFeePerGas : [];
+      const gasUsedRatio = Array.isArray(feeHistory.gasUsedRatio) ? feeHistory.gasUsedRatio : [];
+      const reward = feeHistory.reward;
+
+      const rewardShapeValid =
+        reward === undefined ||
+        (Array.isArray(reward) &&
+          reward.length === 5 &&
+          reward.every(
+            (entry) =>
+              Array.isArray(entry) &&
+              entry.length === 3 &&
+              entry.every((item) => parseHexQuantity(item) !== null)
+          ));
+
+      return {
+        observation: {
+          normalized: {
+            shape: {
+              oldestBlockHex: parseHexQuantity(feeHistory.oldestBlock) !== null,
+              baseFeePerGasLength: baseFees.length,
+              baseFeePerGasAllHex: baseFees.every((item) => parseHexQuantity(item) !== null),
+              gasUsedRatioLength: gasUsedRatio.length,
+              gasUsedRatioAllNumbers: gasUsedRatio.every((item) => typeof item === "number"),
+              rewardShapeValid
+            },
+            invalidTag: invalidTag.ok
+              ? { ok: true, result: invalidTag.result }
+              : {
+                  ok: false,
+                  code: invalidTag.error.code,
+                  message: invalidTag.error.message,
+                  hasMessage: invalidTag.error.message.length > 0
+                }
+          },
+          raw: {
+            history: history.result,
+            invalidTag: invalidTag.ok ? invalidTag.result : invalidTag.response
+          }
+        },
+        requests
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: { rollupError: rollup.error }
+        };
+      }
+
+      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as {
+        shape: {
+          oldestBlockHex: boolean;
+          baseFeePerGasLength: number;
+          baseFeePerGasAllHex: boolean;
+          gasUsedRatioLength: number;
+          gasUsedRatioAllNumbers: boolean;
+          rewardShapeValid: boolean;
+        };
+        invalidTag: { ok: boolean; hasMessage?: boolean; message?: string };
+      };
+      const right = rollup.normalized as typeof left;
+
+      const failures: string[] = [];
+
+      const leftShapeOk =
+        left.shape.oldestBlockHex &&
+        left.shape.baseFeePerGasLength === 6 &&
+        left.shape.baseFeePerGasAllHex &&
+        left.shape.gasUsedRatioLength === 5 &&
+        left.shape.gasUsedRatioAllNumbers &&
+        left.shape.rewardShapeValid;
+      if (!leftShapeOk) {
+        failures.push("Anvil baseline feeHistory shape validation failed");
+      }
+
+      const rightShapeOk =
+        right.shape.oldestBlockHex &&
+        right.shape.baseFeePerGasLength === 6 &&
+        right.shape.baseFeePerGasAllHex &&
+        right.shape.gasUsedRatioLength === 5 &&
+        right.shape.gasUsedRatioAllNumbers &&
+        right.shape.rewardShapeValid;
+      if (!rightShapeOk) {
+        failures.push("Rollup feeHistory shape validation failed");
+      }
+
+      if (right.invalidTag.ok) {
+        failures.push("Rollup feeHistory invalid-tag call unexpectedly succeeded");
+      } else if (!right.invalidTag.hasMessage) {
+        failures.push("Rollup feeHistory invalid-tag error missing message");
+      }
+
+      if (failures.length === 0) {
+        return { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: left,
+          rollup: right
+        }
+      };
+    }
+  },
+  {
+    name: "M.block_receipts_raw",
+    library: "raw",
+    rpcMethods: ["eth_getBlockByNumber", "eth_getBlockReceipts"],
+    runEndpoint: async (runtime) => {
+      const rpc = new JsonRpcClient(runtime.rpcUrl);
+
+      const latest = await rpc.call("eth_getBlockByNumber", ["latest", false]);
+      if (!latest.ok) {
+        return {
+          observation: {
+            error: latest.error,
+            unsupported: isNotSupportedError(latest.error),
+            raw: latest.response
+          },
+          requests: [latest.request]
+        };
+      }
+
+      const latestBlock = latest.result as Record<string, unknown>;
+      const latestHash = typeof latestBlock.hash === "string" ? latestBlock.hash : null;
+      const txHashes = Array.isArray(latestBlock.transactions) ? latestBlock.transactions : [];
+
+      if (!latestHash) {
+        return {
+          observation: {
+            error: {
+              code: null,
+              message: "Latest block hash missing for block receipts check"
+            },
+            raw: latest.result
+          },
+          requests: [latest.request]
+        };
+      }
+
+      const receipts = await rpc.call("eth_getBlockReceipts", [latestHash]);
+      const requests = [latest.request, receipts.request];
+
+      if (!receipts.ok) {
+        return {
+          observation: {
+            error: receipts.error,
+            unsupported: isNotSupportedError(receipts.error),
+            raw: {
+              latest: latest.result,
+              receipts: receipts.response
+            }
+          },
+          requests
+        };
+      }
+
+      const receiptEntries = Array.isArray(receipts.result) ? receipts.result : null;
+
+      const shapeOk =
+        receiptEntries !== null &&
+        receiptEntries.every((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return false;
+          }
+          const receipt = entry as Record<string, unknown>;
+          return (
+            typeof receipt.transactionHash === "string" &&
+            (receipt.status === undefined || parseHexQuantity(receipt.status) !== null) &&
+            Array.isArray(receipt.logs)
+          );
+        });
+
+      return {
+        observation: {
+          normalized: {
+            expectedTxCount: txHashes.length,
+            receiptCount: receiptEntries ? receiptEntries.length : null,
+            shapeOk,
+            countMatchesBlock: receiptEntries ? receiptEntries.length === txHashes.length : false
+          },
+          raw: {
+            latest: latest.result,
+            receipts: receipts.result
+          }
+        },
+        requests
+      };
+    },
+    compare: (anvil, rollup) => {
+      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+        return {
+          outcome: "NOT_SUPPORTED",
+          diff: { rollupError: rollup.error }
+        };
+      }
+
+      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+        return {
+          outcome: "FAIL",
+          diff: {
+            anvilError: anvil.error,
+            rollupError: rollup.error
+          }
+        };
+      }
+
+      const left = anvil.normalized as { shapeOk: boolean; countMatchesBlock: boolean };
+      const right = rollup.normalized as typeof left;
+
+      const failures: string[] = [];
+      if (!left.shapeOk || !left.countMatchesBlock) {
+        failures.push("Anvil baseline block receipts shape/count validation failed");
+      }
+      if (!right.shapeOk) {
+        failures.push("Rollup block receipts returned invalid receipt shape");
+      }
+      if (!right.countMatchesBlock) {
+        failures.push("Rollup block receipts count does not match block transaction count");
+      }
+
+      if (failures.length === 0) {
+        return { outcome: "PASS" };
+      }
+
+      return {
+        outcome: "FAIL",
+        diff: {
+          failures,
+          anvil: anvil.normalized,
+          rollup: rollup.normalized
         }
       };
     }
