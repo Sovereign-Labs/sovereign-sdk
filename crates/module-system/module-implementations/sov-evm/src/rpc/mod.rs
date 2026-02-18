@@ -135,6 +135,7 @@ pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError>
 fn call_upfront_cost(
     request: &TransactionRequest,
     block_env: &BlockEnv,
+    balance: U256,
 ) -> Result<Option<U256>, EthApiError> {
     if request.gas_price.is_some()
         && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
@@ -154,11 +155,26 @@ fn call_upfront_cost(
         return Ok(None);
     };
 
-    let gas_limit = request.gas.unwrap_or(block_env.gas_limit);
+    let value = request.value.unwrap_or_default();
+    let gas_limit = match request.gas {
+        Some(gas_limit) => gas_limit,
+        None => {
+            if fee_per_gas == 0 {
+                block_env.gas_limit
+            } else {
+                // When gas is omitted, cap by what the caller can actually afford instead of
+                // requiring balance for the full block gas limit.
+                let allowance = balance.checked_sub(value).unwrap_or_default();
+                let max_affordable_gas = allowance / U256::from(fee_per_gas);
+                max_affordable_gas
+                    .min(U256::from(block_env.gas_limit))
+                    .to::<u64>()
+            }
+        }
+    };
     let gas_cost = U256::from(gas_limit)
         .checked_mul(U256::from(fee_per_gas))
         .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
-    let value = request.value.unwrap_or_default();
     let total_cost = gas_cost
         .checked_add(value)
         .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
@@ -446,11 +462,11 @@ where
 
         let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let caller = request.from.unwrap_or_default();
-        if let Some(total_cost) = call_upfront_cost(&request, &block_env)? {
-            let balance = evm_db
-                .basic(caller)?
-                .map(|account| account.balance)
-                .unwrap_or_default();
+        let balance = evm_db
+            .basic(caller)?
+            .map(|account| account.balance)
+            .unwrap_or_default();
+        if let Some(total_cost) = call_upfront_cost(&request, &block_env, balance)? {
             if balance < total_cost {
                 return Err(RpcInvalidTransactionError::InsufficientFunds {
                     cost: total_cost,
@@ -982,5 +998,59 @@ pub(crate) fn build_rpc_receipt(
         from,
         to,
         contract_address,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            ..Default::default()
+        };
+        let balance = U256::from(1_000u64);
+
+        let total_cost = call_upfront_cost(&request, &block_env, balance).unwrap();
+
+        assert_eq!(total_cost, Some(balance));
+    }
+
+    #[test]
+    fn call_upfront_cost_keeps_explicit_gas_requirements() {
+        let block_env = BlockEnv::default();
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            gas: Some(1_000),
+            ..Default::default()
+        };
+
+        let total_cost = call_upfront_cost(&request, &block_env, U256::ZERO).unwrap();
+
+        assert_eq!(total_cost, Some(U256::from(10_000u64)));
+    }
+
+    #[test]
+    fn call_upfront_cost_reserves_value_before_affordable_gas() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            value: Some(U256::from(900u64)),
+            ..Default::default()
+        };
+        let balance = U256::from(1_000u64);
+
+        let total_cost = call_upfront_cost(&request, &block_env, balance).unwrap();
+
+        assert_eq!(total_cost, Some(balance));
     }
 }
