@@ -206,6 +206,7 @@ impl LedgerRpcReader {
             return Ok(Vec::new());
         };
         let mut upper_bytes = max_key.inner().clone();
+        // range query is exclusive, add a byte so we get the max key as well
         upper_bytes.push(0x00);
         let range = EventKey::new(&[])..EventKey::new(&upper_bytes);
         let entries = self
