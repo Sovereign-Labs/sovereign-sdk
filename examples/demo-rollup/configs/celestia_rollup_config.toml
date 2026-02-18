@@ -86,7 +86,7 @@ backoff_max_times = 10
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
-state_cache_size = 4294967296 # 4GB. Default is 1GB.
+state_cache_size = 4294967296 # 4 GiB. Default is 1 GiB.
 
 [runner]
 # 3 times per regular celestia block
@@ -95,7 +95,7 @@ da_polling_interval_ms = 2_000
 [runner.http_config]
 bind_host = "127.0.0.1"
 bind_port = 12346
-# In case the rollup is running behind a proxy
+# The fully qualified public name of the server, in case the rollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
 
 [monitoring]
@@ -110,7 +110,7 @@ telegraf_address = "udp://127.0.0.1:8094"
 # How many metrics are allowed to be in pending state, before new metrics will be dropped.
 # This is a number of metrics, not serialized bytes.
 # The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
-# max_pending_metrics = 100
+# max_pending_metrics = 1000
 
 [proof_manager]
 aggregated_proof_block_jump = 10
