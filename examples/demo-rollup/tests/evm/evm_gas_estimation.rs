@@ -41,7 +41,8 @@ async fn eth_estimate_gas_revert_returns_error() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_estimate_gas_omitted_nonce_matches_explicit_nonce_for_create() -> anyhow::Result<()> {
+async fn eth_estimate_gas_omitted_nonce_differs_from_explicit_zero_after_nonce_advance(
+) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
     let client = alloy_client(rollup.http_addr);
@@ -78,6 +79,16 @@ async fn eth_estimate_gas_omitted_nonce_matches_explicit_nonce_for_create() -> a
         },
         "latest",
     ]);
+    let explicit_current_nonce_params = serde_json::json!([
+        {
+            "from": from,
+            "maxFeePerGas": "0x100",
+            "maxPriorityFeePerGas": "0x1",
+            "data": bytecode,
+            "nonce": format!("0x{next_nonce:x}"),
+        },
+        "latest",
+    ]);
 
     let omitted_nonce_estimate: Result<U64, _> = client
         .client()
@@ -87,10 +98,24 @@ async fn eth_estimate_gas_omitted_nonce_matches_explicit_nonce_for_create() -> a
         .client()
         .request("eth_estimateGas", &explicit_zero_nonce_params)
         .await;
+    let explicit_current_nonce_estimate: Result<U64, _> = client
+        .client()
+        .request("eth_estimateGas", &explicit_current_nonce_params)
+        .await;
 
     assert!(
         omitted_nonce_estimate.is_ok(),
         "omitted nonce estimate should succeed after nonce has advanced"
+    );
+    let explicit_zero_value = explicit_zero_nonce_estimate
+        .as_ref()
+        .expect("explicit nonce=0 estimate should succeed");
+    let explicit_current_value = explicit_current_nonce_estimate
+        .as_ref()
+        .expect("explicit current nonce estimate should succeed");
+    assert_eq!(
+        explicit_zero_value, explicit_current_value,
+        "explicit nonce value should not change estimate in current SovHandler execution path"
     );
 
     let differs_from_explicit_zero = match (
@@ -103,7 +128,7 @@ async fn eth_estimate_gas_omitted_nonce_matches_explicit_nonce_for_create() -> a
     };
     assert!(
         differs_from_explicit_zero,
-        "omitted nonce behavior should differ from explicit nonce=0 after prior CREATE+CALL activity; omitted={omitted_nonce_estimate:?}, explicit_zero={explicit_zero_nonce_estimate:?}"
+        "omitted nonce estimate should differ from explicit nonce=0 after nonce has advanced; this captures omitted-nonce lookup side effects in estimate metering; omitted={omitted_nonce_estimate:?}, explicit_zero={explicit_zero_nonce_estimate:?}"
     );
 
     Ok(())
