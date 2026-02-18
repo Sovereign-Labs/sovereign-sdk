@@ -1,6 +1,7 @@
 # 2026-02-17
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
   You can use `SOV_CELESTIA_RPC_URL` for setup.
+- #2499 EVM: Adds more test and removes lock contention on RPC endpoint call
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
