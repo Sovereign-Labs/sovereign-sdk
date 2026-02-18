@@ -649,10 +649,6 @@ where
     ) {
         let node_sequence_number =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
-        let ledger_reader = info.ledger_reader.clone();
-        let slot_number = info.slot_number;
-        let latest_finalized_slot_number = info.latest_finalized_slot_number;
-        let next_tx_number = info.next_tx_number;
 
         if node_sequence_number > inner.sequence_number_of_next_blob {
             inner.sequence_number_of_next_blob = node_sequence_number;
@@ -671,12 +667,7 @@ where
             .await;
         inner
             .executor_events_sender
-            .update_api_ledger(
-                ledger_reader,
-                slot_number,
-                latest_finalized_slot_number,
-                next_tx_number,
-            )
+            .update_api_ledger_from_info(&inner.latest_info)
             .await;
     }
 

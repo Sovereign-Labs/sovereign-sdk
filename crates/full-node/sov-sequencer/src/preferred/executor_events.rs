@@ -191,29 +191,13 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
-    pub(crate) async fn update_api_ledger(
-        &mut self,
-        ledger_reader: DeltaReader,
-        slot_number: SlotNumber,
-        latest_finalized_slot_number: SlotNumber,
-        next_tx_number: u64,
-    ) {
+    pub(crate) async fn update_api_ledger_from_info(&self, info: &StateUpdateInfo<S::Storage>) {
         self.send(ExecutorEvent::UpdateApiLedger {
-            ledger_reader,
-            slot_number,
-            latest_finalized_slot_number,
-            next_tx_number,
+            ledger_reader: info.ledger_reader.clone(),
+            slot_number: info.slot_number,
+            latest_finalized_slot_number: info.latest_finalized_slot_number,
+            next_tx_number: info.next_tx_number,
         })
-        .await;
-    }
-
-    pub(crate) async fn update_api_ledger_from_info(&mut self, info: &StateUpdateInfo<S::Storage>) {
-        self.update_api_ledger(
-            info.ledger_reader.clone(),
-            info.slot_number,
-            info.latest_finalized_slot_number,
-            info.next_tx_number,
-        )
         .await;
     }
 
