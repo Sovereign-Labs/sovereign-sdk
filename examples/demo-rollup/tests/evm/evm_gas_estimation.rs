@@ -126,11 +126,7 @@ async fn eth_call_omitted_nonce_matches_explicit_nonce_for_create() -> anyhow::R
         receipt.status(),
         "precondition CALL transaction should succeed"
     );
-    let next_nonce: u64 = client
-        .get_transaction_count(from)
-        .await?
-        .try_into()
-        .expect("nonce should fit in u64");
+    let next_nonce: u64 = client.get_transaction_count(from).await?;
     assert!(next_nonce > 0, "nonce should advance after deployment");
 
     let bytecode = SimpleStorage::deploy_builder(client.clone())
