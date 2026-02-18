@@ -772,9 +772,11 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                if self
-                    .pending_block(None, state)
-                    .is_some_and(|pending| pending.block_number() == number)
+                // Always prefer archival for explicitly sealed block numbers.
+                if self.blocks.get(&number, state).unwrap_infallible().is_none()
+                    // Treat explicit pending-block numbers as current only when there are pending txs.
+                    && self.has_pending_block(state)
+                    && self.block_env(state).unwrap_infallible().number == number
                 {
                     return Ok(MaybeArchivalState::Current(state));
                 }
