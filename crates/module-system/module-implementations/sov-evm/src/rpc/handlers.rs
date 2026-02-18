@@ -466,17 +466,6 @@ where
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
-        // let block = match self.get_maybe_synthetic_block_for_rpc(
-        //     Some(BlockId::Hash(block_hash.into())),
-        //     false.into(),
-        //     state,
-        // ) {
-        //     Ok(block) => block,
-        //     // ByHash count endpoints return null for not found blocks.
-        //     Err(EthApiError::HeaderNotFound(_)) => None,
-        //     Err(err) => return Err(err.into()),
-        // };
-        // Ok(block.map(|b| U64::from(b.transactions.len())))
         let maybe_block =
             match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
                 Ok(block) => block,
