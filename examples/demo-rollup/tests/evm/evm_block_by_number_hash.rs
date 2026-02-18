@@ -123,14 +123,20 @@ where
 ///
 /// Verifies:
 /// - `earliest` returns genesis (block 0)
-/// - `safe` and `finalized` return the latest finalized rollup height
+/// - `safe` and `finalized` return the latest finalized rollup height, aka the latest sealed soft confirmed block.
 /// - `safe` == `finalized`
 #[tokio::test(flavor = "multi_thread")]
 async fn test_block_tags_earliest_safe_finalized() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
-    let sealed_head_number = client.get_block_number().await?;
+    // Here we rely on the semantics that Finalized returns the latest sealed soft confirmed block.
+    let sealed_head_number = client
+        .get_block_by_number(Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
 
     // TC01: earliest returns genesis
     let earliest = client.get_block_by_number(Earliest).await?.unwrap();
@@ -218,12 +224,10 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
-    // Get sealed head BEFORE pending tx
-    let sealed_head_number = client.get_block_number().await?;
-    let sealed_head_block = client
-        .get_block_by_number(Number(sealed_head_number))
-        .await?
-        .unwrap();
+    // Get sealed head BEFORE pending tx.
+    // eth_blockNumber may already point to pending, so use finalized as the sealed reference.
+    let sealed_head_block = client.get_block_by_number(Finalized).await?.unwrap();
+    let sealed_head_number = sealed_head_block.header.number;
 
     // Submit pending tx
     let tx_hash_1 = simple_storage.set_value(contract_address, 3000).await;
@@ -245,6 +249,7 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
         "pending block number did not advance to sealed_head + 1",
     )
     .await?;
+    let eth_block_number_with_pending = client.get_block_number().await?;
 
     // TC14: Verify we have a real pending block (not fallback to sealed)
     assert_eq!(
@@ -274,6 +279,10 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
     assert_eq!(
         pending_by_hash_1.header.number, pending_block_1.header.number,
         "pending block hash should be resolvable via eth_getBlockByHash"
+    );
+    assert_eq!(
+        eth_block_number_with_pending, pending_block_1.header.number,
+        "eth_blockNumber should align with latest/pending block number when pending txs exist"
     );
 
     // New tx changes pending header's hash, but not number
@@ -386,11 +395,8 @@ async fn test_sealed_block_has_real_hash() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
-    let sealed_head_number = client.get_block_number().await?;
-    let sealed_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
-        .await?
-        .unwrap();
+    // eth_blockNumber may already point to pending, so use finalized as the sealed reference.
+    let sealed_block = client.get_block_by_number(Finalized).await?.unwrap();
 
     // TC12: Sealed block has real (non-zero) hash
     assert_ne!(
@@ -420,12 +426,6 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
-    let sealed_head_number = client.get_block_number().await?;
-    let sealed_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
-        .await?
-        .unwrap();
-
     let tx_hash = simple_storage.set_value(contract_address, 3000).await;
     simple_storage.wait_for_receipt(tx_hash).await;
     // Wait until the pending block is visible to avoid flakiness.
@@ -438,11 +438,20 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
         },
-        |block| block.header.number == sealed_head_number + 1,
-        "pending block number did not advance to sealed_head + 1",
+        |block| {
+            block
+                .transactions
+                .as_transactions()
+                .is_some_and(|txs| !txs.is_empty())
+        },
+        "pending block did not include expected transactions",
     )
     .await?;
     let latest_block = client.get_block_by_number(Latest).full().await?.unwrap();
+    let sealed_block = client
+        .get_block_by_hash(pending_block.header.parent_hash)
+        .await?
+        .unwrap();
 
     // TC13: Pending hash is synthetic (L1 DIVERGENCE: L1 returns null)
     assert_ne!(
@@ -464,7 +473,7 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
     // TC14: Pending number is sealed_head + 1
     assert_eq!(
         pending_block.header.number,
-        sealed_head_number + 1,
+        sealed_block.header.number + 1,
         "pending block number should be sealed_head + 1"
     );
 
@@ -518,7 +527,12 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    let sealed_head_number = client.get_block_number().await?;
+    let sealed_head_number = client
+        .get_block_by_number(Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
 
     // Send 3 transactions, capturing synthetic hash after each
     let mut synthetic_hashes = Vec::new();
@@ -686,7 +700,12 @@ async fn test_pending_without_txs_falls_back_to_sealed() -> anyhow::Result<()> {
     let rollup = setup_paused_rollup(0, 2).await;
     let client = alloy_client(rollup.http_addr);
 
-    let sealed_head_number = client.get_block_number().await?;
+    let sealed_head_number = client
+        .get_block_by_number(Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
     let sealed_block = client
         .get_block_by_number(BlockNumberOrTag::Number(sealed_head_number))
         .await?
@@ -1267,7 +1286,7 @@ async fn test_timestamp_monotonicity() -> anyhow::Result<()> {
             block.header.timestamp >= prev_timestamp,
             "block {n} timestamp {} should be >= block {} timestamp {prev_timestamp}",
             block.header.timestamp,
-            n - 1,
+            n.saturating_sub(1),
         );
 
         // TC141: Timestamp should be reasonable (non-zero after genesis)

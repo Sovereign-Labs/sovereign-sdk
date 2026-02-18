@@ -278,12 +278,15 @@ where
         Ok(ensure_success(result)?)
     }
 
-    /// Handler for: `eth_blockNumber`
+    /// Handler for: `eth_blockNumber`.
+    /// Returns pending block if it has any transactions.
+    /// This is in line with sovereign rollup `pending` == `latest` semantics.
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
-        let block_number_range = self.block_numbers(state);
-        Ok(U256::from(*block_number_range.end()))
+        Ok(U256::from(
+            self.resolve_block_number(BlockNumberOrTag::Latest, state),
+        ))
     }
 
     /// Handler for: `eth_estimateGas`
@@ -463,17 +466,21 @@ where
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
-        let block = match self.get_maybe_synthetic_block_for_rpc(
-            Some(BlockId::Hash(block_hash.into())),
-            false.into(),
-            state,
-        ) {
-            Ok(block) => block,
-            // ByHash count endpoints return null for not found blocks.
-            Err(EthApiError::HeaderNotFound(_)) => None,
-            Err(err) => return Err(err.into()),
-        };
+        let maybe_block =
+            match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
+                Ok(block) => block,
+                // For synthetic hashes that are not in cache, this endpoint should behave
+                // like unknown block hash and return `null` instead of an RPC error.
+                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
+                Err(err) => return Err(err.into()),
+            };
 
-        Ok(block.map(|b| U64::from(b.transactions.len())))
+        Ok(maybe_block.map(|block| {
+            U64::from(
+                block
+                    .transactions_end()
+                    .saturating_sub(block.transactions_start()),
+            )
+        }))
     }
 }
