@@ -52,11 +52,23 @@ trap cleanup EXIT
 
 # ── 1. Patch rollup config for 1-tx-per-block ─────────────────────────────
 echo "==> Patching rollup config for single-tx-per-block..."
+
+# If .bak exists from a previous interrupted run, restore it first so we
+# start from a known-good config.
+if [[ -f "${CONFIG_FILE}.bak" ]]; then
+    echo "    Restoring config from previous interrupted run"
+    mv "${CONFIG_FILE}.bak" "$CONFIG_FILE"
+fi
+
 cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
 CONFIG_BACKED_UP=true
 
-sed -i 's/^max_batch_size_bytes = .*/max_batch_size_bytes = 50/' "$CONFIG_FILE"
-sed -i 's/^batch_execution_time_limit_millis = .*/batch_execution_time_limit_millis = 1/' "$CONFIG_FILE"
+sed -i 's/^max_batch_size_bytes = .*/max_batch_size_bytes = 1048576/' "$CONFIG_FILE"
+# We do NOT override batch_execution_time_limit_millis here. The default (2000ms)
+# is sufficient because the harness sends transactions sequentially (each call
+# awaits the receipt before sending the next), so 1-tx-per-batch happens
+# naturally. Setting it to 1ms causes slots to advance faster than mock DA can
+# finalize, triggering 503 "sequencer overloaded" errors mid-test.
 
 # ── 2. Clean rollup state ─────────────────────────────────────────────────
 echo "==> Cleaning rollup state..."
@@ -64,31 +76,40 @@ rm -rf "$ROLLUP_DATA_DIR"
 rm -f "$SQLITE_DA_FILE"
 
 # ── 3. Build demo-rollup ──────────────────────────────────────────────────
-echo "==> Building demo-rollup (release)..."
-cargo build --release -p sov-demo-rollup --manifest-path "$PROJECT_ROOT/Cargo.toml"
+echo "==> Building demo-rollup..."
+cargo build -p sov-demo-rollup --manifest-path "$PROJECT_ROOT/Cargo.toml"
 
-# ── 4. Start Anvil ────────────────────────────────────────────────────────
+# ── 4. Kill stale processes on our ports ──────────────────────────────────
+echo "==> Checking for stale processes on ports..."
+for port in "$ANVIL_PORT" "$ROLLUP_PORT"; do
+    if pid=$(lsof -ti :"$port" 2>/dev/null); then
+        echo "    Killing stale process on port $port (PID $pid)"
+        kill $pid 2>/dev/null || true
+        sleep 0.5
+    fi
+done
+
+# ── 5. Start Anvil ────────────────────────────────────────────────────────
 echo "==> Starting Anvil on port $ANVIL_PORT..."
 ANVIL_LOG=$(mktemp /tmp/anvil-XXXXXX.log)
 anvil --port "$ANVIL_PORT" > "$ANVIL_LOG" 2>&1 &
 ANVIL_PID=$!
 echo "    Anvil PID=$ANVIL_PID  log=$ANVIL_LOG"
 
-# ── 5. Start demo-rollup ─────────────────────────────────────────────────
+# ── 6. Start demo-rollup ─────────────────────────────────────────────────
 echo "==> Starting demo-rollup on port $ROLLUP_PORT..."
 ROLLUP_LOG=$(mktemp /tmp/rollup-XXXXXX.log)
 (
     cd "$PROJECT_ROOT/examples/demo-rollup"
-    "$PROJECT_ROOT/target/release/sov-demo-rollup" \
+    exec "$PROJECT_ROOT/target/debug/sov-demo-rollup" \
         --da-layer mock \
         --rollup-config-path configs/mock_rollup_config.toml \
-        --genesis-config-dir ../test-data/genesis/demo/mock \
-        > "$ROLLUP_LOG" 2>&1
-) &
+        --genesis-config-dir ../test-data/genesis/demo/mock
+) > "$ROLLUP_LOG" 2>&1 &
 ROLLUP_PID=$!
 echo "    Rollup PID=$ROLLUP_PID  log=$ROLLUP_LOG"
 
-# ── 6. Wait for both to be ready ─────────────────────────────────────────
+# ── 7. Wait for both to be ready ─────────────────────────────────────────
 wait_for_rpc() {
     local url="$1"
     local name="$2"
@@ -105,7 +126,7 @@ wait_for_rpc() {
             return 0
         fi
         sleep 1
-        (( attempt++ ))
+        (( ++attempt ))
     done
 
     echo "ERROR: $name did not become ready after ${max_attempts}s"
@@ -117,18 +138,45 @@ wait_for_rpc() {
 wait_for_rpc "http://127.0.0.1:$ANVIL_PORT" "Anvil" "$ANVIL_LOG"
 wait_for_rpc "http://127.0.0.1:$ROLLUP_PORT/rpc" "Rollup" "$ROLLUP_LOG"
 
-# ── 7. Install harness dependencies ──────────────────────────────────────
+wait_for_sequencer_ready() {
+    local base_url="$1"
+    local name="$2"
+    local log_file="$3"
+    local max_attempts=60
+    local attempt=0
+
+    echo "    Waiting for $name sequencer to be ready..."
+    while (( attempt < max_attempts )); do
+        if curl -sf -o /dev/null "$base_url/sequencer/ready" 2>/dev/null; then
+            echo "    $name sequencer is ready."
+            return 0
+        fi
+        sleep 1
+        (( ++attempt ))
+    done
+
+    echo "ERROR: $name sequencer did not become ready after ${max_attempts}s"
+    echo "Last log lines:"
+    tail -20 "$log_file" || true
+    return 1
+}
+
+wait_for_sequencer_ready "http://127.0.0.1:$ROLLUP_PORT" "Rollup" "$ROLLUP_LOG"
+
+# ── 8. Install harness dependencies ──────────────────────────────────────
 echo "==> Installing harness dependencies..."
 (cd "$HARNESS_DIR" && pnpm install)
 
-# ── 8. Run the harness ────────────────────────────────────────────────────
+# ── 9. Run the harness ────────────────────────────────────────────────────
 echo "==> Running EVM RPC diff harness..."
+# Use env vars instead of CLI args to avoid pnpm arg-forwarding issues
+# with compound scripts ("build:contracts && tsx src/run.ts").
 (
     cd "$HARNESS_DIR"
-    pnpm run compare -- \
-        --anvil "http://127.0.0.1:$ANVIL_PORT" \
-        --rollup "http://127.0.0.1:$ROLLUP_PORT/rpc" \
-        --pk 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+    ANVIL_RPC_URL="http://127.0.0.1:$ANVIL_PORT" \
+    ROLLUP_RPC_URL="http://127.0.0.1:$ROLLUP_PORT/rpc" \
+    TEST_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" \
+    pnpm run compare
 )
 HARNESS_EXIT=$?
 

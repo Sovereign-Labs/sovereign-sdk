@@ -1,3 +1,2 @@
 cache/
-artifacts/build-info/
-artifacts/contracts/
+artifacts/*

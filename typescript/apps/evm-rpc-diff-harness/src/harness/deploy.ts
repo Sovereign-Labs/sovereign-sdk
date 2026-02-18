@@ -120,7 +120,9 @@ function isNonceConflictError(error: unknown): boolean {
       typeof maybe.info === "object" &&
       maybe.info.error &&
       typeof maybe.info.error === "object" &&
-      maybe.info.error.code === -32003
+      maybe.info.error.code === -32003 &&
+      typeof maybe.info.error.message === "string" &&
+      maybe.info.error.message.toLowerCase().includes("nonce")
     ) {
       return true;
     }
@@ -137,6 +139,15 @@ function isNonceConflictError(error: unknown): boolean {
   }
 
   return false;
+}
+
+function isTransientOverloadError(error: unknown): boolean {
+  const message = errorMessage(error).toLowerCase();
+  return (
+    message.includes("temporarily overloaded") ||
+    message.includes("no finalized slots available") ||
+    (message.includes("503") && message.includes("service unavailable"))
+  );
 }
 
 async function sendWithNonceRecovery(
@@ -173,6 +184,16 @@ async function sendWithNonceRecovery(
       return { txResponse, receipt };
     } catch (error) {
       lastError = error;
+
+      if (isTransientOverloadError(error)) {
+        const backoffMs = Math.min(1000 * 2 ** attempt, 15_000);
+        console.warn(
+          `Sequencer overloaded (attempt ${attempt + 1}/6), retrying in ${backoffMs}ms...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+        continue;
+      }
+
       if (!isNonceConflictError(error)) {
         throw error;
       }
