@@ -312,11 +312,7 @@ fn assert_next_items_numbers(slot_number: u64, ledger_db: &LedgerDb) {
     );
 }
 
-fn create_slot_with_keys(
-    slot_num: u64,
-    keys: &[&str],
-    ledger_db: &LedgerDb,
-) -> SchemaBatch {
+fn create_slot_with_keys(slot_num: u64, keys: &[&str], ledger_db: &LedgerDb) -> SchemaBatch {
     let mut block = MockBlock::default();
     block.header.height = slot_num;
 

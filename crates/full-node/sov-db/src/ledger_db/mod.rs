@@ -863,16 +863,12 @@ impl LedgerDb {
 
                 // Decrement EventCountByKey entries for rolled-back events
                 for (key, deleted_count) in &deleted_events_per_key {
-                    let current_count = db
-                        .get::<EventCountByKey>(key)?
-                        .map(|n| n.0)
-                        .unwrap_or(0);
+                    let current_count = db.get::<EventCountByKey>(key)?.map(|n| n.0).unwrap_or(0);
                     let new_count = current_count.saturating_sub(*deleted_count);
                     if new_count == 0 {
                         schema_batch.delete::<EventCountByKey>(key)?;
                     } else {
-                        schema_batch
-                            .put::<EventCountByKey>(key, &EventKeyNumber(new_count))?;
+                        schema_batch.put::<EventCountByKey>(key, &EventKeyNumber(new_count))?;
                     }
                 }
 
