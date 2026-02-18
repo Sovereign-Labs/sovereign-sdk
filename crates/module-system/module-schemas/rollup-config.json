@@ -674,6 +674,14 @@
               "$ref": "#/definitions/Address"
             }
           ]
+        },
+        "storage_path": {
+          "description": "Optional path to the proof manager database directory. Defaults to the rollup storage path if not specified.",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
