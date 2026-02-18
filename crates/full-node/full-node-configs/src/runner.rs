@@ -129,11 +129,10 @@ pub struct ProofManagerConfig<Address> {
     /// A number of state transition info entries are allowed to be kept in memory.
     /// If the number is exceeded, rollup execution will be blocked until provers cathes up.
     pub max_number_of_transitions_in_memory: NonZero<u64>,
-    /// Path to the storage directory for the proof manager database.
-    /// Populated at runtime from the rollup storage config; not deserialized from TOML.
-    #[serde(skip)]
-    #[schemars(skip)]
-    pub storage_path: PathBuf,
+    /// Optional path to the proof manager database directory.
+    /// Defaults to the rollup storage path if not specified.
+    #[serde(default)]
+    pub storage_path: Option<PathBuf>,
 }
 
 /// Rollup Configuration

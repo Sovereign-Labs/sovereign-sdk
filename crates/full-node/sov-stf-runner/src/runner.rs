@@ -182,8 +182,13 @@ where
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
             // Create ProofManagerDb for proof manager state persistence
-            let proof_manager_db = ProofManagerDb::open(&config.storage_path)
-                .context("Failed to open ProofManagerDb")?;
+            let proof_manager_db = ProofManagerDb::open(
+                config
+                    .storage_path
+                    .as_ref()
+                    .expect("storage_path must be resolved before creating runner"),
+            )
+            .context("Failed to open ProofManagerDb")?;
 
             let ledger_head = ledger_db
                 .get_head_slot()?

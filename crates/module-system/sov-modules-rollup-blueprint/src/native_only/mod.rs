@@ -475,13 +475,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
 
-        let pm_config = if prover_config.is_some() {
+        let pm_config = prover_config.is_some().then(|| {
             let mut pm = rollup_config.proof_manager.clone();
-            pm.storage_path = rollup_config.storage.path.clone();
-            Some(pm)
-        } else {
-            None
-        };
+            pm.storage_path
+                .get_or_insert(rollup_config.storage.path.clone());
+            pm
+        });
 
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
