@@ -1,5 +1,6 @@
 mod evm_account_abstraction;
 mod evm_balances;
+mod evm_basefee;
 mod evm_block_by_number_hash;
 mod evm_block_hash;
 mod evm_block_number;
@@ -7,6 +8,7 @@ mod evm_contract_creation_allowlist;
 mod evm_effective_gas_price;
 mod evm_fee_history;
 mod evm_gas_estimation;
+mod evm_get_transaction_count;
 mod evm_logs;
 mod evm_max_fee_validation;
 mod evm_no_gas_limit;

@@ -2391,13 +2391,8 @@ async fn delayed_tx_is_processed_after_delay() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
 
@@ -3275,15 +3270,7 @@ pub(crate) async fn setup_test_rollup_with_initial_state(
     test_rollup: TestRollup<TestBlueprint>,
     admin: &TestUser<TestSpec>,
 ) -> (TestRollup<TestBlueprint>, TestState) {
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(10)
-        .await
-        .unwrap();
-
-    // Wait for all blocks to be processed by the node+sequencer. TODO: better
-    // logic not prone to race conditions.
-    sleep(Duration::from_millis(500)).await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();

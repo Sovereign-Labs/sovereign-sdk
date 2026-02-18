@@ -19,6 +19,7 @@ tracing = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
+thiserror = { workspace = true }
 
 
 [lints]

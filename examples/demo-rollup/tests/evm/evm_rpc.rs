@@ -31,9 +31,27 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     rollup.pause_preferred_batches().await;
 
-    assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Pending).await?.unwrap().number, 0);
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Earliest)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Latest)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Pending)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
     assert_eq!(by_number(&client, 1).await?, None);
     assert_eq!(by_number(&client, 2).await?, None);
 
@@ -41,9 +59,27 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
 
-    assert_eq!(by_number(&client, Earliest).await?.unwrap().number, 0);
-    assert_eq!(by_number(&client, Latest).await?.unwrap().number, 1);
-    assert_eq!(by_number(&client, Pending).await?.unwrap().number, 1);
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Earliest)
+            .await?
+            .unwrap()
+            .number,
+        0
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Latest)
+            .await?
+            .unwrap()
+            .number,
+        1
+    );
+    assert_eq!(
+        by_number(&client, BlockNumberOrTag::Pending)
+            .await?
+            .unwrap()
+            .number,
+        1
+    );
 
     assert_eq!(by_number(&client, 1).await?.unwrap().number, 1);
     assert_eq!(by_number(&client, 2).await?, None);
@@ -72,12 +108,18 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     rollup.wait_for_next_blocks(2).await;
     rollup.pause_preferred_batches().await;
 
-    let latest_hash = by_number(&client, Latest).await?.unwrap().parent_hash;
+    let latest_hash = by_number(&client, BlockNumberOrTag::Latest)
+        .await?
+        .unwrap()
+        .parent_hash;
     let latest = by_hash(&client, latest_hash).await?.unwrap();
     assert_eq!(latest.hash, latest_hash);
     assert_eq!(latest.number, 1);
 
-    let pending_hash = by_number(&client, Latest).await?.unwrap().hash;
+    let pending_hash = by_number(&client, BlockNumberOrTag::Latest)
+        .await?
+        .unwrap()
+        .hash;
     assert_ne!(pending_hash, BlockHash::ZERO);
     // Because the hash of the pending block is fake - it can't be fetched by hash
     assert_ne!(by_hash(&client, pending_hash).await?, None);
@@ -188,7 +230,7 @@ async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> any
     ws_client.wait_for_receipt(tx_hash).await;
 
     let client = alloy_client(rollup.http_addr);
-    let latest = by_number(&client, Latest)
+    let latest = by_number(&client, BlockNumberOrTag::Latest)
         .await?
         .expect("latest block should exist");
     let finalized = by_number(&client, Finalized)
