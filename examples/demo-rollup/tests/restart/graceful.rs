@@ -138,9 +138,8 @@ fn known_restart_warnings() -> [(Level, String); 6] {
 
 fn assert_only_known_logs_since(collector: &LogCollector, start_idx: usize) {
     let known = known_restart_warnings();
-    let mut recorded_errors_warnings = HashSet::<(Level, String)>::from_iter(
-        collector.records().into_iter().skip(start_idx),
-    );
+    let mut recorded_errors_warnings =
+        HashSet::<(Level, String)>::from_iter(collector.records().into_iter().skip(start_idx));
     recorded_errors_warnings.retain(|e| !known.contains(e));
     // We could've checked `.is_empty`, but in case of failure, we will see errors immediately.
     assert_eq!(HashSet::<(Level, String)>::new(), recorded_errors_warnings);
