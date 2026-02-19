@@ -95,8 +95,6 @@ where
         "eth_signTypedData_v3",
         "eth_signTypedData_v4",
         "eth_getProof",
-        "eth_createAccessList",
-        "eth_syncing",
         "net_peerCount",
         "trace_block",
         "trace_call",

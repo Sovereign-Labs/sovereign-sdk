@@ -5,7 +5,8 @@ use alloy_eips::BlockId;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
-    state::StateOverride, Block, BlockNumberOrTag, BlockOverrides, FeeHistory, Transaction,
+    state::StateOverride, AccessListResult, Block, BlockNumberOrTag, BlockOverrides, FeeHistory,
+    Transaction,
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
@@ -14,6 +15,7 @@ use jsonrpsee::core::RpcResult;
 use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
 use revm_database_interface::TryDatabaseCommit;
+use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -38,14 +40,14 @@ where
         trace!(method = "net_version", "EVM module JSON-RPC request");
 
         // Network ID is the same as chain ID for most networks
-        let chain_id = config_value!("CHAIN_ID");
+        let chain_id: u64 = config_value!("CHAIN_ID");
         Ok(chain_id.to_string())
     }
 
     /// Handler for: `eth_chainId`
     #[rpc_method(name = "eth_chainId")]
     pub fn chain_id(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<Option<U64>> {
-        let chain_id = config_value!("CHAIN_ID");
+        let chain_id: u64 = config_value!("CHAIN_ID");
         trace!(
             chain_id = chain_id,
             method = "eth_chainId",
@@ -180,6 +182,15 @@ where
         Ok(U256::from(self.block_env(state)?.basefee))
     }
 
+    /// Handler for: `eth_blobBaseFee`
+    /// Returns the current blob base fee. We report the canonical minimum value
+    /// while blob tx execution is not yet enabled.
+    #[rpc_method(name = "eth_blobBaseFee")]
+    pub fn blob_base_fee(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+        trace!(method = "eth_blobBaseFee", "EVM module JSON-RPC request");
+        Ok(U256::from(1u64))
+    }
+
     /// Handler for: `eth_feeHistory`
     /// Returns historical gas price and usage data for recent blocks.
     ///
@@ -276,6 +287,55 @@ where
         );
         let result = self.call(request, block_id, state)?.result;
         Ok(ensure_success(result)?)
+    }
+
+    /// Handler for: `eth_createAccessList`
+    #[rpc_method(name = "eth_createAccessList")]
+    pub fn eth_create_access_list(
+        &self,
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<AccessListResult> {
+        trace!(
+            ?block_id,
+            method = "eth_createAccessList",
+            "EVM module JSON-RPC request"
+        );
+
+        let initial_access_list = request.access_list.clone().unwrap_or_default();
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
+        let cfg = self.cfg_infallible(state);
+        let cfg_env = crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        let evm_db = self.db(maybe_archival_state.deref_mut());
+
+        let mut inspector = AccessListInspector::new(initial_access_list);
+        let execution = crate::executor::inspect(
+            evm_db,
+            &block_env,
+            tx_env,
+            cfg_env,
+            &mut inspector,
+        )
+        .map_err(EthApiError::from)?;
+
+        let (gas_used, error) = match execution.result {
+            ExecutionResult::Success { gas_used, .. } => (U256::from(gas_used), None),
+            ExecutionResult::Revert { gas_used, .. } => {
+                (U256::from(gas_used), Some("execution reverted".to_string()))
+            }
+            ExecutionResult::Halt { gas_used, reason } => {
+                (U256::from(gas_used), Some(format!("{reason:?}")))
+            }
+        };
+
+        Ok(AccessListResult {
+            access_list: inspector.into_access_list(),
+            gas_used,
+            error,
+        })
     }
 
     /// Handler for: `eth_blockNumber`.
@@ -419,6 +479,14 @@ where
         trace!(method = "net_listening", "EVM module JSON-RPC request");
         // Rollup is always accepting connections via RPC
         Ok(true)
+    }
+
+    /// Handler for: `eth_syncing`
+    /// Returns sync status. Demo rollup exposes a fully-synced local view for rpc-compat.
+    #[rpc_method(name = "eth_syncing")]
+    pub fn eth_syncing(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<bool> {
+        trace!(method = "eth_syncing", "EVM module JSON-RPC request");
+        Ok(false)
     }
 
     /// Handler for: `eth_maxPriorityFeePerGas`

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Translate Hive geth-style genesis into sov-demo-rollup module genesis files.
 
-This adapter intentionally starts small:
-- EOA-focused mapping (alloc addresses become EVM accounts with empty code)
-- balances are funded via bank.json (not via EVM account state)
+Current behavior:
+- alloc balances are funded via bank.json (not via EVM account state)
+- alloc code / nonce / storage are imported into evm.json accounts
 - /chain.rlp and /blocks/*.rlp are intentionally ignored in this phase
 """
 
@@ -198,6 +198,28 @@ def balance_key(address: str) -> str:
     return address
 
 
+def normalize_hex_data(value: str, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"Expected hex string for {field_name}, got {type(value).__name__}")
+
+    body = value[2:] if value.startswith(("0x", "0X")) else value
+    if body == "":
+        return "0x"
+    if len(body) % 2 == 1:
+        body = "0" + body
+    try:
+        int(body, 16)
+    except ValueError as exc:
+        raise ValueError(f"Invalid hex data for {field_name}: {value}") from exc
+    return "0x" + body.lower()
+
+
+def to_hex_u256(value: int, field_name: str) -> str:
+    if value < 0:
+        raise ValueError(f"Negative value for {field_name}: {value}")
+    return hex(value)
+
+
 def main() -> int:
     if len(sys.argv) != 4:
         print(
@@ -270,24 +292,49 @@ def main() -> int:
 
     evm_accounts = []
     alloc_balances = []
-    skipped_non_eoa = 0
+    contract_accounts = 0
+    storage_slots = 0
 
     for raw_address, alloc_entry in alloc.items():
         address = checksum_address(raw_address)
         entry = alloc_entry if isinstance(alloc_entry, dict) else {}
 
-        code = entry.get("code")
-        if isinstance(code, str) and code not in ("", "0x", "0X"):
-            skipped_non_eoa += 1
+        raw_code = entry.get("code", "0x")
+        code = normalize_hex_data(raw_code, f"alloc[{raw_address}].code")
+        code_hash = (
+            EMPTY_CODE_HASH
+            if code == "0x"
+            else "0x" + keccak_256(bytes.fromhex(code[2:])).hex()
+        )
+        if code != "0x":
+            contract_accounts += 1
 
-        if entry.get("storage"):
-            skipped_non_eoa += 1
+        nonce = parse_maybe_int(entry.get("nonce"), 0)
+        if nonce < 0:
+            raise ValueError(f"Negative nonce for {raw_address}")
+
+        storage = entry.get("storage", {})
+        if storage is None:
+            storage = {}
+        if not isinstance(storage, dict):
+            raise ValueError(f"alloc[{raw_address}].storage must be an object")
+
+        normalized_storage = {}
+        for raw_slot, raw_value in storage.items():
+            slot = parse_int(raw_slot, f"alloc[{raw_address}].storage slot")
+            value = parse_int(raw_value, f"alloc[{raw_address}].storage value")
+            normalized_storage[to_hex_u256(slot, "storage slot")] = to_hex_u256(
+                value, "storage value"
+            )
+        storage_slots += len(normalized_storage)
 
         evm_accounts.append(
             {
                 "address": address,
-                "code_hash": EMPTY_CODE_HASH,
-                "code": "0x",
+                "code_hash": code_hash,
+                "code": code,
+                "nonce": nonce,
+                "storage": normalized_storage,
             }
         )
 
@@ -337,15 +384,11 @@ def main() -> int:
         )
 
     print(
-        f"Generated Hive genesis at {output_dir} (chain_id={chain_id}, alloc_accounts={len(evm_accounts)}, skipped_non_eoa={skipped_non_eoa})",
+        "Generated Hive genesis at "
+        f"{output_dir} (chain_id={chain_id}, alloc_accounts={len(evm_accounts)}, "
+        f"contracts={contract_accounts}, storage_slots={storage_slots})",
         file=sys.stderr,
     )
-
-    if skipped_non_eoa > 0:
-        print(
-            "Note: non-EOA alloc entries (code/storage) were intentionally flattened to EOAs in this first pass.",
-            file=sys.stderr,
-        )
 
     return 0
 

@@ -7,6 +7,7 @@ use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{GenesisState, Module, Spec};
+use std::collections::BTreeMap;
 
 use crate::conversions::create_block_env;
 use crate::db::init::InitEvmDb;
@@ -24,6 +25,12 @@ pub struct AccountData {
     pub code_hash: B256,
     /// Smart contract code.
     pub code: Bytes,
+    /// Account nonce.
+    #[serde(default)]
+    pub nonce: u64,
+    /// Preloaded account storage values.
+    #[serde(default)]
+    pub storage: BTreeMap<U256, U256>,
 }
 
 impl AccountData {
@@ -83,20 +90,31 @@ where
         acc: AccountData,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
+        let AccountData {
+            address,
+            code_hash,
+            code,
+            nonce,
+            storage,
+        } = acc;
         let mut evm_db = self.db(state);
         evm_db.insert_account_info(
-            acc.address,
+            address,
             AccountInfo {
                 balance: U256::ZERO,
-                code_hash: acc.code_hash,
-                nonce: 0,
+                code_hash,
+                nonce,
                 code: None,
             },
         )?;
 
-        if !acc.code.is_empty() {
-            evm_db.insert_code(acc.code_hash, acc.code.clone())?;
+        if !code.is_empty() {
+            evm_db.insert_code(code_hash, code)?;
         };
+
+        for (slot, value) in storage {
+            self.account_storage.set(&(&address, &slot), &value, state)?;
+        }
 
         Ok(())
     }

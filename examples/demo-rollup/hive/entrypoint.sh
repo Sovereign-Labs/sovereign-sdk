@@ -36,7 +36,11 @@ if [[ -z "${CHAIN_ID}" ]]; then
   exit 1
 fi
 
-export SOV_TEST_CONST_OVERRIDE_CHAIN_ID="${CHAIN_ID}"
+if [[ -n "${SOV_HIVE_COMPILED_CHAIN_ID:-}" ]] && [[ "${CHAIN_ID}" != "${SOV_HIVE_COMPILED_CHAIN_ID}" ]]; then
+  echo "Genesis chainId (${CHAIN_ID}) does not match compiled CHAIN_ID (${SOV_HIVE_COMPILED_CHAIN_ID}). Rebuild image with matching HIVE_CHAIN_ID." >&2
+  exit 1
+fi
+
 export RUST_LOG="${RUST_LOG:-info}"
 export NO_COLOR="${NO_COLOR:-1}"
 export CLICOLOR="${CLICOLOR:-0}"

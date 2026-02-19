@@ -307,7 +307,9 @@ where
             .code
             .get(&account.code_hash, state.deref_mut())
             .unwrap_infallible()?;
-        Some(code.bytes())
+        // `bytes()` on analyzed legacy bytecode includes the appended STOP byte used for
+        // execution; RPC must return the original deployed bytecode.
+        Some(code.original_bytes())
     }
 
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {

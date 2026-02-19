@@ -19,17 +19,18 @@
 - Input: geth `alloc` balances and header-like fields (`timestamp`, `gasLimit`, `baseFeePerGas`, `config.chainId`).
 - Output:
   - `evm.json`:
-    - `accounts`: EOA-style entries only (`code=0x`, empty code hash)
+    - `accounts`: imports alloc account `code`, `code_hash`, `nonce`, and `storage`
     - updates: `genesis_timestamp`, `initial_base_fee`, `chain_spec.block_gas_limit`
   - `bank.json`:
     - funds alloc addresses with alloc balances (gas token balances)
 - Chain ID:
   - written to `chain_id.txt`
-  - applied with `SOV_TEST_CONST_OVERRIDE_CHAIN_ID` (debug build path)
+  - must match the binary's compile-time `CHAIN_ID` constant
+  - Hive image build patches `constants.toml` / `constants.testing.toml` before compile
+    - default: `HIVE_CHAIN_ID=3503995874084926` (rpc-compat chain)
 
 ## Explicit Stubs / Non-Goals in First Pass
 - `/chain.rlp` and `/blocks/*.rlp` imports are not implemented.
-- Alloc entries with code/storage are flattened to EOAs (no predeploy/state import yet).
 - Engine API is intentionally minimal (setup-unblock stub only).
 
 ## NOMT `io_uring` Requirement in Docker
@@ -73,6 +74,7 @@ Expected when allowed: `fd` is non-negative and `errno 0`.
 cd /home/nikolai/workspace/sovereign-sdk
 
 docker build \
+  --build-arg HIVE_CHAIN_ID=3503995874084926 \
   -f examples/demo-rollup/hive/Dockerfile \
   -t sov-demo-rollup-hive:local \
   .
@@ -100,3 +102,32 @@ hive --sim ethereum/rpc-compat --client sov-demo-rollup-hive
 ## Expected Outcome
 - Hive setup should proceed into `rpc-compat` test execution.
 - Remaining failures should mostly be method-level conformance deltas (actionable for iterative fixes), not startup/lifecycle failures.
+
+## Current Baseline (full run)
+- Total: `200`
+- Pass: `29`
+- Fail: `171`
+
+Failure buckets:
+- `method_not_found`: large
+  - `eth_simulateV1`: `91`
+  - `debug_getRaw*` + `debug_getRawTransaction`: `11`
+- `method_not_supported`: mostly `eth_createAccessList`, `eth_getProof`, `eth_getTransactionByBlock*`
+- `response_value_mismatch`: large
+  - mostly `eth_getBlock*`, `eth_getTransaction*`, `eth_getLogs`, `eth_call`, `eth_getStorageAt`
+- `response_type_mismatch`: small
+  - `eth_estimateGas` error/result shape
+
+## Next Priorities
+1. Keep startup deterministic:
+   - compile with fixed rpc-compat chain ID (`HIVE_CHAIN_ID`)
+   - fail fast when runtime genesis chain ID differs from compiled constant.
+2. Implement `/chain.rlp` (and optionally `/blocks/*.rlp`) import:
+   - this should eliminate most `eth_blockNumber`/`eth_getBlock*`/`eth_getTransaction*` mismatches caused by running on a near-empty chain.
+3. Add missing eth namespace methods used by rpc-compat:
+   - `eth_getTransactionByBlockHashAndIndex`
+   - `eth_getTransactionByBlockNumberAndIndex`
+   - `eth_getProof`
+   - `eth_createAccessList` (full semantics needed; simple stub likely still fails).
+4. Decide explicit scope for non-standard methods:
+   - `eth_simulateV1` and `debug_getRaw*` are a large failure block; either implement or exclude when focusing on baseline Ethereum RPC compatibility.
