@@ -171,6 +171,10 @@ pub struct Evm<S: Spec> {
     /// This is set to true when an EvmRuntimeConfigUpdate with all fields None is received.
     #[state]
     pub(crate) disable_max_fee_check: StateValue<bool, BcsCodec>,
+
+    /// Used only by the RPC: actual gas-token fee paid per tx index.
+    #[state]
+    pub receipt_fees: AccessoryStateMap<u64, Amount, BcsCodec>,
 }
 
 /// The top-level error type for all EVM module operations.

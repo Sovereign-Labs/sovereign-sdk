@@ -1,14 +1,12 @@
 [da]
-# Connection string for SQL database to have stored blocks, for example":
+# Connection string to the database for storing DA data, for example:
 #  - "sqlite://demo_data/da.sqlite?mode=rwc"
 #  - "sqlite::memory:"
 #  - "postgresql://root:hunter2@aws.amazon.com/mock-da"
 connection_string = "sqlite://mock_da.sqlite?mode=rwc"
-# String representation of sequencer address.
-# For initial full node should match genesis of sequencer-registry.
-# It is going to be a DA address that blobs from this node will be associated with.
+# The address to use to "submit" blobs on the mock DA layer.
 sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
-finalization_blocks = 0 # Reorgs up to this depth are allowed. Set to zero for instant finality
+finalization_blocks = 0 # Defines how many blocks progress to finalization. Set to zero for instant finality
 # failure_behavior = "none" # Configures failure injection for testing. Options: "none", or structured variants for testing
 
 [da.block_producing.periodic]
@@ -18,7 +16,7 @@ block_time_ms = 1_000
 # [da.block_producing.manual] # Manual block production mode
 # Disable reorg for now, for better stability
 
-#[da.randomization] # Config for managing reorgs
+#[da.randomization] # If specified, adds randomization to non-finalized blocks
 #seed = "0x0000000000000000000000000000000000000000000000000000000000000012"
 #reorg_interval = [10, 20]
 #[da.randomization.behaviour.shuffle_and_resize]
@@ -30,7 +28,7 @@ block_time_ms = 1_000
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
-state_cache_size = 4294967296 # 4GB. Default is 1GB.
+state_cache_size = 4294967296 # 4 GiB. Default is 1 GiB.
 # user_commit_concurrency = 4 # Number of concurrent commit workers for user state
 # user_hashtable_buckets = 15000000 # Expected state size, cannot be changed after creation
 # user_preallocate_ht = false # Whether to preallocate hashtable file for user db
@@ -45,7 +43,7 @@ state_cache_size = 4294967296 # 4GB. Default is 1GB.
 # kernel_page_cache_upper_levels = 2 # Page cache upper levels for kernel state (higher values can improve performance on high-RAM machines)
 # pruner_block_interval = 100 # How often to run pruner measured by DA blocks
 # pruner_versions_to_keep = 20 # Number of versions available for historical querying
-# pruner_max_batch_size = 300000 # The maximum number of key/value pairs to prune in a single batch. Each key is about 70 bytes, so your prunery memory requirements will be about 21MB by default.
+# pruner_max_batch_size = 300000 # The maximum number of key/value pairs to prune in a single batch. Each key is about 70 bytes, so your pruner memory requirements will be about 21MB by default.
 
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
@@ -59,7 +57,7 @@ da_polling_interval_ms = 50
 [runner.http_config]
 bind_host = "127.0.0.1"
 bind_port = 12346
-# In case of the arollup is running behind a proxy
+# The fully qualified public name of the server, in case the rollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
 # cors = "permissive" # CORS configuration: "permissive" or "restrictive"
 
@@ -76,7 +74,7 @@ tokio_runtime_metrics_interval_millis = 500
 # How many metrics are allowed to be in pending state, before new metrics will be dropped.
 # This is a number of metrics, not serialized bytes.
 # The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
-# max_pending_metrics = 100
+# max_pending_metrics = 1000
 
 [proof_manager]
 aggregated_proof_block_jump = 1
@@ -106,17 +104,21 @@ batch_execution_time_limit_millis = 2000 # Do no more than 2000ms of work per ba
 # This warms up caches so the main transaction executor can run with ready-to-use data.
 # This variable determines the number of worker threads.
 num_cache_warmup_workers = 0
-# minimum_profit_per_tx = 0 # Minimum fee the preferred sequencer accepts per tx, in gas tokens
+# minimum_profit_per_tx = 0 # Minimum fee the preferred sequencer accepts per tx, in rollup tokens
 # events_channel_size = 10000 # Size of Tokio channel for streaming events. Larger values increase memory usage
-ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintain. Larger values increase lag in seeing DA info on chain, but allow more buffering when the DA layer is unstable
+ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintain. Larger values mean forced transactions take longer to be included, but allow more buffering when the DA layer is unstable
 # db_event_channel_size = 10000 # Event buffer size while update_state is running
 # maximum_future_nonce_delta = 100 # Max nonce gap the sequencer will accept and queue for out-of-order txs
 # future_nonce_transaction_timeout_millis = 2000 # Timeout for queued future-nonce transactions
 
 #[sequencer.preferred.postgres_config]
-#postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB to soft confirmed transactions
+#postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB for soft confirmed transactions
 #node_id = "node_1"
-#node_role = "Leader" #Other options are "Replica" or "ReplicaNoLeaderSync".
+#node_role = "Leader" # Other options are "Replica", "ReplicaNoLeaderSync", or "DbElected"
+#[sequencer.preferred.postgres_config.leader_election] # Configuration for leader election timing
+#leader_timeout_millis = 500 # Maximum time in milliseconds without a heartbeat before a leader is considered inactive
+#grace_period_millis = 10000 # Minimum time in milliseconds after leader acquisition before another node can take over
+#heartbeat_interval_millis = 100 # Interval in milliseconds between heartbeat updates
 
 
 # [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
@@ -135,4 +137,4 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 
 [sequencer.extension]
 max_log_limit = 20000
-# response_size_limit = 1018880 # Max response size for eth_getLogs in bytes (default: 1MB - 30KB for headers)
+# response_size_limit = 1017856 # Max response size for eth_getLogs in bytes (default: 1 MiB - 30 KiB for headers and overhead)

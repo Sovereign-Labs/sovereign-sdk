@@ -19,7 +19,7 @@ use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::{BlockId, BlockNumberOrTag};
-use alloy_primitives::{Address, BlockNumber, Bloom, B64};
+use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
@@ -33,7 +33,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
+use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
 
@@ -149,12 +149,16 @@ where
                     .enumerate()
                     .map(|(pos, idx)| {
                         let tx = self.tx(idx, state)?;
-                        Ok::<_, EthApiError>(from_recovered_with_block_context(
-                            tx.into(),
+                        let tx_rpc = self.build_tx_with_maybe_effective_gas_price(
+                            tx,
                             Some(block.header.hash()),
                             block.number,
-                            pos as u64,
-                        ))
+                            block.header.base_fee_per_gas,
+                            pos,
+                            idx,
+                            state,
+                        );
+                        Ok::<_, EthApiError>(tx_rpc)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 BlockTransactions::Full(txs)
@@ -199,17 +203,22 @@ where
             }
             // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
             MaybeSealedBlock::PendingSynthetic(block) | MaybeSealedBlock::PastSynthetic(block) => {
+                let tx_range_start = block.transactions.start;
                 let (header, txs) = self.get_synthetic_block_contents_slow(block, state)?;
                 let txs = match kind {
                     BlockTransactionsKind::Full => BlockTransactions::Full(
                         txs.into_iter()
                             .enumerate()
-                            .map(|(tx_idx, tx)| {
-                                from_recovered_with_block_context(
-                                    tx.into(),
+                            .map(|(pos, tx)| {
+                                let tx_idx = tx_range_start + pos as u64;
+                                self.build_tx_with_maybe_effective_gas_price(
+                                    tx,
                                     Some(header.hash),
                                     header.number,
-                                    tx_idx as u64,
+                                    header.base_fee_per_gas,
+                                    pos,
+                                    tx_idx,
+                                    state,
                                 )
                             })
                             .collect(),
@@ -228,6 +237,34 @@ where
                 }))
             }
         }
+    }
+
+    fn build_tx_with_maybe_effective_gas_price<Accessor: AccessoryStateReader>(
+        &self,
+        tx: TxSignedAndRecovered,
+        block_hash: Option<BlockHash>,
+        block_number: BlockNumber,
+        base_fee_per_gas: Option<u64>,
+        pos: usize,
+        tx_idx: u64,
+        state: &mut Accessor,
+    ) -> Transaction {
+        let mut tx_rpc = from_recovered_with_block_context(
+            tx.into(),
+            block_hash,
+            block_number,
+            pos as u64,
+            base_fee_per_gas,
+        );
+        let fee_paid = self.receipt_fee(tx_idx, state);
+        if let Some((receipt, _)) = self.receipt(tx_idx, state) {
+            if let Some(actual_effective_gas_price) =
+                maybe_actual_effective_gas_price(block_number, receipt.gas_used, fee_paid)
+            {
+                tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
+            }
+        }
+        tx_rpc
     }
 
     /// Populates the header of a partial synthetic block and returns the transactions.
@@ -274,11 +311,19 @@ where
     }
 
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
-        let tx_number = self.tx_index(&hash, state)?;
-        let tx = self.transaction(tx_number, state)?;
+        let tx_idx = self.tx_index(&hash, state)?;
+        let tx = self.transaction(tx_idx, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
-        let index = tx_number - block.transactions_start();
-        let tx = from_recovered_with_block_context(tx.into(), block.hash(), block.number(), index);
+        let pos = tx_idx - block.transactions_start();
+        let tx = self.build_tx_with_maybe_effective_gas_price(
+            tx,
+            block.hash(),
+            block.number(),
+            block.maybe_partial_header().base_fee_per_gas,
+            pos as usize,
+            tx_idx,
+            state,
+        );
         Some(tx)
     }
 
@@ -299,7 +344,24 @@ where
         let tx = self.transaction(number, state)?;
         let block = self.get_maybe_sealed_block(tx.block_number, state)?;
         let (receipt, time) = self.receipt(number, state)?;
-        Some(build_rpc_receipt(block, tx, number, receipt, time))
+        let fee_paid = self.receipt_fee(number, state);
+        Some(build_rpc_receipt(
+            &block, tx, number, receipt, time, fee_paid,
+        ))
+    }
+
+    fn get_receipt_by_index_in_block(
+        &self,
+        number: u64,
+        block: &MaybeSealedBlock,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
+        let tx = self.transaction(number, state)?;
+        let (receipt, time) = self.receipt(number, state)?;
+        let fee_paid = self.receipt_fee(number, state);
+        Some(build_rpc_receipt(
+            block, tx, number, receipt, time, fee_paid,
+        ))
     }
 
     fn get_receipts(
@@ -314,13 +376,14 @@ where
         let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
             return Ok(None);
         };
-        let Some(receipts) = block
-            .tx_range()
-            .map(|index| self.get_receipt_by_index(index, state))
-            .collect::<Option<Vec<_>>>()
-        else {
-            return Ok(None);
-        };
+        let mut receipts =
+            Vec::with_capacity((block.transactions_end() - block.transactions_start()) as usize);
+        for index in block.tx_range() {
+            let Some(receipt) = self.get_receipt_by_index_in_block(index, &block, state) else {
+                return Ok(None);
+            };
+            receipts.push(receipt);
+        }
         Ok(Some(receipts))
     }
 
@@ -369,18 +432,27 @@ where
         None
     }
 
+    fn finalized_block_number(&self, state: &mut ApiStateAccessor<S>) -> u64 {
+        let mut archival = state
+            .build_finalized_state()
+            .expect("Bug: wrong slot number has been passed");
+        *self.block_numbers(&mut archival).end()
+    }
+
     fn block_tag_to_pending_or_block(
         &self,
         block: BlockNumberOrTag,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
-        let block_numbers = self.block_numbers(state);
         match block {
-            BlockNumberOrTag::Earliest => PendingOrBlock::Number(*block_numbers.start()),
+            BlockNumberOrTag::Earliest => {
+                let block_numbers = self.block_numbers(state);
+                PendingOrBlock::Number(*block_numbers.start())
+            }
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => PendingOrBlock::Pending,
             BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-                PendingOrBlock::Number(*block_numbers.end())
+                PendingOrBlock::Number(self.finalized_block_number(state))
             }
             BlockNumberOrTag::Number(number) => PendingOrBlock::Number(number),
         }
@@ -414,6 +486,7 @@ where
     }
 
     /// Converts BlockNumberOrTag into number.
+    /// Can panic if passed ApiStateAccessor has been constructed with wrong finalized_slot_height.
     pub fn resolve_block_number(
         &self,
         block: BlockNumberOrTag,
@@ -422,7 +495,9 @@ where
         let block_numbers = self.block_numbers(state);
         let block_number = match block {
             BlockNumberOrTag::Earliest => *block_numbers.start(),
-            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => *block_numbers.end(),
+            BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+                self.finalized_block_number(state)
+            }
             BlockNumberOrTag::Number(nr) => nr,
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
@@ -437,6 +512,7 @@ where
     }
 
     /// Retrieve a block by its id.
+    /// Can panic if passed ApiStateAccessor has been constructed with wrong finalized_slot_height.
     pub fn get_maybe_sealed_block_by_id(
         &self,
         block_id: BlockId,
@@ -729,12 +805,11 @@ where
             .get_maybe_sealed_block_by_id(block_id, state)?
             .ok_or(EthApiError::UnknownBlock)?;
 
-        let mut block_env = match maybe_block {
+        let block_env = match maybe_block {
             MaybeSealedBlock::PendingSynthetic(_) => self.block_env(state).unwrap_infallible(),
             MaybeSealedBlock::Sealed(sealed_block) => BlockEnv::from(sealed_block),
             MaybeSealedBlock::PastSynthetic(synthetic_block) => BlockEnv::from(synthetic_block),
         };
-        block_env.basefee = 0;
         Ok(block_env)
     }
 }
@@ -752,13 +827,27 @@ fn get_cfg_env_template() -> CfgEnv {
     cfg_env
 }
 
+fn maybe_actual_effective_gas_price(
+    block_number: u64,
+    gas_used: u64,
+    fee_paid: Option<Amount>,
+) -> Option<u128> {
+    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+    if block_number <= apply_actual_fee_after_height || gas_used == 0 {
+        return None;
+    }
+
+    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+}
+
 // modified from: https://github.com/paradigmxyz/reth many times
 pub(crate) fn build_rpc_receipt(
-    block: MaybeSealedBlock,
+    block: &MaybeSealedBlock,
     tx: TxSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,
     time: Time,
+    fee_paid: Option<Amount>,
 ) -> TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>> {
     let transaction: Recovered<TransactionSigned> = tx.into();
     let from = transaction.signer();
@@ -808,9 +897,16 @@ pub(crate) fn build_rpc_receipt(
     //   priority_fee_per_gas = min(transaction.max_priority_fee_per_gas,
     //                              transaction.max_fee_per_gas - block.base_fee_per_gas)
     //   effective_gas_price = priority_fee_per_gas + block.base_fee_per_gas
-    let effective_gas_price = transaction
+    let eip_1559_effective_gas_price = transaction
         .inner()
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
+
+    // Once activated, prefer the fee paid in the Sovereign gas meter when available.
+    // This keeps receipt fee semantics aligned with balance deltas.
+    let effective_gas_price =
+        maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
+            // Keep compatibility for historical data where metadata may be missing.
+            .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),

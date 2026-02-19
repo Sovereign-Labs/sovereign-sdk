@@ -111,7 +111,7 @@ Source: `crates/full-node/sov-ethereum/src/lib.rs`.
 Source: `crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs`.
 
 - `latest` and `pending` are treated as the same tag when resolving blocks (both map to the pending head).
-- `finalized` and `safe` map to the current head block; `earliest` maps to the first stored block.
+- `finalized` and `safe` map to the latest finalized block (may lag head when `finalization_blocks > 0`); `earliest` maps to the first stored block.
 - State reads for `latest`/`pending` resolve via the current state accessor (no pending block replay).
 - Methods accepting `BlockId` also accept EIP-1898 `{"blockHash": ..., "requireCanonical": ...}`; `requireCanonical` is ignored.
 

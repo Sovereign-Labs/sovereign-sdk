@@ -1,6 +1,4 @@
 use derive_new::new;
-use sov_rollup_interface::common::HexHash;
-use sov_rollup_interface::stf::ExecutionContext;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -243,17 +241,27 @@ impl StateMetrics {
 }
 
 /// Metrics for `auth_and_process_tx`, and the tx hash
-#[derive(Debug)]
 pub struct AuthAndProcessMetrics {
     /// The transaction hash
-    pub tx_hash: HexHash,
+    pub tx_hash: [u8; 32],
     /// The metrics.
     pub timings: AuthAndProcessTimings,
 }
 
+impl std::fmt::Debug for AuthAndProcessMetrics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tx_hash_hex = hex::encode(self.tx_hash);
+        write!(
+            f,
+            "AuthAndProcessMetrics {{ tx_hash: 0x{tx_hash_hex}, timings: {:?} }}",
+            self.timings
+        )
+    }
+}
+
 impl AuthAndProcessMetrics {
     /// Creates a new `AuthAndProcessMetrics` instance.
-    pub fn new(tx_hash: HexHash, timings: AuthAndProcessTimings) -> Self {
+    pub fn new(tx_hash: [u8; 32], timings: AuthAndProcessTimings) -> Self {
         Self { tx_hash, timings }
     }
 }
@@ -283,7 +291,7 @@ impl Metric for AuthAndProcessMetrics {
 
         write!(
             buffer,
-            "{metric_name},context={:?} ",
+            "{metric_name},context={} ",
             self.timings.execution_context
         )?;
         for (i, (field, timer)) in fields.iter().enumerate() {
@@ -334,12 +342,12 @@ pub struct AuthAndProcessTimings {
     /// State Accesses performed while rewarding the prover.
     pub reward_prover_access_metrics: StateMetrics,
     /// The execution context for the transaction.
-    pub execution_context: ExecutionContext,
+    pub execution_context: &'static str,
 }
 
 impl AuthAndProcessTimings {
     /// Creates a new `AuthAndProcessTimings` instance.
-    pub fn new_with_defaults(execution_context: ExecutionContext) -> Self {
+    pub fn new_with_defaults(execution_context: &'static str) -> Self {
         Self {
             auth: MaybeTimer::default(),
             total_timer: MaybeTimer::default(),

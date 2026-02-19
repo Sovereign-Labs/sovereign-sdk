@@ -155,7 +155,6 @@ where
             preferred_config.batch_execution_time_limit_millis * 1000;
         let (synchronized_state, synchronized_state_updator) = create(
             seq_role,
-            api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
             batch_execution_time_limit_micros,
@@ -183,6 +182,7 @@ where
             blob_sender,
             executor_events_receiver,
             db,
+            api_ledger_db,
             shutdown_sender: shutdown_sender.clone(),
             transaction_cache: cached_txs.write_handle(),
         }
@@ -283,6 +283,8 @@ where
                 "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
             );
         let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        // Preferred sequencer deliberately treats the latest available slot as finalized
+        // when initializing API state (soft-confirmation semantics).
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
         let (checkpoint_sender, checkpoint_receiver) =
             watch::channel(Arc::new(concurrent_checkpoint));

@@ -1,3 +1,26 @@
+# 2026-02-17
+- #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
+  You can use `SOV_CELESTIA_RPC_URL` for setup.
+- #2495 Updates examples configs
+
+# 2026-02-09
+- #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+- #2458 **Infra only breaking change**: for EVM rollups only: added new constant `EVM_RECEIPT_ACTUAL_FEE_HEIGHT` that should be set to 0 for new rollups, or some future height for existing rollups.
+
+# 2026-01-29
+- #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
+# 2026-02-10
+- #2462 EVM: Include `base_fee` in Transaction RPC response.
+# 2026-02-12
+- #2476 EVM: Fix `eth_getBlockByNumber` to return correct the same block as `eth_getBlockByNumnber(latest)` for RPC cross endpoint consistency
+- #2463 **Breaking change**: EVM now returns actual non-zero value for BASEFEE opcode.
+  Any EVM rollup that had transactions that relied on this opcode will have consensus breaking change.
+
+# 2026-02-09
+- #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+# 2026-02-03
+- #2391 EVM: Add RPC compatibility tests for eth_getBlockByNumber and eth_getBlockByHash
+- #2433 Updates tests in sov-demo-rollup.
 # 2026-02-02
 - #2360 **Breaking change**: sequencing data is now handled via rollup capabilities, replacing the sequencer-submitted timing-oracle transactions. Runtimes must implement `SequencingDataHandler` (or use `StandardProvenRollupCapabilities`, which now requires the `chain_state` module) and provide a sequencing-data type. Chain state now stores oracle time in nanoseconds (`oracle_time_nanos`) and derives millis via `get_oracle_time`; legacy `oracle_time` remains for layout compatibility but is no longer updated. Oracle time updates only from the preferred sequencer’s sequencing data.
 - #2421 **Added**: Configuration options `user_page_cache_upper_levels` and `kernel_page_cache_upper_levels` to `RollupDbConfig` for tuning NOMT storage performance on high-RAM machines.
@@ -17,6 +40,7 @@
 
 # 2026-01-24
 - #2397: ***Breaking Change*** adds `Sync` bound on module event types. Major rework of "pending" block handling. Now we treat each new EVM transaction as creating a new head block (rather than a pending block) and then getting reorged when the next tx is added. 
+- #2395: Adds tests for `eth_getTransactionCount`
 
 # 2026-01-20
 - #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
