@@ -3,16 +3,22 @@ use std::collections::HashSet;
 use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::time::Duration;
 
-use crate::test_helpers::test_genesis_source;
+use crate::test_helpers::{
+    build_transfer_token_tx_with_generation, test_genesis_source, DemoRollupSpec,
+};
 use anyhow::Context;
 use futures::StreamExt;
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
+use sov_bank::config_gas_token_id;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::{BlockProducingConfig, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::OperatingMode;
+use sov_modules_api::{CryptoSpec, OperatingMode, PrivateKey, PublicKey, Spec};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
 use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -20,8 +26,8 @@ use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::logging::LogCollector;
-use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
-use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
+use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, StoragePath, TestRollup};
+use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, registry, EnvFilter, Layer};
@@ -31,9 +37,32 @@ generate_operator_runtime_with_kernel!(
     TestRuntime <=
 );
 
-const ROLLUP_START_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-const ROLLUP_SHUTDOWN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
-const FULL_TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+const ROLLUP_START_TIMEOUT: Duration = Duration::from_secs(10);
+const ROLLUP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
+const FULL_TEST_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// Builds predefined sleep durations spanning the full range relative to block time.
+///
+/// Categories cover: early startup, just before/at/after block production,
+/// and multi-block territory — ensuring restarts happen at every interesting phase.
+fn predefined_sleep_durations(block_time_ms: u64) -> Vec<Duration> {
+    let bt = block_time_ms as i64;
+    [
+        30,           // barely started — initialization phase
+        100,          // early startup — components initializing
+        300,          // mid-startup — close to first block
+        bt - 30,      // just before block production (420ms)
+        bt,           // exactly at block production time (450ms)
+        bt + 30,      // just after block production (480ms)
+        500,          // first block likely done
+        800,          // several blocks worth
+        bt * 2,       // two full block cycles (900ms)
+        bt * 3 + 100, // well into multi-block territory (1450ms)
+    ]
+    .into_iter()
+    .map(|ms| Duration::from_millis(ms.max(10) as u64))
+    .collect()
+}
 
 fn initialize_logging_for_restart(collector: LogCollector, with_stdout: bool) {
     let subscriber = registry().with(collector);
@@ -60,10 +89,14 @@ fn initialize_logging_for_restart(collector: LogCollector, with_stdout: bool) {
 /// Starts a TestNode, lets it run for some time and then shuts it down.
 /// Repeats that several times.
 /// Rollup and MockDa data are preserved between restarts.
+///
+/// Uses predefined sleep durations relative to block time and a seeded RNG
+/// for reproducible shuffling. Log the seed so failures can be reproduced.
 async fn start_stop_empty(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
     rollup_prover_config: RollupProverConfig<Risc0>,
+    seed: u64,
 ) -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     let new_env_filter = EnvFilter::from_str("debug,jmt=warn")?;
@@ -71,15 +104,31 @@ async fn start_stop_empty(
     let subscriber = registry().with(fmt_layer).with(collector.clone());
     subscriber.init();
 
+    tracing::info!(seed, "Starting start_stop_empty with seed");
+
     let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
-    let restarts = 50;
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(seed);
+    let base_durations = predefined_sleep_durations(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
 
-    let sleep_durations: Vec<std::time::Duration> = (0..restarts)
-        .map(|_| std::time::Duration::from_millis(rng.gen_range(80..=300)))
+    // Repeat each duration 5x (10 categories * 5 = 50 restarts) and shuffle with jitter
+    let multiplier = 5;
+    let mut sleep_durations: Vec<Duration> = base_durations
+        .iter()
+        .flat_map(|d| std::iter::repeat_n(*d, multiplier))
+        .map(|d| {
+            let jitter_ms = rng.gen_range(-15i64..=15);
+            let ms = d.as_millis() as i64 + jitter_ms;
+            Duration::from_millis(ms.max(10) as u64)
+        })
         .collect();
+    sleep_durations.shuffle(&mut rng);
 
-    for sleep_duration in sleep_durations {
+    for (i, sleep_duration) in sleep_durations.iter().enumerate() {
+        tracing::info!(
+            restart = i,
+            sleep_ms = sleep_duration.as_millis() as u64,
+            "Restart iteration"
+        );
         let test_rollup = tokio::time::timeout(
             ROLLUP_START_TIMEOUT,
             RollupBuilder::<MockDemoRollup<Native>>::new(
@@ -104,7 +153,7 @@ async fn start_stop_empty(
         .context("Starting rollup failed")??;
 
         // Let rollup run for some time
-        tokio::time::sleep(sleep_duration).await;
+        tokio::time::sleep(*sleep_duration).await;
 
         tracing::info!("Triggering shutdown....");
         tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
@@ -140,44 +189,212 @@ async fn start_stop_empty(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_start_stop_zk_instant_finality() -> anyhow::Result<()> {
-    start_stop_empty(OperatingMode::Zk, 0, RollupProverConfig::Skip).await?;
-    // if can_execute_zk_guest() {
-    //     start_stop_empty(OperatingMode::Zk, 0, RollupProverConfig::Execute).await?;
-    // }
+    for seed in [42, 1337] {
+        start_stop_empty(OperatingMode::Zk, 0, RollupProverConfig::Skip, seed).await?;
+    }
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_start_stop_zk_non_instant_finality() -> anyhow::Result<()> {
-    start_stop_empty(OperatingMode::Zk, 3, RollupProverConfig::Skip).await?;
-    // if can_execute_zk_guest() {
-    //     start_stop_empty(OperatingMode::Zk, 3, RollupProverConfig::Execute).await?;
-    // }
+    for seed in [42, 1337] {
+        start_stop_empty(OperatingMode::Zk, 3, RollupProverConfig::Skip, seed).await?;
+    }
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_start_stop_optimistic_instant_finality() -> anyhow::Result<()> {
-    start_stop_empty(OperatingMode::Optimistic, 0, RollupProverConfig::Skip).await?;
-    // if can_execute_zk_guest() {
-    //     start_stop_empty(OperatingMode::Optimistic, 0, RollupProverConfig::Execute).await?;
-    // }
+    for seed in [42, 1337] {
+        start_stop_empty(OperatingMode::Optimistic, 0, RollupProverConfig::Skip, seed).await?;
+    }
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_start_stop_optimistic_non_instant_finality() -> anyhow::Result<()> {
-    start_stop_empty(OperatingMode::Optimistic, 3, RollupProverConfig::Skip).await?;
-    // if can_execute_zk_guest() {
-    //     start_stop_empty(OperatingMode::Optimistic, 3, RollupProverConfig::Execute).await?;
-    // }
+    for seed in [42, 1337] {
+        start_stop_empty(OperatingMode::Optimistic, 3, RollupProverConfig::Skip, seed).await?;
+    }
     Ok(())
 }
 
-// fn can_execute_zk_guest() -> bool {
-//     let skip_guest_build = std::env::var("SKIP_GUEST_BUILD").unwrap_or_default();
-//     matches!(skip_guest_build.to_lowercase().as_str(), "" | "0" | "false")
-// }
+/// Like `start_stop_empty`, but sends transactions in the background while
+/// the rollup runs, testing restart behavior under load.
+///
+/// Uses fewer restarts (3x multiplier = 30) since each iteration does more work.
+async fn start_stop_under_load(
+    operation_mode: OperatingMode,
+    finalization_blocks: u32,
+    rollup_prover_config: RollupProverConfig<Risc0>,
+    seed: u64,
+) -> anyhow::Result<()> {
+    let collector = LogCollector::new(Level::WARN);
+    let new_env_filter = EnvFilter::from_str("debug,jmt=warn")?;
+    let fmt_layer = fmt::layer().with_filter(new_env_filter);
+    let subscriber = registry().with(fmt_layer).with(collector.clone());
+    subscriber.init();
+
+    tracing::info!(seed, "Starting start_stop_under_load with seed");
+
+    let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let base_durations = predefined_sleep_durations(TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
+
+    // Repeat each duration 3x (10 categories * 3 = 30 restarts)
+    let multiplier = 3;
+    let mut sleep_durations: Vec<Duration> = base_durations
+        .iter()
+        .flat_map(|d| std::iter::repeat_n(*d, multiplier))
+        .map(|d| {
+            let jitter_ms = rng.gen_range(-15i64..=15);
+            let ms = d.as_millis() as i64 + jitter_ms;
+            Duration::from_millis(ms.max(10) as u64)
+        })
+        .collect();
+    sleep_durations.shuffle(&mut rng);
+
+    let key_and_address = read_private_key::<DemoRollupSpec>("tx_signer_private_key.json");
+    let receiver_addr: <DemoRollupSpec as Spec>::Address = {
+        let pk = <<DemoRollupSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+        pk.pub_key().credential_id().into()
+    };
+    let token_id = config_gas_token_id();
+
+    let mut generation: u64 = 0;
+
+    for (i, sleep_duration) in sleep_durations.iter().enumerate() {
+        tracing::info!(
+            restart = i,
+            sleep_ms = sleep_duration.as_millis() as u64,
+            "Under-load restart iteration"
+        );
+        let test_rollup = tokio::time::timeout(
+            ROLLUP_START_TIMEOUT,
+            RollupBuilder::<MockDemoRollup<Native>>::new(
+                test_genesis_source(operation_mode),
+                TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+                finalization_blocks,
+            )
+            .with_zkvm_host_args(mock_da_risc0_host_args())
+            .set_config(|c| {
+                c.max_concurrent_blobs = 65536;
+                c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
+                c.rollup_prover_config = Some(rollup_prover_config.clone());
+                if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
+                    sequencer_conf.disable_state_root_consistency_checks = true;
+                }
+                c.aggregated_proof_block_jump = 10;
+            })
+            .set_persistent_da()
+            .start(),
+        )
+        .await
+        .context("Starting rollup failed")??;
+
+        // Wait for the sequencer to be ready before sending transactions
+        test_rollup.wait_for_sequencer_ready().await?;
+
+        // Spawn background task sending transactions every 50ms
+        let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+        let api_client = test_rollup.client.client.clone();
+        let sender_key = key_and_address.private_key.clone();
+        let sender_receiver = receiver_addr;
+        let start_generation = generation;
+        let tx_sender = tokio::spawn(async move {
+            let mut count = 0u64;
+            loop {
+                tokio::select! {
+                    _ = &mut cancel_rx => break,
+                    _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+                }
+
+                let tx = build_transfer_token_tx_with_generation::<DemoRollupSpec>(
+                    &sender_key,
+                    token_id,
+                    sender_receiver,
+                    100,
+                    start_generation + count,
+                );
+
+                // Errors are expected during shutdown — ignore them
+                let _ = api_client.send_tx_to_sequencer(&tx).await;
+                count += 1;
+            }
+            count
+        });
+
+        // Let rollup run under load for some time
+        tokio::time::sleep(*sleep_duration).await;
+
+        // Cancel the tx sender before shutting down
+        let _ = cancel_tx.send(());
+        let txs_sent = tx_sender.await.context("tx sender task panicked")?;
+        generation += txs_sent;
+
+        tracing::info!(restart = i, txs_sent, "Triggering shutdown under load....");
+        tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
+    }
+
+    let known = [
+        // https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1878:
+        (
+            Level::ERROR,
+            "Invalid proof outcome".to_string(),
+        ),
+        (
+            Level::WARN,
+            "Received error updating target height, stopping background task".to_string()
+        ),
+        // The node gets out of sync during the restart
+        (
+            Level::WARN,
+            "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.".to_string()
+        ),
+        (Level::WARN, "Skipping pruning of sequence number because it's already been pruned".to_string()),
+        (Level::WARN, "The node is unsynced and doesn't know it. This probably means that you wiped the node DB and are resyncing.".to_string()),
+        (Level::WARN, "Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string()),
+    ];
+
+    let mut recorded_errors_warnings =
+        HashSet::<(Level, String)>::from_iter(collector.records().iter().cloned());
+    recorded_errors_warnings.retain(|e| !known.contains(e));
+    // We could've checked `.is_empty`, but in case of failure, we will see errors immediately.
+    assert_eq!(HashSet::<(Level, String)>::new(), recorded_errors_warnings);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn flaky_test_start_stop_under_load_zk_instant_finality() -> anyhow::Result<()> {
+    for seed in [42, 1337] {
+        start_stop_under_load(OperatingMode::Zk, 0, RollupProverConfig::Skip, seed).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn flaky_test_start_stop_under_load_zk_non_instant_finality() -> anyhow::Result<()> {
+    for seed in [42, 1337] {
+        start_stop_under_load(OperatingMode::Zk, 3, RollupProverConfig::Skip, seed).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn flaky_test_start_stop_under_load_optimistic_instant_finality() -> anyhow::Result<()> {
+    for seed in [42, 1337] {
+        start_stop_under_load(OperatingMode::Optimistic, 0, RollupProverConfig::Skip, seed).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn flaky_test_start_stop_under_load_optimistic_non_instant_finality() -> anyhow::Result<()> {
+    for seed in [42, 1337] {
+        start_stop_under_load(OperatingMode::Optimistic, 3, RollupProverConfig::Skip, seed).await?;
+    }
+    Ok(())
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_start_prover_manual() -> anyhow::Result<()> {
