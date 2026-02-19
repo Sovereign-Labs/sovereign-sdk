@@ -572,6 +572,9 @@ pub trait LedgerStateProvider {
     /// Get the most recent aggregated proof, if any.
     async fn get_latest_aggregated_proof(&self) -> anyhow::Result<Option<AggregatedProofResponse>>;
 
+    /// Get the total event count per event key.
+    async fn get_event_key_counts(&self) -> Result<Vec<(String, u64)>, Self::Error>;
+
     /// Get a notification each time a slot is processed
     fn subscribe_slots(&self) -> BoxStream<'static, SlotNumber>;
 
