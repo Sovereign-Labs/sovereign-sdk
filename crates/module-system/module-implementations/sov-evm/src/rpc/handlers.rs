@@ -265,8 +265,8 @@ where
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
-        _state_overrides: Option<StateOverride>,
-        _block_overrides: Option<Box<BlockOverrides>>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         trace!(
@@ -274,7 +274,9 @@ where
             ?block_id,
             "EVM module JSON-RPC request"
         );
-        let result = self.call(request, block_id, state)?.result;
+        let result = self
+            .call(request, block_id, state_overrides, block_overrides, state)?
+            .result;
         Ok(ensure_success(result)?)
     }
 
@@ -310,7 +312,7 @@ where
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_id, state)?;
+        } = self.call(request, block_id, None, None, state)?;
 
         let (gas_used, logs) = match result {
             ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),

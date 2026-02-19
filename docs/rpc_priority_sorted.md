@@ -99,8 +99,8 @@
    Minimal repro: run with `finalization_blocks > 0`, compare `safe` vs `finalized`; L1 allows `safe` to be ahead of `finalized`.
 5. `eth_gasPrice` and `eth_maxPriorityFeePerGas` always return 0 [crates/full-node/sov-ethereum/src/lib.rs:122] [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:414].  
    Minimal repro: call both endpoints; L1 typically returns non-zero.
-6. `eth_call` ignores `state_overrides` and `block_overrides` [crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs:268].  
-   Minimal repro: pass overrides that would change state; expect no effect.
+6. `eth_estimateGas` does not accept `state_overrides`/`block_overrides` parameters (unlike clients that support optional call overrides there).  
+   Minimal repro: send override params to `eth_estimateGas`; request shape is rejected at parameter parsing.
 7. Synthetic block state cache can grow quickly under high pending-tx churn (one accessor clone per synthetic hash; prune window is block-distance based, not count-based) [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:41] [crates/module-system/module-implementations/sov-evm/src/rpc/mod.rs:69].  
    Operational risk: transient memory spikes during sustained high tx-rate bursts and frequent pending-hash queries/subscriptions.
 

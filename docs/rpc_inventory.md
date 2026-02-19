@@ -35,7 +35,7 @@ Source: `crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs
 | `eth_getTransactionByHash` | implemented | Looks up sealed or pending txs in accessory state. |
 | `eth_getBlockReceipts` | implemented | Receipts by block. |
 | `eth_getTransactionReceipt` | implemented | Receipt by tx hash. |
-| `eth_call` | implemented | Block-tagged call; `state_overrides` and `block_overrides` ignored. |
+| `eth_call` | implemented | Block-tagged call; supports `state_overrides` and `block_overrides`. |
 | `eth_blockNumber` | implemented | Returns latest sealed block number. |
 | `eth_estimateGas` | implemented | Block-tagged estimation with safety margin. |
 | `debug_traceBlockByNumber` | implemented | Geth tracing; only `callTracer` supported. |
