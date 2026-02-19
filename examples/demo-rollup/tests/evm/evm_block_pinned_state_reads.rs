@@ -8,16 +8,15 @@
 use crate::evm::evm_test_helper::{
     deploy_contract_check, set_value_check, setup_with_simple_storage, EVM_EXTENSION,
 };
-use alloy_primitives::{Address, Bytes, B256, U256, U64};
+use alloy_primitives::{Address, Bytes, TxHash, B256, U256, U64};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde::Serialize;
 use serde_json::json;
+use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
-
-// =========================================================================
-// Helpers: block-pinned JSON-RPC queries
-// =========================================================================
+use sov_modules_api::execution_mode::Native;
+use sov_test_utils::test_rollup::TestRollup;
 
 async fn nonce_at(client: &SimpleStorageClient, address: Address, block: impl Serialize) -> u64 {
     let count: U64 = client
@@ -103,28 +102,71 @@ fn assert_pause_window_height(observed: u64, head_before_pause: u64) {
     );
 }
 
-// =========================================================================
-// Tests
-// =========================================================================
+async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
+    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    (rollup, client)
+}
+
+async fn sealed_head_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
+    let head_number = client.block_number().await;
+    let head_hash = client
+        .eth_get_block_by_number(Some(number_selector(head_number)))
+        .await
+        .header
+        .hash;
+    (head_number, head_hash)
+}
+
+async fn finalized_head_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
+    let finalized_block = client
+        .eth_get_block_by_number(Some("finalized".to_string()))
+        .await;
+    (finalized_block.header.number, finalized_block.header.hash)
+}
+
+async fn assert_pause_effect(
+    client: &SimpleStorageClient,
+    head_before_pause: u64,
+    finalized_head_before_pause: (u64, B256),
+) {
+    assert_pause_window_height(client.block_number().await, head_before_pause);
+    let finalized_after = finalized_head_number_and_hash(client).await;
+    assert_eq!(
+        finalized_after.0, finalized_head_before_pause.0,
+        "Finalized head number should not change while batches are paused"
+    );
+    assert_eq!(
+        finalized_after.1, finalized_head_before_pause.1,
+        "Finalized head hash should not change while batches are paused"
+    );
+}
+
+async fn wait_for_pending_tx(
+    client: &SimpleStorageClient,
+    tx_hash: TxHash,
+    head_before_pause: u64,
+    finalized_head_before_pause: (u64, B256),
+) {
+    // Sovereign currently exposes receipts for pending txs. If this changes to
+    // strict Ethereum semantics (null pending receipt), this helper must be adapted.
+    client.wait_for_receipt(tx_hash).await;
+    assert_pause_effect(client, head_before_pause, finalized_head_before_pause).await;
+}
 
 /// Block-pinned `eth_getTransactionCount` must not reflect pending nonce changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_nonce_excludes_pending() {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    let (rollup, client) = setup_rollup_and_client().await;
 
     let address = client.address();
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
-        .await;
-    let head_hash = head_block.header.hash;
+    let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
     let sealed_nonce = nonce_at(&client, address, "latest").await;
 
     rollup.pause_preferred_batches().await;
-    let _tx = client.send_eth(Address::ZERO, U256::from(0x1234)).await;
-
-    assert_pause_window_height(client.block_number().await, head_number);
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x1234)).await;
+    wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
     assert_eq!(
         nonce_at(&client, address, number_selector(head_number)).await,
@@ -152,15 +194,11 @@ async fn block_pinned_nonce_excludes_pending() {
 /// Block-pinned `eth_getBalance` must not reflect pending balance changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_balance_excludes_pending() {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    let (rollup, client) = setup_rollup_and_client().await;
 
     let receiver = Address::repeat_byte(0xBB);
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
-        .await;
-    let head_hash = head_block.header.hash;
+    let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
 
     let sealed_balance = balance_at(&client, receiver, "latest").await;
     assert_eq!(
@@ -171,8 +209,8 @@ async fn block_pinned_balance_excludes_pending() {
 
     rollup.pause_preferred_batches().await;
     let transfer_amount = U256::from(0x1_0000_0000u64);
-    let _tx = client.send_eth(receiver, transfer_amount).await;
-    assert_pause_window_height(client.block_number().await, head_number);
+    let tx_hash = client.send_eth(receiver, transfer_amount).await;
+    wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
     assert_eq!(
         balance_at(&client, receiver, number_selector(head_number)).await,
@@ -200,20 +238,16 @@ async fn block_pinned_balance_excludes_pending() {
 /// Block-pinned `eth_getCode` must not reflect pending contract deployments.
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_code_excludes_pending() {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    let (rollup, client) = setup_rollup_and_client().await;
 
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
-        .await;
-    let head_hash = head_block.header.hash;
+    let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
 
     rollup.pause_preferred_batches().await;
     let deploy_tx = client.deploy_contract().await.unwrap();
     let receipt = client.wait_for_receipt(deploy_tx).await;
+    assert_pause_effect(&client, head_number, finalized_head_before_pause).await;
     let contract_address = receipt.contract_address.unwrap();
-    assert_pause_window_height(client.block_number().await, head_number);
 
     assert!(
         code_at(&client, contract_address, number_selector(head_number))
@@ -245,8 +279,7 @@ async fn block_pinned_code_excludes_pending() {
 /// Block-pinned `eth_getStorageAt` must not reflect pending storage changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_storage_excludes_pending() {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    let (rollup, client) = setup_rollup_and_client().await;
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     let initial_value = 0x1234u32;
@@ -255,16 +288,13 @@ async fn block_pinned_storage_excludes_pending() {
         .unwrap();
     rollup.wait_for_next_blocks(1).await;
 
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
-        .await;
-    let head_hash = head_block.header.hash;
+    let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
 
     rollup.pause_preferred_batches().await;
     let new_value = 0x5678u32;
-    let _tx = client.set_value(contract_addr, new_value).await;
-    assert_pause_window_height(client.block_number().await, head_number);
+    let tx_hash = client.set_value(contract_addr, new_value).await;
+    wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
     assert_eq!(
         storage_at(
@@ -298,8 +328,7 @@ async fn block_pinned_storage_excludes_pending() {
 /// Block-pinned `eth_call` must not reflect pending state changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_eth_call_excludes_pending() {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    let (rollup, client) = setup_rollup_and_client().await;
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     let initial_value = 0x1234u32;
@@ -308,18 +337,15 @@ async fn block_pinned_eth_call_excludes_pending() {
         .unwrap();
     rollup.wait_for_next_blocks(1).await;
 
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
-        .await;
-    let head_hash = head_block.header.hash;
+    let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
 
     let get_tx = client.make_tx(Some(contract_addr), Some(client.contract.get()));
 
     rollup.pause_preferred_batches().await;
     let new_value = 0x5678u32;
-    let _tx = client.set_value(contract_addr, new_value).await;
-    assert_pause_window_height(client.block_number().await, head_number);
+    let tx_hash = client.set_value(contract_addr, new_value).await;
+    wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, number_selector(head_number)).await),
@@ -347,17 +373,13 @@ async fn block_pinned_eth_call_excludes_pending() {
 /// Block-pinned `eth_estimateGas` must not reflect pending state changes.
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_estimate_gas_excludes_pending() {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    let (rollup, client) = setup_rollup_and_client().await;
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     rollup.wait_for_next_blocks(1).await;
 
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
-        .await;
-    let head_hash = head_block.header.hash;
+    let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
 
     // Baseline at sealed state (slot is still zero): set(non-zero) pays higher SSTORE cost.
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
@@ -375,8 +397,8 @@ async fn block_pinned_estimate_gas_excludes_pending() {
 
     rollup.pause_preferred_batches().await;
     // Pending mutation makes slot non-zero in current state, lowering cost for the same call.
-    let _tx = client.set_value(contract_addr, 0x1234).await;
-    assert_pause_window_height(client.block_number().await, head_number);
+    let tx_hash = client.set_value(contract_addr, 0x1234).await;
+    wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
     assert_eq!(
         estimate_gas_at(&client, &set_tx, number_selector(head_number)).await,
