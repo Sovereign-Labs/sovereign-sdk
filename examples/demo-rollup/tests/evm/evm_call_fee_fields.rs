@@ -11,6 +11,7 @@ use crate::evm::evm_test_helper::{
 const GAS_LIMIT: u64 = 21_000;
 const NONZERO_FEE_PER_GAS: u128 = 1_000_000_000;
 const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
+const GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR: &str = "gas required exceeds allowance";
 
 fn unfunded_caller() -> Address {
     Address::from([0x11; 20])
@@ -74,6 +75,70 @@ async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()>
         .await;
     let err = result.expect_err("eth_call should fail for unfunded caller when gasPrice is set");
     assert_insufficient_funds_error(err);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_fee() -> anyhow::Result<()> {
+    let client = setup_client().await;
+
+    let caller = unfunded_caller();
+    assert_unfunded_caller(&client, caller).await?;
+
+    let request = TransactionRequest {
+        from: Some(caller),
+        to: Some(TxKind::Call(Address::ZERO)),
+        max_fee_per_gas: Some(NONZERO_FEE_PER_GAS),
+        max_priority_fee_per_gas: Some(1),
+        value: Some(U256::ZERO),
+        ..Default::default()
+    };
+
+    let result: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+    let err = result.expect_err(
+        "eth_estimateGas should fail for unfunded caller when maxFeePerGas is set and gas is omitted",
+    );
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR),
+        "unexpected error: {err_msg}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_gas_price(
+) -> anyhow::Result<()> {
+    let client = setup_client().await;
+
+    let caller = unfunded_caller();
+    assert_unfunded_caller(&client, caller).await?;
+
+    let request = TransactionRequest {
+        from: Some(caller),
+        to: Some(TxKind::Call(Address::ZERO)),
+        gas_price: Some(NONZERO_FEE_PER_GAS),
+        value: Some(U256::ZERO),
+        ..Default::default()
+    };
+
+    let result: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+    let err = result.expect_err(
+        "eth_estimateGas should fail for unfunded caller when gasPrice is set and gas is omitted",
+    );
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR),
+        "unexpected error: {err_msg}"
+    );
 
     Ok(())
 }

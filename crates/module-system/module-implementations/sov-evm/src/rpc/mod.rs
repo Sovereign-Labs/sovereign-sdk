@@ -124,6 +124,7 @@ pub enum PendingOrBlock {
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
+const MIN_TRANSACTION_GAS: u64 = 21_000;
 /// gas * 1.5 + 100_000
 pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
@@ -163,12 +164,20 @@ fn call_upfront_cost(
                 block_env.gas_limit
             } else {
                 // When gas is omitted, cap by what the caller can actually afford instead of
-                // requiring balance for the full block gas limit.
+                // requiring balance for the full block gas limit. Still require enough
+                // allowance for intrinsic tx gas, otherwise the request is unaffordable.
                 let allowance = balance.checked_sub(value).unwrap_or_default();
                 let max_affordable_gas = allowance / U256::from(fee_per_gas);
-                max_affordable_gas
+                let gas_limit = max_affordable_gas
                     .min(U256::from(block_env.gas_limit))
-                    .to::<u64>()
+                    .to::<u64>();
+                if gas_limit < MIN_TRANSACTION_GAS {
+                    return Err(RpcInvalidTransactionError::GasRequiredExceedsAllowance {
+                        gas_limit,
+                    }
+                    .into());
+                }
+                gas_limit
             }
         }
     };
@@ -1015,7 +1024,7 @@ mod tests {
             gas_price: Some(10),
             ..Default::default()
         };
-        let balance = U256::from(1_000u64);
+        let balance = U256::from(1_000_000u64);
 
         let total_cost = call_upfront_cost(&request, &block_env, balance).unwrap();
 
@@ -1044,14 +1053,36 @@ mod tests {
         };
         let request = TransactionRequest {
             gas_price: Some(10),
-            value: Some(U256::from(900u64)),
+            value: Some(U256::from(100_000u64)),
             ..Default::default()
         };
-        let balance = U256::from(1_000u64);
+        let balance = U256::from(310_000u64);
 
         let total_cost = call_upfront_cost(&request, &block_env, balance).unwrap();
 
         assert_eq!(total_cost, Some(balance));
+    }
+
+    #[test]
+    fn call_upfront_cost_rejects_omitted_gas_when_allowance_below_intrinsic_cost() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            ..Default::default()
+        };
+        let balance = U256::from(1000u64);
+
+        let err = call_upfront_cost(&request, &block_env, balance).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::GasRequiredExceedsAllowance { gas_limit: 100 }
+            )
+        ));
     }
 
     #[test]
