@@ -15,15 +15,11 @@ use sov_modules_api::RawTx;
 use sov_test_utils::TransactionType;
 use std::collections::BTreeMap;
 
-struct TxWithHash {
-    tx: TransactionType<RT, S>,
-}
-
 fn create_deploy_tx_with_init_code(
     nonce: u64,
     account: &EvmAccount,
     init_code: Bytes,
-) -> TxWithHash {
+) -> TransactionType<RT, S> {
     let tx = TxEip1559 {
         input: init_code,
         nonce,
@@ -36,9 +32,7 @@ fn create_deploy_tx_with_init_code(
     let raw_tx = RawTx {
         data: borsh::to_vec(&signed_eth_tx).expect("RLP tx should serialize"),
     };
-    TxWithHash {
-        tx: TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
-    }
+    TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
 }
 
 fn create_init_code(runtime_code: &[u8]) -> Bytes {
@@ -122,6 +116,14 @@ fn to_b256(value: U256) -> B256 {
     B256::from(value.to_be_bytes::<32>())
 }
 
+fn call_request(from: Address, to: Address) -> TransactionRequest {
+    TransactionRequest {
+        from: Some(from),
+        to: Some(TxKind::Call(to)),
+        ..Default::default()
+    }
+}
+
 #[test]
 fn test_eth_call_state_override_code_is_applied() {
     let (runner, account, _, _) = setup();
@@ -130,11 +132,7 @@ fn test_eth_call_state_override_code_is_applied() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let request = TransactionRequest {
-            from: Some(account.address()),
-            to: Some(TxKind::Call(target)),
-            ..Default::default()
-        };
+        let request = call_request(account.address(), target);
 
         let baseline = evm
             .eth_call(request.clone(), None, None, None, state)
@@ -212,11 +210,7 @@ fn test_eth_call_rejects_state_and_state_diff_on_same_account() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let request = TransactionRequest {
-            from: Some(account.address()),
-            to: Some(TxKind::Call(target)),
-            ..Default::default()
-        };
+        let request = call_request(account.address(), target);
 
         let mut state_overrides = StateOverride::default();
         state_overrides.insert(
@@ -240,11 +234,7 @@ fn test_eth_call_rejects_block_override_base_fee_overflow() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let request = TransactionRequest {
-            from: Some(account.address()),
-            to: Some(TxKind::Call(target)),
-            ..Default::default()
-        };
+        let request = call_request(account.address(), target);
 
         let err = evm
             .eth_call(
@@ -254,6 +244,49 @@ fn test_eth_call_rejects_block_override_base_fee_overflow() {
                 Some(Box::new(BlockOverrides::default().with_base_fee(U256::MAX))),
                 state,
             )
+            .unwrap_err();
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    });
+}
+
+#[test]
+fn test_eth_call_rejects_block_override_number_overflow() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x5A);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = call_request(account.address(), target);
+
+        let err = evm
+            .eth_call(
+                request,
+                None,
+                None,
+                Some(Box::new(BlockOverrides::default().with_number(U256::MAX))),
+                state,
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    });
+}
+
+#[test]
+fn test_eth_call_rejects_move_precompile_override() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x5B);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = call_request(account.address(), target);
+
+        let mut account_override = AccountOverride::default();
+        account_override.set_move_precompile_to(Address::with_last_byte(0x11));
+        let mut state_overrides = StateOverride::default();
+        state_overrides.insert(target, account_override);
+
+        let err = evm
+            .eth_call(request, None, Some(state_overrides), None, state)
             .unwrap_err();
         assert_eq!(err.code(), INVALID_PARAMS_CODE);
     });
@@ -298,11 +331,7 @@ fn test_eth_estimate_gas_block_override_number_is_applied() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let request = TransactionRequest {
-            from: Some(account.address()),
-            to: Some(TxKind::Call(target)),
-            ..Default::default()
-        };
+        let request = call_request(account.address(), target);
 
         let mut state_overrides = StateOverride::default();
         state_overrides.insert(
@@ -346,16 +375,21 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
     let number_runtime = runtime_returning_opcode(0x43);
     let timestamp_runtime = runtime_returning_opcode(0x42);
 
-    runner.execute(
-        create_deploy_tx_with_init_code(0, &account, create_init_code(basefee_runtime.as_ref())).tx,
-    );
-    runner.execute(
-        create_deploy_tx_with_init_code(1, &account, create_init_code(number_runtime.as_ref())).tx,
-    );
-    runner.execute(
-        create_deploy_tx_with_init_code(2, &account, create_init_code(timestamp_runtime.as_ref()))
-            .tx,
-    );
+    runner.execute(create_deploy_tx_with_init_code(
+        0,
+        &account,
+        create_init_code(basefee_runtime.as_ref()),
+    ));
+    runner.execute(create_deploy_tx_with_init_code(
+        1,
+        &account,
+        create_init_code(number_runtime.as_ref()),
+    ));
+    runner.execute(create_deploy_tx_with_init_code(
+        2,
+        &account,
+        create_init_code(timestamp_runtime.as_ref()),
+    ));
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
@@ -366,11 +400,7 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
 
         let basefee_output = evm
             .eth_call(
-                TransactionRequest {
-                    from: Some(account.address()),
-                    to: Some(TxKind::Call(basefee_contract_addr)),
-                    ..Default::default()
-                },
+                call_request(account.address(), basefee_contract_addr),
                 None,
                 None,
                 Some(Box::new(block_overrides.clone())),
@@ -381,11 +411,7 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
 
         let number_output = evm
             .eth_call(
-                TransactionRequest {
-                    from: Some(account.address()),
-                    to: Some(TxKind::Call(number_contract_addr)),
-                    ..Default::default()
-                },
+                call_request(account.address(), number_contract_addr),
                 None,
                 None,
                 Some(Box::new(block_overrides.clone())),
@@ -396,11 +422,7 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
 
         let timestamp_output = evm
             .eth_call(
-                TransactionRequest {
-                    from: Some(account.address()),
-                    to: Some(TxKind::Call(timestamp_contract_addr)),
-                    ..Default::default()
-                },
+                call_request(account.address(), timestamp_contract_addr),
                 None,
                 None,
                 Some(Box::new(block_overrides)),
@@ -416,17 +438,15 @@ fn test_eth_call_block_hash_override_is_applied() {
     let (mut runner, account, _, _) = setup();
     let contract_addr = account.address().create(0);
     let runtime = runtime_returning_blockhash(0);
-    runner.execute(
-        create_deploy_tx_with_init_code(0, &account, create_init_code(runtime.as_ref())).tx,
-    );
+    runner.execute(create_deploy_tx_with_init_code(
+        0,
+        &account,
+        create_init_code(runtime.as_ref()),
+    ));
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let request = TransactionRequest {
-            from: Some(account.address()),
-            to: Some(TxKind::Call(contract_addr)),
-            ..Default::default()
-        };
+        let request = call_request(account.address(), contract_addr);
 
         let baseline = evm
             .eth_call(request.clone(), None, None, None, state)

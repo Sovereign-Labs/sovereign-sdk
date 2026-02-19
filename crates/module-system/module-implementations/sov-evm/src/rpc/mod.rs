@@ -402,20 +402,32 @@ where
         block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
         let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
         let cfg = self.cfg_infallible(state);
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+
+        if !has_overrides {
+            // Fast path for the common case where no call overrides are provided.
+            let tx_env = prepare_call_env(&block_env, request)?;
+            let caller = tx_env.caller;
+            let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+            verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            return Ok(result);
+        }
+
         let db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let mut evm_db = RevmState::builder().with_database(db).build();
-
         apply_call_overrides(
             &mut evm_db,
             &mut block_env,
             state_overrides,
             block_overrides,
         )?;
-
-        let tx_env = prepare_call_env(&block_env, request.clone())?;
+        let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
@@ -874,7 +886,10 @@ fn apply_block_overrides<DB: Database>(
         db.block_hashes.extend(block_hash);
     }
     if let Some(number) = number {
-        block_env.number = number;
+        let block_number = u64::try_from(number).map_err(|_| {
+            invalid_override_params(format!("block number overflow: {number} exceeds u64::MAX"))
+        })?;
+        block_env.number = U256::from(block_number);
     }
     if let Some(difficulty) = difficulty {
         block_env.difficulty = difficulty;
@@ -927,8 +942,14 @@ where
         code,
         state,
         state_diff,
-        move_precompile_to: _,
+        move_precompile_to,
     } = account_override;
+
+    if let Some(move_precompile_to) = move_precompile_to {
+        return Err(invalid_override_params(format!(
+            "movePrecompileToAddress is not supported: {move_precompile_to}"
+        )));
+    }
 
     let mut info = db.basic(address).map_err(Into::into)?.unwrap_or_default();
     if let Some(nonce) = nonce {
