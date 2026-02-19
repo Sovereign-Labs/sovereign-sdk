@@ -25,11 +25,6 @@ priority = 90                                                        # try to ru
 threads-required = 3
 
 [[profile.default.overrides]]
-filter = 'package(sov-sequencer) & test(/flaky_test_archival_state_is_immediately_available/)'
-priority = 95
-threads-required = 3
-
-[[profile.default.overrides]]
 filter = 'package(sov-sequencer) & test(/seq_behind_deferred_slots_count|test_no_crashes_on_resync|sequencer_back_pressure|heavy_blob_submission/)'
 test-group = 'heavy-sequencer-tests'
 threads-required = 4                                                 # Limit parallelism when these tests run
