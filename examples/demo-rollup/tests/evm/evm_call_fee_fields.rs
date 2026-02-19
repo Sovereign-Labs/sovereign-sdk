@@ -2,6 +2,7 @@ use alloy_primitives::{Address, TxKind, U256, U64};
 use alloy_rpc_types_eth::TransactionRequest;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
+use sov_eth_client::SimpleStorageClient;
 
 use crate::evm::evm_test_helper::{
     create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
@@ -9,18 +10,22 @@ use crate::evm::evm_test_helper::{
 
 const GAS_LIMIT: u64 = 21_000;
 const NONZERO_FEE_PER_GAS: u128 = 1_000_000_000;
+const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
 
 fn unfunded_caller() -> Address {
     Address::from([0x11; 20])
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()> {
+async fn setup_client() -> SimpleStorageClient {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
-    let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await
+}
 
-    let caller = unfunded_caller();
+async fn assert_unfunded_caller(
+    client: &SimpleStorageClient,
+    caller: Address,
+) -> anyhow::Result<()> {
     let balance: U256 = client
         .ws
         .request("eth_getBalance", rpc_params![caller, "latest"])
@@ -30,14 +35,37 @@ async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()>
         U256::ZERO,
         "test precondition failed: caller must start with zero balance"
     );
+    Ok(())
+}
 
-    let request = TransactionRequest {
+fn base_request(caller: Address) -> TransactionRequest {
+    TransactionRequest {
         from: Some(caller),
         to: Some(TxKind::Call(Address::ZERO)),
-        gas_price: Some(NONZERO_FEE_PER_GAS),
         gas: Some(GAS_LIMIT),
         value: Some(U256::ZERO),
         ..Default::default()
+    }
+}
+
+fn assert_insufficient_funds_error(err: impl std::fmt::Display) {
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(INSUFFICIENT_FUNDS_ERROR),
+        "unexpected error: {err_msg}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()> {
+    let client = setup_client().await;
+
+    let caller = unfunded_caller();
+    assert_unfunded_caller(&client, caller).await?;
+
+    let request = TransactionRequest {
+        gas_price: Some(NONZERO_FEE_PER_GAS),
+        ..base_request(caller)
     };
 
     let result: Result<String, _> = client
@@ -45,40 +73,22 @@ async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()>
         .request("eth_call", rpc_params![request, "latest"])
         .await;
     let err = result.expect_err("eth_call should fail for unfunded caller when gasPrice is set");
-    let err_msg = err.to_string();
-    assert!(
-        err_msg.contains("insufficient funds for gas * price + value"),
-        "unexpected error: {err_msg}"
-    );
+    assert_insufficient_funds_error(err);
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
-    let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let client = setup_client().await;
 
     let caller = unfunded_caller();
-    let balance: U256 = client
-        .ws
-        .request("eth_getBalance", rpc_params![caller, "latest"])
-        .await?;
-    assert_eq!(
-        balance,
-        U256::ZERO,
-        "test precondition failed: caller must start with zero balance"
-    );
+    assert_unfunded_caller(&client, caller).await?;
 
     let request = TransactionRequest {
-        from: Some(caller),
-        to: Some(TxKind::Call(Address::ZERO)),
         max_fee_per_gas: Some(NONZERO_FEE_PER_GAS),
         max_priority_fee_per_gas: Some(1),
-        gas: Some(GAS_LIMIT),
-        value: Some(U256::ZERO),
-        ..Default::default()
+        ..base_request(caller)
     };
 
     let result: Result<U64, _> = client
@@ -87,11 +97,7 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyh
         .await;
     let err = result
         .expect_err("eth_estimateGas should fail for unfunded caller when maxFeePerGas is set");
-    let err_msg = err.to_string();
-    assert!(
-        err_msg.contains("insufficient funds for gas * price + value"),
-        "unexpected error: {err_msg}"
-    );
+    assert_insufficient_funds_error(err);
 
     Ok(())
 }

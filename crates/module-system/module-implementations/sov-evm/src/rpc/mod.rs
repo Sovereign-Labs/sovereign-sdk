@@ -1053,4 +1053,45 @@ mod tests {
 
         assert_eq!(total_cost, Some(balance));
     }
+
+    #[test]
+    fn call_upfront_cost_rejects_conflicting_fee_fields() {
+        let request = TransactionRequest {
+            gas_price: Some(1),
+            max_fee_per_gas: Some(1),
+            ..Default::default()
+        };
+
+        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+
+        assert!(matches!(err, EthApiError::ConflictingFeeFieldsInRequest));
+    }
+
+    #[test]
+    fn call_upfront_cost_rejects_tip_above_fee_cap() {
+        let request = TransactionRequest {
+            max_fee_per_gas: Some(1),
+            max_priority_fee_per_gas: Some(2),
+            ..Default::default()
+        };
+
+        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::TipAboveFeeCap)
+        ));
+    }
+
+    #[test]
+    fn call_upfront_cost_returns_none_without_fee_fields() {
+        let total_cost = call_upfront_cost(
+            &TransactionRequest::default(),
+            &BlockEnv::default(),
+            U256::ZERO,
+        )
+        .unwrap();
+
+        assert_eq!(total_cost, None);
+    }
 }
