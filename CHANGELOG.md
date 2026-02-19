@@ -2,6 +2,7 @@
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
   You can use `SOV_CELESTIA_RPC_URL` for setup.
 - #2499 EVM: Adds more test and removes lock contention on RPC endpoint call
+- #2495 Updates examples configs
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
@@ -11,6 +12,8 @@
 - #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
 # 2026-02-10
 - #2462 EVM: Include `base_fee` in Transaction RPC response.
+# 2026-02-12
+- #2476 EVM: Fix `eth_getBlockByNumber` to return correct the same block as `eth_getBlockByNumnber(latest)` for RPC cross endpoint consistency
 - #2463 **Breaking change**: EVM now returns actual non-zero value for BASEFEE opcode.
   Any EVM rollup that had transactions that relied on this opcode will have consensus breaking change.
 

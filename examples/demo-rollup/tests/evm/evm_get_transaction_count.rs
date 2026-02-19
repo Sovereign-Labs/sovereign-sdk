@@ -11,6 +11,10 @@ use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
+use std::time::Duration;
+
+const MAX_POLL_ATTEMPTS: usize = 100;
+const POLL_INTERVAL_MS: u64 = 25;
 
 async fn setup_rollup() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     setup_rollup_with_finality(0).await
@@ -47,6 +51,13 @@ async fn nonce_at_hash(
     try_get_tx_count(client, address, selector).await.unwrap()
 }
 
+async fn finalized_block_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
+    let finalized_block = client
+        .eth_get_block_by_number(Some("finalized".to_string()))
+        .await;
+    (finalized_block.header.number, finalized_block.header.hash)
+}
+
 async fn assert_equal_nonces_for_tags(
     client: &SimpleStorageClient,
     address: Address,
@@ -73,6 +84,26 @@ async fn try_get_tx_count<P: Serialize>(
         .request("eth_getTransactionCount", rpc_params![address, block])
         .await?;
     Ok(count.to::<u64>())
+}
+
+async fn wait_for_nonce_at_tag(
+    client: &SimpleStorageClient,
+    address: Address,
+    tag: &str,
+    expected: u64,
+) -> anyhow::Result<u64> {
+    let mut last = nonce_at_tag(client, address, tag).await;
+    for _ in 0..MAX_POLL_ATTEMPTS {
+        if last == expected {
+            return Ok(last);
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+        last = nonce_at_tag(client, address, tag).await;
+    }
+
+    anyhow::bail!(
+        "Timed out waiting for nonce at tag '{tag}' to become {expected}, last observed {last}"
+    );
 }
 
 // ===========================================================================
@@ -157,7 +188,9 @@ async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     let address = client.address();
-    let head_number = client.block_number().await;
+    // In paused mode, `eth_blockNumber`/`latest` may point to pending.
+    // Use `finalized` as the sealed reference that must remain stable.
+    let (sealed_head_number, _) = finalized_block_number_and_hash(&client).await;
 
     assert_equal_nonces_for_tags(
         &client,
@@ -169,14 +202,19 @@ async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
     let latest_nonce = nonce_at_tag(&client, address, "latest").await;
 
     // Send a transaction (won't be sealed because batches are paused)
-    let _tx_hash = client.send_eth(Address::ZERO, U256::from(0x5678)).await;
-    let head_number_after = client.block_number().await;
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x5678)).await;
+    client.wait_for_receipt(tx_hash).await;
+    let (sealed_head_after, _) = finalized_block_number_and_hash(&client).await;
     assert_eq!(
-        head_number_after, head_number,
-        "Block number should not change while batches are paused"
+        sealed_head_after, sealed_head_number,
+        "Finalized head should not change while batches are paused"
     );
 
     // In our rollup design, both latest and pending reflect the pending tx
+    let expected_nonce = latest_nonce + 1;
+    wait_for_nonce_at_tag(&client, address, "latest", expected_nonce).await?;
+    wait_for_nonce_at_tag(&client, address, "pending", expected_nonce).await?;
+
     assert_equal_nonces_for_tags(
         &client,
         address,
@@ -186,8 +224,7 @@ async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
     .await;
     let latest_after = nonce_at_tag(&client, address, "latest").await;
     assert_eq!(
-        latest_after,
-        latest_nonce + 1,
+        latest_after, expected_nonce,
         "Nonce should increment after sending transaction"
     );
 
@@ -204,36 +241,41 @@ async fn eth_get_transaction_count_block_number_and_hash() -> anyhow::Result<()>
     let (rollup, client) = setup_rollup().await;
     rollup.pause_preferred_batches().await;
 
-    let head_number = client.block_number().await;
-    let head_block = client
-        .eth_get_block_by_number(Some(format!("0x{head_number:x}")))
-        .await;
-    let head_hash = head_block.header.hash;
-    assert_ne!(head_hash, B256::ZERO);
+    let (sealed_head_number, sealed_head_hash) = finalized_block_number_and_hash(&client).await;
+    assert_ne!(sealed_head_hash, B256::ZERO);
 
     let address = client.address();
-    let head_nonce = nonce_at_number(&client, address, head_number).await;
+    let head_nonce = nonce_at_number(&client, address, sealed_head_number).await;
 
-    let _tx_hash = client.send_eth(Address::ZERO, U256::from(0x9ABC)).await;
-    let head_number_after = client.block_number().await;
-    assert_eq!(head_number_after, head_number);
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x9ABC)).await;
+    client.wait_for_receipt(tx_hash).await;
+    let (sealed_head_after, sealed_head_hash_after) =
+        finalized_block_number_and_hash(&client).await;
+    assert_eq!(
+        sealed_head_after, sealed_head_number,
+        "Finalized head number should not change while batches are paused"
+    );
+    assert_eq!(
+        sealed_head_hash_after, sealed_head_hash,
+        "Finalized head hash should not change while batches are paused"
+    );
 
     // Nonce at historical block should remain unchanged
-    let head_nonce_after = nonce_at_number(&client, address, head_number).await;
+    let head_nonce_after = nonce_at_number(&client, address, sealed_head_number).await;
     assert_eq!(
         head_nonce_after, head_nonce,
         "Historical block nonce should not change"
     );
 
     // Query by block hash with requireCanonical: true
-    let by_hash_true_nonce = nonce_at_hash(&client, address, head_hash, true).await;
+    let by_hash_true_nonce = nonce_at_hash(&client, address, sealed_head_hash, true).await;
     assert_eq!(
         by_hash_true_nonce, head_nonce,
         "Block hash query (canonical=true) should match block number query"
     );
 
     // Query by block hash with requireCanonical: false
-    let by_hash_false_nonce = nonce_at_hash(&client, address, head_hash, false).await;
+    let by_hash_false_nonce = nonce_at_hash(&client, address, sealed_head_hash, false).await;
     assert_eq!(
         by_hash_false_nonce, head_nonce,
         "Block hash query (canonical=false) should match block number query"
@@ -675,21 +717,25 @@ async fn eth_get_transaction_count_safe_finalized_exclude_pending() -> anyhow::R
 
     let address = client.address();
 
-    // Record sealed state
-    let sealed_block = client.block_number().await;
-    let nonce_at_sealed_block = nonce_at_number(&client, address, sealed_block).await;
+    // In paused mode, use `finalized` as the sealed reference.
+    let (sealed_block, _) = finalized_block_number_and_hash(&client).await;
+    let nonce_at_sealed_block = nonce_at_tag(&client, address, "finalized").await;
 
     // Send pending transaction (batches paused, won't be sealed)
-    let _tx_hash = client.send_eth(Address::ZERO, U256::from(0x7654)).await;
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(0x7654)).await;
+    client.wait_for_receipt(tx_hash).await;
 
-    // Verify block number hasn't changed
-    let current_block = client.block_number().await;
+    // Finalized head should not change while batches are paused.
+    let (current_block, _) = finalized_block_number_and_hash(&client).await;
     assert_eq!(
         current_block, sealed_block,
-        "Block should not advance while batches paused"
+        "Finalized head should not advance while batches are paused"
     );
 
     // Query all selectors
+    let expected_pending_nonce = nonce_at_sealed_block + 1;
+    wait_for_nonce_at_tag(&client, address, "pending", expected_pending_nonce).await?;
+
     let nonce_safe = nonce_at_tag(&client, address, "safe").await;
     let nonce_finalized = nonce_at_tag(&client, address, "finalized").await;
     let nonce_pending = nonce_at_tag(&client, address, "pending").await;
@@ -706,8 +752,7 @@ async fn eth_get_transaction_count_safe_finalized_exclude_pending() -> anyhow::R
 
     // pending should include the pending tx
     assert_eq!(
-        nonce_pending,
-        nonce_at_sealed_block + 1,
+        nonce_pending, expected_pending_nonce,
         "'pending' should include pending transaction"
     );
 

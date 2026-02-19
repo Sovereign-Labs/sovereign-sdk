@@ -576,20 +576,31 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
     assert_eq!(fee_history.base_fee_per_gas.len(), 3);
     assert_eq!(fee_history.gas_used_ratio.len(), 2);
 
-    let latest = client.get_block_number().await?;
+    let sealed_head = client
+        .get_block_by_number(BlockNumberOrTag::Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
+    let eth_block_number = client.get_block_number().await?;
     assert_eq!(
-        fee_history.oldest_block, latest,
+        eth_block_number,
+        sealed_head + 1,
+        "eth_blockNumber should resolve to pending when a pending block exists"
+    );
+    assert_eq!(
+        fee_history.oldest_block, sealed_head,
         "pending range should start at latest sealed block"
     );
     assert!(fee_history.reward.is_none(), "reward should be omitted");
 
     let genesis = load_evm_genesis_config();
-    let base_fees = base_fee_series_from_genesis(&client, latest, &genesis).await?;
-    let expected_base_fee = base_fees[latest as usize];
+    let base_fees = base_fee_series_from_genesis(&client, sealed_head, &genesis).await?;
+    let expected_base_fee = base_fees[sealed_head as usize];
     assert!(expected_base_fee > 0, "baseFeePerGas should be non-zero");
 
     let gas_limit = genesis.chain_spec.block_gas_limit;
-    let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, sealed_head).await?;
     let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
 
     assert_eq!(
@@ -602,7 +613,7 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
         "gas_used_ratio",
     );
 
-    let latest_base_fee = get_block_base_fee(&client, latest).await?;
+    let latest_base_fee = get_block_base_fee(&client, sealed_head).await?;
     assert_eq!(
         fee_history.base_fee_per_gas[0], latest_base_fee,
         "baseFeePerGas[0] should match latest sealed block header"
@@ -621,14 +632,19 @@ async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Re
 
     let _ = setup_with_pending_tx(&rollup).await;
 
-    let latest = client.get_block_number().await?;
+    let sealed_head = client
+        .get_block_by_number(BlockNumberOrTag::Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
     let genesis = load_evm_genesis_config();
-    let base_fees = base_fee_series_from_genesis(&client, latest, &genesis).await?;
+    let base_fees = base_fee_series_from_genesis(&client, sealed_head, &genesis).await?;
     let gas_limit = genesis.chain_spec.block_gas_limit;
-    let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, sealed_head).await?;
     let params = &genesis.chain_spec.base_fee_params;
     let expected_pending_base_fee = compute_next_base_fee(
-        base_fees[latest as usize],
+        base_fees[sealed_head as usize],
         receipts_gas_used,
         gas_limit,
         params.max_change_denominator,
@@ -760,14 +776,29 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
         pending_history.blob_gas_used_ratio
     );
 
-    let latest = client.get_block_number().await?;
+    let sealed_head = client
+        .get_block_by_number(BlockNumberOrTag::Finalized)
+        .await?
+        .expect("finalized block should exist")
+        .header
+        .number;
+    let eth_block_number = client.get_block_number().await?;
+    assert_eq!(
+        eth_block_number,
+        sealed_head + 1,
+        "eth_blockNumber should resolve to pending when a pending block exists"
+    );
+    assert_eq!(
+        latest_history.oldest_block, sealed_head,
+        "with block_count=2 and newest=pending, oldest should be latest sealed block"
+    );
     let genesis = load_evm_genesis_config();
-    let base_fees = base_fee_series_from_genesis(&client, latest, &genesis).await?;
-    let expected_base_fee = base_fees[latest as usize];
+    let base_fees = base_fee_series_from_genesis(&client, sealed_head, &genesis).await?;
+    let expected_base_fee = base_fees[sealed_head as usize];
     assert!(expected_base_fee > 0, "baseFeePerGas should be non-zero");
 
     let gas_limit = genesis.chain_spec.block_gas_limit;
-    let receipts_gas_used = total_gas_used_from_receipts(&client, latest).await?;
+    let receipts_gas_used = total_gas_used_from_receipts(&client, sealed_head).await?;
     let expected_ratio = receipts_gas_used as f64 / gas_limit as f64;
     assert_float_eq(
         latest_history.gas_used_ratio[0],
@@ -779,19 +810,19 @@ async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
         "baseFeePerGas[0] should match receipt-derived base fee"
     );
 
-    let latest_base_fee = get_block_base_fee(&client, latest).await?;
+    let latest_base_fee = get_block_base_fee(&client, sealed_head).await?;
     assert_eq!(
         latest_history.base_fee_per_gas[0], latest_base_fee,
         "baseFeePerGas[0] should match latest sealed block header"
     );
 
-    let latest_block = client
-        .get_block_by_number(BlockNumberOrTag::Number(latest))
+    let latest_sealed_block = client
+        .get_block_by_number(BlockNumberOrTag::Number(sealed_head))
         .await?
         .expect("latest block should exist");
-    let header_gas_limit = latest_block.header.gas_limit;
+    let header_gas_limit = latest_sealed_block.header.gas_limit;
     assert!(header_gas_limit > 0, "block gas_limit should be non-zero");
-    let expected_ratio = latest_block.header.gas_used as f64 / header_gas_limit as f64;
+    let expected_ratio = latest_sealed_block.header.gas_used as f64 / header_gas_limit as f64;
     assert_float_eq(
         latest_history.gas_used_ratio[0],
         expected_ratio,

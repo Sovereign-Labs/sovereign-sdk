@@ -8,7 +8,7 @@ use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 pub struct RollupDbConfig {
     /// Path where all databases are stored
     pub path: std::path::PathBuf,
-    /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB.
+    /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
 
