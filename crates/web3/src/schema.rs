@@ -256,11 +256,13 @@ pub const DEFAULT_MAX_FEE: u128 = 100000000;
 ///
 /// # Returns
 ///
-/// Returns `UniquenessData::Generation` with the current Unix timestamp
+/// Returns `UniquenessData::Generation` with the current Unix timestamp,
+/// or an error if system time is before the Unix epoch.
 ///
-/// # Panics
+/// # Errors
 ///
-/// Panics if the system clock is set to a time before the Unix epoch.
+/// Returns [`TransactionBuilderError::TimeError`] if the system clock
+/// is set to a time before the Unix epoch.
 pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
