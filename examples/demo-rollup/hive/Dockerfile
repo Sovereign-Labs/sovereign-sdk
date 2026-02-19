@@ -25,7 +25,10 @@ RUN cargo build -p sov-demo-rollup --bin sov-demo-rollup
 
 FROM debian:bookworm-slim AS runtime
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    NO_COLOR=1 \
+    CLICOLOR=0 \
+    CLICOLOR_FORCE=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \

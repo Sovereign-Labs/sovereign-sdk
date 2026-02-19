@@ -32,6 +32,40 @@
 - Alloc entries with code/storage are flattened to EOAs (no predeploy/state import yet).
 - Engine API is intentionally minimal (setup-unblock stub only).
 
+## NOMT `io_uring` Requirement in Docker
+- `nomt` uses Linux `io_uring` and will panic if `io_uring_setup` is denied.
+- On many Docker setups, the default seccomp profile blocks this syscall for containers.
+- Hive does not currently expose per-client `--security-opt` CLI flags, so the practical first-pass fix is daemon-level seccomp config.
+
+### Verify the issue quickly
+```bash
+docker run --rm --entrypoint python3 hive/clients/sov-demo-rollup:latest \
+  -c "import ctypes,os;libc=ctypes.CDLL(None,use_errno=True);fd=libc.syscall(425,2,ctypes.create_string_buffer(256));err=ctypes.get_errno();print('fd',fd,'errno',err,'msg',os.strerror(err) if err else '')"
+```
+Expected when blocked: `errno 1` / `Operation not permitted`.
+
+### Enable for Hive runs (fastest path)
+Set Docker daemon seccomp profile to `unconfined` (test environment only):
+```json
+{
+  "userns-remap": "default",
+  "seccomp-profile": "unconfined"
+}
+```
+File: `/etc/docker/daemon.json`
+
+Restart Docker:
+```bash
+sudo systemctl restart docker
+```
+
+Re-check:
+```bash
+docker run --rm --entrypoint python3 hive/clients/sov-demo-rollup:latest \
+  -c "import ctypes,os;libc=ctypes.CDLL(None,use_errno=True);fd=libc.syscall(425,2,ctypes.create_string_buffer(256));err=ctypes.get_errno();print('fd',fd,'errno',err,'msg',os.strerror(err) if err else '')"
+```
+Expected when allowed: `fd` is non-negative and `errno 0`.
+
 ## Runbook
 
 ### Build Hive client image

@@ -38,6 +38,9 @@ fi
 
 export SOV_TEST_CONST_OVERRIDE_CHAIN_ID="${CHAIN_ID}"
 export RUST_LOG="${RUST_LOG:-info}"
+export NO_COLOR="${NO_COLOR:-1}"
+export CLICOLOR="${CLICOLOR:-0}"
+export CLICOLOR_FORCE="${CLICOLOR_FORCE:-0}"
 
 echo "Starting engine stub on :8551" >&2
 python3 "${ENGINE_STUB_BIN}" &

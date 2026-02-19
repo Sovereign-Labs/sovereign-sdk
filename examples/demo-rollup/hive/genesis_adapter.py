@@ -16,6 +16,44 @@ from pathlib import Path
 
 EMPTY_CODE_HASH = "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 DEFAULT_CHAIN_ID = 7
+MASK_64 = (1 << 64) - 1
+
+# Keccak-f[1600] round constants.
+RC = [
+    0x0000000000000001,
+    0x0000000000008082,
+    0x800000000000808A,
+    0x8000000080008000,
+    0x000000000000808B,
+    0x0000000080000001,
+    0x8000000080008081,
+    0x8000000000008009,
+    0x000000000000008A,
+    0x0000000000000088,
+    0x0000000080008009,
+    0x000000008000000A,
+    0x000000008000808B,
+    0x800000000000008B,
+    0x8000000000008089,
+    0x8000000000008003,
+    0x8000000000008002,
+    0x8000000000000080,
+    0x000000000000800A,
+    0x800000008000000A,
+    0x8000000080008081,
+    0x8000000000008080,
+    0x0000000080000001,
+    0x8000000080008008,
+]
+
+# Rho offsets r[x][y].
+RHO = [
+    [0, 36, 3, 41, 18],
+    [1, 44, 10, 45, 2],
+    [62, 6, 43, 15, 61],
+    [28, 55, 25, 21, 56],
+    [27, 20, 39, 8, 14],
+]
 
 
 def parse_int(value, field_name: str) -> int:
@@ -47,12 +85,111 @@ def parse_maybe_int(value, fallback: int) -> int:
 def normalize_hex_address(address: str) -> str:
     if not isinstance(address, str):
         raise ValueError(f"Address must be string, got {type(address).__name__}")
-    if not address.startswith(("0x", "0X")):
-        raise ValueError(f"Expected 0x-prefixed address, got {address}")
-    body = address[2:]
+
+    # Geth genesis alloc keys can be either "0x..." or plain 40-hex strings.
+    body = address[2:] if address.startswith(("0x", "0X")) else address
     if len(body) != 40:
-        raise ValueError(f"Expected 20-byte address, got {address}")
+        raise ValueError(f"Expected 20-byte address (40 hex chars), got {address}")
+    try:
+        int(body, 16)
+    except ValueError as exc:
+        raise ValueError(f"Invalid hex address: {address}") from exc
+
     return "0x" + body.lower()
+
+
+def rol64(value: int, shift: int) -> int:
+    if shift == 0:
+        return value & MASK_64
+    return ((value << shift) | (value >> (64 - shift))) & MASK_64
+
+
+def keccak_f1600(state: list[int]) -> None:
+    for rc in RC:
+        # Theta
+        c = [0] * 5
+        for x in range(5):
+            c[x] = (
+                state[x]
+                ^ state[x + 5]
+                ^ state[x + 10]
+                ^ state[x + 15]
+                ^ state[x + 20]
+            )
+        d = [0] * 5
+        for x in range(5):
+            d[x] = c[(x - 1) % 5] ^ rol64(c[(x + 1) % 5], 1)
+        for x in range(5):
+            for y in range(5):
+                state[x + 5 * y] = (state[x + 5 * y] ^ d[x]) & MASK_64
+
+        # Rho + Pi
+        b = [0] * 25
+        for x in range(5):
+            for y in range(5):
+                b[y + 5 * ((2 * x + 3 * y) % 5)] = rol64(
+                    state[x + 5 * y], RHO[x][y]
+                )
+
+        # Chi
+        for x in range(5):
+            for y in range(5):
+                idx = x + 5 * y
+                state[idx] = (
+                    b[idx]
+                    ^ ((~b[((x + 1) % 5) + 5 * y]) & b[((x + 2) % 5) + 5 * y])
+                ) & MASK_64
+
+        # Iota
+        state[0] = (state[0] ^ rc) & MASK_64
+
+
+def keccak_256(data: bytes) -> bytes:
+    # Keccak-256 sponge params: rate=1088 bits (136 bytes), capacity=512 bits.
+    rate = 136
+    state = [0] * 25
+
+    offset = 0
+    while offset + rate <= len(data):
+        block = data[offset : offset + rate]
+        for i in range(rate // 8):
+            lane = int.from_bytes(block[8 * i : 8 * i + 8], "little")
+            state[i] = (state[i] ^ lane) & MASK_64
+        keccak_f1600(state)
+        offset += rate
+
+    # Keccak padding (not SHA3): domain suffix 0x01, final bit 0x80.
+    tail = bytearray(data[offset:])
+    tail.append(0x01)
+    while len(tail) < rate:
+        tail.append(0)
+    tail[-1] |= 0x80
+
+    for i in range(rate // 8):
+        lane = int.from_bytes(tail[8 * i : 8 * i + 8], "little")
+        state[i] = (state[i] ^ lane) & MASK_64
+    keccak_f1600(state)
+
+    out = bytearray()
+    for i in range(rate // 8):
+        out.extend(state[i].to_bytes(8, "little"))
+        if len(out) >= 32:
+            return bytes(out[:32])
+    return bytes(out[:32])
+
+
+def checksum_address(address: str) -> str:
+    # EIP-55 checksum over lowercase hex (without 0x), using Keccak-256.
+    normalized = normalize_hex_address(address)
+    body = normalized[2:]
+    hashed = keccak_256(body.encode("ascii")).hex()
+    result = []
+    for i, ch in enumerate(body):
+        if ch.isdigit():
+            result.append(ch)
+        else:
+            result.append(ch.upper() if int(hashed[i], 16) >= 8 else ch)
+    return "0x" + "".join(result)
 
 
 def balance_key(address: str) -> str:
@@ -136,7 +273,7 @@ def main() -> int:
     skipped_non_eoa = 0
 
     for raw_address, alloc_entry in alloc.items():
-        address = normalize_hex_address(raw_address)
+        address = checksum_address(raw_address)
         entry = alloc_entry if isinstance(alloc_entry, dict) else {}
 
         code = entry.get("code")
