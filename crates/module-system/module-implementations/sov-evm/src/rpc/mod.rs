@@ -849,7 +849,7 @@ where
         apply_state_overrides(db, state_overrides)?;
     }
     if let Some(block_overrides) = block_overrides {
-        apply_block_overrides(db, block_env, *block_overrides);
+        apply_block_overrides(db, block_env, *block_overrides)?;
     }
     Ok(())
 }
@@ -858,7 +858,7 @@ fn apply_block_overrides<DB: Database>(
     db: &mut RevmState<DB>,
     block_env: &mut BlockEnv,
     block_overrides: BlockOverrides,
-) {
+) -> Result<(), EthApiError> {
     let BlockOverrides {
         number,
         difficulty,
@@ -892,9 +892,11 @@ fn apply_block_overrides<DB: Database>(
         block_env.prevrandao = Some(random);
     }
     if let Some(base_fee) = base_fee {
-        // TODO: Change function to result and return err on overflow
-        block_env.basefee = u64::try_from(base_fee).unwrap_or(u64::MAX);
+        block_env.basefee = u64::try_from(base_fee).map_err(|_| {
+            invalid_override_params(format!("base fee overflow: {base_fee} exceeds u64::MAX"))
+        })?;
     }
+    Ok(())
 }
 
 fn apply_state_overrides<DB: Database>(

@@ -84,6 +84,25 @@ fn runtime_returning_blockhash(block_number: u8) -> Bytes {
     ])
 }
 
+fn runtime_require_block_number(block_number: u8) -> Bytes {
+    Bytes::from(vec![
+        0x43,
+        0x60,
+        block_number,
+        0x14,
+        0x60,
+        0x0c,
+        0x57,
+        0x60,
+        0x00,
+        0x60,
+        0x00,
+        0xfd,
+        0x5b,
+        0x00,
+    ])
+}
+
 fn runtime_returning_constant(value: U256) -> Bytes {
     let mut runtime = vec![0x7f];
     runtime.extend_from_slice(&value.to_be_bytes::<32>());
@@ -211,6 +230,108 @@ fn test_eth_call_rejects_state_and_state_diff_on_same_account() {
             .eth_call(request, None, Some(state_overrides), None, state)
             .unwrap_err();
         assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    });
+}
+
+#[test]
+fn test_eth_call_rejects_block_override_base_fee_overflow() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x54);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = TransactionRequest {
+            from: Some(account.address()),
+            to: Some(TxKind::Call(target)),
+            ..Default::default()
+        };
+
+        let err = evm
+            .eth_call(
+                request,
+                None,
+                None,
+                Some(Box::new(BlockOverrides::default().with_base_fee(U256::MAX))),
+                state,
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    });
+}
+
+#[test]
+fn test_eth_estimate_gas_state_override_code_is_applied() {
+    let (mut runner, account, _, _) = setup();
+    let contract = LegacySimpleStorage::default();
+    let contract_addr = account.address().create(0);
+    runner.execute(create_deploy_tx(0, &contract, &account).tx);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = TransactionRequest {
+            from: Some(account.address()),
+            to: Some(TxKind::Call(contract_addr)),
+            input: contract.always_revert().into(),
+            ..Default::default()
+        };
+
+        assert!(evm
+            .eth_estimate_gas(request.clone(), None, None, None, state)
+            .is_err());
+
+        let mut state_overrides = StateOverride::default();
+        state_overrides.insert(
+            contract_addr,
+            AccountOverride::default().with_code(Bytes::from(vec![0x00])),
+        );
+        let estimate = evm
+            .eth_estimate_gas(request, None, Some(state_overrides), None, state)
+            .unwrap();
+        assert!(estimate.to::<u64>() > 0);
+    });
+}
+
+#[test]
+fn test_eth_estimate_gas_block_override_number_is_applied() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x55);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = TransactionRequest {
+            from: Some(account.address()),
+            to: Some(TxKind::Call(target)),
+            ..Default::default()
+        };
+
+        let mut state_overrides = StateOverride::default();
+        state_overrides.insert(
+            target,
+            AccountOverride::default().with_code(runtime_require_block_number(77)),
+        );
+
+        assert!(evm
+            .eth_estimate_gas(
+                request.clone(),
+                None,
+                Some(state_overrides.clone()),
+                None,
+                state
+            )
+            .is_err());
+
+        let estimate = evm
+            .eth_estimate_gas(
+                request,
+                None,
+                Some(state_overrides),
+                Some(Box::new(
+                    BlockOverrides::default().with_number(U256::from(77u64)),
+                )),
+                state,
+            )
+            .unwrap();
+        assert!(estimate.to::<u64>() > 0);
     });
 }
 
