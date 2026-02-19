@@ -125,6 +125,13 @@ pub enum PendingOrBlock {
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
 const MIN_TRANSACTION_GAS: u64 = 21_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CallUpfrontCost {
+    total_cost: U256,
+    gas_limit: u64,
+}
+
 /// gas * 1.5 + 100_000
 pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
@@ -137,7 +144,7 @@ fn call_upfront_cost(
     request: &TransactionRequest,
     block_env: &BlockEnv,
     balance: U256,
-) -> Result<Option<U256>, EthApiError> {
+) -> Result<Option<CallUpfrontCost>, EthApiError> {
     if request.gas_price.is_some()
         && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
     {
@@ -187,7 +194,10 @@ fn call_upfront_cost(
     let total_cost = gas_cost
         .checked_add(value)
         .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
-    Ok(Some(total_cost))
+    Ok(Some(CallUpfrontCost {
+        total_cost,
+        gas_limit,
+    }))
 }
 
 impl<S: Spec> Evm<S>
@@ -475,10 +485,14 @@ where
             .basic(caller)?
             .map(|account| account.balance)
             .unwrap_or_default();
-        if let Some(total_cost) = call_upfront_cost(&request, &block_env, balance)? {
-            if balance < total_cost {
+        if let Some(upfront) = call_upfront_cost(&request, &block_env, balance)? {
+            if request.gas.is_none() {
+                request.gas = Some(upfront.gas_limit);
+            }
+
+            if balance < upfront.total_cost {
                 return Err(RpcInvalidTransactionError::InsufficientFunds {
-                    cost: total_cost,
+                    cost: upfront.total_cost,
                     balance,
                 }
                 .into());
@@ -1026,9 +1040,12 @@ mod tests {
         };
         let balance = U256::from(1_000_000u64);
 
-        let total_cost = call_upfront_cost(&request, &block_env, balance).unwrap();
+        let upfront = call_upfront_cost(&request, &block_env, balance)
+            .unwrap()
+            .expect("fee fields are set");
 
-        assert_eq!(total_cost, Some(balance));
+        assert_eq!(upfront.total_cost, balance);
+        assert_eq!(upfront.gas_limit, 100_000);
     }
 
     #[test]
@@ -1040,9 +1057,12 @@ mod tests {
             ..Default::default()
         };
 
-        let total_cost = call_upfront_cost(&request, &block_env, U256::ZERO).unwrap();
+        let upfront = call_upfront_cost(&request, &block_env, U256::ZERO)
+            .unwrap()
+            .expect("fee fields are set");
 
-        assert_eq!(total_cost, Some(U256::from(10_000u64)));
+        assert_eq!(upfront.total_cost, U256::from(10_000u64));
+        assert_eq!(upfront.gas_limit, 1_000);
     }
 
     #[test]
@@ -1058,9 +1078,12 @@ mod tests {
         };
         let balance = U256::from(310_000u64);
 
-        let total_cost = call_upfront_cost(&request, &block_env, balance).unwrap();
+        let upfront = call_upfront_cost(&request, &block_env, balance)
+            .unwrap()
+            .expect("fee fields are set");
 
-        assert_eq!(total_cost, Some(balance));
+        assert_eq!(upfront.total_cost, balance);
+        assert_eq!(upfront.gas_limit, MIN_TRANSACTION_GAS);
     }
 
     #[test]
@@ -1116,13 +1139,13 @@ mod tests {
 
     #[test]
     fn call_upfront_cost_returns_none_without_fee_fields() {
-        let total_cost = call_upfront_cost(
+        let upfront = call_upfront_cost(
             &TransactionRequest::default(),
             &BlockEnv::default(),
             U256::ZERO,
         )
         .unwrap();
 
-        assert_eq!(total_cost, None);
+        assert_eq!(upfront, None);
     }
 }

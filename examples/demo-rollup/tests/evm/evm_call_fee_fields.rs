@@ -144,6 +144,59 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_gas_price
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_rejects_missing_from_with_gas_price() -> anyhow::Result<()> {
+    let client = setup_client().await;
+    assert_unfunded_caller(&client, Address::ZERO).await?;
+
+    let request = TransactionRequest {
+        to: Some(TxKind::Call(Address::ZERO)),
+        gas_price: Some(NONZERO_FEE_PER_GAS),
+        gas: Some(GAS_LIMIT),
+        value: Some(U256::ZERO),
+        ..Default::default()
+    };
+
+    let result: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+    let err =
+        result.expect_err("eth_estimateGas should fail when from is omitted and gasPrice is set");
+    assert_insufficient_funds_error(err);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_rejects_missing_from_with_omitted_gas_and_gas_price() -> anyhow::Result<()>
+{
+    let client = setup_client().await;
+    assert_unfunded_caller(&client, Address::ZERO).await?;
+
+    let request = TransactionRequest {
+        to: Some(TxKind::Call(Address::ZERO)),
+        gas_price: Some(NONZERO_FEE_PER_GAS),
+        value: Some(U256::ZERO),
+        ..Default::default()
+    };
+
+    let result: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+    let err = result.expect_err(
+        "eth_estimateGas should fail when from is omitted, gasPrice is set, and gas is omitted",
+    );
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains(GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR),
+        "unexpected error: {err_msg}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyhow::Result<()> {
     let client = setup_client().await;
 
