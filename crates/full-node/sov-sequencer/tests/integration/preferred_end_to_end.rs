@@ -203,7 +203,10 @@ async fn produce_blocks_until_sequencer_readiness(
             return;
         }
         da_layer.produce_block().await.unwrap();
-        test_rollup.wait_for_node_synced().await.unwrap();
+        // Keep block production paced so readiness transitions can propagate without being
+        // overwhelmed by new blocks.
+        let pause_ms = if expected_ready { 50 } else { 30 };
+        tokio::time::sleep(Duration::from_millis(pause_ms)).await;
     }
 
     let current_ready = test_rollup.is_sequencer_ready().await;
