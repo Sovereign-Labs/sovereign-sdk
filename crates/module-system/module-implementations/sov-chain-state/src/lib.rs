@@ -553,6 +553,14 @@ impl<S: Spec> ChainState<S> {
             .unwrap_infallible();
     }
 
+    /// Returns the admin address, if one has been set.
+    pub fn admin_address<Accessor: StateReader<User>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<Option<S::Address>, Accessor::Error> {
+        self.admin_address.get(state)
+    }
+
     /// Returns the current operating mode of the rollup.
     pub fn operating_mode<Accessor: StateReader<User>>(
         &self,

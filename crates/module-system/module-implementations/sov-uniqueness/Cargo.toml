@@ -16,8 +16,12 @@ borsh = { workspace = true, features = ["rc"] }
 schemars = { workspace = true }
 serde = { workspace = true }
 
+serde_json = { workspace = true }
+sov-chain-state = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-state = { workspace = true }
+strum = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 alloy-consensus = { workspace = true }
@@ -57,6 +61,7 @@ arbitrary = [
 ]
 native = [
 	"reth-primitives/std",
+	"sov-chain-state/native",
 	"sov-modules-api/native",
 	"sov-uniqueness/native",
 	"sov-state/native",

@@ -1,13 +1,18 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
+/// Contains the call methods used by the module.
+mod call;
 mod capabilities;
+/// Error types for the module.
+pub mod error;
 mod generations;
 mod nonces;
 use std::collections::{BTreeMap, HashSet};
 
+pub use call::*;
 use sov_modules_api::{
-    Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi,
-    NotInstantiable, Spec, StateMap, StateReader, TxHash, TxState,
+    Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
+    StateMap, StateReader, TxHash, TxState,
 };
 use sov_state::User;
 
@@ -33,6 +38,10 @@ pub struct Uniqueness<S: Spec> {
     /// Mapping from a credential id to a nonce.
     #[state]
     pub(crate) nonces: StateMap<CredentialId, u64>,
+
+    /// Reference to the chain state module for admin address lookup.
+    #[module]
+    pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,
@@ -100,27 +109,34 @@ impl<S: Spec> Module for Uniqueness<S> {
 
     type Config = ();
 
-    type CallMessage = NotInstantiable;
+    type CallMessage = call::CallMessage;
 
     type Event = ();
 
-    type Error = anyhow::Error;
+    type Error = error::Error;
 
     fn genesis(
         &mut self,
         _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
         _config: &Self::Config,
         _state: &mut impl GenesisState<S>,
-    ) -> Result<(), Self::Error> {
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 
     fn call(
         &mut self,
-        _msg: Self::CallMessage,
-        _context: &Context<S>,
-        _state: &mut impl TxState<S>,
+        msg: Self::CallMessage,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        match msg {
+            CallMessage::PruneGenerations { credential_ids } => {
+                Ok(self.prune_generations(&credential_ids, context, state)?)
+            }
+            CallMessage::PruneSelfGenerations { credential_id } => {
+                Ok(self.prune_self_generations(&credential_id, context, state)?)
+            }
+        }
     }
 }

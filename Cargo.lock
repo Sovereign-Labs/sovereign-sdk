@@ -12567,7 +12567,9 @@ dependencies = [
  "schemars 0.8.22",
  "secp256k1 0.30.0",
  "serde",
+ "serde_json",
  "sov-address",
+ "sov-chain-state",
  "sov-eth-dev-signer",
  "sov-evm",
  "sov-evm-test-utils",
@@ -12581,6 +12583,7 @@ dependencies = [
  "sov-value-setter",
  "strum 0.26.3",
  "tempfile",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
