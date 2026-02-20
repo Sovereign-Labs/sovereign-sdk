@@ -38,7 +38,7 @@ pub type PrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey
 type Container = ContainerAsync<GenericImage>;
 
 pub const FINALIZED_BLOCKS_AT_START: usize = 3;
-pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
+pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 3;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
