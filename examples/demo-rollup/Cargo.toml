@@ -61,6 +61,7 @@ serde_json = { workspace = true, default-features = false, features = [
   "alloc",
 ] }
 hex = { workspace = true, optional = true }
+bincode = { workspace = true, optional = true }
 tokio = { workspace = true, features = [
   "rt-multi-thread",
   "sync",
@@ -155,6 +156,8 @@ bincode = ["risc0/bincode", "sov-risc0-adapter/bincode"]
 migration-script = [
   "dep:sov-blob-storage",
   "dep:rockbound",
+  "dep:bincode",
+  "dep:hex",
   "dep:sov-chain-state",
   "dep:sov-paymaster",
   "dep:sov-sequencer-registry",

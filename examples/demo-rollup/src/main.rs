@@ -45,7 +45,7 @@ struct Args {
     genesis_config_dir: PathBuf,
 
     /// Listen address for Prometheus exporter.
-    #[arg(long, default_value = "127.0.0.1:9845")]
+    #[arg(long, default_value = "127.0.0.1:9846")]
     prometheus_exporter_bind: String,
 
     /// Stops the rollup at a given height.
@@ -349,8 +349,8 @@ async fn new_rollup_with_mock_da_and_nomt(
             rt_genesis_paths,
             rollup_config,
             prover_config,
-            stop_at_rollup_height,
             start_at_rollup_height,
+            stop_at_rollup_height,
             None,
         )
         .await

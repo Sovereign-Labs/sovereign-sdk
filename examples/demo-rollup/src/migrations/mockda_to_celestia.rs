@@ -1,3 +1,5 @@
+use std::cmp::min;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -12,21 +14,22 @@ use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::schema::tables::SlotByNumber;
+use sov_db::schema::tables::{BatchByNumber, SlotByNumber};
+use sov_db::schema::types::{BatchNumber, DbBytes, StoredBatch};
 use sov_db::storage_manager::NomtStorageManager;
 use sov_full_node_configs::runner::from_toml_path;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{MockAddress, MockBlockHeader, MockDaSpec, MockHash};
+use sov_mock_da::{MockAddress, MockDaSpec};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::{ModuleInfo, Spec, StateCheckpoint, StateWriter};
+use sov_modules_api::{BatchSequencerReceipt, ModuleInfo, Spec, StateCheckpoint, StateWriter};
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_paymaster::{AuthorizedSequencers, PaymasterPolicy};
-use sov_rollup_interface::storage::HierarchicalStorageManager;
+use sov_rollup_interface::common::SlotNumber;
 use sov_sequencer_registry::KnownSequencer;
 use sov_state::{
     BcsCodec, BorshCodec, Kernel, NativeStorage, Prefix, SlotKey, SlotKeyFromCodec, SlotValue,
-    SlotValueFromCodec, StateItemDecoder, StateUpdate, Storage, User,
+    SlotValueFromCodec, StateItemDecoder, StateUpdate, User,
 };
 use sov_stf_runner::RollupConfig;
 
@@ -190,6 +193,9 @@ struct MigrationReport {
     sequencer_mappings: Vec<SequencerMappingReportEntry>,
     preferred_sequencer_before: Option<String>,
     preferred_sequencer_after: Option<String>,
+    batch_receipts_scanned: usize,
+    batch_receipts_rewritten: usize,
+    batch_receipts_already_new: usize,
     chain_state_slots_user_reencoded: usize,
     chain_state_slots_kernel_reencoded: usize,
     deferred_blobs_removed: usize,
@@ -200,6 +206,13 @@ struct MigrationReport {
     genesis_da_height_before: Option<u64>,
     genesis_da_height_after: Option<u64>,
     notes: Vec<String>,
+}
+
+#[derive(Default)]
+struct BatchReceiptMigrationStats {
+    scanned: usize,
+    rewritten: usize,
+    already_new: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -219,12 +232,6 @@ impl ModuleDiscriminants {
     }
 }
 
-#[derive(Clone, Copy)]
-struct DbHeadContext {
-    rollup_slot: u64,
-    da_hash: MockHash,
-}
-
 struct ParsedAddressArgs {
     legacy_new_da_address: Option<CelestiaAddress>,
     requested_old_da_address: Option<MockAddress>,
@@ -238,7 +245,7 @@ struct MigrationSession {
     storage_manager: MockNomtStorageManager,
     storage: OldStorage,
     ledger_db: LedgerDb,
-    migration_header: MockBlockHeader,
+    head_slot_number: SlotNumber,
     db_head_rollup_slot: Option<u64>,
 }
 
@@ -288,14 +295,16 @@ fn main() {
 /// - `paymaster.sequencer_to_payer` (cleared because its keys are DA addresses).
 /// - `paymaster.payers` entries with non-`AuthorizedSequencers::All` can be deleted
 ///   under `--force-non-all-paymaster-policies` because those policies may embed DA addresses.
+/// - historical ledger `BatchByNumber.receipt` entries are rewritten from
+///   `BatchSequencerReceipt<OldSpec>` to `BatchSequencerReceipt<NewSpec>` by remapping
+///   sequencer DA addresses (MockDA -> Celestia) using the resolved sequencer mapping.
 ///
 /// It overwrites `chain_state.genesis_da_height` using cutover calibration
 /// (`celestia_height_at_cutover - rollup_slot_at_cutover`) so DA/rollup height math remains
 /// consistent after cutover.
 ///
-/// Finally, it patches ledger head `StoredSlot.state_root` to the migrated root. This is needed
-/// because migration mutates state directly (without materializing a normal new slot), and ledger
-/// state-root consistency checks rely on this value.
+/// Finally, it commits rewritten state in-place at the current head version and patches ledger
+/// head `StoredSlot.state_root` to the migrated root so storage/ledger roots remain aligned.
 fn run() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -308,14 +317,14 @@ fn run() -> anyhow::Result<()> {
         mut storage_manager,
         storage,
         ledger_db,
-        migration_header,
+        head_slot_number,
         db_head_rollup_slot,
     } = prepare_migration_session(&args, &mut notes)?;
 
     let cutover = resolve_cutover_calibration(&args, db_head_rollup_slot, &mut notes)?;
 
     let pre_state_root = storage
-        .get_root_hash(storage.latest_version())
+        .get_root_hash(head_slot_number)
         .context("failed to read pre-migration state root")?;
 
     let sequencer_context = build_sequencer_context(
@@ -382,29 +391,48 @@ fn run() -> anyhow::Result<()> {
     )?;
 
     let (next_state_root, mut state_update, accessory_delta, _witness, storage_after) =
-        checkpoint.materialize_update(pre_state_root.clone());
+        checkpoint.materialize_update(pre_state_root);
     state_update.add_accessory_items(accessory_delta.freeze());
-    let change_set = storage_after.materialize_changes(state_update);
+    let change_set = storage_after.materialize_changes_at_version(state_update, head_slot_number);
+    let (batch_receipt_ledger_patch, batch_receipt_stats) =
+        make_batch_receipt_patch(&ledger_db, &sequencer_context.plan, &mut notes)?;
 
     if !args.dry_run {
-        let ledger_change_set = make_ledger_root_patch(&ledger_db, next_state_root.as_ref())?;
-
+        let mut ledger_change_set = make_ledger_root_patch(&ledger_db, next_state_root.as_ref())?;
+        ledger_change_set.merge(batch_receipt_ledger_patch);
         storage_manager
-            .save_change_set(&migration_header, change_set, ledger_change_set)
-            .context("failed to save migration changeset")?;
-        storage_manager
-            .finalize(&migration_header)
-            .context("failed to finalize migration changeset")?;
+            .commit_migration_change_set_at_head(head_slot_number, change_set, ledger_change_set)
+            .context("failed to commit migration changeset at head version")?;
     }
 
     let post_state_root = if args.dry_run {
         next_state_root
     } else {
-        let (finalized_storage, _) = storage_manager
-            .create_state_after(&migration_header)
-            .context("failed to read post-migration finalized storage")?;
-        finalized_storage
-            .get_root_hash(finalized_storage.latest_version())
+        let (post_storage, post_ledger_reader) = storage_manager
+            .create_state_for_migration()
+            .context("failed to create post-migration storage view")?;
+        let post_ledger_db = LedgerDb::with_reader(post_ledger_reader)
+            .context("failed to initialize post-migration ledger db view")?;
+        let post_head_slot_number = assert_storage_latest_version_matches_ledger_head(
+            &post_storage,
+            &post_ledger_db,
+            "post-migration",
+        )?;
+        if post_head_slot_number != head_slot_number {
+            bail!(
+                "post-migration head slot changed unexpectedly: expected {}, found {}",
+                head_slot_number,
+                post_head_slot_number
+            );
+        }
+        assert_ledger_head_state_root_matches_storage_root(
+            &post_storage,
+            &post_ledger_db,
+            "post-migration",
+        )?;
+
+        post_storage
+            .get_root_hash(post_head_slot_number)
             .context("failed to read post-migration state root")?
     };
 
@@ -435,6 +463,9 @@ fn run() -> anyhow::Result<()> {
         sequencer_mappings,
         preferred_sequencer_before: sequencer_context.preferred_before.map(|x| x.to_string()),
         preferred_sequencer_after: preferred_after,
+        batch_receipts_scanned: batch_receipt_stats.scanned,
+        batch_receipts_rewritten: batch_receipt_stats.rewritten,
+        batch_receipts_already_new: batch_receipt_stats.already_new,
         chain_state_slots_user_reencoded: chain_state_slots_inspection.user_slots_entries.len(),
         chain_state_slots_kernel_reencoded: chain_state_slots_inspection.kernel_slots_entries.len(),
         deferred_blobs_removed: blob_storage_inspection.deferred_blobs_entries.len(),
@@ -509,20 +540,20 @@ fn prepare_migration_session(
 
     let runtime = Runtime::<OldSpec>::default();
     let module_discriminants = ModuleDiscriminants::from_runtime(&runtime);
-    let mut storage_manager = MockNomtStorageManager::new(storage_config)
+    let storage_manager = MockNomtStorageManager::new(storage_config)
         .with_context(|| format!("failed to open storage manager at {}", db_path.display()))?;
 
-    let db_head = read_db_head_context(&mut storage_manager)?;
-    let migration_header = build_migration_header(db_head);
     let (storage, ledger_reader) = storage_manager
-        .create_state_for(&migration_header)
+        .create_state_for_migration()
         .context("failed to create migration storage view")?;
     let ledger_db =
         LedgerDb::with_reader(ledger_reader).context("failed to initialize migration ledger db")?;
+    let head_slot_number =
+        assert_storage_latest_version_matches_ledger_head(&storage, &ledger_db, "pre-migration")?;
+    assert_ledger_head_state_root_matches_storage_root(&storage, &ledger_db, "pre-migration")?;
 
     notes.push(format!(
-        "using DB head rollup slot {} as migration base",
-        db_head.rollup_slot
+        "using DB head rollup slot {head_slot_number} as migration base",
     ));
 
     Ok(MigrationSession {
@@ -532,8 +563,8 @@ fn prepare_migration_session(
         storage_manager,
         storage,
         ledger_db,
-        migration_header,
-        db_head_rollup_slot: Some(db_head.rollup_slot),
+        head_slot_number,
+        db_head_rollup_slot: Some(head_slot_number.get()),
     })
 }
 
@@ -633,7 +664,7 @@ fn build_sequencer_context<S: NativeStorage>(
         &args.sequencer_map,
         parsed_address_args.legacy_new_da_address,
         parsed_address_args.requested_old_da_address,
-        parsed_address_args.requested_new_rollup_address.clone(),
+        parsed_address_args.requested_new_rollup_address,
     )?;
 
     notes.push(format!(
@@ -833,7 +864,7 @@ where
 
     for entry in &plan.entries {
         let migrated = KnownSequencer::<NewSpec> {
-            address: entry.new_rollup_address.clone(),
+            address: entry.new_rollup_address,
             balance: entry.old_known.balance,
             balance_state: entry.old_known.balance_state.clone(),
         };
@@ -957,7 +988,7 @@ fn migrate_slot_information(old_slot_info: &OldSlotInformation) -> NewSlotInform
     NewSlotInformation::new(
         new_slot_hash,
         old_slot_info.gas_info().clone(),
-        old_slot_info.prev_state_root().clone(),
+        *old_slot_info.prev_state_root(),
     )
 }
 
@@ -976,48 +1007,6 @@ fn load_storage_config(args: &Args) -> anyhow::Result<RollupDbConfig> {
     }
 
     Ok(storage)
-}
-
-fn read_db_head_context(
-    storage_manager: &mut MockNomtStorageManager,
-) -> anyhow::Result<DbHeadContext> {
-    // Use `create_state_after` to attach to the latest finalized persisted state, matching startup
-    // semantics for an existing DB.
-    let bootstrap_header = MockBlockHeader::default();
-    let (_storage, ledger_reader) = storage_manager
-        .create_state_after(&bootstrap_header)
-        .context("failed to create finalized storage view for head lookup")?;
-    let ledger_db = LedgerDb::with_reader(ledger_reader)
-        .context("failed to initialize head lookup ledger reader")?;
-    let (slot_number, slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
-
-    Ok(DbHeadContext {
-        rollup_slot: slot_number.get(),
-        da_hash: MockHash::from(slot.hash),
-    })
-}
-
-fn build_migration_header(db_head: DbHeadContext) -> MockBlockHeader {
-    let mut next_hash_bytes = db_head.da_hash.0;
-    // Derive a deterministic synthetic child hash from the DB head hash.
-    next_hash_bytes[0] ^= 0xA5;
-    next_hash_bytes[31] = next_hash_bytes[31].wrapping_add(1);
-    let next_hash = if next_hash_bytes == db_head.da_hash.0 {
-        let mut adjusted = next_hash_bytes;
-        adjusted[0] ^= 0xFF;
-        MockHash(adjusted)
-    } else {
-        MockHash(next_hash_bytes)
-    };
-
-    MockBlockHeader {
-        height: db_head.rollup_slot.saturating_add(1),
-        prev_hash: db_head.da_hash,
-        hash: next_hash,
-        time: sov_rollup_interface::da::Time::now(),
-    }
 }
 
 fn apply_storage_defaults_and_overrides(config: &mut RollupDbConfig, notes: &mut Vec<String>) {
@@ -1121,8 +1110,7 @@ fn resolve_sequencer_plan(
             bail!("--new-sequencer-da-address is required when --sequencer-map is not provided");
         };
         let selected = select_source_sequencer(entries, requested_old_da_address)?;
-        let new_rollup_address =
-            requested_new_rollup_address.unwrap_or_else(|| selected.known.address.clone());
+        let new_rollup_address = requested_new_rollup_address.unwrap_or(selected.known.address);
 
         let preferred_after = match preferred_before {
             Some(preferred) if preferred != selected.da_address => {
@@ -1222,7 +1210,7 @@ fn resolve_sequencer_plan(
             old_da_address: entry.da_address,
             old_known: entry.known.clone(),
             new_da_address: mapping.new_da_address,
-            new_rollup_address: entry.known.address.clone(),
+            new_rollup_address: entry.known.address,
         });
     }
 
@@ -1294,4 +1282,166 @@ fn make_ledger_root_patch(
     let mut batch = SchemaBatch::new();
     batch.put::<SlotByNumber>(&head_slot_number, &head_slot)?;
     Ok(batch)
+}
+
+fn make_batch_receipt_patch(
+    ledger_db: &LedgerDb,
+    sequencer_plan: &ResolvedSequencerPlan,
+    notes: &mut Vec<String>,
+) -> anyhow::Result<(SchemaBatch, BatchReceiptMigrationStats)> {
+    const BATCH_SCAN_CHUNK_SIZE: u64 = 10_000;
+    let mut patch = SchemaBatch::new();
+    let mut stats = BatchReceiptMigrationStats::default();
+    let mut unmapped_old_da_addresses: BTreeMap<MockAddress, usize> = BTreeMap::new();
+
+    let old_to_new = sequencer_plan
+        .entries
+        .iter()
+        .map(|entry| (entry.old_da_address, entry.new_da_address))
+        .collect::<BTreeMap<_, _>>();
+
+    let reader = ledger_db.clone_reader();
+    let Some((last_batch_number, _)) = reader.get_largest::<BatchByNumber>()? else {
+        notes.push("ledger contains no batches; skipping batch receipt migration".to_string());
+        return Ok((patch, stats));
+    };
+    let last_batch_number = last_batch_number.0;
+
+    let mut batch_start = 0u64;
+    while batch_start <= last_batch_number {
+        let batch_end_inclusive = min(
+            batch_start.saturating_add(BATCH_SCAN_CHUNK_SIZE - 1),
+            last_batch_number,
+        );
+        let range_end_exclusive = batch_end_inclusive.saturating_add(1);
+        let batches = reader.collect_in_range::<BatchByNumber, _>(
+            BatchNumber(batch_start)..BatchNumber(range_end_exclusive),
+        )?;
+
+        for (batch_number, batch) in batches {
+            stats.scanned = stats.scanned.saturating_add(1);
+            match migrate_stored_batch_receipt(batch, &old_to_new, &mut unmapped_old_da_addresses)?
+            {
+                BatchReceiptMigrationOutcome::AlreadyNew => {
+                    stats.already_new = stats.already_new.saturating_add(1);
+                }
+                BatchReceiptMigrationOutcome::NeedsRewrite(rewritten_batch) => {
+                    patch.put::<BatchByNumber>(&batch_number, &rewritten_batch)?;
+                    stats.rewritten = stats.rewritten.saturating_add(1);
+                }
+                BatchReceiptMigrationOutcome::UnmappedOldAddress => {}
+            }
+        }
+
+        if batch_end_inclusive == last_batch_number {
+            break;
+        }
+        batch_start = batch_end_inclusive.saturating_add(1);
+    }
+
+    if !unmapped_old_da_addresses.is_empty() {
+        let missing = unmapped_old_da_addresses
+            .iter()
+            .map(|(addr, count)| format!("{addr} ({count} batch receipts)"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        bail!(
+            "found historical batch receipts with old DA addresses not present in the migration mapping: [{}]. \
+             provide --sequencer-map entries for all historical sequencer DA addresses",
+            missing
+        );
+    }
+
+    notes.push(format!(
+        "scanned {} historical batch receipts; rewrote {}; already-migrated {}",
+        stats.scanned, stats.rewritten, stats.already_new
+    ));
+
+    Ok((patch, stats))
+}
+
+enum BatchReceiptMigrationOutcome {
+    AlreadyNew,
+    NeedsRewrite(StoredBatch),
+    UnmappedOldAddress,
+}
+
+fn migrate_stored_batch_receipt(
+    mut batch: StoredBatch,
+    old_to_new: &BTreeMap<MockAddress, CelestiaAddress>,
+    unmapped_old_da_addresses: &mut BTreeMap<MockAddress, usize>,
+) -> anyhow::Result<BatchReceiptMigrationOutcome> {
+    if bincode::deserialize::<BatchSequencerReceipt<NewSpec>>(batch.receipt.as_ref()).is_ok() {
+        return Ok(BatchReceiptMigrationOutcome::AlreadyNew);
+    }
+
+    let old_receipt =
+        bincode::deserialize::<BatchSequencerReceipt<OldSpec>>(batch.receipt.as_ref())
+            .with_context(|| {
+                format!(
+                "failed to decode batch receipt as either NewSpec or OldSpec for batch hash 0x{}",
+                hex::encode(batch.hash)
+            )
+            })?;
+
+    let Some(new_da_address) = old_to_new.get(&old_receipt.da_address) else {
+        let count = unmapped_old_da_addresses
+            .entry(old_receipt.da_address)
+            .or_insert(0);
+        *count = count.saturating_add(1);
+        return Ok(BatchReceiptMigrationOutcome::UnmappedOldAddress);
+    };
+
+    let new_receipt = BatchSequencerReceipt::<NewSpec> {
+        da_address: *new_da_address,
+        gas_price: old_receipt.gas_price,
+        gas_used: old_receipt.gas_used,
+        outcome: old_receipt.outcome,
+    };
+
+    batch.receipt = DbBytes::new(
+        bincode::serialize(&new_receipt).context("failed to encode migrated batch receipt")?,
+    );
+    Ok(BatchReceiptMigrationOutcome::NeedsRewrite(batch))
+}
+
+fn assert_storage_latest_version_matches_ledger_head<S: NativeStorage>(
+    storage: &S,
+    ledger_db: &LedgerDb,
+    phase: &str,
+) -> anyhow::Result<SlotNumber> {
+    let (head_slot_number, _head_slot) = ledger_db
+        .get_head_slot()?
+        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
+    let storage_latest_version = storage.latest_version();
+    if storage_latest_version != head_slot_number {
+        bail!(
+            "{phase} invariant failed: storage.latest_version ({}) != ledger head slot ({})",
+            storage_latest_version,
+            head_slot_number
+        );
+    }
+
+    Ok(head_slot_number)
+}
+
+fn assert_ledger_head_state_root_matches_storage_root<S: NativeStorage>(
+    storage: &S,
+    ledger_db: &LedgerDb,
+    phase: &str,
+) -> anyhow::Result<()> {
+    let (head_slot_number, head_slot) = ledger_db
+        .get_head_slot()?
+        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
+    let storage_root = storage
+        .get_root_hash(head_slot_number)
+        .context("failed to read storage root at ledger head slot")?;
+    if head_slot.state_root.as_ref() != storage_root.as_ref() {
+        bail!(
+            "{phase} invariant failed: ledger head state_root does not match storage root at slot {}",
+            head_slot_number
+        );
+    }
+
+    Ok(())
 }

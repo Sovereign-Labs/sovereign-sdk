@@ -10,6 +10,8 @@ use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
+#[cfg(feature = "migration-script")]
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
@@ -121,6 +123,62 @@ where
         self.merklized_state.send_metrics();
 
         Ok(())
+    }
+
+    #[cfg(feature = "migration-script")]
+    pub(crate) fn commit_at_latest_checked(
+        &mut self,
+        group: CommitGroup,
+        expected_latest: SlotNumber,
+    ) -> anyhow::Result<()> {
+        tracing::trace!(%expected_latest, "Committing a group at latest with expected-head check...");
+        let CommitGroup {
+            nomt: state,
+            rockbound:
+                SnapshotGroup {
+                    historical_state,
+                    accessory,
+                    ledger,
+                },
+        } = group;
+
+        tracing::trace!("Commiting NOMT DBs...");
+        let merklized_commit = self.merklized_state.commit(state)?;
+
+        tracing::trace!("Committing Ledger DB...");
+        let ledger_commit = self.commit_ledger(&ledger)?;
+
+        tracing::trace!("Commiting Accessory DB...");
+        let accessory_commit =
+            self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
+
+        tracing::trace!("Committing Flat DB at latest version...");
+        let flat_metrics = self
+            .flat_state
+            .commit_at_latest_checked(historical_state, expected_latest)?;
+
+        let merklized_commit_from_caller = merklized_commit.total;
+        let commit_detailed_metrics = CommitDetailedMetric {
+            merklized_commit,
+            merklized_commit_from_caller,
+            flat: flat_metrics,
+            accessory_commit,
+            ledger_commit,
+        };
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(commit_detailed_metrics);
+        });
+        self.merklized_state.send_metrics();
+
+        Ok(())
+    }
+
+    #[cfg(feature = "migration-script")]
+    pub(crate) fn latest_flat_state_version(&self) -> anyhow::Result<Option<SlotNumber>> {
+        Ok(self
+            .flat_state
+            .latest_version_and_root_hash_live_db()?
+            .map(|(v, _)| SlotNumber::new(v)))
     }
 
     fn validate_commit_flag_and_rollback_if_necessary(

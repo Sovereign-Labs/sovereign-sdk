@@ -12,6 +12,8 @@ use std::sync::{Arc, RwLock};
 pub use crate::flat_db::FlatStateDb;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
+#[cfg(feature = "migration-script")]
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::reexports::digest;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -194,6 +196,76 @@ where
             pinned_cache,
             with_witness,
         )
+    }
+
+    #[cfg(feature = "migration-script")]
+    /// Creates a strict storage view over the latest finalized state without mutating
+    /// fork bookkeeping maps.
+    pub fn create_state_for_migration(&self) -> anyhow::Result<(S, DeltaReader)> {
+        self.db_group.create_storage(
+            Vec::new(),
+            &self.rockbound_snapshots,
+            self.nomt_snapshots.clone(),
+            None,
+            true,
+        )
+    }
+
+    #[cfg(feature = "migration-script")]
+    /// Commits migration changes directly at the current head version.
+    pub fn commit_migration_change_set_at_head(
+        &mut self,
+        head_slot: SlotNumber,
+        stf_change_set: NomtChangeSet,
+        ledger_change_set: SchemaBatch,
+    ) -> anyhow::Result<()> {
+        if !self.rockbound_snapshots.is_empty()
+            || !self
+                .nomt_snapshots
+                .read()
+                .expect("Failed to lock snapshots")
+                .is_empty()
+            || !self.blocks_to_parent.is_empty()
+            || !self.chain_forks.is_empty()
+        {
+            anyhow::bail!(
+                "migration commit requires an empty in-memory fork cache; restart with a fresh storage manager"
+            );
+        }
+
+        let live_latest = self.db_group.latest_flat_state_version()?;
+
+        let Some(live_latest) = live_latest else {
+            anyhow::bail!("cannot run migration commit on empty state");
+        };
+
+        if live_latest != head_slot {
+            anyhow::bail!(
+                "head slot {} does not match flat-state latest version {}",
+                head_slot,
+                live_latest
+            );
+        }
+
+        let NomtChangeSet {
+            state,
+            historical_state,
+            accessory,
+            pinned_cache: _,
+        } = stf_change_set;
+
+        let state_overlay = state.into_state_overlay();
+        let commit_group = CommitGroup {
+            nomt: state_overlay,
+            rockbound: SnapshotGroup {
+                historical_state,
+                accessory: Arc::new(accessory),
+                ledger: Arc::new(ledger_change_set),
+            },
+        };
+
+        self.db_group
+            .commit_at_latest_checked(commit_group, head_slot)
     }
 
     #[cfg(test)]
