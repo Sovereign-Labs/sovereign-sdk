@@ -94,6 +94,13 @@ struct ValueResponse {
     value: u32,
 }
 
+#[derive(Debug, serde::Deserialize)]
+struct ManyValuesItemResponse {
+    #[allow(unused)]
+    index: u64,
+    value: Option<u8>,
+}
+
 pub struct DaLayerWithSubscription {
     da_layer: Arc<RwLock<StorableMockDaLayer>>,
     state_update_subscription: WsSubscription<StateUpdateNotification>,
@@ -182,6 +189,69 @@ impl DaLayerWithSubscription {
             self.produce_and_wait_for_slot().await;
         }
     }
+}
+
+async fn produce_blocks_until_sequencer_readiness(
+    test_rollup: &TestRollup<TestBlueprint>,
+    da_layer: &mut DaLayerWithSubscription,
+    expected_ready: bool,
+    max_blocks_to_produce: usize,
+    reason: &str,
+) {
+    for _ in 0..max_blocks_to_produce {
+        if test_rollup.is_sequencer_ready().await == expected_ready {
+            return;
+        }
+        da_layer.produce_block().await.unwrap();
+        da_layer.wait_for_new_slot_notification().await;
+    }
+
+    let current_ready = test_rollup.is_sequencer_ready().await;
+    assert_eq!(
+        current_ready, expected_ready,
+        "Sequencer readiness did not reach expected state after producing {max_blocks_to_produce} blocks while {reason}"
+    );
+}
+
+async fn wait_for_many_values_item(
+    test_rollup: &TestRollup<TestBlueprint>,
+    da_layer: &mut DaLayerWithSubscription,
+    index: u64,
+    expected_value: u8,
+    max_blocks_to_produce: usize,
+) -> u8 {
+    let endpoint = format!("/modules/value-setter/state/many-values/items/{index}");
+    let mut last_seen_value: Option<Option<u8>> = None;
+    let mut last_error: Option<String> = None;
+
+    for attempt in 0..=max_blocks_to_produce {
+        match test_rollup
+            .client
+            .query_rest_endpoint::<ManyValuesItemResponse>(&endpoint)
+            .await
+        {
+            Ok(response) => {
+                last_seen_value = Some(response.value);
+                if response.value == Some(expected_value) {
+                    return expected_value;
+                }
+            }
+            Err(error) => {
+                last_error = Some(error.to_string());
+            }
+        }
+
+        if attempt == max_blocks_to_produce {
+            break;
+        }
+
+        da_layer.produce_block().await.unwrap();
+        da_layer.wait_for_new_slot_notification().await;
+    }
+
+    panic!(
+        "Timed out waiting for many_values[{index}] to become {expected_value}. Last seen value: {last_seen_value:?}, last error: {last_error:?}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -820,14 +890,16 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     tracing::info!("Resuming preferred sequencer batch production.");
     test_rollup.resume_preferred_batches().await;
     // Normally on the next state update, the sequencer should always enter recovery.
-    // However for some reason this was flaky. What is the reason?!
-    test_rollup.da_service.produce_block_now().await.unwrap();
-    while test_rollup.is_sequencer_ready().await {
-        let _ = da_layer.produce_block().await;
-        // DA block production above is asynchronous with respect to sequencer state updates.
-        // Sleep briefly so readiness checks observe the new state instead of busy-looping.
-        sleep(Duration::from_millis(30)).await;
-    }
+    // Drive DA forward and wait for slot notifications so we only re-check readiness
+    // after the node has observed a new block.
+    produce_blocks_until_sequencer_readiness(
+        &test_rollup,
+        &mut da_layer,
+        false,
+        80,
+        "entering recovery after resuming preferred sequencer batch production",
+    )
+    .await;
     test_rollup.wait_for_node_synced().await.unwrap();
 
     // Create transaction that should fail: sequencer should not accept transactions while in
@@ -848,11 +920,14 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    while !test_rollup.is_sequencer_ready().await {
-        let _ = da_layer.produce_block().await;
-        // DA notifications are unreliable while recovering, so we use a short poll interval.
-        sleep(Duration::from_millis(50)).await;
-    }
+    produce_blocks_until_sequencer_readiness(
+        &test_rollup,
+        &mut da_layer,
+        true,
+        160,
+        "recovering from deferred-slots lag",
+    )
+    .await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
@@ -862,10 +937,11 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
         .await
         .unwrap();
 
-    tracing::info!("Producing final run of blocks to include the last tx and confirm the rollup is running normally");
-    for _ in 0..10 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-    }
+    tracing::info!(
+        "Producing blocks until the post-recovery tx is visible in state (deterministic inclusion)"
+    );
+    let actual_many_value =
+        wait_for_many_values_item(&test_rollup, &mut da_layer, 0, UPDATE_VEC_VALUE, 80).await;
     test_rollup.wait_for_node_synced().await.unwrap();
 
     // Assert that the earlier transactions sent just before the sequencer went into recovery was
@@ -883,18 +959,6 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Assert that the transaction sent after the sequencer exited recovery was processed (i.e.
     // that the rollup is now functional)
-    #[derive(Debug, serde::Deserialize)]
-    struct IdxResponse {
-        #[allow(unused)]
-        index: u64,
-        value: Option<u8>,
-    }
-    let many_values_response = test_rollup
-        .client
-        .query_rest_endpoint::<IdxResponse>("/modules/value-setter/state/many-values/items/0")
-        .await
-        .unwrap();
-    let actual_many_value = many_values_response.value.unwrap();
     assert_eq!(
         actual_many_value, 12u8,
         "Expected many_values[0] to be 12, but got {actual_many_value}"
@@ -966,13 +1030,19 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     tracing::info!("Restarting rollup after exceeding deferred_slots_count");
     let test_rollup = builder.start().await.unwrap();
     let client = test_rollup.api_client().clone();
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
 
     // First we sync the node to the new DA blocks
     test_rollup.wait_for_node_synced().await.unwrap();
-    // Now on the next state update, the sequencer should always enter recovery
-    test_rollup.da_service.produce_block_now().await.unwrap();
-    test_rollup.wait_for_sequencer_not_ready().await.unwrap();
-    assert!(!test_rollup.is_sequencer_ready().await);
+    // Now on the next state updates, the sequencer should enter recovery.
+    produce_blocks_until_sequencer_readiness(
+        &test_rollup,
+        &mut da_layer,
+        false,
+        80,
+        "entering recovery after restart with deferred-slots lag",
+    )
+    .await;
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
     const UPDATE_VEC_VALUE: u8 = 12;
@@ -991,10 +1061,15 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    while !test_rollup.is_sequencer_ready().await {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        test_rollup.wait_for_node_synced().await.unwrap();
-    }
+    produce_blocks_until_sequencer_readiness(
+        &test_rollup,
+        &mut da_layer,
+        true,
+        160,
+        "recovering after restart",
+    )
+    .await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
     client
@@ -1004,10 +1079,11 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
         .await
         .unwrap();
 
-    tracing::info!("Producing final run of blocks to include the last tx and confirm the rollup is running normally");
-    for _ in 0..10 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-    }
+    tracing::info!(
+        "Producing blocks until the post-recovery tx is visible in state (deterministic inclusion)"
+    );
+    let actual_many_value =
+        wait_for_many_values_item(&test_rollup, &mut da_layer, 0, UPDATE_VEC_VALUE, 80).await;
     test_rollup.wait_for_node_synced().await.unwrap();
 
     // Assert that the earlier transaction sent before shutdown was processed
@@ -1023,18 +1099,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     );
 
     // Assert that the transaction sent after recovery was processed
-    #[derive(Debug, serde::Deserialize)]
-    struct IdxResponse {
-        #[allow(unused)]
-        index: u64,
-        value: Option<u8>,
-    }
-    let many_values_response = test_rollup
-        .client
-        .query_rest_endpoint::<IdxResponse>("/modules/value-setter/state/many-values/items/0")
-        .await
-        .unwrap();
-    let actual_many_value = many_values_response.value.unwrap();
     assert_eq!(
         actual_many_value, 12u8,
         "Expected many_values[0] to be 12, but got {actual_many_value}"
