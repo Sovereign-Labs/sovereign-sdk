@@ -163,6 +163,12 @@ export async function runComparison(options: ComparisonOptions): Promise<void> {
   console.log(`PASS=${report.summary.pass} FAIL=${report.summary.fail} NOT_SUPPORTED=${report.summary.notSupported}`);
   console.log(`JSON report: ${reportJson}`);
   console.log(`Markdown report: ${reportMd}`);
+
+  if (report.summary.fail > 0) {
+    throw new Error(
+      `Comparison reported ${report.summary.fail} failing check(s). See reports at ${reportJson} and ${reportMd}.`
+    );
+  }
 }
 
 async function main(): Promise<void> {

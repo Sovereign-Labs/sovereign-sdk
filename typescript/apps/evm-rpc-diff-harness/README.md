@@ -75,11 +75,14 @@ pnpm test:anvil
 
 This command:
 
-- starts local anvil (`http://127.0.0.1:8545`)
+- starts local anvil (default `http://127.0.0.1:8545`; override host/port with `ANVIL_RPC_URL`)
 - prints funded test account details used by the harness
 - runs compare against:
   - baseline: started anvil
   - rollup: `ROLLUP_RPC_URL` if set, otherwise same local anvil
+
+`ANVIL_RPC_URL` in `test:anvil` mode must be an `http://` URL with host and optional port only (no path/query/hash).
+By default, raw anvil logs are suppressed and only a failure tail is printed when the run fails. Set `ANVIL_VERBOSE_LOGS=1` to stream raw anvil logs.
 
 ## Outcome semantics
 

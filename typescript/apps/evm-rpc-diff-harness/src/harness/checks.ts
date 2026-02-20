@@ -1086,14 +1086,18 @@ const checks: CheckDefinition[] = [
       const byTopic0 = await rpc.call("eth_getLogs", [
         {
           address: runtime.deployment.kitchenSink,
-          topics: [topic0]
+          topics: [topic0],
+          fromBlock: blockTag,
+          toBlock: blockTag
         }
       ]);
 
       const byIndexedTopic = await rpc.call("eth_getLogs", [
         {
           address: runtime.deployment.kitchenSink,
-          topics: [topic0, null, indexedTopic]
+          topics: [topic0, null, indexedTopic],
+          fromBlock: blockTag,
+          toBlock: blockTag
         }
       ]);
 
@@ -1202,6 +1206,7 @@ const checks: CheckDefinition[] = [
       const right = rollup.normalized as LogsFiltersCheckObservation;
       const failures: string[] = [];
       const expectedTxEvents = ["ComplexEvent", "SecondaryEvent"];
+      const expectedComplexEvent = ["ComplexEvent"];
 
       function eventsForTx(entries: DecodedHarnessLogEntry[], txHash: string): string[] {
         const normalizedTxHash = txHash.toLowerCase();
@@ -1218,22 +1223,23 @@ const checks: CheckDefinition[] = [
         }
       }
 
-      function pushIfNotSingle(label: string, entries: DecodedHarnessLogEntry[], expectedEvent: string): void {
-        const events = entries.map((entry) => entry.event);
-        if (events.length !== 1 || events[0] !== expectedEvent) {
-          failures.push(`${label} expected [${expectedEvent}], got [${events.join(", ")}]`);
-        }
-      }
-
       pushIfMismatched("anvil.byAddress", eventsForTx(left.byAddress, left.targetTxHash), expectedTxEvents);
       pushIfMismatched("rollup.byAddress", eventsForTx(right.byAddress, right.targetTxHash), expectedTxEvents);
       pushIfMismatched("anvil.byRange", eventsForTx(left.byRange, left.targetTxHash), expectedTxEvents);
       pushIfMismatched("rollup.byRange", eventsForTx(right.byRange, right.targetTxHash), expectedTxEvents);
 
-      pushIfNotSingle("anvil.byTopic0", left.byTopic0, "ComplexEvent");
-      pushIfNotSingle("rollup.byTopic0", right.byTopic0, "ComplexEvent");
-      pushIfNotSingle("anvil.byIndexedTopic", left.byIndexedTopic, "ComplexEvent");
-      pushIfNotSingle("rollup.byIndexedTopic", right.byIndexedTopic, "ComplexEvent");
+      pushIfMismatched("anvil.byTopic0", eventsForTx(left.byTopic0, left.targetTxHash), expectedComplexEvent);
+      pushIfMismatched("rollup.byTopic0", eventsForTx(right.byTopic0, right.targetTxHash), expectedComplexEvent);
+      pushIfMismatched(
+        "anvil.byIndexedTopic",
+        eventsForTx(left.byIndexedTopic, left.targetTxHash),
+        expectedComplexEvent
+      );
+      pushIfMismatched(
+        "rollup.byIndexedTopic",
+        eventsForTx(right.byIndexedTopic, right.targetTxHash),
+        expectedComplexEvent
+      );
 
       if (failures.length === 0) {
         return { outcome: "PASS" };
