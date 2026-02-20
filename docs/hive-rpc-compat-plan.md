@@ -47,12 +47,12 @@ Explicitly out of scope in P0:
 
 ## Current Results (Parsed)
 Source report:
-- `workspace/logs/full-20260220-153439-p0-nonhistorical/1771598081-1d3a4875d7c2e4a37b9c2bc0cdfad188.json`
+- `workspace/logs/full-20260220-182301-postfix-full-20260220-182301/1771608183-4599637a35f64d8defb49a34b0be308f.json` (under Hive repo root)
 
 Full suite totals:
 - total: `200`
-- pass: `39`
-- fail: `161`
+- pass: `41`
+- fail: `159`
 
 P0 profile totals:
 - p0 total: `27`
@@ -62,7 +62,7 @@ P0 profile totals:
 Failing method buckets (full suite):
 - `eth_simulateV1`: `91`
 - `eth_getBlockByNumber`: `9`
-- `eth_getLogs`: `8`
+- `eth_getLogs`: `6`
 - `eth_getTransactionReceipt`: `7`
 - `eth_getTransactionByHash`: `7`
 - `eth_call`: `6`
@@ -80,6 +80,12 @@ Failing method buckets (full suite):
 - `eth_getStorageAt`: `1`
 - `eth_getCode`: `1`
 - `eth_getBlockTransactionCountByNumber`: `1`
+
+Latest targeted outcomes:
+- `eth_getLogs/filter-error-future-block-range`: `pass`
+- `eth_getLogs/filter-error-reversed-block-range`: `pass`
+- `eth_call/call-contract`: `fail` (fixture-address call returns `0x` due missing fixture-state context)
+- `eth_call/call-revert-abi-error`: `fail` (same root cause; not local revert-mapping semantics)
 
 Top failing tests (first 20):
 - `eth_getTransactionReceipt/get-legacy-receipt (sov-demo-rollup)`
