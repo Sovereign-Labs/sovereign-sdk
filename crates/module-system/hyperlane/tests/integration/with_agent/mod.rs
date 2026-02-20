@@ -543,23 +543,28 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         .await;
     hyperlane.mine_next_block_on_counterparty().await;
 
-    // Wait for the relayer to process the inbound EVM→Sovereign message
-    tracing::info!("Waiting for relayer to process inbound warp transfer...");
-    if let Err(err) = wait_for_messages_processed(
-        hyperlane.metrics(),
-        "ethtest",
-        "sovtest",
-        1,
-        RelayerWaitConfig::default(),
-    )
-    .await
-    {
-        hyperlane.print_stdout().await;
-        panic!("Relayer metrics check failed for inbound transfer: {err}");
-    }
-
+    // Wait for the inbound EVM→Sovereign warp transfer to be relayed and finalized.
+    // Uses a time-based deadline that continuously consumes from the slot subscription,
+    // preventing buffer overflow from accumulating during a separate metrics wait.
+    tracing::info!("Waiting for inbound warp transfer to be relayed and finalized...");
+    let inbound_deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
     let mut transfer_received = false;
-    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
+    let mut last_metrics_check = std::time::Instant::now();
+    loop {
+        if std::time::Instant::now() > inbound_deadline {
+            break;
+        }
+
+        // Periodically check relayer metrics for fast failure on critical errors
+        if last_metrics_check.elapsed() >= std::time::Duration::from_millis(500) {
+            last_metrics_check = std::time::Instant::now();
+            if hyperlane.metrics().has_critical_error().await.unwrap_or(false) {
+                rollup.shutdown().await.unwrap();
+                hyperlane.print_stdout().await;
+                panic!("Relayer reported a critical error during inbound transfer");
+            }
+        }
+
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(token_recv_event) = find_event(&events, "Warp/TokenTransferReceived") {
