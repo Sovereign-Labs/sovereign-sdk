@@ -39,7 +39,6 @@ type Container = ContainerAsync<GenericImage>;
 
 pub const FINALIZED_BLOCKS_AT_START: usize = 3;
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 3;
-pub const MOCK_DA_BLOCK_TIME_MS: u64 = 250;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
@@ -161,9 +160,7 @@ pub async fn setup_rollup(
     };
     let rollup_builder = TestRollupBuilder::new(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
-        sov_mock_da::BlockProducingConfig::Periodic {
-            block_time_ms: MOCK_DA_BLOCK_TIME_MS,
-        },
+        sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         DEFAULT_FINALIZATION_BLOCKS,
     )
     .set_config(|config| {
