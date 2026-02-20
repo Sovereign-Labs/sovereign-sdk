@@ -21,8 +21,11 @@ export type Generation = { generation: number };
 /** Sequential counter-based uniqueness mechanism for ordered transactions */
 export type Nonce = { nonce: number };
 
-/** Union type for transaction uniqueness mechanisms - either nonce-based or generation-based */
-export type Uniqueness = Nonce | Generation;
+/** Rollup-height-based uniqueness mechanism using the current chain height window */
+export type Height = { height: number };
+
+/** Union type for transaction uniqueness mechanisms */
+export type Uniqueness = Nonce | Generation | Height;
 
 /**
  * Base transaction structure before signing, containing the core transaction data.
@@ -31,7 +34,7 @@ export type Uniqueness = Nonce | Generation;
 export type UnsignedTransaction<RuntimeCall> = {
   /** The specific runtime call/method being invoked on the rollup */
   runtime_call: RuntimeCall;
-  /** Uniqueness mechanism (nonce or generation) to prevent replay attacks */
+  /** Uniqueness mechanism (nonce, generation, or height) to prevent replay attacks */
   uniqueness: Uniqueness;
   /** Transaction execution details including fees and gas limits */
   details: TxDetails;
