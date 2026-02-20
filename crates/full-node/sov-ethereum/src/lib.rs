@@ -76,8 +76,6 @@ where
         "eth_coinbase",
         "eth_mining",
         "eth_hashrate",
-        "eth_getTransactionByBlockHashAndIndex",
-        "eth_getTransactionByBlockNumberAndIndex",
         "eth_getUncleCountByBlockHash",
         "eth_getUncleCountByBlockNumber",
         "eth_getUncleByBlockHashAndIndex",

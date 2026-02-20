@@ -1,11 +1,13 @@
 use alloy_consensus::transaction::{PooledTransaction, Recovered};
 use alloy_consensus::Transaction;
+use alloy_eips::Typed2718;
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use reth_primitives_traits::SignedTransaction;
 use revm::{
-    context::{BlockEnv, TransactionType, TxEnv},
+    context::{BlockEnv, TxEnv},
     context_interface::block::BlobExcessGasAndPrice,
+    context_interface::either::Either,
 };
 use thiserror::Error;
 
@@ -69,20 +71,25 @@ pub fn create_tx_env(tx: &TransactionSigned, signer: Address, nonce: u64, gas_li
         caller: signer,
         gas_limit,
         nonce,
-        tx_type: TransactionType::Eip1559.into(),
+        tx_type: tx.ty(),
         kind: tx.to().into(),
         value: tx.value(),
         data: tx.input().clone(),
         chain_id: tx.chain_id(),
-        // We don't set gas_price nor the gas_priority_fee.
-        // We disable the EVM logic charging gas at the beginning of the TX and instead rely on sov gas metering
-        // Default values
-        gas_price: 0,
-        access_list: vec![].into(),
-        gas_priority_fee: None,
-        blob_hashes: vec![],
-        max_fee_per_blob_gas: 0,
-        authorization_list: vec![],
+        // We disable fee charging in revm and charge via rollup metering, but tx fields still
+        // need to match the signed transaction for opcode/RPC semantics.
+        gas_price: tx.max_fee_per_gas(),
+        access_list: tx.access_list().cloned().unwrap_or_default(),
+        gas_priority_fee: tx.max_priority_fee_per_gas(),
+        blob_hashes: tx
+            .blob_versioned_hashes()
+            .map(|hashes| hashes.to_vec())
+            .unwrap_or_default(),
+        max_fee_per_blob_gas: tx.max_fee_per_blob_gas().unwrap_or_default(),
+        authorization_list: tx
+            .authorization_list()
+            .map(|auth| auth.iter().cloned().map(Either::Left).collect())
+            .unwrap_or_default(),
     }
 }
 

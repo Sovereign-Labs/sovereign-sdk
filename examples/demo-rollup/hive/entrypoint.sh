@@ -13,11 +13,14 @@ if [[ ! -f "${GENESIS_JSON}" ]]; then
   exit 1
 fi
 
-# These inputs are part of Hive's generic eth1 lifecycle. For rpc-compat first pass,
-# we intentionally do not import block data from them yet.
+# These inputs are part of Hive's generic eth1 lifecycle.
+# We still do not import historical block data yet, but we do use /chain.rlp to
+# infer time-based fork activation blocks so transaction validation matches fixtures.
 if [[ -f /chain.rlp ]]; then
-  echo "Ignoring /chain.rlp in first-pass rpc-compat mode" >&2
+  echo "Using /chain.rlp for fork schedule derivation (no historical import yet)" >&2
+  export SOV_HIVE_CHAIN_RLP_PATH="/chain.rlp"
 fi
+export SOV_HIVE_GENESIS_JSON_PATH="${GENESIS_JSON}"
 if [[ -d /blocks ]] && compgen -G "/blocks/*.rlp" > /dev/null; then
   echo "Ignoring /blocks/*.rlp in first-pass rpc-compat mode" >&2
 fi
@@ -25,10 +28,17 @@ fi
 mkdir -p /hive-data
 rm -rf "${GENESIS_OUTPUT_DIR}"
 
-python3 /opt/sov/hive/genesis_adapter.py \
-  "${GENESIS_JSON}" \
-  "${GENESIS_TEMPLATE_DIR}" \
+ADAPTER_ARGS=(
+  "${GENESIS_JSON}"
+  "${GENESIS_TEMPLATE_DIR}"
   "${GENESIS_OUTPUT_DIR}"
+)
+
+if [[ -f /chain.rlp ]]; then
+  ADAPTER_ARGS+=("/chain.rlp")
+fi
+
+python3 /opt/sov/hive/genesis_adapter.py "${ADAPTER_ARGS[@]}"
 
 CHAIN_ID="$(tr -d '\n' < "${GENESIS_OUTPUT_DIR}/chain_id.txt")"
 if [[ -z "${CHAIN_ID}" ]]; then

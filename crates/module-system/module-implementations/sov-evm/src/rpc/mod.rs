@@ -21,11 +21,13 @@ use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
+use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
+use jsonrpsee::types::ErrorObjectOwned;
 use maybe_archival_state::MaybeArchivalState;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
@@ -35,7 +37,7 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec, VersionReader};
 use sov_rollup_interface::common::RollupHeight;
-use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 
 // Prune synthetic blocks more than this number of blocks away from the latest block.
 const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
@@ -104,7 +106,63 @@ pub(crate) mod handlers;
 pub(crate) mod maybe_archival_state;
 
 mod fee_history;
+mod hive_chain_fallback;
 mod trace;
+
+/// Ethereum transaction response extended with optional block timestamp.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionWithBlockTimestamp {
+    /// Canonical Ethereum transaction fields.
+    #[serde(flatten)]
+    pub transaction: Transaction,
+    /// Unix timestamp of the block this transaction belongs to.
+    #[serde(
+        default,
+        with = "alloy_serde::quantity::opt",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub block_timestamp: Option<u64>,
+}
+
+/// Block response where full transactions include `blockTimestamp`.
+pub type BlockWithTransactionTimestamp = Block<TransactionWithBlockTimestamp>;
+
+pub(crate) fn with_block_timestamp(
+    transaction: Transaction,
+    block_timestamp: Option<u64>,
+) -> TransactionWithBlockTimestamp {
+    TransactionWithBlockTimestamp {
+        transaction,
+        block_timestamp,
+    }
+}
+
+pub(crate) fn with_block_transaction_timestamps(block: Block) -> BlockWithTransactionTimestamp {
+    let block_timestamp = Some(block.header.timestamp);
+    let transactions = match block.transactions {
+        BlockTransactions::Full(txs) => BlockTransactions::Full(
+            txs.into_iter()
+                .map(|tx| with_block_timestamp(tx, block_timestamp))
+                .collect(),
+        ),
+        BlockTransactions::Hashes(hashes) => BlockTransactions::Hashes(hashes),
+        BlockTransactions::Uncle => BlockTransactions::Uncle,
+    };
+    Block {
+        header: block.header,
+        uncles: block.uncles,
+        transactions,
+        withdrawals: block.withdrawals,
+    }
+}
+
+/// Returns replay-backed logs from imported Hive `/chain.rlp` when available.
+pub fn hive_get_logs(
+    filter: &Filter,
+) -> Option<Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned>> {
+    hive_chain_fallback::get_logs(filter)
+}
 
 /// Result of String => BlockNr conversion
 #[derive(Debug)]
@@ -120,15 +178,6 @@ pub enum PendingOrBlock {
         #[allow(missing_docs)]
         last_tx_idx: u32,
     },
-}
-
-const ABSOLUTE_MARGIN: u64 = 100_000;
-/// gas * 1.5 + 100_000
-pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
-    (gas / 2)
-        .checked_mul(3)
-        .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
 }
 
 impl<S: Spec> Evm<S>
@@ -911,7 +960,10 @@ pub(crate) fn build_rpc_receipt(
             .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
-        inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
+        inner: ReceiptEnvelope::from_typed(
+            transaction.inner().tx_type(),
+            ReceiptWithBloom::new(rpc_receipt, logs_bloom),
+        ),
         transaction_hash,
         transaction_index: Some(transaction_index),
         block_hash,

@@ -110,6 +110,8 @@ fn setup_prague() -> (TestRunner<RT, S>, EvmAccount) {
             address: evm_account.address(),
             code_hash: KECCAK_EMPTY,
             code: Default::default(),
+            nonce: 0,
+            storage: Default::default(),
         }],
         chain_spec: EvmChainSpec {
             limit_contract_code_size: None,
@@ -151,6 +153,8 @@ fn setup_cancun() -> (TestRunner<RT, S>, EvmAccount) {
             address: evm_account.address(),
             code_hash: KECCAK_EMPTY,
             code: Default::default(),
+            nonce: 0,
+            storage: Default::default(),
         }],
         chain_spec: EvmChainSpec {
             limit_contract_code_size: None,

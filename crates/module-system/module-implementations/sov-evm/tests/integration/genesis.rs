@@ -117,6 +117,8 @@ fn default_config() -> EvmGenesisConfig<S> {
             address: Address::from([1u8; 20]),
             code_hash: KECCAK_EMPTY,
             code: Bytes::default(),
+            nonce: 0,
+            storage: Default::default(),
         }],
         initial_base_fee: 70,
         genesis_timestamp: 50,

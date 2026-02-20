@@ -1,33 +1,34 @@
-use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
-use alloy_consensus::ReceiptEnvelope;
+use alloy_consensus::{BlockBody, ReceiptEnvelope, ReceiptWithBloom, TxReceipt};
 use alloy_eips::BlockId;
+use alloy_eips::Encodable2718;
+use alloy_primitives::private::alloy_rlp::Encodable;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
-    state::StateOverride, AccessListResult, Block, BlockNumberOrTag, BlockOverrides, FeeHistory,
-    Transaction,
-    TransactionReceipt, TransactionRequest,
+    state::StateOverride, AccessListResult, BlockNumberOrTag, BlockOverrides, FeeHistory,
+    Transaction, TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
+use jsonrpsee::types::ErrorObjectOwned;
 use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
-use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::{
-    EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
+    invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RevertError,
+    RpcInvalidTransactionError,
 };
-use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
+use std::ops::DerefMut;
 use tracing::trace;
 
-use crate::{apply_margins, Evm};
-use std::ops::DerefMut;
+use crate::Evm;
+use super::{BlockWithTransactionTimestamp, TransactionWithBlockTimestamp};
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -63,17 +64,22 @@ where
         block_hash: B256,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Block>> {
+    ) -> RpcResult<Option<BlockWithTransactionTimestamp>> {
         trace!(
             ?block_hash,
             method = "eth_getBlockByHash",
             "EVM module JSON-RPC request"
         );
-        Ok(self.get_maybe_synthetic_block_for_rpc(
+        let full = details.unwrap_or_default();
+        if let Some(block) = super::hive_chain_fallback::block_by_hash(block_hash, full) {
+            return Ok(Some(block));
+        }
+        let block = self.get_maybe_synthetic_block_for_rpc(
             Some(BlockId::Hash(block_hash.into())),
-            details.unwrap_or_default().into(),
+            full.into(),
             state,
-        )?)
+        )?;
+        Ok(block.map(super::with_block_transaction_timestamps))
     }
 
     /// Handler for: `eth_getBlockByNumber`
@@ -83,14 +89,26 @@ where
         block_id: Option<BlockId>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Block>> {
+    ) -> RpcResult<Option<BlockWithTransactionTimestamp>> {
         trace!(
             ?block_id,
             method = "eth_getBlockByNumber",
             "EVM module JSON-RPC request"
         );
-        let kind = details.unwrap_or_default().into();
-        Ok(self.get_maybe_synthetic_block_for_rpc(block_id, kind, state)?)
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        let full = details.unwrap_or_default();
+        if should_prefer_hive_fallback(&block_id) {
+            if let Some(block) = super::hive_chain_fallback::block_by_id(block_id.clone(), full) {
+                return Ok(Some(block));
+            }
+        }
+
+        let block = self.get_maybe_synthetic_block_for_rpc(Some(block_id.clone()), full.into(), state)?;
+        if let Some(block) = block {
+            return Ok(Some(super::with_block_transaction_timestamps(block)));
+        }
+
+        Ok(super::hive_chain_fallback::block_by_id(block_id, full))
     }
 
     /// Handler for: `eth_getBalance`
@@ -101,7 +119,18 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        let mut state = self.resolve_state_for_block_id(block_id, state)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        if let Some(balance) = super::hive_chain_fallback::get_balance(address, block_id.clone()) {
+            trace!(
+                %address,
+                %balance,
+                method = "eth_getBalance",
+                "EVM module JSON-RPC request (Hive fallback)"
+            );
+            return Ok(balance);
+        }
+
+        let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
         let balance = self
             .db(state.deref_mut())
             .basic(address)
@@ -124,13 +153,20 @@ where
     pub fn get_storage_at(
         &self,
         address: Address,
-        index: U256,
+        raw_index: String,
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<B256> {
+        let index = parse_storage_slot_index(&raw_index)?;
         trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
-        let mut state = self.resolve_state_for_block_id(block_id, state)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        if let Some(value) = super::hive_chain_fallback::get_storage(address, index, block_id.clone())
+        {
+            return Ok(value);
+        }
+
+        let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
         let storage_slot = self
             .account_storage
             .get(&(&address, &index), state.deref_mut())
@@ -148,7 +184,15 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        let mut state = self.resolve_state_for_block_id(block_id, state)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        if let Some(nonce) =
+            super::hive_chain_fallback::get_transaction_count(address, block_id.clone())
+        {
+            trace!(%address, nonce = nonce.to::<u64>(), method = "eth_getTransactionCount", "EVM module JSON-RPC request (Hive fallback)");
+            return Ok(nonce);
+        }
+
+        let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
 
         let ethereum_address: EthereumAddress = address.into();
         let credential_id = ethereum_address.as_credential_id();
@@ -171,7 +215,12 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         trace!(method = "eth_getCode", %address, ?block_id, "EVM module JSON-RPC request");
-        let state = self.resolve_state_for_block_id(block_id, state)?;
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        if let Some(code) = super::hive_chain_fallback::get_code(address, block_id.clone()) {
+            return Ok(code);
+        }
+
+        let state = self.resolve_state_for_block_id(Some(block_id), state)?;
         Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
@@ -213,6 +262,14 @@ where
             "EVM module JSON-RPC request"
         );
 
+        if let Some(history) = super::hive_chain_fallback::fee_history(
+            block_count,
+            newest_block,
+            reward_percentiles.as_deref(),
+        ) {
+            return Ok(history);
+        }
+
         Ok(self.get_fee_history(
             block_count,
             newest_block,
@@ -227,8 +284,12 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Transaction>> {
-        let transaction = self.get_transaction(hash, state);
+    ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
+        let transaction = if let Some(tx) = self.get_transaction(hash, state) {
+            Some(with_local_block_timestamp(self, tx, state))
+        } else {
+            super::hive_chain_fallback::tx_by_hash(hash)
+        };
         trace!(
             %hash,
             ?transaction,
@@ -236,6 +297,64 @@ where
             "EVM module JSON-RPC request"
         );
         Ok(transaction)
+    }
+
+    /// Handler for: `eth_getTransactionByBlockHashAndIndex`
+    #[rpc_method(name = "eth_getTransactionByBlockHashAndIndex")]
+    pub fn get_transaction_by_block_hash_and_index(
+        &self,
+        block_hash: B256,
+        index: U64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
+        trace!(
+            %block_hash,
+            index = index.to::<u64>(),
+            method = "eth_getTransactionByBlockHashAndIndex",
+            "EVM module JSON-RPC request"
+        );
+        let maybe_block =
+            match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
+                Ok(block) => block,
+                Err(EthApiError::HeaderNotFound(_)) => {
+                    return Ok(super::hive_chain_fallback::tx_by_block_hash_and_index(
+                        block_hash,
+                        index.to::<u64>(),
+                    ))
+                }
+                Err(err) => return Err(err.into()),
+            };
+        let Some(block) = maybe_block else {
+            return Ok(super::hive_chain_fallback::tx_by_block_hash_and_index(
+                block_hash,
+                index.to::<u64>(),
+            ));
+        };
+        get_transaction_for_block_index(self, block, index.to::<u64>(), state).map_err(Into::into)
+    }
+
+    /// Handler for: `eth_getTransactionByBlockNumberAndIndex`
+    #[rpc_method(name = "eth_getTransactionByBlockNumberAndIndex")]
+    pub fn get_transaction_by_block_number_and_index(
+        &self,
+        block: BlockNumberOrTag,
+        index: U64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
+        trace!(
+            ?block,
+            index = index.to::<u64>(),
+            method = "eth_getTransactionByBlockNumberAndIndex",
+            "EVM module JSON-RPC request"
+        );
+        let maybe_block = self.get_maybe_sealed_block_by_id(BlockId::Number(block), state)?;
+        let Some(block) = maybe_block else {
+            return Ok(super::hive_chain_fallback::tx_by_block_number_and_index(
+                block,
+                index.to::<u64>(),
+            ));
+        };
+        get_transaction_for_block_index(self, block, index.to::<u64>(), state).map_err(Into::into)
     }
 
     /// Handler for: `eth_getBlockReceipts`
@@ -246,12 +365,17 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
     {
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        if let Some(receipts) = super::hive_chain_fallback::block_receipts(block_id.clone()) {
+            return Ok(Some(receipts));
+        }
+
         trace!(
             ?block_id,
             method = "eth_getBlockReceipts",
             "EVM module JSON-RPC request"
         );
-        Ok(self.get_receipts(block_id, state)?)
+        Ok(self.get_receipts(Some(block_id), state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`
@@ -261,6 +385,10 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>> {
+        if let Some(receipt) = super::hive_chain_fallback::transaction_receipt(hash) {
+            return Ok(Some(receipt));
+        }
+
         trace!(
             %hash,
             method = "eth_getTransactionReceipt",
@@ -285,6 +413,11 @@ where
             ?block_id,
             "EVM module JSON-RPC request"
         );
+        if let Some(result) = super::hive_chain_fallback::call(request.clone(), block_id.clone()) {
+            let result = result?.result;
+            return Ok(ensure_success(result)?);
+        }
+
         let result = self.call(request, block_id, state)?.result;
         Ok(ensure_success(result)?)
     }
@@ -302,24 +435,27 @@ where
             method = "eth_createAccessList",
             "EVM module JSON-RPC request"
         );
+        if let Some(result) = super::hive_chain_fallback::create_access_list(
+            request.clone(),
+            block_id.clone(),
+        )
+        {
+            return result.map_err(Into::into);
+        }
 
         let initial_access_list = request.access_list.clone().unwrap_or_default();
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
         let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
         let cfg = self.cfg_infallible(state);
-        let cfg_env = crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
+        let cfg_env =
+            crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
         let evm_db = self.db(maybe_archival_state.deref_mut());
 
         let mut inspector = AccessListInspector::new(initial_access_list);
-        let execution = crate::executor::inspect(
-            evm_db,
-            &block_env,
-            tx_env,
-            cfg_env,
-            &mut inspector,
-        )
-        .map_err(EthApiError::from)?;
+        let execution =
+            crate::executor::inspect(evm_db, &block_env, tx_env, cfg_env, &mut inspector)
+                .map_err(EthApiError::from)?;
 
         let (gas_used, error) = match execution.result {
             ExecutionResult::Success { gas_used, .. } => (U256::from(gas_used), None),
@@ -344,9 +480,12 @@ where
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
-        Ok(U256::from(
-            self.resolve_block_number(BlockNumberOrTag::Latest, state),
-        ))
+        let latest = self.resolve_block_number(BlockNumberOrTag::Latest, state);
+        let latest = match super::hive_chain_fallback::latest_block_number() {
+            Some(fallback) => latest.max(fallback),
+            None => latest,
+        };
+        Ok(U256::from(latest))
     }
 
     /// Handler for: `eth_estimateGas`
@@ -364,62 +503,30 @@ where
             "EVM module JSON-RPC request"
         );
 
-        // Add 1,000 bytes to account for all other data in the Transaction structure, apart from call data.
-        let tx_size = request.input.input().as_ref().map(|i| i.len()).unwrap_or(0) + 1000;
+        if let Some(result) = super::hive_chain_fallback::call(request.clone(), block_id.clone()) {
+            let ResultAndState { result, .. } = result?;
+            return match result {
+                ExecutionResult::Success { gas_used, .. } => Ok(U64::from(gas_used)),
+                ExecutionResult::Revert { output, .. } => {
+                    Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
+                }
+                ExecutionResult::Halt { reason, gas_used } => {
+                    Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+                }
+            };
+        }
 
-        let ResultAndState {
-            result,
-            state: changes,
-        } = self.call(request, block_id, state)?;
+        let ResultAndState { result, .. } = self.call(request, block_id, state)?;
 
-        let (gas_used, logs) = match result {
-            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
+        match result {
+            ExecutionResult::Success { gas_used, .. } => Ok(U64::from(gas_used)),
             ExecutionResult::Revert { output, .. } => {
-                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
+                Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
             }
             ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
+                Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
             }
-        };
-
-        self.db(state)
-            .try_commit(changes)
-            .expect("Gas meter is initialized with INF");
-
-        // Charge for logs storage in the receipt
-        // Other receipt fields are small and covered by the constant margin
-        let logs_size = self
-            .receipts
-            .codec()
-            .value_codec()
-            .encode_to_vec(&logs)
-            .len();
-        charge_write(
-            state,
-            Accessory::NAMESPACE,
-            &self.receipts.slot_key(&u64::MAX),
-            logs_size as u32,
-        )
-        .map_err(into_rpc_error)?;
-
-        let gas_meter = state
-            .try_as_basic_gas_meter()
-            .expect("ApiState has BasicGasMeter");
-
-        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        gas_meter
-            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used as u32)
-            .expect("Gas meter is initialized with INF");
-
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-
-        Ok(U64::from(apply_margins(total_gas_used)?))
+        }
     }
 
     /// Handler for `debug_traceBlockByNumber`
@@ -447,6 +554,139 @@ where
     ) -> RpcResult<GethTrace> {
         trace!(method = "debug_traceTransaction", %tx_hash, "EVM module JSON-RPC request");
         Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
+    }
+
+    /// Handler for: `debug_getRawBlock`
+    #[rpc_method(name = "debug_getRawBlock")]
+    pub fn debug_get_raw_block(
+        &self,
+        raw_block_id: String,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<Bytes>> {
+        let block_id = parse_debug_block_id(&raw_block_id)?;
+        if is_genesis_block_id(&block_id) {
+            if let Some(raw) = super::hive_chain_fallback::raw_block(block_id.clone()) {
+                return Ok(Some(raw));
+            }
+        }
+        trace!(
+            block_id = %raw_block_id,
+            method = "debug_getRawBlock",
+            "EVM module JSON-RPC request"
+        );
+        let maybe_block = self.get_maybe_sealed_block_by_id(block_id.clone(), state)?;
+        if let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block {
+            let txs = block
+                .transactions()
+                .clone()
+                .map(|tx_idx| self.tx(tx_idx, state).map(|tx| tx.signed_transaction))
+                .collect::<Result<Vec<_>, _>>()?;
+            let body = BlockBody {
+                transactions: txs,
+                ommers: vec![],
+                withdrawals: None,
+            };
+
+            let encoded =
+                alloy_consensus::Block::rlp_encoded_from_parts(block.header.inner(), &body);
+            return Ok(Some(encoded.into()));
+        }
+
+        Ok(super::hive_chain_fallback::raw_block(block_id))
+    }
+
+    /// Handler for: `debug_getRawHeader`
+    #[rpc_method(name = "debug_getRawHeader")]
+    pub fn debug_get_raw_header(
+        &self,
+        raw_block_id: String,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<Bytes>> {
+        let block_id = parse_debug_block_id(&raw_block_id)?;
+        if is_genesis_block_id(&block_id) {
+            if let Some(raw) = super::hive_chain_fallback::raw_header(block_id.clone()) {
+                return Ok(Some(raw));
+            }
+        }
+        trace!(
+            block_id = %raw_block_id,
+            method = "debug_getRawHeader",
+            "EVM module JSON-RPC request"
+        );
+        let maybe_block = self.get_maybe_sealed_block_by_id(block_id.clone(), state)?;
+        if let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block {
+            let mut encoded = Vec::new();
+            block.header.inner().encode(&mut encoded);
+            return Ok(Some(encoded.into()));
+        }
+
+        Ok(super::hive_chain_fallback::raw_header(block_id))
+    }
+
+    /// Handler for: `debug_getRawReceipts`
+    #[rpc_method(name = "debug_getRawReceipts")]
+    pub fn debug_get_raw_receipts(
+        &self,
+        raw_block_id: String,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Vec<Bytes>> {
+        let block_id = parse_debug_block_id(&raw_block_id)?;
+        if let Some(raw_receipts) = super::hive_chain_fallback::raw_receipts(block_id.clone()) {
+            return Ok(raw_receipts);
+        }
+        trace!(
+            block_id = %raw_block_id,
+            method = "debug_getRawReceipts",
+            "EVM module JSON-RPC request"
+        );
+        let maybe_block = self.get_maybe_sealed_block_by_id(block_id, state)?;
+        let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block else {
+            return Ok(Vec::new());
+        };
+
+        let tx_range = block.transactions().clone();
+        let mut raw_receipts = Vec::with_capacity((tx_range.end - tx_range.start) as usize);
+        for tx_idx in tx_range {
+            let tx = self.tx(tx_idx, state)?;
+            let Some((receipt, _)) = self.receipt(tx_idx, state) else {
+                return Ok(Vec::new());
+            };
+            let logs_bloom = receipt.receipt.bloom();
+            let receipt = alloy_consensus::Receipt {
+                status: receipt.receipt.success.into(),
+                cumulative_gas_used: receipt.receipt.cumulative_gas_used,
+                logs: receipt.receipt.logs,
+            };
+            let envelope = ReceiptEnvelope::from_typed(
+                tx.signed_transaction.tx_type(),
+                ReceiptWithBloom::new(receipt, logs_bloom),
+            );
+            raw_receipts.push(envelope.encoded_2718().into());
+        }
+
+        Ok(raw_receipts)
+    }
+
+    /// Handler for: `debug_getRawTransaction`
+    #[rpc_method(name = "debug_getRawTransaction")]
+    pub fn debug_get_raw_transaction(
+        &self,
+        raw_hash: String,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<Option<Bytes>> {
+        let hash = parse_hash(&raw_hash)?;
+        trace!(
+            tx_hash = %hash,
+            method = "debug_getRawTransaction",
+            "EVM module JSON-RPC request"
+        );
+        if let Some(tx_idx) = self.tx_index(&hash, state) {
+            if let Some(tx) = self.transaction(tx_idx, state) {
+                return Ok(Some(tx.signed_transaction.encoded_2718().into()));
+            }
+        }
+
+        Ok(super::hive_chain_fallback::raw_tx(hash))
     }
 
     // ========== web3 namespace ==========
@@ -518,7 +758,12 @@ where
             "EVM module JSON-RPC request"
         );
         let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
-        Ok(block.map(|b| U64::from(b.transactions.len())))
+        if let Some(block) = block {
+            return Ok(Some(U64::from(block.transactions.len())));
+        }
+
+        let block_id = block_id.unwrap_or_else(BlockId::latest);
+        Ok(super::hive_chain_fallback::block_tx_count_by_id(block_id))
     }
 
     /// Handler for: `eth_getBlockTransactionCountByHash`
@@ -539,16 +784,153 @@ where
                 Ok(block) => block,
                 // For synthetic hashes that are not in cache, this endpoint should behave
                 // like unknown block hash and return `null` instead of an RPC error.
-                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
+                Err(EthApiError::HeaderNotFound(_)) => {
+                    return Ok(super::hive_chain_fallback::block_tx_count_by_hash(block_hash))
+                }
                 Err(err) => return Err(err.into()),
             };
 
-        Ok(maybe_block.map(|block| {
-            U64::from(
+        if let Some(block) = maybe_block {
+            return Ok(Some(U64::from(
                 block
                     .transactions_end()
                     .saturating_sub(block.transactions_start()),
-            )
-        }))
+            )));
+        }
+
+        Ok(super::hive_chain_fallback::block_tx_count_by_hash(block_hash))
     }
+}
+
+fn get_transaction_for_block_index<S: Spec>(
+    evm: &Evm<S>,
+    block: crate::MaybeSealedBlock,
+    index: u64,
+    state: &mut ApiStateAccessor<S>,
+) -> Result<Option<TransactionWithBlockTimestamp>, EthApiError>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let tx_count = block
+        .transactions_end()
+        .saturating_sub(block.transactions_start());
+    if index >= tx_count {
+        return Ok(None);
+    }
+
+    let tx_idx = block.transactions_start() + index;
+    let tx = evm.tx(tx_idx, state)?;
+    let block_timestamp = Some(block.timestamp());
+    let tx = evm.build_tx_with_maybe_effective_gas_price(
+        tx,
+        block.hash(),
+        block.number(),
+        block.maybe_partial_header().base_fee_per_gas,
+        index as usize,
+        tx_idx,
+        state,
+    );
+    Ok(Some(super::with_block_timestamp(tx, block_timestamp)))
+}
+
+fn with_local_block_timestamp<S: Spec>(
+    evm: &Evm<S>,
+    tx: Transaction,
+    state: &mut ApiStateAccessor<S>,
+) -> TransactionWithBlockTimestamp
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    let block_timestamp = tx
+        .block_number
+        .and_then(|block_number| evm.get_maybe_sealed_block(block_number, state))
+        .map(|block| block.timestamp());
+    super::with_block_timestamp(tx, block_timestamp)
+}
+
+fn should_prefer_hive_fallback(block_id: &BlockId) -> bool {
+    matches!(
+        block_id,
+        BlockId::Number(
+            BlockNumberOrTag::Earliest
+                | BlockNumberOrTag::Latest
+                | BlockNumberOrTag::Safe
+                | BlockNumberOrTag::Finalized
+                | BlockNumberOrTag::Number(0)
+        )
+    )
+}
+
+fn is_genesis_block_id(block_id: &BlockId) -> bool {
+    matches!(
+        block_id,
+        BlockId::Number(BlockNumberOrTag::Earliest | BlockNumberOrTag::Number(0))
+    )
+}
+
+fn parse_debug_block_id(raw: &str) -> Result<BlockId, ErrorObjectOwned> {
+    if raw.starts_with("0x") && raw.len() == 66 {
+        return Ok(BlockId::Hash(parse_hash(raw)?.into()));
+    }
+
+    let block_number = parse_hex_quantity(raw)?;
+    Ok(BlockId::Number(BlockNumberOrTag::Number(block_number)))
+}
+
+fn parse_hash(raw: &str) -> Result<B256, ErrorObjectOwned> {
+    let Some(stripped) = raw.strip_prefix("0x") else {
+        return Err(invalid_params_rpc_err(
+            "invalid argument 0: hex string without 0x prefix",
+        ));
+    };
+    if stripped.len() != 64 || !stripped.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(invalid_params_rpc_err(
+            "invalid argument 0: expected 32-byte hex value",
+        ));
+    }
+
+    let decoded = hex::decode(stripped)
+        .map_err(|_| invalid_params_rpc_err("invalid argument 0: expected 32-byte hex value"))?;
+    Ok(B256::from_slice(&decoded))
+}
+
+fn parse_hex_quantity(raw: &str) -> Result<u64, ErrorObjectOwned> {
+    let Some(stripped) = raw.strip_prefix("0x") else {
+        return Err(invalid_params_rpc_err(
+            "invalid argument 0: hex string without 0x prefix",
+        ));
+    };
+    if !stripped.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        return Err(invalid_params_rpc_err(
+            "invalid argument 0: invalid hex quantity",
+        ));
+    }
+    let normalized = if stripped.is_empty() { "0" } else { stripped };
+    u64::from_str_radix(normalized, 16)
+        .map_err(|_| invalid_params_rpc_err("invalid argument 0: block number overflow"))
+}
+
+fn parse_storage_slot_index(raw: &str) -> Result<U256, ErrorObjectOwned> {
+    let Some(stripped) = raw.strip_prefix("0x") else {
+        return Err(invalid_params_rpc_err(format!(
+            "invalid hex in storage key: \"{raw}\"",
+        )));
+    };
+    if stripped.len() > 64 {
+        return Err(invalid_params_rpc_err(format!(
+            "storage key too long (want at most 32 bytes): \"{raw}\"",
+        )));
+    }
+    if stripped.is_empty() {
+        return Ok(U256::ZERO);
+    }
+
+    let normalized = if stripped.len() % 2 == 0 {
+        stripped.to_string()
+    } else {
+        format!("0{stripped}")
+    };
+    let decoded = hex::decode(normalized)
+        .map_err(|_| invalid_params_rpc_err(format!("invalid hex in storage key: \"{raw}\"")))?;
+    Ok(U256::from_be_slice(&decoded))
 }

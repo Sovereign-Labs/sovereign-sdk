@@ -30,7 +30,7 @@
     - default: `HIVE_CHAIN_ID=3503995874084926` (rpc-compat chain)
 
 ## Explicit Stubs / Non-Goals in First Pass
-- `/chain.rlp` and `/blocks/*.rlp` imports are not implemented.
+- `/chain.rlp` and `/blocks/*.rlp` historical state import is still not implemented.
 - Engine API is intentionally minimal (setup-unblock stub only).
 
 ## NOMT `io_uring` Requirement in Docker
@@ -103,31 +103,54 @@ hive --sim ethereum/rpc-compat --client sov-demo-rollup-hive
 - Hive setup should proceed into `rpc-compat` test execution.
 - Remaining failures should mostly be method-level conformance deltas (actionable for iterative fixes), not startup/lifecycle failures.
 
-## Current Baseline (full run)
+## Current Baseline (latest full run: 2026-02-20, tag `full-estfix2`)
 - Total: `200`
-- Pass: `29`
-- Fail: `171`
+- Pass: `39`
+- Fail: `161`
+
+Progress over the most recent iterations:
+- `177` fail -> `165` fail: chain-id/fork-schedule alignment + startup/genesis fixes
+- `165` fail -> `162` fail: tx-type handling fixes for call/execution envs
+- `162` fail -> `161` fail: `eth_estimateGas` switched to EVM-native estimate semantics
+
+Recent improvements since the initial bring-up:
+- Added `eth_syncing` and `eth_blobBaseFee` handlers in `sov-evm`.
+- Added `eth_createAccessList` implementation in `sov-evm`.
+- Fixed raw tx decode path to accept pooled tx envelopes.
+- Enforced `EVM_GAS_METERING_MODE = "EVM"` in Hive build.
+- Added `eth_getTransactionByBlockHashAndIndex` and `eth_getTransactionByBlockNumberAndIndex` handlers in `sov-evm` (and removed wrapper stubs).
+- Added `debug_getRawBlock`, `debug_getRawHeader`, `debug_getRawReceipts`, `debug_getRawTransaction` handlers in `sov-evm`.
+- Fixed `eth_getStorageAt` invalid-key handling to return clean `-32602` errors without extra `error.data`.
+- Fixed receipt envelope typing to use the transaction type instead of always `Eip1559`.
+- Added geth-fork-schedule derivation from `genesis.config` (+ time-fork block mapping via `/chain.rlp` timestamps) in Hive genesis adapter.
+- Made call/tx execution env construction tx-type aware instead of hardcoding EIP-1559.
+- Set `NO_COLOR=1` at container runtime path so logs stay readable in Hive output.
 
 Failure buckets:
 - `method_not_found`: large
   - `eth_simulateV1`: `91`
-  - `debug_getRaw*` + `debug_getRawTransaction`: `11`
-- `method_not_supported`: mostly `eth_createAccessList`, `eth_getProof`, `eth_getTransactionByBlock*`
+  - `debug_getRaw*` now mostly implemented (remaining failures are fixture/history dependent)
+- `method_not_supported`: mostly `eth_getProof` (`3`)
 - `response_value_mismatch`: large
   - mostly `eth_getBlock*`, `eth_getTransaction*`, `eth_getLogs`, `eth_call`, `eth_getStorageAt`
-- `response_type_mismatch`: small
-  - `eth_estimateGas` error/result shape
+  - dominant root cause: missing historical chain import/state parity with rpc-compat fixture chain
+- `response_type_mismatch`: small (`eth_estimateGas` narrowed but still present where fixture contracts/state are missing)
 
 ## Next Priorities
 1. Keep startup deterministic:
    - compile with fixed rpc-compat chain ID (`HIVE_CHAIN_ID`)
    - fail fast when runtime genesis chain ID differs from compiled constant.
-2. Implement `/chain.rlp` (and optionally `/blocks/*.rlp`) import:
-   - this should eliminate most `eth_blockNumber`/`eth_getBlock*`/`eth_getTransaction*` mismatches caused by running on a near-empty chain.
-3. Add missing eth namespace methods used by rpc-compat:
-   - `eth_getTransactionByBlockHashAndIndex`
-   - `eth_getTransactionByBlockNumberAndIndex`
-   - `eth_getProof`
-   - `eth_createAccessList` (full semantics needed; simple stub likely still fails).
-4. Decide explicit scope for non-standard methods:
-   - `eth_simulateV1` and `debug_getRaw*` are a large failure block; either implement or exclude when focusing on baseline Ethereum RPC compatibility.
+2. Implement fixture chain import (`/chain.rlp` first, then optional `/blocks/*.rlp`):
+   - highest-impact item for correctness.
+   - expected to remove most failures in:
+     - `eth_blockNumber`
+     - `eth_getBlockBy*`
+     - `eth_getTransaction*`
+     - `eth_getTransactionReceipt`
+     - `eth_getLogs`
+     - many `eth_call`/`eth_estimateGas` fixture-contract cases.
+3. Implement `eth_simulateV1`:
+   - currently `91` guaranteed failures from `-32601 Method not found`.
+   - this is the single largest remaining non-lifecycle bucket.
+4. `eth_getProof` support:
+   - small but standards-relevant; currently `3` failures.

@@ -112,12 +112,12 @@ fn create_auth_tx_and_hash<
     state: &mut Accessor,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
+    let evm = Evm::<S>::default();
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
 
     let user_max_fee_per_gas = tx.max_fee_per_gas();
     let rollup_base_fee = gas_price.as_ref()[0].0;
 
-    let evm = Evm::<S>::default();
     let multiplier = evm.validate_fee_and_calculate_multiplier(
         user_max_fee_per_gas,
         rollup_base_fee,
@@ -153,10 +153,7 @@ fn validate_chain_id(
     tx_hash: TxHash,
 ) -> Result<u64, AuthenticationError> {
     let rollup_chain_id = config_value!("CHAIN_ID");
-    let tx_chain_id = tx_chain_id.ok_or(AuthenticationError::FatalError(
-        FatalError::MissingChainId(rollup_chain_id),
-        tx_hash,
-    ))?;
+    let tx_chain_id = tx_chain_id.unwrap_or(0);
 
     // Allow 0 chain id for compatibility with EIP7702
     if tx_chain_id != rollup_chain_id && tx_chain_id != 0 {

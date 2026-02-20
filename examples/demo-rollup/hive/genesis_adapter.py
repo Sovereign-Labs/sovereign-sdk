@@ -4,7 +4,8 @@
 Current behavior:
 - alloc balances are funded via bank.json (not via EVM account state)
 - alloc code / nonce / storage are imported into evm.json accounts
-- /chain.rlp and /blocks/*.rlp are intentionally ignored in this phase
+- /chain.rlp is used only to infer time-based fork activation blocks
+- /chain.rlp and /blocks/*.rlp historical bodies are not imported in this phase
 """
 
 from __future__ import annotations
@@ -80,6 +81,19 @@ def parse_maybe_int(value, fallback: int) -> int:
             return int(v, 16)
         return int(v, 10)
     return fallback
+
+
+def parse_optional_int(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        v = value.strip()
+        if v.startswith(("0x", "0X")):
+            return int(v, 16)
+        return int(v, 10)
+    return None
 
 
 def normalize_hex_address(address: str) -> str:
@@ -220,10 +234,177 @@ def to_hex_u256(value: int, field_name: str) -> str:
     return hex(value)
 
 
+def rlp_item_info(buf: bytes, pos: int) -> tuple[bool, int, int, int]:
+    if pos >= len(buf):
+        raise ValueError("RLP decode out of bounds")
+
+    prefix = buf[pos]
+    if prefix <= 0x7F:
+        return (False, pos, 1, pos + 1)
+    if prefix <= 0xB7:
+        length = prefix - 0x80
+        payload_start = pos + 1
+        payload_end = payload_start + length
+        if payload_end > len(buf):
+            raise ValueError("RLP short string length out of bounds")
+        return (False, payload_start, length, payload_end)
+    if prefix <= 0xBF:
+        len_of_len = prefix - 0xB7
+        payload_len_start = pos + 1
+        payload_start = payload_len_start + len_of_len
+        if payload_start > len(buf):
+            raise ValueError("RLP long string length prefix out of bounds")
+        length = int.from_bytes(buf[payload_len_start:payload_start], "big")
+        payload_end = payload_start + length
+        if payload_end > len(buf):
+            raise ValueError("RLP long string length out of bounds")
+        return (False, payload_start, length, payload_end)
+    if prefix <= 0xF7:
+        length = prefix - 0xC0
+        payload_start = pos + 1
+        payload_end = payload_start + length
+        if payload_end > len(buf):
+            raise ValueError("RLP short list length out of bounds")
+        return (True, payload_start, length, payload_end)
+
+    len_of_len = prefix - 0xF7
+    payload_len_start = pos + 1
+    payload_start = payload_len_start + len_of_len
+    if payload_start > len(buf):
+        raise ValueError("RLP long list length prefix out of bounds")
+    length = int.from_bytes(buf[payload_len_start:payload_start], "big")
+    payload_end = payload_start + length
+    if payload_end > len(buf):
+        raise ValueError("RLP long list length out of bounds")
+    return (True, payload_start, length, payload_end)
+
+
+def rlp_list_items(
+    buf: bytes, payload_start: int, payload_len: int
+) -> list[tuple[bool, int, int, int]]:
+    items: list[tuple[bool, int, int, int]] = []
+    pos = payload_start
+    end = payload_start + payload_len
+    while pos < end:
+        item = rlp_item_info(buf, pos)
+        items.append(item)
+        pos = item[3]
+    if pos != end:
+        raise ValueError("Malformed RLP list payload")
+    return items
+
+
+def rlp_string_to_int(buf: bytes, item: tuple[bool, int, int, int]) -> int:
+    is_list, payload_start, payload_len, _ = item
+    if is_list:
+        raise ValueError("Expected RLP string, found list")
+    if payload_len == 0:
+        return 0
+    return int.from_bytes(buf[payload_start : payload_start + payload_len], "big")
+
+
+def load_chain_timestamps(chain_rlp_path: Path) -> list[tuple[int, int]]:
+    data = chain_rlp_path.read_bytes()
+    result: list[tuple[int, int]] = []
+    pos = 0
+
+    while pos < len(data):
+        is_list, payload_start, payload_len, item_end = rlp_item_info(data, pos)
+        if not is_list:
+            raise ValueError("Top-level chain.rlp item must be a block list")
+
+        block_items = rlp_list_items(data, payload_start, payload_len)
+        if len(block_items) < 1:
+            raise ValueError("Malformed block in chain.rlp")
+
+        header_item = block_items[0]
+        if not header_item[0]:
+            raise ValueError("Malformed block header in chain.rlp")
+
+        header_items = rlp_list_items(data, header_item[1], header_item[2])
+        if len(header_items) < 12:
+            raise ValueError("Block header has fewer fields than expected")
+
+        block_number = rlp_string_to_int(data, header_items[8])
+        timestamp = rlp_string_to_int(data, header_items[11])
+        result.append((block_number, timestamp))
+        pos = item_end
+
+    return result
+
+
+def activation_block_for_timestamp(
+    chain_timestamps: list[tuple[int, int]], timestamp: int
+) -> int | None:
+    for block_number, block_timestamp in chain_timestamps:
+        if block_timestamp >= timestamp:
+            return block_number
+    return None
+
+
+def set_hardfork_schedule(
+    evm_genesis: dict, geth_genesis: dict, chain_timestamps: list[tuple[int, int]]
+) -> None:
+    config = geth_genesis.get("config", {})
+    if not isinstance(config, dict):
+        return
+
+    schedule: list[tuple[int, str]] = [(0, "FRONTIER")]
+
+    def add_block_fork(field: str, fork_name: str) -> None:
+        value = parse_optional_int(config.get(field))
+        if value is None or value < 0:
+            return
+        schedule.append((value, fork_name))
+
+    add_block_fork("homesteadBlock", "HOMESTEAD")
+    add_block_fork("eip150Block", "TANGERINE")
+
+    eip155 = parse_optional_int(config.get("eip155Block"))
+    eip158 = parse_optional_int(config.get("eip158Block"))
+    if eip155 is not None or eip158 is not None:
+        max_spurious = max(x for x in [eip155, eip158] if x is not None)
+        schedule.append((max_spurious, "SPURIOUS_DRAGON"))
+
+    add_block_fork("byzantiumBlock", "BYZANTIUM")
+    add_block_fork("constantinopleBlock", "CONSTANTINOPLE")
+    add_block_fork("petersburgBlock", "PETERSBURG")
+    add_block_fork("istanbulBlock", "ISTANBUL")
+    add_block_fork("muirGlacierBlock", "MUIR_GLACIER")
+    add_block_fork("berlinBlock", "BERLIN")
+    add_block_fork("londonBlock", "LONDON")
+    add_block_fork("arrowGlacierBlock", "ARROW_GLACIER")
+    add_block_fork("grayGlacierBlock", "GRAY_GLACIER")
+    add_block_fork("mergeNetsplitBlock", "MERGE")
+
+    def add_time_fork(field: str, fork_name: str) -> None:
+        ts = parse_optional_int(config.get(field))
+        if ts is None:
+            return
+        activation = activation_block_for_timestamp(chain_timestamps, ts)
+        if activation is not None:
+            schedule.append((activation, fork_name))
+
+    add_time_fork("shanghaiTime", "SHANGHAI")
+    add_time_fork("cancunTime", "CANCUN")
+    add_time_fork("pragueTime", "PRAGUE")
+
+    schedule.sort(key=lambda item: item[0])
+    deduped: list[tuple[int, str]] = []
+    for block_number, fork_name in schedule:
+        if deduped and deduped[-1][0] == block_number:
+            deduped[-1] = (block_number, fork_name)
+        else:
+            deduped.append((block_number, fork_name))
+
+    chain_spec = evm_genesis.setdefault("chain_spec", {})
+    chain_spec["hardforks"] = [[block, fork] for block, fork in deduped]
+
+
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) not in (4, 5):
         print(
-            "Usage: genesis_adapter.py <geth_genesis.json> <template_genesis_dir> <output_dir>",
+            "Usage: genesis_adapter.py <geth_genesis.json> <template_genesis_dir> <output_dir> [chain_rlp_path]",
             file=sys.stderr,
         )
         return 1
@@ -231,6 +412,7 @@ def main() -> int:
     input_genesis = Path(sys.argv[1])
     template_dir = Path(sys.argv[2])
     output_dir = Path(sys.argv[3])
+    chain_rlp_path = Path(sys.argv[4]) if len(sys.argv) == 5 else None
 
     if not input_genesis.exists():
         print(f"Missing genesis file: {input_genesis}", file=sys.stderr)
@@ -254,6 +436,16 @@ def main() -> int:
     with bank_path.open("r", encoding="utf-8") as f:
         bank_genesis = json.load(f)
 
+    chain_timestamps: list[tuple[int, int]] = []
+    if chain_rlp_path is not None and chain_rlp_path.exists():
+        try:
+            chain_timestamps = load_chain_timestamps(chain_rlp_path)
+        except Exception as exc:
+            print(
+                f"Warning: failed to parse {chain_rlp_path} for fork schedule: {exc}",
+                file=sys.stderr,
+            )
+
     chain_id = parse_maybe_int(geth_genesis.get("config", {}).get("chainId"), DEFAULT_CHAIN_ID)
 
     evm_genesis["genesis_timestamp"] = parse_maybe_int(
@@ -266,6 +458,7 @@ def main() -> int:
     )
 
     chain_spec = evm_genesis.setdefault("chain_spec", {})
+    set_hardfork_schedule(evm_genesis, geth_genesis, chain_timestamps)
     existing_block_gas_limit = parse_maybe_int(chain_spec.get("block_gas_limit"), 30_000_000)
     chain_spec["block_gas_limit"] = parse_maybe_int(
         geth_genesis.get("gasLimit"),

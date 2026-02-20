@@ -113,7 +113,8 @@ where
         };
 
         for (slot, value) in storage {
-            self.account_storage.set(&(&address, &slot), &value, state)?;
+            self.account_storage
+                .set(&(&address, &slot), &value, state)?;
         }
 
         Ok(())
