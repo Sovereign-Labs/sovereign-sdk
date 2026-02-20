@@ -1,5 +1,6 @@
 use crate::helpers::{create_deploy_tx, create_set_arg_tx, setup, EvmAccount};
-use crate::runtime::{RT, S};
+use crate::runtime::{GenesisConfig, RT, S};
+use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256};
@@ -8,11 +9,17 @@ use alloy_rpc_types::{
     BlockOverrides, TransactionRequest,
 };
 use jsonrpsee::types::error::INVALID_PARAMS_CODE;
-use sov_evm::{EthereumAuthenticator, Evm};
+use sov_address::{EthereumAddress, MultiAddress};
+use sov_evm::{
+    AccountData, ContractCreationPolicy, EthereumAuthenticator, Evm, EvmChainSpec,
+    EvmGenesisConfig, SpecId,
+};
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
-use sov_test_utils::TransactionType;
+use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
+use sov_test_utils::runtime::TestRunner;
+use sov_test_utils::{TransactionType, TEST_DEFAULT_USER_BALANCE};
 use std::collections::BTreeMap;
 
 fn create_deploy_tx_with_init_code(
@@ -104,6 +111,10 @@ fn runtime_returning_constant(value: U256) -> Bytes {
     Bytes::from(runtime)
 }
 
+fn runtime_returning_push0() -> Bytes {
+    Bytes::from(vec![0x5f, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3])
+}
+
 fn decode_u256(output: Bytes) -> U256 {
     U256::from_be_slice(output.as_ref())
 }
@@ -122,6 +133,47 @@ fn call_request(from: Address, to: Address) -> TransactionRequest {
         to: Some(TxKind::Call(to)),
         ..Default::default()
     }
+}
+
+fn setup_with_hardforks(hardforks: Vec<(u64, SpecId)>) -> (TestRunner<RT, S>, EvmAccount) {
+    let evm_account = EvmAccount::generate();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
+    let admin = genesis_config
+        .additional_accounts()
+        .first()
+        .expect("genesis should include a default account")
+        .clone();
+
+    let evm_config = EvmGenesisConfig {
+        accounts: vec![AccountData {
+            address: evm_account.address(),
+            code_hash: KECCAK_EMPTY,
+            code: Default::default(),
+        }],
+        chain_spec: EvmChainSpec {
+            limit_contract_code_size: None,
+            coinbase: Address::ZERO,
+            block_gas_limit: 1_000_000_000,
+            tx_gas_limit: Some(30_000_000),
+            hardforks,
+        },
+        contract_creation_policy: ContractCreationPolicy::Everyone,
+        initial_base_fee: 0,
+        genesis_timestamp: 0,
+        admin: admin.address(),
+    };
+
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
+    if let Some(c) = genesis.bank.gas_token_config.as_mut() {
+        c.address_and_balances.push((
+            MultiAddress::Vm(EthereumAddress::from(evm_account.address())),
+            TEST_DEFAULT_USER_BALANCE,
+        ));
+    }
+
+    let runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    (runner, evm_account)
 }
 
 #[test]
@@ -430,6 +482,59 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
             )
             .unwrap();
         assert_eq!(decode_u256(timestamp_output), U256::from(5_555u64));
+    });
+}
+
+#[test]
+fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
+    let (runner, account) = setup_with_hardforks(vec![(0, SpecId::LONDON), (100, SpecId::CANCUN)]);
+    let push0_contract_addr = Address::with_last_byte(0x56);
+    let number_contract_addr = Address::with_last_byte(0x57);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let mut push0_overrides = StateOverride::default();
+        push0_overrides.insert(
+            push0_contract_addr,
+            AccountOverride::default().with_code(runtime_returning_push0()),
+        );
+
+        assert!(evm
+            .eth_call(
+                call_request(account.address(), push0_contract_addr),
+                None,
+                Some(push0_overrides.clone()),
+                None,
+                state,
+            )
+            .is_err());
+
+        let block_overrides = BlockOverrides::default().with_number(U256::from(100u64));
+        assert!(evm
+            .eth_call(
+                call_request(account.address(), push0_contract_addr),
+                None,
+                Some(push0_overrides),
+                Some(Box::new(block_overrides.clone())),
+                state,
+            )
+            .is_err());
+
+        let mut number_overrides = StateOverride::default();
+        number_overrides.insert(
+            number_contract_addr,
+            AccountOverride::default().with_code(runtime_returning_opcode(0x43)),
+        );
+        let number_output = evm
+            .eth_call(
+                call_request(account.address(), number_contract_addr),
+                None,
+                Some(number_overrides),
+                Some(Box::new(block_overrides)),
+                state,
+            )
+            .unwrap();
+        assert_eq!(decode_u256(number_output), U256::from(100u64));
     });
 }
 

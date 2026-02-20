@@ -326,6 +326,9 @@ where
             }
         };
 
+        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
+        // This intentionally includes override-based hypothetical state, because estimateGas
+        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
         self.db(state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");

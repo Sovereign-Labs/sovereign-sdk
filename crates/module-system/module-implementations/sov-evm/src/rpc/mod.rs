@@ -421,6 +421,7 @@ where
 
         let db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let mut evm_db = RevmState::builder().with_database(db).build();
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         apply_call_overrides(
             &mut evm_db,
             &mut block_env,
@@ -429,7 +430,6 @@ where
         )?;
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
-        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
         verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
