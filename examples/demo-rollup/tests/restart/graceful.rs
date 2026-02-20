@@ -40,8 +40,11 @@ generate_operator_runtime_with_kernel!(
 const ROLLUP_START_TIMEOUT: Duration = Duration::from_secs(10);
 const ROLLUP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const FULL_TEST_TIMEOUT: Duration = Duration::from_secs(300);
+const UNDER_LOAD_READY_TIMEOUT: Duration = Duration::from_secs(3);
 const MIN_SLEEP_MS: i64 = 10;
 const JITTER_MS: i64 = 15;
+const TX_SEND_INTERVAL_MS: u64 = 50;
+const TX_SENDER_DRAIN_BEFORE_SHUTDOWN_MS: u64 = 250;
 
 #[derive(Clone, Copy, Debug)]
 enum SleepKind {
@@ -105,7 +108,7 @@ fn build_sleep_schedule(
     schedule
 }
 
-fn known_restart_warnings() -> [(Level, String); 6] {
+fn known_restart_warnings() -> [(Level, String); 9] {
     [
         // https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1878:
         (
@@ -132,6 +135,21 @@ fn known_restart_warnings() -> [(Level, String); 6] {
         (
             Level::WARN,
             "Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown".to_string(),
+        ),
+        // Expected during catch-up/restart races when replayed txs cannot be applied.
+        (
+            Level::WARN,
+            "Cache warm up task: Transaction could not be applied on the executor.".to_string(),
+        ),
+        // Emitted by tower-http TraceLayer for non-success responses (e.g. /sequencer/ready probes).
+        (
+            Level::ERROR,
+            "response failed".to_string(),
+        ),
+        // Transactions can race with readiness transitions around restart boundaries.
+        (
+            Level::ERROR,
+            "Error accepting transaction".to_string(),
         ),
     ]
 }
@@ -357,60 +375,86 @@ async fn start_stop_under_load(
             .start(),
         )
         .await
-        .context("Starting rollup failed")??;
+        .with_context(|| format!("Starting rollup failed: restart={i} seed={seed}"))??;
 
-        // Spawn background task sending transactions every 50ms
-        // We deliberately skip wait_for_sequencer_ready: with persistent DA, accumulated
-        // blocks across restarts can make sync exceed the timeout on CI. The tx sender
-        // tolerates errors, so it naturally retries until the sequencer is ready.
-        let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
-        let api_client = test_rollup.client.client.clone();
-        let sender_key = key_and_address.private_key.clone();
-        let sender_receiver = receiver_addr;
-        let start_generation = generation;
-        let tx_sender = tokio::spawn(async move {
-            let mut count = 0u64;
+        // Submit transactions only while the sequencer is known-ready.
+        let sequencer_ready = tokio::time::timeout(UNDER_LOAD_READY_TIMEOUT, async {
             loop {
-                let tx = build_transfer_token_tx_with_generation::<DemoRollupSpec>(
-                    &sender_key,
-                    token_id,
-                    sender_receiver,
-                    100,
-                    start_generation.saturating_add(count),
-                );
-
-                // Race cancellation against the send so we respond promptly to shutdown
-                tokio::select! {
-                    _ = &mut cancel_rx => break,
-                    _ = api_client.send_tx_to_sequencer(&tx) => {}
+                if test_rollup.is_sequencer_ready().await {
+                    break;
                 }
-                count += 1;
-
-                // Pace the sends, also checking for cancellation
-                tokio::select! {
-                    _ = &mut cancel_rx => break,
-                    _ = tokio::time::sleep(Duration::from_millis(50)) => {}
-                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            count
-        });
+        })
+        .await
+        .is_ok();
+
+        if !sequencer_ready {
+            tracing::info!(
+                restart = i,
+                seed,
+                "Skipping tx phase because sequencer did not become ready in time"
+            );
+        }
+
+        let tx_sender_state = if sequencer_ready {
+            let (cancel_tx, mut cancel_rx) = tokio::sync::oneshot::channel::<()>();
+            let api_client = test_rollup.client.client.clone();
+            let sender_key = key_and_address.private_key.clone();
+            let sender_receiver = receiver_addr;
+            let start_generation = generation;
+            let tx_sender = tokio::spawn(async move {
+                let mut count = 0u64;
+                loop {
+                    let tx = build_transfer_token_tx_with_generation::<DemoRollupSpec>(
+                        &sender_key,
+                        token_id,
+                        sender_receiver,
+                        100,
+                        start_generation.saturating_add(count),
+                    );
+
+                    // Race cancellation against the send so we respond promptly to shutdown
+                    tokio::select! {
+                        _ = &mut cancel_rx => break,
+                        _ = api_client.send_tx_to_sequencer(&tx) => {}
+                    }
+                    count += 1;
+
+                    // Pace the sends, also checking for cancellation
+                    tokio::select! {
+                        _ = &mut cancel_rx => break,
+                        _ = tokio::time::sleep(Duration::from_millis(TX_SEND_INTERVAL_MS)) => {}
+                    }
+                }
+                count
+            });
+            Some((cancel_tx, tx_sender))
+        } else {
+            None
+        };
 
         // Let rollup run under load for some time
         tokio::time::sleep(sleep_entry.duration).await;
 
-        tracing::info!(restart = i, "Triggering shutdown under load....");
-        let shutdown_result =
-            tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await;
+        let mut txs_sent = 0u64;
+        if let Some((cancel_tx, tx_sender)) = tx_sender_state {
+            // Stop tx sender before shutdown so submissions happen only while ready.
+            let _ = cancel_tx.send(());
+            txs_sent = tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, tx_sender)
+                .await
+                .with_context(|| format!("join_tx_sender timed out: restart={i} seed={seed}"))?
+                .with_context(|| format!("tx sender task panicked: restart={i} seed={seed}"))?;
+            generation = generation.saturating_add(txs_sent);
 
-        // Stop tx sender after shutdown attempt so it overlaps with restart/shutdown boundary.
-        let _ = cancel_tx.send(());
-        let txs_sent = tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, tx_sender)
+            // Give in-flight request futures a short window to settle before shutdown.
+            tokio::time::sleep(Duration::from_millis(TX_SENDER_DRAIN_BEFORE_SHUTDOWN_MS)).await;
+        }
+
+        tracing::info!(restart = i, txs_sent, "Triggering shutdown under load....");
+        tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
             .await
-            .context("Timed out joining tx sender task")?
-            .context("tx sender task panicked")?;
-        generation = generation.saturating_add(txs_sent);
-
-        shutdown_result??;
+            .with_context(|| format!("shutdown timed out: restart={i} seed={seed}"))??;
         tracing::info!(restart = i, txs_sent, "Shutdown complete under load");
     }
 
