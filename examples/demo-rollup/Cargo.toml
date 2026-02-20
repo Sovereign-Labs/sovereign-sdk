@@ -69,6 +69,7 @@ tracing = { workspace = true }
 prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
+alloy-primitives = { workspace = true }
 
 
 [dev-dependencies]
@@ -159,3 +160,7 @@ path = "src/main.rs"
 [[bin]]
 name = "demo-celestia-tester"
 path = "src/da_tester/demo_celestia_tester.rs"
+
+[[bin]]
+name = "sov-hive-genesis-adapter"
+path = "src/hive/genesis_adapter.rs"

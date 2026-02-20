@@ -43,6 +43,17 @@ impl AccountData {
     pub fn balance(balance: u64) -> U256 {
         U256::from(balance)
     }
+
+    /// Builds an empty EVM account for the given address.
+    pub fn empty_with_address(address: Address) -> Self {
+        AccountData {
+            address,
+            code_hash: KECCAK_EMPTY,
+            code: Default::default(),
+            nonce: 0,
+            storage: Default::default(),
+        }
+    }
 }
 
 impl<S: Spec> Evm<S>

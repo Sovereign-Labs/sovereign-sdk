@@ -6,7 +6,11 @@ GENESIS_TEMPLATE_DIR="${SOV_HIVE_GENESIS_TEMPLATE_DIR:-/opt/sov/hive/genesis-tem
 GENESIS_OUTPUT_DIR="${SOV_HIVE_GENESIS_OUTPUT_DIR:-/tmp/sov-hive-genesis}"
 ROLLUP_CONFIG_PATH="${SOV_HIVE_ROLLUP_CONFIG_PATH:-/opt/sov/hive/mock_nomt_rollup_config.toml}"
 ROLLUP_BIN="${SOV_HIVE_ROLLUP_BIN:-/opt/sov/bin/sov-demo-rollup}"
+GENESIS_ADAPTER_BIN="${SOV_HIVE_GENESIS_ADAPTER_BIN:-/opt/sov/bin/sov-hive-genesis-adapter}"
 ENGINE_STUB_BIN="${SOV_HIVE_ENGINE_STUB_BIN:-/opt/sov/hive/engine_stub.py}"
+RPC_PROXY_BIN="${SOV_HIVE_RPC_PROXY_BIN:-/opt/sov/hive/rpc_root_proxy.py}"
+BACKEND_RPC_PORT="${SOV_HIVE_BACKEND_RPC_PORT:-8546}"
+ROLLUP_CONFIG_RUNTIME_PATH="${SOV_HIVE_RUNTIME_CONFIG_PATH:-/tmp/sov-hive-rollup-config.toml}"
 
 if [[ ! -f "${GENESIS_JSON}" ]]; then
   echo "Expected geth-style genesis at ${GENESIS_JSON}" >&2
@@ -38,7 +42,7 @@ if [[ -f /chain.rlp ]]; then
   ADAPTER_ARGS+=("/chain.rlp")
 fi
 
-python3 /opt/sov/hive/genesis_adapter.py "${ADAPTER_ARGS[@]}"
+"${GENESIS_ADAPTER_BIN}" "${ADAPTER_ARGS[@]}"
 
 CHAIN_ID="$(tr -d '\n' < "${GENESIS_OUTPUT_DIR}/chain_id.txt")"
 if [[ -z "${CHAIN_ID}" ]]; then
@@ -56,19 +60,67 @@ export NO_COLOR="${NO_COLOR:-1}"
 export CLICOLOR="${CLICOLOR:-0}"
 export CLICOLOR_FORCE="${CLICOLOR_FORCE:-0}"
 
+cp "${ROLLUP_CONFIG_PATH}" "${ROLLUP_CONFIG_RUNTIME_PATH}"
+sed -Ei "s/^(bind_port[[:space:]]*=[[:space:]]*).*/\\1${BACKEND_RPC_PORT}/" "${ROLLUP_CONFIG_RUNTIME_PATH}"
+
+cleanup() {
+  kill "${ROLLUP_PID:-}" 2>/dev/null || true
+  wait "${ROLLUP_PID:-}" 2>/dev/null || true
+  kill "${RPC_PROXY_PID:-}" 2>/dev/null || true
+  wait "${RPC_PROXY_PID:-}" 2>/dev/null || true
+  kill "${ENGINE_PID:-}" 2>/dev/null || true
+  wait "${ENGINE_PID:-}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 echo "Starting engine stub on :8551" >&2
 python3 "${ENGINE_STUB_BIN}" &
 ENGINE_PID=$!
 
-cleanup() {
-  kill "${ENGINE_PID}" 2>/dev/null || true
-  wait "${ENGINE_PID}" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
-echo "Starting sov-demo-rollup (mock DA + NOMT) on :8545" >&2
-exec "${ROLLUP_BIN}" \
+echo "Starting sov-demo-rollup backend (mock DA + NOMT) on :${BACKEND_RPC_PORT}" >&2
+"${ROLLUP_BIN}" \
   --da-layer mock \
   --storage nomt \
-  --rollup-config-path "${ROLLUP_CONFIG_PATH}" \
-  --genesis-config-dir "${GENESIS_OUTPUT_DIR}"
+  --rollup-config-path "${ROLLUP_CONFIG_RUNTIME_PATH}" \
+  --genesis-config-dir "${GENESIS_OUTPUT_DIR}" &
+ROLLUP_PID=$!
+
+echo "Waiting for backend RPC on :${BACKEND_RPC_PORT}" >&2
+for _ in $(seq 1 300); do
+  if python3 - <<PY
+import socket
+s = socket.socket()
+s.settimeout(0.2)
+try:
+    s.connect(("127.0.0.1", int("${BACKEND_RPC_PORT}")))
+except OSError:
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+  then
+    break
+  fi
+  sleep 0.1
+done
+
+if ! python3 - <<PY
+import socket
+s = socket.socket()
+s.settimeout(0.2)
+try:
+    s.connect(("127.0.0.1", int("${BACKEND_RPC_PORT}")))
+except OSError:
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+then
+  echo "Backend RPC did not become ready on :${BACKEND_RPC_PORT}" >&2
+  exit 1
+fi
+
+echo "Starting RPC root proxy on :8545 -> /rpc backend :${BACKEND_RPC_PORT}" >&2
+export SOV_HIVE_RPC_BACKEND_URL="http://127.0.0.1:${BACKEND_RPC_PORT}/rpc"
+python3 "${RPC_PROXY_BIN}" &
+RPC_PROXY_PID=$!
+
+wait -n "${ROLLUP_PID}" "${RPC_PROXY_PID}" "${ENGINE_PID}"

@@ -4,11 +4,10 @@ sender_address = "00000000000000000000000000000000000000000000000000000000000000
 finalization_blocks = 0
 
 [da.block_producing.periodic]
-block_time_ms = 500
+block_time_ms = 1000
 
 [storage]
 path = "/hive-data/demo_data"
-state_cache_size = 1000000
 user_commit_concurrency = 2
 user_hashtable_buckets = 500
 user_preallocate_ht = false

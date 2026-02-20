@@ -28,7 +28,7 @@ fn test_simple_transfer() {
             let mut db = evm.db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
-            // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
+            // The only balance changes should be from the transfer itself and not from gas as it's disabled in SovEvm
             assert_eq!(
                 from_acc.balance,
                 TEST_DEFAULT_USER_BALANCE.0 - value - ctx.gas_value_used.0
@@ -326,9 +326,9 @@ fn test_executing_eth_transactions_several_blocks() {
                         .unwrap()
                         .unwrap();
 
-                    assert_eq!(&tx.hash, tx_from_evm.inner.hash());
-                    assert_eq!(tx_index, tx_from_evm.transaction_index.unwrap());
-                    assert_eq!(block.nr, tx_from_evm.block_number.unwrap());
+                    assert_eq!(&tx.hash, tx_from_evm.transaction.inner.hash());
+                    assert_eq!(tx_index, tx_from_evm.transaction.transaction_index.unwrap());
+                    assert_eq!(block.nr, tx_from_evm.transaction.block_number.unwrap());
 
                     let receipt_from_evm = evm
                         .get_transaction_receipt(tx.hash, state)
@@ -339,7 +339,7 @@ fn test_executing_eth_transactions_several_blocks() {
                     assert_eq!(block.nr, receipt_from_evm.block_number.unwrap());
                     assert_eq!(tx_index, receipt_from_evm.transaction_index.unwrap());
                     assert_eq!(
-                        tx_from_evm.effective_gas_price,
+                        tx_from_evm.transaction.effective_gas_price,
                         Some(receipt_from_evm.effective_gas_price),
                         "transaction gas price should match receipt effective gas price",
                     );
@@ -507,7 +507,7 @@ impl Block {
 
         let mut blocks = vec![];
 
-        // We start from 1 becaue genesis is alredy in the state.
+        // We start from 1 because genesis is already in the state.
         let mut nr = 1;
         for txs in transfers.chunks(batch_size) {
             blocks.push(Block {

@@ -38,17 +38,15 @@ pub(crate) fn prepare_call_env(
     let tx_type = transaction_type.unwrap_or(inferred_tx_type);
     let gas_limit = gas.unwrap_or(block_env.gas_limit);
     let tx_kind = TransactionType::from(tx_type);
-    let (effective_gas_price, gas_priority_fee) = if matches!(
-        tx_kind,
-        TransactionType::Legacy | TransactionType::Eip2930
-    ) {
-        (gas_price.unwrap_or_default(), None)
-    } else {
-        (
-            max_fee_per_gas.or(gas_price).unwrap_or_default(),
-            Some(max_priority_fee_per_gas.unwrap_or_default()),
-        )
-    };
+    let (effective_gas_price, gas_priority_fee) =
+        if matches!(tx_kind, TransactionType::Legacy | TransactionType::Eip2930) {
+            (gas_price.unwrap_or_default(), None)
+        } else {
+            (
+                max_fee_per_gas.or(gas_price).unwrap_or_default(),
+                Some(max_priority_fee_per_gas.unwrap_or_default()),
+            )
+        };
 
     let env = TxEnv {
         tx_type,

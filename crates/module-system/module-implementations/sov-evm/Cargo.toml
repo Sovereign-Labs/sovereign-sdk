@@ -123,7 +123,8 @@ arbitrary = [
 	"alloy-consensus/arbitrary",
 	"reth-primitives-traits/arbitrary",
 	"reth-ethereum-primitives/arbitrary",
-	"sov-evm-test-utils/arbitrary"
+	"sov-evm-test-utils/arbitrary",
+	"alloy-serde?/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",

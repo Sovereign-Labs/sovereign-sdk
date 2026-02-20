@@ -90,9 +90,7 @@ pub(crate) async fn start_http_server(
         if let CorsConfiguration::Permissive = cors_configuration {
             router = router.layer(CorsLayer::permissive());
         }
-        // Serve JSON-RPC on both "/" (Hive and Ethereum tooling default) and "/rpc"
-        // to preserve existing SDK clients.
-        let router = router.merge(rpc_router.clone()).nest("/rpc", rpc_router);
+        let router = router.nest("/rpc", rpc_router);
         let router = NormalizePathLayer::trim_trailing_slash().layer(router);
 
         // TODO: Is there a way to have max_connections and other params for axum::serve?

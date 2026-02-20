@@ -1,7 +1,7 @@
 use alloy_consensus::transaction::{PooledTransaction, Recovered};
 use alloy_consensus::Transaction;
-use alloy_eips::Typed2718;
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
+use alloy_eips::Typed2718;
 use alloy_primitives::{Address, Bytes, B256, U256};
 use reth_primitives_traits::SignedTransaction;
 use revm::{

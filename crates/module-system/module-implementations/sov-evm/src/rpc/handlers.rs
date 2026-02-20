@@ -27,8 +27,8 @@ use sov_rpc_eth_types::{
 use std::ops::DerefMut;
 use tracing::trace;
 
-use crate::Evm;
 use super::{BlockWithTransactionTimestamp, TransactionWithBlockTimestamp};
+use crate::Evm;
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -103,7 +103,8 @@ where
             }
         }
 
-        let block = self.get_maybe_synthetic_block_for_rpc(Some(block_id.clone()), full.into(), state)?;
+        let block =
+            self.get_maybe_synthetic_block_for_rpc(Some(block_id.clone()), full.into(), state)?;
         if let Some(block) = block {
             return Ok(Some(super::with_block_transaction_timestamps(block)));
         }
@@ -161,7 +162,8 @@ where
         trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        if let Some(value) = super::hive_chain_fallback::get_storage(address, index, block_id.clone())
+        if let Some(value) =
+            super::hive_chain_fallback::get_storage(address, index, block_id.clone())
         {
             return Ok(value);
         }
@@ -229,15 +231,6 @@ where
     pub fn gas_price(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_gasPrice", "EVM module JSON-RPC request");
         Ok(U256::from(self.block_env(state)?.basefee))
-    }
-
-    /// Handler for: `eth_blobBaseFee`
-    /// Returns the current blob base fee. We report the canonical minimum value
-    /// while blob tx execution is not yet enabled.
-    #[rpc_method(name = "eth_blobBaseFee")]
-    pub fn blob_base_fee(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
-        trace!(method = "eth_blobBaseFee", "EVM module JSON-RPC request");
-        Ok(U256::from(1u64))
     }
 
     /// Handler for: `eth_feeHistory`
@@ -435,10 +428,8 @@ where
             method = "eth_createAccessList",
             "EVM module JSON-RPC request"
         );
-        if let Some(result) = super::hive_chain_fallback::create_access_list(
-            request.clone(),
-            block_id.clone(),
-        )
+        if let Some(result) =
+            super::hive_chain_fallback::create_access_list(request.clone(), block_id.clone())
         {
             return result.map_err(Into::into);
         }
@@ -785,7 +776,9 @@ where
                 // For synthetic hashes that are not in cache, this endpoint should behave
                 // like unknown block hash and return `null` instead of an RPC error.
                 Err(EthApiError::HeaderNotFound(_)) => {
-                    return Ok(super::hive_chain_fallback::block_tx_count_by_hash(block_hash))
+                    return Ok(super::hive_chain_fallback::block_tx_count_by_hash(
+                        block_hash,
+                    ))
                 }
                 Err(err) => return Err(err.into()),
             };
@@ -798,7 +791,9 @@ where
             )));
         }
 
-        Ok(super::hive_chain_fallback::block_tx_count_by_hash(block_hash))
+        Ok(super::hive_chain_fallback::block_tx_count_by_hash(
+            block_hash,
+        ))
     }
 }
 
