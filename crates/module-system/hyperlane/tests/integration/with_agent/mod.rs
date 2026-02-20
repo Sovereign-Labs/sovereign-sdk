@@ -558,7 +558,12 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
         // Periodically check relayer metrics for fast failure on critical errors
         if last_metrics_check.elapsed() >= std::time::Duration::from_millis(500) {
             last_metrics_check = std::time::Instant::now();
-            if hyperlane.metrics().has_critical_error().await.unwrap_or(false) {
+            if hyperlane
+                .metrics()
+                .has_critical_error()
+                .await
+                .unwrap_or(false)
+            {
                 rollup.shutdown().await.unwrap();
                 hyperlane.print_stdout().await;
                 panic!("Relayer reported a critical error during inbound transfer");
