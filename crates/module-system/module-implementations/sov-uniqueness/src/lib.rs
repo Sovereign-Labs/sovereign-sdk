@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 mod capabilities;
 mod generations;
+mod heights;
 mod nonces;
 use std::collections::{BTreeMap, HashSet};
 
@@ -20,6 +21,11 @@ use sov_state::User;
 ///   Each generation is mapped to a bucket of transactions that deduplicate transactions by their hash.
 ///   Each credential can store at most `MAX_STORED_TX_HASHES_PER_CREDENTIAL` in `PAST_TRANSACTION_GENERATIONS` generations.
 ///   When a transaction land with a generation number that is higher than the highest known generation, the buckets older than `new_generation - PAST_TRANSACTION_GENERATIONS` are pruned.
+///
+/// - Height deduplication: Each transaction sent by a given `sov_rollup_interface::crypto::CredentialId` can use a rollup height bucket.
+///   Heights are valid for `PAST_TRANSACTION_HEIGHTS` blocks after the provided height and each
+///   height bucket deduplicates transactions by hash. Buckets older than the configured cutoff are
+///   pruned when transactions are recorded.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
 pub struct Uniqueness<S: Spec> {
     /// The ID of the sov-uniqueness module.
@@ -33,6 +39,10 @@ pub struct Uniqueness<S: Spec> {
     /// Mapping from a credential id to a nonce.
     #[state]
     pub(crate) nonces: StateMap<CredentialId, u64>,
+
+    /// Mapping from a credential id to several rollup-height buckets.
+    #[state]
+    pub(crate) heights: StateMap<CredentialId, BTreeMap<u64, HashSet<TxHash>>>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,

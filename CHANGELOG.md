@@ -3,6 +3,8 @@
   You can use `SOV_CELESTIA_RPC_URL` for setup.
 - #2499 EVM: Add block-pinned state isolation tests for all 6 RPC endpoints
 - #2495 Updates examples configs
+# 2026-02-12
+- #2474 **Breaking change**: A new option for replay protection has been added, using rollup heights. Passing `UniquenessData::Height(u64)` makes the transaction valid from that rollup height and for the next `PAST_TRANSACTION_HEIGHTS` heights; no two transactions with the same height number can have the same `tx_hash`. Transactions sent for a future height are rejected immediately (not buffered). It's also possible to send transactions for a height in the near past to intentionally reduce the TTL of a transaction, if desired. This is a **chain hash breaking** change.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`

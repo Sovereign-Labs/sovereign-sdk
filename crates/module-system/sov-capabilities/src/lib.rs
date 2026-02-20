@@ -257,9 +257,12 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
+        let current_rollup_height = self.chain_state.rollup_height(state)?.get();
+
         self.uniqueness.check_uniqueness(
             &auth_data.credential_id,
             auth_data.uniqueness,
+            current_rollup_height,
             auth_data.tx_hash,
             execution_context,
             state,
@@ -273,9 +276,12 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         _sequencer: &<S::Da as DaSpec>::Address,
         state: &mut impl StateAccessor,
     ) -> anyhow::Result<()> {
+        let current_rollup_height = self.chain_state.rollup_height(state)?.get();
+
         self.uniqueness.mark_tx_attempted(
             &auth_data.credential_id,
             auth_data.uniqueness,
+            current_rollup_height,
             auth_data.tx_hash,
             state,
         )
