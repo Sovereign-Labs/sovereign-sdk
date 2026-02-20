@@ -197,6 +197,7 @@ impl CelestiaConfig {
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
                 endpoint = endpoint.metadata("x-token", grpc_auth_token);
             }
+            builder = builder.grpc_endpoint(endpoint);
             if let Some(signer_key_hex) = &self.signer_private_key {
                 builder = builder.private_key_hex(signer_key_hex);
             }
