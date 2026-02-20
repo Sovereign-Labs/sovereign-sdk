@@ -37,9 +37,6 @@ where
         _: Extensions,
     ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
         let filter = parse_filter(parameters)?;
-        if let Some(result) = sov_evm::hive_get_logs(&filter) {
-            return result;
-        }
 
         let state = ethereum.api_state_accessor();
         let service = LogsService::<S, Seq>::new(

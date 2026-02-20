@@ -21,13 +21,11 @@ use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
-use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{
     Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
-use jsonrpsee::types::ErrorObjectOwned;
 use maybe_archival_state::MaybeArchivalState;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
@@ -106,7 +104,6 @@ pub(crate) mod handlers;
 pub(crate) mod maybe_archival_state;
 
 mod fee_history;
-mod hive_chain_fallback;
 mod trace;
 
 /// Ethereum transaction response extended with optional block timestamp.
@@ -155,13 +152,6 @@ pub(crate) fn with_block_transaction_timestamps(block: Block) -> BlockWithTransa
         transactions,
         withdrawals: block.withdrawals,
     }
-}
-
-/// Returns replay-backed logs from imported Hive `/chain.rlp` when available.
-pub fn hive_get_logs(
-    filter: &Filter,
-) -> Option<Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned>> {
-    hive_chain_fallback::get_logs(filter)
 }
 
 /// Result of String => BlockNr conversion

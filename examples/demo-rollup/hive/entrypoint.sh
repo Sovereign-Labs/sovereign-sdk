@@ -18,13 +18,11 @@ if [[ ! -f "${GENESIS_JSON}" ]]; then
 fi
 
 # These inputs are part of Hive's generic eth1 lifecycle.
-# We still do not import historical block data yet, but we do use /chain.rlp to
-# infer time-based fork activation blocks so transaction validation matches fixtures.
+# We still do not import historical block data.
+# /chain.rlp is used for fork schedule derivation only.
 if [[ -f /chain.rlp ]]; then
-  echo "Using /chain.rlp for fork schedule derivation (no historical import yet)" >&2
-  export SOV_HIVE_CHAIN_RLP_PATH="/chain.rlp"
+  echo "Using /chain.rlp for fork schedule derivation (no historical import)" >&2
 fi
-export SOV_HIVE_GENESIS_JSON_PATH="${GENESIS_JSON}"
 if [[ -d /blocks ]] && compgen -G "/blocks/*.rlp" > /dev/null; then
   echo "Ignoring /blocks/*.rlp in first-pass rpc-compat mode" >&2
 fi

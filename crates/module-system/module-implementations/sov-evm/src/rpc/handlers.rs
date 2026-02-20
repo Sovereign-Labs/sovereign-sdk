@@ -71,9 +71,6 @@ where
             "EVM module JSON-RPC request"
         );
         let full = details.unwrap_or_default();
-        if let Some(block) = super::hive_chain_fallback::block_by_hash(block_hash, full) {
-            return Ok(Some(block));
-        }
         let block = self.get_maybe_synthetic_block_for_rpc(
             Some(BlockId::Hash(block_hash.into())),
             full.into(),
@@ -97,19 +94,8 @@ where
         );
         let block_id = block_id.unwrap_or_else(BlockId::latest);
         let full = details.unwrap_or_default();
-        if should_prefer_hive_fallback(&block_id) {
-            if let Some(block) = super::hive_chain_fallback::block_by_id(block_id.clone(), full) {
-                return Ok(Some(block));
-            }
-        }
-
-        let block =
-            self.get_maybe_synthetic_block_for_rpc(Some(block_id.clone()), full.into(), state)?;
-        if let Some(block) = block {
-            return Ok(Some(super::with_block_transaction_timestamps(block)));
-        }
-
-        Ok(super::hive_chain_fallback::block_by_id(block_id, full))
+        let block = self.get_maybe_synthetic_block_for_rpc(Some(block_id), full.into(), state)?;
+        Ok(block.map(super::with_block_transaction_timestamps))
     }
 
     /// Handler for: `eth_getBalance`
@@ -121,16 +107,6 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        if let Some(balance) = super::hive_chain_fallback::get_balance(address, block_id.clone()) {
-            trace!(
-                %address,
-                %balance,
-                method = "eth_getBalance",
-                "EVM module JSON-RPC request (Hive fallback)"
-            );
-            return Ok(balance);
-        }
-
         let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
         let balance = self
             .db(state.deref_mut())
@@ -162,12 +138,6 @@ where
         trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        if let Some(value) =
-            super::hive_chain_fallback::get_storage(address, index, block_id.clone())
-        {
-            return Ok(value);
-        }
-
         let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
         let storage_slot = self
             .account_storage
@@ -187,13 +157,6 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        if let Some(nonce) =
-            super::hive_chain_fallback::get_transaction_count(address, block_id.clone())
-        {
-            trace!(%address, nonce = nonce.to::<u64>(), method = "eth_getTransactionCount", "EVM module JSON-RPC request (Hive fallback)");
-            return Ok(nonce);
-        }
-
         let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
 
         let ethereum_address: EthereumAddress = address.into();
@@ -218,10 +181,6 @@ where
     ) -> RpcResult<Bytes> {
         trace!(method = "eth_getCode", %address, ?block_id, "EVM module JSON-RPC request");
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        if let Some(code) = super::hive_chain_fallback::get_code(address, block_id.clone()) {
-            return Ok(code);
-        }
-
         let state = self.resolve_state_for_block_id(Some(block_id), state)?;
         Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
@@ -255,14 +214,6 @@ where
             "EVM module JSON-RPC request"
         );
 
-        if let Some(history) = super::hive_chain_fallback::fee_history(
-            block_count,
-            newest_block,
-            reward_percentiles.as_deref(),
-        ) {
-            return Ok(history);
-        }
-
         Ok(self.get_fee_history(
             block_count,
             newest_block,
@@ -278,11 +229,9 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
-        let transaction = if let Some(tx) = self.get_transaction(hash, state) {
-            Some(with_local_block_timestamp(self, tx, state))
-        } else {
-            super::hive_chain_fallback::tx_by_hash(hash)
-        };
+        let transaction = self
+            .get_transaction(hash, state)
+            .map(|tx| with_local_block_timestamp(self, tx, state));
         trace!(
             %hash,
             ?transaction,
@@ -309,19 +258,11 @@ where
         let maybe_block =
             match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
                 Ok(block) => block,
-                Err(EthApiError::HeaderNotFound(_)) => {
-                    return Ok(super::hive_chain_fallback::tx_by_block_hash_and_index(
-                        block_hash,
-                        index.to::<u64>(),
-                    ))
-                }
+                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
                 Err(err) => return Err(err.into()),
             };
         let Some(block) = maybe_block else {
-            return Ok(super::hive_chain_fallback::tx_by_block_hash_and_index(
-                block_hash,
-                index.to::<u64>(),
-            ));
+            return Ok(None);
         };
         get_transaction_for_block_index(self, block, index.to::<u64>(), state).map_err(Into::into)
     }
@@ -342,10 +283,7 @@ where
         );
         let maybe_block = self.get_maybe_sealed_block_by_id(BlockId::Number(block), state)?;
         let Some(block) = maybe_block else {
-            return Ok(super::hive_chain_fallback::tx_by_block_number_and_index(
-                block,
-                index.to::<u64>(),
-            ));
+            return Ok(None);
         };
         get_transaction_for_block_index(self, block, index.to::<u64>(), state).map_err(Into::into)
     }
@@ -359,10 +297,6 @@ where
     ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
     {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        if let Some(receipts) = super::hive_chain_fallback::block_receipts(block_id.clone()) {
-            return Ok(Some(receipts));
-        }
-
         trace!(
             ?block_id,
             method = "eth_getBlockReceipts",
@@ -378,10 +312,6 @@ where
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>> {
-        if let Some(receipt) = super::hive_chain_fallback::transaction_receipt(hash) {
-            return Ok(Some(receipt));
-        }
-
         trace!(
             %hash,
             method = "eth_getTransactionReceipt",
@@ -406,10 +336,6 @@ where
             ?block_id,
             "EVM module JSON-RPC request"
         );
-        if let Some(result) = super::hive_chain_fallback::call(request.clone(), block_id.clone()) {
-            let result = result?.result;
-            return Ok(ensure_success(result)?);
-        }
 
         let result = self.call(request, block_id, state)?.result;
         Ok(ensure_success(result)?)
@@ -428,12 +354,6 @@ where
             method = "eth_createAccessList",
             "EVM module JSON-RPC request"
         );
-        if let Some(result) =
-            super::hive_chain_fallback::create_access_list(request.clone(), block_id.clone())
-        {
-            return result.map_err(Into::into);
-        }
-
         let initial_access_list = request.access_list.clone().unwrap_or_default();
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
         let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
@@ -472,10 +392,6 @@ where
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
         let latest = self.resolve_block_number(BlockNumberOrTag::Latest, state);
-        let latest = match super::hive_chain_fallback::latest_block_number() {
-            Some(fallback) => latest.max(fallback),
-            None => latest,
-        };
         Ok(U256::from(latest))
     }
 
@@ -493,19 +409,6 @@ where
             method = "eth_estimateGas",
             "EVM module JSON-RPC request"
         );
-
-        if let Some(result) = super::hive_chain_fallback::call(request.clone(), block_id.clone()) {
-            let ResultAndState { result, .. } = result?;
-            return match result {
-                ExecutionResult::Success { gas_used, .. } => Ok(U64::from(gas_used)),
-                ExecutionResult::Revert { output, .. } => {
-                    Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
-                }
-                ExecutionResult::Halt { reason, gas_used } => {
-                    Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
-                }
-            };
-        }
 
         let ResultAndState { result, .. } = self.call(request, block_id, state)?;
 
@@ -555,17 +458,12 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Bytes>> {
         let block_id = parse_debug_block_id(&raw_block_id)?;
-        if is_genesis_block_id(&block_id) {
-            if let Some(raw) = super::hive_chain_fallback::raw_block(block_id.clone()) {
-                return Ok(Some(raw));
-            }
-        }
         trace!(
             block_id = %raw_block_id,
             method = "debug_getRawBlock",
             "EVM module JSON-RPC request"
         );
-        let maybe_block = self.get_maybe_sealed_block_by_id(block_id.clone(), state)?;
+        let maybe_block = self.get_maybe_sealed_block_by_id(block_id, state)?;
         if let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block {
             let txs = block
                 .transactions()
@@ -583,7 +481,7 @@ where
             return Ok(Some(encoded.into()));
         }
 
-        Ok(super::hive_chain_fallback::raw_block(block_id))
+        Ok(None)
     }
 
     /// Handler for: `debug_getRawHeader`
@@ -594,24 +492,19 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Bytes>> {
         let block_id = parse_debug_block_id(&raw_block_id)?;
-        if is_genesis_block_id(&block_id) {
-            if let Some(raw) = super::hive_chain_fallback::raw_header(block_id.clone()) {
-                return Ok(Some(raw));
-            }
-        }
         trace!(
             block_id = %raw_block_id,
             method = "debug_getRawHeader",
             "EVM module JSON-RPC request"
         );
-        let maybe_block = self.get_maybe_sealed_block_by_id(block_id.clone(), state)?;
+        let maybe_block = self.get_maybe_sealed_block_by_id(block_id, state)?;
         if let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block {
             let mut encoded = Vec::new();
             block.header.inner().encode(&mut encoded);
             return Ok(Some(encoded.into()));
         }
 
-        Ok(super::hive_chain_fallback::raw_header(block_id))
+        Ok(None)
     }
 
     /// Handler for: `debug_getRawReceipts`
@@ -622,9 +515,6 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Vec<Bytes>> {
         let block_id = parse_debug_block_id(&raw_block_id)?;
-        if let Some(raw_receipts) = super::hive_chain_fallback::raw_receipts(block_id.clone()) {
-            return Ok(raw_receipts);
-        }
         trace!(
             block_id = %raw_block_id,
             method = "debug_getRawReceipts",
@@ -677,7 +567,7 @@ where
             }
         }
 
-        Ok(super::hive_chain_fallback::raw_tx(hash))
+        Ok(None)
     }
 
     // ========== web3 namespace ==========
@@ -753,8 +643,7 @@ where
             return Ok(Some(U64::from(block.transactions.len())));
         }
 
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
-        Ok(super::hive_chain_fallback::block_tx_count_by_id(block_id))
+        Ok(None)
     }
 
     /// Handler for: `eth_getBlockTransactionCountByHash`
@@ -775,11 +664,7 @@ where
                 Ok(block) => block,
                 // For synthetic hashes that are not in cache, this endpoint should behave
                 // like unknown block hash and return `null` instead of an RPC error.
-                Err(EthApiError::HeaderNotFound(_)) => {
-                    return Ok(super::hive_chain_fallback::block_tx_count_by_hash(
-                        block_hash,
-                    ))
-                }
+                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
                 Err(err) => return Err(err.into()),
             };
 
@@ -791,9 +676,7 @@ where
             )));
         }
 
-        Ok(super::hive_chain_fallback::block_tx_count_by_hash(
-            block_hash,
-        ))
+        Ok(None)
     }
 }
 
@@ -841,26 +724,6 @@ where
         .and_then(|block_number| evm.get_maybe_sealed_block(block_number, state))
         .map(|block| block.timestamp());
     super::with_block_timestamp(tx, block_timestamp)
-}
-
-fn should_prefer_hive_fallback(block_id: &BlockId) -> bool {
-    matches!(
-        block_id,
-        BlockId::Number(
-            BlockNumberOrTag::Earliest
-                | BlockNumberOrTag::Latest
-                | BlockNumberOrTag::Safe
-                | BlockNumberOrTag::Finalized
-                | BlockNumberOrTag::Number(0)
-        )
-    )
-}
-
-fn is_genesis_block_id(block_id: &BlockId) -> bool {
-    matches!(
-        block_id,
-        BlockId::Number(BlockNumberOrTag::Earliest | BlockNumberOrTag::Number(0))
-    )
 }
 
 fn parse_debug_block_id(raw: &str) -> Result<BlockId, ErrorObjectOwned> {

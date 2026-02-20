@@ -1,126 +1,161 @@
-# Hive rpc-compat Bring-Up for `sov-demo-rollup` (Correctness First)
+# Hive rpc-compat P0 Plan for `sov-demo-rollup`
 
-## Scope
-- Simulator: `ethereum/rpc-compat`
-- Target binary: `sov-demo-rollup`
-- Runtime mode: `--da-layer mock --storage nomt`
-- Priority: JSON-RPC and EVM correctness deltas, not throughput.
+## Goal
+- Run Hive `ethereum/rpc-compat` as a correctness signal for JSON-RPC + EVM behavior.
+- Keep phase-1 scope small, deterministic, and actionable.
+- Focus on correctness deltas, not throughput.
 
-## Current Status
-Latest full result:
-- `workspace/logs/full-20260220-130435-plan-impl/1771589325-0814d0020d77913d63eecdbb7fcb198c.json`
+## Scope Decision (P0, Non-Historical)
+Historical fixture-state reads are out of scope for this phase.
 
-Current baseline from that run:
-- Total: `200`
-- Pass: `84`
-- Fail: `116`
+P0 is a smoke conformance gate (27 tests currently), covering:
+- Network identity:
+  - `eth_chainId/get-chain-id`
+  - `net_version/get-network-id`
+  - `eth_syncing/check-syncing`
+- Transaction submission:
+  - all `eth_sendRawTransaction/*` tests
+- Basic transaction/receipt presence semantics:
+  - `eth_getTransactionByHash/get-empty-tx`
+  - `eth_getTransactionByHash/get-notfound-tx`
+  - `eth_getTransactionReceipt/get-empty-tx`
+  - `eth_getTransactionReceipt/get-notfound-tx`
+- Unknown-account / invalid-input behavior:
+  - `eth_getBalance/get-balance-unknown-account`
+  - `eth_getCode/get-code-unknown-account`
+  - `eth_getStorageAt/get-storage-invalid-key-too-large`
+  - `eth_getStorageAt/get-storage-invalid-key`
+  - `eth_getStorageAt/get-storage-unknown-account`
+  - `eth_getTransactionCount/get-nonce-unknown-account`
+- Missing-block semantics:
+  - `eth_getBlockByHash/get-block-by-empty-hash`
+  - `eth_getBlockByHash/get-block-by-notfound-hash`
+  - `eth_getBlockByNumber/get-block-notfound`
+  - `eth_getBlockReceipts/get-block-receipts-empty`
+  - `eth_getBlockReceipts/get-block-receipts-future`
+  - `eth_getBlockReceipts/get-block-receipts-not-found`
+- Minimal execution smoke:
+  - `eth_createAccessList/create-al-value-transfer`
+  - `eth_estimateGas/estimate-simple-transfer`
 
-Method coverage snapshot:
-- RPC method groups exercised: `30`
-- Fully passing groups: `19`
-- Partially passing groups: `8`
-- Zero-pass groups: `3` (`eth_blobBaseFee`, `eth_getProof`, `eth_simulateV1`)
+Explicitly out of scope in P0:
+- `eth_simulateV1`
+- `eth_getProof`
+- `eth_blobBaseFee`
+- fixture-history dependent reads (`latest/safe/finalized` fixture checks, fixture tx/receipt/log replay expectations)
+- `/blocks/*.rlp` import
 
-Largest remaining fail buckets:
+## Current Results (Parsed)
+Source report:
+- `workspace/logs/full-20260220-153439-p0-nonhistorical/1771598081-1d3a4875d7c2e4a37b9c2bc0cdfad188.json`
+
+Full suite totals:
+- total: `200`
+- pass: `39`
+- fail: `161`
+
+P0 profile totals:
+- p0 total: `27`
+- p0 pass: `27`
+- p0 fail: `0`
+
+Failing method buckets (full suite):
 - `eth_simulateV1`: `91`
-- `eth_getLogs`: `6`
-- `eth_getTransactionReceipt`: `6`
-- `eth_getBlockReceipts`: `4`
+- `eth_getBlockByNumber`: `9`
+- `eth_getLogs`: `8`
+- `eth_getTransactionReceipt`: `7`
+- `eth_getTransactionByHash`: `7`
+- `eth_call`: `6`
+- `eth_estimateGas`: `4`
 - `eth_getProof`: `3`
+- `eth_getBlockReceipts`: `3`
+- `eth_getTransactionCount`: `2`
+- `eth_getBlockTransactionCountByHash`: `2`
+- `eth_getBalance`: `2`
+- `eth_createAccessList`: `2`
+- `debug_getRawHeader`: `2`
+- `debug_getRawBlock`: `2`
+- `eth_getTransactionByBlockNumberAndIndex`: `1`
+- `eth_getTransactionByBlockHashAndIndex`: `1`
+- `eth_getStorageAt`: `1`
+- `eth_getCode`: `1`
+- `eth_getBlockTransactionCountByNumber`: `1`
 
-## What Is Implemented
-- Hive eth1 client lifecycle support:
-  - JSON-RPC HTTP exposed on `:8545`
-  - `/genesis.json` consumed at startup
-  - `/hive-bin/enode.sh` present (stub)
-  - `/version.txt` generated at build time
-- Engine API startup compatibility:
-  - `engine_stub.py` serves minimal setup methods on `:8551`
-- Genesis translation:
-  - now handled by Rust binary `sov-hive-genesis-adapter`
-  - geth alloc balances are applied to `bank.json`
-  - geth alloc EVM state (`code`, `nonce`, `storage`) is applied to `evm.json`
-  - chain ID is written to `chain_id.txt`
-  - `/chain.rlp` is used for time-fork activation mapping only
-- Chain ID correctness guard:
-  - image compiles `CHAIN_ID` from `HIVE_CHAIN_ID`
-  - runtime startup fails fast if `chain_id.txt` mismatches compiled chain ID
+Top failing tests (first 20):
+- `eth_getTransactionReceipt/get-legacy-receipt (sov-demo-rollup)`
+- `eth_getTransactionReceipt/get-setcode-tx (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-add-more-non-defined-BlockStateCalls-than-fit-but-now-with-fit (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-add-more-non-defined-BlockStateCalls-than-fit (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-basefee-too-low-with-validation-38012 (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-basefee-too-low-without-validation-38012-without-basefee-override (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-basefee-too-low-without-validation-38012 (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-big-block-state-calls-array (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-blobs (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-num-order-38020 (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-override-reflected-in-contract-simple (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-override-reflected-in-contract (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-timestamp-auto-increment (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-timestamp-non-increment (sov-demo-rollup)`
+- `debug_getRawTransaction/get-tx (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-timestamp-order-38021 (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-block-timestamps-incrementing (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-blockhash-complex (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-blockhash-simple (sov-demo-rollup)`
+- `eth_simulateV1/ethSimulate-blockhash-start-before-head (sov-demo-rollup)`
 
-## Intentional Stubs / Non-Goals (Current)
-- Full historical chain import from `/chain.rlp` and `/blocks/*.rlp` into canonical runtime state is not implemented.
-- `eth_simulateV1` is not implemented yet.
-- `eth_getProof` remains unsupported.
-- `eth_blobBaseFee` is intentionally unsupported in this rollup profile.
+## Implementation in Repository
+1. Profiled runner:
+- `examples/demo-rollup/hive/run-rpc-compat.sh` supports:
+  - `--profile full`
+  - `--profile p0` (alias of `p0-nonhistorical`)
+  - `--profile p0-nonhistorical`
+- For `p0`, the script runs full rpc-compat and then gates on a fixed P0 test-name regex.
+- Reason: rpc-compat `--sim.limit` filtering is too coarse for method-level subsetting.
 
-## NOMT on Other Machines (Custom Seccomp, Recommended)
-NOMT requires `io_uring` syscalls inside containers.
+2. No chain replay fallback in this PR:
+- `hive_chain_fallback` compatibility layer removed.
+- Native RPC paths only; no replay env toggles.
 
-### 1) Build a custom Docker seccomp profile
-Use Docker default seccomp as base, then allow `io_uring_*`:
+3. Vanilla Hive compatibility:
+- No Hive source patching required.
+- Uses standard Hive eth1 client image lifecycle.
+
+## Run Commands
+Build + run P0 gate:
 
 ```bash
-sudo cp /usr/share/docker/seccomp.json /etc/docker/seccomp-nomt.json
-sudo jq '.syscalls += [{"names":["io_uring_setup","io_uring_enter","io_uring_register"],"action":"SCMP_ACT_ALLOW"}]' \
-  /etc/docker/seccomp-nomt.json | sudo tee /etc/docker/seccomp-nomt.json >/dev/null
+bash /home/nikolai/workspace/sovereign-sdk/examples/demo-rollup/hive/run-rpc-compat.sh \
+  --build-image \
+  --profile p0 \
+  --tag p0-nonhistorical \
+  --exit-on-fail
 ```
 
-If `/usr/share/docker/seccomp.json` is missing, fetch Docker's default profile and apply the same `jq` patch.
-
-### 2) Configure Docker daemon to use the profile
-`/etc/docker/daemon.json`:
-
-```json
-{
-  "seccomp-profile": "/etc/docker/seccomp-nomt.json"
-}
-```
-
-If you already have daemon settings, merge this key into the existing JSON.
-
-Restart Docker:
+Run full suite baseline (non-gating in phase-1):
 
 ```bash
-sudo systemctl restart docker
+bash /home/nikolai/workspace/sovereign-sdk/examples/demo-rollup/hive/run-rpc-compat.sh \
+  --build-image \
+  --profile full \
+  --tag full-baseline
 ```
 
-### 3) Verify `io_uring` is allowed in containers
+## NOMT Requirement on New Machines
+NOMT needs `io_uring` syscalls allowed by Docker seccomp.
+
+1. Create seccomp profile allowing `io_uring_setup`, `io_uring_enter`, `io_uring_register`.
+2. Set Docker daemon `seccomp-profile` to that file.
+3. Restart Docker.
+4. Verify with:
 
 ```bash
 docker run --rm --entrypoint python3 hive/clients/sov-demo-rollup:latest \
   -c "import ctypes,os;libc=ctypes.CDLL(None,use_errno=True);fd=libc.syscall(425,2,ctypes.create_string_buffer(256));err=ctypes.get_errno();print('fd',fd,'errno',err,'msg',os.strerror(err) if err else '')"
 ```
 
-Expected healthy output: `fd` non-negative and `errno 0`.
+Expected: non-negative `fd`, `errno 0`.
 
-## Build and Run
-Build client image:
-
-```bash
-cd /home/nikolai/workspace/sovereign-sdk
-
-docker build \
-  --build-arg HIVE_CHAIN_ID=3503995874084926 \
-  -f examples/demo-rollup/hive/Dockerfile \
-  -t sov-demo-rollup-hive:local \
-  .
-```
-
-Run full rpc-compat from Hive checkout:
-
-```bash
-hive \
-  --sim ethereum/rpc-compat \
-  --client sov-demo-rollup \
-  --loglevel 2 \
-  --sim.loglevel 2 \
-  --client.checktimelimit 10m
-```
-
-## Vanilla Hive Compatibility
-- No Hive source patches are required.
-- Local integration is done through standard Hive client packaging (`clients/sov-demo-rollup/` and client YAML).
-
-## Next Fix Order
-1. Restore deterministic receipt/log behavior for fixture history paths (`eth_getLogs`, `eth_getTransactionReceipt`, `eth_getBlockReceipts`).
-2. Decide scope for `eth_getProof` (implement vs intentionally unsupported with documented expectation).
-3. Implement `eth_simulateV1` (largest remaining bucket).
+## P0 Acceptance Criteria
+- `run-rpc-compat.sh --profile p0 --exit-on-fail` succeeds.
+- P0 subset remains zero-fail across repeated runs.
+- Full-suite failures remain visible for prioritization but do not block phase-1.

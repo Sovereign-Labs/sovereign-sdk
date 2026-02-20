@@ -15,9 +15,10 @@ and prints a compact summary.
 Options:
   --build-image            Build sov-demo-rollup-hive image before running Hive
   --tag <suffix>           Result directory suffix (default: run)
+  --profile <name>         Built-in profile: full|p0|p0-nonhistorical (default: full)
   --sim <name>             Hive simulator (default: ethereum/rpc-compat)
   --client <name>          Hive client (default: sov-demo-rollup)
-  --limit <regex>          Optional Hive --sim.limit regex
+  --limit <regex>          Optional Hive --sim.limit regex (overrides --profile)
   --check-timeout <dur>    Hive --client.checktimelimit (default: 10m)
   --hive-dir <path>        Hive repo path (default: $HOME/workspace/hive)
   --results-base <path>    Base log dir (default: <hive-dir>/workspace/logs)
@@ -37,9 +38,11 @@ SDK_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 BUILD_IMAGE=0
 RUN_TAG="run"
+PROFILE="full"
 SIM="ethereum/rpc-compat"
 CLIENT="sov-demo-rollup"
 SIM_LIMIT=""
+PROFILE_SCOPE_REGEX=""
 CHECK_TIMEOUT="10m"
 HIVE_DIR="${HOME}/workspace/hive"
 RESULTS_BASE=""
@@ -55,6 +58,10 @@ while (($# > 0)); do
       ;;
     --tag)
       RUN_TAG="${2:?missing value for --tag}"
+      shift 2
+      ;;
+    --profile)
+      PROFILE="${2:?missing value for --profile}"
       shift 2
       ;;
     --sim)
@@ -105,6 +112,25 @@ while (($# > 0)); do
   esac
 done
 
+if [[ -z "${SIM_LIMIT}" ]]; then
+  case "${PROFILE}" in
+    full)
+      ;;
+    p0|p0-nonhistorical)
+      # P0 non-historical smoke surface: basic network/transaction correctness,
+      # intentionally excluding fixture-history dependent reads.
+      # rpc-compat's simulator-level filtering is too coarse for method subsets,
+      # so this profile runs the full suite and evaluates pass/fail only for the
+      # scoped P0 test names below.
+      PROFILE_SCOPE_REGEX='^(client launch|eth_chainId/get-chain-id|net_version/get-network-id|eth_syncing/check-syncing|eth_sendRawTransaction/|eth_getTransactionByHash/(get-empty-tx|get-notfound-tx)|eth_getTransactionReceipt/(get-empty-tx|get-notfound-tx)|eth_getBalance/get-balance-unknown-account|eth_getCode/get-code-unknown-account|eth_getStorageAt/(get-storage-invalid-key-too-large|get-storage-invalid-key|get-storage-unknown-account)|eth_getTransactionCount/get-nonce-unknown-account|eth_getBlockByHash/(get-block-by-empty-hash|get-block-by-notfound-hash)|eth_getBlockByNumber/get-block-notfound|eth_getBlockReceipts/(get-block-receipts-empty|get-block-receipts-future|get-block-receipts-not-found)|eth_createAccessList/create-al-value-transfer|eth_estimateGas/estimate-simple-transfer)'
+      ;;
+    *)
+      log "Unknown profile: ${PROFILE} (expected full|p0|p0-nonhistorical)"
+      exit 1
+      ;;
+  esac
+fi
+
 if [[ ! -d "${HIVE_DIR}" ]]; then
   log "Hive directory not found: ${HIVE_DIR}"
   exit 1
@@ -145,6 +171,13 @@ if [[ -n "${SIM_LIMIT}" ]]; then
 fi
 
 log "Run dir: ${RUN_DIR}"
+log "Profile: ${PROFILE}"
+if [[ -n "${SIM_LIMIT}" ]]; then
+  log "Sim limit regex: ${SIM_LIMIT}"
+fi
+if [[ -n "${PROFILE_SCOPE_REGEX}" ]]; then
+  log "Profile scope regex: ${PROFILE_SCOPE_REGEX}"
+fi
 log "Running: ${HIVE_CMD[*]}"
 
 set +e
@@ -190,6 +223,47 @@ jq -r '
   | head -n 20 \
   | sed 's/^/[hive-rpc]   /'
 
+PROFILE_FAIL_COUNT=""
+if [[ -n "${PROFILE_SCOPE_REGEX}" ]]; then
+  PROFILE_SUMMARY="$(
+    jq -r --arg re "${PROFILE_SCOPE_REGEX}" '
+      .testCases
+      | to_entries
+      | map(select(.value.name | test($re)))
+      | "total=\(length) pass=\(map(select(.value.summaryResult.pass))|length) fail=\(map(select(.value.summaryResult.pass|not))|length)"
+    ' "${RESULT_JSON}"
+  )"
+  PROFILE_FAIL_COUNT="$(
+    jq -r --arg re "${PROFILE_SCOPE_REGEX}" '
+      .testCases
+      | to_entries
+      | map(select(.value.name | test($re)))
+      | map(select(.value.summaryResult.pass|not))
+      | length
+    ' "${RESULT_JSON}"
+  )"
+  log "Profile summary: ${PROFILE_SUMMARY}"
+
+  if [[ "${PROFILE_FAIL_COUNT}" != "0" ]]; then
+    log "Profile failing tests:"
+    jq -r --arg re "${PROFILE_SCOPE_REGEX}" '
+      .testCases
+      | to_entries[]
+      | select(.value.name | test($re))
+      | select(.value.summaryResult.pass|not)
+      | .value.name
+    ' "${RESULT_JSON}" \
+      | head -n 40 \
+      | sed 's/^/[hive-rpc]   /'
+  fi
+fi
+
 if [[ "${EXIT_ON_FAIL}" == "1" ]]; then
+  if [[ -n "${PROFILE_SCOPE_REGEX}" ]]; then
+    if [[ "${PROFILE_FAIL_COUNT}" != "0" ]]; then
+      exit 1
+    fi
+    exit 0
+  fi
   exit "${HIVE_RC}"
 fi

@@ -61,9 +61,8 @@ fn parse_u64_value(value: &Value, field_name: &str) -> Result<u64> {
 
 fn parse_optional_u64(value: Option<&Value>, field_name: &str) -> Result<Option<u64>> {
     match value {
-        Some(Value::Null) => Ok(None),
+        Some(Value::Null) | None => Ok(None),
         Some(v) => Ok(Some(parse_u64_value(v, field_name)?)),
-        None => Ok(None),
     }
 }
 
