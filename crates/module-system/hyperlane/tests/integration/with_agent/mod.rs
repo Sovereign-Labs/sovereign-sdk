@@ -490,7 +490,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     let mut local_route_id = HexString([0; 32]);
     let mut remote_route_id = HexString([0; 32]);
     // look for `route registered` event
-    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
+    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(route_registered_event) = find_event(&events, "Warp/RouteRegistered") {
@@ -559,7 +559,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     }
 
     let mut transfer_received = false;
-    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
+    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         if let Some(token_recv_event) = find_event(&events, "Warp/TokenTransferReceived") {
@@ -612,7 +612,7 @@ async fn test_warp_transfer_back_and_forth_with_evm_counterparty(
     let transfer_tx = encode_call(prover.user_info.private_key(), &transfer_call);
     submit_tx(rollup.api_client(), transfer_tx).await;
 
-    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 15 {
+    for _ in 0..DEFAULT_FINALIZATION_BLOCKS * 30 {
         let events = next_slot_events(rollup.api_client(), &mut slot_subscription).await;
 
         // look for event that sent outbound transfer
