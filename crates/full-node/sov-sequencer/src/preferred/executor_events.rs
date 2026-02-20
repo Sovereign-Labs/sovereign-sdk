@@ -1,9 +1,12 @@
 use std::num::NonZero;
 use std::sync::Arc;
 
+use rockbound::cache::delta_reader::DeltaReader;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet, VisibleSlotNumber};
+use sov_modules_api::{
+    Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxChangeSet, VisibleSlotNumber,
+};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot, watch};
 
@@ -13,6 +16,7 @@ use crate::preferred::db::{BlobsCache, ReadBatch};
 use crate::preferred::{
     exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
 };
+use crate::SlotNumber;
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 
@@ -187,6 +191,16 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
+    pub(crate) async fn update_api_ledger_from_info(&self, info: &StateUpdateInfo<S::Storage>) {
+        self.send(ExecutorEvent::UpdateApiLedger {
+            ledger_reader: info.ledger_reader.clone(),
+            slot_number: info.slot_number,
+            latest_finalized_slot_number: info.latest_finalized_slot_number,
+            next_tx_number: info.next_tx_number,
+        })
+        .await;
+    }
+
     /// Fetch the in-progress batch from the database.
     pub(crate) fn fetch_in_progress_batch(&self) -> Option<ReadBatch> {
         self.cache
@@ -325,6 +339,13 @@ where
     AcceptedTx(AcceptedTxEventContents<S, Rt>),
     /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery
     ForceUpdateApiState(StateCheckpoint<S>),
+    /// Update the ledger reader and send slot notifications for API/WebSocket consistency.
+    UpdateApiLedger {
+        ledger_reader: DeltaReader,
+        slot_number: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
+        next_tx_number: u64,
+    },
     /// Prune the database up to the given sequence number.
     PruneDb(SequenceNumber),
     /// Enter recovery mode.
