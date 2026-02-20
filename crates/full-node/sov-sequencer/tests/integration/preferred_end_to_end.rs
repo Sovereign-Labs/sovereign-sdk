@@ -203,7 +203,7 @@ async fn produce_blocks_until_sequencer_readiness(
             return;
         }
         da_layer.produce_block().await.unwrap();
-        da_layer.wait_for_new_slot_notification().await;
+        test_rollup.wait_for_node_synced().await.unwrap();
     }
 
     let current_ready = test_rollup.is_sequencer_ready().await;
@@ -246,7 +246,7 @@ async fn wait_for_many_values_item(
         }
 
         da_layer.produce_block().await.unwrap();
-        da_layer.wait_for_new_slot_notification().await;
+        test_rollup.wait_for_node_synced().await.unwrap();
     }
 
     panic!(
