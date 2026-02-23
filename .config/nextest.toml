@@ -31,11 +31,21 @@ priority = 85                                                        # Start lon
 threads-required = 4                                                 # Limit parallelism when these tests run
 slow-timeout = { period = "60s", terminate-after = 10 }              # These tests need up to 10 minutes under load
 
+# Performance benchmark: must run in complete isolation to avoid contention
+[[profile.default.overrides]]
+filter = 'package(sov-sequencer) & test(/flaky_test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes/)'
+test-group = 'isolated-perf-tests'
+priority = 95                                                        # Run early to avoid adding tail latency
+slow-timeout = { period = "60s", terminate-after = 10 }              # Needs up to 10 minutes under load
+
 # Conservative default for sequencer tests: allow parallelism while avoiding
 # over-contention on tokio multi-thread tests.
 [[profile.default.overrides]]
 filter = 'package(sov-sequencer)'
 threads-required = 4
+
+[test-groups.isolated-perf-tests]
+max-threads = 1
 
 [test-groups.heavy-sequencer-tests]
 max-threads = 2
