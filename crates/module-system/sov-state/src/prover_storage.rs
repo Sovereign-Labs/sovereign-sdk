@@ -66,9 +66,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         key: &SlotKey,
         version: SlotNumber,
     ) -> Option<SlotValue> {
-        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-        let key_vec = key.as_ref().to_vec();
-        match self.db.get_value_option_by_key::<N>(version, &key_vec) {
+        match self.db.get_value_option_by_key::<N>(version, key.as_ref()) {
             Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
@@ -256,14 +254,11 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         accessory_writes: &OrderedReadsAndWrites,
     ) -> sov_db::schema::SchemaBatch {
         let next_version = self.db.get_next_version();
-        // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
         AccessoryDb::materialize_values(
-            accessory_writes.ordered_writes.iter().map(|(k, v_opt)| {
-                (
-                    k.as_ref().to_vec(),
-                    v_opt.as_ref().map(|v| v.value().to_vec()),
-                )
-            }),
+            accessory_writes
+                .ordered_writes
+                .iter()
+                .map(|(k, v_opt)| (k.as_ref(), v_opt.as_ref().map(|v| v.value()))),
             next_version,
         )
         .expect("accessory db materialization must succeed")
