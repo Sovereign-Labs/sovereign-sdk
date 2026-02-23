@@ -518,6 +518,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             let prover_config = prover_config
                 .expect("This code path should not be possible; this is a bug, please report it");
 
+            let prover_service = self
+                .create_prover_service(prover_config, &rollup_config, &da_service)
+                .await;
+
             let proof_sender =
                 Box::new(self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone())?);
 
@@ -540,9 +544,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?
                 }
                 OperatingMode::Zk => {
-                    let prover_service = self
-                        .create_prover_service(prover_config, &rollup_config, &da_service)
-                        .await;
                     start_zk_workflow_in_background(
                         prover_service,
                         rollup_config.proof_manager.aggregated_proof_block_jump,
