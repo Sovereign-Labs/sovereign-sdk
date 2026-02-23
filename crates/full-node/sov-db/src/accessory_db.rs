@@ -50,21 +50,21 @@ impl AccessoryDb {
             key.as_ref(),
             version,
             self.db
-                .get_prev::<ModuleAccessoryState>(&(key.as_ref().to_vec(), version))?,
+                .get_prev::<ModuleAccessoryState>(&(key.as_ref(), version))?,
         )
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
-    pub fn materialize_values(
-        key_value_pairs: impl IntoIterator<Item = (AccessoryKey, AccessoryStateValue)>,
+    pub fn materialize_values<K: AsRef<[u8]>, V: AsRef<[u8]>>(
+        key_value_pairs: impl IntoIterator<Item = (K, Option<V>)>,
         version: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
             // We always .put and not .delete to keep archival data.
-            batch.put::<ModuleAccessoryState>(&(key.clone(), version), &value)?;
+            batch.put::<ModuleAccessoryState>(&(key.as_ref(), version), &value)?;
             // Also update the secondary index for efficient rollback
-            batch.put::<AccessoryKeysByVersion>(&(version, key), &())?;
+            batch.put::<AccessoryKeysByVersion>(&(version, key.as_ref()), &())?;
         }
         Ok(batch)
     }
