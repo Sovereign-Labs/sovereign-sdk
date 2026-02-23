@@ -187,10 +187,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
-        // Slot notifications can arrive before the height endpoint reflects the new rollup height.
-        // Keep a short delay here so the next height read doesn't overshoot `stop_at_height`.
-        // A strict wait_for_height() is unsafe in this test because the rollup can stop mid-wait.
-        tokio::time::sleep(Duration::from_millis(300)).await;
         current_height = test_rollup.height().await;
     }
 
