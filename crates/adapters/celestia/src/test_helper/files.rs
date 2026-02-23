@@ -439,7 +439,6 @@ pub mod from_testnet_no_shares {
     }
 }
 
-#[allow(dead_code)]
 pub mod from_mocha_shares_mismatch {
     use super::*;
     pub const DATA_PATH: &str = "test_data/block_mocha_shares_mismatch_1";
@@ -597,7 +596,6 @@ pub mod with_mixed_v0_and_v1_blobs {
     }
 }
 
-#[allow(dead_code)]
 pub mod from_mocha_invalid_row_proof {
     use super::*;
     pub const DATA_PATH: &str = "test_data/block_mocha_invalid_row_proof";
@@ -626,7 +624,6 @@ pub mod from_mocha_invalid_row_proof {
         let path = make_test_path(DATA_PATH);
 
         let signers = serde_json::json!({"signers": vec![ADDR_4]});
-        println!("SIGNERS: {signers:?}");
         write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
 
         let block_header = client.header().get_by_height(HEIGHT).await.unwrap();
@@ -685,8 +682,6 @@ pub(crate) fn load_from_file<T: DeserializeOwned>(path: &Path, name: &str) -> an
 
 pub(crate) fn write_to_file<T: serde::Serialize>(path: &Path, data: &T) -> anyhow::Result<()> {
     let pretty_json = serde_json::to_string_pretty(data)?;
-    println!("PRETTY: {pretty_json:?}");
-    println!("PATH: {path:?}");
     std::fs::write(path, pretty_json)?;
     Ok(())
 }
