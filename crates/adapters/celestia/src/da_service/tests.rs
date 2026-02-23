@@ -601,7 +601,7 @@ async fn generate_mocha_testnet_blocks() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-// #[ignore = "should be run manually if need to regenerate data"]
+#[ignore = "should be run manually if need to regenerate data"]
 async fn mocha_shares_panic() -> anyhow::Result<()> {
     // Install the ring crypto provider for rustls (required for TLS connections)
     let _ = rustls::crypto::ring::default_provider().install_default();
