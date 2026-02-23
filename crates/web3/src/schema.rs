@@ -263,6 +263,10 @@ pub const DEFAULT_MAX_FEE: u128 = 100000000;
 ///
 /// Returns [`TransactionBuilderError::TimeError`] if the system clock
 /// is set to a time before the Unix epoch.
+///
+/// # Panics
+/// Panics if the system clock is outside the supported Unix epoch range
+/// (milliseconds since 1970 do not fit in `u64`).
 pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
