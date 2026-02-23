@@ -765,9 +765,6 @@ async fn save_blobs(
 ) {
     write_to_file(&path.join(HEADER_JSON), &block_header).unwrap();
 
-    // TODO: get signers from input
-    // let signers = serde_json::json!({"signers": Vec::<String>::new()});
-    // write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
     let rollup_batch_rows = client
         .share()
         .get_namespace_data(block_header.height(), APP_VERSION, batch_namespace)
