@@ -5,7 +5,7 @@ use anyhow::{ensure, Context};
 use jmt::storage::{HasPreimage, NodeBatch, TreeReader};
 use jmt::{KeyHash, Version};
 use rockbound::cache::delta_reader::DeltaReader;
-use rockbound::{SchemaBatch, SchemaKey};
+use rockbound::SchemaBatch;
 use sov_rollup_interface::common::SlotNumber;
 
 use crate::namespaces::{KernelNamespace, Namespace, UserNamespace};
@@ -93,7 +93,7 @@ impl StateDb {
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
         for (key_hash, key) in items.into_iter() {
-            batch.put::<KeyHashToKey<N>>(&key_hash.0, key.as_ref())?;
+            batch.put::<KeyHashToKey<N>>(&key_hash.0, &key.as_ref().to_vec())?;
         }
         Ok(batch)
     }

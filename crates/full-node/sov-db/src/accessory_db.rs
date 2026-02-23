@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
@@ -9,7 +10,7 @@ use crate::schema::tables::{
     AccessoryKeysByVersion, ModuleAccessoryState, StateRootHashes, ACCESSORY_TABLES,
 };
 use crate::schema::types::slot_key::SlotKey;
-use crate::schema::types::{AccessoryKey, AccessoryStateValue};
+use crate::schema::types::AccessoryStateValue;
 use crate::{ensure_version_is_correct, DbOptions};
 
 /// Specifies a particular version of the Accessory state.
@@ -55,14 +56,15 @@ impl AccessoryDb {
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
-    pub fn materialize_values<K: AsRef<[u8]>, V: AsRef<[u8]>>(
+    pub fn materialize_values<K: AsRef<[u8]> + Debug, V: AsRef<[u8]>>(
         key_value_pairs: impl IntoIterator<Item = (K, Option<V>)>,
         version: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
             // We always .put and not .delete to keep archival data.
-            batch.put::<ModuleAccessoryState>(&(key.as_ref(), version), &value)?;
+            let value_opt: Option<Vec<u8>> = value.as_ref().map(|v| v.as_ref().to_vec());
+            batch.put::<ModuleAccessoryState>(&(key.as_ref(), version), &value_opt)?;
             // Also update the secondary index for efficient rollback
             batch.put::<AccessoryKeysByVersion>(&(version, key.as_ref()), &())?;
         }
@@ -136,12 +138,12 @@ impl AccessoryDb {
         // Create a range that covers all keys for this version
         // Since keys are encoded as (version, key), all entries for a version
         // will be between (version, empty) and (version+1, empty)
-        let start = (version, Vec::new());
+        let start = (version, Vec::<u8>::new());
 
         let mut next_version = version;
         next_version.incr();
 
-        let end = (next_version, Vec::new());
+        let end = (next_version, Vec::<u8>::new());
 
         let mut iter = db.iter_range::<AccessoryKeysByVersion>(&start, &end)?;
         iter.seek_to_first();
@@ -173,6 +175,7 @@ impl AccessoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::types::AccessoryKey;
     use sov_rollup_interface::common::IntoSlotNumber;
     use std::{collections::HashMap, sync::Arc};
 
@@ -241,7 +244,7 @@ mod tests {
         );
 
         let changes2 =
-            AccessoryDb::materialize_values(vec![(key.clone(), None)], 0.to_slot_number()).unwrap();
+            AccessoryDb::materialize_values(vec![(key.clone(), None::<Vec<u8>>)], 0.to_slot_number()).unwrap();
         rocksdb.write_schemas(&changes2).unwrap();
         assert_eq!(
             db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
