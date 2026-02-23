@@ -344,6 +344,10 @@ k256 = { version = "0.13.4", default-features = false, features = ["ecdsa", "std
 quick_cache = "0.6.16"
 # End of EVM dependencies
 
+[profile.dev]
+# Keep backtraces useful while reducing debug-link overhead in local builds.
+debug = "line-tables-only"
+
 [profile.rust-analyzer-optimized]
 inherits = "dev"
 debug = false

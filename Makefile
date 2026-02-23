@@ -63,6 +63,13 @@ test-all: ## Runs test suite using nextest, across the whole workspace
 test-default-features:  ## Runs test suite using default features
 	@cargo nextest run --no-fail-fast --status-level skip
 
+test-fast: ## Runs a fast local test suite (skips guest builds and docker tests)
+	@SKIP_GUEST_BUILD=1 SP1_SKIP_PROGRAM_BUILD=1 SOV_TEST_SKIP_DOCKER=1 cargo nextest run --no-fail-fast --status-level skip --all-features --profile local-fast
+
+docker-pull-test-images: ## Pre-pull docker images used by integration tests
+	docker pull ghcr.io/sovereign-labs/celestia-validator-devnet:v6.2.2-mocha
+	docker pull ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.28.2-mocha
+
 install-dev-tools:  ## Installs all necessary dev tools
 install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolchain
 	rustup update nightly
