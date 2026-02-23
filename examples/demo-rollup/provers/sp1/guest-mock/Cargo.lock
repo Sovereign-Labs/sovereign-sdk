@@ -5925,8 +5925,12 @@ dependencies = [
  "borsh",
  "schemars 0.8.22",
  "serde",
+ "serde_json",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-state",
+ "strum 0.26.3",
+ "thiserror 1.0.69",
 ]
 
 [[package]]
