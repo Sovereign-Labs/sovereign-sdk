@@ -270,7 +270,7 @@ pub const DEFAULT_MAX_FEE: u128 = 100000000;
 pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-    Ok(UniquenessData::Generation(now.try_into::<u64>().expect(
+    Ok(UniquenessData::Generation(now.try_into().expect(
         "system clock is far beyond Unix epoch range; milliseconds since 1970 do not fit in u64",
     )))
 }
