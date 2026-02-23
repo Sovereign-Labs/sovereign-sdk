@@ -167,18 +167,21 @@ wait_for_sequencer_ready "http://127.0.0.1:$ROLLUP_PORT" "Rollup" "$ROLLUP_LOG"
 echo "==> Installing harness dependencies..."
 (cd "$HARNESS_DIR" && pnpm install)
 
-# ── 9. Run the harness ────────────────────────────────────────────────────
+# ── 9. Clear stale reports so a crash doesn't leave misleading artifacts ──
+rm -f "$HARNESS_DIR/artifacts/report.json" "$HARNESS_DIR/artifacts/report.md"
+
+# ── 10. Run the harness ───────────────────────────────────────────────────
 echo "==> Running EVM RPC diff harness..."
 # Use env vars instead of CLI args to avoid pnpm arg-forwarding issues
 # with compound scripts ("build:contracts && tsx src/run.ts").
+HARNESS_EXIT=0
 (
     cd "$HARNESS_DIR"
     ANVIL_RPC_URL="http://127.0.0.1:$ANVIL_PORT" \
     ROLLUP_RPC_URL="http://127.0.0.1:$ROLLUP_PORT/rpc" \
     TEST_PRIVATE_KEY="0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" \
     pnpm run compare
-)
-HARNESS_EXIT=$?
+) || HARNESS_EXIT=$?
 
 echo ""
 if [[ $HARNESS_EXIT -eq 0 ]]; then
@@ -188,4 +191,10 @@ else
 fi
 
 echo "==> Report: $HARNESS_DIR/artifacts/report.md"
+
+if [[ -f "$HARNESS_DIR/artifacts/report.md" ]]; then
+    echo ""
+    cat "$HARNESS_DIR/artifacts/report.md"
+fi
+
 exit $HARNESS_EXIT
