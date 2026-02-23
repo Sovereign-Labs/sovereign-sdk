@@ -159,6 +159,7 @@ where
                 )),
             )
             .route("/events", get(Self::list_events))
+            .route("/events/counts", get(Self::get_event_key_counts))
             .route("/events/latest", get(Self::get_latest_event))
             .nest(
                 "/events/:eventId",
@@ -394,6 +395,15 @@ where
             .map_err(errors::database_error_response_500)?
             .ok_or_else(|| errors::not_found_404("Event", event_number))?;
         Ok(event.into())
+    }
+
+    async fn get_event_key_counts(
+        State(state): State<LedgerState<T>>,
+    ) -> ApiResult<HashMap<String, u64>> {
+        match state.ledger.get_event_key_counts().await {
+            Ok(counts) => Ok(counts.into_iter().collect::<HashMap<_, _>>().into()),
+            Err(err) => Err(errors::database_error_response_500(err)),
+        }
     }
 
     // ENTITY ID RESOLVERS

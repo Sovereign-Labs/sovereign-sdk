@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -7,17 +8,19 @@ use serde::Serialize;
 use sov_rollup_interface::common::{HexHash, SlotNumber};
 use sov_rollup_interface::node::da::SlotData;
 use sov_rollup_interface::node::ledger_api::AggregatedProofResponse;
-use sov_rollup_interface::stf::{BatchReceipt, DiscardedBlob, StoredEvent, TxReceiptContents};
+use sov_rollup_interface::stf::{
+    BatchReceipt, DiscardedBlob, EventKey, StoredEvent, TxReceiptContents,
+};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 
 use crate::schema::tables::DiscardedBlobHahsByNumber;
 use crate::schema::tables::{
-    BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, FinalizedSlots,
-    ProofByUniqueId, SlotByHash, SlotByNumber, StfInfoByNumber, StfInfoMetadata, TxByHash,
-    TxByNumber, LEDGER_TABLES,
+    BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey,
+    FinalizedSlots, ProofByUniqueId, SlotByHash, SlotByNumber, StfInfoByNumber, StfInfoMetadata,
+    TxByHash, TxByNumber, LEDGER_TABLES,
 };
 use crate::schema::types::{
-    split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventNumber,
+    split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventKeyNumber, EventNumber,
     LatestFinalizedSlotSingleton, ProofUniqueId, StfInfoUniqueId, StoredBatch, StoredDiscardedBlob,
     StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
@@ -390,10 +393,26 @@ impl LedgerDb {
         event: &StoredEvent,
         event_number: &EventNumber,
         tx_number: TxNumber,
+        event_key_count: u64,
         schema_batch: &mut SchemaBatch,
     ) -> anyhow::Result<()> {
         schema_batch.put::<EventByNumber>(event_number, event)?;
-        schema_batch.put::<EventByKey>(&(event.key().clone(), tx_number, *event_number), &())
+        schema_batch.put::<EventByKey>(&(event.key().clone(), tx_number, *event_number), &())?;
+        schema_batch.put::<EventCountByKey>(event.key(), &EventKeyNumber(event_key_count))
+    }
+
+    /// Gets the current event count for the given key from the database.
+    fn get_event_key_count(&self, key: &EventKey) -> u64 {
+        // We intentionally ignore errors here because a missing or
+        // unreadable count is treated as zero (new key)
+        self.db
+            .read()
+            .expect(DB_LOCK_POISONED)
+            .get::<EventCountByKey>(key)
+            .ok()
+            .flatten()
+            .map(|n| n.0)
+            .unwrap_or(0)
     }
 
     /// Materializes [`SlotCommit`] into [`SchemaBatch`] by inserting its events,
@@ -409,6 +428,8 @@ impl LedgerDb {
 
         let slot_number = current_item_numbers.slot_number;
 
+        let mut event_key_counts: HashMap<EventKey, u64> = HashMap::new();
+
         let first_batch_number = current_item_numbers.batch_number;
         let last_batch_number = first_batch_number + data_to_commit.batch_receipts.len() as u64;
         // Insert data from "bottom up" to ensure consistency if the application crashes during insertion
@@ -422,10 +443,15 @@ impl LedgerDb {
                 let (tx_to_store, events) =
                     split_tx_for_storage(tx, batch_number, current_item_numbers.event_number);
                 for event in events.into_iter() {
+                    let count = event_key_counts
+                        .entry(event.key().clone())
+                        .or_insert_with(|| self.get_event_key_count(event.key()));
+                    *count += 1;
                     self.put_event(
                         &event,
                         &EventNumber(current_item_numbers.event_number),
                         TxNumber(current_item_numbers.tx_number),
+                        *count,
                         &mut schema_batch,
                     )?;
                     current_item_numbers.event_number += 1;
@@ -789,6 +815,7 @@ impl LedgerDb {
 
                 // Delete hash-indexed entries by iterating through txs
                 // (we need tx_number to delete EventByKey, and tx.hash to delete TxByHash)
+                let mut deleted_events_per_key: HashMap<EventKey, u64> = HashMap::new();
                 for current_tx_number in tx_range_start.0..tx_range_end.0 {
                     let current_tx_number = TxNumber(current_tx_number);
 
@@ -821,6 +848,9 @@ impl LedgerDb {
                                 );
                             }
                         };
+                        *deleted_events_per_key
+                            .entry(event.key().clone())
+                            .or_default() += 1;
                         schema_batch.delete::<EventByKey>(&(
                             event.key().clone(),
                             current_tx_number,
@@ -829,6 +859,22 @@ impl LedgerDb {
                     }
                     // Delete TxByHash entry
                     schema_batch.delete::<TxByHash>(&(tx.hash, current_tx_number))?;
+                }
+
+                // Decrement EventCountByKey entries for rolled-back events
+                for (key, deleted_count) in &deleted_events_per_key {
+                    let current_count = db.get::<EventCountByKey>(key)?.map(|n| n.0).unwrap_or(0);
+                    let new_count = current_count.checked_sub(*deleted_count).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "Ledger DB corruption during rollback: event count underflow for key {:?} (current_count={}, deleted_count={})",
+                            key, current_count, deleted_count,
+                        )
+                    })?;
+                    if new_count == 0 {
+                        schema_batch.delete::<EventCountByKey>(key)?;
+                    } else {
+                        schema_batch.put::<EventCountByKey>(key, &EventKeyNumber(new_count))?;
+                    }
                 }
 
                 // Range delete EventByNumber (reduces tombstones).

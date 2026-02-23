@@ -312,6 +312,161 @@ fn assert_next_items_numbers(slot_number: u64, ledger_db: &LedgerDb) {
     );
 }
 
+fn create_slot_with_keys(slot_num: u64, keys: &[&str], ledger_db: &LedgerDb) -> SchemaBatch {
+    let mut block = MockBlock::default();
+    block.header.height = slot_num;
+
+    let mut slot_commit =
+        SlotCommit::<_, i32, TestTxReceiptContents>::new(block, Default::default());
+
+    let mut tx_receipts = vec![];
+    let mut out = [0u8; 32];
+    out[..8].copy_from_slice(&u64::to_le_bytes(1000 + slot_num));
+    let tx_hash = TxHash::new(out);
+
+    let events = keys
+        .iter()
+        .map(|k| StoredEvent::new(k.as_bytes(), b"val", tx_hash.0))
+        .collect();
+
+    tx_receipts.push(TransactionReceipt {
+        tx_hash,
+        body_to_save: None,
+        events,
+        receipt: TxEffect::Successful(0),
+    });
+
+    let batch_receipt = BatchReceipt {
+        batch_hash: [slot_num as u8; 32],
+        tx_receipts,
+        ignored_tx_receipts: vec![],
+        inner: 0,
+    };
+
+    slot_commit.add_batch(batch_receipt);
+
+    ledger_db
+        .materialize_slot(slot_commit, b"state-root")
+        .unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_event_key_counts_basic() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Insert a slot with 3 events: 2x "alpha", 1x "beta"
+    let schema_batch = create_slot_with_keys(0, &["alpha", "alpha", "beta"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    let counts: std::collections::HashMap<String, u64> = ledger_db
+        .get_event_key_counts()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+
+    assert_eq!(counts.get("alpha"), Some(&2), "alpha should have count 2");
+    assert_eq!(counts.get("beta"), Some(&1), "beta should have count 1");
+    assert_eq!(counts.len(), 2, "should have exactly 2 distinct keys");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_event_key_counts_across_slots() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Slot 0: 1x "alpha", 1x "beta"
+    let schema_batch = create_slot_with_keys(0, &["alpha", "beta"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    // Slot 1: 2x "alpha", 1x "gamma"
+    let schema_batch = create_slot_with_keys(1, &["alpha", "alpha", "gamma"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    let counts: std::collections::HashMap<String, u64> = ledger_db
+        .get_event_key_counts()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+
+    assert_eq!(
+        counts.get("alpha"),
+        Some(&3),
+        "alpha should accumulate across slots"
+    );
+    assert_eq!(counts.get("beta"), Some(&1));
+    assert_eq!(counts.get("gamma"), Some(&1));
+    assert_eq!(counts.len(), 3);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_event_key_counts_after_rollback() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let db = storage_manager.get_db();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    // Slot 0: 1x "alpha", 1x "beta"
+    let schema_batch = create_slot_with_keys(0, &["alpha", "beta"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    // Slot 1: 2x "alpha", 1x "beta"
+    let schema_batch = create_slot_with_keys(1, &["alpha", "alpha", "beta"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    // Before rollback: alpha=3, beta=2
+    let counts: std::collections::HashMap<String, u64> = ledger_db
+        .get_event_key_counts()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    assert_eq!(counts.get("alpha"), Some(&3));
+    assert_eq!(counts.get("beta"), Some(&2));
+
+    // Rollback slot 1
+    LedgerDb::rollback_head_slot(db.clone()).unwrap();
+
+    // After rollback: alpha=1, beta=1
+    let counts: std::collections::HashMap<String, u64> = ledger_db
+        .get_event_key_counts()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    assert_eq!(
+        counts.get("alpha"),
+        Some(&1),
+        "alpha should be decremented after rollback"
+    );
+    assert_eq!(
+        counts.get("beta"),
+        Some(&1),
+        "beta should be decremented after rollback"
+    );
+
+    // Rollback slot 0: all counts should go to zero (entries deleted)
+    LedgerDb::rollback_head_slot(db.clone()).unwrap();
+
+    let counts: std::collections::HashMap<String, u64> = ledger_db
+        .get_event_key_counts()
+        .await
+        .unwrap()
+        .into_iter()
+        .collect();
+    assert!(
+        counts.is_empty(),
+        "all event count entries should be deleted after full rollback"
+    );
+}
+
 fn create_slot_schema_batch(slot_num: u64, ledger_db: &LedgerDb) -> SchemaBatch {
     let mut block = MockBlock::default();
     block.header.height = slot_num;

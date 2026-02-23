@@ -278,3 +278,4 @@ u64_wrapper!(EventNumber);
 u64_wrapper!(ProofUniqueId);
 u64_wrapper!(StfInfoUniqueId);
 u64_wrapper!(StateRootHashId);
+u64_wrapper!(EventKeyNumber);

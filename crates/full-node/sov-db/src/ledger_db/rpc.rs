@@ -21,8 +21,8 @@ use crate::ledger_db::rpc_constants::{
 };
 use crate::ledger_db::{LedgerDb, DB_LOCK_POISONED};
 use crate::schema::tables::{
-    BatchByHash, BatchByNumber, EventByNumber, FinalizedSlots, ProofByUniqueId, SlotByHash,
-    SlotByNumber, TxByHash, TxByNumber,
+    BatchByHash, BatchByNumber, EventByNumber, EventCountByKey, FinalizedSlots, ProofByUniqueId,
+    SlotByHash, SlotByNumber, TxByHash, TxByNumber,
 };
 use crate::schema::types::{
     BatchNumber, EventNumber, LatestFinalizedSlotSingleton, StoredBatch, StoredSlot,
@@ -197,6 +197,30 @@ impl LedgerRpcReader {
             Some(e) => Ok(Some(e.0 .0)),
             None => Ok(None),
         }
+    }
+
+    async fn get_event_key_counts(&self) -> anyhow::Result<Vec<(String, u64)>> {
+        use sov_rollup_interface::stf::EventKey;
+
+        let Some((max_key, _)) = self.db.get_largest_async::<EventCountByKey>().await? else {
+            return Ok(Vec::new());
+        };
+        let mut upper_bytes = max_key.inner().clone();
+        // range query is exclusive, add a byte so we get the max key as well
+        upper_bytes.push(0x00);
+        let range = EventKey::new(&[])..EventKey::new(&upper_bytes);
+        let entries = self
+            .db
+            .collect_in_range_async::<EventCountByKey, EventKey>(range)
+            .await?;
+        Ok(entries
+            .into_iter()
+            .map(|(key, count)| {
+                let key_str = String::from_utf8(key.inner().clone())
+                    .unwrap_or_else(|_| hex::encode(key.inner()));
+                (key_str, count.0)
+            })
+            .collect())
     }
 
     async fn collect_transaction_numbers(
@@ -797,6 +821,11 @@ impl LedgerStateProvider for LedgerDb {
     {
         let rpc_reader = self.get_rpc_reader().await?;
         rpc_reader.get_events_by_txn_number(txn_num).await
+    }
+
+    async fn get_event_key_counts(&self) -> Result<Vec<(String, u64)>, Self::Error> {
+        let rpc_reader = self.get_rpc_reader().await?;
+        rpc_reader.get_event_key_counts().await
     }
 
     async fn get_slots_range<B, T, E>(

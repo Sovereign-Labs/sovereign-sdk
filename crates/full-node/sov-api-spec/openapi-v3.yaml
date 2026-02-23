@@ -199,6 +199,22 @@ paths:
           $ref: "#/components/responses/LedgerEvent"
         "404":
           $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/events/counts:
+    get:
+      tags:
+        - Ledger
+      summary: Get total event counts per event key.
+      operationId: get_event_key_counts
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+                  format: uint64
   /ledger/events:
     get:
       tags:

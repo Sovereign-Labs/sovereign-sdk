@@ -679,9 +679,10 @@ where
             .executor_events_sender
             .force_update_api_state(checkpoint)
             .await;
-
-        let info = &inner.latest_info;
-        inner.update_api_ledger(info).await;
+        inner
+            .executor_events_sender
+            .update_api_ledger_from_info(&inner.latest_info)
+            .await;
     }
 
     async fn process_prune_sequencer_db(&mut self, reason: &'static str) {
@@ -717,7 +718,10 @@ where
         inner
             .force_overwrite_state(info.clone(), recovery_executor)
             .await;
-        inner.update_api_ledger(&info).await;
+        inner
+            .executor_events_sender
+            .update_api_ledger_from_info(&info)
+            .await;
     }
 
     async fn process_wait_for_node_resync(
@@ -749,8 +753,10 @@ where
             .executor_events_sender
             .update_state_for_recovery(checkpoint)
             .await;
-
-        inner.update_api_ledger(&info).await;
+        inner
+            .executor_events_sender
+            .update_api_ledger_from_info(&info)
+            .await;
     }
 
     /// Closes the current batch
