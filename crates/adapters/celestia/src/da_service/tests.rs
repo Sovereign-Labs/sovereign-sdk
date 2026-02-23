@@ -607,8 +607,8 @@ async fn mocha_shares_panic() -> anyhow::Result<()> {
     let _ = rustls::crypto::ring::default_provider().install_default();
 
     let client = celestia_client::ClientBuilder::new()
-        .rpc_url("ws://da-private.celestia-mocha.com:26658")
-        // .grpc_url("https://127.0.0.1:9090")
+        .rpc_url("http://127.0.0.1:26658")
+        .grpc_url("https://127.0.0.1:9090")
         .build()
         .await?;
 

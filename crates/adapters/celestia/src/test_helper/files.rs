@@ -608,7 +608,7 @@ pub mod from_mocha_invalid_row_proof {
 
     pub const HEIGHT: u64 = 10207148;
 
-        pub fn filtered_block() -> FilteredCelestiaBlock {
+    pub fn filtered_block() -> FilteredCelestiaBlock {
         let path = make_test_path(DATA_PATH);
         filtered_block_from_path(
             ROLLUP_PARAMS.rollup_batch_namespace,
@@ -764,7 +764,8 @@ async fn save_blobs(
     proof_namespace: Namespace,
 ) {
     write_to_file(&path.join(HEADER_JSON), &block_header).unwrap();
-    
+
+    // TODO: get signers from input
     // let signers = serde_json::json!({"signers": Vec::<String>::new()});
     // write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
     let rollup_batch_rows = client
