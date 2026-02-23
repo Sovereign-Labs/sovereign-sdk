@@ -1,0 +1,19 @@
+[
+  {
+    "shares": [],
+    "proof": {
+      "start": 28,
+      "end": 29,
+      "nodes": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAAF0uB0FjqjtNmBgAAAAAAAAAAAAAAAAAAAAAAAAAXS4HQWOqO02YGJ4DlNwKL0gTGB0cUkLK1/EPxP7Fam+cuJVkpW8BjgF7",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAF0uB0FjqjtNmBgAAAAAAAAAAAAAAAAAAAAAAAAAXS4HQWOqO02YGCPcHVO2SIxd64VBj5F3T9QIMWKmOiuOyn+j5cZYYF+/",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAF0uB0FjqjtNmBgAAAAAAAAAAAAAAAAAAAAAAAAAc292LXNvYWstYTFQTq/V3gvBk0PHI3duym8xqqXPBrSckoxn8HHT9llJ",
+        "//////////////////////////////////////7//////////////////////////////////////plEqgR/c4IAVkNdYRWOYOAESD4whneKR54Dz5Dfe4p2",
+        "//////////////////////////////////////7//////////////////////////////////////lrD0qJ9dspxSO1Yl8NDioZfgOm8Yj63Y+BGDRHlKCRj",
+        "/////////////////////////////////////////////////////////////////////////////ypTDSC26/mITTZdrLaV6CMFFfv8ARp72DLDmWI4z4tD"
+      ],
+      "leaf_hash": "//////////////////////////////////////7//////////////////////////////////////plEqgR/c4IAVkNdYRWOYOAESD4whneKR54Dz5Dfe4p2",
+      "is_max_namespace_ignored": true
+    }
+  }
+]
