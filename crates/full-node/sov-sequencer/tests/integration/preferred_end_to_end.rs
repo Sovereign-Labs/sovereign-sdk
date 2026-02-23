@@ -191,31 +191,6 @@ impl DaLayerWithSubscription {
     }
 }
 
-async fn produce_blocks_until_sequencer_readiness(
-    test_rollup: &TestRollup<TestBlueprint>,
-    da_layer: &mut DaLayerWithSubscription,
-    expected_ready: bool,
-    max_blocks_to_produce: usize,
-    reason: &str,
-) {
-    for _ in 0..max_blocks_to_produce {
-        if test_rollup.is_sequencer_ready().await == expected_ready {
-            return;
-        }
-        da_layer.produce_block().await.unwrap();
-        // Keep block production paced so readiness transitions can propagate without being
-        // overwhelmed by new blocks.
-        let pause_ms = if expected_ready { 50 } else { 30 };
-        tokio::time::sleep(Duration::from_millis(pause_ms)).await;
-    }
-
-    let current_ready = test_rollup.is_sequencer_ready().await;
-    assert_eq!(
-        current_ready, expected_ready,
-        "Sequencer readiness did not reach expected state after producing {max_blocks_to_produce} blocks while {reason}"
-    );
-}
-
 async fn wait_for_many_values_item(
     test_rollup: &TestRollup<TestBlueprint>,
     da_layer: &mut DaLayerWithSubscription,
@@ -893,16 +868,11 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     tracing::info!("Resuming preferred sequencer batch production.");
     test_rollup.resume_preferred_batches().await;
     // Normally on the next state update, the sequencer should always enter recovery.
-    // Drive DA forward and wait for slot notifications so we only re-check readiness
-    // after the node has observed a new block.
-    produce_blocks_until_sequencer_readiness(
-        &test_rollup,
-        &mut da_layer,
-        false,
-        80,
-        "entering recovery after resuming preferred sequencer batch production",
-    )
-    .await;
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    while test_rollup.is_sequencer_ready().await {
+        let _ = da_layer.produce_block().await;
+        sleep(Duration::from_millis(30)).await;
+    }
     test_rollup.wait_for_node_synced().await.unwrap();
 
     // Create transaction that should fail: sequencer should not accept transactions while in
@@ -923,14 +893,10 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    produce_blocks_until_sequencer_readiness(
-        &test_rollup,
-        &mut da_layer,
-        true,
-        160,
-        "recovering from deferred-slots lag",
-    )
-    .await;
+    while !test_rollup.is_sequencer_ready().await {
+        let _ = da_layer.produce_block().await;
+        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
+    }
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
@@ -1037,15 +1003,10 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // First we sync the node to the new DA blocks
     test_rollup.wait_for_node_synced().await.unwrap();
-    // Now on the next state updates, the sequencer should enter recovery.
-    produce_blocks_until_sequencer_readiness(
-        &test_rollup,
-        &mut da_layer,
-        false,
-        80,
-        "entering recovery after restart with deferred-slots lag",
-    )
-    .await;
+    // Now on the next state update, the sequencer should always enter recovery
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    sleep(Duration::from_millis(50)).await;
+    assert!(!test_rollup.is_sequencer_ready().await);
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
     const UPDATE_VEC_VALUE: u8 = 12;
@@ -1064,14 +1025,10 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    produce_blocks_until_sequencer_readiness(
-        &test_rollup,
-        &mut da_layer,
-        true,
-        160,
-        "recovering after restart",
-    )
-    .await;
+    while !test_rollup.is_sequencer_ready().await {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        sleep(Duration::from_millis(50)).await;
+    }
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
