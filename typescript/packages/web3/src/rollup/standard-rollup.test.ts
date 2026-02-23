@@ -3,7 +3,11 @@ import type { RollupSchema, Serializer } from "@sovereign-sdk/serializers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   StandardRollup,
+  createRollupHeightUniquenessOverride,
   createStandardRollup,
+  fetchCurrentRollupHeight,
+  heightUniqueness,
+  heightUniquenessBuilderOverride,
   standardTypeBuilder,
 } from "./standard-rollup";
 
@@ -144,6 +148,94 @@ describe("standardTypeBuilder", () => {
   });
 });
 
+describe("height-based uniqueness helpers", () => {
+  const mockRollup = {
+    context: {
+      defaultTxDetails: {
+        max_priority_fee_bips: 100,
+        max_fee: "1000",
+        chain_id: 1,
+      },
+    },
+    http: {
+      get: vi.fn(),
+    },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should fetch the current rollup height", async () => {
+    mockRollup.http.get.mockResolvedValue({ value: [42, 99] });
+
+    const height = await fetchCurrentRollupHeight(mockRollup as any);
+
+    expect(height).toBe(42);
+    expect(mockRollup.http.get).toHaveBeenCalledWith(
+      "/modules/chain-state/state/current-heights",
+    );
+  });
+
+  it("should build a height-based uniqueness object", async () => {
+    mockRollup.http.get.mockResolvedValue({ value: [11, 99] });
+
+    const uniqueness = await heightUniqueness(mockRollup as any);
+
+    expect(uniqueness).toEqual({ height: 11 });
+  });
+
+  it("should throw when the current-heights response is missing rollup height", async () => {
+    mockRollup.http.get.mockResolvedValue({ value: [] });
+
+    await expect(fetchCurrentRollupHeight(mockRollup as any)).rejects.toThrow(
+      "missing rollup height",
+    );
+  });
+
+  it("should create an unsigned tx override that uses rollup height uniqueness", async () => {
+    mockRollup.http.get.mockResolvedValue({ value: [123, 999] });
+    const override = createRollupHeightUniquenessOverride();
+
+    const result = await override({
+      runtimeCall: { foo: "bar" },
+      overrides: {},
+      rollup: mockRollup as any,
+    });
+
+    expect(result).toEqual({
+      runtime_call: { foo: "bar" },
+      uniqueness: { height: 123 },
+      details: {
+        max_priority_fee_bips: 100,
+        max_fee: "1000",
+        chain_id: 1,
+      },
+    });
+  });
+
+  it("should preserve explicit uniqueness overrides when using height override helper", async () => {
+    const override = createRollupHeightUniquenessOverride();
+
+    const result = await override({
+      runtimeCall: { foo: "bar" },
+      overrides: { uniqueness: { generation: 5 } },
+      rollup: mockRollup as any,
+    });
+
+    expect(result).toEqual({
+      runtime_call: { foo: "bar" },
+      uniqueness: { generation: 5 },
+      details: {
+        max_priority_fee_bips: 100,
+        max_fee: "1000",
+        chain_id: 1,
+      },
+    });
+    expect(mockRollup.http.get).not.toHaveBeenCalled();
+  });
+});
+
 const mockSerializer = {
   serialize: vi.fn().mockReturnValue(new Uint8Array([1, 2, 3])),
   serializeRuntimeCall: vi.fn().mockReturnValue(new Uint8Array([4, 5, 6])),
@@ -212,6 +304,72 @@ describe("createStandardRollup", () => {
     expect(typeBuilder.unsignedTransaction).toBe(customUnsignedTransaction);
     expect(typeBuilder.transaction).toBeDefined();
     expect(typeof typeBuilder.transaction).toBe("function");
+  });
+
+  it("should support the heightUniquenessBuilderOverride helper", async () => {
+    const rollup = await createStandardRollup(
+      mockConfig,
+      heightUniquenessBuilderOverride(),
+    );
+    rollup.http.get = vi.fn().mockResolvedValue({ value: [88, 999] });
+
+    const typeBuilder = (rollup as any)._typeBuilder;
+    const unsignedTx = await typeBuilder.unsignedTransaction({
+      runtimeCall: { foo: "bar" },
+      overrides: {},
+      rollup,
+    });
+
+    expect(unsignedTx).toEqual({
+      runtime_call: { foo: "bar" },
+      uniqueness: { height: 88 },
+      details: {
+        max_priority_fee_bips: 100,
+        max_fee: "1000",
+        chain_id: 1,
+        gas_limit: null,
+      },
+    });
+  });
+
+  it("should support manual uniqueness composition in one-off call overrides", async () => {
+    const rollup = await createStandardRollup(mockConfig);
+    const signer = {
+      sign: vi.fn().mockResolvedValue(new Uint8Array([7, 8, 9])),
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([4, 5, 6])),
+    };
+
+    rollup.http.get = vi.fn().mockResolvedValue({ value: [66, 999] });
+    rollup.http.rollup.schema = vi.fn().mockResolvedValue({
+      schema: { chain_data: { chain_id: 1 } },
+      chain_hash: "0x01020304",
+    });
+
+    const tx = await rollup.prepareCall({ foo: "bar" } as any, {
+      signer: signer as any,
+      overrides: {
+        uniqueness: await heightUniqueness(rollup),
+        details: {
+          max_fee: "2222",
+        },
+      },
+    });
+
+    expect(tx).toEqual(
+      expect.objectContaining({
+        V0: expect.objectContaining({
+          pub_key: "040506",
+          signature: "070809",
+          runtime_call: { foo: "bar" },
+          uniqueness: { height: 66 },
+          details: expect.objectContaining({
+            max_priority_fee_bips: 100,
+            max_fee: "2222",
+            chain_id: 1,
+          }),
+        }),
+      }),
+    );
   });
 
   it("should be created using the default context", async () => {

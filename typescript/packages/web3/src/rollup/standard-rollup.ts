@@ -31,6 +31,12 @@ export type StandardRollupSpec<RuntimeCall> = {
   Dedup: Dedup;
 };
 
+const CURRENT_HEIGHTS_ENDPOINT = "/modules/chain-state/state/current-heights";
+
+type CurrentHeightsResponse = {
+  value: [number, number] | number[];
+};
+
 const useOrFetchUniqueness = async <S extends StandardRollupSpec<unknown>>({
   overrides,
 }: Omit<
@@ -44,40 +50,118 @@ const useOrFetchUniqueness = async <S extends StandardRollupSpec<unknown>>({
   return { generation: Date.now() };
 };
 
+/**
+ * Fetches the current rollup height from the chain-state module.
+ */
+export async function fetchCurrentRollupHeight<
+  S extends StandardRollupSpec<unknown>,
+>(rollup: Pick<Rollup<S, StandardRollupContext>, "http">): Promise<number> {
+  const { value } = await rollup.http.get<CurrentHeightsResponse>(
+    CURRENT_HEIGHTS_ENDPOINT,
+  );
+  const rollupHeight = value[0];
+
+  if (typeof rollupHeight !== "number") {
+    throw new Error(
+      `Unexpected response from ${CURRENT_HEIGHTS_ENDPOINT}: missing rollup height`,
+    );
+  }
+
+  return rollupHeight;
+}
+
+/**
+ * Builds a height-based uniqueness value from the current rollup height.
+ */
+export async function heightUniqueness<S extends StandardRollupSpec<unknown>>(
+  rollup: Pick<Rollup<S, StandardRollupContext>, "http">,
+) {
+  const height = await fetchCurrentRollupHeight(rollup);
+  return { height };
+}
+
+/**
+ * Shared implementation of the default unsigned transaction builder.
+ */
+export async function buildStandardUnsignedTransaction<
+  S extends StandardRollupSpec<unknown>,
+>(context: UnsignedTransactionContext<S, StandardRollupContext>) {
+  const { rollup, runtimeCall } = context;
+  const { uniqueness: _, ...overrides } = context.overrides;
+  const uniqueness = await useOrFetchUniqueness(context);
+  const details: TxDetails = {
+    ...rollup.context.defaultTxDetails,
+    ...overrides.details,
+  };
+
+  return {
+    runtime_call: runtimeCall,
+    uniqueness,
+    details,
+  } as S["UnsignedTransaction"];
+}
+
+/**
+ * Shared implementation of the default signed transaction builder.
+ */
+export async function buildStandardTransaction<
+  S extends StandardRollupSpec<unknown>,
+>({
+  sender,
+  signature,
+  unsignedTx,
+}: TransactionContext<S, StandardRollupContext>) {
+  return {
+    V0: {
+      pub_key: bytesToHex(sender),
+      signature: bytesToHex(signature),
+      ...unsignedTx,
+    },
+  };
+}
+
+/**
+ * Creates an unsigned-transaction override for `createStandardRollup` that uses
+ * height-based replay protection by default.
+ *
+ * Any explicitly supplied per-call `overrides.uniqueness` still takes precedence.
+ */
+export function createRollupHeightUniquenessOverride<
+  S extends StandardRollupSpec<unknown>,
+>(): TypeBuilder<S, StandardRollupContext>["unsignedTransaction"] {
+  return async (context) => {
+    const unsignedTx = await buildStandardUnsignedTransaction(context);
+
+    if (context.overrides?.uniqueness) {
+      return unsignedTx;
+    }
+
+    const uniqueness = await heightUniqueness(context.rollup);
+
+    return {
+      ...unsignedTx,
+      uniqueness,
+    };
+  };
+}
+
+/**
+ * Builder-level helper for `createStandardRollup(..., typeBuilderOverrides)`.
+ */
+export function heightUniquenessBuilderOverride<
+  S extends StandardRollupSpec<unknown>,
+>(): Partial<TypeBuilder<S, StandardRollupContext>> {
+  return {
+    unsignedTransaction: createRollupHeightUniquenessOverride<S>(),
+  };
+}
+
 export function standardTypeBuilder<
   S extends StandardRollupSpec<unknown>,
 >(): TypeBuilder<S, StandardRollupContext> {
   return {
-    async unsignedTransaction(
-      context: UnsignedTransactionContext<S, StandardRollupContext>,
-    ) {
-      const { rollup, runtimeCall } = context;
-      const { uniqueness: _, ...overrides } = context.overrides;
-      const uniqueness = await useOrFetchUniqueness(context);
-      const details: TxDetails = {
-        ...rollup.context.defaultTxDetails,
-        ...overrides.details,
-      };
-
-      return {
-        runtime_call: runtimeCall,
-        uniqueness,
-        details,
-      } as S["UnsignedTransaction"];
-    },
-    async transaction({
-      sender,
-      signature,
-      unsignedTx,
-    }: TransactionContext<S, StandardRollupContext>) {
-      return {
-        V0: {
-          pub_key: bytesToHex(sender),
-          signature: bytesToHex(signature),
-          ...unsignedTx,
-        },
-      };
-    },
+    unsignedTransaction: buildStandardUnsignedTransaction,
+    transaction: buildStandardTransaction,
   };
 }
 
