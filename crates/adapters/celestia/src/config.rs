@@ -62,12 +62,6 @@ pub struct CelestiaConfig {
     /// Default: 30.
     #[serde(default = "default_background_stat_polling_interval_secs")]
     pub background_stat_polling_interval_secs: u64,
-    /// Whether to verify fetched namespace data against block DAH before returning from `get_block_at`.
-    /// Disable only if you explicitly want to skip this integrity check for performance reasons.
-    /// Disabling it might lead to silent consensus breaking fork if connected RPC node returns corrupted data.
-    /// Default: true.
-    #[serde(default = "default_verify_on_fetch")]
-    pub verify_on_fetch: bool,
     /// See [`sov_rollup_interface::node::da::DaService::safe_lead_time`].
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
@@ -117,7 +111,6 @@ impl fmt::Debug for CelestiaConfig {
                 "background_stat_polling_interval_secs",
                 &self.background_stat_polling_interval_secs,
             )
-            .field("verify_on_fetch", &self.verify_on_fetch)
             .field("safe_lead_time_ms", &self.safe_lead_time_ms)
             .field("tx_priority", &self.tx_priority)
             .field("backoff_min_delay_ms", &self.backoff_min_delay_ms)
@@ -159,7 +152,6 @@ impl CelestiaConfig {
             api_request_timeout_secs: default_api_request_timeout_secs(),
             tx_status_polling_millis: default_tx_status_polling_millis(),
             background_stat_polling_interval_secs: default_background_stat_polling_interval_secs(),
-            verify_on_fetch: default_verify_on_fetch(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
             tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),
@@ -299,29 +291,12 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
     30
 }
 
-pub(crate) const fn default_verify_on_fetch() -> bool {
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use super::{validate_rpc_url, CelestiaConfig};
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
     const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
-
-    #[test]
-    fn verify_on_fetch_defaults_to_true() {
-        let parsed: CelestiaConfig = serde_json::from_str("{}").expect("valid default config");
-        assert!(parsed.verify_on_fetch);
-    }
-
-    #[test]
-    fn verify_on_fetch_can_be_disabled() {
-        let parsed: CelestiaConfig =
-            serde_json::from_str(r#"{"verify_on_fetch":false}"#).expect("valid override config");
-        assert!(!parsed.verify_on_fetch);
-    }
 
     struct EnvVarGuard {
         key: &'static str,
