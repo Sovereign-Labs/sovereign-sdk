@@ -350,6 +350,7 @@ where
     async fn list_events(
         State(state): State<LedgerState<T>>,
         pagination_opt: Option<Query<Pagination<String>>>,
+        event_key_prefix_opt: Option<Query<EventFilter>>,
     ) -> ApiResult<Vec<RuntimeEventResponse<E>>> {
         let pagination = match pagination_opt {
             Some(Query(pagination)) => pagination,
@@ -375,6 +376,13 @@ where
             .map_err(errors::database_error_response_500)?
             .into_iter()
             .flatten()
+            .filter(|event| {
+                if let Some(prefix) = &event_key_prefix_opt {
+                    event.key.starts_with(&prefix.prefix)
+                } else {
+                    true
+                }
+            })
             .collect::<Vec<_>>();
         Ok(events.into())
     }
