@@ -14,7 +14,7 @@ type TxResponse = SovereignClient.SovereignSDK.Sequencer.TxCreateResponse;
 const ROLLUP_URL = import.meta.env.VITE_ROLLUP_URL || "http://localhost:12346";
 const SOLANA_ENDPOINT =
   import.meta.env.VITE_SOLANA_ENDPOINT || "/sequencer/accept-solana-offchain-tx";
-const CHAIN_ID_FROM_ENV = Number(import.meta.env.VITE_CHAIN_ID);
+const CHAIN_ID_FROM_ENV = Number(import.meta.env.VITE_CHAIN_ID || "4321");
 
 const DEFAULT_TX = {
   bank: {

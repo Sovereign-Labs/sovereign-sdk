@@ -47,11 +47,11 @@ if ! curl -sf http://127.0.0.1:12346/healthcheck >/dev/null; then
 fi
 
 cd "$DAPP_DIR"
-npm ci
-npx playwright install --with-deps chromium
+pnpm install --frozen-lockfile
+pnpm exec playwright install --with-deps chromium
 
 CI=true \
 VITE_ROLLUP_URL=http://127.0.0.1:12346 \
 VITE_CHAIN_ID=4321 \
 VITE_SOLANA_ENDPOINT=/sequencer/accept-solana-offchain-tx \
-npm run test:e2e
+pnpm run test:e2e

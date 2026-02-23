@@ -14,21 +14,318 @@
  * Module call message.
  */
 export interface RuntimeCall {
-    accounts?:                 CallMessage;
-    uniqueness?:               null;
-    bank?:                     CallMessage2;
-    sequencer_registry?:       CallMessage3;
-    operator_incentives?:      CallMessage4;
-    attester_incentives?:      CallMessage5Class | CallMessage5Enum;
-    prover_incentives?:        CallMessage6Class | CallMessage6Enum;
-    value_setter?:           CallMessage7;
-    chain_state?:              null;
-    blob_storage?:             null;
-    paymaster?:                CallMessage8;
-    mailbox?:                  CallMessage9;
-    interchain_gas_paymaster?: CallMessage10;
-    merkle_tree_hook?:         null;
-    warp?:                     CallMessageForConfigurableSpec;
+    bank?:                CallMessage;
+    sequencer_registry?:  CallMessage2;
+    operator_incentives?: CallMessage3;
+    attester_incentives?: CallMessage4Class | CallMessage4Enum;
+    prover_incentives?:   CallMessage5Class | CallMessage5Enum;
+    accounts?:            CallMessage6;
+    uniqueness?:          null;
+    chain_state?:         CallMessage7Class | CallMessage7Enum;
+    blob_storage?:        null;
+    paymaster?:           CallMessage8;
+    evm?:                 CallMessageClass;
+    access_pattern?:      AccessPatternMessagesClass | AccessPatternMessagesEnum;
+    synthetic_load?:      CallMessage9;
+}
+
+/**
+ * Writes `size` bytes to the module state for every position between `begin` and `begin +
+ * size`
+ *
+ * Like [`Self::WriteCells`] but writes a custom string.
+ *
+ * Reads every element of the module state between `begin` and `begin + size`
+ *
+ * Hashes the string of bytes made by the repeted filler.
+ *
+ * Hashes the custom input buffer.
+ *
+ * Stores a signature to verify.
+ *
+ * Verifies a custom signature, without storing it to state.
+ *
+ * Stores a string serialized as bytes.
+ *
+ * Deserializes a custom input buffer into a string without storing it to state.
+ *
+ * Deletes every element of the module state between `begin` and `begin + size`
+ *
+ * Activates the pre/end-exec-hook. Adds a variable number of reads/writes for each tx.
+ *
+ * Updates the admin for the module.
+ */
+export interface AccessPatternMessagesClass {
+    write_cells?:               WriteCells;
+    write_custom?:              WriteCustom;
+    read_cells?:                ReadCells;
+    hash_bytes?:                HashBytes;
+    hash_custom?:               HashCustom;
+    store_signature?:           StoreSignature;
+    verify_custom_signature?:   VerifyCustomSignature;
+    store_serialized_string?:   StoreSerializedString;
+    deserialize_custom_string?: DeserializeCustomString;
+    delete_cells?:              DeleteCells;
+    set_hook?:                  SetHook;
+    update_admin?:              AccessPatternMessagesUpdateAdmin;
+}
+
+export interface DeleteCells {
+    /**
+     * The first index to delete from
+     */
+    begin: number;
+    /**
+     * The number of storage cells to delete
+     */
+    num_cells: number;
+    [property: string]: any;
+}
+
+export interface DeserializeCustomString {
+    /**
+     * The serialized string to deserialize
+     */
+    input: number[];
+    [property: string]: any;
+}
+
+export interface HashBytes {
+    /**
+     * The filler bytes to be repeated over
+     */
+    filler: number;
+    /**
+     * The size of the buffer
+     */
+    size: number;
+    [property: string]: any;
+}
+
+export interface HashCustom {
+    /**
+     * The input to hash
+     */
+    input: number[];
+    [property: string]: any;
+}
+
+export interface ReadCells {
+    /**
+     * The first index to read from
+     */
+    begin: number;
+    /**
+     * The number of storage cells to read from
+     */
+    num_cells: number;
+    [property: string]: any;
+}
+
+export interface SetHook {
+    /**
+     * The configuration of the post-exec hooks. Set to None to disable
+     */
+    post?: HooksConfig[] | null;
+    /**
+     * The configuration of the pre-exec hooks. Set to None to disable
+     */
+    pre?: HooksConfig[] | null;
+    [property: string]: any;
+}
+
+/**
+ * Specifies what happens inside the pre/end-exec hook.
+ *
+ * Reads from the storage
+ *
+ * Writes to the storage
+ *
+ * Delete from the storage
+ */
+export interface HooksConfig {
+    Read?:   Read;
+    Write?:  Write;
+    Delete?: Delete;
+}
+
+export interface Delete {
+    /**
+     * The first index to delete
+     */
+    begin: number;
+    /**
+     * The number of storage cells to delete
+     */
+    size: number;
+    [property: string]: any;
+}
+
+export interface Read {
+    /**
+     * The first index to read from
+     */
+    begin: number;
+    /**
+     * The number of storage cells to read from
+     */
+    size: number;
+    [property: string]: any;
+}
+
+export interface Write {
+    /**
+     * The first index to write to
+     */
+    begin: number;
+    /**
+     * The size of the data to write to each storage cell
+     */
+    data_size: number;
+    /**
+     * The number of storage cells to write to
+     */
+    size: number;
+    [property: string]: any;
+}
+
+export interface StoreSerializedString {
+    /**
+     * The serialized string to store
+     */
+    input: number[];
+    [property: string]: any;
+}
+
+export interface StoreSignature {
+    /**
+     * The associated message
+     */
+    message: string;
+    /**
+     * The associated public key
+     */
+    pub_key: Ed25519PublicKey;
+    /**
+     * The signature to store
+     */
+    sign: Ed25519Signature;
+    [property: string]: any;
+}
+
+/**
+ * The associated public key
+ *
+ * The public key of an ed25519 keypair.
+ */
+export interface Ed25519PublicKey {
+    pub_key: number[];
+    [property: string]: any;
+}
+
+/**
+ * The signature to store
+ *
+ * An ed25519 signature. Wraps the optimized Risc0 fork of the ed25519-dalek crate.
+ */
+export interface Ed25519Signature {
+    bytes: number[];
+    /**
+     * The inner signature.
+     */
+    msg_sig: number[];
+    [property: string]: any;
+}
+
+export interface AccessPatternMessagesUpdateAdmin {
+    /**
+     * New admin of the module
+     */
+    new_admin: MultiAddressEvmSolana;
+    [property: string]: any;
+}
+
+/**
+ * An address type which supports standard rollup addresses, EVM addresses, and Solana-style
+ * base58 addresses.
+ *
+ * The address of the account that the new tokens are minted to.
+ *
+ * The address to which the tokens will be transferred.
+ *
+ * Address to mint tokens to
+ *
+ * The new address that will receive rewards for operating the rollup. Note: We do not
+ * verify possession of the corresponding private key, so it's possible to set an address
+ * for which the `sender` does not control the private key.
+ *
+ * New admin of the module
+ *
+ * A standard address derived from a SHA-256 hash of a public key.
+ *
+ * A 20-byte Ethereum address.
+ *
+ * A 32-byte Solana-style base58 address.
+ */
+export interface MultiAddressEvmSolana {
+    Standard?: string;
+    Evm?:      string;
+    Solana?:   string;
+}
+
+export interface VerifyCustomSignature {
+    /**
+     * The associated message
+     */
+    message: string;
+    /**
+     * The associated public key
+     */
+    pub_key: Ed25519PublicKey;
+    /**
+     * The signature to store
+     */
+    sign: Ed25519Signature;
+    [property: string]: any;
+}
+
+export interface WriteCells {
+    /**
+     * The first index to write to
+     */
+    begin: number;
+    /**
+     * The size of the data to write to storage. This is the maximum number of iterations done
+     * in a string generation loop.
+     */
+    data_size: number;
+    /**
+     * The number of storage cells to write to
+     */
+    num_cells: number;
+    [property: string]: any;
+}
+
+export interface WriteCustom {
+    /**
+     * The first index to write to
+     */
+    begin: number;
+    /**
+     * The content to write to the storage. Write a string to every cell from `begin`
+     */
+    content: string[];
+    [property: string]: any;
+}
+
+/**
+ * Verifies the signature stored.
+ *
+ * Deserializes the stored bytes into a string
+ */
+export enum AccessPatternMessagesEnum {
+    DeserializeBytesAsString = "deserialize_bytes_as_string",
+    VerifySignature = "verify_signature",
 }
 
 /**
@@ -36,7 +333,7 @@ export interface RuntimeCall {
  *
  * Inserts a new credential id for the corresponding Account.
  */
-export interface CallMessage {
+export interface CallMessage6 {
     insert_credential_id: string;
 }
 
@@ -47,7 +344,7 @@ export interface CallMessage {
  *
  * Increases the balance of the attester.
  */
-export interface CallMessage5Class {
+export interface CallMessage4Class {
     register_attester?:   number;
     register_challenger?: number;
     deposit_attester?:    number;
@@ -60,7 +357,7 @@ export interface CallMessage5Class {
  *
  * Exit a challenger
  */
-export enum CallMessage5Enum {
+export enum CallMessage4Enum {
     BeginExitAttester = "begin_exit_attester",
     ExitAttester = "exit_attester",
     ExitChallenger = "exit_challenger",
@@ -79,13 +376,17 @@ export enum CallMessage5Enum {
  * Mints a specified amount of tokens.
  *
  * Freezes a token so that the supply is frozen
+ *
+ * Updates the list of admins for a specified token.
  */
-export interface CallMessage2 {
-    create_token?: CreateToken;
-    transfer?:     Transfer;
-    burn?:         Burn;
-    mint?:         Mint;
-    freeze?:       Freeze;
+export interface CallMessage {
+    create_token?:       CreateToken;
+    transfer?:           Transfer;
+    burn?:               Burn;
+    mint?:               Mint;
+    freeze?:             Freeze;
+    update_admin?:       CallMessageUpdateAdmin;
+    transfer_with_memo?: TransferWithMemo;
 }
 
 export interface Burn {
@@ -122,7 +423,7 @@ export interface CreateToken {
     /**
      * Admins list.
      */
-    admins: string[];
+    admins: MultiAddressEvmSolana[];
     /**
      * The initial balance of the new token.
      */
@@ -130,7 +431,7 @@ export interface CreateToken {
     /**
      * The address of the account that the new tokens are minted to.
      */
-    mint_to_address: string;
+    mint_to_address: MultiAddressEvmSolana;
     /**
      * The supply cap of the new token, if any.
      */
@@ -162,7 +463,7 @@ export interface Mint {
     /**
      * Address to mint tokens to
      */
-    mint_to_address: string;
+    mint_to_address: MultiAddressEvmSolana;
     [property: string]: any;
 }
 
@@ -174,216 +475,172 @@ export interface Transfer {
     /**
      * The address to which the tokens will be transferred.
      */
-    to: string;
+    to: MultiAddressEvmSolana;
+    [property: string]: any;
+}
+
+export interface TransferWithMemo {
+    /**
+     * The amount of tokens to transfer.
+     */
+    coins: Coins;
+    /**
+     * The message included with the transfer
+     */
+    memo: string;
+    /**
+     * The address to which the tokens will be transferred.
+     */
+    to: MultiAddressEvmSolana;
+    [property: string]: any;
+}
+
+export interface CallMessageUpdateAdmin {
+    /**
+     * The new admin address. If `None`, the current admin entry for the transaction sender will
+     * be removed.
+     */
+    new_admin?: NewAdminClass | null;
+    /**
+     * The ID of the token whose admin list is being updated.
+     */
+    token_id: string;
     [property: string]: any;
 }
 
 /**
- * This enumeration represents the available call messages for interacting with the
- * `ValueSetter` module. The `derive` for [`schemars::JsonSchema`] is a requirement of
- * [`sov_modules_api::ModuleCallJsonSchema`].
+ * A standard address derived from a SHA-256 hash of a public key.
+ *
+ * A 20-byte Ethereum address.
+ *
+ * A 32-byte Solana-style base58 address.
  */
-export interface CallMessage7 {
-    set_value: number;
+export interface NewAdminClass {
+    Standard?: string;
+    Evm?:      string;
+    Solana?:   string;
 }
 
 /**
- * InterchainGasPaymaster CallMessage
- *
- * Set or update config for relayer (sender).
- *
- * This could be used to clear values too.
- *
- * Update oracle data for relayer (sender)
- *
- * Beneficiary (sender) claim all relayer rewards.
+ * Sets the current time.
  */
-export interface CallMessage10 {
-    set_relayer_config?: SetRelayerConfig;
-    update_oracle_data?: UpdateOracleData;
-    claim_rewards?:      ClaimRewards;
+export interface CallMessage7Class {
+    SetOracleTime: SetOracleTime;
 }
 
-export interface ClaimRewards {
+export interface SetOracleTime {
     /**
-     * Relayer to transfer tokens from.
+     * The new time in milliseconds since the epoch
      */
-    relayer_address: string;
-    [property: string]: any;
-}
-
-export interface SetRelayerConfig {
-    /**
-     * Beneficiary who can claim relayer rewards.
-     */
-    beneficiary?: null | string;
-    /**
-     * Default gas used if custom one is not set.
-     */
-    default_gas: number;
-    /**
-     * Custom default gas per domain.
-     */
-    domain_default_gas: DomainDefaultGas[];
-    /**
-     * oracle data per domain.
-     */
-    domain_oracle_data: DomainOracleData[];
+    milliseconds_since_epoch: number;
     [property: string]: any;
 }
 
 /**
- * Domain Default Gas used in `CallMessage::SetRelayerConfig`.
+ * Terminates setup mode as of the next rollup block.
  */
-export interface DomainDefaultGas {
+export enum CallMessage7Enum {
+    TerminateSetupMode = "TerminateSetupMode",
+}
+
+/**
+ * EVM call message.
+ *
+ * RLP encoded transaction.
+ *
+ * Update the runtime configuration
+ */
+export interface CallMessageClass {
+    call?:                  RlpEvmTransaction;
+    update_runtime_config?: EvmRuntimeConfigUpdate;
+}
+
+/**
+ * RLP encoded evm transaction.
+ */
+export interface RlpEvmTransaction {
     /**
-     * Default gas.
+     * Rlp data.
      */
-    default_gas: number;
-    /**
-     * Domain.
-     */
-    domain: number;
+    rlp: number[];
     [property: string]: any;
 }
 
 /**
- * Domain Oracle Data used in `CallMessage::SetRelayerConfig`.
+ * An update to the runtime configuration.
  */
-export interface DomainOracleData {
+export interface EvmRuntimeConfigUpdate {
     /**
-     * Oracle data value.
+     * A new chain spec to apply. None means "no change"
      */
-    data_value: ExchangeRateAndGasPrice;
+    chain_spec_update?: null | ChainSpecUpdate;
     /**
-     * Domain.
+     * A new admin address to set. None means "no change"
      */
-    domain: number;
+    new_admin?: NewAdminClass | null;
+    /**
+     * A new contract creation policy to apply. None means "no change"
+     */
+    new_contract_creation_policy?: NewContractCreationPolicyClass | NewContractCreationPolicyEnum | null;
+    /**
+     * A new hardfork to activate and the block number at which it activates
+     */
+    new_hardfork?: Array<number | string> | null;
     [property: string]: any;
 }
 
 /**
- * Oracle data value.
- *
- * Oracle data used to calculate required gas.
- *
- * Oracle data.
- *
- * Relayer is responsible to multiple token_rate_exchange by `TOKEN_EXCHANGE_RATE_SCALE`.
+ * An update to the chain spec.
  */
-export interface ExchangeRateAndGasPrice {
+export interface ChainSpecUpdate {
     /**
-     * Gas price.
+     * The new block gas limit. Must be greater than 5M to avoid censorship. None means "no
+     * change" Check that the limit is greater than 5M to avoid accidental complete shutdown.
      */
-    gas_price: number;
+    new_block_gas_limit?: number | null;
     /**
-     * Token exchange rate, calculated as local gas token price / remote gas token price.
-     *
-     * Relayer is responsible to multiply token_rate_exchange by `TOKEN_EXCHANGE_RATE_SCALE`.
+     * The new limit for contract code size. None means "no change"
      */
-    token_exchange_rate: number;
-    [property: string]: any;
-}
-
-export interface UpdateOracleData {
+    new_limit_contract_code_size?: number | null;
     /**
-     * Domain or destination domain (i.e. chain id in hyperlane).
+     * The new tx gas limit. Must be less than or equal to the effective block gas limit after
+     * applying the update. None means "no change"
      */
-    domain: number;
-    /**
-     * Oracle data.
-     *
-     * Relayer is responsible to multiple token_rate_exchange by `TOKEN_EXCHANGE_RATE_SCALE`.
-     */
-    oracle_data: ExchangeRateAndGasPrice;
+    new_tx_gas_limit?: number | null;
     [property: string]: any;
 }
 
 /**
- * This enumeration represents the available call messages for interacting with the
- * `sov-value-setter` module.
- *
- * Sends an outbound message to the specified recipient.
- *
- * Receive an inbound message. This is called *on the desitination chain* by the relayer
- * after a `dispatch` call has been made on the source chain.
- *
- * Passes the message metadata and body to the security module (ISM) for verification, then
- * calls the recipient's `handle` function with the message body.
- *
- * Announce a validator and its signatures' storage.
+ * Only allowed addresses can create contracts
  */
-export interface CallMessage9 {
-    dispatch?: Dispatch;
-    process?:  Process;
-    announce?: Announce;
+export interface NewContractCreationPolicyClass {
+    allowlist: Allowlist;
 }
 
-export interface Announce {
+export interface Allowlist {
     /**
-     * Signature of the announcement message for verification.
+     * Addresses to add to the allowlist
      */
-    signature: string;
+    add: string[];
     /**
-     * Location of validator's signatures.
+     * Addresses to remove from the allowlist
      */
-    storage_location: string;
-    /**
-     * Address of a validator.
-     */
-    validator_address: string;
+    remove: string[];
     [property: string]: any;
 }
 
-export interface Dispatch {
-    /**
-     * The message body. For example, if the recipient is a warp route, this will encode the
-     * amount/type of funds being transferred
-     */
-    body: string;
-    /**
-     * The destination domain (aka "Chain ID")
-     */
-    domain: number;
-    /**
-     * A limit for the payment to relayer to cover gas needed for message delivery. If relayer
-     * demands more than this value of native gas token, dispatching message will fail. If it
-     * demands less than this, only needed amount will be paid.
-     */
-    gas_payment_limit: number;
-    /**
-     * The "metadata" which is used to verify the message or control hooks. Can be used to set
-     * the destination gas limit for a message using [`IGPMetadata`](crate::igp::IGPMetadata)
-     */
-    metadata?: null | string;
-    /**
-     * The recipient address. Must implement the `handle` function - i.e. be a smart contract
-     */
-    recipient: string;
-    /**
-     * Selected relayer
-     */
-    relayer?: null | string;
-    [property: string]: any;
-}
-
-export interface Process {
-    /**
-     * The serialized [`Message`] struct
-     */
-    message: string;
-    /**
-     * Metadata used to verify the message.
-     */
-    metadata: string;
-    [property: string]: any;
+/**
+ * No restrictions on contract creation
+ */
+export enum NewContractCreationPolicyEnum {
+    Everyone = "everyone",
 }
 
 /**
  * This enumeration represents the available call messages for interacting with the
  * sov-operator-incentives module.
  */
-export interface CallMessage4 {
+export interface CallMessage3 {
     update_reward_address: UpdateRewardAddress;
 }
 
@@ -393,13 +650,7 @@ export interface UpdateRewardAddress {
      * verify possession of the corresponding private key, so it's possible to set an address
      * for which the `sender` does not control the private key.
      */
-    new_reward_address: string;
-    [property: string]: any;
-}
-
-export interface UpdatePolicy {
-    payer:  string;
-    update: CallMessage8;
+    new_reward_address: MultiAddressEvmSolana;
     [property: string]: any;
 }
 
@@ -448,7 +699,7 @@ export interface PaymasterPolicyInitializer {
     /**
      * Users who are authorized to update this policy.
      */
-    authorized_updaters: string[];
+    authorized_updaters: MultiAddressEvmSolana[];
     /**
      * Default payee policy for users that are not in the balances map.
      */
@@ -456,7 +707,7 @@ export interface PaymasterPolicyInitializer {
     /**
      * A mapping from user address to the policy for that user.
      */
-    payees: Array<Array<PayeePolicyClass | string>>;
+    payees: Array<Array<SafeVec20_OfTupleOfMultiAddressEvmSolanaAndPayeePolicyClass | PayeePolicyEnum>>;
     [property: string]: any;
 }
 
@@ -505,9 +756,77 @@ export enum PayeePolicyEnum {
     Deny = "deny",
 }
 
+/**
+ * A standard address derived from a SHA-256 hash of a public key.
+ *
+ * A 20-byte Ethereum address.
+ *
+ * A 32-byte Solana-style base58 address.
+ *
+ * The paymaster pays the fees for a particular sender when the policy allows it... - If the
+ * policy specifies a `max_fee`, the transaction's max fee must be less than or equal to
+ * that value - if the policy specifies a `max_gas_price`, the current gas price must be
+ * less than or equal to that value - If the policy specifies a gas limit, the transaction
+ * must also specify a limit *and* that limit must be less than or equal to `gas_limit`.
+ *
+ * - If the policy specifies a transaction_limit, the policy can only cover that many
+ * transactions, after which it will expire and be replaced with a Deny policy
+ *
+ * In all other cases, the sender pays their own fees.
+ */
+export interface SafeVec20_OfTupleOfMultiAddressEvmSolanaAndPayeePolicyClass {
+    Standard?: string;
+    Evm?:      string;
+    Solana?:   string;
+    allow?:    Allow;
+}
+
 export interface SetPayerForSequencer {
-    payer: string;
+    payer: MultiAddressEvmSolana;
     [property: string]: any;
+}
+
+export interface UpdatePolicy {
+    payer:  MultiAddressEvmSolana;
+    update: PolicyUpdate;
+    [property: string]: any;
+}
+
+/**
+ * An update to the policy of a single gas payer
+ */
+export interface PolicyUpdate {
+    default_policy?:           PayeePolicyClass | PayeePolicyEnum | null;
+    payee_policies_to_delete?: MultiAddressEvmSolana[] | null;
+    payee_policies_to_set?:    Array<Array<SafeVec20_OfTupleOfMultiAddressEvmSolanaAndPayeePolicyClass | PayeePolicyEnum>> | null;
+    sequencer_update?:         SequencerUpdateClass | SequencerUpdateEnum | null;
+    updaters_to_add?:          MultiAddressEvmSolana[] | null;
+    updaters_to_remove?:       MultiAddressEvmSolana[] | null;
+    [property: string]: any;
+}
+
+/**
+ * Sets the list of authorized sequencers to an explicit whitelist if it was previously
+ * `AllowAll`. Adds and removes the requested addresses from the sequencer whitelist.
+ */
+export interface SequencerUpdateClass {
+    update: SequencerUpdateList;
+}
+
+/**
+ * A list of updates to the `allowed_sequencers` list for a particular payer.
+ */
+export interface SequencerUpdateList {
+    to_add?:    string[] | null;
+    to_remove?: string[] | null;
+    [property: string]: any;
+}
+
+/**
+ * Authorizes any sequencer to use this payer.
+ */
+export enum SequencerUpdateEnum {
+    AllowAll = "allow_all",
 }
 
 /**
@@ -516,7 +835,7 @@ export interface SetPayerForSequencer {
  * Increases the balance of the prover, transferring the funds from the prover account to
  * the rollup.
  */
-export interface CallMessage6Class {
+export interface CallMessage5Class {
     register?: number;
     deposit?:  number;
 }
@@ -524,7 +843,7 @@ export interface CallMessage6Class {
 /**
  * Unbonds the prover.
  */
-export enum CallMessage6Enum {
+export enum CallMessage5Enum {
     Exit = "exit",
 }
 
@@ -541,7 +860,7 @@ export enum CallMessage6Enum {
  *
  * Withdraw a sequencer's balance after waiting for the withdrawal period.
  */
-export interface CallMessage3 {
+export interface CallMessage2 {
     register?:            Register;
     deposit?:             Deposit;
     initiate_withdrawal?: InitiateWithdrawal;
@@ -589,224 +908,54 @@ export interface Withdraw {
 }
 
 /**
- * Call messages for the test recipient module.
+ * This enumeration represents the available call messages for interacting with the module.
  *
- * Register a route with the given token source and ISM.
+ * Read and set many individual values.
  *
- * Update an existing route with new admin or ISM.
+ * Read and set entries in a large vector stored as a `StateValue`
  *
- * Add a counterparty router on another chain. This router is trusted. A malicious remote
- * router can steal funds. Each warp route can have at most one remote router for a given
- * destination domain.
- *
- * Remove a counterparty router on another chain.
- *
- * Transfer a token from the local chain to the remote chain.
+ * Run CPU heavy operation. Each iteration computes a hash with the Spec::Hasher.
  */
-export interface CallMessageForConfigurableSpec {
-    Register?:             RegisterObject;
-    Update?:               Update;
-    EnrollRemoteRouter?:   EnrollRemoteRouter;
-    UnEnrollRemoteRouter?: UnEnrollRemoteRouter;
-    TransferRemote?:       TransferRemote;
+export interface CallMessage9 {
+    read_and_set_many_individual_values?: ReadAndSetManyIndividualValues;
+    read_and_set_heavy_state?:            ReadAndSetHeavyState;
+    run_c_p_u_heavy_operation?:           RunCPUHeavyOperation;
 }
 
-export interface EnrollRemoteRouter {
+export interface ReadAndSetHeavyState {
     /**
-     * The domain of the remote chain.
+     * The max size of the heavy state.
      */
-    remote_domain: number;
+    max_heavy_state_size: number;
     /**
-     * The router address on the remote chain.
+     * The number of new values to read and set.
      */
-    remote_router_address: string;
+    number_of_new_values: number;
     /**
-     * The ID of the warp route on the local chain.
+     * The salt.
      */
-    warp_route: string;
+    salt: number;
     [property: string]: any;
 }
 
-export interface RegisterObject {
+export interface ReadAndSetManyIndividualValues {
     /**
-     * The authority that can modify the route, if any.
+     * The number of values to read and set.
      */
-    admin: AdminForConfigurableSpecClass | AdminForConfigurableSpecEnum;
+    number_of_operations: number;
     /**
-     * The ISM for this route.
+     * The salt.
      */
-    ism: IsmClass | IsmEnum;
-    /**
-     * Remote routers to enroll on route registration.
-     */
-    remote_routers: Array<Array<number | string>>;
-    /**
-     * The token source for the route.
-     */
-    token_source: TokenKindClass | TokenKindEnum;
+    salt: number;
     [property: string]: any;
 }
 
-/**
- * Allow the specified address to modify the route. This is extremely insecure, but it seems
- * to be common practice in Hyperlane.
- */
-export interface AdminForConfigurableSpecClass {
-    InsecureOwner: string;
-}
-
-/**
- * No admin - the route is immutable.
- */
-export enum AdminForConfigurableSpecEnum {
-    None = "None",
-}
-
-/**
- * Accepts all messages from a trusted relayer
- *
- * Accepts messages if signed by `threshold` or more of the provided `validators`
- */
-export interface IsmClass {
-    TrustedRelayer?:    TrustedRelayer;
-    MessageIdMultisig?: MessageIDMultisig;
-}
-
-export interface MessageIDMultisig {
+export interface RunCPUHeavyOperation {
     /**
-     * The number of signatures required to accept a message
+     * The number of iterations.
      */
-    threshold: number;
-    /**
-     * The addresses of the validators
-     */
-    validators: string[];
+    iterations: number;
     [property: string]: any;
-}
-
-export interface TrustedRelayer {
-    /**
-     * The address of the trusted relayer, in [`HyperlaneAddress`] format
-     */
-    relayer: string;
-    [property: string]: any;
-}
-
-/**
- * Performs no validation. Will accept any message - useful for testing
- */
-export enum IsmEnum {
-    AlwaysTrust = "AlwaysTrust",
-}
-
-/**
- * The token is natively issued on some remote chain, so the local representation is a
- * synthetic token.
- *
- * The token is natively issued on the local chain.
- */
-export interface TokenKindClass {
-    Synthetic?:  Synthetic;
-    Collateral?: Collateral;
-}
-
-export interface Collateral {
-    /**
-     * The ID of the token on the local chain.
-     */
-    token: string;
-    [property: string]: any;
-}
-
-export interface Synthetic {
-    /**
-     * The number of decimal places for the local (synthetic) token.
-     *
-     * Should be set if remote token should be scaled locally, defaults to remote decimals.
-     */
-    local_decimals?: number | null;
-    /**
-     * The number of decimal places of the remote token.
-     */
-    remote_decimals: number;
-    /**
-     * The ID of the remote token.
-     */
-    remote_token_id: string;
-    [property: string]: any;
-}
-
-/**
- * The token is the native token of the local chain.
- */
-export enum TokenKindEnum {
-    Native = "Native",
-}
-
-export interface TransferRemote {
-    /**
-     * The amount to transfer.
-     */
-    amount: number;
-    /**
-     * The domain of the destination chain.
-     */
-    destination_domain: number;
-    /**
-     * A limit for the payment to relayer to cover gas needed for message delivery.
-     */
-    gas_payment_limit: number;
-    /**
-     * The recipient on the destination chain.
-     */
-    recipient: string;
-    /**
-     * Selected relayer
-     */
-    relayer?: null | string;
-    /**
-     * The route to use for the transfer.
-     */
-    warp_route: string;
-    [property: string]: any;
-}
-
-export interface UnEnrollRemoteRouter {
-    /**
-     * The domain of the remote chain.
-     */
-    remote_domain: number;
-    /**
-     * The ID of the warp route on the local chain.
-     */
-    warp_route: string;
-    [property: string]: any;
-}
-
-export interface Update {
-    /**
-     * New authority that can modify the route.
-     */
-    admin?: AdminForConfigurableSpecClass | AdminForConfigurableSpecEnum | null;
-    /**
-     * New ISM for this route.
-     */
-    ism?: IsmIsmClass | IsmEnum | null;
-    /**
-     * The ID of the warp route on the local chain to update.
-     */
-    warp_route: string;
-    [property: string]: any;
-}
-
-/**
- * Accepts all messages from a trusted relayer
- *
- * Accepts messages if signed by `threshold` or more of the provided `validators`
- */
-export interface IsmIsmClass {
-    TrustedRelayer?:    TrustedRelayer;
-    MessageIdMultisig?: MessageIDMultisig;
 }
 
 // Converts JSON strings to/from your types
@@ -975,36 +1124,127 @@ function r(name: string) {
 
 const typeMap: any = {
     "RuntimeCall": o([
-        { json: "accounts", js: "accounts", typ: u(undefined, r("CallMessage")) },
+        { json: "bank", js: "bank", typ: u(undefined, r("CallMessage")) },
+        { json: "sequencer_registry", js: "sequencer_registry", typ: u(undefined, r("CallMessage2")) },
+        { json: "operator_incentives", js: "operator_incentives", typ: u(undefined, r("CallMessage3")) },
+        { json: "attester_incentives", js: "attester_incentives", typ: u(undefined, u(r("CallMessage4Class"), r("CallMessage4Enum"))) },
+        { json: "prover_incentives", js: "prover_incentives", typ: u(undefined, u(r("CallMessage5Class"), r("CallMessage5Enum"))) },
+        { json: "accounts", js: "accounts", typ: u(undefined, r("CallMessage6")) },
         { json: "uniqueness", js: "uniqueness", typ: u(undefined, null) },
-        { json: "bank", js: "bank", typ: u(undefined, r("CallMessage2")) },
-        { json: "sequencer_registry", js: "sequencer_registry", typ: u(undefined, r("CallMessage3")) },
-        { json: "operator_incentives", js: "operator_incentives", typ: u(undefined, r("CallMessage4")) },
-        { json: "attester_incentives", js: "attester_incentives", typ: u(undefined, u(r("CallMessage5Class"), r("CallMessage5Enum"))) },
-        { json: "prover_incentives", js: "prover_incentives", typ: u(undefined, u(r("CallMessage6Class"), r("CallMessage6Enum"))) },
-        { json: "value_setter", js: "value_setter", typ: u(undefined, r("CallMessage7")) },
-        { json: "chain_state", js: "chain_state", typ: u(undefined, null) },
+        { json: "chain_state", js: "chain_state", typ: u(undefined, u(r("CallMessage7Class"), r("CallMessage7Enum"))) },
         { json: "blob_storage", js: "blob_storage", typ: u(undefined, null) },
         { json: "paymaster", js: "paymaster", typ: u(undefined, r("CallMessage8")) },
-        { json: "mailbox", js: "mailbox", typ: u(undefined, r("CallMessage9")) },
-        { json: "interchain_gas_paymaster", js: "interchain_gas_paymaster", typ: u(undefined, r("CallMessage10")) },
-        { json: "merkle_tree_hook", js: "merkle_tree_hook", typ: u(undefined, null) },
-        { json: "warp", js: "warp", typ: u(undefined, r("CallMessageForConfigurableSpec")) },
+        { json: "evm", js: "evm", typ: u(undefined, r("CallMessageClass")) },
+        { json: "access_pattern", js: "access_pattern", typ: u(undefined, u(r("AccessPatternMessagesClass"), r("AccessPatternMessagesEnum"))) },
+        { json: "synthetic_load", js: "synthetic_load", typ: u(undefined, r("CallMessage9")) },
     ], false),
-    "CallMessage": o([
+    "AccessPatternMessagesClass": o([
+        { json: "write_cells", js: "write_cells", typ: u(undefined, r("WriteCells")) },
+        { json: "write_custom", js: "write_custom", typ: u(undefined, r("WriteCustom")) },
+        { json: "read_cells", js: "read_cells", typ: u(undefined, r("ReadCells")) },
+        { json: "hash_bytes", js: "hash_bytes", typ: u(undefined, r("HashBytes")) },
+        { json: "hash_custom", js: "hash_custom", typ: u(undefined, r("HashCustom")) },
+        { json: "store_signature", js: "store_signature", typ: u(undefined, r("StoreSignature")) },
+        { json: "verify_custom_signature", js: "verify_custom_signature", typ: u(undefined, r("VerifyCustomSignature")) },
+        { json: "store_serialized_string", js: "store_serialized_string", typ: u(undefined, r("StoreSerializedString")) },
+        { json: "deserialize_custom_string", js: "deserialize_custom_string", typ: u(undefined, r("DeserializeCustomString")) },
+        { json: "delete_cells", js: "delete_cells", typ: u(undefined, r("DeleteCells")) },
+        { json: "set_hook", js: "set_hook", typ: u(undefined, r("SetHook")) },
+        { json: "update_admin", js: "update_admin", typ: u(undefined, r("AccessPatternMessagesUpdateAdmin")) },
+    ], false),
+    "DeleteCells": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "num_cells", js: "num_cells", typ: 0 },
+    ], "any"),
+    "DeserializeCustomString": o([
+        { json: "input", js: "input", typ: a(0) },
+    ], "any"),
+    "HashBytes": o([
+        { json: "filler", js: "filler", typ: 0 },
+        { json: "size", js: "size", typ: 0 },
+    ], "any"),
+    "HashCustom": o([
+        { json: "input", js: "input", typ: a(0) },
+    ], "any"),
+    "ReadCells": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "num_cells", js: "num_cells", typ: 0 },
+    ], "any"),
+    "SetHook": o([
+        { json: "post", js: "post", typ: u(undefined, u(a(r("HooksConfig")), null)) },
+        { json: "pre", js: "pre", typ: u(undefined, u(a(r("HooksConfig")), null)) },
+    ], "any"),
+    "HooksConfig": o([
+        { json: "Read", js: "Read", typ: u(undefined, r("Read")) },
+        { json: "Write", js: "Write", typ: u(undefined, r("Write")) },
+        { json: "Delete", js: "Delete", typ: u(undefined, r("Delete")) },
+    ], false),
+    "Delete": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "size", js: "size", typ: 0 },
+    ], "any"),
+    "Read": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "size", js: "size", typ: 0 },
+    ], "any"),
+    "Write": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "data_size", js: "data_size", typ: 0 },
+        { json: "size", js: "size", typ: 0 },
+    ], "any"),
+    "StoreSerializedString": o([
+        { json: "input", js: "input", typ: a(0) },
+    ], "any"),
+    "StoreSignature": o([
+        { json: "message", js: "message", typ: "" },
+        { json: "pub_key", js: "pub_key", typ: r("Ed25519PublicKey") },
+        { json: "sign", js: "sign", typ: r("Ed25519Signature") },
+    ], "any"),
+    "Ed25519PublicKey": o([
+        { json: "pub_key", js: "pub_key", typ: a(0) },
+    ], "any"),
+    "Ed25519Signature": o([
+        { json: "bytes", js: "bytes", typ: a(0) },
+        { json: "msg_sig", js: "msg_sig", typ: a(0) },
+    ], "any"),
+    "AccessPatternMessagesUpdateAdmin": o([
+        { json: "new_admin", js: "new_admin", typ: r("MultiAddressEvmSolana") },
+    ], "any"),
+    "MultiAddressEvmSolana": o([
+        { json: "Standard", js: "Standard", typ: u(undefined, "") },
+        { json: "Evm", js: "Evm", typ: u(undefined, "") },
+        { json: "Solana", js: "Solana", typ: u(undefined, "") },
+    ], false),
+    "VerifyCustomSignature": o([
+        { json: "message", js: "message", typ: "" },
+        { json: "pub_key", js: "pub_key", typ: r("Ed25519PublicKey") },
+        { json: "sign", js: "sign", typ: r("Ed25519Signature") },
+    ], "any"),
+    "WriteCells": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "data_size", js: "data_size", typ: 0 },
+        { json: "num_cells", js: "num_cells", typ: 0 },
+    ], "any"),
+    "WriteCustom": o([
+        { json: "begin", js: "begin", typ: 0 },
+        { json: "content", js: "content", typ: a("") },
+    ], "any"),
+    "CallMessage6": o([
         { json: "insert_credential_id", js: "insert_credential_id", typ: "" },
     ], false),
-    "CallMessage5Class": o([
+    "CallMessage4Class": o([
         { json: "register_attester", js: "register_attester", typ: u(undefined, 0) },
         { json: "register_challenger", js: "register_challenger", typ: u(undefined, 0) },
         { json: "deposit_attester", js: "deposit_attester", typ: u(undefined, 0) },
     ], false),
-    "CallMessage2": o([
+    "CallMessage": o([
         { json: "create_token", js: "create_token", typ: u(undefined, r("CreateToken")) },
         { json: "transfer", js: "transfer", typ: u(undefined, r("Transfer")) },
         { json: "burn", js: "burn", typ: u(undefined, r("Burn")) },
         { json: "mint", js: "mint", typ: u(undefined, r("Mint")) },
         { json: "freeze", js: "freeze", typ: u(undefined, r("Freeze")) },
+        { json: "update_admin", js: "update_admin", typ: u(undefined, r("CallMessageUpdateAdmin")) },
+        { json: "transfer_with_memo", js: "transfer_with_memo", typ: u(undefined, r("TransferWithMemo")) },
     ], false),
     "Burn": o([
         { json: "coins", js: "coins", typ: r("Coins") },
@@ -1014,9 +1254,9 @@ const typeMap: any = {
         { json: "token_id", js: "token_id", typ: "" },
     ], "any"),
     "CreateToken": o([
-        { json: "admins", js: "admins", typ: a("") },
+        { json: "admins", js: "admins", typ: a(r("MultiAddressEvmSolana")) },
         { json: "initial_balance", js: "initial_balance", typ: 0 },
-        { json: "mint_to_address", js: "mint_to_address", typ: "" },
+        { json: "mint_to_address", js: "mint_to_address", typ: r("MultiAddressEvmSolana") },
         { json: "supply_cap", js: "supply_cap", typ: u(undefined, u(0, null)) },
         { json: "token_decimals", js: "token_decimals", typ: u(undefined, u(0, null)) },
         { json: "token_name", js: "token_name", typ: "" },
@@ -1026,76 +1266,62 @@ const typeMap: any = {
     ], "any"),
     "Mint": o([
         { json: "coins", js: "coins", typ: r("Coins") },
-        { json: "mint_to_address", js: "mint_to_address", typ: "" },
+        { json: "mint_to_address", js: "mint_to_address", typ: r("MultiAddressEvmSolana") },
     ], "any"),
     "Transfer": o([
         { json: "coins", js: "coins", typ: r("Coins") },
-        { json: "to", js: "to", typ: "" },
+        { json: "to", js: "to", typ: r("MultiAddressEvmSolana") },
     ], "any"),
-    "CallMessage7": o([
-        { json: "set_value", js: "set_value", typ: 0 },
+    "TransferWithMemo": o([
+        { json: "coins", js: "coins", typ: r("Coins") },
+        { json: "memo", js: "memo", typ: "" },
+        { json: "to", js: "to", typ: r("MultiAddressEvmSolana") },
+    ], "any"),
+    "CallMessageUpdateAdmin": o([
+        { json: "new_admin", js: "new_admin", typ: u(undefined, u(r("NewAdminClass"), null)) },
+        { json: "token_id", js: "token_id", typ: "" },
+    ], "any"),
+    "NewAdminClass": o([
+        { json: "Standard", js: "Standard", typ: u(undefined, "") },
+        { json: "Evm", js: "Evm", typ: u(undefined, "") },
+        { json: "Solana", js: "Solana", typ: u(undefined, "") },
     ], false),
-    "CallMessage10": o([
-        { json: "set_relayer_config", js: "set_relayer_config", typ: u(undefined, r("SetRelayerConfig")) },
-        { json: "update_oracle_data", js: "update_oracle_data", typ: u(undefined, r("UpdateOracleData")) },
-        { json: "claim_rewards", js: "claim_rewards", typ: u(undefined, r("ClaimRewards")) },
+    "CallMessage7Class": o([
+        { json: "SetOracleTime", js: "SetOracleTime", typ: r("SetOracleTime") },
     ], false),
-    "ClaimRewards": o([
-        { json: "relayer_address", js: "relayer_address", typ: "" },
+    "SetOracleTime": o([
+        { json: "milliseconds_since_epoch", js: "milliseconds_since_epoch", typ: 0 },
     ], "any"),
-    "SetRelayerConfig": o([
-        { json: "beneficiary", js: "beneficiary", typ: u(undefined, u(null, "")) },
-        { json: "default_gas", js: "default_gas", typ: 0 },
-        { json: "domain_default_gas", js: "domain_default_gas", typ: a(r("DomainDefaultGas")) },
-        { json: "domain_oracle_data", js: "domain_oracle_data", typ: a(r("DomainOracleData")) },
-    ], "any"),
-    "DomainDefaultGas": o([
-        { json: "default_gas", js: "default_gas", typ: 0 },
-        { json: "domain", js: "domain", typ: 0 },
-    ], "any"),
-    "DomainOracleData": o([
-        { json: "data_value", js: "data_value", typ: r("ExchangeRateAndGasPrice") },
-        { json: "domain", js: "domain", typ: 0 },
-    ], "any"),
-    "ExchangeRateAndGasPrice": o([
-        { json: "gas_price", js: "gas_price", typ: 0 },
-        { json: "token_exchange_rate", js: "token_exchange_rate", typ: 0 },
-    ], "any"),
-    "UpdateOracleData": o([
-        { json: "domain", js: "domain", typ: 0 },
-        { json: "oracle_data", js: "oracle_data", typ: r("ExchangeRateAndGasPrice") },
-    ], "any"),
-    "CallMessage9": o([
-        { json: "dispatch", js: "dispatch", typ: u(undefined, r("Dispatch")) },
-        { json: "process", js: "process", typ: u(undefined, r("Process")) },
-        { json: "announce", js: "announce", typ: u(undefined, r("Announce")) },
+    "CallMessageClass": o([
+        { json: "call", js: "call", typ: u(undefined, r("RlpEvmTransaction")) },
+        { json: "update_runtime_config", js: "update_runtime_config", typ: u(undefined, r("EvmRuntimeConfigUpdate")) },
     ], false),
-    "Announce": o([
-        { json: "signature", js: "signature", typ: "" },
-        { json: "storage_location", js: "storage_location", typ: "" },
-        { json: "validator_address", js: "validator_address", typ: "" },
+    "RlpEvmTransaction": o([
+        { json: "rlp", js: "rlp", typ: a(0) },
     ], "any"),
-    "Dispatch": o([
-        { json: "body", js: "body", typ: "" },
-        { json: "domain", js: "domain", typ: 0 },
-        { json: "gas_payment_limit", js: "gas_payment_limit", typ: 0 },
-        { json: "metadata", js: "metadata", typ: u(undefined, u(null, "")) },
-        { json: "recipient", js: "recipient", typ: "" },
-        { json: "relayer", js: "relayer", typ: u(undefined, u(null, "")) },
+    "EvmRuntimeConfigUpdate": o([
+        { json: "chain_spec_update", js: "chain_spec_update", typ: u(undefined, u(null, r("ChainSpecUpdate"))) },
+        { json: "new_admin", js: "new_admin", typ: u(undefined, u(r("NewAdminClass"), null)) },
+        { json: "new_contract_creation_policy", js: "new_contract_creation_policy", typ: u(undefined, u(r("NewContractCreationPolicyClass"), r("NewContractCreationPolicyEnum"), null)) },
+        { json: "new_hardfork", js: "new_hardfork", typ: u(undefined, u(a(u(0, "")), null)) },
     ], "any"),
-    "Process": o([
-        { json: "message", js: "message", typ: "" },
-        { json: "metadata", js: "metadata", typ: "" },
+    "ChainSpecUpdate": o([
+        { json: "new_block_gas_limit", js: "new_block_gas_limit", typ: u(undefined, u(0, null)) },
+        { json: "new_limit_contract_code_size", js: "new_limit_contract_code_size", typ: u(undefined, u(0, null)) },
+        { json: "new_tx_gas_limit", js: "new_tx_gas_limit", typ: u(undefined, u(0, null)) },
     ], "any"),
-    "CallMessage4": o([
+    "NewContractCreationPolicyClass": o([
+        { json: "allowlist", js: "allowlist", typ: r("Allowlist") },
+    ], false),
+    "Allowlist": o([
+        { json: "add", js: "add", typ: a("") },
+        { json: "remove", js: "remove", typ: a("") },
+    ], "any"),
+    "CallMessage3": o([
         { json: "update_reward_address", js: "update_reward_address", typ: r("UpdateRewardAddress") },
     ], false),
     "UpdateRewardAddress": o([
-        { json: "new_reward_address", js: "new_reward_address", typ: "" },
-    ], "any"),
-    "UpdatePolicy": o([
-        { json: "payer", js: "payer", typ: "" },
-        { json: "update", js: "update", typ: r("CallMessage8") },
+        { json: "new_reward_address", js: "new_reward_address", typ: r("MultiAddressEvmSolana") },
     ], "any"),
     "CallMessage8": o([
         { json: "register_paymaster", js: "register_paymaster", typ: u(undefined, r("RegisterPaymaster")) },
@@ -1107,9 +1333,9 @@ const typeMap: any = {
     ], "any"),
     "PaymasterPolicyInitializer": o([
         { json: "authorized_sequencers", js: "authorized_sequencers", typ: u(r("AuthorizedSequencersClass"), r("AuthorizedSequencersEnum")) },
-        { json: "authorized_updaters", js: "authorized_updaters", typ: a("") },
+        { json: "authorized_updaters", js: "authorized_updaters", typ: a(r("MultiAddressEvmSolana")) },
         { json: "default_payee_policy", js: "default_payee_policy", typ: u(r("PayeePolicyClass"), r("PayeePolicyEnum")) },
-        { json: "payees", js: "payees", typ: a(a(u(r("PayeePolicyClass"), ""))) },
+        { json: "payees", js: "payees", typ: a(a(u(r("SafeVec20_OfTupleOfMultiAddressEvmSolanaAndPayeePolicyClass"), r("PayeePolicyEnum")))) },
     ], "any"),
     "AuthorizedSequencersClass": o([
         { json: "some", js: "some", typ: a("") },
@@ -1123,14 +1349,39 @@ const typeMap: any = {
         { json: "max_gas_price", js: "max_gas_price", typ: u(undefined, u(a(3.14), null)) },
         { json: "transaction_limit", js: "transaction_limit", typ: u(undefined, u(0, null)) },
     ], "any"),
+    "SafeVec20_OfTupleOfMultiAddressEvmSolanaAndPayeePolicyClass": o([
+        { json: "Standard", js: "Standard", typ: u(undefined, "") },
+        { json: "Evm", js: "Evm", typ: u(undefined, "") },
+        { json: "Solana", js: "Solana", typ: u(undefined, "") },
+        { json: "allow", js: "allow", typ: u(undefined, r("Allow")) },
+    ], false),
     "SetPayerForSequencer": o([
-        { json: "payer", js: "payer", typ: "" },
+        { json: "payer", js: "payer", typ: r("MultiAddressEvmSolana") },
     ], "any"),
-    "CallMessage6Class": o([
+    "UpdatePolicy": o([
+        { json: "payer", js: "payer", typ: r("MultiAddressEvmSolana") },
+        { json: "update", js: "update", typ: r("PolicyUpdate") },
+    ], "any"),
+    "PolicyUpdate": o([
+        { json: "default_policy", js: "default_policy", typ: u(undefined, u(r("PayeePolicyClass"), r("PayeePolicyEnum"), null)) },
+        { json: "payee_policies_to_delete", js: "payee_policies_to_delete", typ: u(undefined, u(a(r("MultiAddressEvmSolana")), null)) },
+        { json: "payee_policies_to_set", js: "payee_policies_to_set", typ: u(undefined, u(a(a(u(r("SafeVec20_OfTupleOfMultiAddressEvmSolanaAndPayeePolicyClass"), r("PayeePolicyEnum")))), null)) },
+        { json: "sequencer_update", js: "sequencer_update", typ: u(undefined, u(r("SequencerUpdateClass"), r("SequencerUpdateEnum"), null)) },
+        { json: "updaters_to_add", js: "updaters_to_add", typ: u(undefined, u(a(r("MultiAddressEvmSolana")), null)) },
+        { json: "updaters_to_remove", js: "updaters_to_remove", typ: u(undefined, u(a(r("MultiAddressEvmSolana")), null)) },
+    ], "any"),
+    "SequencerUpdateClass": o([
+        { json: "update", js: "update", typ: r("SequencerUpdateList") },
+    ], false),
+    "SequencerUpdateList": o([
+        { json: "to_add", js: "to_add", typ: u(undefined, u(a(""), null)) },
+        { json: "to_remove", js: "to_remove", typ: u(undefined, u(a(""), null)) },
+    ], "any"),
+    "CallMessage5Class": o([
         { json: "register", js: "register", typ: u(undefined, 0) },
         { json: "deposit", js: "deposit", typ: u(undefined, 0) },
     ], false),
-    "CallMessage3": o([
+    "CallMessage2": o([
         { json: "register", js: "register", typ: u(undefined, r("Register")) },
         { json: "deposit", js: "deposit", typ: u(undefined, r("Deposit")) },
         { json: "initiate_withdrawal", js: "initiate_withdrawal", typ: u(undefined, r("InitiateWithdrawal")) },
@@ -1150,75 +1401,37 @@ const typeMap: any = {
     "Withdraw": o([
         { json: "da_address", js: "da_address", typ: "" },
     ], "any"),
-    "CallMessageForConfigurableSpec": o([
-        { json: "Register", js: "Register", typ: u(undefined, r("RegisterObject")) },
-        { json: "Update", js: "Update", typ: u(undefined, r("Update")) },
-        { json: "EnrollRemoteRouter", js: "EnrollRemoteRouter", typ: u(undefined, r("EnrollRemoteRouter")) },
-        { json: "UnEnrollRemoteRouter", js: "UnEnrollRemoteRouter", typ: u(undefined, r("UnEnrollRemoteRouter")) },
-        { json: "TransferRemote", js: "TransferRemote", typ: u(undefined, r("TransferRemote")) },
+    "CallMessage9": o([
+        { json: "read_and_set_many_individual_values", js: "read_and_set_many_individual_values", typ: u(undefined, r("ReadAndSetManyIndividualValues")) },
+        { json: "read_and_set_heavy_state", js: "read_and_set_heavy_state", typ: u(undefined, r("ReadAndSetHeavyState")) },
+        { json: "run_c_p_u_heavy_operation", js: "run_c_p_u_heavy_operation", typ: u(undefined, r("RunCPUHeavyOperation")) },
     ], false),
-    "EnrollRemoteRouter": o([
-        { json: "remote_domain", js: "remote_domain", typ: 0 },
-        { json: "remote_router_address", js: "remote_router_address", typ: "" },
-        { json: "warp_route", js: "warp_route", typ: "" },
+    "ReadAndSetHeavyState": o([
+        { json: "max_heavy_state_size", js: "max_heavy_state_size", typ: 0 },
+        { json: "number_of_new_values", js: "number_of_new_values", typ: 0 },
+        { json: "salt", js: "salt", typ: 0 },
     ], "any"),
-    "RegisterObject": o([
-        { json: "admin", js: "admin", typ: u(r("AdminForConfigurableSpecClass"), r("AdminForConfigurableSpecEnum")) },
-        { json: "ism", js: "ism", typ: u(r("IsmClass"), r("IsmEnum")) },
-        { json: "remote_routers", js: "remote_routers", typ: a(a(u(0, ""))) },
-        { json: "token_source", js: "token_source", typ: u(r("TokenKindClass"), r("TokenKindEnum")) },
+    "ReadAndSetManyIndividualValues": o([
+        { json: "number_of_operations", js: "number_of_operations", typ: 0 },
+        { json: "salt", js: "salt", typ: 0 },
     ], "any"),
-    "AdminForConfigurableSpecClass": o([
-        { json: "InsecureOwner", js: "InsecureOwner", typ: "" },
-    ], false),
-    "IsmClass": o([
-        { json: "TrustedRelayer", js: "TrustedRelayer", typ: u(undefined, r("TrustedRelayer")) },
-        { json: "MessageIdMultisig", js: "MessageIdMultisig", typ: u(undefined, r("MessageIDMultisig")) },
-    ], false),
-    "MessageIDMultisig": o([
-        { json: "threshold", js: "threshold", typ: 0 },
-        { json: "validators", js: "validators", typ: a("") },
+    "RunCPUHeavyOperation": o([
+        { json: "iterations", js: "iterations", typ: 0 },
     ], "any"),
-    "TrustedRelayer": o([
-        { json: "relayer", js: "relayer", typ: "" },
-    ], "any"),
-    "TokenKindClass": o([
-        { json: "Synthetic", js: "Synthetic", typ: u(undefined, r("Synthetic")) },
-        { json: "Collateral", js: "Collateral", typ: u(undefined, r("Collateral")) },
-    ], false),
-    "Collateral": o([
-        { json: "token", js: "token", typ: "" },
-    ], "any"),
-    "Synthetic": o([
-        { json: "local_decimals", js: "local_decimals", typ: u(undefined, u(0, null)) },
-        { json: "remote_decimals", js: "remote_decimals", typ: 0 },
-        { json: "remote_token_id", js: "remote_token_id", typ: "" },
-    ], "any"),
-    "TransferRemote": o([
-        { json: "amount", js: "amount", typ: 0 },
-        { json: "destination_domain", js: "destination_domain", typ: 0 },
-        { json: "gas_payment_limit", js: "gas_payment_limit", typ: 0 },
-        { json: "recipient", js: "recipient", typ: "" },
-        { json: "relayer", js: "relayer", typ: u(undefined, u(null, "")) },
-        { json: "warp_route", js: "warp_route", typ: "" },
-    ], "any"),
-    "UnEnrollRemoteRouter": o([
-        { json: "remote_domain", js: "remote_domain", typ: 0 },
-        { json: "warp_route", js: "warp_route", typ: "" },
-    ], "any"),
-    "Update": o([
-        { json: "admin", js: "admin", typ: u(undefined, u(r("AdminForConfigurableSpecClass"), r("AdminForConfigurableSpecEnum"), null)) },
-        { json: "ism", js: "ism", typ: u(undefined, u(r("IsmIsmClass"), r("IsmEnum"), null)) },
-        { json: "warp_route", js: "warp_route", typ: "" },
-    ], "any"),
-    "IsmIsmClass": o([
-        { json: "TrustedRelayer", js: "TrustedRelayer", typ: u(undefined, r("TrustedRelayer")) },
-        { json: "MessageIdMultisig", js: "MessageIdMultisig", typ: u(undefined, r("MessageIDMultisig")) },
-    ], false),
-    "CallMessage5Enum": [
+    "AccessPatternMessagesEnum": [
+        "deserialize_bytes_as_string",
+        "verify_signature",
+    ],
+    "CallMessage4Enum": [
         "begin_exit_attester",
         "exit_attester",
         "exit_challenger",
+    ],
+    "CallMessage7Enum": [
+        "TerminateSetupMode",
+    ],
+    "NewContractCreationPolicyEnum": [
+        "everyone",
     ],
     "AuthorizedSequencersEnum": [
         "all",
@@ -1226,16 +1439,10 @@ const typeMap: any = {
     "PayeePolicyEnum": [
         "deny",
     ],
-    "CallMessage6Enum": [
+    "SequencerUpdateEnum": [
+        "allow_all",
+    ],
+    "CallMessage5Enum": [
         "exit",
-    ],
-    "AdminForConfigurableSpecEnum": [
-        "None",
-    ],
-    "IsmEnum": [
-        "AlwaysTrust",
-    ],
-    "TokenKindEnum": [
-        "Native",
     ],
 };

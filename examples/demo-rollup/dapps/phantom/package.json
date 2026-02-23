@@ -2,9 +2,10 @@
   "name": "phantom-solana-offchain-example",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@9.0.0",
   "type": "module",
   "scripts": {
-    "schema": "quicktype -s schema ../../stf/.artifacts/json-schema.json -o src/types.ts --top-level RuntimeCall",
+    "schema": "quicktype -s schema ../../.artifacts/json-schema.json -o src/types.ts --top-level RuntimeCall",
     "dev": "vite dev",
     "build": "vite build && tsc --noEmit",
     "lint": "eslint .",
