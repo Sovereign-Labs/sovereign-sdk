@@ -48,8 +48,3 @@ threads-required = 3
 
 [profile.ci]
 default-filter = 'all()'
-
-[profile.local-fast]
-# Local developer profile tuned for fast iteration. Keep this additive:
-# CI should continue using profile.default/profile.ci.
-default-filter = 'all()'
