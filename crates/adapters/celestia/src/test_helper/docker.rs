@@ -6,7 +6,7 @@ use crate::config::{
     default_api_request_timeout_secs, default_background_stat_polling_interval_secs,
     default_factor, default_max_delay_ms, default_max_times, default_min_delay_ms,
     default_request_timeout_seconds, default_safe_lead_time_ms, default_tx_priority,
-    default_tx_status_polling_millis,
+    default_tx_status_polling_millis, default_verify_on_fetch,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::{CelestiaConfig, CelestiaService};
@@ -285,6 +285,7 @@ impl CelestiaDevNode {
             api_request_timeout_secs: default_api_request_timeout_secs(),
             tx_status_polling_millis: default_tx_status_polling_millis(),
             background_stat_polling_interval_secs: default_background_stat_polling_interval_secs(),
+            verify_on_fetch: default_verify_on_fetch(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
             tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),

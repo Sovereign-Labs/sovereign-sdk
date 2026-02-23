@@ -29,7 +29,9 @@ use celestia_types::nmt::Namespace;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
-use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
+use sov_rollup_interface::da::{
+    BlobReaderTrait, DaProof, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
+};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
@@ -46,6 +48,7 @@ pub struct CelestiaService {
     client: Arc<celestia_client::Client>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
+    verify_on_fetch: bool,
     signer_address: Option<CelestiaAddress>,
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
@@ -59,6 +62,7 @@ impl CelestiaService {
         client: celestia_client::Client,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
+        verify_on_fetch: bool,
         signer_address: Option<CelestiaAddress>,
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
@@ -70,6 +74,7 @@ impl CelestiaService {
             client: Arc::new(client),
             rollup_batch_namespace,
             rollup_proof_namespace,
+            verify_on_fetch,
             signer_address,
             safe_lead_time,
             backoff_policy,
@@ -232,6 +237,7 @@ impl CelestiaService {
             client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
+            config.verify_on_fetch,
             fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
@@ -359,7 +365,11 @@ impl CelestiaService {
             tracker.submit(get_block_measurement);
         });
         tracing::trace!(height, "get_block_at metrics send, returning");
-        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
+        let block = FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)?;
+        if self.verify_on_fetch {
+            self.verify_block_integrity(&block)?;
+        }
+        Ok(block)
     }
 
     async fn get_head_block_header_inner(
@@ -425,6 +435,28 @@ impl CelestiaService {
             .subscribe()
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
             .boxed())
+    }
+
+    fn verify_block_integrity(&self, block: &FilteredCelestiaBlock) -> anyhow::Result<()> {
+        let verifier = CelestiaVerifier::new(RollupParams {
+            rollup_batch_namespace: self.rollup_batch_namespace,
+            rollup_proof_namespace: self.rollup_proof_namespace,
+        });
+
+        let mut relevant_blobs = extract_relevant_blobs(block);
+        // Advance full blob data first, then derive proofs for the consumed ranges.
+        for blob in relevant_blobs
+            .batch_blobs
+            .iter_mut()
+            .chain(relevant_blobs.proof_blobs.iter_mut())
+        {
+            blob.advance(blob.total_len());
+        }
+        let relevant_proofs = get_extraction_proof(block, &relevant_blobs);
+
+        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)?;
+
+        Ok(())
     }
 }
 
