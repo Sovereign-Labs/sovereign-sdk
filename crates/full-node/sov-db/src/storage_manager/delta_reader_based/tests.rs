@@ -84,11 +84,11 @@ impl TestableStorage for TestNativeStorage {
     fn get_value(&self, key: &[u8]) -> Option<Vec<u8>> {
         let user_value = self
             .state
-            .get_value_option_by_key::<UserNamespace>(SlotNumber::GENESIS, &key.to_vec())
+            .get_value_option_by_key::<UserNamespace>(SlotNumber::GENESIS, key)
             .unwrap();
         let kernel_value = self
             .state
-            .get_value_option_by_key::<KernelNamespace>(SlotNumber::GENESIS, &key.to_vec())
+            .get_value_option_by_key::<KernelNamespace>(SlotNumber::GENESIS, key)
             .unwrap();
         assert_eq!(user_value, kernel_value);
         user_value
