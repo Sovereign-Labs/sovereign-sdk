@@ -93,8 +93,7 @@ impl StateDb {
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
         for (key_hash, key) in items.into_iter() {
-            // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-            batch.put::<KeyHashToKey<N>>(&key_hash.0, &key.as_ref().to_vec())?;
+            batch.put::<KeyHashToKey<N>>(&key_hash.0, key.as_ref())?;
         }
         Ok(batch)
     }
@@ -124,11 +123,11 @@ impl StateDb {
         self.next_version.checked_sub(1)
     }
 
-    /// Get an optional value from the database, given a version and a key hash.
+    /// Get an optional value from the database, given a version and a key.
     pub fn get_value_option_by_key<N: Namespace>(
         &self,
         version: SlotNumber,
-        key: &SchemaKey,
+        key: &[u8],
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
         // Defense programming
         if version >= self.next_version {
