@@ -6,6 +6,7 @@ mod genesis;
 mod helpers;
 mod max_fee;
 mod pruning;
+mod rpc_basefee;
 mod runtime;
 mod state;
 mod trace;

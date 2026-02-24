@@ -159,6 +159,7 @@ where
                 )),
             )
             .route("/events", get(Self::list_events))
+            .route("/events/counts", get(Self::get_event_key_counts))
             .route("/events/latest", get(Self::get_latest_event))
             .nest(
                 "/events/:eventId",
@@ -349,6 +350,7 @@ where
     async fn list_events(
         State(state): State<LedgerState<T>>,
         pagination_opt: Option<Query<Pagination<String>>>,
+        event_key_prefix_opt: Option<Query<EventFilter>>,
     ) -> ApiResult<Vec<RuntimeEventResponse<E>>> {
         let pagination = match pagination_opt {
             Some(Query(pagination)) => pagination,
@@ -374,6 +376,13 @@ where
             .map_err(errors::database_error_response_500)?
             .into_iter()
             .flatten()
+            .filter(|event| {
+                if let Some(prefix) = &event_key_prefix_opt {
+                    event.key.starts_with(&prefix.prefix)
+                } else {
+                    true
+                }
+            })
             .collect::<Vec<_>>();
         Ok(events.into())
     }
@@ -394,6 +403,15 @@ where
             .map_err(errors::database_error_response_500)?
             .ok_or_else(|| errors::not_found_404("Event", event_number))?;
         Ok(event.into())
+    }
+
+    async fn get_event_key_counts(
+        State(state): State<LedgerState<T>>,
+    ) -> ApiResult<HashMap<String, u64>> {
+        match state.ledger.get_event_key_counts().await {
+            Ok(counts) => Ok(counts.into_iter().collect::<HashMap<_, _>>().into()),
+            Err(err) => Err(errors::database_error_response_500(err)),
+        }
     }
 
     // ENTITY ID RESOLVERS

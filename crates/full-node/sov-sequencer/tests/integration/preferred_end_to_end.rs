@@ -253,14 +253,26 @@ async fn test_transaction_priority() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_archival_state_is_immediately_available() {
-    let (test_rollup, admin) = create_test_rollup(
+async fn test_archival_state_is_immediately_available() {
+    let (genesis_params, admin) = create_genesis_params();
+    let dir = tempdir_inside_codebase_dir();
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+        dir.clone(),
+        genesis_params
+            .runtime
+            .sequencer_registry
+            .sequencer_config
+            .seq_da_address,
+        genesis_params,
         0,
+        false, // automatic_batch_production — disabled to prevent empty batches from advancing height
         TEST_MAX_BATCH_SIZE,
+        BlockProducingConfig::Manual,
+        None,
         TEST_BLOB_PROCESSING_TIMEOUT,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
+        None,
         0,
-        BlockProducingConfig::Manual,
     )
     .await;
     test_rollup.produce_enough_finalized_slots().await;
@@ -288,7 +300,6 @@ async fn flaky_test_archival_state_is_immediately_available() {
 
     for (i, height) in (height_at_start..=final_height).enumerate() {
         // Send a transaction to ensure the previous batch is closed.
-        // Why generation was zero?
         let value_to_set = i + 2;
         let tx = tx_set_value(&admin.private_key, generation, value_to_set as u64);
         test_rollup
@@ -319,6 +330,103 @@ async fn flaky_test_archival_state_is_immediately_available() {
                 .unwrap();
         }
     }
+}
+
+/// Regression test: verifies that archival state is accessible immediately after a slot
+/// notification, even when checkpoint publication in the side-effects task is artificially delayed.
+///
+/// Uses `SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS` to inject a 750ms delay before checkpoint
+/// application. The ordering fix (oneshot ack in ForceUpdateApiState) ensures that slot
+/// notifications are only sent after the checkpoint is applied, so queries should never see
+/// `HeightNotAccessible` regardless of the delay.
+///
+/// Automatic batch production is disabled to prevent empty batches from advancing rollup height
+/// through a separate code path, which would confound the checkpoint ordering test.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update() {
+    const DELAY_ENV: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
+    std::env::set_var(DELAY_ENV, "750");
+
+    let (genesis_params, admin) = create_genesis_params();
+    let dir = Arc::new(tempfile::tempdir().unwrap());
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+        dir.clone(),
+        genesis_params
+            .runtime
+            .sequencer_registry
+            .sequencer_config
+            .seq_da_address,
+        genesis_params,
+        0,
+        false, // automatic_batch_production — disabled to isolate checkpoint ordering
+        TEST_MAX_BATCH_SIZE,
+        BlockProducingConfig::Manual,
+        None,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        None,
+        0,
+    )
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut saw_invalid_height = false;
+
+    for (generation, value_to_set) in (1..=20_u64).enumerate() {
+        let tx = tx_set_value(&admin.private_key, generation as u64, value_to_set);
+        test_rollup
+            .api_client()
+            .send_raw_tx_to_sequencer(&tx)
+            .await
+            .unwrap();
+
+        test_rollup.force_close_batch().await.unwrap();
+
+        let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
+        test_rollup.tenderly_produce_blocks(2).await.unwrap();
+        for _ in 0..2 {
+            let _slot = slots.next().await.unwrap().unwrap();
+        }
+
+        let queried_height = test_rollup.height().await.get();
+        let url = format!("/modules/value-setter/state/value?rollup_height={queried_height}");
+        let query_result = test_rollup
+            .client
+            .query_rest_endpoint::<serde_json::Value>(&url)
+            .await;
+
+        match query_result {
+            Ok(response) => {
+                if response
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .map(|msg| msg == "invalid rollup height")
+                    .unwrap_or(false)
+                {
+                    saw_invalid_height = true;
+                    break;
+                }
+            }
+            Err(err) => {
+                let err_string = format!("{err:#}");
+                if err_string.contains("404 Not Found")
+                    && err_string.contains("invalid rollup height")
+                {
+                    saw_invalid_height = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    let _ = test_rollup.shutdown().await;
+    std::env::remove_var(DELAY_ENV);
+
+    assert!(
+        !saw_invalid_height,
+        "Observed transient invalid rollup height despite ordering fix. The checkpoint-vs-notification race condition has regressed."
+    );
 }
 
 /// All the interesting "things" that can happen during sequencer operations, and to
@@ -1184,7 +1292,6 @@ async fn max_batch_size() {
     // The transaction is rejected because it is too large.
     {
         let tx = tx_set_many_values(&admin.private_key, 0, vec![0; 1024]);
-
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
     }
@@ -1199,10 +1306,12 @@ async fn max_batch_size() {
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
 
-        let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 512]);
+        // Fully baked txs include auth wrapper + sequencing metadata + borsh overhead.
+        // 480 bytes keeps two medium txs below the 99% comfortable size limit for a 1024 batch.
+        let tx = tx_set_many_values(&admin.private_key, 1, vec![0; 480]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 480]);
         let resp = client.send_raw_tx_to_sequencer(&tx).await.unwrap_err();
         validate_expected_error(resp);
     }
@@ -1221,7 +1330,7 @@ async fn max_batch_size() {
     test_rollup.pause_preferred_batches().await;
     // Once we start creating a fresh batch, we can insert a transaction that was previously rejected.
     {
-        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 512]);
+        let tx = tx_set_many_values(&admin.private_key, 2, vec![1; 480]);
         let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     }
 }
@@ -2288,22 +2397,12 @@ async fn events_are_returned_in_tx_response() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
     let tx = tx_set_value(&admin.private_key, 0, 7);
-    let response = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    let response = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
     assert_eq!(response.events.len(), 1);
 }
@@ -2400,13 +2499,8 @@ async fn delayed_tx_is_processed_after_delay() {
     )
     .await;
 
-    // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(5)
-        .await
-        .unwrap();
-    sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();
 
@@ -3284,15 +3378,7 @@ pub(crate) async fn setup_test_rollup_with_initial_state(
     test_rollup: TestRollup<TestBlueprint>,
     admin: &TestUser<TestSpec>,
 ) -> (TestRollup<TestBlueprint>, TestState) {
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(10)
-        .await
-        .unwrap();
-
-    // Wait for all blocks to be processed by the node+sequencer. TODO: better
-    // logic not prone to race conditions.
-    sleep(Duration::from_millis(500)).await;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let client = test_rollup.api_client().clone();

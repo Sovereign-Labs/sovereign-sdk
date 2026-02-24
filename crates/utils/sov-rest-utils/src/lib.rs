@@ -434,6 +434,7 @@ fn compress_bytes(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(data)?;
+    encoder.write_all(b"\n")?; // Add a newline for easy use with bash pipes.
     encoder.finish()
 }
 

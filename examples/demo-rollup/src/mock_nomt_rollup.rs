@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use demo_stf::runtime::Runtime;
-use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
+use demo_stf::MultiAddressEvmSolana;
+use sov_address::{EthereumAddress, FromVmAddress};
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
@@ -27,6 +28,7 @@ use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProv
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
+use crate::solana_offchain_endpoint::solana_offchain_router;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
 #[derive(Default)]
@@ -43,7 +45,7 @@ pub type MockNomtRollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
     Risc0,
     MockZkvm,
-    MultiAddressEvm,
+    MultiAddressEvmSolana,
     M,
     Risc0CryptoSpec,
     NativeStorage,
@@ -126,8 +128,10 @@ impl FullNodeBlueprint<Native> for MockNomtDemoRollup<Native> {
             extension: rollup_config.extension_or_panic(),
             shutdown_receiver,
         };
+        let axum_router = solana_offchain_router(sequencer.clone());
 
         Ok(NodeEndpoints {
+            axum_router,
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
                 .remove_context(),
             ..Default::default()

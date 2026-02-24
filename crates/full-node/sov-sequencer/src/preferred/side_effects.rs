@@ -1,8 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use sov_modules_api::sequencing_metadata::HDTimestamp;
-use sov_modules_api::{ConcurrentStateCheckpoint, FullyBakedTx, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
@@ -15,8 +14,8 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
-    exit_rollup, PreferredBlobSender, PreferredSequencerDb, ReadBatch, ReadBlob, RecoveryStrategy,
-    RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
+    exit_rollup, LedgerDb, PreferredBlobSender, PreferredSequencerDb, ReadBatch, ReadBlob,
+    RecoveryStrategy, RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY,
 };
 
 /// A task that runs in the background and handles side effects of accepted transactions.
@@ -29,6 +28,7 @@ where
     pub checkpoint_sender: watch::Sender<std::sync::Arc<ConcurrentStateCheckpoint<S>>>,
     pub blob_sender: PreferredBlobSender<Da>,
     pub db: PreferredSequencerDb,
+    pub api_ledger_db: LedgerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,
@@ -40,9 +40,30 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    #[cfg(not(debug_assertions))]
+    async fn maybe_delay_api_state_update_for_tests() {}
+
+    #[cfg(debug_assertions)]
+    async fn maybe_delay_api_state_update_for_tests() {
+        const ENV_VAR: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
+        let Ok(raw_ms) = std::env::var(ENV_VAR) else {
+            return;
+        };
+        let Ok(ms) = raw_ms.parse::<u64>() else {
+            warn!(%ENV_VAR, %raw_ms, "Invalid delay value, expected u64 milliseconds");
+            return;
+        };
+        if ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+        }
+    }
+
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
     #[tracing::instrument(skip_all, level = "trace")]
     fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
+        // Preferred sequencer intentionally treats the latest available slot as finalized
+        // for API state (soft-confirmation semantics). This differs from the standard
+        // sequencer which passes the node's true finalized slot explicitly.
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
         if self
             .checkpoint_sender
@@ -51,6 +72,37 @@ where
         {
             debug!("Could not send checkpoint because the receiver has been dropped; this probably means the rollup is shutting down");
         }
+    }
+
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn update_api_ledger(
+        &self,
+        ledger_reader: rockbound::cache::delta_reader::DeltaReader,
+        slot_number: crate::SlotNumber,
+        latest_finalized_slot_number: crate::SlotNumber,
+        next_tx_number: u64,
+    ) {
+        let start = std::time::Instant::now();
+        tracing::trace!(
+            slot_number = %slot_number,
+            latest_finalized_slot_number = %latest_finalized_slot_number,
+            "Starting LedgerAPI storage update"
+        );
+        self.api_ledger_db.replace_reader(ledger_reader);
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %slot_number,
+            latest_finalized_slot_number = %latest_finalized_slot_number,
+            "LedgerDb reader is replaced, sending notifications for the slot"
+        );
+        self.api_ledger_db.send_notifications_for_slot(slot_number);
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %slot_number,
+            latest_finalized_slot_number = %latest_finalized_slot_number,
+            "LedgerAPI storage updated, notification has been sent"
+        );
+        self.transaction_cache.prune(next_tx_number).await;
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -122,9 +174,10 @@ where
                 let txs = txs_to_insert
                     .iter()
                     .map(|contents| {
-                        let mut tx = FullyBakedTx::new(contents.accepted_tx.tx.data.clone().into());
-                        tx.set_sequencing_metadata(&HDTimestamp::now());
-                        (tx, contents.accepted_tx.tx_hash)
+                        (
+                            contents.accepted_tx.tx.clone(),
+                            contents.accepted_tx.tx_hash,
+                        )
                     })
                     .collect();
                 self.db
@@ -135,10 +188,6 @@ where
 
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
-                    self.transaction_cache
-                        .insert(contents.accepted_tx.clone())
-                        .await;
-                    // If the receiver is no longer listening, just don't send the confirmation.
                     // Apply all updates in a single batch
                     checkpoint_ref.apply_tx_changes(contents.tx_changes);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
@@ -146,9 +195,13 @@ where
                 // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
                 // relying on change notifications get one. Note, however, that change notifications are not in sync with the actual changes.
                 self.checkpoint_sender.send_modify(|_| {});
-                // Send tx confirmations after API state is updated
+                // Send tx confirmations after API state is updated, then broadcast to WebSocket.
+                // HTTP callers receive their response before WebSocket subscribers are notified.
+                // We yield after sending to the oneshot to give the HTTP handler a chance to
+                // process the response before we broadcast to WebSocket subscribers.
                 for (oneshot, tx) in oneshot_and_txs {
-                    let _ = oneshot.send(tx);
+                    let _ = oneshot.send(tx.clone());
+                    self.transaction_cache.insert(tx).await;
                 }
             }
             ExecutorEvent::CloseBatch {
@@ -212,12 +265,28 @@ where
                     .await?;
             }
             ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
+                Self::maybe_delay_api_state_update_for_tests().await;
                 self.update_api_state(new_checkpoint);
+            }
+            ExecutorEvent::UpdateApiLedger {
+                ledger_reader,
+                slot_number,
+                latest_finalized_slot_number,
+                next_tx_number,
+            } => {
+                self.update_api_ledger(
+                    ledger_reader,
+                    slot_number,
+                    latest_finalized_slot_number,
+                    next_tx_number,
+                )
+                .await;
             }
             ExecutorEvent::PruneDb(sequence_number) => {
                 self.db.prune_db(sequence_number).await?;
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
+                Self::maybe_delay_api_state_update_for_tests().await;
                 self.update_api_state(checkpoint);
             }
             ExecutorEvent::FlushTransactionsCache {

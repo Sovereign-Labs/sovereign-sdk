@@ -1,7 +1,6 @@
-use crate::preferred::db::leadership_election::LeadershipElectionTask;
-use crate::preferred::db::SequencerRole;
-
 use super::*;
+use crate::preferred::db::heartbeat_task::HeartBeatTask;
+use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
@@ -71,13 +70,8 @@ where
             "Instantiating the preferred sequencer"
         );
 
-        let mut config = self.config;
+        let config = self.config;
         let preferred_config = &config.sequencer_kind_config;
-
-        let maybe_oracle_config =
-            TimingOracleConfigWithPrivateKey::new(preferred_config.timing_oracle.clone())
-                .transpose()?;
-        maybe_add_oracle_to_admins(&mut config.admin_addresses, &maybe_oracle_config);
 
         let tx_status_manager = TxStatusManager::default();
 
@@ -161,7 +155,6 @@ where
             preferred_config.batch_execution_time_limit_millis * 1000;
         let (synchronized_state, synchronized_state_updator) = create(
             seq_role,
-            api_ledger_db.clone(),
             latest_state_update.clone(),
             tx_queue_id.clone(),
             batch_execution_time_limit_micros,
@@ -189,6 +182,7 @@ where
             blob_sender,
             executor_events_receiver,
             db,
+            api_ledger_db,
             shutdown_sender: shutdown_sender.clone(),
             transaction_cache: cached_txs.write_handle(),
         }
@@ -240,25 +234,17 @@ where
             }
         }
 
-        // Launch leadership task for DbElected nodes
+        // Launch heartbeat tasks for leadership election and node registration
         if let Some(postgres_config) = &preferred_config.postgres_config {
-            if postgres_config.node_role == ConfiguredNodeRole::DbElected {
-                let election_task = LeadershipElectionTask::new(
-                    postgres_config,
-                    shutdown_sender.clone(),
-                    bind_addr,
-                )
-                .await?;
-
-                let leadership_handle = match seq_role {
-                    SequencerRole::BatchProducer => election_task.spawn_leader_heartbeat_task(),
-                    SequencerRole::PgSyncReplica => election_task.spawn_replica_election_task(),
-                    _ => unreachable!(
-                        "DbElected should only result in BatchProducer or PgSyncReplica role"
-                    ),
-                };
-                handles.push(leadership_handle);
-            }
+            let heartbeat_task = HeartBeatTask::new(
+                postgres_config.clone(),
+                shutdown_sender.clone(),
+                bind_addr,
+                postgres_config.leader_election.heartbeat_interval(),
+            )
+            .await?;
+            let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
+            handles.push(heartbeat_handle);
         }
 
         handles.push(tokio::spawn(update_state_task(
@@ -282,19 +268,6 @@ where
             }
         }));
 
-        if let Some(oracle_config) = maybe_oracle_config {
-            if let SequencerRole::BatchProducer = seq_role {
-                if Rt::default().maybe_set_oracle_timestamp(0).is_some() {
-                    match update_timestamp_task(seq.clone(), oracle_config, shutdown_receiver) {
-                        Ok(handle) => handles.push(handle),
-                        Err(e) => {
-                            error!(error = ?e, "Failed to start timestamp oracle task");
-                        }
-                    }
-                }
-            }
-        }
-
         Ok((seq, handles))
     }
 
@@ -310,6 +283,8 @@ where
                 "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
             );
         let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        // Preferred sequencer deliberately treats the latest available slot as finalized
+        // when initializing API state (soft-confirmation semantics).
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
         let (checkpoint_sender, checkpoint_receiver) =
             watch::channel(Arc::new(concurrent_checkpoint));
@@ -321,20 +296,4 @@ where
         );
         (api_state, checkpoint_sender)
     }
-}
-
-fn maybe_add_oracle_to_admins<S: Spec>(
-    admins: &mut Vec<S::Address>,
-    oracle_config: &Option<TimingOracleConfigWithPrivateKey<S>>,
-) {
-    if let Some(oracle_config) = oracle_config {
-        let oracle = oracle_config.address();
-        if !admins.contains(&oracle) {
-            info!(
-                "Adding oracle address {} to sequencer's admin address list",
-                oracle
-            );
-            admins.push(oracle);
-        }
-    };
 }

@@ -12,7 +12,7 @@ use sov_attester_incentives::AttesterIncentivesConfig;
 pub use sov_bank::{BankConfig, Coins, TokenConfig};
 pub use sov_chain_state::ChainStateConfig;
 pub use sov_evm::EvmGenesisConfig;
-use sov_modules_api::prelude::*;
+use sov_modules_api::{prelude::*, Base58Address};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_operator_incentives::OperatorIncentivesConfig;
 use sov_paymaster::PaymasterConfig;
@@ -77,7 +77,7 @@ pub fn create_genesis_config<S: Spec>(
     genesis_paths: &GenesisPaths,
 ) -> anyhow::Result<<Runtime<S> as RuntimeTrait<S>>::GenesisConfig>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     let bank_config: BankConfig<S> = read_genesis_json(&genesis_paths.bank_genesis_path)?;
 

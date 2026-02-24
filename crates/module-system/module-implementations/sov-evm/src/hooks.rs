@@ -55,7 +55,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
 
         let new_timestamp = self
             .chain_state_module
-            .get_oracle_time_with_fallback(state)
+            .get_oracle_time(state)
             .unwrap_infallible()
             .secs() as u64;
 
@@ -277,6 +277,7 @@ impl<S: Spec> Evm<S> {
             .remove(tx_hash, state)
             .unwrap_infallible()?;
         self.receipts.remove(&idx, state).unwrap_infallible()?;
+        self.receipt_fees.delete(&idx, state).unwrap_infallible();
         Some(())
     }
 }

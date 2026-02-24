@@ -55,21 +55,24 @@ pub(crate) fn from_recovered_with_block_context(
     block_hash: Option<B256>,
     block_number: BlockNumber,
     tx_index: u64,
+    base_fee: Option<u64>,
 ) -> alloy_rpc_types::Transaction {
     let tx_info = TransactionInfo {
+        base_fee,
         block_hash,
         block_number: Some(block_number),
         index: Some(tx_index),
-        // Default values
+        // Default value, because hash is in the tx.
         hash: None,
-        base_fee: None,
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::{Address, U256};
+    use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
+    use alloy_primitives::Signature;
+    use alloy_primitives::{Address, B256, U256};
     use revm::context::TransactTo;
 
     use super::*;
@@ -116,5 +119,32 @@ mod tests {
         assert_eq!(tx_env.chain_id, expected.chain_id);
         assert_eq!(tx_env.nonce, expected.nonce);
         assert_eq!(tx_env.access_list, expected.access_list);
+    }
+
+    #[test]
+    fn from_recovered_with_block_context_uses_base_fee_for_effective_gas_price() {
+        let tx = TxEip1559 {
+            max_fee_per_gas: 100,
+            max_priority_fee_per_gas: 2,
+            ..Default::default()
+        };
+        let recovered = Recovered::new_unchecked(
+            EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+                tx,
+                Signature::test_signature(),
+                Default::default(),
+            )),
+            Address::ZERO,
+        );
+
+        let with_base_fee =
+            from_recovered_with_block_context(recovered.clone(), Some(B256::ZERO), 1, 0, Some(10));
+        // min(max_priority_fee_per_gas, max_fee_per_gas - base_fee) + base_fee
+        assert_eq!(with_base_fee.effective_gas_price, Some(12));
+
+        let without_base_fee =
+            from_recovered_with_block_context(recovered, Some(B256::ZERO), 1, 0, None);
+        // Fallback behavior when base fee is unavailable.
+        assert_eq!(without_base_fee.effective_gas_price, Some(100));
     }
 }

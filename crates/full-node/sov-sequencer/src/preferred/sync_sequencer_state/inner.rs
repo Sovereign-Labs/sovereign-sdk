@@ -18,7 +18,7 @@ use crate::preferred::RollupBlockExecutorConfig;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
-    Confirmation, LedgerDb, PreferredBatchToReplay, PreferredSequencerConfig,
+    Confirmation, PreferredBatchToReplay, PreferredSequencerConfig,
     PreferredSequencerFetchBatchesToReplayMetrics, TxResultWriter,
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
@@ -53,6 +53,7 @@ pub(crate) enum DoNewTxError<S: Spec> {
     TxTooBig {
         current_batch_size: usize,
         max_batch_size: usize,
+        tx_len: usize,
     },
     ExecutorError(RollupBlockExecutorError<S>),
     Shutdown,
@@ -67,11 +68,6 @@ where
     Rt: Runtime<S>,
 {
     pub(crate) seq_role: SequencerRole,
-    // This ledgerdb is used specifically for REST API and websocket subscriptions.
-    // The sequencer controls when it is updated to solve inconsistency issues,
-    // See [`LedgerDb::with_shared_notifications`] for more details.
-    pub(crate) api_ledger_db: LedgerDb,
-
     pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) shutdown_receiver: watch::Receiver<()>,
     pub(crate) shutdown_sender: watch::Sender<()>,
@@ -452,30 +448,6 @@ where
         self.seq_role == SequencerRole::PgSyncReplica
     }
 
-    pub(crate) async fn update_api_ledger(&self, info: &StateUpdateInfo<S::Storage>) {
-        let start = std::time::Instant::now();
-        tracing::trace!(
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "Starting LedgerAPI storage update");
-        self.api_ledger_db
-            .replace_reader(info.ledger_reader.clone());
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "LedgerDb reader is replaced, sending notifications for the slot");
-        self.api_ledger_db
-            .send_notifications_for_slot(info.slot_number);
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %info.slot_number,
-            latest_finalized_slot_number = %info.latest_finalized_slot_number,
-            "LedgerAPI storage updated, notification has been sent");
-
-        self.tx_cache_writer.prune(info.next_tx_number).await;
-    }
-
     /// Create a new batch, if possible. Errors here are expected, because it's not always possible to create a new batch due to transient DA issues.
     /// We can only create a new batch if we have a finalized slot available to use as our `visible_slot_number_after_increase`.
     #[tracing::instrument(skip_all, level = "trace")]
@@ -693,6 +665,7 @@ where
                 Err(DoNewTxError::TxTooBig {
                     current_batch_size: batch_size_tracker.current_batch_size,
                     max_batch_size: batch_size_tracker.max_batch_size,
+                    tx_len,
                 }),
                 request_used,
             );

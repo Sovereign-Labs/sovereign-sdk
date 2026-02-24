@@ -598,8 +598,8 @@ where
                         blobs_selection_time: blob_selection_time,
                         slot_finalization_time,
                         da_height: slot_header.height(),
-                        execution_context,
-                        visible_slot_number,
+                        execution_context: execution_context.str(),
+                        visible_slot_number: visible_slot_number.get(),
                         gas_used: total_gas.as_ref().to_vec(),
                     });
                 });
@@ -732,7 +732,7 @@ where
                     {
                         save_elapsed!(processing_time SINCE start_batch_processing);
                         let transactions_count = batch_receipt.tx_receipts.len();
-                        let ignored_transactions_count = batch_receipt.tx_receipts.len();
+                        let ignored_transactions_count = batch_receipt.ignored_tx_receipts.len();
 
                         sov_metrics::track_metrics(|tracker| {
                             tracker.submit(sov_metrics::BatchMetrics {
@@ -823,8 +823,8 @@ where
                 tracker.submit(sov_metrics::UserSpaceSlotProcessingMetrics {
                     begin_block_hook_time,
                     blobs_processing_time: blob_processing_time,
-                    visible_slot_number: state.current_visible_slot_number(),
-                    execution_context,
+                    visible_slot_number: state.current_visible_slot_number().get(),
+                    execution_context: execution_context.str(),
                     end_block_hook_time,
                     gas_used: total_gas,
                 });

@@ -134,9 +134,12 @@ where
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
         let latest_state_update = state_update_receiver.borrow().clone();
-        let checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
-        ));
+        let checkpoint = Arc::new(
+            ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
+                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
+                latest_state_update.latest_finalized_slot_number,
+            ),
+        );
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
         let api_state = ApiState::build(
@@ -280,8 +283,8 @@ where
         let execution_context = ExecutionContext::Sequencer;
         let pre_exec_working_set = tx_scratchpad.to_pre_exec_working_set(gas_meter);
         let metrics = AuthAndProcessMetrics::new(
-            mempool_tx.hash,
-            AuthAndProcessTimings::new_with_defaults(execution_context),
+            mempool_tx.hash.into(),
+            AuthAndProcessTimings::new_with_defaults(execution_context.str()),
         );
         let (res, tx_scratchpad, _gas_meter) = process_tx_and_reward_prover(
             &mut runtime,
@@ -320,7 +323,7 @@ where
     }
 
     async fn produce_batch(&self) -> anyhow::Result<Option<WithCachedTxHashes<Vec<FullyBakedTx>>>> {
-        tracing::debug!("`produce_batch` has been called");
+        tracing::trace!("`produce_batch` has been called");
         let mut inner = self.inner.lock().await;
 
         // We already have a batch assembled. We'll wait until it's popped
@@ -348,10 +351,12 @@ where
             let mut txs = Vec::new();
 
             let count_before = mempool.len();
-            tracing::debug!(
-                txs_count = count_before,
-                "Going to build batch from transactions in mempool"
-            );
+            if count_before > 0 {
+                tracing::debug!(
+                    txs_count = count_before,
+                    "Going to build batch from transactions in mempool"
+                );
+            }
 
             let mut cursor = self.mempool_cursor(&ctx);
 
@@ -665,6 +670,7 @@ where
             storage,
             slot_number,
             ledger_reader,
+            latest_finalized_slot_number,
             ..
         } = &state_update_info;
         let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
@@ -677,10 +683,15 @@ where
         {
             let mut inner = self.inner.lock().await;
             self.checkpoint_sender
-                .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                    checkpoint
-                        .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
-                )))
+                .send(Arc::new(
+                    // Standard sequencer preserves true finality as reported by the node.
+                    ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
+                        checkpoint
+                            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(
+                            ),
+                        *latest_finalized_slot_number,
+                    ),
+                ))
                 .ok();
             inner.checkpoint = Some(checkpoint);
         }

@@ -223,13 +223,14 @@ async fn submit_tx(
 async fn query_balance(client: &NodeClient, address: &str) -> Option<Amount> {
     let gas_token_id: TokenId = config_value!("GAS_TOKEN_ID");
 
-    // Query initial balance of recipient (should be 0)
-    let response = client
+    let Ok(response) = client
         .query_rest_endpoint::<BalanceResponse>(&format!(
             "/modules/bank/tokens/{gas_token_id}/balances/{address}"
         ))
         .await
-        .expect("Failed to query balance");
+    else {
+        return None;
+    };
 
     response.amount
 }
