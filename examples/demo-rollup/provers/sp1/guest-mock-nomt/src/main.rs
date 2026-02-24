@@ -3,8 +3,7 @@
 sp1_zkvm::entrypoint!(main);
 
 use demo_stf::runtime::Runtime;
-use demo_stf::StfVerifier;
-use sov_address::MultiAddressEvm;
+use demo_stf::{MultiAddressEvmSolana, StfVerifier};
 use sov_mock_da::{MockDaSpec, MockDaVerifier};
 pub use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
@@ -23,7 +22,15 @@ pub fn main() {
     let storage = NomtStorage::new();
 
     let stf: StfBlueprint<
-        ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvm, Zk, sov_sp1_adapter::SP1CryptoSpec, NomtStorage>,
+        ConfigurableSpec<
+            MockDaSpec,
+            SP1,
+            MockZkvm,
+            MultiAddressEvmSolana,
+            Zk,
+            sov_sp1_adapter::SP1CryptoSpec,
+            NomtStorage,
+        >,
         Runtime<_>,
     > = StfBlueprint::new();
 
