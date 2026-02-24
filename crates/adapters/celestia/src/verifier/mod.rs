@@ -1,8 +1,6 @@
 pub mod address;
 pub mod proofs;
 
-use std::cmp::Ordering;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::{Namespace, NamespacedHash, NS_SIZE};
 use nmt_rs::NamespacedSha2Hasher;
@@ -10,7 +8,7 @@ use sov_rollup_interface::da::{self, DaSpec, RelevantBlobs, RelevantProofs};
 
 use self::address::CelestiaAddress;
 use self::proofs::*;
-use crate::shares::shares_needed_for_bytes;
+use crate::shares::shares_needed_for_bytes_with_signer;
 use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
 };
@@ -259,8 +257,9 @@ impl PreValidationOutput {
 
 /// 1. Checks that blobs quantity matches inclusion proofs quantity.
 /// 2. Checks that row roots are non-empty for non-empty blobs slice.
-/// 3. Handles the case of an empty blobs slice and verifies absence proof.
-///    In this case returns `PreValidationOutput::EarlyReturn` and the caller can exit early.
+/// 3. Handles the case of an empty blobs slice:
+///    - if inclusion proofs are present, verification continues (unsupported blobs may be proven as skipped);
+///    - otherwise verifies absence proof and returns early.
 fn prevalidate_blobs(
     namespace_row_roots: &[&NamespacedHash],
     blobs: &[BlobWithSender],
@@ -275,18 +274,30 @@ fn prevalidate_blobs(
     } else if namespace_row_roots.is_empty() && !blobs.is_empty() {
         return Err(InvalidBlobData(BlobDataError::UnexpectedBlobs));
     } else if blobs.is_empty() && !namespace_row_roots.is_empty() {
-        // We get a list of all row roots that "contain" our namespace (i.e. MIN <= NAMESPACE <= MAX)
-        // it's possible that there's a row whose root "contains" our namespace even though no shares from our namespace are actually present in that row.
-        // For that to be the case, the row needs to contain shares from at least two different namespaces,
-        // one, which is less than our namespace, and one which is greater.
-        // Because shares are ordered by namespace, there can only be at most one such row.
-        // The row before that one will only have shares that are strictly less than our namespace, and the row after will only have shares that are strictly greater.
+        tracing::debug!(
+            row_roots = namespace_row_roots.len(),
+            inclusion_proof = inclusion_proof.len(),
+            has_boundary = namespace_boundary_proof.is_some(),
+            "Prevalidate: empty blob list for non-empty namespace row roots"
+        );
+        // If inclusion proofs are present, continue with regular verification:
+        // they may correspond to unsupported blobs that are intentionally skipped by extraction.
+        if !inclusion_proof.is_empty() {
+            return Ok(PreValidationOutput::ContinueVerification);
+        }
 
+        // Security hardening: if multiple row roots "contain" the namespace (MIN <= NAMESPACE <= MAX),
+        // we cannot safely conclude full namespace absence from a single-row absence proof.
+        // This can happen because parity shares use MAX namespace, broadening row namespace ranges.
+        // Until completeness proof format can provide per-row absence evidence, fail closed.
         if namespace_row_roots.len() > 1 {
+            tracing::warn!(
+                row_roots = namespace_row_roots.len(),
+                "Prevalidate: ambiguous empty namespace without inclusion proof; rejecting"
+            );
             return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
-        let row_root = namespace_row_roots[0];
-        // Verifying that there are no shares in this single row.
+
         let Some(NamespaceBoundaryProof {
             last_share_proof, ..
         }) = namespace_boundary_proof
@@ -295,6 +306,8 @@ fn prevalidate_blobs(
                 ProofError::Missing,
             )));
         };
+        // Safe due to guard above (`row_roots.len() > 1` returns MissingBlobs).
+        let row_root = namespace_row_roots[0];
         return last_share_proof
             .verify_complete_namespace(row_root, &Vec::<Vec<u8>>::new(), *namespace)
             .map(|_| PreValidationOutput::EarlyReturn)
@@ -333,7 +346,10 @@ fn authenticate_blob_data(
     // The accumulator length is considered trusted as a record of the bytes that the rollup saw.
     // This does not mean that it can be trusted to contain the correct bytes.
     let blob_data_read = blob.blob.accumulator();
-    let num_shares_to_prove = shares_needed_for_bytes(blob_data_read.len()).max(1);
+    let first_share = blob_row_proof.first_share().map_err(InvalidRowProof)?;
+    let has_signer = first_share.signer().is_some();
+    let num_shares_to_prove =
+        shares_needed_for_bytes_with_signer(blob_data_read.len(), has_signer).max(1);
     let num_shares_with_proofs = blob_row_proof
         .range_proofs
         .iter()
@@ -423,7 +439,8 @@ fn authenticate_blob_data(
     // Failure means a bug.
     debug_assert!(signer_checked, "Bug. Signer checking has been skipped");
     let sequence_length = sequence_length.expect("sequence length should be set by this point");
-    let shares_occupied_total = shares_needed_for_bytes(sequence_length as usize);
+    let shares_occupied_total =
+        shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer);
     Ok(shares_occupied_total)
 }
 
@@ -472,20 +489,31 @@ fn verify_skipped_blob(
         .verify_range(row_root, &raw_leaves, namespace.into())
         .map_err(|e| InvalidRowProof(RowProofError::ProofError(ProofError::Invalid(e))))?;
 
-    let shares_occupied_total = shares_needed_for_bytes(sequence_length as usize);
+    let shares_occupied_total = shares_needed_for_bytes_with_signer(
+        sequence_length as usize,
+        first_share.signer().is_some(),
+    );
 
     Ok(shares_occupied_total)
 }
 
-// After all blobs have been verified, we need to check that there are no more blobs in the namespace.
-// It does it by explicitly checking proof of the last share. For this proof, the leaf on the right must be from another namespace.
+// After all blobs have been verified, check namespace right boundary for completeness/censorship resistance.
+// This is done with a proof for the last share of the namespace. For a valid boundary,
+// the sibling on the right must belong to a strictly greater namespace.
+//
+// Security-critical behavior:
+// * Derive boundary row as:
+//   `delta = last_proven_share_idx - proof_start_in_row`, `row_idx = delta / row_len`.
+// * Require row alignment: `delta % row_len == 0`.
+// * Require `row_idx` to point to the last candidate row in `namespace_row_roots`.
+//   If it points earlier, later candidate rows could still contain this namespace, so return `MissingBlobs`.
+//
 // Parameters:
-// * `block_header` is a trusted input parameter.
-// * `namespace_row_roots` is trusted, as it should've been trustlessly derived from the block header.
-// * `namespace` is a trusted rollup parameter.
-// * `last_proven_share_idx` is trusted and should be properly derived by the caller.\
-// * `namespace_boundary_proof` is allowed to be None if the last proven share is the last share in the row.
-//    This is checked
+// * `block_header` is trusted.
+// * `namespace_row_roots` is trusted (derived from verified DAH).
+// * `namespace` is trusted rollup parameter.
+// * `last_proven_share_idx` is derived by the verifier from validated shares.
+// * `namespace_boundary_proof` may be `None` only when last proven share is the last share of the last candidate row.
 fn check_namespace_end_boundary(
     block_header: &CelestiaHeader,
     namespace_row_roots: &[&NamespacedHash],
@@ -509,31 +537,51 @@ fn check_namespace_end_boundary(
                 ProofError::Missing,
             )));
         };
-        // Upsize everything to u64, even though zkVM is 32 bit, and such big namespace rows are highly unlikely,
-        // better to be on the safe side.
-        let last_share_proof_start_idx = (namespace_row_roots.len() as u64 - 1)
-            .checked_mul(block_header.row_length() as u64)
-            .expect("Square overflow")
-            .checked_add(last_share_proof.start_idx() as u64)
-            .expect("Square overflow");
-
-        // Last proven share should match index of the proof
-        // This index is trusted, because it is derived from sequence length,
-        // which is tied to the row root.
-        match (last_proven_share_idx as u64).cmp(&last_share_proof_start_idx) {
-            Ordering::Less => {
-                return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Err(IncompleteNamespace(
-                    IncompleteNamespaceError::corrupted_proof(),
-                ));
-            }
+        // Determine the row of the boundary proof from the trusted `last_proven_share_idx`.
+        // Security invariant: the boundary proof must terminate the namespace in the last
+        // candidate row root. Otherwise, rows after `row_idx` could still contain this namespace.
+        let row_len = block_header.row_length() as u64;
+        let proof_start_in_row = last_share_proof.start_idx() as u64;
+        let last_proven_share_idx_u64 = last_proven_share_idx as u64;
+        if last_proven_share_idx_u64 < proof_start_in_row {
+            tracing::error!(
+                last_proven_share_idx = last_proven_share_idx_u64,
+                proof_start_in_row,
+                "MissingBlobs in check_namespace_end_boundary: proven index is before proof start in row"
+            );
+            return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
-        let last_row_root = namespace_row_roots
-            .last()
-            .expect("Empty namespace row roots have been checked before");
+
+        let delta = last_proven_share_idx_u64
+            .checked_sub(proof_start_in_row)
+            .expect("checked above");
+        let row_idx_u64 = delta.checked_div(row_len).expect("row_len cannot be 0");
+        let rem = delta % row_len;
+        if rem != 0 {
+            return Err(IncompleteNamespace(
+                IncompleteNamespaceError::corrupted_proof(),
+            ));
+        }
+        let row_idx = usize::try_from(row_idx_u64)
+            .map_err(|_| IncompleteNamespace(IncompleteNamespaceError::corrupted_proof()))?;
+        if row_idx >= namespace_row_roots.len() {
+            return Err(IncompleteNamespace(
+                IncompleteNamespaceError::corrupted_proof(),
+            ));
+        }
+        let last_row_idx = namespace_row_roots
+            .len()
+            .checked_sub(1)
+            .expect("row roots cannot be empty in this branch");
+        if row_idx != last_row_idx {
+            tracing::error!(
+                row_idx,
+                last_row_idx,
+                "MissingBlobs in check_namespace_end_boundary: boundary proof does not target last namespace row"
+            );
+            return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
+        }
+        let last_row_root = namespace_row_roots[last_row_idx];
 
         let Some(raw_leaves) = last_share.as_ref().map(|s| vec![s.data()]) else {
             return Err(IncompleteNamespace(
@@ -551,8 +599,191 @@ fn check_namespace_end_boundary(
             )));
         };
         if *namespace >= lrs.min_namespace() {
+            tracing::error!(
+                namespace = ?namespace,
+                right_sibling_min = ?lrs.min_namespace(),
+                "MissingBlobs in check_namespace_end_boundary: right sibling is not strictly greater"
+            );
             return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helper::files::{
+        from_testnet_no_shares, from_testnet_with_tail_padding, with_namespace_padding,
+        with_rollup_batch_data,
+    };
+    use crate::types::FilteredCelestiaBlock;
+
+    fn fixture_with_multiple_candidate_row_roots() -> (FilteredCelestiaBlock, Namespace) {
+        let candidates = [
+            (
+                from_testnet_no_shares::filtered_block(),
+                from_testnet_no_shares::ROLLUP_PARAMS.rollup_batch_namespace,
+            ),
+            (
+                from_testnet_with_tail_padding::filtered_block(),
+                from_testnet_with_tail_padding::ROLLUP_PARAMS.rollup_batch_namespace,
+            ),
+            (
+                with_namespace_padding::filtered_block(),
+                with_namespace_padding::ROLLUP_PARAMS.rollup_batch_namespace,
+            ),
+        ];
+
+        for (block, namespace) in candidates {
+            let root_count = block.header.get_row_roots_for_namespace(namespace).count();
+            if root_count > 1 {
+                return (block, namespace);
+            }
+        }
+
+        panic!("No fixture with multiple candidate row roots found");
+    }
+
+    #[test]
+    fn prevalidate_rejects_ambiguous_empty_namespace_without_inclusion_proofs() {
+        let (block, namespace) = fixture_with_multiple_candidate_row_roots();
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Test fixture must have multiple candidate row roots"
+        );
+
+        let empty_blobs: Vec<BlobWithSender> = Vec::new();
+        let empty_inclusion_proof: Vec<BlobProof> = Vec::new();
+        let err = match prevalidate_blobs(
+            &namespace_row_roots,
+            &empty_blobs,
+            namespace,
+            &empty_inclusion_proof,
+            &None,
+        ) {
+            Err(err) => err,
+            Ok(_) => panic!("Expected MissingBlobs for ambiguous empty namespace"),
+        };
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+        ));
+    }
+
+    #[test]
+    fn prevalidate_continues_when_inclusion_proofs_are_present_even_if_no_blobs() {
+        let (block, namespace) = fixture_with_multiple_candidate_row_roots();
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Test fixture must have multiple candidate row roots"
+        );
+
+        let empty_blobs: Vec<BlobWithSender> = Vec::new();
+        let non_empty_inclusion_proof = vec![BlobProof {
+            range_proofs: Vec::new(),
+        }];
+        let output = prevalidate_blobs(
+            &namespace_row_roots,
+            &empty_blobs,
+            namespace,
+            &non_empty_inclusion_proof,
+            &None,
+        )
+        .unwrap();
+
+        assert!(matches!(output, PreValidationOutput::ContinueVerification));
+    }
+
+    #[test]
+    fn prevalidate_single_row_requires_boundary_proof() {
+        let block = with_rollup_batch_data::filtered_block();
+        let namespace = with_rollup_batch_data::ROLLUP_PARAMS.rollup_batch_namespace;
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            namespace_row_roots.len(),
+            1,
+            "Test fixture must have exactly one candidate row root"
+        );
+
+        let empty_blobs: Vec<BlobWithSender> = Vec::new();
+        let empty_inclusion_proof: Vec<BlobProof> = Vec::new();
+        let err = match prevalidate_blobs(
+            &namespace_row_roots,
+            &empty_blobs,
+            namespace,
+            &empty_inclusion_proof,
+            &None,
+        ) {
+            Err(err) => err,
+            Ok(_) => panic!("Expected missing completeness proof for single-row absence path"),
+        };
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Missing))
+        ));
+    }
+
+    #[test]
+    fn boundary_proof_for_non_last_row_is_rejected() {
+        let block = from_testnet_with_tail_padding::filtered_block();
+        let namespace = from_testnet_with_tail_padding::ROLLUP_PARAMS.rollup_batch_namespace;
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Fixture must have multiple candidate namespace row roots"
+        );
+
+        let first_row = &block.rollup_batch_data.data.rows()[0];
+        assert!(
+            !first_row.shares.is_empty(),
+            "First namespace row should contain shares"
+        );
+        let all_before_last = &first_row.shares[..first_row.shares.len().saturating_sub(1)];
+        let last_share = first_row
+            .shares
+            .last()
+            .expect("First row should contain at least one share")
+            .clone();
+        let last_share_proof = first_row
+            .proof
+            .narrow_range(all_before_last, &[], *namespace)
+            .expect("Failed to build boundary proof for first row");
+        let boundary_proof = NamespaceBoundaryProof {
+            last_share_proof: last_share_proof.into(),
+            last_share: Some(last_share),
+        };
+
+        // Force computed row_idx = 0 (first row), which is not the last row.
+        let last_proven_share_idx = boundary_proof.last_share_proof.start_idx() as usize;
+        let err = check_namespace_end_boundary(
+            &block.header,
+            &namespace_row_roots,
+            namespace,
+            last_proven_share_idx,
+            Some(boundary_proof),
+        )
+        .expect_err("Boundary proof from non-last row must be rejected");
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+        ));
+    }
 }
