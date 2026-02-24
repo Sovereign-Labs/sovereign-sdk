@@ -5,7 +5,7 @@ use sov_state::{
     AccessSize, ArrayWitness, BorshCodec, IsValueCached, Namespace, OrderedReadsAndWrites, Prefix,
     StateAccesses, Storage, ZkStorage,
 };
-use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::storage::SimpleJmtStorageManager;
 use sov_test_utils::{validate_and_materialize, MockDaSpec, TestStorageSpec};
 
 use super::seal::UniversalStateAccessor;
@@ -25,11 +25,11 @@ const NAMESPACE: Namespace = Namespace::User;
 fn create_storage_manager(
     initial_values: Vec<(Vec<u8>, u64)>,
 ) -> (
-    SimpleStorageManager<TestStorageSpec>,
+    SimpleJmtStorageManager<TestStorageSpec>,
     <<Native as Spec>::Storage as Storage>::Root,
 ) /*ProverStorage<DefaultStorageSpec<sha2::Sha256>>*/
 {
-    let mut storage_manager = SimpleStorageManager::new();
+    let mut storage_manager = SimpleJmtStorageManager::new();
     let storage = storage_manager.create_storage();
 
     let (root, genesis_change_set) = validate_and_materialize(

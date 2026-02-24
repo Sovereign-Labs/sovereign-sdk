@@ -10,12 +10,21 @@ use sov_modules_api::{Context, CryptoSpec, Module, ModuleInfo, SequencerType, Sp
 use sov_revenue_share::{CallMessage as RevenueShareCallMessage, RevenueShare};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::{generate_optimistic_runtime, AsUser, TestUser, TransactionTestCase};
+use sov_test_utils::{
+    generate_optimistic_runtime, AsUser, TestStorage, TestUser, TransactionTestCase,
+};
 
 use crate::test_helpers::TestCryptoSpec;
 
-type TestSpec =
-    ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, EthereumAddress, Native, TestCryptoSpec>;
+type TestSpec = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    EthereumAddress,
+    Native,
+    TestCryptoSpec,
+    TestStorage,
+>;
 
 type S = TestSpec;
 

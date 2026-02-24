@@ -8,7 +8,6 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
-use tracing::error;
 
 use crate::common::HexHash;
 use crate::da::{BlockHeaderTrait, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs, Time};

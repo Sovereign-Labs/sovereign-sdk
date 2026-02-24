@@ -72,17 +72,4 @@ describe("bank", async () => {
       );
     });
   });
-
-  describe("totalSupply()", async () => {
-    it("should return the expected total supply", async () => {
-      const bank = new Bank(rollup);
-      const actual = await bank.totalSupply();
-      expect(actual).toBe(BigInt("10030000000000000"));
-    });
-    it("should use the tokenId parameter if it is supplied", async () => {
-      const bank = new Bank(rollup);
-      const actual = await bank.totalSupply(createdTokenId);
-      expect(actual).toBe(BigInt(createdTokenInitBalance));
-    });
-  });
 });

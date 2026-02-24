@@ -2,7 +2,7 @@ use crate::GAS;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy_eips::Encodable2718;
-use alloy_primitives::{Address, Bytes, TxHash, TxKind, U256};
+use alloy_primitives::{Address, Bytes, TxHash, TxKind, B256, U256};
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::RootProvider;
@@ -166,10 +166,12 @@ impl RpcClient {
     }
 
     pub async fn eth_get_storage_at(&self, address: Address, index: U256) -> U256 {
-        self.ws
+        let value: B256 = self
+            .ws
             .request("eth_getStorageAt", rpc_params![address, index])
             .await
-            .unwrap()
+            .unwrap();
+        U256::from_be_slice(value.as_slice())
     }
 
     pub async fn get_logs_allow_error(&self) -> Result<Vec<Log>, Box<dyn std::error::Error>> {

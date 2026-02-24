@@ -7,11 +7,13 @@ pub async fn print_logs_from_exec_result(name: &str, result: &mut ExecResult, ti
     let _span = tracing::info_span!("docker_exec_log", name = name).entered();
     let exit_code = result.exit_code().await.unwrap();
     tracing::info!("Exit code  {exit_code:?}");
+    eprintln!("[{name}] exec exit code: {exit_code:?}");
     let _ = tokio::time::timeout(timeout, async {
         tracing::info!("Printing stdout");
         let mut stdout = result.stdout().lines();
         while let Some(line) = stdout.next_line().await.unwrap() {
             tracing::info!("stdout: {line}");
+            eprintln!("[{name}] stdout: {line}");
         }
     })
     .await;
@@ -21,6 +23,7 @@ pub async fn print_logs_from_exec_result(name: &str, result: &mut ExecResult, ti
         let mut stderr = result.stderr().lines();
         while let Some(line) = stderr.next_line().await.unwrap() {
             tracing::info!("stderr: {line}");
+            eprintln!("[{name}] stderr: {line}");
         }
     })
     .await;

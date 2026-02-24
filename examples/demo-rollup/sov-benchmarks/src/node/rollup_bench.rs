@@ -3,13 +3,13 @@
 use std::env;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use sov_address::MultiAddressEvm;
+use demo_stf::MultiAddressEvmSolana;
 use sov_benchmarks::node::{assert_batch_receipts, generate_transfers, prefill_state};
 use sov_benchmarks::{setup_with_runner, BenchSpec, NomtBenchSpec};
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::Spec;
 use sov_test_utils::storage::{
-    ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
+    ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
 };
 use sov_test_utils::MockZkvm;
 
@@ -20,7 +20,7 @@ where
         InnerZkvm = MockZkvm,
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {
@@ -66,13 +66,13 @@ fn stf_apply_slot_bench(c: &mut Criterion) {
         bench_after_blocks * senders_count
     );
 
-    run_spec::<BenchSpec<MockZkvm>, SimpleStorageManager<_>>(
+    run_spec::<BenchSpec<MockZkvm>, SimpleJmtStorageManager<_>>(
         c,
         "jmt",
         senders_count,
         bench_after_blocks,
     );
-    run_spec::<NomtBenchSpec, SimpleNomtStorageManager<_>>(
+    run_spec::<NomtBenchSpec, SimpleStorageManager<_>>(
         c,
         "nomt",
         senders_count,

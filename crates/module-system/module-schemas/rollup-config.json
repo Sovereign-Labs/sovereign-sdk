@@ -152,6 +152,38 @@
         }
       ]
     },
+    "ConfiguredNodeRole": {
+      "oneOf": [
+        {
+          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
+          "type": "string",
+          "enum": [
+            "Leader"
+          ]
+        },
+        {
+          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
+          "type": "string",
+          "enum": [
+            "Replica"
+          ]
+        },
+        {
+          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
+          "type": "string",
+          "enum": [
+            "ReplicaNoLeaderSync"
+          ]
+        },
+        {
+          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
+          "type": "string",
+          "enum": [
+            "DbElected"
+          ]
+        }
+      ]
+    },
     "CorsConfiguration": {
       "description": "See [`HttpServerConfig::cors`].\n\n# Default\n\nCross-origin resource sharing (CORS) makes local development easier, so it's enabled by default\n\nIn production, one may want to disable it and let your reverse proxy handle CORS instead. Security note: Allowing CORS in production allows making requests to rollup node any website on the Internet.",
       "oneOf": [
@@ -312,6 +344,33 @@
         }
       }
     },
+    "LeaderElectionConfig": {
+      "description": "Configuration for leader election timing.",
+      "type": "object",
+      "properties": {
+        "grace_period_millis": {
+          "description": "Minimum time in milliseconds after leader acquisition before another node can take over. Prevents rapid leader flapping.",
+          "default": 10000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "heartbeat_interval_millis": {
+          "description": "Interval in milliseconds between heartbeat updates.",
+          "default": 100,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "leader_timeout_millis": {
+          "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
+          "default": 500,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    },
     "Limits": {
       "type": "object",
       "required": [
@@ -398,7 +457,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "MonitoringConfig": {
       "description": "Configuration of Sovereign monitoring",
@@ -442,38 +502,6 @@
         }
       }
     },
-    "NodeRole": {
-      "oneOf": [
-        {
-          "description": "This node runs as the leader. The leader is responsible for producing new batches.",
-          "type": "string",
-          "enum": [
-            "Leader"
-          ]
-        },
-        {
-          "description": "This node runs as a replica, syncing its state from the leader. Replicas do not publish blobs to the DA layer, do not accept transactions via the API, and do not issue soft confirmations.",
-          "type": "string",
-          "enum": [
-            "Replica"
-          ]
-        },
-        {
-          "description": "This node runs in replica mode with Postgres-based synchronization from the leader disabled. It receives transactions exclusively through the DA layer. Use this mode when you want replica behavior without accepting transactions from the Leader only from the DA.",
-          "type": "string",
-          "enum": [
-            "ReplicaNoLeaderSync"
-          ]
-        },
-        {
-          "description": "The node initially starts as a `Replica` and attempts to register itself as the `Leader` by sending a request to the Db to acquire leadership. If successful, it becomes the `Leader` and all other nodes remain Replicas. If the Leader goes down and fails to refresh its entry in the `Leader` table, one of the `Replicas` will take over and assume the Leader role.",
-          "type": "string",
-          "enum": [
-            "DbElected"
-          ]
-        }
-      ]
-    },
     "PostgresConfig": {
       "description": "Postgres DB config.",
       "type": "object",
@@ -483,12 +511,25 @@
         "postgres_connection_string"
       ],
       "properties": {
+        "leader_election": {
+          "description": "Configuration for leader election timing.",
+          "default": {
+            "grace_period_millis": 10000,
+            "heartbeat_interval_millis": 100,
+            "leader_timeout_millis": 500
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/LeaderElectionConfig"
+            }
+          ]
+        },
         "node_id": {
           "description": "Id of the node.",
           "type": "string"
         },
         "node_role": {
-          "$ref": "#/definitions/NodeRole"
+          "$ref": "#/definitions/ConfiguredNodeRole"
         },
         "postgres_connection_string": {
           "description": "Connection string.",
@@ -592,18 +633,6 @@
           "allOf": [
             {
               "$ref": "#/definitions/RecoveryStrategy"
-            }
-          ]
-        },
-        "timing_oracle": {
-          "description": "Configuration for the timing oracle.",
-          "default": null,
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TimingOracleConfig"
-            },
-            {
-              "type": "null"
             }
           ]
         }
@@ -876,6 +905,15 @@
           "format": "uint",
           "minimum": 0.0
         },
+        "kernel_page_cache_upper_levels": {
+          "description": "Page cache upper levels for kernel state. More details at [`Options::page_cache_upper_levels`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
         "kernel_preallocate_ht": {
           "description": "Sets whether to preallocate the hashtable file for kernel db. More details at [`Options::preallocate_ht`]",
           "type": [
@@ -915,7 +953,7 @@
           "minimum": 0.0
         },
         "state_cache_size": {
-          "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1GB. A larger cache size can improve execution speed at the cost of more memory usage.",
+          "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB. A larger cache size can improve execution speed at the cost of more memory usage.",
           "type": [
             "integer",
             "null"
@@ -952,6 +990,15 @@
         },
         "user_page_cache_size": {
           "description": "Page cache size for user state. More details at [`Options::page_cache_size`]",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "user_page_cache_upper_levels": {
+          "description": "Page cache upper levels for user state. More details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
@@ -1025,7 +1072,7 @@
           "minimum": 0.0
         },
         "response_size_limit": {
-          "description": "The maximum size of the response to the eth_getLogs RPC endpoint. Use 1MB - 30KB for a safe default.",
+          "description": "The maximum size of the response to the eth_getLogs RPC endpoint. Use 1 MiB - 30 KiB for a safe default.",
           "default": 1017856,
           "type": "integer",
           "format": "uint",
@@ -1245,41 +1292,6 @@
             {
               "$ref": "#/definitions/Transport"
             }
-          ]
-        }
-      }
-    },
-    "TimingOracleConfig": {
-      "type": "object",
-      "required": [
-        "interval_millis",
-        "max_fee",
-        "priority_fee_percentage"
-      ],
-      "properties": {
-        "interval_millis": {
-          "description": "The interval in milliseconds at which the timestamp oracle update tx is submitted.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "max_fee": {
-          "description": "The maximum fee that the sequencer will pay for the timestamp oracle update tx.",
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0.0
-        },
-        "priority_fee_percentage": {
-          "description": "The priority fee percentage that the sequencer will pay for the timestamp oracle update tx.",
-          "type": "integer",
-          "format": "uint8",
-          "minimum": 0.0
-        },
-        "private_key_hex": {
-          "description": "The private key to use to sign timestamp oracle txs. If none is provided, an ephemeral key will be generated.",
-          "type": [
-            "string",
-            "null"
           ]
         }
       }

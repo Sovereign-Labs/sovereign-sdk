@@ -1,4 +1,4 @@
-use crate::test_helpers::build_transfer_token_tx;
+use crate::test_helpers::build_transfer_token_tx_with_generation;
 use crate::test_helpers::test_genesis_source;
 use futures::stream::BoxStream;
 use futures::StreamExt;
@@ -120,7 +120,7 @@ async fn test_crash_before_commiting_live() -> anyhow::Result<()> {
 
 // This test checks whether rollup can recover from different kinds of crashes, see `CrashLocation` enum.
 async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
-    let temp_dir = Arc::new(tempfile::tempdir()?);
+    let temp_dir: Arc<TempDir> = Arc::new(tempfile::tempdir()?);
 
     let mut mock_da_config = MockDaConfig::instant_with_sender(MockAddress::new([0; 32]));
     mock_da_config.block_producing = BlockProducingConfig::Periodic {
@@ -174,6 +174,14 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
                 "The node didn't crash, but it was expected to."
             );
         }
+
+        // Verify the crash was due to the expected CrashLocation panic, not some other bug.
+        test_rollup
+            .wait_for_rollup_to_crash_with_expected_panic(
+                Duration::from_secs(30),
+                &crash_moment.to_string(),
+            )
+            .await?;
     }
 
     // Give the OS time to clean up file handles after the crash.
@@ -259,7 +267,7 @@ async fn send_txs(
     let api_client = client.client.clone();
     let mut nb_of_txs = 0;
     loop {
-        let tx = build_transfer_token_tx::<MockNomtRollupSpec<Native>>(
+        let tx = build_transfer_token_tx_with_generation::<MockNomtRollupSpec<Native>>(
             &key_and_address.private_key,
             config_gas_token_id(),
             receiver,

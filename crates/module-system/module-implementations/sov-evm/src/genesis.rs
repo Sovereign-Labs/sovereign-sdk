@@ -57,7 +57,7 @@ where
         self.head.set(&block, state)?;
 
         let block_env = create_block_env(
-            0,
+            config.initial_base_fee,
             block.header.gas_limit,
             block.header.timestamp,
             block.header.beneficiary,
@@ -110,7 +110,7 @@ fn init_block<S: Spec>(config: &EvmGenesisConfig<S>) -> Block {
         gas_limit: config.chain_spec.block_gas_limit,
         timestamp: config.genesis_timestamp,
         excess_blob_gas: Some(EXCESS_BLOB_GAS),
-        base_fee_per_gas: Some(0),
+        base_fee_per_gas: Some(config.initial_base_fee),
         // Default values
         parent_hash: B256::ZERO,
         ommers_hash: EMPTY_OMMER_ROOT_HASH,

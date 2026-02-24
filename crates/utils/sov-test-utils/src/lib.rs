@@ -13,15 +13,15 @@ use serde::{Deserialize, Serialize};
 pub use sov_db::schema::SchemaBatch;
 pub use sov_mock_da::verifier::MockDaSpec;
 use sov_mock_da::BlockProducingConfig;
+pub use sov_mock_da::MockHash;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::default_spec::DefaultSpec;
+use sov_modules_api::default_spec::{DefaultNomtSpec, DefaultSpec};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{
     PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
-use sov_modules_api::{Address, Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
+use sov_modules_api::{Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
 pub use sov_modules_api::{EncodeCall, TxProcessingError, TxReceiptContents};
 pub use sov_modules_rollup_blueprint::logging::initialize_logging;
 pub use sov_modules_stf_blueprint::get_gas_used;
@@ -77,20 +77,12 @@ pub type TestHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 pub type TestStorageSpec = DefaultStorageSpec<TestHasher>;
 /// The default test spec. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+pub type TestJmtSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// Shortcut to [`sov_mock_da::MockHash`];
 pub type TestSlotHash = <MockDaSpec as DaSpec>::SlotHash;
 /// The default test spec for NOMT. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestNomtSpec = ConfigurableSpec<
-    MockDaSpec,
-    MockZkvm,
-    MockZkvm,
-    Address,
-    Native,
-    MockZkvmCryptoSpec,
-    NomtProverStorage<TestStorageSpec, TestSlotHash>,
->;
+pub type TestSpec = DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// The default test spec for ZK. Uses a [`MockZkvm`] for both inner and outer vm verification.
 pub type ZkTestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Zk>;
 /// The default address type. This is the [`sov_modules_api::BasicAddress`] type defined by the [`TestSpec`].
@@ -104,9 +96,11 @@ pub type TestSignature = <TestCryptoSpec as CryptoSpec>::Signature;
 
 /// The default STF blueprint type. Uses [`MockDaSpec`] for DA and [`sov_kernels::basic::BasicKernel`] for kernel.
 pub type TestStfBlueprint<RT, S> = StfBlueprint<S, RT>;
-/// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`ProverStorage`] and [`TestStorageSpec`].
+/// Just [`NomtProverStorage`] with predefined configs.
+pub type TestStorage = NomtProverStorage<TestStorageSpec, TestSlotHash>;
+/// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
 pub type TestStorageManager =
-    sov_db::storage_manager::NativeStorageManager<MockDaSpec, ProverStorage<TestStorageSpec>>;
+    sov_db::storage_manager::NomtStorageManager<MockDaSpec, TestHasher, TestStorage>;
 // --- Blessed test parameters ---
 
 // Blessed gas parameters
@@ -203,6 +197,23 @@ pub fn default_test_tx_details<S: Spec>() -> TxDetails<S> {
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     }
+}
+
+/// Creates signed transaction with default test parameters from serializable RuntimeCallMessage.
+pub fn default_test_signed_transaction_with_nonce<T: TransactionCallable, S: Spec>(
+    key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    msg: &T::Call,
+    nonce: u64,
+    chain_hash: &[u8; 32],
+) -> Transaction<T, S> {
+    let tx_details = default_test_tx_details::<S>();
+    test_signed_transaction(
+        key,
+        msg,
+        UniquenessData::Nonce(nonce),
+        chain_hash,
+        tx_details,
+    )
 }
 
 /// Creates signed transaction with default test parameters from serializable RuntimeCallMessage.

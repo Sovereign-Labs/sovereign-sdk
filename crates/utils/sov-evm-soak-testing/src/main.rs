@@ -9,7 +9,6 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use futures::future::try_join_all;
 use reqwest::Url;
-use std::net::SocketAddr;
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 
@@ -25,9 +24,9 @@ const MAX_WORKERS: usize = 255;
 #[command(name = "sov-evm-soak-testing")]
 #[command(about = "EVM soak testing tool", long_about = None)]
 struct Args {
-    /// RPC address
-    #[arg(short, long, default_value = "127.0.0.1:12346")]
-    rpc_addr: SocketAddr,
+    /// RPC URL (e.g., http://127.0.0.1:12346/rpc or https://example.com/rpc)
+    #[arg(short, long, default_value = "http://127.0.0.1:12346/rpc")]
+    rpc_url: Url,
 
     /// Private key for signing transactions
     #[arg(
@@ -100,22 +99,36 @@ fn derive_worker_key(root_key: &str, worker_idx: usize) -> Result<String> {
 }
 
 /// Creates an Alloy HTTP client connected to the specified RPC server.
-pub(crate) fn alloy_client(rpc_addr: SocketAddr, signer: PrivateKeySigner) -> Result<DynProvider> {
-    let url = Url::parse(&format!("http://{rpc_addr}/rpc"))?;
+pub(crate) fn alloy_client(rpc_url: &Url, signer: PrivateKeySigner) -> Result<DynProvider> {
     let client = ProviderBuilder::new()
         .wallet(signer)
-        .connect_http(url)
+        .connect_http(rpc_url.clone())
         .erased();
     Ok(client)
 }
 
+/// Converts an HTTP(S) URL to its WebSocket equivalent (ws/wss).
+fn http_to_ws_url(url: &Url) -> Result<Url> {
+    let mut ws_url = url.clone();
+    let new_scheme = match url.scheme() {
+        "http" => "ws",
+        "https" => "wss",
+        "ws" | "wss" => return Ok(ws_url),
+        scheme => return Err(anyhow!("Unsupported URL scheme: {scheme}")),
+    };
+    ws_url
+        .set_scheme(new_scheme)
+        .map_err(|_| anyhow!("Failed to set WebSocket scheme"))?;
+    Ok(ws_url)
+}
+
 /// Creates an Alloy WS client connected to the specified RPC server.
 pub(crate) async fn alloy_ws_client(
-    rpc_addr: SocketAddr,
+    rpc_url: &Url,
     signer: PrivateKeySigner,
 ) -> Result<DynProvider> {
-    let url = Url::parse(&format!("ws://{rpc_addr}/rpc"))?;
-    let ws = WsConnect::new(url);
+    let ws_url = http_to_ws_url(rpc_url)?;
+    let ws = WsConnect::new(ws_url);
     let client = ProviderBuilder::new()
         .wallet(signer)
         .connect_ws(ws)
@@ -137,7 +150,7 @@ fn validate_worker_count(num_workers: usize) -> Result<()> {
 
 /// Spawns multiple Uniswap test workers and waits for them to complete.
 async fn run_uniswap_test(
-    rpc_addr: SocketAddr,
+    rpc_url: &Url,
     private_key: &str,
     count: usize,
     num_workers: usize,
@@ -147,7 +160,7 @@ async fn run_uniswap_test(
     let mut handles = Vec::with_capacity(num_workers);
     for worker_idx in 0..num_workers {
         let signer: PrivateKeySigner = derive_worker_key(private_key, worker_idx)?.parse()?;
-        let client = alloy_client(rpc_addr, signer.clone())?;
+        let client = alloy_client(rpc_url, signer.clone())?;
 
         handles.push(tokio::spawn(async move {
             match UniSoakTest::new(client, signer.address()).await {
@@ -196,9 +209,9 @@ async fn fund_worker_accounts(
 }
 
 /// Runs the SimpleStorage soak test.
-async fn run_simple_storage_test(rpc_addr: SocketAddr, private_key: &str) -> Result<()> {
+async fn run_simple_storage_test(rpc_url: &Url, private_key: &str) -> Result<()> {
     let signer: PrivateKeySigner = private_key.parse()?;
-    let client = alloy_client(rpc_addr, signer)?;
+    let client = alloy_client(rpc_url, signer)?;
     simple_storage::run(client).await
 }
 
@@ -210,10 +223,10 @@ async fn main() -> Result<()> {
 
     match args.test {
         TestType::Uniswap { count, num_workers } => {
-            run_uniswap_test(args.rpc_addr, &args.private_key, count, num_workers).await?;
+            run_uniswap_test(&args.rpc_url, &args.private_key, count, num_workers).await?;
         }
         TestType::SimpleStorage => {
-            run_simple_storage_test(args.rpc_addr, &args.private_key).await?;
+            run_simple_storage_test(&args.rpc_url, &args.private_key).await?;
         }
         TestType::Logs {
             tx_count,
@@ -222,7 +235,7 @@ async fn main() -> Result<()> {
             mode,
         } => {
             run_logs_test(
-                args.rpc_addr,
+                &args.rpc_url,
                 &args.private_key,
                 tx_count,
                 logs_per_tx,

@@ -1,9 +1,12 @@
 use crate::with_agent::configs::{
-    core_config, ethtest_metadata, sovtest_addresses, sovtest_metadata, warp_route_config,
+    core_config, ethtest_addresses, ethtest_metadata, sovtest_addresses, sovtest_metadata,
+    warp_route_config,
 };
 use crate::with_agent::helpers::{parse_eth_addr, DEPLOYER_ACCOUNT, EVM_MAILBOX, RELAYER_ACCOUNT};
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::HexHash;
+use std::collections::HashMap;
+use std::path::Path;
 use std::str::FromStr;
 use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
@@ -26,6 +29,19 @@ impl HyperlaneCliRunner {
         );
         let data = tempfile::tempdir().expect("failed to create tempdir for hyperlane-cli data");
         prepare_cli_data(data.path(), rollup_port, anvil_port, host_address);
+
+        Self { data }
+    }
+
+    /// Prepares data for core deployment only (no addresses pre-seeded).
+    pub fn new_core_deploy(anvil_port: u16, host_address: &str) -> Self {
+        tracing::debug!(
+            anvil_port,
+            host_address,
+            "Initializing runner for hyperlane-cli core deployment"
+        );
+        let data = tempfile::tempdir().expect("failed to create tempdir for hyperlane-cli data");
+        prepare_core_deploy_data(data.path(), anvil_port, host_address);
 
         Self { data }
     }
@@ -59,21 +75,7 @@ impl HyperlaneCliRunner {
 
     /// Returns an address of evm test recipient, to which we can dispatch test messages.
     pub async fn deploy_core(&self) -> HexHash {
-        let hyperlane_cli_image = self.prepare_container().with_cmd([
-            "core",
-            "deploy",
-            "--registry",
-            "/root/.hyperlane",
-            "--disableProxy",
-            "--config",
-            "/root/configs/core-config.yaml",
-            "--chain",
-            "ethtest",
-            "--yes",
-        ]);
-        let pretty_stdout = wait_till_container_exit(hyperlane_cli_image).await;
-
-        let deployment_output = parse_deployments_map(&pretty_stdout);
+        let deployment_output = self.deploy_core_with_output().await;
         let test_recipient = deployment_output
             .get("testRecipient")
             .expect("Failed to find 'testRecipient' in stdout");
@@ -94,6 +96,27 @@ impl HyperlaneCliRunner {
             "Deployed core");
 
         parse_eth_addr(test_recipient)
+    }
+
+    pub async fn deploy_core_with_output(&self) -> HashMap<String, String> {
+        let pretty_stdout = self.deploy_core_raw().await;
+        parse_deployments_map(&pretty_stdout)
+    }
+
+    async fn deploy_core_raw(&self) -> String {
+        let hyperlane_cli_image = self.prepare_container().with_cmd([
+            "core",
+            "deploy",
+            "--registry",
+            "/root/.hyperlane",
+            "--disableProxy",
+            "--config",
+            "/root/configs/core-config.yaml",
+            "--chain",
+            "ethtest",
+            "--yes",
+        ]);
+        wait_till_container_exit(hyperlane_cli_image).await
     }
 
     pub async fn deploy_warp(&self) -> HexHash {
@@ -154,6 +177,7 @@ fn prepare_cli_data(
     let ethtest_config = ethtest_metadata(host_address, anvil_port);
     let core_config = core_config(RELAYER_ACCOUNT.0.parse().unwrap());
     let sov_addresses = sovtest_addresses();
+    let ethtest_addresses = ethtest_addresses();
 
     std::fs::write(sovtest_dir.join("metadata.yaml"), sovtest_config)
         .expect("Failed to write 'sovtest' metadata");
@@ -163,6 +187,27 @@ fn prepare_cli_data(
         .expect("Failed to write core-config");
     std::fs::write(sovtest_dir.join("addresses.yaml"), sov_addresses)
         .expect("Failed to write 'sovtest' addresses");
+    std::fs::write(ethtest_dir.join("addresses.yaml"), ethtest_addresses)
+        .expect("Failed to write 'ethtest' addresses");
+}
+
+/// Renders configs for core deploy without pre-seeded addresses.
+fn prepare_core_deploy_data(data_path: &Path, anvil_port: u16, host_address: &str) {
+    let hyperlane_dir = data_path.join(".hyperlane");
+    let chains_dir = hyperlane_dir.join("chains");
+    let ethtest_dir = chains_dir.join("ethtest");
+    let configs_dir = data_path.join("configs");
+
+    std::fs::create_dir_all(&ethtest_dir).expect("Failed to create 'ethtest' directory");
+    std::fs::create_dir_all(&configs_dir).expect("Failed to create 'configs' directory");
+
+    let ethtest_config = ethtest_metadata(host_address, anvil_port);
+    let core_config = core_config(RELAYER_ACCOUNT.0.parse().unwrap());
+
+    std::fs::write(ethtest_dir.join("metadata.yaml"), ethtest_config)
+        .expect("Failed to write 'ethtest' metadata");
+    std::fs::write(configs_dir.join("core-config.yaml"), core_config)
+        .expect("Failed to write core-config");
 }
 
 // Waits for some time while hyperlane-cli exit with status code 0

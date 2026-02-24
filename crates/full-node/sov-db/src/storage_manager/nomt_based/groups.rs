@@ -56,7 +56,7 @@ where
             Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?);
 
         // Validate the commit state.
-        Self::validate_commit_flag_and_rollback_if_necessesary(
+        Self::validate_commit_flag_and_rollback_if_necessary(
             &merklized_state,
             ledger.clone(),
             accessory.clone(),
@@ -73,6 +73,7 @@ where
     }
 
     pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
+        tracing::trace!("Commiting a group...");
         // The last commit had to be successful.
         let CommitGroup {
             nomt: state,
@@ -85,22 +86,27 @@ where
         } = group;
 
         // NOMT
+        tracing::trace!("Commiting NOMT DBs...");
         let merklized_commit = self.merklized_state.commit(state)?;
 
-        // LEDGER
+        // Ledger
+        tracing::trace!("Committing Ledger DB...");
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
         let ledger_commit = self.commit_ledger(&ledger)?;
 
-        // ACCESORRY
+        // Accessory
+        tracing::trace!("Commiting Accessory DB...");
         #[cfg(feature = "test-utils")]
         crate::test_utils::CrashLocation::BeforeCommittingAccessory.crash_if_env_set();
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 
-        // FLATDB
+        // Flat State
+        tracing::trace!("Committing Flat DB..");
         let flat_metrics = self.flat_state.commit(historical_state)?;
 
+        // Metrics
         let merklized_commit_from_caller = merklized_commit.total;
         let commit_detailed_metrics = CommitDetailedMetric {
             merklized_commit,
@@ -109,24 +115,22 @@ where
             accessory_commit,
             ledger_commit,
         };
-
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(commit_detailed_metrics);
         });
-
         self.merklized_state.send_metrics();
 
         Ok(())
     }
 
-    fn validate_commit_flag_and_rollback_if_necessesary(
-        merkelized_state: &NomtStateDb<H>,
+    fn validate_commit_flag_and_rollback_if_necessary(
+        merklized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
         accessory_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<()> {
         let state_roots = AllDBsStateRoots::from_dbs(
-            merkelized_state,
+            merklized_state,
             ledger_db.clone(),
             accessory_db.clone(),
             flat_state_db,
@@ -135,11 +139,11 @@ where
         state_roots.info("before validation");
 
         if state_roots.is_kernel_nomt_root_newer() {
-            merkelized_state.kernel.rollback(1)?;
+            merklized_state.kernel.rollback(1)?;
         }
 
         if state_roots.is_user_nomt_root_newer() {
-            merkelized_state.user.rollback(1)?;
+            merklized_state.user.rollback(1)?;
         }
 
         if state_roots.is_ledger_db_root_newer() {
@@ -155,7 +159,7 @@ where
         }
 
         let state_roots =
-            AllDBsStateRoots::from_dbs(merkelized_state, ledger_db, accessory_db, flat_state_db)?;
+            AllDBsStateRoots::from_dbs(merklized_state, ledger_db, accessory_db, flat_state_db)?;
         state_roots.info("after validation");
 
         state_roots.check_all();
@@ -301,7 +305,7 @@ where
                 //         keys_to_prune += 1;
                 //         keys_inspected += 1;
                 //         // Prune the historical state table. This is the main table that we want to prune.
-                //         // We want to make sure that the the newest version of the key is accessible. The pruning table
+                //         // We want to make sure that the newest version of the key is accessible. The pruning table
                 //         // records that we wrote key K at time T, so delete key K at time T-1. Recursively, this will ensure
                 //         // that no keys are pruned that are still live, and all old keys are pruned as soon as possible.
                 //         let mut key = key.into_versioned_key();
@@ -471,17 +475,17 @@ struct AllDBsStateRoots {
 
 impl AllDBsStateRoots {
     fn from_dbs<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync>(
-        merkelized_state: &NomtStateDb<H>,
+        merklized_state: &NomtStateDb<H>,
         ledger_db: Arc<rockbound::DB>,
         accessory_db: Arc<rockbound::DB>,
         flat_state_db: &FlatStateDb,
     ) -> anyhow::Result<AllDBsStateRoots> {
-        let root_hash_nomt = merkelized_state.get_root_hashes();
+        let root_hash_nomt = merklized_state.get_root_hashes();
 
         let root_hash_from_live_db = match flat_state_db.root_hash_from_live_db()? {
             Some(root_hash_from_live_db) => root_hash_from_live_db,
             None => {
-                // The merkelized_state is committed first:
+                // The merklized_state is committed first:
                 // root_hash_from_live_db == None and root_hash_nomt is empty. This indicates that the rollup is being run for the first time.
                 if root_hash_nomt.is_empty() {
                     pre_genesis_root()
@@ -498,7 +502,9 @@ impl AllDBsStateRoots {
                     tracing::error!(
                         "Rollup instantiation error: Delete the rollup databases and start again."
                     );
-                    anyhow::bail!("Live db not found. Delete the rollup databses and start again.");
+                    anyhow::bail!(
+                        "Live db not found. Delete the rollup databases and start again."
+                    );
                 }
             }
         };
@@ -581,7 +587,7 @@ impl AllDBsStateRoots {
         let root_hash_from_live_db = hex::encode(root_hash_from_live_db);
 
         if root_hash != root_hash_from_live_db {
-            panic!("{root_hash_name}: {root_hash} dooes not match root_hash_from_live_db: {root_hash_from_live_db}");
+            panic!("{root_hash_name}: {root_hash} does not match root_hash_from_live_db: {root_hash_from_live_db}");
         }
     }
 

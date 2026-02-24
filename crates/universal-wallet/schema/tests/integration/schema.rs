@@ -370,6 +370,7 @@ pub enum SimpleEnumWithTemplate {
     BorshDeserialize,
 )]
 #[sov_wallet(template_inherit)]
+#[allow(dead_code)]
 pub enum SimplerEnumWithTemplate {
     One(SimpleStructWithTemplate),
 }
@@ -794,12 +795,14 @@ impl UniversalWallet for SchemalessStringWrapper {
 
 #[derive(Debug, PartialEq, Eq, Clone, UniversalWallet)]
 #[cfg_attr(test, derive(BorshSerialize, BorshDeserialize))]
+#[allow(dead_code)]
 pub struct VecOfThing {
     memo: Vec<StringWrapper>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, UniversalWallet)]
 #[cfg_attr(test, derive(BorshSerialize, BorshDeserialize))]
+#[allow(dead_code)]
 pub struct VecOfWrapper {
     memo: Vec<SchemalessStringWrapper>,
 }
@@ -1181,6 +1184,7 @@ pub enum EnumWithStruct {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+#[allow(dead_code)]
 pub enum EnumWithTwoStructs {
     Foo {
         first_field: u64,

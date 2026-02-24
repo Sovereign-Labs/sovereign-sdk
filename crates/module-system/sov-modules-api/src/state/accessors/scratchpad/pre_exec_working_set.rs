@@ -129,7 +129,7 @@ mod tests {
     use sov_state::namespaces::User;
     use sov_state::SlotValueFromCodec;
     use sov_state::{SlotKey, SlotValue};
-    use sov_test_utils::storage::SimpleStorageManager;
+    use sov_test_utils::storage::SimpleJmtStorageManager;
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
     use crate::capabilities::mocks::MockKernel;
@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_pre_exec_ws() {
         let codec = BcsCodec {};
-        let storage_manager = SimpleStorageManager::new();
+        let storage_manager = SimpleJmtStorageManager::new();
         let storage = storage_manager.create_storage();
         let kernel: MockKernel<TestSpec> = MockKernel::new(4, 1);
 

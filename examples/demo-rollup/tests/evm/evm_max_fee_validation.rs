@@ -10,7 +10,7 @@ use sov_demo_rollup::MockDemoRollup;
 use sov_evm::{CallMessage, EvmRuntimeConfigUpdate};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::Transaction;
-use sov_test_utils::default_test_signed_transaction;
+use sov_test_utils::default_test_signed_transaction_with_nonce;
 use sov_test_utils::test_rollup::{read_private_key, TestRollup};
 
 use crate::evm::evm_test_helper::{
@@ -176,7 +176,7 @@ async fn disable_max_fee_check(rollup: &TestRollup<MockDemoRollup<Native>>) -> a
     let msg = RuntimeCall::<DemoRollupSpec>::Evm(CallMessage::UpdateRuntimeConfig(update));
 
     let tx: Transaction<Runtime<DemoRollupSpec>, DemoRollupSpec> =
-        default_test_signed_transaction(&admin_key, &msg, 0, &CHAIN_HASH);
+        default_test_signed_transaction_with_nonce(&admin_key, &msg, 0, &CHAIN_HASH);
 
     rollup
         .client

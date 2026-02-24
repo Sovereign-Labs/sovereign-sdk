@@ -4,6 +4,7 @@
 use sov_modules_api::{ModuleId, ModuleInfo, Spec, StateMap};
 
 #[derive(Clone, ModuleInfo)]
+#[allow(dead_code)]
 struct Module1<SpecWithWeirdNameForTesting: Spec> {
     #[id]
     pub id: ModuleId,
@@ -14,6 +15,7 @@ struct Module1<SpecWithWeirdNameForTesting: Spec> {
 }
 
 #[derive(Clone, ModuleInfo)]
+#[allow(dead_code)]
 struct Module2<SpecWithWeirdNameForTesting: Spec> {
     #[id]
     pub id: ModuleId,

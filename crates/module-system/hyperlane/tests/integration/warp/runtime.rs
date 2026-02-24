@@ -30,9 +30,6 @@ generate_runtime! {
     auth_type: sov_modules_api::capabilities::RollupAuthenticator<S, TestRuntime<S>>,
     auth_call_wrapper: |call| call,
 }
-/// The input for the runtime's authenticator functionality.
-#[derive(std::fmt::Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct AuthenticatorInput(sov_modules_api::RawTx);
 
 pub const CONFIGURED_DOMAIN: u32 = 1;
 pub const CONFIGURED_REMOTE_ROUTER_ADDRESS: HexHash = HexString([1; 32]);

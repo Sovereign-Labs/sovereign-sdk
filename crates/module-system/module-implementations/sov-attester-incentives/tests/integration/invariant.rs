@@ -88,6 +88,7 @@ fn setup_invariant_tests() -> (TestRunner<RT, S>, TestAttester<S>, u64) {
 /// The attesters need to publish attestations for slots above `MAX_ATTESTED_HEIGHT - ROLLUP_FINALITY_PERIOD`.
 
 #[test]
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_cannot_attest_below_max_attested_height() {
     let (mut runner, genesis_attester, expected_max_attested_height) = setup_invariant_tests();
 
@@ -133,6 +134,7 @@ fn test_cannot_attest_below_max_attested_height() {
 /// The attesters need to publish attestations for slots below `MAX_ATTESTED_HEIGHT + 1`.
 
 #[test]
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_cannot_attest_above_max_attested_height_plus_one() {
     let (mut runner, genesis_attester, expected_max_attested_height) = setup_invariant_tests();
 
@@ -166,6 +168,7 @@ fn test_cannot_attest_above_max_attested_height_plus_one() {
 /// Test that the attesters can publish attestations for slots within the range `MAX_ATTESTED_HEIGHT - ROLLUP_FINALITY_PERIOD` to `MAX_ATTESTED_HEIGHT + 1`.
 /// If attesters publish attestations in the range `MAX_ATTESTED_HEIGHT - ROLLUP_FINALITY_PERIOD + 1` to `MAX_ATTESTED_HEIGHT`, the attestations are valid but the max attested height is not updated.
 #[test]
+#[ignore = "NOMT does not support opening proof for archival state"]
 fn test_can_attest_within_allowed_range() {
     let (mut runner, genesis_attester, max_attested_height) = setup_invariant_tests();
     // Now try to attest every non-finalized slot again,

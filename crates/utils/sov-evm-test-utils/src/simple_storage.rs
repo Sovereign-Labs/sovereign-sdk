@@ -74,6 +74,47 @@ impl LegacySimpleStorage {
         };
         Bytes::from(call.abi_encode())
     }
+
+    /// Emit a log with all 4 topic slots populated (max EVM allows).
+    pub fn emit_full_topic_log(&self, t0: U256, t1: U256, t2: U256, data: U256) -> Bytes {
+        let call = SimpleStorage::emitFullTopicLogCall { t0, t1, t2, data };
+        Bytes::from(call.abi_encode())
+    }
+
+    /// Emit logs with configurable topic values for flexible testing.
+    pub fn emit_configurable_logs(
+        &self,
+        topic1_base: U256,
+        topic2_base: U256,
+        count: u32,
+    ) -> Bytes {
+        let call = SimpleStorage::emitConfigurableLogsCall {
+            topic1Base: topic1_base,
+            topic2Base: topic2_base,
+            count: U256::from(count),
+        };
+        Bytes::from(call.abi_encode())
+    }
+
+    /// Emit a log with no indexed topics (only event signature in topic0).
+    pub fn emit_data_only_log(&self, v1: U256, v2: U256) -> Bytes {
+        let call = SimpleStorage::emitDataOnlyLogCall { v1, v2 };
+        Bytes::from(call.abi_encode())
+    }
+
+    /// Emit a log with only indexed topics (data == 0x).
+    pub fn emit_indexed_only_log(&self, value: U256) -> Bytes {
+        let call = SimpleStorage::emitIndexedOnlyLogCall { value };
+        Bytes::from(call.abi_encode())
+    }
+
+    /// Burn gas by computing keccak256 in a loop (for gas usage testing).
+    pub fn burn_gas(&self, iterations: u32) -> Bytes {
+        let call = SimpleStorage::burnGasCall {
+            iterations: U256::from(iterations),
+        };
+        Bytes::from(call.abi_encode())
+    }
 }
 
 /// Log with some additional metadata.
@@ -85,7 +126,10 @@ pub struct SimpleStorageContractLog {
 
 sol! {
     #[derive(Debug)]
-    event SimpleLog(address indexed sender,uint256 indexed topic,uint256 value);
+    event SimpleLog(address indexed sender,uint256 indexed topic1,uint256 indexed topic2,uint256 value);
+    event FullTopicLog(uint256 indexed topic0,uint256 indexed topic1,uint256 indexed topic2,uint256 data);
+    event DataOnlyLog(uint256 value1,uint256 value2);
+    event IndexedOnlyLog(uint256 indexed value);
 }
 
 impl LegacySimpleStorage {

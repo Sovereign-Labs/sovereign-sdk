@@ -11,11 +11,6 @@ pub struct HttpStorageAccessClient {
     rollup_height: Option<u64>,
 }
 
-#[derive(serde::Deserialize, serde::Serialize)]
-struct LenResponse {
-    length: u64,
-}
-
 #[derive(Debug, Deserialize)]
 struct MapResponse<T> {
     #[allow(unused)]

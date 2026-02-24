@@ -25,7 +25,7 @@ impl<S: Spec> StateCheckpoint<S> {
         &mut self,
         // This argument prevents this method from being called outside of genesis.
         _config: &G::Config,
-    ) -> GenesisStateAccessor<S> {
+    ) -> GenesisStateAccessor<'_, S> {
         GenesisStateAccessor {
             checkpoint: self,
             events: Vec::default(),

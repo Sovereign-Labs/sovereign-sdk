@@ -1,12 +1,16 @@
+#[cfg(test)]
+mod tests;
+
 use crate::preferred::db::FailedOperation;
 use anyhow::{anyhow, Result};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
 use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
+use anyhow::Context;
 use axum::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
@@ -18,8 +22,8 @@ use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
 use time::OffsetDateTime;
 
-// The leader timeout.
-const LEADER_TIMEOUT: Duration = Duration::from_millis(500);
+// Re-export for internal use
+pub(crate) use sov_full_node_configs::sequencer::LeaderElectionConfig;
 
 #[derive(Debug, FromRow, PartialEq)]
 pub(crate) struct SequencerLeader {
@@ -30,7 +34,6 @@ pub(crate) struct SequencerLeader {
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
-    leader_timeout: Duration,
     node_id: String,
     pub(crate) node_address: String,
 }
@@ -63,22 +66,10 @@ macro_rules! run_with_retries {
 }
 
 impl PostgresBackend {
+    /// Connects to Postgres db.
     pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
         let node_address = node_address(bind_addr)?;
-
-        let backend =
-            Self::connect_with_leader_timeout(config, LEADER_TIMEOUT, node_address).await?;
-
-        backend.try_update_leader_and_register_node().await?;
-        Ok(backend)
-    }
-
-    async fn connect_with_leader_timeout(
-        config: &PostgresConfig,
-        leader_timeout: Duration,
-        node_address: String,
-    ) -> Result<Self> {
         let connection_string = &config.postgres_connection_string;
         // This backoff policy should usually terminate in a second.
         // Running the numbers... We do 8 retries, doubling the sleep each time that yields 256ms max delay and an average delay of ~50ms
@@ -105,7 +96,6 @@ impl PostgresBackend {
         Ok(Self {
             pool,
             backoff_policy,
-            leader_timeout,
             node_id: config.node_id.clone(),
             node_address,
         })
@@ -250,42 +240,62 @@ impl PostgresBackend {
         }))
     }
 
-    /// Attempts to acquire or refresh leadership and register the node in the nodes table atomically.
+    /// Sends a heartbeat to update this node's registration and optionally compete for leadership.
     ///
-    /// Returns `Some(leader)` if leadership was acquired (this node became leader, refreshed its
-    /// leadership, or took over from a timed-out leader). Returns `None` if another node is
-    /// the active leader and hasn't timed out yet. The node is always registered regardless.
-    pub(crate) async fn try_update_leader_and_register_node(
+    /// This method always updates the node's entry in the `nodes` table with the current timestamp.
+    ///
+    /// If `config` is `Some`, also attempts to acquire or refresh leadership using the provided timeouts.
+    /// Returns `Some(leader)` if this node became or remains the leader.
+    /// Returns `None` if another active leader exists or if leadership competition was skipped.
+    pub(crate) async fn heartbeat(
         &self,
+        config: Option<LeaderElectionConfig>,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         run_with_retries!(
             &self.backoff_policy,
-            self.try_update_leader_and_register_node_in_tx(),
-            "postgres_db_backend_try_update_leader_and_register_node"
+            self.heartbeat_in_tx(config),
+            "postgres_db_backend_heartbeat"
         )
     }
 
-    async fn try_update_leader_and_register_node_in_tx(
+    async fn heartbeat_in_tx(
         &self,
+        config: Option<LeaderElectionConfig>,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
-        let result = self.try_update_leader_inner(&mut tx).await?;
+        let result = if let Some(config) = config {
+            self.try_update_leader_inner(&mut tx, config.leader_timeout(), config.grace_period())
+                .await?
+        } else {
+            None
+        };
         self.upsert_node_registration_inner(&mut tx).await?;
         tx.commit().await?;
         Ok(result)
     }
 
-    async fn try_update_leader_inner(
+    pub(crate) async fn try_update_leader_inner(
         &self,
         conn: &mut PgConnection,
+        leader_timeout: Duration,
+        grace_period: Duration,
     ) -> anyhow::Result<Option<SequencerLeader>> {
-        let leader_timeout: i64 = self
-            .leader_timeout
+        let leader_timeout: i64 = leader_timeout
             .as_millis()
             .try_into()
             // It is ok to `expect` as leader_timeout should be much smaller than i64::MAX
             .expect("PostgresBackend error: leader_timeout is bigger than i64::MAX");
 
+        let grace_period: i64 = grace_period
+            .as_millis()
+            .try_into()
+            .expect("PostgresBackend error: grace_period is bigger than i64::MAX");
+
+        // Leadership update logic:
+        // 1. Same node can always refresh its heartbeat
+        // 2. Different node can only take over if BOTH:
+        //    - The current leader has timed out (no heartbeat within leader_timeout)
+        //    - The grace period since leader_acquired_at has passed (prevents rapid flapping)
         let res = sqlx::query_as::<_, SequencerLeader>(
             "WITH ts AS (SELECT NOW() as current_time)
             INSERT INTO sequencer_leader (node_id, last_updated)
@@ -300,18 +310,25 @@ impl PostgresBackend {
                         END
                     WHERE
                         sequencer_leader.node_id = EXCLUDED.node_id
-                        OR sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                        OR (
+                            sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
+                            AND sequencer_leader.leader_acquired_at < EXCLUDED.last_updated - ($3 * INTERVAL '1 millisecond')
+                        )
                     RETURNING node_id, last_updated",
         )
         .bind(&self.node_id)
         .bind(leader_timeout)
+        .bind(grace_period)
         .fetch_optional(&mut *conn)
         .await?;
 
         Ok(res)
     }
 
-    async fn upsert_node_registration_inner(&self, conn: &mut PgConnection) -> anyhow::Result<()> {
+    pub(crate) async fn upsert_node_registration_inner(
+        &self,
+        conn: &mut PgConnection,
+    ) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO nodes (node_id, address, last_updated)
              VALUES ($1, $2, NOW())
@@ -643,391 +660,41 @@ impl DbBackend for PostgresBackend {
 fn node_address(bind_addr: SocketAddr) -> Result<String> {
     let bind_port = bind_addr.port();
     let ip = bind_addr.ip();
-    Ok(format!("{ip}:{bind_port}"))
+
+    let effective_ip = if ip.is_unspecified() {
+        get_local_ip(ip)?
+    } else {
+        ip
+    };
+
+    let effective_addr = SocketAddr::new(effective_ip, bind_port);
+    Ok(effective_addr.to_string())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sov_full_node_configs::sequencer::NodeRole;
-    use sov_modules_api::VisibleSlotNumber;
-    use sov_test_utils::postgres::{
-        config_from_postgres_container, create_postgres_container, CreatePostgresError,
-    };
-    use std::num::NonZero;
+/// Gets the local IP address by creating a UDP socket and checking its local address.
+fn get_local_ip(ip: IpAddr) -> Result<std::net::IpAddr> {
+    // This is a classic networking trick to figure out your machine's local IP address,
+    // without actually sending any data.
+    let addr = if ip.is_ipv6() {
+        let socket = std::net::UdpSocket::bind("[::]:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv6 address discovery: {ip}")
+        })?;
+        socket
+            .connect("[2001:4860:4860::8888]:80")
+            .context("Failed to connect UDP socket for local IPv6 address discovery")?;
+        socket
+    } else {
+        let socket = std::net::UdpSocket::bind("0.0.0.0:0").with_context(|| {
+            format!("Failed to bind UDP socket for local IPv4 address discovery: {ip}")
+        })?;
+        socket
+            .connect("8.8.8.8:80")
+            .context("Failed to connect UDP socket for local IPv4 address discovery.")?;
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_sequencer_leader_election() {
-        let postgres = create_postgres_container().await;
-        let postgres = match postgres {
-            Ok(pg) => pg,
-            Err(CreatePostgresError::DockerNotSupported) => return,
-            Err(CreatePostgresError::DockerError(e)) => {
-                panic!("Failed to create Postgres container: {e}");
-            }
-        };
-
-        let db_1 = &mut DB::new(&postgres, String::from("node_id_1"), NodeRole::Leader).await;
-        let db_2 = &mut DB::new(&postgres, String::from("node_id_2"), NodeRole::Replica).await;
-
-        {
-            // Updating the same node_id should change the last updated time in the db.
-            let leader_1 = db_1.maybe_update_leader().await.unwrap();
-            let updated_leader_1 = db_1.maybe_update_leader().await.unwrap();
-
-            assert_eq!(leader_1.node_id, db_1.node_id);
-            assert_eq!(leader_1.node_id, updated_leader_1.node_id);
-            assert!(leader_1.last_updated < updated_leader_1.last_updated);
-
-            // Updating a different node id shouldn't change anything as the time delta is too big.
-            let leader_2 = db_2.maybe_update_leader().await;
-            assert!(leader_2.is_none());
-
-            let leader_node_id = db_2.get_sequencer_leader().await.unwrap().unwrap();
-            assert_eq!(updated_leader_1.node_id, leader_node_id);
-        }
-
-        {
-            db_2.override_leader_timeout(Duration::ZERO);
-            // Now we should be able to update db as the leader_timeout is zero.
-            let leader_2 = db_2.maybe_update_leader().await.unwrap();
-            assert_eq!(leader_2.node_id, db_2.node_id);
-        }
-
-        {
-            db_1.override_leader_timeout(Duration::from_millis(100));
-            let leader_1 = db_1.maybe_update_leader().await;
-            assert!(leader_1.is_none());
-
-            // Wait for more than 100ms and update the leader.
-            tokio::time::sleep(Duration::from_millis(200)).await;
-            let leader_1 = db_1.maybe_update_leader().await.unwrap();
-            assert_eq!(leader_1.node_id, db_1.node_id);
-        }
+        socket
     }
+    .local_addr()
+    .context("Failed to retrieve local address from UDP socket.")?;
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_db_operations_leader() {
-        let postgres = create_postgres_container().await;
-        let postgres = match postgres {
-            Ok(pg) => pg,
-            Err(CreatePostgresError::DockerNotSupported) => return,
-            Err(CreatePostgresError::DockerError(e)) => {
-                panic!("Failed to create Postgres container: {e}");
-            }
-        };
-
-        let db = &mut DB::new(&postgres, String::from("node_id_1"), NodeRole::Leader).await;
-        db.maybe_update_leader().await.unwrap();
-
-        let sequence_number = 1;
-        let batch_to_store = batch_to_store(sequence_number);
-
-        db.as_mut()
-            .begin_rollup_block(batch_to_store)
-            .await
-            .unwrap();
-
-        db.as_mut()
-            .add_tx(
-                sequence_number,
-                1,
-                FullyBakedTx::new(vec![1, 2, 3]),
-                TxHash::new([1; 32]),
-            )
-            .await
-            .unwrap();
-
-        db.as_mut()
-            .batch_add_txs(
-                sequence_number,
-                2,
-                &[(FullyBakedTx::new(vec![4, 5, 6]), TxHash::new([1; 32]))],
-            )
-            .await
-            .unwrap();
-
-        db.as_mut()
-            .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
-            .await
-            .unwrap();
-
-        db.as_mut().end_rollup_block(batch_to_store).await.unwrap();
-
-        let data = db.as_mut().current_data().await.unwrap();
-        assert!(!data.is_empty());
-
-        db.as_mut().prune(2).await.unwrap();
-        let data = db.as_mut().current_data().await.unwrap();
-        assert!(data.is_empty());
-
-        db.as_mut().prune(2).await.unwrap();
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_db_operations_replica() {
-        let postgres = create_postgres_container().await;
-        let postgres = match postgres {
-            Ok(pg) => pg,
-            Err(CreatePostgresError::DockerNotSupported) => return,
-            Err(CreatePostgresError::DockerError(e)) => {
-                panic!("Failed to create Postgres container: {e}");
-            }
-        };
-        let db_leader = &mut DB::new(&postgres, String::from("node_id_1"), NodeRole::Leader).await;
-        let db_replica =
-            &mut DB::new(&postgres, String::from("node_id_2"), NodeRole::Replica).await;
-
-        let sequence_number = 1;
-        let batch_to_store = batch_to_store(sequence_number);
-
-        db_leader.maybe_update_leader().await.unwrap();
-
-        let err = db_replica
-            .as_mut()
-            .begin_rollup_block(batch_to_store)
-            .await
-            .unwrap_err();
-
-        assert_err(err, &db_replica.node_id, &FailedOperation::BeginBlock);
-
-        let err = db_replica
-            .as_mut()
-            .add_tx(
-                sequence_number,
-                1,
-                FullyBakedTx::new(vec![1, 2, 3]),
-                TxHash::new([1; 32]),
-            )
-            .await
-            .unwrap_err();
-
-        assert_err(err, &db_replica.node_id, &FailedOperation::AddTx);
-
-        let err = db_replica
-            .as_mut()
-            .batch_add_txs(
-                sequence_number,
-                2,
-                &[(FullyBakedTx::new(vec![4, 5, 6]), TxHash::new([1; 32]))],
-            )
-            .await
-            .unwrap_err();
-
-        assert_err(err, &db_replica.node_id, &FailedOperation::BatchAddTxs);
-
-        let err = db_replica
-            .as_mut()
-            .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
-            .await
-            .unwrap_err();
-
-        assert_err(err, &db_replica.node_id, &FailedOperation::AddProof);
-
-        let err = db_replica
-            .as_mut()
-            .end_rollup_block(batch_to_store)
-            .await
-            .unwrap_err();
-
-        assert_err(err, &db_replica.node_id, &FailedOperation::EndBlock);
-
-        let err = db_replica.as_mut().prune(2).await.unwrap_err();
-        assert_err(
-            err,
-            &db_replica.node_id,
-            &FailedOperation::Prune {
-                db_leader: Some(db_leader.node_id.clone()),
-            },
-        );
-
-        let err = db_replica.as_mut().current_data().await.unwrap_err();
-        assert_err(
-            err,
-            &db_replica.node_id,
-            &FailedOperation::CurrentData {
-                db_leader: Some(db_leader.node_id.clone()),
-            },
-        );
-    }
-
-    fn assert_err(err: DbError, expected_node_id: &String, expected_operation: &FailedOperation) {
-        match &err {
-            DbError::ReplicaDisallowed {
-                self_node_id,
-                operation,
-            } => {
-                assert_eq!(self_node_id, expected_node_id);
-                assert_eq!(operation, expected_operation);
-            }
-            DbError::Database(err) => unreachable!("DbError::Database not allowed in test {err:?}"),
-        }
-    }
-
-    struct DB {
-        backend: PostgresBackend,
-        node_id: String,
-    }
-
-    impl AsRef<PostgresBackend> for DB {
-        fn as_ref(&self) -> &PostgresBackend {
-            &self.backend
-        }
-    }
-
-    impl AsMut<PostgresBackend> for DB {
-        fn as_mut(&mut self) -> &mut PostgresBackend {
-            &mut self.backend
-        }
-    }
-
-    impl DB {
-        async fn new(
-            postgres: &sov_test_utils::postgres::ContainerAsync<sov_test_utils::postgres::Postgres>,
-            node_id: String,
-            node_role: NodeRole,
-        ) -> Self {
-            let leader_timeout = Duration::from_millis(100_000);
-            let postgres_config =
-                config_from_postgres_container(postgres, node_id.clone(), node_role)
-                    .await
-                    .unwrap();
-            let backend = PostgresBackend::connect_with_leader_timeout(
-                &postgres_config,
-                leader_timeout,
-                format!("{node_id}_address"),
-            )
-            .await
-            .unwrap();
-
-            Self { backend, node_id }
-        }
-
-        fn override_leader_timeout(&mut self, leader_timeout: Duration) {
-            self.backend.leader_timeout = leader_timeout;
-        }
-
-        async fn maybe_update_leader(&self) -> Option<SequencerLeader> {
-            self.backend
-                .try_update_leader_and_register_node()
-                .await
-                .unwrap()
-        }
-
-        pub(crate) async fn get_sequencer_leader(&self) -> Result<Option<String>, sqlx::Error> {
-            let mut tx = self.backend.pool.begin().await?;
-            let res = self.backend.get_sequencer_leader_inner(&mut tx).await?;
-            tx.commit().await?;
-            Ok(res)
-        }
-    }
-
-    fn batch_to_store(sequence_number: SequenceNumber) -> BatchToStore {
-        BatchToStore {
-            blob_id: 1,
-            sequence_number,
-            visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
-            visible_slots_to_advance: NonZero::new(1).unwrap(),
-        }
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_nodes_table_notifications() {
-        let postgres = create_postgres_container().await;
-        let postgres = match postgres {
-            Ok(pg) => pg,
-            Err(CreatePostgresError::DockerNotSupported) => return,
-            Err(CreatePostgresError::DockerError(e)) => {
-                panic!("Failed to create Postgres container: {e}");
-            }
-        };
-
-        let db = DB::new(&postgres, String::from("node_1"), NodeRole::Leader).await;
-
-        let mut listener = sqlx::postgres::PgListener::connect_with(&db.backend.pool)
-            .await
-            .unwrap();
-
-        listener.listen("nodes_changes").await.unwrap();
-
-        // Test INSERT notification via try_update_leader_and_register_node
-        db.maybe_update_leader().await.unwrap();
-
-        let notification = tokio::time::timeout(Duration::from_secs(5), listener.recv())
-            .await
-            .expect("Timed out waiting for INSERT notification")
-            .unwrap();
-
-        assert_eq!(notification.channel(), "nodes_changes");
-        let parts: Vec<&str> = notification.payload().split(',').collect();
-        assert_eq!(parts, vec!["node_1", "node_1_address", "INSERT"]);
-
-        // Test UPDATE notification via try_update_leader_and_register_node
-        db.maybe_update_leader().await.unwrap();
-
-        let notification = tokio::time::timeout(Duration::from_secs(5), listener.recv())
-            .await
-            .expect("Timed out waiting for UPDATE notification")
-            .unwrap();
-
-        assert_eq!(notification.channel(), "nodes_changes");
-        let parts: Vec<&str> = notification.payload().split(',').collect();
-        assert_eq!(parts, vec!["node_1", "node_1_address", "UPDATE"]);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_leader_acquired_at() {
-        let postgres = create_postgres_container().await;
-        let postgres = match postgres {
-            Ok(pg) => pg,
-            Err(CreatePostgresError::DockerNotSupported) => return,
-            Err(CreatePostgresError::DockerError(e)) => {
-                panic!("Failed to create Postgres container: {e}");
-            }
-        };
-
-        let db_1 = &mut DB::new(&postgres, String::from("node_1"), NodeRole::Leader).await;
-        let db_2 = &mut DB::new(&postgres, String::from("node_2"), NodeRole::Replica).await;
-
-        // Node 1 becomes leader
-        db_1.maybe_update_leader().await.unwrap();
-
-        let (initial_leader_acquired_at,): (OffsetDateTime,) =
-            sqlx::query_as("SELECT leader_acquired_at FROM sequencer_leader WHERE singleton = 1")
-                .fetch_one(&db_1.backend.pool)
-                .await
-                .unwrap();
-
-        // Small delay to ensure time difference
-        tokio::time::sleep(Duration::from_millis(10)).await;
-
-        // Same node refreshes leadership (heartbeat)
-        db_1.maybe_update_leader().await.unwrap();
-
-        let (after_refresh_leader_acquired_at,): (OffsetDateTime,) =
-            sqlx::query_as("SELECT leader_acquired_at FROM sequencer_leader WHERE singleton = 1")
-                .fetch_one(&db_1.backend.pool)
-                .await
-                .unwrap();
-
-        assert_eq!(
-            initial_leader_acquired_at, after_refresh_leader_acquired_at,
-            "leader_acquired_at should not change when same node refreshes leadership"
-        );
-
-        // Different node takes over leadership after timeout
-        db_2.override_leader_timeout(Duration::ZERO);
-        db_2.maybe_update_leader().await.unwrap();
-
-        let (after_takeover_leader_acquired_at,): (OffsetDateTime,) =
-            sqlx::query_as("SELECT leader_acquired_at FROM sequencer_leader WHERE singleton = 1")
-                .fetch_one(&db_2.backend.pool)
-                .await
-                .unwrap();
-
-        assert!(
-            after_takeover_leader_acquired_at > initial_leader_acquired_at,
-            "leader_acquired_at should be updated when a different node takes over leadership"
-        );
-    }
+    Ok(addr.ip())
 }

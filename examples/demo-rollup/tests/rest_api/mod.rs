@@ -14,7 +14,7 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
 use sov_test_utils::{
-    default_test_signed_transaction, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
+    default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
     TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
 };
 
@@ -88,7 +88,7 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
         },
     );
 
-    let tx = default_test_signed_transaction::<Runtime<TestSpec>, TestSpec>(
+    let tx = default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
         &key_and_address.private_key,
         &msg,
         0,

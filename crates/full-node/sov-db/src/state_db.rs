@@ -46,7 +46,7 @@ impl StateDb {
     }
 
     /// Returns the associated JMT handler for a given namespace
-    pub fn get_jmt_handler<N: Namespace>(&self) -> JmtHandler<N> {
+    pub fn get_jmt_handler<N: Namespace>(&self) -> JmtHandler<'_, N> {
         JmtHandler {
             state_db: self,
             phantom: Default::default(),

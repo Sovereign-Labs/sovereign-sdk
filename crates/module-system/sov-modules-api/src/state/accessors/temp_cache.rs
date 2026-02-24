@@ -16,7 +16,7 @@ const MAX_EXPECTED_CACHE_ITEMS: usize = 100;
 /// This is used to warn if the cache is getting too large.
 const MAX_EXPECTED_CACHE_BYTES: usize = 10_000_000; // 10MB
 
-type Value = Option<(Box<(dyn Any + Send + Sync + 'static)>, usize)>;
+type Value = Option<(Box<dyn Any + Send + Sync + 'static>, usize)>;
 
 /// The result of a cache lookup.
 #[derive(Debug, PartialEq, Eq)]

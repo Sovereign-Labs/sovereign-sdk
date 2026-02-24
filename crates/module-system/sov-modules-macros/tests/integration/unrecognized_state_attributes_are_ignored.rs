@@ -1,6 +1,7 @@
 use sov_modules_api::{ModuleId, ModuleInfo, Spec, StateMap};
 
 #[derive(Clone, ModuleInfo)]
+#[allow(dead_code)]
 struct TestStruct<S: Spec> {
     #[id]
     id: ModuleId,

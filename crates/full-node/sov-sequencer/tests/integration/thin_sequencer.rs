@@ -20,8 +20,8 @@ use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConf
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
 use sov_test_utils::{
-    default_test_signed_transaction, generate_optimistic_runtime, RtAgnosticBlueprint, TestSpec,
-    TestUser,
+    default_test_signed_transaction_with_nonce, generate_optimistic_runtime, RtAgnosticBlueprint,
+    TestSpec, TestUser,
 };
 
 generate_optimistic_runtime!(TestRuntime <=);
@@ -129,7 +129,7 @@ fn generate_tx_with_nonce(user: &TestUser<TestSpec>, nonce: u64) -> RawTx {
         },
     );
 
-    let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
+    let tx = default_test_signed_transaction_with_nonce::<TestRuntime<TestSpec>, TestSpec>(
         &user.private_key,
         &msg,
         nonce,

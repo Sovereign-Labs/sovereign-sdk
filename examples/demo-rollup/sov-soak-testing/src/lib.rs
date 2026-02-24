@@ -1,4 +1,4 @@
-use sov_address::MultiAddressEvm;
+use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::verifier::CelestiaSpec;
 use sov_mock_da::{BlockProducingConfig, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
@@ -9,7 +9,7 @@ use sov_paymaster::{
     SafeVec,
 };
 use sov_rollup_interface::execution_mode::Native;
-use sov_sequencer::preferred::{NodeRole, PostgresConfig, PreferredSequencerConfig};
+use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::SequencerKindConfig;
 pub use sov_soak_testing_lib::*;
 use sov_synthetic_load::SyntheticLoad;
@@ -35,12 +35,12 @@ pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 
 // Celestia
 pub type CelestiaRollupSpec =
-    ConfigurableSpec<CelestiaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
+    ConfigurableSpec<CelestiaSpec, MockZkvm, MockZkvm, MultiAddressEvmSolana, Native>;
 pub type DemoCelestiaRT = demo_stf::runtime::Runtime<CelestiaRollupSpec>;
 
 // Mock
 pub type MockDemoRollupSpec =
-    ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
+    ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvmSolana, Native>;
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
 generate_runtime! {
@@ -125,7 +125,8 @@ pub async fn setup_rollup(
     let postgres_config = db_connection_url.map(|url| PostgresConfig {
         postgres_connection_string: url,
         node_id: "Primary".to_string(),
-        node_role: NodeRole::Leader,
+        node_role: ConfiguredNodeRole::Leader,
+        leader_election: Default::default(),
     });
 
     let rollup_builder = TestRollupBuilder::new_with_storage_path(

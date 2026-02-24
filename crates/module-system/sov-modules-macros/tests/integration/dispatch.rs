@@ -258,6 +258,7 @@ pub mod third_test_module {
 mod custom_attributes {
     use super::*;
     #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+    #[allow(dead_code)]
     struct Runtime<S: Spec> {
         pub chain_state: first_test_module::FirstTestStruct<S>,
         pub second: second_test_module::SecondTestStruct<S>,
@@ -275,6 +276,7 @@ mod derive_event {
 
     use super::*;
     #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
+    #[allow(dead_code)]
     struct Runtime<S: Spec> {
         pub chain_state: first_test_module::FirstTestStruct<S>,
         pub second: second_test_module::SecondTestStruct<S>,

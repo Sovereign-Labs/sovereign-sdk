@@ -5,20 +5,6 @@ use sov_rollup_interface::Bytes;
 
 const PARITY_SHARE_PANIC: &str = "Attempted to read the payload of a parity share, but only data shares have payloads. Parity shares should never be read by the adapter - this is a bug, please report it.";
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub(crate) enum VersionedStartShare {
-    Zero(celestia_types::Share),
-    One(celestia_types::Share),
-}
-
-impl AsRef<[u8]> for VersionedStartShare {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            VersionedStartShare::Zero(inner) | VersionedStartShare::One(inner) => inner.as_ref(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ShareError {
     NotAStartShare,

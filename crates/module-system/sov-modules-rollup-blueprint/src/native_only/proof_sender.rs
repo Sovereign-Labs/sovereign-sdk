@@ -119,6 +119,7 @@ fn make_details<S: Spec>(max_fee: Amount) -> TxDetails<S> {
 }
 
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize)]
+#[allow(dead_code)]
 struct PreferredProofData {
     sequence_number: u64,
     data: Vec<u8>,

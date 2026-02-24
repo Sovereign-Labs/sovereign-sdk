@@ -33,20 +33,6 @@ use sov_transaction_generator::interface::MessageValidity;
 use sov_transaction_generator::{Distribution, GeneratedMessage, Percent, State};
 use tokio::sync::watch::Receiver;
 
-/// The message substring that indicates the sequencer has reached its configured stop height.
-const STOP_HEIGHT_ERROR_MARKER: &str = "The preferred sequencer has reached the stop height ";
-
-/// Checks if an API error indicates the sequencer has reached its configured stop height.
-/// When a rollup is configured with a stop height, transactions are rejected once that height
-/// is reached. This is not a real error condition for soak tests.
-fn is_stop_height_error(err: &sov_api_spec::Error<sov_api_spec::types::ApiError>) -> bool {
-    if let sov_api_spec::Error::ErrorResponse(response) = err {
-        // ResponseValue<T> implements Deref<Target = T>, so we can access ApiError fields directly
-        return response.message.contains(STOP_HEIGHT_ERROR_MARKER);
-    }
-    false
-}
-
 pub const BUFFER_SIZE: usize = 100_000;
 // The minimum randomness needed to guarantee successful transaction generation
 pub const SAFE_MIN_RANDOMNESS: usize = 1_000;
@@ -421,22 +407,21 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
                     anyhow::bail!("Outdated transaction should have failed");
                 }
             } else {
-                // Always try a fail-fast call first to check for stop height error
-                match client.send_tx_to_sequencer(tx).await {
-                    Ok(_) => {}
-                    Err(err) if is_stop_height_error(&err) => {
+                let result = if use_retries {
+                    client.send_tx_to_sequencer_with_retry(tx).await
+                } else {
+                    client.send_tx_to_sequencer(tx).await
+                };
+
+                if let Err(err) = result {
+                    if sov_api_spec::is_stop_height_error(&err) {
                         tracing::info!(
                             "Sequencer reached stop height, gracefully stopping soak worker"
                         );
                         return Ok(());
                     }
-                    Err(_) if use_retries => {
-                        // First attempt failed with a non-stop-height error, kick off retries
-                        client.send_tx_to_sequencer_with_retry(tx).await?;
-                    }
-                    Err(err) => {
-                        return Err(err.into());
-                    }
+
+                    return Err(err.into());
                 }
             }
             total_txns += 1;

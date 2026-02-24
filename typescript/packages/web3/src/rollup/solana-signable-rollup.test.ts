@@ -1,8 +1,10 @@
 import SovereignClient from "@sovereign-sdk/client";
+import { JsSerializer } from "@sovereign-sdk/serializers";
 import type { Signer } from "@sovereign-sdk/signers";
 import { Ed25519Signer } from "@sovereign-sdk/signers";
 import { LedgerSolanaSigner } from "@sovereign-sdk/signers/ledger-solana";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import demoRollupSchema from "../../../__fixtures__/demo-rollup-schema.json";
 import {
   SolanaSignableRollup,
   createSolanaPreamble,
@@ -17,11 +19,17 @@ function createMockClient(overrides?: {
 }) {
   const mockClient = new SovereignClient({ fetch: vi.fn() });
   const chainId = overrides?.chainId || 1;
+  const chainName = overrides?.chainName ?? "";
 
   mockClient.rollup = {
     constants: vi.fn().mockResolvedValue({ chain_id: chainId }),
     schema: vi.fn().mockResolvedValue({
-      schema: overrides?.chainName ? { chain_name: overrides.chainName } : {},
+      schema: {
+        chain_data: {
+          chain_id: chainId,
+          chain_name: chainName,
+        },
+      },
       chain_hash:
         overrides?.chainHash ||
         "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -134,7 +142,9 @@ describe("SolanaSignableRollup", () => {
       {
         client: mockClient,
         getSerializer: () =>
-          createMockSerializer({ schema: { chain_name: "TestChain" } }),
+          createMockSerializer({
+            schema: { chain_data: { chain_id: 1, chain_name: "TestChain" } },
+          }),
       },
       customEndpoint,
     );
@@ -161,6 +171,61 @@ describe("SolanaSignableRollup", () => {
     expect(capturedPayload).toHaveProperty("body");
   });
 
+  it("should read chain_name from schema.chain_data in fixture schema", async () => {
+    const fixtureChainId = demoRollupSchema.chain_data.chain_id;
+    const mockClient = createMockClient({ chainId: fixtureChainId });
+
+    // Capture the payload sent to the client
+    let capturedPayload: any;
+    mockClient.post = vi
+      .fn()
+      .mockImplementation((path: string, options: any) => {
+        capturedPayload = options;
+        return Promise.resolve({ id: "test-tx-hash" });
+      });
+
+    mockClient.rollup.schema = vi.fn().mockResolvedValue({
+      schema: demoRollupSchema,
+      chain_hash:
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+    });
+
+    const rollup = await createSolanaSignableRollup({
+      client: mockClient,
+      getSerializer: (schema: any) => new JsSerializer(schema),
+    });
+
+    await rollup.signAndSubmitTransaction(
+      {
+        runtime_call: { test: "call" },
+        uniqueness: { generation: 123 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "1000",
+          gas_limit: null,
+          chain_id: fixtureChainId,
+        },
+      } as any,
+      {
+        signer: createMockSigner(),
+        authenticator: "solanaSimple",
+      },
+    );
+
+    const bodyJson = JSON.parse(JSON.stringify(capturedPayload));
+    const decodedBody = Buffer.from(bodyJson.body.body, "base64");
+    const view = new DataView(
+      decodedBody.buffer,
+      decodedBody.byteOffset,
+      decodedBody.byteLength,
+    );
+    const messageLength = view.getUint32(0, true);
+    const jsonBytes = decodedBody.slice(4, 4 + messageLength);
+    const message = JSON.parse(new TextDecoder().decode(jsonBytes));
+
+    expect(message.chain_name).toBe(demoRollupSchema.chain_data.chain_name);
+  });
+
   describe("byte-level compatibility with Rust implementation", () => {
     it("should generate identical bytes to Rust test_submit_raw_signed_message_transaction", async () => {
       // This test verifies that our TypeScript implementation generates the exact same bytes
@@ -171,7 +236,7 @@ describe("SolanaSignableRollup", () => {
       const privateKeyHex =
         "4096e0037e7dc13c28730b01e303ea4679a05e019f68a5ee8aec6c1968cac707";
       const expectedJson =
-        '{"body":"cAEAAHsicnVudGltZV9jYWxsIjp7ImJhbmsiOnsidHJhbnNmZXIiOnsidG8iOiI0emR3SE5hRWE1bnBIdFJ0YVozUkwxbTZycHR1UVo2UkJMSEc2Y0F5VkhqTCIsImNvaW5zIjp7ImFtb3VudCI6IjEwMDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiJ9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwuMdhE5OjziHniAzu9qaFH0I50R93Apv2VgyONYPuLm3nN3Cr4cJwZ5ii6YYXxr7LsW3qcL0NAJfIvmUZroK+fuM18D3Hj+NsFn+nmN9jCjiWhjbQO1/79i365l424Erwg="}';
+        '{"body":{"body":"cAEAAHsicnVudGltZV9jYWxsIjp7ImJhbmsiOnsidHJhbnNmZXIiOnsidG8iOiI0emR3SE5hRWE1bnBIdFJ0YVozUkwxbTZycHR1UVo2UkJMSEc2Y0F5VkhqTCIsImNvaW5zIjp7ImFtb3VudCI6IjEwMDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiJ9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwuMdhE5OjziHniAzu9qaFH0I50R93Apv2VgyONYPuLm3nN3Cr4cJwZ5ii6YYXxr7LsW3qcL0NAJfIvmUZroK+fuM18D3Hj+NsFn+nmN9jCjiWhjbQO1/79i365l424Erwg="}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
@@ -245,7 +310,7 @@ describe("SolanaSignableRollup", () => {
       const knownSignatureHex =
         "71204c3487b8e637cffaa5e9dc409efe2f1e98db6b557041181a368f4c487bbd407f72c43f08aa44b75f219e6fb3ce4681785dd72ee3eebe4e641ade8289370d";
       const expectedJson =
-        '{"body":"xAEAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAXAkjJmh05dpgxyZcGlIuYUVhcupB6Z30RL5o2lMvLTNbwF7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI1MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiJ9cSBMNIe45jfP+qXp3ECe/i8emNtrVXBBGBo2j0xIe71Af3LEPwiqRLdfIZ5vs85GgXhd1y7j7r5OZBregok3DQ=="}';
+        '{"body":{"body":"xAEAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAXAkjJmh05dpgxyZcGlIuYUVhcupB6Z30RL5o2lMvLTNbwF7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI1MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiJ9cSBMNIe45jfP+qXp3ECe/i8emNtrVXBBGBo2j0xIe71Af3LEPwiqRLdfIZ5vs85GgXhd1y7j7r5OZBregok3DQ=="}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
@@ -337,7 +402,9 @@ describe("SolanaSignableRollup", () => {
       const rollup = await createSolanaSignableRollup({
         client: mockClient,
         getSerializer: () =>
-          createMockSerializer({ schema: { chain_name: "TestChain" } }),
+          createMockSerializer({
+            schema: { chain_data: { chain_id: 1, chain_name: "TestChain" } },
+          }),
       });
 
       // Create a real LedgerSolanaSigner instance and mock its methods
@@ -364,7 +431,7 @@ describe("SolanaSignableRollup", () => {
 
       // Verify that spec-compliant message was sent (it will have the preamble)
       const bodyJson = JSON.parse(JSON.stringify(capturedPayload));
-      const decodedBody = Buffer.from(bodyJson.body, "base64");
+      const decodedBody = Buffer.from(bodyJson.body.body, "base64");
 
       // Check for Solana offchain signing domain in preamble
       // The spec-compliant message has a 4-byte length prefix, then the preamble starts with 0xff
@@ -388,7 +455,9 @@ describe("SolanaSignableRollup", () => {
       const rollup = await createSolanaSignableRollup({
         client: mockClient,
         getSerializer: () =>
-          createMockSerializer({ schema: { chain_name: "TestChain" } }),
+          createMockSerializer({
+            schema: { chain_data: { chain_id: 1, chain_name: "TestChain" } },
+          }),
       });
 
       // Create a regular Ed25519Signer
@@ -413,7 +482,7 @@ describe("SolanaSignableRollup", () => {
 
       // Verify that simple message was sent (no preamble)
       const bodyJson = JSON.parse(JSON.stringify(capturedPayload));
-      const decodedBody = Buffer.from(bodyJson.body, "base64");
+      const decodedBody = Buffer.from(bodyJson.body.body, "base64");
 
       // Simple message starts with a length prefix (4 bytes) followed by the JSON message
       // It should NOT have the 0xff signing domain marker

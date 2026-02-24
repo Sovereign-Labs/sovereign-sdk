@@ -36,7 +36,7 @@ use sov_rollup_interface::stf::{EventKey, StoredEvent};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 
 use super::types::{
-    AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventNumber,
+    AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventKeyNumber, EventNumber,
     LatestFinalizedSlotSingleton, ProofUniqueId, StateRootHashId, StfInfoUniqueId, StoredBatch,
     StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
@@ -61,6 +61,7 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
     FinalizedSlots::table_name(),
     StfInfoByNumber::table_name(),
     StfInfoMetadata::table_name(),
+    EventCountByKey::table_name(),
 ];
 
 /// A list of all tables used by the AccessoryDB. These tables store
@@ -276,6 +277,11 @@ define_table_with_seek_key_codec!(
 define_table_with_seek_key_codec!(
     /// An index for event data by key
     (EventByKey) (EventKey, TxNumber, EventNumber) => ()
+);
+
+define_table_with_seek_key_codec!(
+    /// Tracks the total count of events per event key
+    (EventCountByKey) EventKey => EventKeyNumber
 );
 
 define_table_with_seek_key_codec!(

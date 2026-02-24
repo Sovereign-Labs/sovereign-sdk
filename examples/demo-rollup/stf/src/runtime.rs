@@ -27,6 +27,7 @@
 //!    no module-specific state is updated (the transaction is reverted).
 #[cfg(feature = "native")]
 use sov_evm::execution_config::EvmExecutionConfig;
+use sov_solana_offchain_auth::SolanaOffchainAuthenticatorTrait;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
@@ -36,17 +37,19 @@ use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "native")]
 pub use sov_attester_incentives::BondingProofServiceImpl;
 use sov_capabilities::StandardProvenRollupCapabilities as StandardCapabilities;
-use sov_evm::{EthereumAuthenticator, EvmAuthenticatorInput};
+use sov_evm::EthereumAuthenticator;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
 use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, TransactionAuthenticator};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
-use sov_modules_api::prelude::*;
-use sov_modules_api::TxState;
+use sov_modules_api::{prelude::*, Base58Address};
 use sov_modules_api::{DispatchCall, Event, Genesis, Hooks, MessageCodec, RawTx, Spec};
 
+use crate::authentication::{
+    EvmAndSolanaOffchainAuthenticator, EvmAndSolanaOffchainAuthenticatorInput,
+};
 #[cfg(feature = "native")]
 use crate::genesis_config::GenesisPaths;
 
@@ -93,7 +96,7 @@ where
 impl<S> sov_modules_stf_blueprint::Runtime<S> for Runtime<S>
 where
     S: Spec,
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
 
@@ -105,7 +108,7 @@ where
     #[cfg(feature = "native")]
     type ModuleExecutionConfig = EvmExecutionConfig;
 
-    type Auth = sov_evm::EvmAuthenticator<S, Self>;
+    type Auth = EvmAndSolanaOffchainAuthenticator<S, Self>;
 
     #[cfg(feature = "native")]
     fn endpoints(
@@ -121,10 +124,13 @@ where
         let dedup_endpoint = SovereignDeDupEndpoint::new(api_state.clone());
         let axum_router = axum_router.merge(dedup_endpoint.axum_router());
 
-        let schema_endpoint = StandardSchemaEndpoint::new(
+        // StandardSchemaEndpoint resolves chain hash based on current height.
+        // This ensures wallets get the correct chain hash during chain hash transitions.
+        let schema_endpoint = StandardSchemaEndpoint::<S>::new(
             &serde_json::from_str(__generated::SCHEMA_JSON)
                 .expect("Failed to deserialize schema json"),
             Self::CHAIN_HASH.into(),
+            api_state.checkpoint_receiver(),
         )
         .expect("Failed to initialize StandardSchemaEndpoint");
         let axum_router = axum_router.merge(schema_endpoint.axum_router());
@@ -161,8 +167,9 @@ where
         auth_data: <Self::Auth as TransactionAuthenticator<S>>::Decodable,
     ) -> Self::Decodable {
         match auth_data {
-            EvmAuthenticatorInput::Evm(call) => Self::Decodable::Evm(call),
-            EvmAuthenticatorInput::Standard(call) => call,
+            EvmAndSolanaOffchainAuthenticatorInput::Evm(call) => Self::Decodable::Evm(call),
+            EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(call)
+            | EvmAndSolanaOffchainAuthenticatorInput::Standard(call) => call,
         }
     }
 
@@ -174,40 +181,6 @@ where
             ) => 100,
             _ => 0,
         }
-    }
-
-    fn is_unauthorized_system_tx(
-        &self,
-        call: &Self::Decodable,
-        context: &Context<S>,
-        state: &mut impl TxState<S>,
-    ) -> bool {
-        match call {
-            Self::Decodable::ChainState(sov_chain_state::CallMessage::SetOracleTime { .. }) => {
-                // Reject tx conservatively if a preferred sequencer is not registered
-                let Ok(Some((_, preferred_sequencer_address))) =
-                    self.sequencer_registry.get_preferred_sequencer(state)
-                else {
-                    return true;
-                };
-                // The tx is unauthorized if it's not from the preferred sequencer
-                context.sequencer() != &preferred_sequencer_address
-            }
-            // All non oracle calls are allowed
-            _ => false,
-        }
-    }
-
-    #[cfg(feature = "native")]
-    fn maybe_set_oracle_timestamp(
-        &self,
-        millis_since_epoch: i64,
-    ) -> Option<<Self as sov_modules_api::DispatchCall>::Decodable> {
-        Some(Self::Decodable::ChainState(
-            sov_chain_state::CallMessage::SetOracleTime {
-                milliseconds_since_epoch: millis_since_epoch,
-            },
-        ))
     }
 
     #[cfg(feature = "native")]
@@ -236,7 +209,7 @@ where
 
 impl<S: Spec> HasCapabilities<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Capabilities<'a> = StandardCapabilities<'a, S, &'a mut sov_paymaster::Paymaster<S>>;
     fn capabilities(&mut self) -> Guard<Self::Capabilities<'_>> {
@@ -246,6 +219,7 @@ where
             sequencer_registry: &mut self.sequencer_registry,
             accounts: &mut self.accounts,
             uniqueness: &mut self.uniqueness,
+            chain_state: &mut self.chain_state,
             operator_incentives: &mut self.operator_incentives,
             prover_incentives: &mut self.prover_incentives,
             attester_incentives: &mut self.attester_incentives,
@@ -255,7 +229,7 @@ where
 
 impl<S: Spec> HasKernel<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Kernel<'a> = SoftConfirmationsKernel<'a, S>;
 
@@ -274,9 +248,18 @@ where
 
 impl<S: Spec> EthereumAuthenticator<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn add_ethereum_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
-        EvmAuthenticatorInput::Evm(tx)
+        EvmAndSolanaOffchainAuthenticatorInput::Evm(tx)
+    }
+}
+
+impl<S: Spec> SolanaOffchainAuthenticatorTrait<S> for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+{
+    fn add_solana_offchain_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
+        EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(tx)
     }
 }

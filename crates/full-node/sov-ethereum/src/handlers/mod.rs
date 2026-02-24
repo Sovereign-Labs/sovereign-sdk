@@ -24,8 +24,8 @@ pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
-use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::capabilities::{AuthenticationError, FatalError, HasKernel};
 #[cfg(feature = "local")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::FullyBakedTx;
@@ -165,8 +165,16 @@ where
     // This will also be moved into the sequencer, but for now is kept here.
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
-            .map_err(|e| rpc_invalid_params(format!("Authentication failed: {e}")))?;
+        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
+            if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
+                &e
+            {
+                if err_msg.contains("Only EIP1559") {
+                    return rpc_tx_rejected(format!("transaction type not supported: {err_msg}"));
+                }
+            };
+            rpc_invalid_params(format!("Authentication failed: {e}"))
+        })?;
         Ok(())
     }
 
@@ -220,6 +228,8 @@ where
             let estimated_gas = evm.eth_estimate_gas(
                 transaction_request.clone(),
                 Some(BlockId::pending()),
+                None,
+                None,
                 &mut state,
             )?;
             transaction_request.gas = Some(estimated_gas.to::<u64>());

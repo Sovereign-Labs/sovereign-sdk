@@ -5,6 +5,7 @@
 use sov_modules_api::{Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, VersionedStateValue};
 
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
+#[allow(dead_code)]
 struct TestModule<S: Spec> {
     #[id]
     id: ModuleId,

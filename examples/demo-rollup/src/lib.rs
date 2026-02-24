@@ -28,6 +28,8 @@ pub use external_mock_rollup::*;
 mod external_mock_nomt_rollup;
 pub use external_mock_nomt_rollup::*;
 
+mod solana_offchain_endpoint;
+
 mod zk;
 pub use zk::*;
 

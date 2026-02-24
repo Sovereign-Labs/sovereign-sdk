@@ -268,7 +268,7 @@ impl<T> Distribution<T> {
     }
 
     /// Maps the values inside the distribution using the mapping function
-    pub fn map_values<U>(self, map_fn: &mut impl (FnMut(T) -> U)) -> Distribution<U> {
+    pub fn map_values<U>(self, map_fn: &mut impl FnMut(T) -> U) -> Distribution<U> {
         Distribution {
             weights_and_values: self
                 .weights_and_values

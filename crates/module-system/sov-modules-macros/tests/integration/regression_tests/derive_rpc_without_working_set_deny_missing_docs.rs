@@ -4,6 +4,7 @@ use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::{ModuleId, Spec};
 
 #[derive(sov_modules_api::ModuleInfo, Clone)]
+#[allow(dead_code)]
 pub struct TestStruct<S: Spec> {
     #[id]
     pub(crate) id: ModuleId,

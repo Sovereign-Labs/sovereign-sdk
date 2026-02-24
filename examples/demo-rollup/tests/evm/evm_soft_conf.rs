@@ -26,25 +26,34 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
                 .eth_get_block_by_number(Some("pending".to_string()))
                 .await;
 
+            // When there are no pending txs, pending falls back to the latest sealed block.
             assert_eq!(latest_block, pending_block);
-            assert!(pending_block.transactions.is_empty());
         }
 
         let set_arg = 1;
         let tx_hash = evm_client.set_value(contract_address, set_arg).await;
-
-        let expected_block_nr = evm_client.block_number().await + 1;
+        let expected_block_nr = {
+            let rec = evm_client.receipt(tx_hash).await.unwrap();
+            rec.block_number.unwrap()
+        };
 
         // Verify the `receipt & transaction` asserts.
         {
             let rec = evm_client.receipt(tx_hash).await.unwrap();
             let tx = evm_client.transaction(tx_hash).await.unwrap();
+            let rpc_block_number = evm_client.block_number().await;
 
             assert!(rec.block_hash.is_some());
             assert!(tx.block_hash.is_some());
 
+            assert_eq!(
+                rpc_block_number, expected_block_nr,
+                "eth_blockNumber should align with pending head while tx is pending"
+            );
             assert_eq!(rec.block_number.unwrap(), expected_block_nr);
             assert_eq!(tx.block_number.unwrap(), expected_block_nr);
+            assert_eq!(rec.block_number.unwrap(), rpc_block_number);
+            assert_eq!(tx.block_number.unwrap(), rpc_block_number);
         }
 
         // Verify the `pending_block` asserts after inserting the transaction.

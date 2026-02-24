@@ -8,7 +8,7 @@ use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
 use sov_state::{EncodeLike, Prefix, SlotKey, SlotValue, StateCodec, StateItemCodec};
 #[cfg(feature = "native")]
-use sov_state::{StateItemDecoder, Storage};
+use sov_state::{NativeStorage, StateItemDecoder, Storage};
 use thiserror::Error;
 #[cfg(feature = "arbitrary")]
 use unwrap_infallible::UnwrapInfallible;
@@ -59,6 +59,10 @@ pub enum StateMapError<N> {
 }
 
 type ValueOrError<V, N> = Result<V, StateMapError<N>>;
+#[cfg(feature = "native")]
+type RawMapEntry<K> = anyhow::Result<(K, Vec<u8>)>;
+#[cfg(feature = "native")]
+type RawMapEntriesVec<K> = Vec<(K, Option<Vec<u8>>)>;
 
 /// A container that maps keys to values
 ///
@@ -237,7 +241,7 @@ where
         &self,
         key: &Kq,
         state: &mut Reader,
-    ) -> Result<Borrowed<Option<V>, Self>, Reader::Error>
+    ) -> Result<Borrowed<'_, Option<V>, Self>, Reader::Error>
     where
         Codec::KeyCodec: EncodeLike<Kq, K>,
         Kq: ?Sized,
@@ -255,7 +259,7 @@ where
         &mut self,
         key: &Kq,
         state: &mut Reader,
-    ) -> Result<BorrowedMut<Option<V>, Self>, Reader::Error>
+    ) -> Result<BorrowedMut<'_, Option<V>, Self>, Reader::Error>
     where
         Codec::KeyCodec: EncodeLike<Kq, K>,
         Kq: ?Sized,
@@ -349,6 +353,112 @@ where
 }
 
 #[cfg(feature = "native")]
+impl<N, K, V, Codec> NamespacedStateMap<N, K, V, Codec>
+where
+    N: CompileTimeNamespace,
+    Codec: StateCodec,
+    Codec::KeyCodec: StateItemCodec<K>,
+    Codec::ValueCodec: StateItemCodec<V>,
+    K: FromStr + std::fmt::Display,
+{
+    /// Returns the raw value bytes corresponding to the key, or [`None`] if the map doesn't contain the key.
+    pub fn get_raw<Kq, Reader>(
+        &self,
+        key: &Kq,
+        state: &mut Reader,
+    ) -> Result<Option<Vec<u8>>, Reader::Error>
+    where
+        Codec::KeyCodec: EncodeLike<Kq, K>,
+        Kq: ?Sized,
+        Reader: StateReader<N>,
+    {
+        let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
+        tracing::trace!(%key, "Getting raw map value");
+        state
+            .get(&key)
+            .map(|value| value.map(|v| v.value().to_vec()))
+    }
+
+    /// Inserts a key-value pair into the map where the value is already serialized bytes.
+    pub fn set_raw<Kq, Writer>(
+        &mut self,
+        key: &Kq,
+        value: &[u8],
+        state: &mut Writer,
+    ) -> Result<(), Writer::Error>
+    where
+        Codec::KeyCodec: EncodeLike<Kq, K>,
+        Kq: ?Sized,
+        Writer: StateWriter<N>,
+    {
+        let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
+        tracing::trace!(%key, "Setting raw map value");
+        state.set(&key, SlotValue::from(value.to_vec()))
+    }
+
+    /// Removes a key from the map, returning the corresponding raw value bytes (or [`None`] if the key is absent).
+    pub fn remove_raw<Kq, ReaderAndWriter>(
+        &self,
+        key: &Kq,
+        state: &mut ReaderAndWriter,
+    ) -> Result<Option<Vec<u8>>, <ReaderAndWriter as StateWriter<N>>::Error>
+    where
+        Codec::KeyCodec: EncodeLike<Kq, K>,
+        Kq: ?Sized,
+        ReaderAndWriter: StateReaderAndWriter<N>,
+    {
+        let key = self.slot_key(key);
+        #[cfg(feature = "expensive-observability")]
+        tracing::trace!(%key, "Removing raw map value");
+        let value = state.get(&key)?;
+        state.delete(&key)?;
+        Ok(value.map(|v| v.value().to_vec()))
+    }
+
+    /// Iterates raw values for caller-provided keys.
+    ///
+    /// This is a backend-agnostic fallback when prefix iteration is unavailable.
+    pub fn iter_raw_from_keys<I, Kq, Reader>(
+        &self,
+        keys: I,
+        state: &mut Reader,
+    ) -> Result<RawMapEntriesVec<Kq>, Reader::Error>
+    where
+        I: IntoIterator<Item = Kq>,
+        Codec::KeyCodec: EncodeLike<Kq, K>,
+        Reader: StateReader<N>,
+    {
+        let mut entries = Vec::new();
+        for key in keys {
+            let value = self.get_raw(&key, state)?;
+            entries.push((key, value));
+        }
+        Ok(entries)
+    }
+
+    fn decode_raw_iter<'a>(
+        &'a self,
+        maybe_iter: Option<impl Iterator<Item = (SlotKey, SlotValue)> + 'a>,
+        namespace_name: &'static str,
+    ) -> Option<impl Iterator<Item = RawMapEntry<K>> + 'a> {
+        maybe_iter.map(move |iter| {
+            iter.map(move |(key, value)| {
+                let decoded_key = self
+                    .codec()
+                    .key_codec()
+                    .try_decode(key.without_prefix())
+                    .map_err(|e| {
+                        anyhow::anyhow!("Failed to decode {namespace_name} map key: {:?}", e)
+                    })?;
+                Ok((decoded_key, value.value().to_vec()))
+            })
+        })
+    }
+}
+
+#[cfg(feature = "native")]
 impl<N: sov_state::namespaces::ProvableCompileTimeNamespace, K, V, Codec>
     NamespacedStateMap<N, K, V, Codec>
 where
@@ -404,6 +514,52 @@ where {
     }
 }
 
+#[cfg(feature = "native")]
+impl<K, V, Codec> NamespacedStateMap<User, K, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V>,
+    Codec::KeyCodec: StateItemCodec<K>,
+    K: FromStr + std::fmt::Display,
+{
+    /// Iterates over all raw values under this map prefix in the user namespace.
+    /// Returns per-item decode errors for malformed keys.
+    pub fn iter_raw<'a, S>(
+        &'a self,
+        storage: &'a S,
+    ) -> anyhow::Result<Option<impl Iterator<Item = RawMapEntry<K>> + 'a>>
+    where
+        S: NativeStorage,
+    {
+        let prefix = SlotKey::singleton(self.prefix());
+        let maybe_iter = storage.maybe_iter_user_values_with_prefix(prefix)?;
+        Ok(self.decode_raw_iter(maybe_iter, "user"))
+    }
+}
+
+#[cfg(feature = "native")]
+impl<K, V, Codec> NamespacedStateMap<Kernel, K, V, Codec>
+where
+    Codec: StateCodec,
+    Codec::ValueCodec: StateItemCodec<V>,
+    Codec::KeyCodec: StateItemCodec<K>,
+    K: FromStr + std::fmt::Display,
+{
+    /// Iterates over all raw values under this map prefix in the kernel namespace.
+    /// Returns per-item decode errors for malformed keys.
+    pub fn iter_raw<'a, S>(
+        &'a self,
+        storage: &'a S,
+    ) -> anyhow::Result<Option<impl Iterator<Item = RawMapEntry<K>> + 'a>>
+    where
+        S: NativeStorage,
+    {
+        let prefix = SlotKey::singleton(self.prefix());
+        let maybe_iter = storage.maybe_iter_kernel_values_with_prefix(prefix)?;
+        Ok(self.decode_raw_iter(maybe_iter, "kernel"))
+    }
+}
+
 #[cfg(feature = "arbitrary")]
 impl<'a, N, K, V, Codec> NamespacedStateMap<N, K, V, Codec>
 where
@@ -440,5 +596,150 @@ where
 
             Ok(map)
         })
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use borsh::to_vec as borsh_to_vec;
+    use sov_mock_zkvm::MockZkvm;
+    use sov_rollup_interface::execution_mode::Native;
+    use sov_state::codec::BorshCodec;
+    use sov_state::{Prefix, Storage};
+    use sov_test_utils::storage::{SimpleJmtStorageManager, SimpleStorageManager};
+    use sov_test_utils::MockDaSpec;
+    use unwrap_infallible::UnwrapInfallible;
+
+    use crate::capabilities::mocks::MockKernel;
+    use crate::{AccessoryStateMap, KernelStateMap, Spec, StateCheckpoint, StateMap};
+
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestNomtSpec =
+        crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+
+    #[test]
+    fn state_map_raw_roundtrip_and_remove() {
+        let storage_manager = SimpleJmtStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(10, 10);
+        let mut map = StateMap::<u64, u32>::with_codec(prefix, BorshCodec);
+        let key = 7_u64;
+
+        assert_eq!(map.get_raw(&key, &mut state).unwrap_infallible(), None);
+
+        let raw = vec![3, 1, 4, 1, 5];
+        map.set_raw(&key, &raw, &mut state).unwrap_infallible();
+        assert_eq!(
+            map.get_raw(&key, &mut state).unwrap_infallible(),
+            Some(raw.clone())
+        );
+        assert_eq!(
+            map.remove_raw(&key, &mut state).unwrap_infallible(),
+            Some(raw.clone())
+        );
+        assert_eq!(map.get_raw(&key, &mut state).unwrap_infallible(), None);
+    }
+
+    #[test]
+    fn state_map_raw_and_typed_compatibility() {
+        let storage_manager = SimpleJmtStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(11, 11);
+        let mut map = StateMap::<u64, u32>::with_codec(prefix, BorshCodec);
+        let key = 9_u64;
+
+        map.set(&key, &42_u32, &mut state).unwrap_infallible();
+        assert_eq!(
+            map.get_raw(&key, &mut state).unwrap_infallible(),
+            Some(borsh_to_vec(&42_u32).unwrap())
+        );
+
+        let typed_from_raw = borsh_to_vec(&100_u32).unwrap();
+        map.set_raw(&key, &typed_from_raw, &mut state)
+            .unwrap_infallible();
+        assert_eq!(map.get(&key, &mut state).unwrap_infallible(), Some(100_u32));
+    }
+
+    #[test]
+    fn state_map_iter_raw_user_namespace() {
+        let storage_manager = SimpleJmtStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestSpec> =
+            StateCheckpoint::new(storage.clone(), &MockKernel::<TestSpec>::default(), None);
+
+        let prefix = Prefix::new(12, 12);
+        let mut map = StateMap::<u64, u32>::with_codec(prefix, BorshCodec);
+        map.set(&1_u64, &10_u32, &mut state).unwrap_infallible();
+        map.set(&2_u64, &20_u32, &mut state).unwrap_infallible();
+
+        // JMT storage does not support prefix iteration.
+        assert!(map.iter_raw(&storage).unwrap().is_none());
+    }
+
+    #[test]
+    fn state_map_iter_raw_kernel_namespace_on_nomt() {
+        let mut storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestNomtSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestNomtSpec>::default(), None);
+
+        let prefix = Prefix::new(13, 13);
+        let mut map = KernelStateMap::<u64, u32>::with_codec(prefix, BorshCodec);
+        map.set(&1_u64, &10_u32, &mut state).unwrap_infallible();
+        map.set(&2_u64, &20_u32, &mut state).unwrap_infallible();
+
+        // we iterate over storage, so we have to commit before are keys show up
+        let (_root, state_update, _accessory_delta, _witness, storage) = state
+            .materialize_update(<<TestNomtSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT);
+        storage_manager.commit(storage.materialize_changes(state_update));
+        let storage = storage_manager.create_storage();
+
+        let mut collected = map
+            .iter_raw(&storage)
+            .unwrap()
+            .expect("NOMT should support kernel prefix iteration")
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        collected.sort_by_key(|(key, _)| *key);
+
+        assert_eq!(
+            collected,
+            vec![
+                (1_u64, borsh_to_vec(&10_u32).unwrap()),
+                (2_u64, borsh_to_vec(&20_u32).unwrap())
+            ]
+        );
+    }
+
+    #[test]
+    fn state_map_iter_raw_from_keys_accessory_namespace() {
+        let storage_manager = SimpleStorageManager::new();
+        let storage = storage_manager.create_storage();
+        let mut state: StateCheckpoint<TestNomtSpec> =
+            StateCheckpoint::new(storage, &MockKernel::<TestNomtSpec>::default(), None);
+
+        let prefix = Prefix::new(14, 14);
+        let mut map = AccessoryStateMap::<u64, u32>::with_codec(prefix, BorshCodec);
+        let mut accessory_state = state.accessory_state();
+
+        map.set(&1_u64, &10_u32, &mut accessory_state)
+            .unwrap_infallible();
+        map.set_raw(&2_u64, &[0xAA, 0xBB], &mut accessory_state)
+            .unwrap_infallible();
+
+        let keys = vec![1_u64, 2_u64, 3_u64];
+        let collected = map
+            .iter_raw_from_keys(keys, &mut accessory_state)
+            .unwrap_infallible();
+
+        assert_eq!(collected[0], (1_u64, Some(borsh_to_vec(&10_u32).unwrap())));
+        assert_eq!(collected[1], (2_u64, Some(vec![0xAA, 0xBB])));
+        assert_eq!(collected[2], (3_u64, None));
     }
 }

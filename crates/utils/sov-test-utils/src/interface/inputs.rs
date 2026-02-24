@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use derivative::Derivative;
 use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
-use sov_modules_api::sequencing_metadata::HDTimestamp;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{Amount, CryptoSpec, DispatchCall, FullyBakedTx, PrivateKey, RawTx, Spec};
 use sov_rollup_interface::da::RelevantBlobs;
@@ -103,7 +102,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         self,
         nonces: &mut HashMap<<S::CryptoSpec as CryptoSpec>::PublicKey, u64>,
     ) -> FullyBakedTx {
-        let mut tx = match self {
+        match self {
             TransactionType::PreAuthenticated(data) => data,
             TransactionType::PreSigned(raw_tx) => RT::Auth::encode_with_standard_auth(raw_tx),
             TransactionType::Plain {
@@ -117,9 +116,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
                 details,
                 nonces,
             )),
-        };
-        tx.set_sequencing_metadata(&HDTimestamp::now());
-        tx
+        }
     }
 
     /// Creates a [`TransactionType`] from an [`UnsignedTransaction`].

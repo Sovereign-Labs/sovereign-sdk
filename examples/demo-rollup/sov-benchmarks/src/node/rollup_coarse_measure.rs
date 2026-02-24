@@ -4,16 +4,16 @@ use std::default::Default;
 use std::env;
 use std::time::{Duration, Instant};
 
+use demo_stf::MultiAddressEvmSolana;
 use humantime::format_duration;
 use prettytable::{row, Table};
-use sov_address::MultiAddressEvm;
 use sov_benchmarks::node::{generate_transfers, prefill_state};
 use sov_benchmarks::{setup_with_runner_and_spec, BenchSpec, NomtBenchSpec};
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::Spec;
 use sov_test_utils::storage::{
-    ForklessStorageManager, SimpleNomtStorageManager, SimpleStorageManager,
+    ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
 };
 use sov_test_utils::MockZkvm;
 
@@ -108,7 +108,7 @@ where
         InnerZkvm = MockZkvm,
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {
@@ -168,11 +168,11 @@ async fn main() -> anyhow::Result<()> {
     match env::var("SOV_BENCH") {
         Ok(s) => {
             if &s == "nomt" {
-                run_with_spec::<NomtBenchSpec, SimpleNomtStorageManager<_>>().await
+                run_with_spec::<NomtBenchSpec, SimpleStorageManager<_>>().await
             } else {
-                run_with_spec::<BenchSpec<MockZkvm>, SimpleStorageManager<_>>().await
+                run_with_spec::<BenchSpec<MockZkvm>, SimpleJmtStorageManager<_>>().await
             }
         }
-        Err(_) => run_with_spec::<BenchSpec<MockZkvm>, SimpleStorageManager<_>>().await,
+        Err(_) => run_with_spec::<BenchSpec<MockZkvm>, SimpleJmtStorageManager<_>>().await,
     }
 }

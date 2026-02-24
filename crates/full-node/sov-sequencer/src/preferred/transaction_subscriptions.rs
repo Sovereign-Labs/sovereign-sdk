@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use futures::task::Poll;
-use futures::{Future, FutureExt, Stream, StreamExt, TryStreamExt};
+use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
@@ -264,14 +264,63 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         }))
     }
 
-    pub fn subscribe(&self) -> SequencerTxStream<Confirmation<S, Rt>> {
-        BroadcastStream::new(
-            // chain an empty stream::iter to make the types match
-            self.tx_response_receiver.resubscribe(),
-        )
-        .map(|tx| tx.map(|tx| tx.into()))
-        .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged) // Put an explicit type check to ensure we catch this if the set of errors expands.
-        .boxed()
+    /// Subscribe to transactions with tx number tracking for lag notifications.  
+    pub fn subscribe_txs(&self) -> SequencerTxStream<Confirmation<S, Rt>> {
+        let broadcast_stream = BroadcastStream::new(self.tx_response_receiver.resubscribe());
+
+        let mut last_tx_number: Option<u64> = None;
+        broadcast_stream
+            .map(move |result| match result {
+                Ok(tx) => {
+                    last_tx_number = Some(tx.confirmation.tx_number);
+                    Ok(tx.into())
+                }
+                Err(BroadcastStreamRecvError::Lagged(skipped)) => {
+                    Err(SubscriptionStreamError::Lagged {
+                        skipped,
+                        disconnected_at: last_tx_number,
+                        resumed_at: last_tx_number.map(|id| {
+                            id.checked_add(skipped)
+                                .and_then(|id| id.checked_add(1))
+                                .expect("Overflow when adding tx number and skipped count")
+                        }),
+                    })
+                }
+            })
+            .boxed()
+    }
+
+    /// Subscribe to events with event number tracking for lag notifications.
+    pub fn subscribe_events(&self) -> crate::common::SequencerEventStream<Rt> {
+        let broadcast_stream = BroadcastStream::new(self.tx_response_receiver.resubscribe());
+
+        // Track the last event number seen. Option<u64> is Copy, so it can be
+        // captured by the inner `async move` block without moving out of the closure.
+        let mut last_event_number: Option<u64> = None;
+
+        broadcast_stream
+            .flat_map(move |result| {
+                match result {
+                    Ok(tx) => {
+                        // Update last_event_number for each event as we collect them
+                        last_event_number = tx.confirmation.events.last().map(|e| e.number);
+                        let events = tx.confirmation.events.into_iter().map(Ok);
+                        futures::stream::iter(events).left_stream()
+                    }
+                    Err(BroadcastStreamRecvError::Lagged(skipped)) => {
+                        // last_event_number is Copy, so this captures a copy
+                        futures::stream::once(async move {
+                            Err(SubscriptionStreamError::Lagged {
+                                skipped,
+                                disconnected_at: last_event_number,
+                                resumed_at: None, // Unknown until next event arrives
+                            })
+                        })
+                        .right_stream()
+                    }
+                }
+            })
+            .boxed()
     }
 
     pub async fn subscribe_starting_from_tx_number(
@@ -279,7 +328,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         starting_from: Option<u64>,
     ) -> Result<SequencerTxStream<Confirmation<S, Rt>>, SubscriptionStreamError> {
         let Some(starting_from) = starting_from else {
-            return Ok(self.subscribe());
+            return Ok(self.subscribe_txs());
         };
         let transaction_cache = self.inner.read().await;
         let next_tx_number = transaction_cache.next_tx_number;
@@ -291,7 +340,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
 
         // If the caller is starting from the next tx number, we can just return the broadcast stream
         if starting_from == transaction_cache.next_tx_number {
-            return Ok(self.subscribe());
+            return Ok(self.subscribe_txs());
         }
 
         let stream = AcceptedTxStream {
@@ -301,6 +350,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             next_chunk: VecDeque::new(),
             maybe_subscription: None,
             pending_get_next_chunk: None,
+            last_sent_id: None,
         };
         Ok(Box::pin(stream))
     }
@@ -313,6 +363,8 @@ struct AcceptedTxStream<S: Spec, Rt: Runtime<S>> {
     next_chunk: VecDeque<ApiAcceptedTx<Confirmation<S, Rt>>>,
     maybe_subscription: Option<BroadcastStream<AcceptedTx<Confirmation<S, Rt>>>>,
     pending_get_next_chunk: Option<GetNextChunkFuture<S, Rt>>,
+    /// Tracks the last tx_number that was successfully yielded, for lag error reporting.
+    last_sent_id: Option<u64>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
@@ -421,71 +473,92 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
     }
 
     fn poll_subscription(
-        subscription: &mut BroadcastStream<AcceptedTx<Confirmation<S, Rt>>>,
+        &mut self,
         cx: &mut futures::task::Context<'_>,
     ) -> Poll<Option<TxStreamItem<S, Rt>>> {
-        let subscription = Pin::new(subscription);
-        match subscription.poll_next(cx) {
-            Poll::Ready(Some(e)) => Poll::Ready(Some(
-                e.map(|tx| tx.into())
-                    .map_err(|_: BroadcastStreamRecvError| SubscriptionStreamError::Lagged),
-            )),
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
+        let Some(subscription) = self.maybe_subscription.as_mut() else {
+            return Poll::Pending;
+        };
+        let last_sent_id = self.last_sent_id;
+        let result: Poll<Option<TxStreamItem<S, Rt>>> =
+            Pin::new(subscription).poll_next(cx).map(|opt| {
+                opt.map(|result| {
+                    result
+                        .map(|tx| tx.into())
+                        .map_err(|BroadcastStreamRecvError::Lagged(n)| {
+                            SubscriptionStreamError::Lagged {
+                                skipped: n,
+                                disconnected_at: last_sent_id,
+                                resumed_at: last_sent_id.map(|id| {
+                                    id.checked_add(n)
+                                        .and_then(|id| id.checked_add(1))
+                                        .expect("Overflow when adding tx number and skipped count")
+                                }),
+                            }
+                        })
+                })
+            });
+        if let Poll::Ready(Some(Ok(ref tx))) = result {
+            self.last_sent_id = Some(tx.confirmation.tx_number);
         }
+        result
     }
 }
 
 impl<S: Spec, Rt: Runtime<S>> Stream for AcceptedTxStream<S, Rt> {
     type Item = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 
-    // TODO: Verify that the delegated `poll` calls register this task for wakeup
     fn poll_next(
         mut self: Pin<&mut Self>,
         cx: &mut futures::task::Context<'_>,
     ) -> Poll<Option<Self::Item>> {
-        // If we have txs already cached, serve one of those
+        // Step 1: Drain any buffered historical transactions from the last fetch.
+        // These come from cache/DB and must be served before switching to live data.
         if let Some(tx) = self.next_chunk.pop_front() {
+            self.last_sent_id = Some(tx.confirmation.tx_number);
             return Poll::Ready(Some(Ok(tx)));
         }
-        // If we have a subscription to the broadcast channel set up, then we're ready to start using that as our source instead
-        // (since we've just checked that the local backfill cache has been drained)
-        if let Some(subscription) = self.maybe_subscription.as_mut() {
-            return Self::poll_subscription(subscription, cx);
+
+        // Step 2: Check if we have alreaady have a live subscription from the previous iteration of this function.
+        // If so, that means we're done with backfill. Simply poll the subscription for the next transaction.
+        if self.maybe_subscription.is_some() {
+            return self.poll_subscription(cx);
         }
-        // If we have no subscription and no backfill txs, we need to get the next chunk from the cache/db.
-        let mut pending_get_next_chunk = match self.pending_get_next_chunk.take() {
-            Some(pending_get_next_chunk) => pending_get_next_chunk,
-            None => Box::pin(Self::get_next_chunk(
+
+        // Step 3: If we don't have a live subscription (checked above) we need to fetch the next chunk of historical
+        // transactions from cache/DB. This call will return a subscription if this chunk brings us up to date.
+        let mut pending = self.pending_get_next_chunk.take().unwrap_or_else(|| {
+            Box::pin(Self::get_next_chunk(
                 self.starting_from,
                 self.inner.clone(),
                 self.ledger_db.clone(),
-            )),
-        };
-        let next_chunk_poll_result = pending_get_next_chunk.poll_unpin(cx);
-        self.pending_get_next_chunk = Some(pending_get_next_chunk);
-        match next_chunk_poll_result {
+            ))
+        });
+
+        match pending.poll_unpin(cx) {
             Poll::Ready(Ok((txs, maybe_subscription))) => {
-                // If the next chunk task is ready, it will return at either some txs from the cache or a fresh subscription to the broadcast channel, or both.
-                //
-                // We'll need to store the results, then check both sources (in order) and return the first one that is ready
+                // Store results. If maybe_subscription is Some, the next poll will send these transaction first
+                // (Step 1) before serving data from the subscription (Step 2).
                 self.starting_from += txs.len() as u64;
                 self.next_chunk = txs.into();
                 self.maybe_subscription = maybe_subscription;
-                self.pending_get_next_chunk = None;
+
                 if let Some(tx) = self.next_chunk.pop_front() {
+                    self.last_sent_id = Some(tx.confirmation.tx_number);
                     return Poll::Ready(Some(Ok(tx)));
                 }
-                if let Some(subscription) = self.maybe_subscription.as_mut() {
-                    return Self::poll_subscription(subscription, cx);
+                if self.maybe_subscription.is_some() {
+                    return self.poll_subscription(cx);
                 }
-                unreachable!("AcceptedTxStream::get_next_chunk must return an active subscription, a non-empty chunk of txs, or an error");
+                unreachable!(
+                    "get_next_chunk must return a subscription, transactions, or an error"
+                );
             }
-            Poll::Ready(Err(e)) => {
-                self.pending_get_next_chunk = None;
-                Poll::Ready(Some(Err(e)))
+            Poll::Ready(Err(e)) => Poll::Ready(Some(Err(e))),
+            Poll::Pending => {
+                self.pending_get_next_chunk = Some(pending);
+                Poll::Pending
             }
-            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -619,6 +692,61 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next_tx.confirmation.tx_number, num_txs);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_subscribe_reports_correct_identifier_on_lag() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+        let ledger_db = LedgerDb::with_reader(storage_manager.create_ledger_storage()).unwrap();
+        // Use a small channel size to easily trigger lag
+        let cache = TransactionCache::<S, TestRuntime<S>>::new(ledger_db, 0, 4);
+        let writer = cache.write_handle();
+
+        // Subscribe first (broadcast channel only sends new messages to subscribers)
+        let mut stream = cache.subscribe_txs();
+
+        // Insert transactions and receive them to update the tracked identifier
+        for i in 0..3 {
+            writer.insert(build_mock_confirmation(i)).await;
+            let item = tokio::time::timeout(std::time::Duration::from_millis(100), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert_eq!(item.confirmation.tx_number, i);
+        }
+
+        // Now insert more transactions than the channel can hold WITHOUT reading them.
+        // This will cause the subscriber to lag.
+        // Channel size is 4, so inserting 6 more should cause lag.
+        for i in 3..9 {
+            writer.insert(build_mock_confirmation(i)).await;
+        }
+
+        // The next item should be a lag error with disconnected_at = 2 (last received tx)
+        let item = tokio::time::timeout(std::time::Duration::from_millis(100), stream.next())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match item {
+            Err(SubscriptionStreamError::Lagged {
+                disconnected_at,
+                resumed_at,
+                skipped,
+            }) => {
+                assert_eq!(
+                    disconnected_at,
+                    Some(2),
+                    "disconnected_at should be the last successfully received tx_number"
+                );
+                // resumed_at should be disconnected_at + skipped + 1
+                assert_eq!(resumed_at, Some(2 + skipped + 1));
+            }
+            Ok(_) => panic!("Expected Lagged error, got Ok"),
+            Err(other) => panic!("Expected Lagged error, got {other:?}"),
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]

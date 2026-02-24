@@ -4,7 +4,6 @@ use std::fmt::Debug;
 use derivative::Derivative;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use thiserror::Error;
-use tracing::error;
 
 use crate::Amount;
 

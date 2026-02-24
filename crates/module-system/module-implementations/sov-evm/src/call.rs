@@ -72,8 +72,7 @@ where
         TxSignedAndRecovered,
         u64,
     )> {
-        let mut block_env = self.block_env(state)?;
-        block_env.basefee = 0; // Set fee to zero for evm execution. Gas is paid for by the sov gas meter instead
+        let block_env = self.block_env(state)?;
 
         // The signature was checked before the call was dispatched,
         // and the signer was recovered during the authentication process.
@@ -295,9 +294,7 @@ where
         start_timer!(set_state);
 
         // Note that we get the time unconditionally here, as we want to store the time in the pending transaction and have consistent gas metering across zk/native
-        let time = self
-            .chain_state_module
-            .get_oracle_time_with_fallback(state)?;
+        let time = self.chain_state_module.get_oracle_time(state)?;
 
         let pending_tx = PendingTransaction::new(tx, receipt, time);
         self.pending_transactions.push(&pending_tx, state)?;
@@ -316,8 +313,14 @@ where
         #[cfg(feature = "native")]
         let set_accessory_state_time = {
             start_timer!(set_accessory_state);
+            // Places this after timer, so we don't have unmetered parts
+            let tx_fee_paid = state
+                .try_as_basic_gas_meter()
+                .expect("TxState should have BasicGasMeter")
+                .gas_info()
+                .gas_value;
             // Since we just inserted tx above, we need to increment `pending_len`` by 1.
-            self.set_accessory_state(head, &pending_tx, pending_len + 1, state)
+            self.set_accessory_state(head, &pending_tx, pending_len + 1, tx_fee_paid, state)
                 .unwrap_infallible();
             set_accessory_state.elapsed()
         };
@@ -463,6 +466,7 @@ where
         head: crate::Block,
         pending_transaction: &PendingTransaction,
         pending_tx_len: u64,
+        tx_fee_paid: sov_bank::Amount,
         state: &mut impl TxState<S>,
     ) -> Result<(), Infallible> {
         assert!(pending_tx_len > 0);
@@ -483,6 +487,7 @@ where
             ),
             state,
         )?;
+        self.receipt_fees.set(&tx_index, &tx_fee_paid, state)?;
 
         let hash = pending_transaction.transaction.signed_transaction.hash();
         self.transaction_hashes.set(hash, &tx_index, state)?;

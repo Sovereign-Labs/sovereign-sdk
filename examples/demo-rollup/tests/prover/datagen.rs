@@ -14,7 +14,7 @@ type S = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
     sov_risc0_adapter::Risc0,
     sov_mock_zkvm::MockZkvm,
-    sov_address::MultiAddressEvm,
+    demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
 >;
 

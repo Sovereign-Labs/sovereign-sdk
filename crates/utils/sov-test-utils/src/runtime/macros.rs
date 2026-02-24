@@ -150,9 +150,12 @@ macro_rules! generate_runtime_without_capabilities {
                 })
                 .unwrap();
 
-                let schema_endpoint = StandardSchemaEndpoint::new(
+                // StandardSchemaEndpoint resolves chain hash based on current height.
+                // This ensures wallets get the correct chain hash during chain hash transitions.
+                let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
                     Self::CHAIN_HASH.into(),
+                    api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");
                 let axum_router = axum_router.merge(schema_endpoint.axum_router());
@@ -278,6 +281,7 @@ macro_rules! generate_runtime {
                         sequencer_registry: &mut self.sequencer_registry,
                         accounts: &mut self.accounts,
                         uniqueness: &mut self.uniqueness,
+                        chain_state: &mut self.chain_state,
                         operator_incentives: &mut self.operator_incentives,
                         prover_incentives: &mut self.prover_incentives,
                         attester_incentives: &mut self.attester_incentives,
@@ -331,6 +335,7 @@ macro_rules! generate_runtime {
                         sequencer_registry: &mut self.sequencer_registry,
                         accounts: &mut self.accounts,
                         uniqueness: &mut self.uniqueness,
+                        chain_state: &mut self.chain_state,
                         operator_incentives: &mut self.operator_incentives,
                         prover_incentives: &mut self.prover_incentives,
                         attester_incentives: &mut self.attester_incentives,

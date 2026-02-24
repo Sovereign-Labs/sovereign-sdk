@@ -204,6 +204,7 @@ async fn measure_time(req: Request, next: Next) -> impl IntoResponse {
             response_status: status,
             response_body_size: exact_or_lower,
             handler_processing_time: duration,
+            is_ws: false,
         };
         tracker.submit_known_metric(point);
     });
