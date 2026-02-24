@@ -530,8 +530,8 @@ fn check_namespace_end_boundary(
             )));
         };
         // Determine the row of the boundary proof from the trusted `last_proven_share_idx`.
-        // This avoids assuming that the boundary proof is always for the last row root in
-        // `namespace_row_roots`, which may include extra "containing" rows without actual shares.
+        // Security invariant: the boundary proof must terminate the namespace in the last
+        // candidate row root. Otherwise, rows after `row_idx` could still contain this namespace.
         let row_len = block_header.row_length() as u64;
         let proof_start_in_row = last_share_proof.start_idx() as u64;
         let last_proven_share_idx_u64 = last_proven_share_idx as u64;
@@ -556,11 +556,24 @@ fn check_namespace_end_boundary(
         }
         let row_idx = usize::try_from(row_idx_u64)
             .map_err(|_| IncompleteNamespace(IncompleteNamespaceError::corrupted_proof()))?;
-        let Some(last_row_root) = namespace_row_roots.get(row_idx) else {
+        if row_idx >= namespace_row_roots.len() {
             return Err(IncompleteNamespace(
                 IncompleteNamespaceError::corrupted_proof(),
             ));
-        };
+        }
+        let last_row_idx = namespace_row_roots
+            .len()
+            .checked_sub(1)
+            .expect("row roots cannot be empty in this branch");
+        if row_idx != last_row_idx {
+            tracing::error!(
+                row_idx,
+                last_row_idx,
+                "MissingBlobs in check_namespace_end_boundary: boundary proof does not target last namespace row"
+            );
+            return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
+        }
+        let last_row_root = namespace_row_roots[last_row_idx];
 
         let Some(raw_leaves) = last_share.as_ref().map(|s| vec![s.data()]) else {
             return Err(IncompleteNamespace(
@@ -713,6 +726,56 @@ mod tests {
         assert!(matches!(
             err,
             IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Missing))
+        ));
+    }
+
+    #[test]
+    fn boundary_proof_for_non_last_row_is_rejected() {
+        let block = from_testnet_with_tail_padding::filtered_block();
+        let namespace = from_testnet_with_tail_padding::ROLLUP_PARAMS.rollup_batch_namespace;
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Fixture must have multiple candidate namespace row roots"
+        );
+
+        let first_row = &block.rollup_batch_data.data.rows()[0];
+        assert!(
+            !first_row.shares.is_empty(),
+            "First namespace row should contain shares"
+        );
+        let all_before_last = &first_row.shares[..first_row.shares.len().saturating_sub(1)];
+        let last_share = first_row
+            .shares
+            .last()
+            .expect("First row should contain at least one share")
+            .clone();
+        let last_share_proof = first_row
+            .proof
+            .narrow_range(all_before_last, &[], *namespace)
+            .expect("Failed to build boundary proof for first row");
+        let boundary_proof = NamespaceBoundaryProof {
+            last_share_proof: last_share_proof.into(),
+            last_share: Some(last_share),
+        };
+
+        // Force computed row_idx = 0 (first row), which is not the last row.
+        let last_proven_share_idx = boundary_proof.last_share_proof.start_idx() as usize;
+        let err = check_namespace_end_boundary(
+            &block.header,
+            &namespace_row_roots,
+            namespace,
+            last_proven_share_idx,
+            Some(boundary_proof),
+        )
+        .expect_err("Boundary proof from non-last row must be rejected");
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
         ));
     }
 }

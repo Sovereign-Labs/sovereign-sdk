@@ -292,15 +292,22 @@ async fn wait_until_head_at_least(
     service: &CelestiaService,
     target_height: u64,
 ) -> anyhow::Result<u64> {
+    const MAX_POLLS: usize = 120;
+    const POLL_INTERVAL: Duration = Duration::from_millis(250);
+
     let mut head = service.get_head_block_header().await?.height();
-    for _ in 0..40 {
+    for _ in 0..MAX_POLLS {
         if head >= target_height {
             return Ok(head);
         }
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        tokio::time::sleep(POLL_INTERVAL).await;
         head = service.get_head_block_header().await?.height();
     }
-    Ok(head)
+
+    Err(anyhow::anyhow!(
+        "Timed out waiting for head >= target height: target={target_height}, head={head}, polls={MAX_POLLS}, interval_ms={}",
+        POLL_INTERVAL.as_millis()
+    ))
 }
 
 #[tokio::test(flavor = "multi_thread")]
