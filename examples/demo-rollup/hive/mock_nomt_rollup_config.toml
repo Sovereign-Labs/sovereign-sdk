@@ -15,7 +15,7 @@ kernel_commit_concurrency = 2
 kernel_hashtable_buckets = 500
 kernel_preallocate_ht = false
 # Pruner stays disabled unless `pruner_block_interval` is set explicitly.
-# pruner_versions_to_keep = 20
+pruner_versions_to_keep = 20
 
 [runner]
 da_polling_interval_ms = 50
