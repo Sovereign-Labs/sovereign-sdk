@@ -10,6 +10,8 @@ If PR does not exist yet add a placeholder like `#PR_NUMBER`.
 
 2. **Description**: Attempt to derive a brief description of the change from the git commits on the current branch. 
 
+If the branch modifies the `examples/demo-rollup/tests/resync/data/mock_da.sqlite` file then it is considered breaking, prefix the description with `**Breaking change**``.
+
 If not possible, prompt the user to provide a description.
    - Start with the affected component (e.g., "EVM:", "DB:", "API:")
    - Use concise, clear language

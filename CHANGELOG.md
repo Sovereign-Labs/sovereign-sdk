@@ -4,6 +4,10 @@
 # 2026-02-24
 - #2511 Add pruning of generations via admin call message
 
+- #2511 **Breaking change** Add pruning of generations via admin call message
+# 2026-02-16
+- #2489 Non-breaking, but **important**: Celestia adapter now by default validates blocks fetched from RPC node.
+  This adds performance overhead. It can be disabled by setting `verify_on_fetch = false` in `da` section of rollup_config.toml. Do on your own risk.
 # 2026-02-17
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
   You can use `SOV_CELESTIA_RPC_URL` for setup.
