@@ -10,15 +10,16 @@ export default defineConfig({
   reporter: "html",
 
   use: {
-    baseURL: "http://localhost:5174",
+    baseURL: "http://127.0.0.1:5174",
     trace: "on-first-retry",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
 
   webServer: {
-    command: "pnpm run dev -- --port 5174",
-    url: "http://localhost:5174",
+    command: "npm run dev -- --host 127.0.0.1 --port 5174",
+    url: "http://127.0.0.1:5174",
+    timeout: 180_000,
     reuseExistingServer: !process.env.CI,
     env: {
       VITE_ROLLUP_URL: process.env.VITE_ROLLUP_URL || "http://localhost:12346",
