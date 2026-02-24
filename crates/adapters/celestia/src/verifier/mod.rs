@@ -1,8 +1,6 @@
 pub mod address;
 pub mod proofs;
 
-use std::cmp::Ordering;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::{Namespace, NamespacedHash, NS_SIZE};
 use nmt_rs::NamespacedSha2Hasher;
@@ -10,7 +8,7 @@ use sov_rollup_interface::da::{self, DaSpec, RelevantBlobs, RelevantProofs};
 
 use self::address::CelestiaAddress;
 use self::proofs::*;
-use crate::shares::shares_needed_for_bytes;
+use crate::shares::shares_needed_for_bytes_with_signer;
 use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
 };
@@ -276,6 +274,12 @@ fn prevalidate_blobs(
     } else if namespace_row_roots.is_empty() && !blobs.is_empty() {
         return Err(InvalidBlobData(BlobDataError::UnexpectedBlobs));
     } else if blobs.is_empty() && !namespace_row_roots.is_empty() {
+        tracing::debug!(
+            row_roots = namespace_row_roots.len(),
+            inclusion_proof = inclusion_proof.len(),
+            has_boundary = namespace_boundary_proof.is_some(),
+            "Prevalidate: empty blob list for non-empty namespace row roots"
+        );
         // If inclusion proofs are present, continue with regular verification:
         // they may correspond to unsupported blobs that are intentionally skipped by extraction.
         if !inclusion_proof.is_empty() {
@@ -288,12 +292,9 @@ fn prevalidate_blobs(
         // one, which is less than our namespace, and one which is greater.
         // Because shares are ordered by namespace, there can only be at most one such row.
         // The row before that one will only have shares that are strictly less than our namespace, and the row after will only have shares that are strictly greater.
-
-        if namespace_row_roots.len() > 1 {
-            return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
-        }
-        let row_root = namespace_row_roots[0];
-        // Verifying that there are no shares in this single row.
+        // In practice, there may be multiple row roots that "contain" the namespace while still
+        // having no actual shares from this namespace (e.g. parity-row range behavior). We accept
+        // the absence proof as soon as it verifies against one of the candidate row roots.
         let Some(NamespaceBoundaryProof {
             last_share_proof, ..
         }) = namespace_boundary_proof
@@ -302,12 +303,33 @@ fn prevalidate_blobs(
                 ProofError::Missing,
             )));
         };
-        return last_share_proof
-            .verify_complete_namespace(row_root, &Vec::<Vec<u8>>::new(), *namespace)
-            .map(|_| PreValidationOutput::EarlyReturn)
-            .map_err(|e| {
-                IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Invalid(e)))
-            });
+
+        let empty_leaves: Vec<Vec<u8>> = Vec::new();
+        let mut last_error = None;
+        for (idx, row_root) in namespace_row_roots.iter().enumerate() {
+            match last_share_proof.verify_complete_namespace(row_root, &empty_leaves, *namespace) {
+                Ok(_) => {
+                    tracing::debug!(
+                        row_index = idx,
+                        "Prevalidate: empty namespace absence proof verified"
+                    );
+                    return Ok(PreValidationOutput::EarlyReturn);
+                }
+                Err(e) => {
+                    tracing::trace!(
+                        row_index = idx,
+                        error = ?e,
+                        "Prevalidate: absence proof mismatch for candidate row"
+                    );
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        let error = last_error.expect("namespace_row_roots is known to be non-empty");
+        return Err(IncompleteNamespace(IncompleteNamespaceError::ProofError(
+            ProofError::Invalid(error),
+        )));
     }
 
     if blobs.len() > inclusion_proof.len() {
@@ -340,7 +362,10 @@ fn authenticate_blob_data(
     // The accumulator length is considered trusted as a record of the bytes that the rollup saw.
     // This does not mean that it can be trusted to contain the correct bytes.
     let blob_data_read = blob.blob.accumulator();
-    let num_shares_to_prove = shares_needed_for_bytes(blob_data_read.len()).max(1);
+    let first_share = blob_row_proof.first_share().map_err(InvalidRowProof)?;
+    let has_signer = first_share.signer().is_some();
+    let num_shares_to_prove =
+        shares_needed_for_bytes_with_signer(blob_data_read.len(), has_signer).max(1);
     let num_shares_with_proofs = blob_row_proof
         .range_proofs
         .iter()
@@ -430,7 +455,8 @@ fn authenticate_blob_data(
     // Failure means a bug.
     debug_assert!(signer_checked, "Bug. Signer checking has been skipped");
     let sequence_length = sequence_length.expect("sequence length should be set by this point");
-    let shares_occupied_total = shares_needed_for_bytes(sequence_length as usize);
+    let shares_occupied_total =
+        shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer);
     Ok(shares_occupied_total)
 }
 
@@ -479,7 +505,10 @@ fn verify_skipped_blob(
         .verify_range(row_root, &raw_leaves, namespace.into())
         .map_err(|e| InvalidRowProof(RowProofError::ProofError(ProofError::Invalid(e))))?;
 
-    let shares_occupied_total = shares_needed_for_bytes(sequence_length as usize);
+    let shares_occupied_total = shares_needed_for_bytes_with_signer(
+        sequence_length as usize,
+        first_share.signer().is_some(),
+    );
 
     Ok(shares_occupied_total)
 }
@@ -516,31 +545,38 @@ fn check_namespace_end_boundary(
                 ProofError::Missing,
             )));
         };
-        // Upsize everything to u64, even though zkVM is 32 bit, and such big namespace rows are highly unlikely,
-        // better to be on the safe side.
-        let last_share_proof_start_idx = (namespace_row_roots.len() as u64 - 1)
-            .checked_mul(block_header.row_length() as u64)
-            .expect("Square overflow")
-            .checked_add(last_share_proof.start_idx() as u64)
-            .expect("Square overflow");
-
-        // Last proven share should match index of the proof
-        // This index is trusted, because it is derived from sequence length,
-        // which is tied to the row root.
-        match (last_proven_share_idx as u64).cmp(&last_share_proof_start_idx) {
-            Ordering::Less => {
-                return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
-            }
-            Ordering::Equal => {}
-            Ordering::Greater => {
-                return Err(IncompleteNamespace(
-                    IncompleteNamespaceError::corrupted_proof(),
-                ));
-            }
+        // Determine the row of the boundary proof from the trusted `last_proven_share_idx`.
+        // This avoids assuming that the boundary proof is always for the last row root in
+        // `namespace_row_roots`, which may include extra "containing" rows without actual shares.
+        let row_len = block_header.row_length() as u64;
+        let proof_start_in_row = last_share_proof.start_idx() as u64;
+        let last_proven_share_idx_u64 = last_proven_share_idx as u64;
+        if last_proven_share_idx_u64 < proof_start_in_row {
+            tracing::error!(
+                last_proven_share_idx = last_proven_share_idx_u64,
+                proof_start_in_row,
+                "MissingBlobs in check_namespace_end_boundary: proven index is before proof start in row"
+            );
+            return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
-        let last_row_root = namespace_row_roots
-            .last()
-            .expect("Empty namespace row roots have been checked before");
+
+        let delta = last_proven_share_idx_u64
+            .checked_sub(proof_start_in_row)
+            .expect("checked above");
+        let row_idx_u64 = delta.checked_div(row_len).expect("row_len cannot be 0");
+        let rem = delta % row_len;
+        if rem != 0 {
+            return Err(IncompleteNamespace(
+                IncompleteNamespaceError::corrupted_proof(),
+            ));
+        }
+        let row_idx = usize::try_from(row_idx_u64)
+            .map_err(|_| IncompleteNamespace(IncompleteNamespaceError::corrupted_proof()))?;
+        let Some(last_row_root) = namespace_row_roots.get(row_idx) else {
+            return Err(IncompleteNamespace(
+                IncompleteNamespaceError::corrupted_proof(),
+            ));
+        };
 
         let Some(raw_leaves) = last_share.as_ref().map(|s| vec![s.data()]) else {
             return Err(IncompleteNamespace(
@@ -558,6 +594,11 @@ fn check_namespace_end_boundary(
             )));
         };
         if *namespace >= lrs.min_namespace() {
+            tracing::error!(
+                namespace = ?namespace,
+                right_sibling_min = ?lrs.min_namespace(),
+                "MissingBlobs in check_namespace_end_boundary: right sibling is not strictly greater"
+            );
             return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
     }

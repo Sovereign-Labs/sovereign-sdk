@@ -360,6 +360,7 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyhow::Result<()> {
+    let _guard = sov_test_utils::initialize_logging();
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let base_config = dev_node.get_config().await?;
 
