@@ -206,6 +206,42 @@ fn call_upfront_cost(
     }))
 }
 
+fn call_caller(request: &TransactionRequest) -> Address {
+    // Keep `eth_call` parity with Ethereum clients: when `from` is omitted,
+    // execution uses the zero address as the caller.
+    request.from.unwrap_or_default()
+}
+
+fn enforce_call_upfront_cost<DB: Database>(
+    request: &mut TransactionRequest,
+    block_env: &BlockEnv,
+    db: &mut DB,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    let balance = db
+        .basic(call_caller(request))
+        .map_err(Into::into)?
+        .map(|account| account.balance)
+        .unwrap_or_default();
+    if let Some(upfront) = call_upfront_cost(request, block_env, balance)? {
+        if request.gas.is_none() {
+            request.gas = Some(upfront.gas_limit);
+        }
+
+        if balance < upfront.total_cost {
+            return Err(RpcInvalidTransactionError::InsufficientFunds {
+                cost: upfront.total_cost,
+                balance,
+            }
+            .into());
+        }
+    }
+
+    Ok(())
+}
+
 impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
@@ -475,12 +511,26 @@ where
         let cfg = self.cfg_infallible(state);
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
 
+        // For simulation parity with real execution, omitted nonce defaults to the
+        // caller's current EVM account nonce (not zero).
+        if let (None, Some(from)) = (request.nonce, request.from) {
+            let account_nonce = self
+                .accounts
+                .get(&from, maybe_archival_state.deref_mut())
+                .unwrap_infallible()
+                .map(|acc| acc.nonce)
+                .unwrap_or_default();
+            request.nonce = Some(account_nonce);
+        }
+
         if !has_overrides {
             // Fast path for the common case where no call overrides are provided.
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            enforce_call_upfront_cost(&mut request, &block_env, &mut evm_db)?;
+
             let tx_env = prepare_call_env(&block_env, request)?;
             let caller = tx_env.caller;
             let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
-            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
             let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
             verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
                 .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
@@ -497,36 +547,7 @@ where
             block_overrides,
         )?;
 
-        // For simulation parity with real execution, omitted nonce defaults to the
-        // caller's current EVM account nonce (not zero).
-        if let (None, Some(from)) = (request.nonce, request.from) {
-            let account_nonce = self
-                .accounts
-                .get(&from, maybe_archival_state.deref_mut())
-                .unwrap_infallible()
-                .map(|acc| acc.nonce)
-                .unwrap_or_default();
-            request.nonce = Some(account_nonce);
-        }
-
-        let caller = request.from.unwrap_or_default();
-        let balance = evm_state
-            .basic(caller)?
-            .map(|account| account.balance)
-            .unwrap_or_default();
-        if let Some(upfront) = call_upfront_cost(&request, &block_env, balance)? {
-            if request.gas.is_none() {
-                request.gas = Some(upfront.gas_limit);
-            }
-
-            if balance < upfront.total_cost {
-                return Err(RpcInvalidTransactionError::InsufficientFunds {
-                    cost: upfront.total_cost,
-                    balance,
-                }
-                    .into());
-            }
-        }
+        enforce_call_upfront_cost(&mut request, &block_env, &mut evm_state)?;
 
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
