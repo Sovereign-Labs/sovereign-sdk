@@ -1322,6 +1322,7 @@ dependencies = [
  "sov-prover-incentives",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-solana-offchain-auth",
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
@@ -3927,6 +3928,7 @@ dependencies = [
  "sov-accounts",
  "sov-attester-incentives",
  "sov-bank",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-operator-incentives",
  "sov-paymaster",
@@ -4040,10 +4042,10 @@ dependencies = [
  "anyhow",
  "bincode",
  "derive-new",
+ "hex",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
- "sov-rollup-interface",
 ]
 
 [[package]]
@@ -4257,6 +4259,22 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "sov-solana-offchain-auth"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sov-modules-api",
+ "sov-state",
  "tracing",
 ]
 
