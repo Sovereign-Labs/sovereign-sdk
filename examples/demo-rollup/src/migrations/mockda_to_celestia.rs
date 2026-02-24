@@ -73,19 +73,9 @@ struct Args {
     new_sequencer_rollup_address: Option<String>,
 
     /// Rollup slot at cutover.
-    /// Must be provided together with `--celestia-height-at-cutover`, unless
-    /// `--rollup-slot-at-cutover-from-db` is used.
-    #[arg(long = "rollup-slot-at-cutover", visible_alias = "cutover-rollup-slot")]
+    ///
+    /// If not provided, the script will use the latest rollup slot from the DB.
     rollup_slot_at_cutover: Option<u64>,
-
-    /// Resolve the rollup slot at cutover from the DB head slot.
-    /// Mutually exclusive with `--rollup-slot-at-cutover`.
-    #[arg(
-        long = "rollup-slot-at-cutover-from-db",
-        visible_alias = "cutover-rollup-slot-from-db",
-        default_value_t = false
-    )]
-    rollup_slot_at_cutover_from_db: bool,
 
     /// Celestia height at cutover.
     /// Required for all migrations.
@@ -186,8 +176,8 @@ struct MigrationReport {
     pre_state_root: String,
     post_state_root: String,
     db_head_rollup_slot: Option<u64>,
-    resolved_rollup_slot_at_cutover: Option<u64>,
-    rollup_slot_at_cutover_source: Option<String>,
+    rollup_slot_at_cutover: u64,
+    rollup_slot_at_cutover_source: String,
     known_sequencers_removed: usize,
     known_sequencers_added: usize,
     sequencer_mappings: Vec<SequencerMappingReportEntry>,
@@ -203,8 +193,8 @@ struct MigrationReport {
     paymaster_payers_total: usize,
     paymaster_non_all_found: usize,
     paymaster_non_all_policies_deleted: usize,
-    genesis_da_height_before: Option<u64>,
-    genesis_da_height_after: Option<u64>,
+    genesis_da_height_before: u64,
+    genesis_da_height_after: u64,
     notes: Vec<String>,
 }
 
@@ -250,9 +240,9 @@ struct MigrationSession {
 }
 
 struct CutoverCalibration {
-    resolved_rollup_slot_at_cutover: Option<u64>,
-    rollup_slot_at_cutover_source: Option<String>,
-    calibrated_genesis_da_height: Option<u64>,
+    rollup_slot_at_cutover: u64,
+    rollup_slot_at_cutover_source: String,
+    calibrated_genesis_da_height: u64,
 }
 
 struct SequencerContext {
@@ -397,17 +387,14 @@ fn run() -> anyhow::Result<()> {
     let (batch_receipt_ledger_patch, batch_receipt_stats) =
         make_batch_receipt_patch(&ledger_db, &sequencer_context.plan, &mut notes)?;
 
-    if !args.dry_run {
+    let post_state_root = if args.dry_run {
+        next_state_root
+    } else {
         let mut ledger_change_set = make_ledger_root_patch(&ledger_db, next_state_root.as_ref())?;
         ledger_change_set.merge(batch_receipt_ledger_patch);
         storage_manager
             .commit_migration_change_set_at_head(head_slot_number, change_set, ledger_change_set)
             .context("failed to commit migration changeset at head version")?;
-    }
-
-    let post_state_root = if args.dry_run {
-        next_state_root
-    } else {
         let (post_storage, post_ledger_reader) = storage_manager
             .create_state_for_migration()
             .context("failed to create post-migration storage view")?;
@@ -456,8 +443,8 @@ fn run() -> anyhow::Result<()> {
         pre_state_root: pre_state_root.to_string(),
         post_state_root: post_state_root.to_string(),
         db_head_rollup_slot,
-        resolved_rollup_slot_at_cutover: cutover.resolved_rollup_slot_at_cutover,
-        rollup_slot_at_cutover_source: cutover.rollup_slot_at_cutover_source,
+        rollup_slot_at_cutover: cutover.rollup_slot_at_cutover,
+        rollup_slot_at_cutover_source: cutover.rollup_slot_at_cutover_source.clone(),
         known_sequencers_removed: sequencer_context.plan.entries.len(),
         known_sequencers_added: sequencer_context.plan.entries.len(),
         sequencer_mappings,
@@ -476,9 +463,7 @@ fn run() -> anyhow::Result<()> {
             .deleted_non_all_paymaster_policies
             .len(),
         genesis_da_height_before,
-        genesis_da_height_after: cutover
-            .calibrated_genesis_da_height
-            .or(genesis_da_height_before),
+        genesis_da_height_after: cutover.calibrated_genesis_da_height,
         notes,
     };
 
@@ -573,26 +558,14 @@ fn resolve_cutover_calibration(
     db_head_rollup_slot: Option<u64>,
     notes: &mut Vec<String>,
 ) -> anyhow::Result<CutoverCalibration> {
-    if args.rollup_slot_at_cutover.is_some() && args.rollup_slot_at_cutover_from_db {
-        bail!(
-            "--rollup-slot-at-cutover and --rollup-slot-at-cutover-from-db are mutually exclusive"
-        );
-    }
-
-    let cutover_rollup_slot_requested =
-        args.rollup_slot_at_cutover.is_some() || args.rollup_slot_at_cutover_from_db;
-    if !cutover_rollup_slot_requested {
-        bail!("either --rollup-slot-at-cutover or --rollup-slot-at-cutover-from-db is required");
-    }
-
     let Some(celestia_height_at_cutover) = args.celestia_height_at_cutover else {
         bail!("--celestia-height-at-cutover is required for migration calibration");
     };
 
-    let (resolved_rollup_slot_at_cutover, rollup_slot_at_cutover_source) =
+    let (rollup_slot_at_cutover, rollup_slot_at_cutover_source) =
         if let Some(explicit_slot) = args.rollup_slot_at_cutover {
-            (Some(explicit_slot), Some("explicit-arg".to_string()))
-        } else if args.rollup_slot_at_cutover_from_db {
+            (explicit_slot, "explicit-arg".to_string())
+        } else {
             let resolved_slot = db_head_rollup_slot.ok_or_else(|| {
                 anyhow::anyhow!(
                 "--rollup-slot-at-cutover-from-db was requested, but DB head slot is unavailable"
@@ -601,17 +574,9 @@ fn resolve_cutover_calibration(
             notes.push(format!(
                 "resolved cutover rollup slot from DB head slot: {resolved_slot}"
             ));
-            (Some(resolved_slot), Some("db-head".to_string()))
-        } else {
-            (None, None)
+            (resolved_slot, "db-head".to_string())
         };
 
-    let rollup_slot_at_cutover = resolved_rollup_slot_at_cutover.ok_or_else(|| {
-        anyhow::anyhow!(
-            "failed to resolve rollup slot at cutover; provide --rollup-slot-at-cutover \
-             or --rollup-slot-at-cutover-from-db"
-        )
-    })?;
     let calibrated_genesis_da_height = celestia_height_at_cutover
         .checked_sub(rollup_slot_at_cutover)
         .ok_or_else(|| {
@@ -627,9 +592,9 @@ fn resolve_cutover_calibration(
     ));
 
     Ok(CutoverCalibration {
-        resolved_rollup_slot_at_cutover,
+        rollup_slot_at_cutover,
         rollup_slot_at_cutover_source,
-        calibrated_genesis_da_height: Some(calibrated_genesis_da_height),
+        calibrated_genesis_da_height,
     })
 }
 
@@ -800,7 +765,7 @@ fn decode_old_slot_information_entries(
 fn read_chain_state_genesis_da_height<S: NativeStorage>(
     storage: &S,
     module_discriminants: ModuleDiscriminants,
-) -> anyhow::Result<(SlotKey, Option<u64>)> {
+) -> anyhow::Result<(SlotKey, u64)> {
     let chain_state_genesis_da_height_key = SlotKey::singleton(&Prefix::new(
         module_discriminants.chain_state,
         OldChainState::GENESIS_DA_HEIGHT_ITEM_DISCRIMINANT,
@@ -814,33 +779,27 @@ fn read_chain_state_genesis_da_height<S: NativeStorage>(
                 "chain_state.genesis_da_height state value",
             )
         })
-        .transpose()?;
+        .transpose()?
+        .expect("Genesis DA height must have been set at genesis!");
 
     Ok((chain_state_genesis_da_height_key, genesis_da_height_before))
 }
 
 fn add_genesis_da_height_notes(
-    calibrated_genesis_da_height: Option<u64>,
-    genesis_da_height_before: Option<u64>,
+    calibrated_genesis_da_height: u64,
+    genesis_da_height_before: u64,
     notes: &mut Vec<String>,
 ) {
-    match (genesis_da_height_before, calibrated_genesis_da_height) {
-        (Some(before), Some(after)) if before == after => notes.push(format!(
+    let before = genesis_da_height_before;
+    let after = calibrated_genesis_da_height;
+    if before == after {
+        notes.push(format!(
             "chain_state.genesis_da_height remains unchanged at {after}"
-        )),
-        (Some(before), Some(after)) => notes.push(format!(
+        ));
+    } else {
+        notes.push(format!(
             "chain_state.genesis_da_height will be updated from {before} to {after}"
-        )),
-        (None, Some(after)) => notes.push(format!(
-            "chain_state.genesis_da_height was missing and will be set to {after}"
-        )),
-        (Some(before), None) => notes.push(format!(
-            "chain_state.genesis_da_height will remain at existing value {before}"
-        )),
-        (None, None) => notes.push(
-            "chain_state.genesis_da_height is missing and no cutover calibration was provided"
-                .to_string(),
-        ),
+        ));
     }
 }
 
@@ -933,21 +892,19 @@ where
 fn apply_genesis_da_height_update<WS>(
     checkpoint: &mut WS,
     chain_state_genesis_da_height_key: &SlotKey,
-    calibrated_genesis_da_height: Option<u64>,
+    calibrated_genesis_da_height: u64,
 ) -> anyhow::Result<()>
 where
     WS: StateWriter<User>,
 {
-    if let Some(new_genesis_da_height) = calibrated_genesis_da_height {
-        StateWriter::<User>::set(
-            checkpoint,
-            chain_state_genesis_da_height_key,
-            SlotValue::new(&new_genesis_da_height, &BorshCodec),
-        )
-        .with_context(|| {
-            format!("failed to set chain_state.genesis_da_height to {new_genesis_da_height}")
-        })?;
-    }
+    StateWriter::<User>::set(
+        checkpoint,
+        chain_state_genesis_da_height_key,
+        SlotValue::new(&calibrated_genesis_da_height, &BorshCodec),
+    )
+    .with_context(|| {
+        format!("failed to set chain_state.genesis_da_height to {calibrated_genesis_da_height}")
+    })?;
 
     Ok(())
 }
