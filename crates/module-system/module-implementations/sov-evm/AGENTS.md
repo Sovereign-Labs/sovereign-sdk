@@ -77,6 +77,12 @@ For the same tx/block, values must agree across:
 - Do not introduce non-deterministic state access in module/core logic.
 - Avoid hidden behavior drift between native and proof-relevant paths.
 
+### 6. Supported transaction types (Hard Constraint)
+
+- `sov-evm` must accept only `EIP-1559` and `EIP-7702` transaction envelopes.
+- `Legacy`, `EIP-2930`, and `EIP-4844` transactions must be rejected at authentication and execution ingress.
+- Do not relax this policy without explicit product approval and matching tests for the new support matrix.
+
 ## Failure Pattern Matrix (PR Lessons)
 
 | Pattern | Repeated in PR(s) | Typical root cause | What to verify before merge |

@@ -34,12 +34,12 @@ pub struct AccountData {
 }
 
 impl AccountData {
-    /// Empty code hash.
+    #[allow(missing_docs)]
     pub fn empty_code() -> B256 {
         KECCAK_EMPTY
     }
 
-    /// Account balance.
+    #[allow(missing_docs)]
     pub fn balance(balance: u64) -> U256 {
         U256::from(balance)
     }

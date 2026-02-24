@@ -42,6 +42,11 @@ const MIN_BLOCK_GAS_LIMIT: u64 = 5_000_000;
 /// Setting an infinitely high gas limit would allow DOS by the sequencer/operator.
 const MAX_TX_GAS_LIMIT: u64 = 10_000_000_000;
 
+fn ensure_supported_transaction_type_for_execution(tx: &TransactionSigned) -> anyhow::Result<()> {
+    crate::authenticate::ensure_supported_transaction_type(tx)
+        .map_err(|err| anyhow::anyhow!("EVM transaction error: {err}"))
+}
+
 /// EVM call message.
 #[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema, UniversalWallet)]
 #[serialize(Borsh, Serde)]
@@ -239,10 +244,7 @@ where
         start_timer!(total);
         // Note: This does *not* verify the signature
         let tx = convert_to_tx_signed(message)?;
-
-        if matches!(tx, alloy_consensus::EthereumTxEnvelope::Eip4844(_)) {
-            anyhow::bail!("Eip4844 not supported");
-        }
+        ensure_supported_transaction_type_for_execution(&tx)?;
 
         start_timer!(fetch_state);
         let (cfg, cfg_env, block, tx_env, tx, pending_len) =
@@ -711,6 +713,8 @@ pub(crate) fn get_spec_id(spec: &[(u64, SpecId)], block_number: u64) -> SpecId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559, TxEip2930, TxEip7702, TxLegacy};
+    use alloy_primitives::Signature;
 
     #[test]
     fn spec_id_lookup() {
@@ -720,5 +724,43 @@ mod tests {
         assert_eq!(get_spec_id(&spec, 1), SpecId::CONSTANTINOPLE);
         assert_eq!(get_spec_id(&spec, 2), SpecId::BERLIN);
         assert_eq!(get_spec_id(&spec, 3), SpecId::BERLIN);
+    }
+
+    #[test]
+    fn execution_supports_eip1559_and_eip7702_only() {
+        let eip1559 = EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+            TxEip1559::default(),
+            Signature::test_signature(),
+            Default::default(),
+        ));
+        assert!(ensure_supported_transaction_type_for_execution(&eip1559).is_ok());
+
+        let eip7702 = EthereumTxEnvelope::Eip7702(Signed::new_unchecked(
+            TxEip7702::default(),
+            Signature::test_signature(),
+            Default::default(),
+        ));
+        assert!(ensure_supported_transaction_type_for_execution(&eip7702).is_ok());
+
+        let legacy = EthereumTxEnvelope::Legacy(Signed::new_unchecked(
+            TxLegacy::default(),
+            Signature::test_signature(),
+            Default::default(),
+        ));
+        assert!(ensure_supported_transaction_type_for_execution(&legacy).is_err());
+
+        let eip2930 = EthereumTxEnvelope::Eip2930(Signed::new_unchecked(
+            TxEip2930::default(),
+            Signature::test_signature(),
+            Default::default(),
+        ));
+        assert!(ensure_supported_transaction_type_for_execution(&eip2930).is_err());
+
+        let eip4844 = EthereumTxEnvelope::Eip4844(Signed::new_unchecked(
+            alloy_consensus::TxEip4844::default(),
+            Signature::test_signature(),
+            Default::default(),
+        ));
+        assert!(ensure_supported_transaction_type_for_execution(&eip4844).is_err());
     }
 }

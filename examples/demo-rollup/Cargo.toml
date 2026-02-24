@@ -71,6 +71,7 @@ prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 alloy-primitives = { workspace = true }
+alloy-rlp = { workspace = true }
 
 
 [dev-dependencies]

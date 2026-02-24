@@ -3,19 +3,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use alloy_primitives::{hex, keccak256, Address, U256};
+use alloy_rlp::{Decodable, Header, PayloadView};
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Map, Value};
 
 const DEFAULT_CHAIN_ID: u64 = 7;
 const DEFAULT_BLOCK_GAS_LIMIT: u64 = 30_000_000;
-
-#[derive(Clone, Copy, Debug)]
-struct RlpItem {
-    is_list: bool,
-    payload_start: usize,
-    payload_len: usize,
-    item_end: usize,
-}
 
 fn usage(bin: &str) -> String {
     format!("Usage: {bin} <geth_genesis.json> <template_genesis_dir> <output_dir> [chain_rlp_path]")
@@ -130,145 +123,75 @@ fn parse_storage_map(
     Ok(normalized)
 }
 
-fn rlp_item_info(buf: &[u8], pos: usize) -> Result<RlpItem> {
-    if pos >= buf.len() {
-        bail!("RLP decode out of bounds");
-    }
-    let prefix = buf[pos];
-
-    let mk = |is_list: bool, payload_start: usize, payload_len: usize| -> Result<RlpItem> {
-        let item_end = payload_start
-            .checked_add(payload_len)
-            .ok_or_else(|| anyhow!("RLP length overflow"))?;
-        if item_end > buf.len() {
-            bail!("RLP length out of bounds");
-        }
-        Ok(RlpItem {
-            is_list,
-            payload_start,
-            payload_len,
-            item_end,
-        })
-    };
-
-    if prefix <= 0x7f {
-        return Ok(RlpItem {
-            is_list: false,
-            payload_start: pos,
-            payload_len: 1,
-            item_end: pos + 1,
-        });
-    }
-    if prefix <= 0xb7 {
-        let payload_len = (prefix - 0x80) as usize;
-        return mk(false, pos + 1, payload_len);
-    }
-    if prefix <= 0xbf {
-        let len_of_len = (prefix - 0xb7) as usize;
-        let payload_start = pos
-            .checked_add(1 + len_of_len)
-            .ok_or_else(|| anyhow!("RLP length overflow"))?;
-        if payload_start > buf.len() {
-            bail!("RLP long string length prefix out of bounds");
-        }
-        let payload_len = bytes_to_usize(&buf[pos + 1..payload_start])?;
-        return mk(false, payload_start, payload_len);
-    }
-    if prefix <= 0xf7 {
-        let payload_len = (prefix - 0xc0) as usize;
-        return mk(true, pos + 1, payload_len);
+fn next_rlp_item<'a>(input: &mut &'a [u8], context: &str) -> Result<&'a [u8]> {
+    if input.is_empty() {
+        bail!("Unexpected end of RLP stream while decoding {context}");
     }
 
-    let len_of_len = (prefix - 0xf7) as usize;
-    let payload_start = pos
-        .checked_add(1 + len_of_len)
+    let original = *input;
+    let mut after_header = original;
+    let header = Header::decode(&mut after_header)
+        .with_context(|| format!("Failed to decode RLP header for {context}"))?;
+    let header_len = original
+        .len()
+        .checked_sub(after_header.len())
+        .ok_or_else(|| anyhow!("RLP length underflow"))?;
+    let total_len = header_len
+        .checked_add(header.payload_length)
         .ok_or_else(|| anyhow!("RLP length overflow"))?;
-    if payload_start > buf.len() {
-        bail!("RLP long list length prefix out of bounds");
+    if total_len > original.len() {
+        bail!("RLP item for {context} extends beyond available input");
     }
-    let payload_len = bytes_to_usize(&buf[pos + 1..payload_start])?;
-    mk(true, payload_start, payload_len)
+
+    let (item, rest) = original.split_at(total_len);
+    *input = rest;
+    Ok(item)
 }
 
-fn bytes_to_usize(bytes: &[u8]) -> Result<usize> {
-    if bytes.len() > std::mem::size_of::<usize>() {
-        bail!("RLP length is too large");
+fn decode_rlp_list_items<'a>(raw: &'a [u8], context: &str) -> Result<Vec<&'a [u8]>> {
+    let mut cursor = raw;
+    let payload = Header::decode_raw(&mut cursor)
+        .with_context(|| format!("Failed to decode RLP payload for {context}"))?;
+    if !cursor.is_empty() {
+        bail!("Malformed RLP list for {context}: trailing bytes");
     }
-    let mut out = 0usize;
-    for byte in bytes {
-        out = out
-            .checked_mul(256)
-            .and_then(|v| v.checked_add(*byte as usize))
-            .ok_or_else(|| anyhow!("RLP length overflow"))?;
+    match payload {
+        PayloadView::List(items) => Ok(items),
+        PayloadView::String(_) => bail!("Expected RLP list for {context}"),
     }
-    Ok(out)
 }
 
-fn rlp_list_items(buf: &[u8], payload_start: usize, payload_len: usize) -> Result<Vec<RlpItem>> {
-    let mut out = Vec::new();
-    let mut pos = payload_start;
-    let end = payload_start
-        .checked_add(payload_len)
-        .ok_or_else(|| anyhow!("RLP length overflow"))?;
-    while pos < end {
-        let item = rlp_item_info(buf, pos)?;
-        pos = item.item_end;
-        out.push(item);
+fn decode_rlp_u64(raw: &[u8], context: &str) -> Result<u64> {
+    let mut field = raw;
+    let value = u64::decode(&mut field)
+        .with_context(|| format!("Failed to decode RLP quantity for {context}"))?;
+    if !field.is_empty() {
+        bail!("Malformed RLP quantity for {context}: trailing bytes");
     }
-    if pos != end {
-        bail!("Malformed RLP list payload");
-    }
-    Ok(out)
-}
-
-fn rlp_string_to_u64(buf: &[u8], item: RlpItem) -> Result<u64> {
-    if item.is_list {
-        bail!("Expected RLP string, found list");
-    }
-    let bytes = &buf[item.payload_start..item.payload_start + item.payload_len];
-    if bytes.is_empty() {
-        return Ok(0);
-    }
-    let mut out = 0u64;
-    for byte in bytes {
-        out = out
-            .checked_mul(256)
-            .and_then(|v| v.checked_add(*byte as u64))
-            .ok_or_else(|| anyhow!("RLP integer exceeds u64"))?;
-    }
-    Ok(out)
+    Ok(value)
 }
 
 fn load_chain_timestamps(chain_rlp_path: &Path) -> Result<Vec<(u64, u64)>> {
     let data = fs::read(chain_rlp_path)
         .with_context(|| format!("Failed to read {}", chain_rlp_path.display()))?;
     let mut out = Vec::new();
-    let mut pos = 0usize;
+    let mut cursor = data.as_slice();
 
-    while pos < data.len() {
-        let block_item = rlp_item_info(&data, pos)?;
-        if !block_item.is_list {
-            bail!("Top-level chain.rlp item must be a block list");
-        }
-        let block_fields = rlp_list_items(&data, block_item.payload_start, block_item.payload_len)?;
+    while !cursor.is_empty() {
+        let block_item = next_rlp_item(&mut cursor, "chain.rlp block")?;
+        let block_fields = decode_rlp_list_items(block_item, "chain.rlp block")?;
         if block_fields.is_empty() {
             bail!("Malformed block in chain.rlp");
         }
 
-        let header_item = block_fields[0];
-        if !header_item.is_list {
-            bail!("Malformed block header in chain.rlp");
-        }
-        let header_fields =
-            rlp_list_items(&data, header_item.payload_start, header_item.payload_len)?;
+        let header_fields = decode_rlp_list_items(block_fields[0], "chain.rlp block header")?;
         if header_fields.len() < 12 {
             bail!("Block header has fewer fields than expected");
         }
 
-        let block_number = rlp_string_to_u64(&data, header_fields[8])?;
-        let timestamp = rlp_string_to_u64(&data, header_fields[11])?;
+        let block_number = decode_rlp_u64(header_fields[8], "chain.rlp block number")?;
+        let timestamp = decode_rlp_u64(header_fields[11], "chain.rlp block timestamp")?;
         out.push((block_number, timestamp));
-        pos = block_item.item_end;
     }
 
     Ok(out)

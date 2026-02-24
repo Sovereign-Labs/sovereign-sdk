@@ -84,6 +84,7 @@ echo "Starting sov-demo-rollup backend (mock DA + NOMT) on :${BACKEND_RPC_PORT}"
 ROLLUP_PID=$!
 
 echo "Waiting for backend RPC on :${BACKEND_RPC_PORT}" >&2
+READY=0
 for _ in $(seq 1 300); do
   if python3 - <<PY
 import socket
@@ -96,22 +97,12 @@ except OSError:
 raise SystemExit(0)
 PY
   then
+    READY=1
     break
   fi
   sleep 0.1
 done
-
-if ! python3 - <<PY
-import socket
-s = socket.socket()
-s.settimeout(0.2)
-try:
-    s.connect(("127.0.0.1", int("${BACKEND_RPC_PORT}")))
-except OSError:
-    raise SystemExit(1)
-raise SystemExit(0)
-PY
-then
+if [[ "${READY}" -ne 1 ]]; then
   echo "Backend RPC did not become ready on :${BACKEND_RPC_PORT}" >&2
   exit 1
 fi

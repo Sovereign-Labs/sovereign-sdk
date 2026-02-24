@@ -1,12 +1,13 @@
+use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
 use alloy_consensus::{BlockBody, ReceiptEnvelope, ReceiptWithBloom, TxReceipt};
 use alloy_eips::BlockId;
 use alloy_eips::Encodable2718;
-use alloy_primitives::private::alloy_rlp::Encodable;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
+use alloy_rlp::Encodable;
 use alloy_rpc_types::{
-    state::StateOverride, AccessListResult, BlockNumberOrTag, BlockOverrides, FeeHistory,
+    state::StateOverride, AccessListResult, Block, BlockNumberOrTag, BlockOverrides, FeeHistory,
     Transaction, TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
@@ -15,19 +16,20 @@ use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::ErrorObjectOwned;
 use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
+use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
 use sov_rpc_eth_types::{
     invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RevertError,
     RpcInvalidTransactionError,
 };
+use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use std::ops::DerefMut;
 use tracing::trace;
 
-use super::{BlockWithTransactionTimestamp, TransactionWithBlockTimestamp};
 use crate::Evm;
 
 #[rpc_gen(client, server)]
@@ -64,19 +66,17 @@ where
         block_hash: B256,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<BlockWithTransactionTimestamp>> {
+    ) -> RpcResult<Option<Block>> {
         trace!(
             ?block_hash,
             method = "eth_getBlockByHash",
             "EVM module JSON-RPC request"
         );
-        let full = details.unwrap_or_default();
-        let block = self.get_maybe_synthetic_block_for_rpc(
+        Ok(self.get_maybe_synthetic_block_for_rpc(
             Some(BlockId::Hash(block_hash.into())),
-            full.into(),
+            details.unwrap_or_default().into(),
             state,
-        )?;
-        Ok(block.map(super::with_block_transaction_timestamps))
+        )?)
     }
 
     /// Handler for: `eth_getBlockByNumber`
@@ -86,16 +86,18 @@ where
         block_id: Option<BlockId>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<BlockWithTransactionTimestamp>> {
+    ) -> RpcResult<Option<Block>> {
         trace!(
             ?block_id,
             method = "eth_getBlockByNumber",
             "EVM module JSON-RPC request"
         );
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let full = details.unwrap_or_default();
-        let block = self.get_maybe_synthetic_block_for_rpc(Some(block_id), full.into(), state)?;
-        Ok(block.map(super::with_block_transaction_timestamps))
+        Ok(self.get_maybe_synthetic_block_for_rpc(
+            Some(block_id),
+            details.unwrap_or_default().into(),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -194,9 +196,6 @@ where
 
     /// Handler for: `eth_feeHistory`
     /// Returns historical gas price and usage data for recent blocks.
-    ///
-    /// This endpoint helps wallets and users determine appropriate gas prices
-    /// by exposing the rollup's EIP-1559 style base fee history.
     #[rpc_method(name = "eth_feeHistory")]
     pub fn fee_history(
         &self,
@@ -228,10 +227,8 @@ where
         &self,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
-        let transaction = self
-            .get_transaction(hash, state)
-            .map(|tx| with_local_block_timestamp(self, tx, state));
+    ) -> RpcResult<Option<Transaction>> {
+        let transaction = self.get_transaction(hash, state);
         trace!(
             %hash,
             ?transaction,
@@ -248,7 +245,7 @@ where
         block_hash: B256,
         index: U64,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
+    ) -> RpcResult<Option<Transaction>> {
         trace!(
             %block_hash,
             index = index.to::<u64>(),
@@ -274,7 +271,7 @@ where
         block: BlockNumberOrTag,
         index: U64,
         state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<TransactionWithBlockTimestamp>> {
+    ) -> RpcResult<Option<Transaction>> {
         trace!(
             ?block,
             index = index.to::<u64>(),
@@ -321,7 +318,6 @@ where
     }
 
     /// Handler for: `eth_call`
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,
@@ -410,17 +406,72 @@ where
             "EVM module JSON-RPC request"
         );
 
-        let ResultAndState { result, .. } = self.call(request, block_id, state)?;
+        // Add 1,000 bytes to account for all Transaction fields besides calldata.
+        let tx_size = request
+            .input
+            .input()
+            .as_ref()
+            .map(|input| input.len())
+            .unwrap_or(0)
+            .saturating_add(1000);
 
-        match result {
-            ExecutionResult::Success { gas_used, .. } => Ok(U64::from(gas_used)),
+        let ResultAndState {
+            result,
+            state: changes,
+        } = self.call(request, block_id, state)?;
+
+        let (gas_used, logs) = match result {
+            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
             ExecutionResult::Revert { output, .. } => {
-                Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
+                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
             }
             ExecutionResult::Halt { reason, gas_used } => {
-                Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
             }
-        }
+        };
+
+        self.db(state)
+            .try_commit(changes)
+            .expect("Gas meter is initialized with INF");
+
+        // Charge for logs storage in the receipt.
+        // Other receipt fields are small and covered by the constant margin.
+        let logs_size = self
+            .receipts
+            .codec()
+            .value_codec()
+            .encode_to_vec(&logs)
+            .len();
+        let logs_size =
+            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
+        charge_write(
+            state,
+            Accessory::NAMESPACE,
+            &self.receipts.slot_key(&u64::MAX),
+            logs_size,
+        )
+        .map_err(into_rpc_error)?;
+
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter");
+
+        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
+        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
+        let gas_used =
+            u32::try_from(gas_used).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
+        gas_meter
+            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
+            .expect("Gas meter is initialized with INF");
+
+        let total_gas_used =
+            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+
+        Ok(U64::from(apply_estimate_margins(total_gas_used)?))
     }
 
     /// Handler for `debug_traceBlockByNumber`
@@ -530,7 +581,10 @@ where
         for tx_idx in tx_range {
             let tx = self.tx(tx_idx, state)?;
             let Some((receipt, _)) = self.receipt(tx_idx, state) else {
-                return Ok(Vec::new());
+                return Err(EthApiError::EvmCustom(format!(
+                    "missing receipt for sealed transaction index {tx_idx}",
+                ))
+                .into());
             };
             let logs_bloom = receipt.receipt.bloom();
             let receipt = alloy_consensus::Receipt {
@@ -685,7 +739,7 @@ fn get_transaction_for_block_index<S: Spec>(
     block: crate::MaybeSealedBlock,
     index: u64,
     state: &mut ApiStateAccessor<S>,
-) -> Result<Option<TransactionWithBlockTimestamp>, EthApiError>
+) -> Result<Option<Transaction>, EthApiError>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
@@ -698,7 +752,6 @@ where
 
     let tx_idx = block.transactions_start() + index;
     let tx = evm.tx(tx_idx, state)?;
-    let block_timestamp = Some(block.timestamp());
     let tx = evm.build_tx_with_maybe_effective_gas_price(
         tx,
         block.hash(),
@@ -708,27 +761,30 @@ where
         tx_idx,
         state,
     );
-    Ok(Some(super::with_block_timestamp(tx, block_timestamp)))
-}
-
-fn with_local_block_timestamp<S: Spec>(
-    evm: &Evm<S>,
-    tx: Transaction,
-    state: &mut ApiStateAccessor<S>,
-) -> TransactionWithBlockTimestamp
-where
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    let block_timestamp = tx
-        .block_number
-        .and_then(|block_number| evm.get_maybe_sealed_block(block_number, state))
-        .map(|block| block.timestamp());
-    super::with_block_timestamp(tx, block_timestamp)
+    Ok(Some(tx))
 }
 
 fn parse_debug_block_id(raw: &str) -> Result<BlockId, ErrorObjectOwned> {
+    let block_tag = match raw {
+        "latest" => Some(BlockNumberOrTag::Latest),
+        "pending" => Some(BlockNumberOrTag::Pending),
+        "earliest" => Some(BlockNumberOrTag::Earliest),
+        "safe" => Some(BlockNumberOrTag::Safe),
+        "finalized" => Some(BlockNumberOrTag::Finalized),
+        _ => None,
+    };
+    if let Some(tag) = block_tag {
+        return Ok(BlockId::Number(tag));
+    }
+
     if raw.starts_with("0x") && raw.len() == 66 {
         return Ok(BlockId::Hash(parse_hash(raw)?.into()));
+    }
+
+    if !raw.starts_with("0x") {
+        return Err(invalid_params_rpc_err(
+            "invalid argument 0: expected block hash, hex block number, or block tag",
+        ));
     }
 
     let block_number = parse_hex_quantity(raw)?;
@@ -791,4 +847,66 @@ fn parse_storage_slot_index(raw: &str) -> Result<U256, ErrorObjectOwned> {
     let decoded = hex::decode(normalized)
         .map_err(|_| invalid_params_rpc_err(format!("invalid hex in storage key: \"{raw}\"")))?;
     Ok(U256::from_be_slice(&decoded))
+}
+
+const ESTIMATE_GAS_ABSOLUTE_MARGIN: u64 = 100_000;
+
+/// Returns `gas * 1.5 + 100_000`.
+fn apply_estimate_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
+    (gas / 2)
+        .checked_mul(3)
+        .and_then(|with_relative_margin| {
+            with_relative_margin.checked_add(ESTIMATE_GAS_ABSOLUTE_MARGIN)
+        })
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
+}
+
+#[cfg(test)]
+mod estimate_gas_tests {
+    use super::apply_estimate_margins;
+    use sov_rpc_eth_types::RpcInvalidTransactionError;
+
+    #[test]
+    fn apply_estimate_margins_adds_relative_and_absolute_components() {
+        assert_eq!(apply_estimate_margins(200_000).unwrap(), 400_000);
+    }
+
+    #[test]
+    fn apply_estimate_margins_detects_overflow() {
+        assert!(matches!(
+            apply_estimate_margins(u64::MAX),
+            Err(RpcInvalidTransactionError::GasUintOverflow)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_debug_block_id;
+    use alloy_eips::{BlockId, BlockNumberOrTag};
+
+    #[test]
+    fn parse_debug_block_id_accepts_tags() {
+        assert_eq!(parse_debug_block_id("latest").unwrap(), BlockId::latest());
+        assert_eq!(
+            parse_debug_block_id("pending").unwrap(),
+            BlockId::Number(BlockNumberOrTag::Pending),
+        );
+        assert_eq!(
+            parse_debug_block_id("safe").unwrap(),
+            BlockId::Number(BlockNumberOrTag::Safe),
+        );
+        assert_eq!(
+            parse_debug_block_id("finalized").unwrap(),
+            BlockId::Number(BlockNumberOrTag::Finalized),
+        );
+    }
+
+    #[test]
+    fn parse_debug_block_id_rejects_decimal_number() {
+        let err = parse_debug_block_id("42").unwrap_err();
+        assert!(err
+            .message()
+            .contains("expected block hash, hex block number, or block tag"));
+    }
 }

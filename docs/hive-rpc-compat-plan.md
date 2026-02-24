@@ -45,69 +45,13 @@ Explicitly out of scope in P0:
 - fixture-history dependent reads (`latest/safe/finalized` fixture checks, fixture tx/receipt/log replay expectations)
 - `/blocks/*.rlp` import
 
-## Current Results (Parsed)
-Source report:
-- `workspace/logs/full-20260220-182301-postfix-full-20260220-182301/1771608183-4599637a35f64d8defb49a34b0be308f.json` (under Hive repo root)
-
-Full suite totals:
-- total: `200`
-- pass: `41`
-- fail: `159`
-
-P0 profile totals:
-- p0 total: `27`
-- p0 pass: `27`
-- p0 fail: `0`
-
-Failing method buckets (full suite):
-- `eth_simulateV1`: `91`
-- `eth_getBlockByNumber`: `9`
-- `eth_getLogs`: `6`
-- `eth_getTransactionReceipt`: `7`
-- `eth_getTransactionByHash`: `7`
-- `eth_call`: `6`
-- `eth_estimateGas`: `4`
-- `eth_getProof`: `3`
-- `eth_getBlockReceipts`: `3`
-- `eth_getTransactionCount`: `2`
-- `eth_getBlockTransactionCountByHash`: `2`
-- `eth_getBalance`: `2`
-- `eth_createAccessList`: `2`
-- `debug_getRawHeader`: `2`
-- `debug_getRawBlock`: `2`
-- `eth_getTransactionByBlockNumberAndIndex`: `1`
-- `eth_getTransactionByBlockHashAndIndex`: `1`
-- `eth_getStorageAt`: `1`
-- `eth_getCode`: `1`
-- `eth_getBlockTransactionCountByNumber`: `1`
-
-Latest targeted outcomes:
-- `eth_getLogs/filter-error-future-block-range`: `pass`
-- `eth_getLogs/filter-error-reversed-block-range`: `pass`
-- `eth_call/call-contract`: `fail` (fixture-address call returns `0x` due missing fixture-state context)
-- `eth_call/call-revert-abi-error`: `fail` (same root cause; not local revert-mapping semantics)
-
-Top failing tests (first 20):
-- `eth_getTransactionReceipt/get-legacy-receipt (sov-demo-rollup)`
-- `eth_getTransactionReceipt/get-setcode-tx (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-add-more-non-defined-BlockStateCalls-than-fit-but-now-with-fit (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-add-more-non-defined-BlockStateCalls-than-fit (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-basefee-too-low-with-validation-38012 (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-basefee-too-low-without-validation-38012-without-basefee-override (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-basefee-too-low-without-validation-38012 (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-big-block-state-calls-array (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-blobs (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-num-order-38020 (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-override-reflected-in-contract-simple (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-override-reflected-in-contract (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-timestamp-auto-increment (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-timestamp-non-increment (sov-demo-rollup)`
-- `debug_getRawTransaction/get-tx (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-timestamp-order-38021 (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-block-timestamps-incrementing (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-blockhash-complex (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-blockhash-simple (sov-demo-rollup)`
-- `eth_simulateV1/ethSimulate-blockhash-start-before-head (sov-demo-rollup)`
+## Result Tracking
+- Run artifacts are written under `<hive-dir>/workspace/logs/full-<timestamp>-<tag>/`.
+- `run-rpc-compat.sh` prints:
+  - full-suite totals (`total/pass/fail`)
+  - top failing method buckets
+  - scoped P0 totals when `--profile p0` is used
+- Treat full-suite numbers as moving baselines; do not hardcode machine-local paths or counts in this doc.
 
 ## Implementation in Repository
 1. Profiled runner:
@@ -115,7 +59,8 @@ Top failing tests (first 20):
   - `--profile full`
   - `--profile p0` (alias of `p0-nonhistorical`)
   - `--profile p0-nonhistorical`
-- For `p0`, the script runs full rpc-compat and then gates on a fixed P0 test-name regex.
+- For `p0`, the script runs full rpc-compat and then gates on scoped P0 test-name regexes from:
+  - `examples/demo-rollup/hive/p0-nonhistorical-tests.regex`
 - Reason: rpc-compat `--sim.limit` filtering is too coarse for method-level subsetting.
 
 2. No chain replay fallback in this PR:
@@ -130,7 +75,7 @@ Top failing tests (first 20):
 Build + run P0 gate:
 
 ```bash
-bash /home/nikolai/workspace/sovereign-sdk/examples/demo-rollup/hive/run-rpc-compat.sh \
+bash examples/demo-rollup/hive/run-rpc-compat.sh \
   --build-image \
   --profile p0 \
   --tag p0-nonhistorical \
@@ -140,7 +85,7 @@ bash /home/nikolai/workspace/sovereign-sdk/examples/demo-rollup/hive/run-rpc-com
 Run full suite baseline (non-gating in phase-1):
 
 ```bash
-bash /home/nikolai/workspace/sovereign-sdk/examples/demo-rollup/hive/run-rpc-compat.sh \
+bash examples/demo-rollup/hive/run-rpc-compat.sh \
   --build-image \
   --profile full \
   --tag full-baseline

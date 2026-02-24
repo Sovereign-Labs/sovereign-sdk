@@ -35,6 +35,7 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+P0_SCOPE_FILE="${SCRIPT_DIR}/p0-nonhistorical-tests.regex"
 
 BUILD_IMAGE=0
 RUN_TAG="run"
@@ -121,8 +122,23 @@ if [[ -z "${SIM_LIMIT}" ]]; then
       # intentionally excluding fixture-history dependent reads.
       # rpc-compat's simulator-level filtering is too coarse for method subsets,
       # so this profile runs the full suite and evaluates pass/fail only for the
-      # scoped P0 test names below.
-      PROFILE_SCOPE_REGEX='^(client launch|eth_chainId/get-chain-id|net_version/get-network-id|eth_syncing/check-syncing|eth_sendRawTransaction/|eth_getTransactionByHash/(get-empty-tx|get-notfound-tx)|eth_getTransactionReceipt/(get-empty-tx|get-notfound-tx)|eth_getBalance/get-balance-unknown-account|eth_getCode/get-code-unknown-account|eth_getStorageAt/(get-storage-invalid-key-too-large|get-storage-invalid-key|get-storage-unknown-account)|eth_getTransactionCount/get-nonce-unknown-account|eth_getBlockByHash/(get-block-by-empty-hash|get-block-by-notfound-hash)|eth_getBlockByNumber/get-block-notfound|eth_getBlockReceipts/(get-block-receipts-empty|get-block-receipts-future|get-block-receipts-not-found)|eth_createAccessList/create-al-value-transfer|eth_estimateGas/estimate-simple-transfer)'
+      # scoped P0 test names listed in ${P0_SCOPE_FILE}.
+      if [[ ! -f "${P0_SCOPE_FILE}" ]]; then
+        log "Missing P0 scope file: ${P0_SCOPE_FILE}"
+        exit 1
+      fi
+      P0_SCOPE_TERMS="$(
+        awk '
+          /^[[:space:]]*(#|$)/ { next }
+          { out = (out == "" ? $0 : out "|" $0) }
+          END { print out }
+        ' "${P0_SCOPE_FILE}"
+      )"
+      if [[ -z "${P0_SCOPE_TERMS}" ]]; then
+        log "P0 scope file is empty: ${P0_SCOPE_FILE}"
+        exit 1
+      fi
+      PROFILE_SCOPE_REGEX="^(${P0_SCOPE_TERMS})$"
       ;;
     *)
       log "Unknown profile: ${PROFILE} (expected full|p0|p0-nonhistorical)"
