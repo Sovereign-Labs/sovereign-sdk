@@ -17,6 +17,7 @@ borsh = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["alloc", "derive"] }
 strum = { workspace = true, features = ["derive"] }
 schemars = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 
 sov-accounts = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
@@ -34,6 +35,7 @@ sov-operator-incentives = { workspace = true }
 sov-prover-incentives = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-sequencer-registry = { workspace = true }
+sov-solana-offchain-auth = { workspace = true }
 sov-state = { workspace = true }
 sov-synthetic-load = { workspace = true }
 sov-kernels = { workspace = true }
@@ -43,28 +45,43 @@ sov-test-utils = { workspace = true, optional = true }
 
 [features]
 default = []
+arbitrary = [
+	"dep:arbitrary",
+	"sov-address/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-accounts/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-evm/arbitrary",
+	"sov-paymaster/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-sequencer-registry/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils?/arbitrary",
+	"sov-uniqueness/arbitrary"
+]
 native = [
-    "sov-accounts/native",
-    "sov-attester-incentives/native",
-    "sov-bank/native",
-    "sov-capabilities/native",
-    "sov-chain-state/native",
-    "sov-evm/native",
-    "sov-kernels/native",
-    "sov-modules-api/native",
-    "sov-modules-stf-blueprint/native",
-    "sov-uniqueness/native",
-    "sov-operator-incentives/native",
-    "sov-prover-incentives/native",
-    "sov-rollup-interface/native",
-    "sov-sequencer-registry/native",
-    "sov-state/native",
-    "sov-synthetic-load/native",
-    "sov-blob-storage/native",
-    "sov-rollup-apis",
-    "sov-paymaster/native",
-    "sov-address/native",
-    "sov-test-modules/native"
+	"sov-accounts/native",
+	"sov-attester-incentives/native",
+	"sov-bank/native",
+	"sov-capabilities/native",
+	"sov-chain-state/native",
+	"sov-evm/native",
+	"sov-kernels/native",
+	"sov-modules-api/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-uniqueness/native",
+	"sov-operator-incentives/native",
+	"sov-prover-incentives/native",
+	"sov-rollup-interface/native",
+	"sov-sequencer-registry/native",
+	"sov-state/native",
+	"sov-synthetic-load/native",
+	"sov-blob-storage/native",
+	"sov-rollup-apis",
+	"sov-paymaster/native",
+	"sov-address/native",
+	"sov-test-modules/native",
+	"sov-solana-offchain-auth/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.

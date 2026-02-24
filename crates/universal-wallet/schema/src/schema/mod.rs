@@ -306,6 +306,11 @@ impl Schema {
         Ok(schema)
     }
 
+    /// Get the chain data for the schema.
+    pub fn chain_data(&self) -> &ChainData {
+        &self.chain_data
+    }
+
     #[cfg(not(feature = "serde"))]
     pub fn metadata_hash(&self) -> Result<[u8; 32], SchemaError> {
         // In borsh-only context, the hash must have been deserialized

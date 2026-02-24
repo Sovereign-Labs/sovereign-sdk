@@ -3526,6 +3526,7 @@ name = "demo-stf"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "borsh",
  "schemars 0.8.22",
  "serde",
@@ -3546,6 +3547,7 @@ dependencies = [
  "sov-rollup-apis",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-solana-offchain-auth",
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
@@ -11201,6 +11203,7 @@ dependencies = [
  "sov-rpc-eth-types",
  "sov-sequencer",
  "sov-sequencer-registry",
+ "sov-solana-offchain-auth",
  "sov-sp1-adapter",
  "sov-state",
  "sov-stf-runner",

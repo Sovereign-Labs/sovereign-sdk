@@ -596,6 +596,48 @@ pub mod with_mixed_v0_and_v1_blobs {
     }
 }
 
+pub mod from_mocha_invalid_row_proof {
+    use super::*;
+    pub const DATA_PATH: &str = "test_data/block_mocha_invalid_row_proof";
+    pub const ROLLUP_PARAMS: RollupParams = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(*b"sov-soak-a"),
+        rollup_proof_namespace: Namespace::const_v0(*b"sov-soak-p"),
+    };
+
+    pub const HEIGHT: u64 = 10207148;
+
+    pub fn filtered_block() -> FilteredCelestiaBlock {
+        let path = make_test_path(DATA_PATH);
+        filtered_block_from_path(
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+            &path,
+        )
+        .unwrap()
+    }
+
+    pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
+        (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+
+    pub async fn update_test_data(client: &celestia_client::Client) {
+        let path = make_test_path(DATA_PATH);
+
+        let signers = serde_json::json!({"signers": vec![ADDR_4]});
+        write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
+
+        let block_header = client.header().get_by_height(HEIGHT).await.unwrap();
+        save_blobs(
+            client,
+            &path,
+            &block_header,
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+        )
+        .await;
+    }
+}
+
 fn generate_payload_with_batches(batches: usize, batch_size: usize) -> PayloadData {
     // Not random, but not the same bytes
     let mut rng = rand::rngs::SmallRng::from_seed([1; 32]);
@@ -718,8 +760,6 @@ async fn save_blobs(
 ) {
     write_to_file(&path.join(HEADER_JSON), &block_header).unwrap();
 
-    let signers = serde_json::json!({"signers": Vec::<String>::new()});
-    write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
     let rollup_batch_rows = client
         .share()
         .get_namespace_data(block_header.height(), APP_VERSION, batch_namespace)

@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use demo_stf::runtime::Runtime;
-use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
+use demo_stf::MultiAddressEvmSolana;
+use sov_address::{EthereumAddress, FromVmAddress};
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams};
 use sov_celestia_adapter::CelestiaService;
 use sov_db::ledger_db::LedgerDb;
@@ -27,6 +28,7 @@ use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
+use crate::solana_offchain_endpoint::solana_offchain_router;
 use crate::{eth_dev_signer, ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
 /// Rollup with CelestiaDa
@@ -35,7 +37,8 @@ pub struct CelestiaDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-type CelestiaRollupSpec<M> = ConfigurableSpec<CelestiaSpec, Risc0, MockZkvm, MultiAddressEvm, M>;
+type CelestiaRollupSpec<M> =
+    ConfigurableSpec<CelestiaSpec, Risc0, MockZkvm, MultiAddressEvmSolana, M>;
 
 impl RollupBlueprint<Native> for CelestiaDemoRollup<Native>
 where
@@ -51,7 +54,7 @@ where
     CelestiaRollupSpec<WitnessGeneration>: PluggableSpec,
     <CelestiaRollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
 {
-    type Spec = CelestiaRollupSpec<Native>;
+    type Spec = CelestiaRollupSpec<WitnessGeneration>;
     type Runtime = Runtime<Self::Spec>;
 }
 
@@ -131,8 +134,10 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             extension: rollup_config.extension_or_panic(),
             shutdown_receiver,
         };
+        let axum_router = solana_offchain_router(sequencer.clone());
 
         Ok(NodeEndpoints {
+            axum_router,
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
                 .remove_context(),
             ..Default::default()

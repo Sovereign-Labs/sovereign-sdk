@@ -228,6 +228,8 @@ where
             let estimated_gas = evm.eth_estimate_gas(
                 transaction_request.clone(),
                 Some(BlockId::pending()),
+                None,
+                None,
                 &mut state,
             )?;
             transaction_request.gas = Some(estimated_gas.to::<u64>());
