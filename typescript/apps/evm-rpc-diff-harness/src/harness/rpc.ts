@@ -58,7 +58,7 @@ function toRpcError(error: unknown, fallbackMessage: string): RpcErrorShape {
   return { code: null, message: fallbackMessage, raw: error };
 }
 
-function isHexQuantity(value: unknown): value is string {
+export function isHexQuantity(value: unknown): value is string {
   return typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value);
 }
 

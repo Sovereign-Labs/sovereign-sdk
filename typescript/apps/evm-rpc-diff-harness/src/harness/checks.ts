@@ -72,6 +72,77 @@ type ErrorConventionCase =
       raw: RpcErrorShape;
     };
 
+interface EstimateGasObservation {
+  setSimple: { values: string[]; above21000: boolean; stabilitySpread: number };
+  emitMultipleEvents: { values: string[]; above21000: boolean; stabilitySpread: number };
+  revertEstimate: { failed: boolean };
+}
+
+interface BlockShapeObservation {
+  latestHashesShape: { ok: boolean; issues: string[] };
+  latestFullShape: { ok: boolean; issues: string[] };
+}
+
+interface BlockNumberConsistencyObservation {
+  checks: { nonDecreasing: boolean; latestWithinRange: boolean };
+  blockNumberA: { validHexQuantity: boolean };
+  latestBlockNumber: { validHexQuantity: boolean };
+  blockNumberB: { validHexQuantity: boolean };
+}
+
+interface BlockTagStateReadsObservation {
+  blocks: { historicalComparable: boolean; sameBlock: boolean };
+  checks: {
+    atSecondMatchesExpected: boolean;
+    latestMatchesExpected: boolean;
+    atFirstMatchesExpectedWhenComparable: boolean | null;
+    pendingHasMessageIfErrored: boolean;
+  };
+}
+
+interface PendingToSealedObservation {
+  checks: {
+    txFoundEventually: boolean;
+    receiptFoundEventually: boolean;
+    receiptHasStatus: boolean;
+    receiptHashMatches: boolean;
+  };
+}
+
+interface BlockLookupObservation {
+  shapes: {
+    latestByNumber: { ok: boolean };
+    byHashShort: { ok: boolean };
+    byHashFull: { ok: boolean };
+  };
+  linkage: { hashMatchesByHash: boolean; numberMatchesByHash: boolean; hashMatchesFull: boolean };
+  txCount: {
+    supported: boolean;
+    validHex: boolean;
+    equalsEachOther: boolean;
+    matchesLatestArrayLength: boolean;
+    unsupportedError?: RpcErrorShape;
+  };
+  invalidHashBehavior: { returnedNull: boolean; error: RpcErrorShape | null };
+}
+
+interface FeeHistoryObservation {
+  shape: {
+    oldestBlockHex: boolean;
+    baseFeePerGasLength: number;
+    baseFeePerGasAllHex: boolean;
+    gasUsedRatioLength: number;
+    gasUsedRatioAllNumbers: boolean;
+    rewardShapeValid: boolean;
+  };
+  invalidTag: { ok: boolean; hasMessage?: boolean; message?: string };
+}
+
+interface BlockReceiptsObservation {
+  shapeOk: boolean;
+  countMatchesBlock: boolean;
+}
+
 function normalizeAddress(address: string, runtime: EndpointRuntime): string {
   const lower = address.toLowerCase();
   if (lower === runtime.wallet.address.toLowerCase()) {
@@ -160,6 +231,25 @@ function defaultComparison(anvil: EndpointObservation, rollup: EndpointObservati
     outcome: "FAIL",
     diff: minimalJsonDiff(anvil.normalized, rollup.normalized)
   };
+}
+
+function standardCompare<T>(
+  anvil: EndpointObservation,
+  rollup: EndpointObservation,
+  validate: (left: T, right: T) => string[] | ComparisonResult
+): ComparisonResult {
+  if (rollup.unsupported || isNotSupportedError(rollup.error)) {
+    return { outcome: "NOT_SUPPORTED", diff: { rollupError: rollup.error } };
+  }
+  if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
+    return { outcome: "FAIL", diff: { anvilError: anvil.error, rollupError: rollup.error } };
+  }
+  const result = validate(anvil.normalized as T, rollup.normalized as T);
+  if (Array.isArray(result)) {
+    if (result.length === 0) return { outcome: "PASS" };
+    return { outcome: "FAIL", diff: { failures: result, anvil: anvil.normalized, rollup: rollup.normalized } };
+  }
+  return result;
 }
 
 function buildFailureExecution(error: unknown): EndpointExecution {
@@ -977,33 +1067,7 @@ const checks: CheckDefinition[] = [
         ]
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: {
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as {
-        setSimple: { values: string[]; above21000: boolean; stabilitySpread: number };
-        emitMultipleEvents: { values: string[]; above21000: boolean; stabilitySpread: number };
-        revertEstimate: { failed: boolean };
-      };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<EstimateGasObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
       if (!left.setSimple.above21000 || !right.setSimple.above21000) {
         failures.push("setSimple estimates must be above 21,000 gas");
@@ -1037,19 +1101,8 @@ const checks: CheckDefinition[] = [
         failures.push("emitMultipleEvents estimate differs by more than 5x from anvil baseline");
       }
 
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: left,
-          rollup: right
-        }
-      };
-    }
+      return failures;
+    })
   },
   {
     name: "D.logs_filters_raw",
@@ -1182,28 +1235,7 @@ const checks: CheckDefinition[] = [
         requests: [byAddress.request, byTopic0.request, byIndexedTopic.request, byRange.request]
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: {
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as LogsFiltersCheckObservation;
-      const right = rollup.normalized as LogsFiltersCheckObservation;
+    compare: (anvil, rollup) => standardCompare<LogsFiltersCheckObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
       const expectedTxEvents = ["ComplexEvent", "SecondaryEvent"];
       const expectedComplexEvent = ["ComplexEvent"];
@@ -1241,19 +1273,8 @@ const checks: CheckDefinition[] = [
         expectedComplexEvent
       );
 
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: left,
-          rollup: right
-        }
-      };
-    }
+      return failures;
+    })
   },
   {
     name: "E.block_shape_raw",
@@ -1307,32 +1328,7 @@ const checks: CheckDefinition[] = [
         requests: [latestHashes.request, latestFull.request]
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: {
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as {
-        latestHashesShape: { ok: boolean; issues: string[] };
-        latestFullShape: { ok: boolean; issues: string[] };
-      };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<BlockShapeObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
       if (!left.latestHashesShape.ok || !left.latestFullShape.ok) {
         failures.push("Anvil baseline block shape validation failed");
@@ -1340,20 +1336,8 @@ const checks: CheckDefinition[] = [
       if (!right.latestHashesShape.ok || !right.latestFullShape.ok) {
         failures.push("Rollup block shape validation failed");
       }
-
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil,
-          rollup
-        }
-      };
-    }
+      return failures;
+    })
   },
   {
     name: "E.chain_fields_raw",
@@ -1834,32 +1818,7 @@ const checks: CheckDefinition[] = [
         requests
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: { rollupError: rollup.error }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as {
-        checks: { nonDecreasing: boolean; latestWithinRange: boolean };
-        blockNumberA: { validHexQuantity: boolean };
-        latestBlockNumber: { validHexQuantity: boolean };
-        blockNumberB: { validHexQuantity: boolean };
-      };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<BlockNumberConsistencyObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
       if (!left.blockNumberA.validHexQuantity || !left.latestBlockNumber.validHexQuantity || !left.blockNumberB.validHexQuantity) {
         failures.push("Anvil baseline returned invalid block number quantity shape");
@@ -1873,20 +1832,8 @@ const checks: CheckDefinition[] = [
       if (!right.checks.nonDecreasing || !right.checks.latestWithinRange) {
         failures.push("Rollup block number sequence is inconsistent");
       }
-
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: left,
-          rollup: right
-        }
-      };
-    }
+      return failures;
+    })
   },
   {
     name: "I.block_tag_state_reads_raw",
@@ -2027,35 +1974,7 @@ const checks: CheckDefinition[] = [
         ]
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: { rollupError: rollup.error }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as {
-        blocks: { historicalComparable: boolean; sameBlock: boolean };
-        checks: {
-          atSecondMatchesExpected: boolean;
-          latestMatchesExpected: boolean;
-          atFirstMatchesExpectedWhenComparable: boolean | null;
-          pendingHasMessageIfErrored: boolean;
-        };
-      };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<BlockTagStateReadsObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
 
       if (!left.checks.atSecondMatchesExpected || !left.checks.latestMatchesExpected) {
@@ -2078,27 +1997,19 @@ const checks: CheckDefinition[] = [
         failures.push("Rollup pending-tag eth_call errored without message string");
       }
 
-      if (failures.length === 0) {
-        const notes: string[] = [];
-        if (right.blocks.sameBlock) {
-          notes.push("Rollup sealed both writes in one block; historical tag assertion was skipped.");
-        }
-        if (left.blocks.sameBlock) {
-          notes.push("Anvil sealed both writes in one block; historical baseline assertion was skipped.");
-        }
+      if (failures.length > 0) return failures;
 
-        return notes.length > 0 ? { outcome: "PASS", notes } : { outcome: "PASS" };
+      const notes: string[] = [];
+      if (right.blocks.sameBlock) {
+        notes.push("Rollup sealed both writes in one block; historical tag assertion was skipped.");
+      }
+      if (left.blocks.sameBlock) {
+        notes.push("Anvil sealed both writes in one block; historical baseline assertion was skipped.");
       }
 
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: anvil.normalized,
-          rollup: rollup.normalized
-        }
-      };
-    }
+      if (notes.length > 0) return { outcome: "PASS" as const, notes };
+      return failures;
+    })
   },
   {
     name: "J.pending_to_sealed_tx_raw",
@@ -2270,34 +2181,7 @@ const checks: CheckDefinition[] = [
         ]
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: { rollupError: rollup.error }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as {
-        checks: {
-          txFoundEventually: boolean;
-          receiptFoundEventually: boolean;
-          receiptHasStatus: boolean;
-          receiptHashMatches: boolean;
-        };
-      };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<PendingToSealedObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
       const baselineChecks = [
         left.checks.txFoundEventually,
@@ -2322,19 +2206,8 @@ const checks: CheckDefinition[] = [
         failures.push("Rollup receipt transactionHash does not match sent tx hash");
       }
 
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: anvil.normalized,
-          rollup: rollup.normalized
-        }
-      };
-    }
+      return failures;
+    })
   },
   {
     name: "K.block_lookup_and_tx_count_raw",
@@ -2507,23 +2380,8 @@ const checks: CheckDefinition[] = [
         };
       }
 
-      const left = anvil.normalized as {
-        shapes: {
-          latestByNumber: { ok: boolean };
-          byHashShort: { ok: boolean };
-          byHashFull: { ok: boolean };
-        };
-        linkage: { hashMatchesByHash: boolean; numberMatchesByHash: boolean; hashMatchesFull: boolean };
-        txCount: {
-          supported: boolean;
-          validHex: boolean;
-          equalsEachOther: boolean;
-          matchesLatestArrayLength: boolean;
-          unsupportedError?: RpcErrorShape;
-        };
-        invalidHashBehavior: { returnedNull: boolean; error: RpcErrorShape | null };
-      };
-      const right = rollup.normalized as typeof left;
+      const left = anvil.normalized as BlockLookupObservation;
+      const right = rollup.normalized as BlockLookupObservation;
 
       if (!right.txCount.supported && isNotSupportedError(right.txCount.unsupportedError)) {
         return {
@@ -2649,37 +2507,7 @@ const checks: CheckDefinition[] = [
         requests
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: { rollupError: rollup.error }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as {
-        shape: {
-          oldestBlockHex: boolean;
-          baseFeePerGasLength: number;
-          baseFeePerGasAllHex: boolean;
-          gasUsedRatioLength: number;
-          gasUsedRatioAllNumbers: boolean;
-          rewardShapeValid: boolean;
-        };
-        invalidTag: { ok: boolean; hasMessage?: boolean; message?: string };
-      };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<FeeHistoryObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
 
       const leftShapeOk =
@@ -2710,19 +2538,8 @@ const checks: CheckDefinition[] = [
         failures.push("Rollup feeHistory invalid-tag error missing message");
       }
 
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: left,
-          rollup: right
-        }
-      };
-    }
+      return failures;
+    })
   },
   {
     name: "M.block_receipts_raw",
@@ -2809,27 +2626,7 @@ const checks: CheckDefinition[] = [
         requests
       };
     },
-    compare: (anvil, rollup) => {
-      if (rollup.unsupported || isNotSupportedError(rollup.error)) {
-        return {
-          outcome: "NOT_SUPPORTED",
-          diff: { rollupError: rollup.error }
-        };
-      }
-
-      if (anvil.error || rollup.error || !anvil.normalized || !rollup.normalized) {
-        return {
-          outcome: "FAIL",
-          diff: {
-            anvilError: anvil.error,
-            rollupError: rollup.error
-          }
-        };
-      }
-
-      const left = anvil.normalized as { shapeOk: boolean; countMatchesBlock: boolean };
-      const right = rollup.normalized as typeof left;
-
+    compare: (anvil, rollup) => standardCompare<BlockReceiptsObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
       if (!left.shapeOk || !left.countMatchesBlock) {
         failures.push("Anvil baseline block receipts shape/count validation failed");
@@ -2840,20 +2637,8 @@ const checks: CheckDefinition[] = [
       if (!right.countMatchesBlock) {
         failures.push("Rollup block receipts count does not match block transaction count");
       }
-
-      if (failures.length === 0) {
-        return { outcome: "PASS" };
-      }
-
-      return {
-        outcome: "FAIL",
-        diff: {
-          failures,
-          anvil: anvil.normalized,
-          rollup: rollup.normalized
-        }
-      };
-    }
+      return failures;
+    })
   }
 ];
 

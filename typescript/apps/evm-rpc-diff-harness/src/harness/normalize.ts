@@ -1,3 +1,5 @@
+import { isHexQuantity } from "./rpc";
+
 export interface DiffEntry {
   path: string;
   expected: unknown;
@@ -15,6 +17,7 @@ const VOLATILE_KEYS = new Set([
   "timestamp"
 ]);
 
+// Returns value unchanged if it's not a valid hex string (pass-through by design).
 function normalizeHex(value: string): string {
   if (!/^0x[0-9a-fA-F]*$/.test(value)) {
     return value;
@@ -151,10 +154,6 @@ function isHex(value: unknown, bytes?: number): boolean {
   }
 
   return true;
-}
-
-function isHexQuantity(value: unknown): boolean {
-  return typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value);
 }
 
 export interface ShapeReport {

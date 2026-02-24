@@ -6,7 +6,7 @@
   "scripts": {
     "build:contracts": "hardhat compile",
     "compare": "pnpm run build:contracts && tsx src/run.ts",
-    "test:anvil": "tsx src/scripts/testAnvil.ts",
+    "test:anvil": "pnpm run build:contracts && tsx src/scripts/testAnvil.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

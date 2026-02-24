@@ -22,6 +22,8 @@ ROLLUP_PORT=12346
 
 ANVIL_PID=""
 ROLLUP_PID=""
+ANVIL_LOG=""
+ROLLUP_LOG=""
 CONFIG_BACKED_UP=false
 
 # ── Cleanup ────────────────────────────────────────────────────────────────
@@ -45,6 +47,9 @@ cleanup() {
         echo "    Restoring original config"
         mv "${CONFIG_FILE}.bak" "$CONFIG_FILE"
     fi
+
+    [[ -n "$ANVIL_LOG" ]] && rm -f "$ANVIL_LOG"
+    [[ -n "$ROLLUP_LOG" ]] && rm -f "$ROLLUP_LOG"
 
     echo "==> Done."
 }
@@ -82,9 +87,9 @@ cargo build -p sov-demo-rollup --manifest-path "$PROJECT_ROOT/Cargo.toml"
 # ── 4. Kill stale processes on our ports ──────────────────────────────────
 echo "==> Checking for stale processes on ports..."
 for port in "$ANVIL_PORT" "$ROLLUP_PORT"; do
-    if pid=$(lsof -ti :"$port" 2>/dev/null); then
-        echo "    Killing stale process on port $port (PID $pid)"
-        kill $pid 2>/dev/null || true
+    if lsof -ti :"$port" > /dev/null 2>&1; then
+        echo "    Killing stale process(es) on port $port"
+        lsof -ti :"$port" 2>/dev/null | xargs kill 2>/dev/null || true
         sleep 0.5
     fi
 done
@@ -110,18 +115,17 @@ ROLLUP_PID=$!
 echo "    Rollup PID=$ROLLUP_PID  log=$ROLLUP_LOG"
 
 # ── 7. Wait for both to be ready ─────────────────────────────────────────
-wait_for_rpc() {
+wait_for_endpoint() {
     local url="$1"
     local name="$2"
+    local log_file="$3"
+    shift 3
     local max_attempts=60
     local attempt=0
 
-    echo "    Waiting for $name at $url..."
+    echo "    Waiting for $name..."
     while (( attempt < max_attempts )); do
-        if curl -sf -X POST "$url" \
-            -H "Content-Type: application/json" \
-            -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}' \
-            > /dev/null 2>&1; then
+        if curl -sf "$@" "$url" > /dev/null 2>&1; then
             echo "    $name is ready."
             return 0
         fi
@@ -131,37 +135,19 @@ wait_for_rpc() {
 
     echo "ERROR: $name did not become ready after ${max_attempts}s"
     echo "Last log lines:"
-    tail -20 "$3" || true
-    return 1
-}
-
-wait_for_rpc "http://127.0.0.1:$ANVIL_PORT" "Anvil" "$ANVIL_LOG"
-wait_for_rpc "http://127.0.0.1:$ROLLUP_PORT/rpc" "Rollup" "$ROLLUP_LOG"
-
-wait_for_sequencer_ready() {
-    local base_url="$1"
-    local name="$2"
-    local log_file="$3"
-    local max_attempts=60
-    local attempt=0
-
-    echo "    Waiting for $name sequencer to be ready..."
-    while (( attempt < max_attempts )); do
-        if curl -sf -o /dev/null "$base_url/sequencer/ready" 2>/dev/null; then
-            echo "    $name sequencer is ready."
-            return 0
-        fi
-        sleep 1
-        (( ++attempt ))
-    done
-
-    echo "ERROR: $name sequencer did not become ready after ${max_attempts}s"
-    echo "Last log lines:"
     tail -20 "$log_file" || true
     return 1
 }
 
-wait_for_sequencer_ready "http://127.0.0.1:$ROLLUP_PORT" "Rollup" "$ROLLUP_LOG"
+wait_for_endpoint "http://127.0.0.1:$ANVIL_PORT" "Anvil" "$ANVIL_LOG" \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+
+wait_for_endpoint "http://127.0.0.1:$ROLLUP_PORT/rpc" "Rollup RPC" "$ROLLUP_LOG" \
+    -X POST -H "Content-Type: application/json" \
+    -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+
+wait_for_endpoint "http://127.0.0.1:$ROLLUP_PORT/sequencer/ready" "Rollup sequencer" "$ROLLUP_LOG"
 
 # ── 8. Install harness dependencies ──────────────────────────────────────
 echo "==> Installing harness dependencies..."
