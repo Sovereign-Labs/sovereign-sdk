@@ -286,15 +286,18 @@ fn prevalidate_blobs(
             return Ok(PreValidationOutput::ContinueVerification);
         }
 
-        // We get a list of all row roots that "contain" our namespace (i.e. MIN <= NAMESPACE <= MAX)
-        // it's possible that there's a row whose root "contains" our namespace even though no shares from our namespace are actually present in that row.
-        // For that to be the case, the row needs to contain shares from at least two different namespaces,
-        // one, which is less than our namespace, and one which is greater.
-        // Because shares are ordered by namespace, there can only be at most one such row.
-        // The row before that one will only have shares that are strictly less than our namespace, and the row after will only have shares that are strictly greater.
-        // In practice, there may be multiple row roots that "contain" the namespace while still
-        // having no actual shares from this namespace (e.g. parity-row range behavior). We accept
-        // the absence proof as soon as it verifies against one of the candidate row roots.
+        // Security hardening: if multiple row roots "contain" the namespace (MIN <= NAMESPACE <= MAX),
+        // we cannot safely conclude full namespace absence from a single-row absence proof.
+        // This can happen because parity shares use MAX namespace, broadening row namespace ranges.
+        // Until completeness proof format can provide per-row absence evidence, fail closed.
+        if namespace_row_roots.len() > 1 {
+            tracing::warn!(
+                row_roots = namespace_row_roots.len(),
+                "Prevalidate: ambiguous empty namespace without inclusion proof; rejecting"
+            );
+            return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
+        }
+
         let Some(NamespaceBoundaryProof {
             last_share_proof, ..
         }) = namespace_boundary_proof
@@ -303,33 +306,14 @@ fn prevalidate_blobs(
                 ProofError::Missing,
             )));
         };
-
-        let empty_leaves: Vec<Vec<u8>> = Vec::new();
-        let mut last_error = None;
-        for (idx, row_root) in namespace_row_roots.iter().enumerate() {
-            match last_share_proof.verify_complete_namespace(row_root, &empty_leaves, *namespace) {
-                Ok(_) => {
-                    tracing::debug!(
-                        row_index = idx,
-                        "Prevalidate: empty namespace absence proof verified"
-                    );
-                    return Ok(PreValidationOutput::EarlyReturn);
-                }
-                Err(e) => {
-                    tracing::trace!(
-                        row_index = idx,
-                        error = ?e,
-                        "Prevalidate: absence proof mismatch for candidate row"
-                    );
-                    last_error = Some(e);
-                }
-            }
-        }
-
-        let error = last_error.expect("namespace_row_roots is known to be non-empty");
-        return Err(IncompleteNamespace(IncompleteNamespaceError::ProofError(
-            ProofError::Invalid(error),
-        )));
+        // Safe due to guard above (`row_roots.len() > 1` returns MissingBlobs).
+        let row_root = namespace_row_roots[0];
+        return last_share_proof
+            .verify_complete_namespace(row_root, &Vec::<Vec<u8>>::new(), *namespace)
+            .map(|_| PreValidationOutput::EarlyReturn)
+            .map_err(|e| {
+                IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Invalid(e)))
+            });
     }
 
     if blobs.len() > inclusion_proof.len() {
@@ -603,4 +587,132 @@ fn check_namespace_end_boundary(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_helper::files::{
+        from_testnet_no_shares, from_testnet_with_tail_padding, with_namespace_padding,
+        with_rollup_batch_data,
+    };
+    use crate::types::FilteredCelestiaBlock;
+
+    fn fixture_with_multiple_candidate_row_roots() -> (FilteredCelestiaBlock, Namespace) {
+        let candidates = [
+            (
+                from_testnet_no_shares::filtered_block(),
+                from_testnet_no_shares::ROLLUP_PARAMS.rollup_batch_namespace,
+            ),
+            (
+                from_testnet_with_tail_padding::filtered_block(),
+                from_testnet_with_tail_padding::ROLLUP_PARAMS.rollup_batch_namespace,
+            ),
+            (
+                with_namespace_padding::filtered_block(),
+                with_namespace_padding::ROLLUP_PARAMS.rollup_batch_namespace,
+            ),
+        ];
+
+        for (block, namespace) in candidates {
+            let root_count = block.header.get_row_roots_for_namespace(namespace).count();
+            if root_count > 1 {
+                return (block, namespace);
+            }
+        }
+
+        panic!("No fixture with multiple candidate row roots found");
+    }
+
+    #[test]
+    fn prevalidate_rejects_ambiguous_empty_namespace_without_inclusion_proofs() {
+        let (block, namespace) = fixture_with_multiple_candidate_row_roots();
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Test fixture must have multiple candidate row roots"
+        );
+
+        let empty_blobs: Vec<BlobWithSender> = Vec::new();
+        let empty_inclusion_proof: Vec<BlobProof> = Vec::new();
+        let err = match prevalidate_blobs(
+            &namespace_row_roots,
+            &empty_blobs,
+            namespace,
+            &empty_inclusion_proof,
+            &None,
+        ) {
+            Err(err) => err,
+            Ok(_) => panic!("Expected MissingBlobs for ambiguous empty namespace"),
+        };
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+        ));
+    }
+
+    #[test]
+    fn prevalidate_continues_when_inclusion_proofs_are_present_even_if_no_blobs() {
+        let (block, namespace) = fixture_with_multiple_candidate_row_roots();
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Test fixture must have multiple candidate row roots"
+        );
+
+        let empty_blobs: Vec<BlobWithSender> = Vec::new();
+        let non_empty_inclusion_proof = vec![BlobProof {
+            range_proofs: Vec::new(),
+        }];
+        let output = prevalidate_blobs(
+            &namespace_row_roots,
+            &empty_blobs,
+            namespace,
+            &non_empty_inclusion_proof,
+            &None,
+        )
+        .unwrap();
+
+        assert!(matches!(output, PreValidationOutput::ContinueVerification));
+    }
+
+    #[test]
+    fn prevalidate_single_row_requires_boundary_proof() {
+        let block = with_rollup_batch_data::filtered_block();
+        let namespace = with_rollup_batch_data::ROLLUP_PARAMS.rollup_batch_namespace;
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            namespace_row_roots.len(),
+            1,
+            "Test fixture must have exactly one candidate row root"
+        );
+
+        let empty_blobs: Vec<BlobWithSender> = Vec::new();
+        let empty_inclusion_proof: Vec<BlobProof> = Vec::new();
+        let err = match prevalidate_blobs(
+            &namespace_row_roots,
+            &empty_blobs,
+            namespace,
+            &empty_inclusion_proof,
+            &None,
+        ) {
+            Err(err) => err,
+            Ok(_) => panic!("Expected missing completeness proof for single-row absence path"),
+        };
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Missing))
+        ));
+    }
 }
