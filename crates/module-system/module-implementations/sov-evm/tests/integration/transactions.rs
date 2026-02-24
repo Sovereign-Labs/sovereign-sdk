@@ -1,6 +1,7 @@
 use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
+use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::BlockId;
 use alloy_primitives::FixedBytes;
 use alloy_primitives::Log;
@@ -43,8 +44,14 @@ fn test_receipt_fee_matches_balance_delta() {
     set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
-    let transfer =
-        create_transfer_tx_with_fee_params(0, &from, &to, value, 1_000_000_000, 987_654_321);
+    let transfer = create_transfer_tx_with_fee_params(
+        0,
+        &from,
+        &to,
+        value,
+        MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        0,
+    );
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -85,8 +92,14 @@ fn test_block_receipt_fee_matches_balance_delta() {
     set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
-    let transfer =
-        create_transfer_tx_with_fee_params(0, &from, &to, value, 1_000_000_000, 987_654_321);
+    let transfer = create_transfer_tx_with_fee_params(
+        0,
+        &from,
+        &to,
+        value,
+        MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        0,
+    );
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -132,8 +145,14 @@ fn test_receipt_uses_eip1559_formula_before_activation_height() {
     set_receipt_actual_fee_height(1_000_000);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
-    let transfer =
-        create_transfer_tx_with_fee_params(0, &from, &to, value, 1_000_000_000, 987_654_321);
+    let transfer = create_transfer_tx_with_fee_params(
+        0,
+        &from,
+        &to,
+        value,
+        MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        0,
+    );
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {

@@ -120,7 +120,8 @@ mod tests {
         let expected = TxEnv {
             tx_type: TransactionType::Eip1559.into(),
             caller: from,
-            gas_price: 0,
+            gas_price: 100,
+            gas_priority_fee: Some(0),
             gas_limit: 200,
             kind: TransactTo::Call(to),
             value: U256::from(300u64),

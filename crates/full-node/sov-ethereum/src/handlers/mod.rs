@@ -54,6 +54,7 @@ type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
 const IP_ADDRESS_ERROR: &str = "Unable to retrieve the peer IP address";
+const UNSUPPORTED_TX_TYPE_PREFIX: &str = "Unsupported transaction type";
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
@@ -169,7 +170,9 @@ where
             if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
                 &e
             {
-                if err_msg.contains("Only EIP1559") {
+                if err_msg.contains("Only EIP1559")
+                    || err_msg.contains(UNSUPPORTED_TX_TYPE_PREFIX)
+                {
                     return rpc_tx_rejected(format!("transaction type not supported: {err_msg}"));
                 }
             };
