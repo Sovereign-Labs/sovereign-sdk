@@ -45,6 +45,14 @@ fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
         .build()
         .unwrap();
     guest_pkg_to_options.insert("sov-demo-prover-guest-mock-risc0", guest_options.clone());
-    guest_pkg_to_options.insert("sov-demo-prover-guest-mock-nomt-risc0", guest_options);
+    guest_pkg_to_options.insert(
+        "sov-demo-prover-guest-celestia-risc0",
+        guest_options.clone(),
+    );
+    guest_pkg_to_options.insert(
+        "sov-demo-prover-guest-mock-nomt-risc0",
+        guest_options.clone(),
+    );
+    guest_pkg_to_options.insert("sov-demo-prover-guest-celestia-nomt-risc0", guest_options);
     guest_pkg_to_options
 }
