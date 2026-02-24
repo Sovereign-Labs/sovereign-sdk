@@ -419,19 +419,19 @@ where
             return Ok(result);
         }
 
-        let db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-        let mut evm_db = RevmState::builder().with_database(db).build();
+        let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+        let mut evm_state = RevmState::builder().with_database(evm_db).build();
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         apply_call_overrides(
-            &mut evm_db,
+            &mut evm_state,
             &mut block_env,
             state_overrides,
             block_overrides,
         )?;
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
-        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+        let result = executor::transact(&mut evm_state, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_state)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
     }
