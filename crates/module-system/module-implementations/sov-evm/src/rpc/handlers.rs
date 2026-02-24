@@ -323,8 +323,8 @@ where
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
-        _state_overrides: Option<StateOverride>,
-        _block_overrides: Option<Box<BlockOverrides>>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         trace!(
@@ -333,7 +333,9 @@ where
             "EVM module JSON-RPC request"
         );
 
-        let result = self.call(request, block_id, state)?.result;
+        let result = self
+            .call(request, block_id, state_overrides, block_overrides, state)?
+            .result;
         Ok(ensure_success(result)?)
     }
 
@@ -398,6 +400,8 @@ where
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
         trace!(
@@ -418,7 +422,7 @@ where
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_id, state)?;
+        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
 
         let (gas_used, logs) = match result {
             ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
@@ -430,6 +434,9 @@ where
             }
         };
 
+        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
+        // This intentionally includes override-based hypothetical state, because estimateGas
+        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
         self.db(state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");
