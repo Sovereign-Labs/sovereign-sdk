@@ -167,11 +167,23 @@ pub struct RangeProof {
 }
 
 #[cfg(feature = "native")]
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum InclusionProofBuildError {
+    #[error(
+        "supported shares exist in namespace {namespace:?}, but extracted blobs are empty (namespace share count: {end_of_ns})"
+    )]
+    SupportedSharesWithoutBlobs {
+        namespace: celestia_types::nmt::Namespace,
+        end_of_ns: usize,
+    },
+}
+
+#[cfg(feature = "native")]
 pub(crate) fn new_inclusion_proof(
     header: &crate::CelestiaHeader,
     rollup_data: &crate::types::NamespaceRelevantData,
     blobs: &[crate::types::BlobWithSender],
-) -> Vec<BlobProof> {
+) -> Result<Vec<BlobProof>, InclusionProofBuildError> {
     let mut needed_share_ranges = Vec::new();
 
     let mut prev_range_end: Option<usize> = None;
@@ -233,6 +245,20 @@ pub(crate) fn new_inclusion_proof(
                 == SUPPORTED_SHARE_VERSION
     });
 
+    // Invariant: if namespace has supported shares, extraction is expected to produce
+    // at least one blob. Empty `blobs` in this case indicates inconsistent extraction input.
+    if blobs.is_empty() && end_of_ns > 0 && namespace_has_supported_shares {
+        tracing::error!(
+            namespace = ?rollup_data.namespace,
+            end_of_ns,
+            "Invariant violation: supported shares exist but extracted blob list is empty"
+        );
+        return Err(InclusionProofBuildError::SupportedSharesWithoutBlobs {
+            namespace: rollup_data.namespace,
+            end_of_ns,
+        });
+    }
+
     if blobs.is_empty() && end_of_ns > 0 && !namespace_has_supported_shares {
         // If no supported blobs were extracted, the namespace may still contain
         // unsupported blobs (e.g. v0) that must be proven as skipped.
@@ -252,13 +278,13 @@ pub(crate) fn new_inclusion_proof(
         .cloned()
         .collect::<Vec<_>>();
 
-    sub_namespace_inclusion_proofs(
+    Ok(sub_namespace_inclusion_proofs(
         header.row_length(),
         &rollup_data.data,
         rollup_data.namespace,
         &needed_share_ranges,
         &row_roots,
-    )
+    ))
 }
 
 #[cfg(feature = "native")]
