@@ -22,20 +22,27 @@ use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
-    Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
+    state::{AccountOverride, StateOverride},
+    Block, BlockOverrides, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
 use maybe_archival_state::MaybeArchivalState;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
+use revm::database::State as RevmState;
+use revm::primitives::HashMap as RevmHashMap;
+use revm::state::{Account, AccountStatus, Bytecode, EvmStorageSlot};
+use revm::{Database, DatabaseCommit};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
-use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
+use sov_rpc_eth_types::{
+    invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError,
+};
 
 // Prune synthetic blocks more than this number of blocks away from the latest block.
 const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
@@ -391,17 +398,40 @@ where
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let tx_env = prepare_call_env(&block_env, request.clone())?;
-        let caller = tx_env.caller;
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
+        let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
         let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
-        let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+
+        if !has_overrides {
+            // Fast path for the common case where no call overrides are provided.
+            let tx_env = prepare_call_env(&block_env, request)?;
+            let caller = tx_env.caller;
+            let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+            verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            return Ok(result);
+        }
+
+        let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+        let mut evm_state = RevmState::builder().with_database(evm_db).build();
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+        apply_call_overrides(
+            &mut evm_state,
+            &mut block_env,
+            state_overrides,
+            block_overrides,
+        )?;
+        let tx_env = prepare_call_env(&block_env, request)?;
+        let caller = tx_env.caller;
+        let result = executor::transact(&mut evm_state, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_state)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
     }
@@ -822,6 +852,168 @@ where
         };
         Ok(block_env)
     }
+}
+
+fn invalid_override_params(message: impl Into<String>) -> EthApiError {
+    EthApiError::other(invalid_params_rpc_err(message.into()))
+}
+
+fn apply_call_overrides<DB: Database>(
+    db: &mut RevmState<DB>,
+    block_env: &mut BlockEnv,
+    state_overrides: Option<StateOverride>,
+    block_overrides: Option<Box<BlockOverrides>>,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    if let Some(state_overrides) = state_overrides {
+        apply_state_overrides(db, state_overrides)?;
+    }
+    if let Some(block_overrides) = block_overrides {
+        apply_block_overrides(db, block_env, *block_overrides)?;
+    }
+    Ok(())
+}
+
+fn apply_block_overrides<DB: Database>(
+    db: &mut RevmState<DB>,
+    block_env: &mut BlockEnv,
+    block_overrides: BlockOverrides,
+) -> Result<(), EthApiError> {
+    let BlockOverrides {
+        number,
+        difficulty,
+        time,
+        gas_limit,
+        coinbase,
+        random,
+        base_fee,
+        block_hash,
+    } = block_overrides;
+
+    if let Some(block_hash) = block_hash {
+        db.block_hashes.extend(block_hash);
+    }
+    if let Some(number) = number {
+        let block_number = u64::try_from(number).map_err(|_| {
+            invalid_override_params(format!("block number overflow: {number} exceeds u64::MAX"))
+        })?;
+        block_env.number = U256::from(block_number);
+    }
+    if let Some(difficulty) = difficulty {
+        block_env.difficulty = difficulty;
+    }
+    if let Some(time) = time {
+        block_env.timestamp = U256::from(time);
+    }
+    if let Some(gas_limit) = gas_limit {
+        block_env.gas_limit = gas_limit;
+    }
+    if let Some(coinbase) = coinbase {
+        block_env.beneficiary = coinbase;
+    }
+    if let Some(random) = random {
+        block_env.prevrandao = Some(random);
+    }
+    if let Some(base_fee) = base_fee {
+        block_env.basefee = u64::try_from(base_fee).map_err(|_| {
+            invalid_override_params(format!("base fee overflow: {base_fee} exceeds u64::MAX"))
+        })?;
+    }
+    Ok(())
+}
+
+fn apply_state_overrides<DB: Database>(
+    db: &mut RevmState<DB>,
+    state_overrides: StateOverride,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    for (address, account_override) in state_overrides {
+        apply_account_override(db, address, account_override)?;
+    }
+
+    Ok(())
+}
+
+fn apply_account_override<DB: Database>(
+    db: &mut RevmState<DB>,
+    address: Address,
+    account_override: AccountOverride,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    let AccountOverride {
+        balance,
+        nonce,
+        code,
+        state,
+        state_diff,
+        move_precompile_to,
+    } = account_override;
+
+    if let Some(move_precompile_to) = move_precompile_to {
+        return Err(invalid_override_params(format!(
+            "movePrecompileToAddress is not supported: {move_precompile_to}"
+        )));
+    }
+
+    let mut info = db.basic(address).map_err(Into::into)?.unwrap_or_default();
+    if let Some(nonce) = nonce {
+        info.nonce = nonce;
+    }
+    if let Some(code) = code {
+        let bytecode = Bytecode::new_raw_checked(code).map_err(|err| {
+            invalid_override_params(format!("Invalid account override bytecode: {err}"))
+        })?;
+        info.set_code(bytecode);
+    }
+    if let Some(balance) = balance {
+        info.balance = balance;
+    }
+
+    let mut patched_account = Account {
+        info,
+        status: AccountStatus::Touched,
+        storage: Default::default(),
+        transaction_id: 0,
+    };
+
+    let storage_overrides = match (state, state_diff) {
+        (Some(_), Some(_)) => {
+            return Err(invalid_override_params(format!(
+                "Both 'state' and 'stateDiff' are set for account {address}"
+            )));
+        }
+        (Some(state), None) => {
+            db.commit(RevmHashMap::from_iter([(
+                address,
+                Account {
+                    status: AccountStatus::SelfDestructed | AccountStatus::Touched,
+                    ..Default::default()
+                },
+            )]));
+            patched_account.mark_created();
+            Some(state)
+        }
+        (None, Some(state_diff)) => Some(state_diff),
+        (None, None) => None,
+    };
+
+    if let Some(storage_overrides) = storage_overrides {
+        for (slot, value) in storage_overrides {
+            patched_account.storage.insert(
+                slot.into(),
+                EvmStorageSlot::new_changed((!value).into(), value.into(), 0),
+            );
+        }
+    }
+
+    db.commit(RevmHashMap::from_iter([(address, patched_account)]));
+    Ok(())
 }
 
 fn get_cfg_env_template() -> CfgEnv {
