@@ -6007,6 +6007,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-primitives",
+ "alloy-rlp",
  "anyhow",
  "borsh",
  "bytes",

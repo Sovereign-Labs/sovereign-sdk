@@ -4,52 +4,73 @@ use alloy_primitives::TxKind;
 use alloy_primitives::B256;
 use alloy_rpc_types::{TransactionInfo, TransactionRequest};
 use revm::context::{BlockEnv, TransactionType, TxEnv};
+use revm::context_interface::either::Either;
 use sov_rpc_eth_types::EthResult;
 
 use crate::evm::primitive_types::TransactionSigned;
 
-// https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
-// it is `pub(crate)` only for tests
 pub(crate) fn prepare_call_env(
     block_env: &BlockEnv,
     request: TransactionRequest,
 ) -> EthResult<TxEnv> {
+    let inferred_tx_type = request.minimal_tx_type() as u8;
     let TransactionRequest {
         from,
         to,
+        gas_price,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        max_fee_per_blob_gas,
         gas,
         value,
         input,
         nonce,
         access_list,
         chain_id,
+        transaction_type,
+        blob_versioned_hashes,
+        authorization_list,
         ..
     } = request;
 
+    let tx_type = transaction_type.unwrap_or(inferred_tx_type);
     let gas_limit = gas.unwrap_or(block_env.gas_limit);
+    let tx_kind = TransactionType::from(tx_type);
+    let (effective_gas_price, gas_priority_fee) =
+        if matches!(tx_kind, TransactionType::Legacy | TransactionType::Eip2930) {
+            (gas_price.unwrap_or_default(), None)
+        } else {
+            (
+                max_fee_per_gas.or(gas_price).unwrap_or_default(),
+                Some(max_priority_fee_per_gas.unwrap_or_default()),
+            )
+        };
 
     let env = TxEnv {
-        tx_type: TransactionType::Eip1559.into(),
+        tx_type,
         gas_limit,
         nonce: nonce.unwrap_or_default(),
         caller: from.unwrap_or_default(),
-        gas_price: 0,
-        gas_priority_fee: None,
+        gas_price: effective_gas_price,
+        gas_priority_fee,
         kind: to.unwrap_or(TxKind::Create),
         value: value.unwrap_or_default(),
         data: input.try_into_unique_input()?.unwrap_or_default(),
         chain_id,
         access_list: access_list.unwrap_or_default(),
-        // Default values
-        blob_hashes: vec![],
-        max_fee_per_blob_gas: 0,
-        authorization_list: vec![],
+        blob_hashes: blob_versioned_hashes.unwrap_or_default(),
+        max_fee_per_blob_gas: max_fee_per_blob_gas.unwrap_or_default(),
+        authorization_list: authorization_list
+            .unwrap_or_default()
+            .into_iter()
+            .map(Either::Left)
+            .collect(),
     };
 
     Ok(env)
 }
 
-/// copy from [`reth_rpc_types_compat::transaction::from_recovered_with_block_context`]
+/// Builds an RPC transaction from a recovered signed transaction with block context.
 pub(crate) fn from_recovered_with_block_context(
     tx: Recovered<TransactionSigned>,
     block_hash: Option<B256>,
@@ -77,7 +98,6 @@ mod tests {
 
     use super::*;
 
-    // TODO: Needs more complex tests later
     #[test]
     fn prepare_call_env_conversion() {
         let from = Address::random();
@@ -100,7 +120,8 @@ mod tests {
         let expected = TxEnv {
             tx_type: TransactionType::Eip1559.into(),
             caller: from,
-            gas_price: 0,
+            gas_price: 100,
+            gas_priority_fee: Some(0),
             gas_limit: 200,
             kind: TransactTo::Call(to),
             value: U256::from(300u64),

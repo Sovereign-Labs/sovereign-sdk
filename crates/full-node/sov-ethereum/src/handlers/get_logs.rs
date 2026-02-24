@@ -1,3 +1,4 @@
+use crate::rpc_invalid_params;
 use crate::rpc_limit_exceeded;
 use crate::Ethereum;
 use crate::EthereumAddress;
@@ -35,9 +36,11 @@ where
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
+        let filter = parse_filter(parameters)?;
+
         let state = ethereum.api_state_accessor();
         let service = LogsService::<S, Seq>::new(
-            parameters.one::<Filter>()?,
+            filter,
             None,
             ethereum.extension.max_log_limit,
             state,
@@ -71,4 +74,9 @@ where
         );
         Ok(service.logs_for_filter().await?)
     }
+}
+
+fn parse_filter(parameters: JRpcParams<'static>) -> Result<Filter, ErrorObjectOwned> {
+    let raw = parameters.one::<serde_json::Value>()?;
+    serde_json::from_value(raw).map_err(|err| rpc_invalid_params(err.to_string()))
 }

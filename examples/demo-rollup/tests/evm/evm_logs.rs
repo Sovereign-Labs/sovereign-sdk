@@ -281,7 +281,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
+async fn get_logs_from_greater_than_to_returns_invalid_params() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
@@ -291,11 +291,33 @@ async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
 
     rollup_and_client.produce_logs(1, 2, None).await;
 
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Latest)
-        .to_block(BlockNumberOrTag::Earliest);
-    let logs = rollup_and_client.client.get_logs(&filter).await;
-    assert!(logs.is_empty());
+    let response: Value = reqwest::Client::new()
+        .post(format!(
+            "http://{}/rpc",
+            rollup_and_client.test_rollup.http_addr
+        ))
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_getLogs",
+            "params": [{
+                "fromBlock": "latest",
+                "toBlock": "earliest"
+            }],
+            "id": 1
+        }))
+        .send()
+        .await?
+        .json()
+        .await?;
+
+    let error = response
+        .get("error")
+        .expect("expected invalid params error object");
+    let code = error
+        .get("code")
+        .and_then(Value::as_i64)
+        .expect("error.code should be present");
+    assert_eq!(code, -32602, "expected JSON-RPC invalid params code");
 
     Ok(())
 }

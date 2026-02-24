@@ -55,6 +55,7 @@ alloy-consensus = { workspace = true, features = [
 	"serde",
 	"serde-bincode-compat",
 ] }
+alloy-rlp = { workspace = true }
 
 alloy-rpc-types = { workspace = true, optional = true }
 alloy-rpc-types-trace = { workspace = true, optional = true }
@@ -83,7 +84,6 @@ alloy-primitives = { workspace = true, features = ["getrandom"] }
 alloy-consensus = { workspace = true, features = ["secp256k1"] }
 alloy-signer = { workspace = true }
 alloy-signer-local = { workspace = true }
-alloy-rlp = { workspace = true }
 sov-evm = { path = ".", features = ["native"] }
 strum = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

@@ -86,11 +86,15 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount, TestUser<S>
             address: evm_account.address(),
             code_hash: KECCAK_EMPTY,
             code: Default::default(),
+            nonce: 0,
+            storage: Default::default(),
         },
         AccountData {
             address: no_balance_account.address(),
             code_hash: KECCAK_EMPTY,
             code: Default::default(),
+            nonce: 0,
+            storage: Default::default(),
         },
     ];
 
