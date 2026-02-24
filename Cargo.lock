@@ -11211,6 +11211,7 @@ dependencies = [
  "sp1",
  "strum 0.26.3",
  "tempfile",
+ "testcontainers",
  "tokio",
  "tokio-stream",
  "tracing",

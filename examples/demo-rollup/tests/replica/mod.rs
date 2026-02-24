@@ -35,6 +35,7 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
+mod chaos;
 mod db_elected;
 mod replica_gets_txs_from_master;
 mod replica_registers_in_db;
