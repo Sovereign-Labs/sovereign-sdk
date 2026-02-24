@@ -3,8 +3,8 @@
 #![no_main]
 
 use demo_stf::runtime::Runtime;
+use demo_stf::MultiAddressEvmSolana;
 use demo_stf::StfVerifier;
-use sov_address::MultiAddressEvm;
 use sov_celestia_adapter::types::Namespace;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier};
 use sov_mock_zkvm::MockZkvm;
@@ -26,7 +26,7 @@ pub fn main() {
     let guest = Risc0Guest::new();
     let storage = ZkStorage::new();
     let stf: StfBlueprint<
-        ConfigurableSpec<CelestiaSpec, Risc0, MockZkvm, MultiAddressEvm, Zk>,
+        ConfigurableSpec<CelestiaSpec, Risc0, MockZkvm, MultiAddressEvmSolana, Zk>,
         Runtime<_>,
     > = StfBlueprint::new();
 

@@ -2,8 +2,8 @@
 sp1_zkvm::entrypoint!(main);
 
 use demo_stf::runtime::Runtime;
+use demo_stf::MultiAddressEvmSolana;
 use demo_stf::StfVerifier;
-use sov_address::MultiAddressEvm;
 use sov_celestia_adapter::types::Namespace;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier};
 use sov_mock_zkvm::MockZkvm;
@@ -23,7 +23,7 @@ pub fn main() {
     let guest = SP1Guest::new();
     let storage = ZkStorage::new();
     let stf: StfBlueprint<
-        ConfigurableSpec<CelestiaSpec, SP1, MockZkvm, MultiAddressEvm, Zk>,
+        ConfigurableSpec<CelestiaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Zk>,
         Runtime<_>,
     > = StfBlueprint::new();
 

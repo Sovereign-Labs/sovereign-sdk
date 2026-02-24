@@ -12,15 +12,64 @@ use crate::manifest::Manifest;
 pub(crate) fn derive_module_info(input: &DeriveInput) -> syn::Result<proc_macro::TokenStream> {
     let struct_def = StructDef::parse(input)?;
 
+    let impl_state_discriminant_constants = impl_state_discriminant_constants(&struct_def)?;
     let impl_prefix_functions = impl_prefix_functions(&struct_def);
     let impl_new = impl_module_info(&struct_def)?;
 
     Ok(quote::quote! {
+        #impl_state_discriminant_constants
+
         #impl_prefix_functions
 
         #impl_new
     }
     .into())
+}
+
+fn impl_state_discriminant_constants(
+    struct_def: &StructDef,
+) -> syn::Result<proc_macro2::TokenStream> {
+    use convert_case::Case;
+    use convert_case::Casing;
+
+    let StructDef {
+        ident,
+        impl_generics,
+        type_generics,
+        fields,
+        where_clause,
+        ..
+    } = struct_def;
+
+    let const_defs = fields
+        .iter()
+        .filter(|field| matches!(field.attr, ModuleFieldAttribute::State { .. }))
+        .enumerate()
+        .map(|(i, field)| {
+            let item_discriminant: u8 = i.try_into().map_err(|_| {
+                syn::Error::new(
+                    Span::call_site(),
+                    "Modules cannot have more than 255 fields",
+                )
+            })?;
+            let field_name = field.ident.to_string();
+            let const_name = format!(
+                "{}_ITEM_DISCRIMINANT",
+                field_name.to_case(Case::ScreamingSnake)
+            );
+            let const_ident = Ident::new(&const_name, field.ident.span());
+            Ok(quote::quote! {
+                #[doc = concat!("State item discriminant for `", #field_name, "`.")]
+                pub const #const_ident: u8 = #item_discriminant;
+            })
+        })
+        .collect::<syn::Result<Vec<_>>>()?;
+
+    Ok(quote::quote! {
+        impl #impl_generics #ident #type_generics #where_clause {
+            #(#const_defs)*
+        }
+    })
 }
 
 // Creates a prefix function for each field of the underlying structure.
