@@ -497,15 +497,23 @@ fn verify_skipped_blob(
     Ok(shares_occupied_total)
 }
 
-// After all blobs have been verified, we need to check that there are no more blobs in the namespace.
-// It does it by explicitly checking proof of the last share. For this proof, the leaf on the right must be from another namespace.
+// After all blobs have been verified, check namespace right boundary for completeness/censorship resistance.
+// This is done with a proof for the last share of the namespace. For a valid boundary,
+// the sibling on the right must belong to a strictly greater namespace.
+//
+// Security-critical behavior:
+// * Derive boundary row as:
+//   `delta = last_proven_share_idx - proof_start_in_row`, `row_idx = delta / row_len`.
+// * Require row alignment: `delta % row_len == 0`.
+// * Require `row_idx` to point to the last candidate row in `namespace_row_roots`.
+//   If it points earlier, later candidate rows could still contain this namespace, so return `MissingBlobs`.
+//
 // Parameters:
-// * `block_header` is a trusted input parameter.
-// * `namespace_row_roots` is trusted, as it should've been trustlessly derived from the block header.
-// * `namespace` is a trusted rollup parameter.
-// * `last_proven_share_idx` is trusted and should be properly derived by the caller.\
-// * `namespace_boundary_proof` is allowed to be None if the last proven share is the last share in the row.
-//    This is checked
+// * `block_header` is trusted.
+// * `namespace_row_roots` is trusted (derived from verified DAH).
+// * `namespace` is trusted rollup parameter.
+// * `last_proven_share_idx` is derived by the verifier from validated shares.
+// * `namespace_boundary_proof` may be `None` only when last proven share is the last share of the last candidate row.
 fn check_namespace_end_boundary(
     block_header: &CelestiaHeader,
     namespace_row_roots: &[&NamespacedHash],

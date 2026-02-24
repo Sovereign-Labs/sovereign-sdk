@@ -489,6 +489,13 @@ impl DaService for CelestiaService {
         extract_relevant_blobs(block)
     }
 
+    /// Generates inclusion and completeness proofs for the provided blobs against the block.
+    ///
+    /// # Panics
+    ///
+    /// Panics if proof generation fails due to inconsistent inputs (e.g. the block data
+    /// doesn't match the provided blobs). This indicates a bug in the caller, since the
+    /// trait signature does not return `Result`.
     async fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,

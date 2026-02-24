@@ -9,6 +9,7 @@ use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
 use crate::CelestiaService;
 use anyhow::Context;
+use celestia_types::consts::appconsts;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use rand::{RngCore, SeedableRng};
@@ -62,7 +63,7 @@ fn assert_single_blob(
     expected_hash: HexHash,
     expected_data: &[u8],
 ) {
-    assert_eq!(1, blobs.len());
+    assert_eq!(blobs.len(), 1);
     let mut fetched_blob = blobs.pop().unwrap();
     assert_eq!(fetched_blob.sender, expected_signer);
     assert_eq!(fetched_blob.hash, expected_hash);
@@ -114,15 +115,19 @@ struct NamespaceRecords {
     observed_proof: Vec<BlobRecord>,
 }
 
-const FIRST_SPARSE_SHARE_CONTENT_SIZE: usize = 478;
-const CONTINUATION_SPARSE_SHARE_CONTENT_SIZE: usize = 482;
-
-fn bytes_for_shares(share_count: usize) -> usize {
+fn bytes_for_shares(share_count: usize, has_signer: bool) -> usize {
+    let first_share_content_size = if has_signer {
+        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+            .checked_sub(appconsts::SIGNER_SIZE)
+            .expect("signer size should fit into first share content size")
+    } else {
+        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+    };
     if share_count <= 1 {
-        return FIRST_SPARSE_SHARE_CONTENT_SIZE;
+        return first_share_content_size;
     }
-    FIRST_SPARSE_SHARE_CONTENT_SIZE
-        + (share_count - 1).saturating_mul(CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+    first_share_content_size
+        + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
 }
 
 fn deterministic_payload(
@@ -161,18 +166,20 @@ fn deterministic_payload(
 }
 
 fn build_batch_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
-    let small_exact = bytes_for_shares(1);
+    // This test configures all active senders with a private key, so blobs are v1 signed.
+    let has_signer = true;
+    let small_exact = bytes_for_shares(1, has_signer);
     let small_overflow = small_exact.saturating_add(1);
     let power_of_two = if sender_idx % 2 == 0 {
-        bytes_for_shares(4)
+        bytes_for_shares(4, has_signer)
     } else {
-        bytes_for_shares(8).saturating_add(1)
+        bytes_for_shares(8, has_signer).saturating_add(1)
     };
     let row_case = match sender_idx {
-        0 => bytes_for_shares(row_len.saturating_sub(1).max(1)),
-        1 => bytes_for_shares(row_len),
-        2 => bytes_for_shares(row_len).saturating_add(1),
-        3 => bytes_for_shares(row_len.saturating_add(1)),
+        0 => bytes_for_shares(row_len.saturating_sub(1).max(1), has_signer),
+        1 => bytes_for_shares(row_len, has_signer),
+        2 => bytes_for_shares(row_len, has_signer).saturating_add(1),
+        3 => bytes_for_shares(row_len.saturating_add(1), has_signer),
         _ => unreachable!("sender_idx should be in range [0..4)"),
     };
 
@@ -180,18 +187,20 @@ fn build_batch_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
 }
 
 fn build_proof_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
-    let small_exact = bytes_for_shares(1);
+    // This test configures all active senders with a private key, so blobs are v1 signed.
+    let has_signer = true;
+    let small_exact = bytes_for_shares(1, has_signer);
     let small_overflow = small_exact.saturating_add(1);
     let power_of_two = if sender_idx % 2 == 0 {
-        bytes_for_shares(8)
+        bytes_for_shares(8, has_signer)
     } else {
-        bytes_for_shares(4).saturating_add(1)
+        bytes_for_shares(4, has_signer).saturating_add(1)
     };
     let row_case = match sender_idx {
-        0 => bytes_for_shares(row_len),
-        1 => bytes_for_shares(row_len.saturating_add(1)),
-        2 => bytes_for_shares(row_len.saturating_sub(1).max(1)),
-        3 => bytes_for_shares(row_len).saturating_add(1),
+        0 => bytes_for_shares(row_len, has_signer),
+        1 => bytes_for_shares(row_len.saturating_add(1), has_signer),
+        2 => bytes_for_shares(row_len.saturating_sub(1).max(1), has_signer),
+        3 => bytes_for_shares(row_len, has_signer).saturating_add(1),
         _ => unreachable!("sender_idx should be in range [0..4)"),
     };
 
@@ -647,13 +656,13 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
 
     for (namespace_idx, records) in namespace_records.iter().enumerate() {
         assert_eq!(
-            multiset_counts(&records.expected_batch),
             multiset_counts(&records.observed_batch),
+            multiset_counts(&records.expected_batch),
             "Batch mismatch for namespace idx {namespace_idx}",
         );
         assert_eq!(
-            multiset_counts(&records.expected_proof),
             multiset_counts(&records.observed_proof),
+            multiset_counts(&records.expected_proof),
             "Proof mismatch for namespace idx {namespace_idx}",
         );
     }
@@ -675,6 +684,21 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
     );
 
     Ok(())
+}
+
+#[test]
+fn bytes_for_shares_accounts_for_signer_overhead() {
+    let unsigned_first = appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE;
+    let signed_first = unsigned_first
+        .checked_sub(appconsts::SIGNER_SIZE)
+        .expect("signer size should fit into first share content size");
+
+    assert_eq!(bytes_for_shares(1, false), unsigned_first);
+    assert_eq!(bytes_for_shares(1, true), signed_first);
+    assert_eq!(
+        bytes_for_shares(2, true),
+        signed_first + appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -718,8 +742,8 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
         .to_string();
 
     assert_eq!(
+        error,
         "Celestia RPC node returned an error: Transport(Rejected { status_code: 500 })",
-        error
     );
     Ok(())
 }
@@ -784,14 +808,14 @@ where
                 let signer = signers
                     .next()
                     .expect("missing signer in test data for batch");
-                assert_eq!(signer, batch.sender);
+                assert_eq!(batch.sender, signer);
                 batch_processing_fn(batch);
             }
             for proof in blob_iters.proof_blobs {
                 let signer = signers
                     .next()
                     .expect("missing signer in test data for batch");
-                assert_eq!(signer, proof.sender);
+                assert_eq!(proof.sender, signer);
                 proof_processing_fn(proof);
             }
         }
