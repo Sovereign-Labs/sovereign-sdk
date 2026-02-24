@@ -363,7 +363,7 @@ $ ./../../target/debug/sov-cli node submit-batch --wait-for-processing by-addres
 
 ```bash,test-ci,bashtestmd:compare-output
 $ curl -Ss http://127.0.0.1:12346/modules/bank/tokens/token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7/total-supply | jq -c -M
-{"amount":"10030000000000000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}
+{"amount":"25030000000000000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}
 ```
 
 #### 6. Wait for aggregated proof to be available

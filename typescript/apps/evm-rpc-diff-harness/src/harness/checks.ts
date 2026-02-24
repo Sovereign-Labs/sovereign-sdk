@@ -2061,7 +2061,7 @@ const checks: CheckDefinition[] = [
       }
 
       const txImmediate = await rpc.call("eth_getTransactionByHash", [txHash]);
-      let receiptInitial = await rpc.call("eth_getTransactionReceipt", [txHash]);
+      const receiptInitial = await rpc.call("eth_getTransactionReceipt", [txHash]);
       const receiptRequests: unknown[] = [receiptInitial.request];
 
       let receiptFinal = receiptInitial;
@@ -2597,8 +2597,7 @@ const checks: CheckDefinition[] = [
       const receiptEntries = Array.isArray(receipts.result) ? receipts.result : null;
 
       const shapeOk =
-        receiptEntries !== null &&
-        receiptEntries.every((entry) => {
+        receiptEntries?.every((entry) => {
           if (!entry || typeof entry !== "object") {
             return false;
           }
