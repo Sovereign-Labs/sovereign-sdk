@@ -499,7 +499,11 @@ impl DaService for CelestiaService {
     > {
         // NOTE: Does not add logic here, it should go directly into the function below,
         // otherwise tests won't cover the change
-        get_extraction_proof(block, blobs)
+        get_extraction_proof(block, blobs).unwrap_or_else(|e| {
+            panic!(
+                "Failed to generate extraction proof due to inconsistent extraction input: {e:#}"
+            )
+        })
     }
 
     async fn send_transaction(
@@ -567,13 +571,14 @@ pub(crate) fn extract_relevant_blobs(
 pub(crate) fn get_extraction_proof(
     block: &FilteredCelestiaBlock,
     blobs: &RelevantBlobs<BlobWithSender>,
-) -> RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>> {
+) -> anyhow::Result<RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>>> {
     let batch = {
         let inclusion_proof = proofs::new_inclusion_proof(
             &block.header,
             &block.rollup_batch_data,
             &blobs.batch_blobs,
-        );
+        )
+        .context("Failed to generate batch namespace inclusion proof")?;
 
         DaProof {
             inclusion_proof,
@@ -589,7 +594,8 @@ pub(crate) fn get_extraction_proof(
             &block.header,
             &block.rollup_proof_data,
             &blobs.proof_blobs,
-        );
+        )
+        .context("Failed to generate proof namespace inclusion proof")?;
 
         DaProof {
             inclusion_proof,
@@ -599,7 +605,7 @@ pub(crate) fn get_extraction_proof(
         }
     };
 
-    RelevantProofs { proof, batch }
+    Ok(RelevantProofs { proof, batch })
 }
 
 fn flatten_timeout<T>(
