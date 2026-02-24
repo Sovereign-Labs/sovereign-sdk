@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::time::Duration;
 
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
@@ -10,10 +11,12 @@ use crate::CelestiaService;
 use anyhow::Context;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
+use rand::{RngCore, SeedableRng};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
+use tokio::sync::{mpsc, oneshot};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct BasicJsonRpcRequest {
@@ -67,6 +70,239 @@ fn assert_single_blob(
     assert_eq!(fetched_blob.verified_data(), expected_data);
 }
 
+#[derive(Debug, Clone, Copy)]
+enum SubmissionKind {
+    Batch,
+    Proof,
+}
+
+impl SubmissionKind {
+    fn as_byte(self) -> u8 {
+        match self {
+            Self::Batch => 0,
+            Self::Proof => 1,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct SubmissionRequest {
+    payload: Vec<u8>,
+    response_tx: oneshot::Sender<anyhow::Result<HexHash>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct BlobRecord {
+    sender: CelestiaAddress,
+    hash: HexHash,
+    payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+struct PhaseCommand {
+    namespace_idx: usize,
+    sender: CelestiaAddress,
+    kind: SubmissionKind,
+    payload: Vec<u8>,
+}
+
+#[derive(Debug, Default)]
+struct NamespaceRecords {
+    expected_batch: Vec<BlobRecord>,
+    expected_proof: Vec<BlobRecord>,
+    observed_batch: Vec<BlobRecord>,
+    observed_proof: Vec<BlobRecord>,
+}
+
+const FIRST_SPARSE_SHARE_CONTENT_SIZE: usize = 478;
+const CONTINUATION_SPARSE_SHARE_CONTENT_SIZE: usize = 482;
+
+fn bytes_for_shares(share_count: usize) -> usize {
+    if share_count <= 1 {
+        return FIRST_SPARSE_SHARE_CONTENT_SIZE;
+    }
+    FIRST_SPARSE_SHARE_CONTENT_SIZE
+        + (share_count - 1).saturating_mul(CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+}
+
+fn deterministic_payload(
+    size: usize,
+    namespace_idx: usize,
+    sender_idx: usize,
+    kind: SubmissionKind,
+    seq_idx: usize,
+) -> Vec<u8> {
+    let mut seed = [0u8; 32];
+    seed[0] = namespace_idx as u8;
+    seed[1] = sender_idx as u8;
+    seed[2] = kind.as_byte();
+    seed[3] = seq_idx as u8;
+    seed[4] = (size & 0xff) as u8;
+    seed[5] = ((size >> 8) & 0xff) as u8;
+
+    let mut payload = vec![0u8; size];
+    let mut rng = rand::rngs::SmallRng::from_seed(seed);
+    rng.fill_bytes(&mut payload);
+
+    if !payload.is_empty() {
+        payload[0] = namespace_idx as u8;
+    }
+    if payload.len() > 1 {
+        payload[1] = sender_idx as u8;
+    }
+    if payload.len() > 2 {
+        payload[2] = kind.as_byte();
+    }
+    if payload.len() > 3 {
+        payload[3] = seq_idx as u8;
+    }
+
+    payload
+}
+
+fn build_batch_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
+    let small_exact = bytes_for_shares(1);
+    let small_overflow = small_exact.saturating_add(1);
+    let power_of_two = if sender_idx % 2 == 0 {
+        bytes_for_shares(4)
+    } else {
+        bytes_for_shares(8).saturating_add(1)
+    };
+    let row_case = match sender_idx {
+        0 => bytes_for_shares(row_len.saturating_sub(1).max(1)),
+        1 => bytes_for_shares(row_len),
+        2 => bytes_for_shares(row_len).saturating_add(1),
+        3 => bytes_for_shares(row_len.saturating_add(1)),
+        _ => unreachable!("sender_idx should be in range [0..4)"),
+    };
+
+    [small_exact, small_overflow, power_of_two, row_case]
+}
+
+fn build_proof_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
+    let small_exact = bytes_for_shares(1);
+    let small_overflow = small_exact.saturating_add(1);
+    let power_of_two = if sender_idx % 2 == 0 {
+        bytes_for_shares(8)
+    } else {
+        bytes_for_shares(4).saturating_add(1)
+    };
+    let row_case = match sender_idx {
+        0 => bytes_for_shares(row_len),
+        1 => bytes_for_shares(row_len.saturating_add(1)),
+        2 => bytes_for_shares(row_len.saturating_sub(1).max(1)),
+        3 => bytes_for_shares(row_len).saturating_add(1),
+        _ => unreachable!("sender_idx should be in range [0..4)"),
+    };
+
+    [small_exact, small_overflow, power_of_two, row_case]
+}
+
+fn multiset_counts(records: &[BlobRecord]) -> std::collections::HashMap<BlobRecord, usize> {
+    let mut output = std::collections::HashMap::new();
+    for record in records.iter().cloned() {
+        *output.entry(record).or_insert(0) += 1;
+    }
+    output
+}
+
+async fn spawn_submission_worker(
+    service: CelestiaService,
+    kind: SubmissionKind,
+    mut rx: mpsc::Receiver<SubmissionRequest>,
+) {
+    while let Some(cmd) = rx.recv().await {
+        let result: anyhow::Result<HexHash> = async {
+            let submit_result = match kind {
+                SubmissionKind::Batch => service.send_transaction(&cmd.payload).await,
+                SubmissionKind::Proof => service.send_proof(&cmd.payload).await,
+            };
+            let receipt = submit_result
+                .await
+                .context("Submission receiver has been dropped")??;
+            Ok(receipt.blob_hash)
+        }
+        .await;
+
+        let _ = cmd.response_tx.send(result);
+    }
+}
+
+async fn execute_phase(
+    phase_name: &str,
+    commands: Vec<PhaseCommand>,
+    batch_txs: &[mpsc::Sender<SubmissionRequest>],
+    proof_txs: &[mpsc::Sender<SubmissionRequest>],
+    namespace_records: &mut [NamespaceRecords],
+) -> anyhow::Result<()> {
+    let mut pending = Vec::with_capacity(commands.len());
+
+    for command in commands {
+        let PhaseCommand {
+            namespace_idx,
+            sender,
+            kind,
+            payload,
+        } = command;
+        let payload_for_expected = payload.clone();
+
+        let (response_tx, response_rx) = oneshot::channel();
+        let worker_tx = match kind {
+            SubmissionKind::Batch => batch_txs[namespace_idx].clone(),
+            SubmissionKind::Proof => proof_txs[namespace_idx].clone(),
+        };
+        worker_tx
+            .send(SubmissionRequest {
+                payload,
+                response_tx,
+            })
+            .await
+            .with_context(|| format!("Failed to queue command for {phase_name}"))?;
+
+        pending.push((
+            namespace_idx,
+            sender,
+            kind,
+            payload_for_expected,
+            response_rx,
+        ));
+    }
+
+    for (namespace_idx, sender, kind, payload, response_rx) in pending {
+        let blob_hash = response_rx
+            .await
+            .with_context(|| format!("Submission worker dropped for {phase_name}"))??;
+
+        let record = BlobRecord {
+            sender,
+            hash: blob_hash,
+            payload,
+        };
+
+        match kind {
+            SubmissionKind::Batch => namespace_records[namespace_idx].expected_batch.push(record),
+            SubmissionKind::Proof => namespace_records[namespace_idx].expected_proof.push(record),
+        }
+    }
+
+    Ok(())
+}
+
+async fn wait_until_head_at_least(
+    service: &CelestiaService,
+    target_height: u64,
+) -> anyhow::Result<u64> {
+    let mut head = service.get_head_block_header().await?.height();
+    for _ in 0..40 {
+        if head >= target_height {
+            return Ok(head);
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+        head = service.get_head_block_header().await?.height();
+    }
+    Ok(head)
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
@@ -118,6 +354,317 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
         "Batch blobs should not be sent when submitting proofs"
     );
     assert_single_blob(collected_proof_blobs, signer, response.blob_hash, &zk_proof);
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let base_config = dev_node.get_config().await?;
+
+    let active_rollup_params = [
+        RollupParams {
+            rollup_batch_namespace: Namespace::const_v0(*b"n00batch00"),
+            rollup_proof_namespace: Namespace::const_v0(*b"n00proof00"),
+        },
+        RollupParams {
+            rollup_batch_namespace: Namespace::const_v0(*b"n01zzbat01"),
+            rollup_proof_namespace: Namespace::const_v0(*b"n01aaprf01"),
+        },
+        RollupParams {
+            rollup_batch_namespace: Namespace::const_v0(*b"n02batch02"),
+            rollup_proof_namespace: Namespace::const_v0(*b"n02proof02"),
+        },
+        RollupParams {
+            rollup_batch_namespace: Namespace::const_v0(*b"n03zzbat03"),
+            rollup_proof_namespace: Namespace::const_v0(*b"n03aaprf03"),
+        },
+    ];
+    let unknown_rollup_params = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(*b"n99batch99"),
+        rollup_proof_namespace: Namespace::const_v0(*b"n99proof99"),
+    };
+
+    let mut shutdown_senders = Vec::new();
+    let mut active_services = Vec::new();
+    let mut active_signers = Vec::new();
+
+    for (sender_idx, params) in active_rollup_params.iter().enumerate() {
+        let signer_private_key = dev_node.export_signer_key(sender_idx as u8).await?;
+        let expected_signer = dev_node.get_signer_address(sender_idx as u8).await?;
+
+        let mut config = base_config.clone();
+        config.signer_private_key = Some(signer_private_key);
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+        shutdown_senders.push(shutdown_tx);
+        let service = CelestiaService::new(config, *params, shutdown_rx).await;
+        assert_eq!(
+            service.get_signer().await,
+            Some(expected_signer),
+            "Service signer mismatch for sender index {sender_idx}"
+        );
+        active_services.push(service);
+        active_signers.push(expected_signer);
+    }
+
+    let (unknown_shutdown_tx, unknown_shutdown_rx) = tokio::sync::watch::channel(());
+    shutdown_senders.push(unknown_shutdown_tx);
+    let unknown_service =
+        CelestiaService::new(base_config, unknown_rollup_params, unknown_shutdown_rx).await;
+
+    let mut verification_services = active_services.clone();
+    verification_services.push(unknown_service);
+
+    let all_rollup_params = [
+        active_rollup_params[0],
+        active_rollup_params[1],
+        active_rollup_params[2],
+        active_rollup_params[3],
+        unknown_rollup_params,
+    ];
+    let verifiers = all_rollup_params
+        .iter()
+        .map(|params| CelestiaVerifier::new(*params))
+        .collect::<Vec<_>>();
+    let mut namespace_records = all_rollup_params
+        .iter()
+        .map(|_| NamespaceRecords::default())
+        .collect::<Vec<_>>();
+
+    let row_len = verification_services[0]
+        .get_head_block_header()
+        .await?
+        .row_length();
+    let batch_sizes_per_sender = (0..4)
+        .map(|sender_idx| build_batch_sizes(row_len, sender_idx))
+        .collect::<Vec<_>>();
+    let proof_sizes_per_sender = (0..4)
+        .map(|sender_idx| build_proof_sizes(row_len, sender_idx))
+        .collect::<Vec<_>>();
+
+    let mut batch_payloads = vec![Vec::new(); 4];
+    let mut proof_payloads = vec![Vec::new(); 4];
+    for sender_idx in 0..4 {
+        batch_payloads[sender_idx] = batch_sizes_per_sender[sender_idx]
+            .iter()
+            .enumerate()
+            .map(|(seq_idx, size)| {
+                deterministic_payload(
+                    *size,
+                    sender_idx,
+                    sender_idx,
+                    SubmissionKind::Batch,
+                    seq_idx,
+                )
+            })
+            .collect();
+        proof_payloads[sender_idx] = proof_sizes_per_sender[sender_idx]
+            .iter()
+            .enumerate()
+            .map(|(seq_idx, size)| {
+                deterministic_payload(
+                    *size,
+                    sender_idx,
+                    sender_idx,
+                    SubmissionKind::Proof,
+                    seq_idx,
+                )
+            })
+            .collect();
+    }
+
+    let head_before = verification_services[0]
+        .get_head_block_header()
+        .await?
+        .height();
+
+    let mut batch_txs = Vec::new();
+    let mut proof_txs = Vec::new();
+    let mut worker_handles = Vec::new();
+    for service in active_services.iter().cloned() {
+        let (batch_tx, batch_rx) = mpsc::channel(32);
+        batch_txs.push(batch_tx);
+        worker_handles.push(tokio::spawn(spawn_submission_worker(
+            service.clone(),
+            SubmissionKind::Batch,
+            batch_rx,
+        )));
+
+        let (proof_tx, proof_rx) = mpsc::channel(32);
+        proof_txs.push(proof_tx);
+        worker_handles.push(tokio::spawn(spawn_submission_worker(
+            service,
+            SubmissionKind::Proof,
+            proof_rx,
+        )));
+    }
+
+    let rounds = batch_payloads[0].len();
+    for round_idx in 0..rounds {
+        let batch_commands = (0..4)
+            .map(|sender_idx| PhaseCommand {
+                namespace_idx: sender_idx,
+                sender: active_signers[sender_idx],
+                kind: SubmissionKind::Batch,
+                payload: batch_payloads[sender_idx][round_idx].clone(),
+            })
+            .collect::<Vec<_>>();
+        execute_phase(
+            &format!("round_{round_idx}_all_batch"),
+            batch_commands,
+            &batch_txs,
+            &proof_txs,
+            &mut namespace_records,
+        )
+        .await?;
+
+        if round_idx % 2 == 0 {
+            let proof_commands = (0..4)
+                .map(|sender_idx| PhaseCommand {
+                    namespace_idx: sender_idx,
+                    sender: active_signers[sender_idx],
+                    kind: SubmissionKind::Proof,
+                    payload: proof_payloads[sender_idx][round_idx].clone(),
+                })
+                .collect::<Vec<_>>();
+            execute_phase(
+                &format!("round_{round_idx}_all_proof"),
+                proof_commands,
+                &batch_txs,
+                &proof_txs,
+                &mut namespace_records,
+            )
+            .await?;
+        } else {
+            let first_group = if round_idx % 4 == 1 {
+                vec![0usize, 2usize]
+            } else {
+                vec![1usize, 3usize]
+            };
+            let remaining = (0..4)
+                .filter(|idx| !first_group.contains(idx))
+                .collect::<Vec<_>>();
+
+            let group_commands = first_group
+                .into_iter()
+                .map(|sender_idx| PhaseCommand {
+                    namespace_idx: sender_idx,
+                    sender: active_signers[sender_idx],
+                    kind: SubmissionKind::Proof,
+                    payload: proof_payloads[sender_idx][round_idx].clone(),
+                })
+                .collect::<Vec<_>>();
+            execute_phase(
+                &format!("round_{round_idx}_proof_group"),
+                group_commands,
+                &batch_txs,
+                &proof_txs,
+                &mut namespace_records,
+            )
+            .await?;
+
+            for sender_idx in remaining {
+                execute_phase(
+                    &format!("round_{round_idx}_proof_single_sender_{sender_idx}"),
+                    vec![PhaseCommand {
+                        namespace_idx: sender_idx,
+                        sender: active_signers[sender_idx],
+                        kind: SubmissionKind::Proof,
+                        payload: proof_payloads[sender_idx][round_idx].clone(),
+                    }],
+                    &batch_txs,
+                    &proof_txs,
+                    &mut namespace_records,
+                )
+                .await?;
+            }
+        }
+    }
+
+    drop(batch_txs);
+    drop(proof_txs);
+    for handle in worker_handles {
+        handle
+            .await
+            .context("Submission worker task join failure")?;
+    }
+
+    let head_after_submit = verification_services[0]
+        .get_head_block_header()
+        .await?
+        .height();
+    let target_scan_end = head_after_submit.saturating_add(2);
+    let scan_end = wait_until_head_at_least(&verification_services[0], target_scan_end).await?;
+    let scan_start = head_before;
+
+    for height in scan_start..=scan_end {
+        for (namespace_idx, service) in verification_services.iter().enumerate() {
+            let block = service.get_block_at(height).await?;
+            let mut relevant_blobs = service.extract_relevant_blobs(&block);
+
+            for blob in relevant_blobs.batch_blobs.iter_mut() {
+                blob.advance(blob.total_len());
+                namespace_records[namespace_idx]
+                    .observed_batch
+                    .push(BlobRecord {
+                        sender: blob.sender,
+                        hash: blob.hash,
+                        payload: blob.verified_data().to_vec(),
+                    });
+            }
+
+            for blob in relevant_blobs.proof_blobs.iter_mut() {
+                blob.advance(blob.total_len());
+                namespace_records[namespace_idx]
+                    .observed_proof
+                    .push(BlobRecord {
+                        sender: blob.sender,
+                        hash: blob.hash,
+                        payload: blob.verified_data().to_vec(),
+                    });
+            }
+
+            let relevant_proofs = service.get_extraction_proof(&block, &relevant_blobs).await;
+            verifiers[namespace_idx]
+                .verify_relevant_tx_list(block.header(), &relevant_blobs, relevant_proofs)
+                .with_context(|| {
+                    format!(
+                        "Verification failed for namespace idx {namespace_idx} at height {height}",
+                    )
+                })?;
+        }
+    }
+
+    for (namespace_idx, records) in namespace_records.iter().enumerate() {
+        assert_eq!(
+            multiset_counts(&records.expected_batch),
+            multiset_counts(&records.observed_batch),
+            "Batch mismatch for namespace idx {namespace_idx}",
+        );
+        assert_eq!(
+            multiset_counts(&records.expected_proof),
+            multiset_counts(&records.observed_proof),
+            "Proof mismatch for namespace idx {namespace_idx}",
+        );
+    }
+
+    for (namespace_idx, ns_record) in namespace_records.iter().enumerate().take(4) {
+        assert!(
+            !ns_record.observed_batch.is_empty(),
+            "Expected non-empty batch observations for namespace idx {namespace_idx}"
+        );
+        assert!(
+            !ns_record.observed_proof.is_empty(),
+            "Expected non-empty proof observations for namespace idx {namespace_idx}"
+        );
+    }
+    assert!(
+        namespace_records[4].observed_batch.is_empty()
+            && namespace_records[4].observed_proof.is_empty(),
+        "Unknown namespace verifier should not observe blobs"
+    );
 
     Ok(())
 }
@@ -375,10 +922,23 @@ async fn verification_fails_if_tx_missing() {
         .unwrap_err();
 
     assert!(
-        error
-            .to_string()
-            .contains("IncompleteNamespace(ProofError(Invalid(WrongAmountOfLeavesProvided)))"),
+        error.to_string().contains("MoreProofsThanBlobs"),
         "Actual error: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn extraction_proof_for_empty_blob_list_does_not_try_to_skip_supported_blobs() {
+    let block = with_mixed_v0_and_v1_blobs::filtered_block();
+    let relevant_blobs = RelevantBlobs {
+        batch_blobs: Default::default(),
+        proof_blobs: Default::default(),
+    };
+
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    assert!(
+        relevant_proofs.batch.inclusion_proof.is_empty(),
+        "Batch proof should be empty when no supported blobs are provided"
     );
 }
 

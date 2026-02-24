@@ -259,8 +259,9 @@ impl PreValidationOutput {
 
 /// 1. Checks that blobs quantity matches inclusion proofs quantity.
 /// 2. Checks that row roots are non-empty for non-empty blobs slice.
-/// 3. Handles the case of an empty blobs slice and verifies absence proof.
-///    In this case returns `PreValidationOutput::EarlyReturn` and the caller can exit early.
+/// 3. Handles the case of an empty blobs slice:
+///    - if inclusion proofs are present, verification continues (unsupported blobs may be proven as skipped);
+///    - otherwise verifies absence proof and returns early.
 fn prevalidate_blobs(
     namespace_row_roots: &[&NamespacedHash],
     blobs: &[BlobWithSender],
@@ -275,6 +276,12 @@ fn prevalidate_blobs(
     } else if namespace_row_roots.is_empty() && !blobs.is_empty() {
         return Err(InvalidBlobData(BlobDataError::UnexpectedBlobs));
     } else if blobs.is_empty() && !namespace_row_roots.is_empty() {
+        // If inclusion proofs are present, continue with regular verification:
+        // they may correspond to unsupported blobs that are intentionally skipped by extraction.
+        if !inclusion_proof.is_empty() {
+            return Ok(PreValidationOutput::ContinueVerification);
+        }
+
         // We get a list of all row roots that "contain" our namespace (i.e. MIN <= NAMESPACE <= MAX)
         // it's possible that there's a row whose root "contains" our namespace even though no shares from our namespace are actually present in that row.
         // For that to be the case, the row needs to contain shares from at least two different namespaces,

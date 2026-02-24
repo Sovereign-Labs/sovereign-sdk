@@ -200,7 +200,19 @@ pub(crate) fn new_inclusion_proof(
     }
 
     let end_of_ns = flat_shares.len();
-    if prev_range_end.is_some() && prev_range_end != Some(end_of_ns) {
+    let namespace_has_supported_shares = flat_shares.iter().any(|share| {
+        !is_tail_padding(share)
+            && share.info_byte().expect("Bug. Missing info byte").version()
+                == SUPPORTED_SHARE_VERSION
+    });
+
+    if blobs.is_empty() && end_of_ns > 0 && !namespace_has_supported_shares {
+        // If no supported blobs were extracted, the namespace may still contain
+        // unsupported blobs (e.g. v0) that must be proven as skipped.
+        let skipped_blob_ranges =
+            build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares);
+        needed_share_ranges.extend(skipped_blob_ranges);
+    } else if prev_range_end.is_some() && prev_range_end != Some(end_of_ns) {
         let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
             prev_range_end.unwrap()..end_of_ns,
             &flat_shares,
