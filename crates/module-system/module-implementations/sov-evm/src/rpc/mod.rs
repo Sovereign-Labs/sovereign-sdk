@@ -40,7 +40,9 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
-use sov_rpc_eth_types::{invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp};
+use sov_rpc_eth_types::{
+    invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError,
+};
 
 // Prune synthetic blocks more than this number of blocks away from the latest block.
 const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
@@ -130,21 +132,12 @@ pub enum PendingOrBlock {
     },
 }
 
-const ABSOLUTE_MARGIN: u64 = 100_000;
 const MIN_TRANSACTION_GAS: u64 = 21_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CallUpfrontCost {
     total_cost: U256,
     gas_limit: u64,
-}
-
-/// gas * 1.5 + 100_000
-pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
-    (gas / 2)
-        .checked_mul(3)
-        .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
 }
 
 fn call_upfront_cost(
