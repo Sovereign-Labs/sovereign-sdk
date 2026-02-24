@@ -145,26 +145,30 @@ export class JsonRpcClient {
       };
     }
 
-    if (parsed && typeof parsed === "object" && "error" in parsed) {
-      const envelope = parsed as { error: unknown };
-      return {
-        ok: false,
-        request: payload,
-        response: parsed,
-        error: toRpcError(envelope.error, "RPC call failed"),
-        durationMs
-      };
-    }
+    if (parsed && typeof parsed === "object") {
+      const envelope = parsed as { result?: unknown; error?: unknown };
+      const hasResult = "result" in envelope;
+      const hasError = "error" in envelope && envelope.error !== null && envelope.error !== undefined;
 
-    if (parsed && typeof parsed === "object" && "result" in parsed) {
-      const envelope = parsed as { result: unknown };
-      return {
-        ok: true,
-        request: payload,
-        response: parsed,
-        result: envelope.result,
-        durationMs
-      };
+      if (hasError) {
+        return {
+          ok: false,
+          request: payload,
+          response: parsed,
+          error: toRpcError(envelope.error, "RPC call failed"),
+          durationMs
+        };
+      }
+
+      if (hasResult) {
+        return {
+          ok: true,
+          request: payload,
+          response: parsed,
+          result: envelope.result,
+          durationMs
+        };
+      }
     }
 
     return {
@@ -226,8 +230,10 @@ export class JsonRpcClient {
     if (!Array.isArray(parsed)) {
       let error: RpcErrorShape | undefined;
       if (parsed && typeof parsed === "object" && "error" in parsed) {
-        const envelope = parsed as { error: unknown };
-        error = toRpcError(envelope.error, "Batch request failed");
+        const envelope = parsed as { error?: unknown };
+        if (envelope.error !== null && envelope.error !== undefined) {
+          error = toRpcError(envelope.error, "Batch request failed");
+        }
       }
 
       return {
@@ -272,8 +278,10 @@ export class JsonRpcClient {
 
       const envelope = item as { id?: unknown; result?: unknown; error?: unknown };
       const id = typeof envelope.id === "number" ? envelope.id : -1;
+      const hasResult = "result" in envelope;
+      const hasError = "error" in envelope && envelope.error !== null && envelope.error !== undefined;
 
-      if ("error" in envelope) {
+      if (hasError) {
         return {
           id,
           method: idToMethod.get(id),
@@ -283,11 +291,26 @@ export class JsonRpcClient {
         };
       }
 
+      if (hasResult) {
+        return {
+          id,
+          method: idToMethod.get(id),
+          ok: true,
+          result: envelope.result,
+          raw: item
+        };
+      }
+
       return {
         id,
         method: idToMethod.get(id),
-        ok: true,
-        result: envelope.result,
+        ok: false,
+        error: {
+          code: null,
+          message: "Malformed batch item",
+          data: item,
+          raw: item
+        },
         raw: item
       };
     });

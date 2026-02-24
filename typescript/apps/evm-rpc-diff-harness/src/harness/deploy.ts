@@ -23,6 +23,10 @@ export interface SendTransactionResult {
   txTypeUsed: "eip1559" | "legacy";
 }
 
+const DEPLOY_TX_GAS_LIMIT = 8_000_000n;
+const CONTRACT_TX_GAS_LIMIT = 3_000_000n;
+const VALUE_TX_GAS_LIMIT = 21_000n;
+
 function parseArtifact(json: string): ContractArtifact {
   const artifact = JSON.parse(json) as {
     abi?: unknown;
@@ -92,15 +96,19 @@ function hasEffectiveGasPrice(
   return receipt.effectiveGasPrice !== undefined || receipt.gasPrice !== undefined;
 }
 
-function isNonceConflictError(error: unknown): boolean {
-  const message = errorMessage(error).toLowerCase();
+function isNonceConflictMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("nonce too low") ||
+    normalized.includes("nonce has already been used") ||
+    normalized.includes("nonce is too low") ||
+    normalized.includes("replacement transaction underpriced") ||
+    normalized.includes("already known")
+  );
+}
 
-  if (
-    message.includes("nonce too low") ||
-    message.includes("nonce has already been used") ||
-    message.includes("already known") ||
-    message.includes("nonce")
-  ) {
+function isNonceConflictError(error: unknown): boolean {
+  if (isNonceConflictMessage(errorMessage(error))) {
     return true;
   }
 
@@ -122,7 +130,7 @@ function isNonceConflictError(error: unknown): boolean {
       typeof maybe.info.error === "object" &&
       maybe.info.error.code === -32003 &&
       typeof maybe.info.error.message === "string" &&
-      maybe.info.error.message.toLowerCase().includes("nonce")
+      isNonceConflictMessage(maybe.info.error.message)
     ) {
       return true;
     }
@@ -132,7 +140,7 @@ function isNonceConflictError(error: unknown): boolean {
       typeof maybe.error === "object" &&
       maybe.error.code === -32003 &&
       typeof maybe.error.message === "string" &&
-      maybe.error.message.toLowerCase().includes("nonce")
+      isNonceConflictMessage(maybe.error.message)
     ) {
       return true;
     }
@@ -157,6 +165,7 @@ async function sendWithNonceRecovery(
     data?: string;
     value?: bigint;
     type: 0 | 2;
+    gasLimit?: bigint;
     gasPrice?: bigint;
     maxFeePerGas?: bigint;
     maxPriorityFeePerGas?: bigint;
@@ -241,7 +250,7 @@ export function toRpcError(error: unknown): RpcErrorShape {
 
 async function sendTransactionWithFallback(
   wallet: Wallet,
-  tx: { to?: string; data?: string; value?: bigint }
+  tx: { to?: string; data?: string; value?: bigint; gasLimit?: bigint }
 ): Promise<SendTransactionResult> {
   if (!wallet.provider) {
     throw new Error("Wallet provider is not attached");
@@ -255,7 +264,8 @@ async function sendTransactionWithFallback(
   const baseTx = {
     to: tx.to,
     data: tx.data,
-    value: tx.value ?? 0n
+    value: tx.value ?? 0n,
+    gasLimit: tx.gasLimit
   };
 
   try {
@@ -323,7 +333,8 @@ async function deployContract(
   const valueRaw = deployRequest.value;
   const deployResult = await sendTransactionWithFallback(wallet, {
     data: deployData,
-    value: valueRaw ? BigInt(valueRaw.toString()) : 0n
+    value: valueRaw ? BigInt(valueRaw.toString()) : 0n,
+    gasLimit: DEPLOY_TX_GAS_LIMIT
   });
   const contractAddress = deployResult.receipt.contractAddress;
   if (!contractAddress) {
@@ -345,7 +356,8 @@ async function callContractWithFallback(
   const data = contract.interface.encodeFunctionData(method, args);
   return sendTransactionWithFallback(wallet, {
     to: await contract.getAddress(),
-    data
+    data,
+    gasLimit: CONTRACT_TX_GAS_LIMIT
   });
 }
 
@@ -436,7 +448,8 @@ export async function sendContractTransactionWithFallback(
   return sendTransactionWithFallback(runtime.wallet, {
     to: contractAddress,
     data,
-    value
+    value,
+    gasLimit: CONTRACT_TX_GAS_LIMIT
   });
 }
 
@@ -447,7 +460,8 @@ export async function sendValueTransactionWithFallback(
 ): Promise<SendTransactionResult> {
   return sendTransactionWithFallback(runtime.wallet, {
     to,
-    value
+    value,
+    gasLimit: VALUE_TX_GAS_LIMIT
   });
 }
 
