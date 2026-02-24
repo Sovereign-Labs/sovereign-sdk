@@ -225,6 +225,12 @@ paths:
         - $ref: "#/components/parameters/pageType"
         - $ref: "#/components/parameters/pageSize"
         - $ref: "#/components/parameters/pageCursor"
+        - name: prefix
+          in: query
+          description: The key prefix to filter by.
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: "Returns a list of events"

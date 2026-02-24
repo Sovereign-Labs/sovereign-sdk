@@ -34,7 +34,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec, VersionReader};
+use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
 
@@ -670,7 +670,7 @@ where
                                 newest_pending_block,
                             )));
                         }
-                        // Otherwise, this is a the same as the pending block but with fewer txs - truncate the pending block to the number of txs requested
+                        // Otherwise, this is at the same as the pending block but with fewer txs - truncate the pending block to the number of txs requested
                         newest_pending_block.transactions.end =
                             newest_pending_block.transactions.start + num_txs as u64;
                         return Ok(Some(MaybeSealedBlock::PendingSynthetic(
@@ -855,6 +855,13 @@ where
             .expect("Maybe pending block should never return None if allow_empty is true")
     }
 
+    /// Resolves a block ID to either current or archival state.
+    ///
+    /// Explicit numeric selectors are resolved by block kind, not by height arithmetic:
+    /// - if the number identifies the current synthetic pending block, use `Current`
+    /// - otherwise resolve through archival state for that exact block number.
+    ///
+    /// This avoids coupling correctness to `rollup_height` transition timing.
     fn resolve_state_for_block_id<'a>(
         &self,
         block_id: Option<BlockId>,
@@ -865,8 +872,11 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                if number == state.rollup_height_to_access().get()
-                    || (number == state.rollup_height_to_access().get() + 1)
+                // Always prefer archival for explicitly sealed block numbers.
+                if self.blocks.get(&number, state).unwrap_infallible().is_none()
+                    // Treat explicit pending-block numbers as current only when there are pending txs.
+                    && self.has_pending_block(state)
+                    && self.block_env(state).unwrap_infallible().number == number
                 {
                     return Ok(MaybeArchivalState::Current(state));
                 }

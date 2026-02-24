@@ -256,15 +256,23 @@ pub const DEFAULT_MAX_FEE: u128 = 100000000;
 ///
 /// # Returns
 ///
-/// Returns `UniquenessData::Generation` with the current Unix timestamp
+/// Returns `UniquenessData::Generation` with the current Unix timestamp,
+/// or an error if system time is before the Unix epoch.
+///
+/// # Errors
+///
+/// Returns [`TransactionBuilderError::TimeError`] if the system clock
+/// is set to a time before the Unix epoch.
 ///
 /// # Panics
-///
-/// Panics if the system clock is set to a time before the Unix epoch.
+/// Panics if the system clock is outside the supported Unix epoch range
+/// (milliseconds since 1970 do not fit in `u64`).
 pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
-    Ok(UniquenessData::Generation(now as u64))
+    Ok(UniquenessData::Generation(now.try_into().expect(
+        "system clock is far beyond Unix epoch range; milliseconds since 1970 do not fit in u64",
+    )))
 }
 
 /// Errors that can occur when building transactions using the schema-based approach.
