@@ -1010,7 +1010,8 @@ mod adversarial_tampering {
 mod multirow_absence_spec {
     use super::*;
     use crate::proptests::{
-        build_header, make_blob_shares, namespace_rows, NS_BATCH, NS_HIGH_A, NS_LOW_A, NS_PROOF,
+        build_header, make_blob_shares, namespace_rows, signer_for_index, NS_BATCH, NS_HIGH_A,
+        NS_LOW_A, NS_PROOF,
     };
     use crate::types::{NamespaceRelevantData, APP_VERSION};
     use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
@@ -1055,6 +1056,58 @@ mod multirow_absence_spec {
         (block, params)
     }
 
+    fn synthetic_multirow_mixed_presence_fixture() -> (FilteredCelestiaBlock, RollupParams) {
+        let ods_width = 4usize;
+        let mut ods_shares = Vec::with_capacity(ods_width * ods_width);
+
+        // Row 0: low + high, no target shares (candidate row with absence).
+        ods_shares.extend(make_blob_shares(NS_LOW_A, 3, None, 0x11));
+        ods_shares.extend(make_blob_shares(NS_HIGH_A, 1, None, 0x12));
+
+        // Row 1: low + target + high (candidate row with real target shares).
+        ods_shares.extend(make_blob_shares(NS_LOW_A, 1, None, 0x21));
+        ods_shares.extend(make_blob_shares(
+            NS_BATCH,
+            1,
+            Some(signer_for_index(0x22, 0)),
+            0x23,
+        ));
+        ods_shares.extend(make_blob_shares(NS_HIGH_A, 2, None, 0x24));
+
+        // Rows 2-3: high only, non-candidate rows for NS_BATCH.
+        ods_shares.extend(make_blob_shares(NS_HIGH_A, ods_width * 2, None, 0x31));
+
+        let eds =
+            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
+        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+
+        assert!(
+            batch_rows.len() > 1,
+            "synthetic fixture must contain multiple candidate rows"
+        );
+        assert!(
+            batch_rows.iter().any(|row| row.shares.is_empty()),
+            "synthetic fixture must contain at least one absence candidate row"
+        );
+        assert!(
+            batch_rows.iter().any(|row| !row.shares.is_empty()),
+            "synthetic fixture must contain at least one presence candidate row"
+        );
+
+        let block = FilteredCelestiaBlock {
+            header: build_header(dah),
+            rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
+            rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
+        };
+        let params = RollupParams {
+            rollup_batch_namespace: NS_BATCH,
+            rollup_proof_namespace: NS_PROOF,
+        };
+        (block, params)
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "BUG SPEC: Multi-row empty-namespace absence should be accepted when all candidate rows are proven absent, but current legacy completeness proof (Option<NamespaceBoundaryProof>) cannot express all-row evidence. Expected: verifier accepts this synthetic all-rows-absent block. Actual: verifier rejects ambiguous multi-row emptiness (MissingBlobs). References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, branch nikolai/celestia-fix-empty-namespace-proof, docs/celestia/multirow-absence-redesign-prompt.md."]
     async fn empty_namespace_multicandidate_rows_all_rows_absent_accepted_after_redesign() {
@@ -1082,6 +1135,41 @@ mod multirow_absence_spec {
     #[tokio::test(flavor = "multi_thread")]
     async fn empty_namespace_multicandidate_rows_without_global_evidence_rejected() {
         let (block, rollup_params) = synthetic_multirow_absence_fixture();
+        let relevant_blobs = RelevantBlobs {
+            batch_blobs: Vec::new(),
+            proof_blobs: Vec::new(),
+        };
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("MissingBlobs"),
+            "expected MissingBlobs, got: {error}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn empty_namespace_claim_rejected_when_candidate_row_contains_real_shares() {
+        let (block, rollup_params) = synthetic_multirow_mixed_presence_fixture();
+        let root_count = block
+            .header
+            .get_row_roots_for_namespace(rollup_params.rollup_batch_namespace)
+            .count();
+        assert!(
+            root_count > 1,
+            "fixture should have more than one candidate row root"
+        );
+
+        let honest_blobs = extract_relevant_blobs(&block);
+        assert!(
+            !honest_blobs.batch_blobs.is_empty(),
+            "synthetic fixture should contain real extracted batch blobs"
+        );
+
+        // Adversarial claim: pretend namespace is empty.
         let relevant_blobs = RelevantBlobs {
             batch_blobs: Vec::new(),
             proof_blobs: Vec::new(),
