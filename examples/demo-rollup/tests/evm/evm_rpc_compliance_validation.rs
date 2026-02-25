@@ -247,7 +247,6 @@ async fn rpc_004_eth_call_applies_state_overrides() -> anyhow::Result<()> {
 
 // RPC-005
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known RPC compatibility gap: tx rejection uses custom -32003 code instead of standard invalid-params class"]
 async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -279,7 +278,6 @@ async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyh
         "expected rejected transaction error: {response}"
     );
     // Ethereum clients commonly classify malformed tx params as -32602.
-    // Sovereign currently maps this path to custom -32003.
     assert_eq!(error_code(&response), -32602);
 
     Ok(())
