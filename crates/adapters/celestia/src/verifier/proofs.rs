@@ -167,23 +167,11 @@ pub struct RangeProof {
 }
 
 #[cfg(feature = "native")]
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum InclusionProofBuildError {
-    #[error(
-        "supported shares exist in namespace {namespace:?}, but extracted blobs are empty (namespace share count: {end_of_ns})"
-    )]
-    SupportedSharesWithoutBlobs {
-        namespace: celestia_types::nmt::Namespace,
-        end_of_ns: usize,
-    },
-}
-
-#[cfg(feature = "native")]
 pub(crate) fn new_inclusion_proof(
     header: &crate::CelestiaHeader,
     rollup_data: &crate::types::NamespaceRelevantData,
     blobs: &[crate::types::BlobWithSender],
-) -> Result<Vec<BlobProof>, InclusionProofBuildError> {
+) -> Vec<BlobProof> {
     let mut needed_share_ranges = Vec::new();
 
     let mut prev_range_end: Option<usize> = None;
@@ -264,10 +252,11 @@ pub(crate) fn new_inclusion_proof(
             end_of_ns,
             "Invariant violation: supported shares exist but extracted blob list is empty"
         );
-        return Err(InclusionProofBuildError::SupportedSharesWithoutBlobs {
-            namespace: rollup_data.namespace,
-            end_of_ns,
-        });
+        panic!(
+            "supported shares exist in namespace {:?}, but extracted blobs are empty (namespace share count: {})",
+            rollup_data.namespace,
+            end_of_ns
+        );
     }
 
     if blobs.is_empty() && end_of_ns > 0 && !namespace_has_supported_shares {
@@ -289,13 +278,13 @@ pub(crate) fn new_inclusion_proof(
         .cloned()
         .collect::<Vec<_>>();
 
-    Ok(sub_namespace_inclusion_proofs(
+    sub_namespace_inclusion_proofs(
         header.row_length(),
         &rollup_data.data,
         rollup_data.namespace,
         &needed_share_ranges,
         &row_roots,
-    ))
+    )
 }
 
 #[cfg(feature = "native")]

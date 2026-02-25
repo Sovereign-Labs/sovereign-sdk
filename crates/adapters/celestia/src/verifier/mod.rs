@@ -540,6 +540,8 @@ fn check_namespace_end_boundary(
         // Determine the row of the boundary proof from the trusted `last_proven_share_idx`.
         // Security invariant: the boundary proof must terminate the namespace in the last
         // candidate row root. Otherwise, rows after `row_idx` could still contain this namespace.
+        // Upsize everything to u64, even though zkVM is 32 bit, and such big namespace rows are highly unlikely,
+        // better to be on the safe side.
         let row_len = block_header.row_length() as u64;
         let proof_start_in_row = last_share_proof.start_idx() as u64;
         let last_proven_share_idx_u64 = last_proven_share_idx as u64;

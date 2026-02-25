@@ -820,8 +820,7 @@ where
             }
         }
 
-        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-            .expect("extraction proof should be generated for extracted blobs");
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
         let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -921,8 +920,7 @@ async fn verification_error(
     rollup_params: RollupParams,
 ) -> anyhow::Result<()> {
     let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-        .expect("extraction proof should be generated for extracted blobs");
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -942,8 +940,7 @@ async fn verification_fails_if_tx_missing() {
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
 
     let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-        .expect("extraction proof should be generated for extracted blobs");
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -963,6 +960,7 @@ async fn verification_fails_if_tx_missing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[should_panic(expected = "supported shares exist in namespace")]
 async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist() {
     let block = with_mixed_v0_and_v1_blobs::filtered_block();
     let relevant_blobs = RelevantBlobs {
@@ -970,16 +968,11 @@ async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist(
         proof_blobs: Default::default(),
     };
 
-    let err = get_extraction_proof(&block, &relevant_blobs).unwrap_err();
-    let has_supported_shares_err = err.chain().any(|cause| {
-        cause
-            .to_string()
-            .contains("supported shares exist in namespace")
-    });
-    assert!(has_supported_shares_err, "Unexpected error: {err:#}");
+    let _ = get_extraction_proof(&block, &relevant_blobs);
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[should_panic(expected = "supported shares exist in namespace")]
 async fn verification_fails_if_supported_namespace_has_empty_blob_list() {
     let block = with_rollup_batch_data::filtered_block();
     let relevant_blobs = RelevantBlobs {
@@ -987,13 +980,7 @@ async fn verification_fails_if_supported_namespace_has_empty_blob_list() {
         proof_blobs: Default::default(),
     };
 
-    let err = get_extraction_proof(&block, &relevant_blobs).unwrap_err();
-    let has_supported_shares_err = err.chain().any(|cause| {
-        cause
-            .to_string()
-            .contains("supported shares exist in namespace")
-    });
-    assert!(has_supported_shares_err, "Unexpected error: {err:#}");
+    let _ = get_extraction_proof(&block, &relevant_blobs);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1003,8 +990,7 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
 
     let relevant_blobs = extract_relevant_blobs(&block);
 
-    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-        .expect("extraction proof should be generated for extracted blobs");
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
     // drop the proof for last batch
     relevant_proofs.batch.inclusion_proof.pop();
 
@@ -1036,8 +1022,7 @@ async fn verification_for_padded_namespace() {
     let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
 
     let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-        .expect("extraction proof should be generated for extracted blobs");
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     let verifier = CelestiaVerifier::new(rollup_params);
 
@@ -1052,8 +1037,7 @@ async fn verification_fails_if_there_is_less_blobs_than_proofs() {
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
 
     let relevant_blobs = extract_relevant_blobs(&block);
-    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-        .expect("extraction proof should be generated for extracted blobs");
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     // push one extra blob proof
     relevant_proofs
@@ -1078,8 +1062,7 @@ async fn verification_fails_for_incorrect_namespace() {
     let block = with_rollup_proof_data::filtered_block();
 
     let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs)
-        .expect("extraction proof should be generated for extracted blobs");
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
     // create a verifier with a different namespace than the da_service
     let verifier = CelestiaVerifier::new(RollupParams {
