@@ -523,7 +523,7 @@ where
         let user_reads = state_accesses.user.ordered_reads.len();
         let user_writes = state_accesses.user.ordered_writes.len();
         let kernel_reads = state_accesses.kernel.ordered_reads.len();
-        let kernel_writes = state_accesses.kernel.ordered_reads.len();
+        let kernel_writes = state_accesses.kernel.ordered_writes.len();
         let with_witness = self.strict_with_witness;
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtProverComputeStateResult {
