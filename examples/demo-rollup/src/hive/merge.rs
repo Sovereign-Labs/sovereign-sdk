@@ -8,6 +8,9 @@ use crate::types::{
     decode_hex_address, decode_u256_literal, value_as_u256, AllocStats, GethAllocAccount, U256Like,
 };
 
+type AddressBalance = (String, U256);
+type AllocConversion = (Vec<Value>, Vec<AddressBalance>, AllocStats);
+
 fn balance_key(address: &str) -> String {
     if address.starts_with("0x") || address.starts_with("0X") {
         address.to_ascii_lowercase()
@@ -76,9 +79,9 @@ fn normalize_storage(
 
 pub(crate) fn build_evm_accounts_and_alloc_balances(
     alloc: &BTreeMap<String, GethAllocAccount>,
-) -> Result<(Vec<Value>, Vec<(String, U256)>, AllocStats)> {
+) -> Result<AllocConversion> {
     let mut evm_accounts = Vec::with_capacity(alloc.len());
-    let mut alloc_balances: Vec<(String, U256)> = Vec::new();
+    let mut alloc_balances: Vec<AddressBalance> = Vec::new();
     let mut stats = AllocStats::default();
 
     for (raw_address, entry) in alloc {
@@ -129,9 +132,9 @@ pub(crate) fn build_evm_accounts_and_alloc_balances(
 
 pub(crate) fn merge_balances(
     existing_balances: &[Value],
-    alloc_balances: Vec<(String, U256)>,
+    alloc_balances: Vec<AddressBalance>,
 ) -> Result<Vec<Value>> {
-    let mut merged: Vec<(String, U256)> = Vec::new();
+    let mut merged: Vec<AddressBalance> = Vec::new();
     let mut index_by_key: HashMap<String, usize> = HashMap::new();
 
     for pair in existing_balances {
