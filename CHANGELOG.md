@@ -1,5 +1,6 @@
 # 2026-02-23
 - #2520 reverts #2489
+- #2532 EVM: Minor fixes in RPC endpoints
 
 # 2026-02-17
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
