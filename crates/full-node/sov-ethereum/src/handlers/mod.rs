@@ -170,8 +170,7 @@ where
             if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
                 &e
             {
-                if err_msg.contains("Only EIP1559") || err_msg.contains(UNSUPPORTED_TX_TYPE_PREFIX)
-                {
+                if err_msg.contains(UNSUPPORTED_TX_TYPE_PREFIX) {
                     return rpc_tx_rejected(format!("transaction type not supported: {err_msg}"));
                 }
             };

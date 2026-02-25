@@ -13,7 +13,6 @@ use alloy_rpc_types::{
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::ErrorObjectOwned;
 use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
 use revm_database_interface::TryDatabaseCommit;
@@ -23,8 +22,7 @@ use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
 use sov_rpc_eth_types::{
-    invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RevertError,
-    RpcInvalidTransactionError,
+    EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
 };
 use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use std::ops::DerefMut;
@@ -92,12 +90,8 @@ where
             method = "eth_getBlockByNumber",
             "EVM module JSON-RPC request"
         );
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
-        Ok(self.get_maybe_synthetic_block_for_rpc(
-            Some(block_id),
-            details.unwrap_or_default().into(),
-            state,
-        )?)
+        let kind = details.unwrap_or_default().into();
+        Ok(self.get_maybe_synthetic_block_for_rpc(block_id, kind, state)?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -108,8 +102,7 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U256> {
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
         let balance = self
             .db(state.deref_mut())
             .basic(address)
@@ -132,15 +125,13 @@ where
     pub fn get_storage_at(
         &self,
         address: Address,
-        raw_index: String,
+        index: U256,
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<B256> {
-        let index = parse_storage_slot_index(&raw_index)?;
         trace!(method = "eth_getStorageAt", ?block_id, %address, %index, "EVM module JSON-RPC request");
 
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
         let storage_slot = self
             .account_storage
             .get(&(&address, &index), state.deref_mut())
@@ -158,8 +149,7 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let mut state = self.resolve_state_for_block_id(Some(block_id), state)?;
+        let mut state = self.resolve_state_for_block_id(block_id, state)?;
 
         let ethereum_address: EthereumAddress = address.into();
         let credential_id = ethereum_address.as_credential_id();
@@ -182,8 +172,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         trace!(method = "eth_getCode", %address, ?block_id, "EVM module JSON-RPC request");
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let state = self.resolve_state_for_block_id(Some(block_id), state)?;
+        let state = self.resolve_state_for_block_id(block_id, state)?;
         Ok(self.get_contract_code(address, state).unwrap_or_default())
     }
 
@@ -196,6 +185,9 @@ where
 
     /// Handler for: `eth_feeHistory`
     /// Returns historical gas price and usage data for recent blocks.
+    ///
+    /// This endpoint helps wallets and users determine appropriate gas prices
+    /// by exposing the rollup's EIP-1559 style base fee history.
     #[rpc_method(name = "eth_feeHistory")]
     pub fn fee_history(
         &self,
@@ -293,13 +285,12 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
     {
-        let block_id = block_id.unwrap_or_else(BlockId::latest);
         trace!(
             ?block_id,
             method = "eth_getBlockReceipts",
             "EVM module JSON-RPC request"
         );
-        Ok(self.get_receipts(Some(block_id), state)?)
+        Ok(self.get_receipts(block_id, state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`
@@ -318,6 +309,7 @@ where
     }
 
     /// Handler for: `eth_call`
+    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,
@@ -389,8 +381,9 @@ where
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
-        let latest = self.resolve_block_number(BlockNumberOrTag::Latest, state);
-        Ok(U256::from(latest))
+        Ok(U256::from(
+            self.resolve_block_number(BlockNumberOrTag::Latest, state),
+        ))
     }
 
     /// Handler for: `eth_estimateGas`
@@ -512,12 +505,11 @@ where
     #[rpc_method(name = "debug_getRawBlock")]
     pub fn debug_get_raw_block(
         &self,
-        raw_block_id: String,
+        block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Bytes>> {
-        let block_id = parse_debug_block_id(&raw_block_id)?;
         trace!(
-            block_id = %raw_block_id,
+            ?block_id,
             method = "debug_getRawBlock",
             "EVM module JSON-RPC request"
         );
@@ -546,12 +538,11 @@ where
     #[rpc_method(name = "debug_getRawHeader")]
     pub fn debug_get_raw_header(
         &self,
-        raw_block_id: String,
+        block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Bytes>> {
-        let block_id = parse_debug_block_id(&raw_block_id)?;
         trace!(
-            block_id = %raw_block_id,
+            ?block_id,
             method = "debug_getRawHeader",
             "EVM module JSON-RPC request"
         );
@@ -569,12 +560,11 @@ where
     #[rpc_method(name = "debug_getRawReceipts")]
     pub fn debug_get_raw_receipts(
         &self,
-        raw_block_id: String,
+        block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Vec<Bytes>> {
-        let block_id = parse_debug_block_id(&raw_block_id)?;
         trace!(
-            block_id = %raw_block_id,
+            ?block_id,
             method = "debug_getRawReceipts",
             "EVM module JSON-RPC request"
         );
@@ -613,10 +603,9 @@ where
     #[rpc_method(name = "debug_getRawTransaction")]
     pub fn debug_get_raw_transaction(
         &self,
-        raw_hash: String,
+        hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Bytes>> {
-        let hash = parse_hash(&raw_hash)?;
         trace!(
             tx_hash = %hash,
             method = "debug_getRawTransaction",
@@ -700,11 +689,7 @@ where
             "EVM module JSON-RPC request"
         );
         let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
-        if let Some(block) = block {
-            return Ok(Some(U64::from(block.transactions.len())));
-        }
-
-        Ok(None)
+        Ok(block.map(|b| U64::from(b.transactions.len())))
     }
 
     /// Handler for: `eth_getBlockTransactionCountByHash`
@@ -729,15 +714,13 @@ where
                 Err(err) => return Err(err.into()),
             };
 
-        if let Some(block) = maybe_block {
-            return Ok(Some(U64::from(
+        Ok(maybe_block.map(|block| {
+            U64::from(
                 block
                     .transactions_end()
                     .saturating_sub(block.transactions_start()),
-            )));
-        }
-
-        Ok(None)
+            )
+        }))
     }
 }
 
@@ -771,91 +754,6 @@ where
     Ok(Some(tx))
 }
 
-fn parse_debug_block_id(raw: &str) -> Result<BlockId, ErrorObjectOwned> {
-    let block_tag = match raw {
-        "latest" => Some(BlockNumberOrTag::Latest),
-        "pending" => Some(BlockNumberOrTag::Pending),
-        "earliest" => Some(BlockNumberOrTag::Earliest),
-        "safe" => Some(BlockNumberOrTag::Safe),
-        "finalized" => Some(BlockNumberOrTag::Finalized),
-        _ => None,
-    };
-    if let Some(tag) = block_tag {
-        return Ok(BlockId::Number(tag));
-    }
-
-    if raw.starts_with("0x") && raw.len() == 66 {
-        return Ok(BlockId::Hash(parse_hash(raw)?.into()));
-    }
-
-    if !raw.starts_with("0x") {
-        return Err(invalid_params_rpc_err(
-            "invalid argument 0: expected block hash, hex block number, or block tag",
-        ));
-    }
-
-    let block_number = parse_hex_quantity(raw)?;
-    Ok(BlockId::Number(BlockNumberOrTag::Number(block_number)))
-}
-
-fn parse_hash(raw: &str) -> Result<B256, ErrorObjectOwned> {
-    let Some(stripped) = raw.strip_prefix("0x") else {
-        return Err(invalid_params_rpc_err(
-            "invalid argument 0: hex string without 0x prefix",
-        ));
-    };
-    if stripped.len() != 64 || !stripped.chars().all(|ch| ch.is_ascii_hexdigit()) {
-        return Err(invalid_params_rpc_err(
-            "invalid argument 0: expected 32-byte hex value",
-        ));
-    }
-
-    let decoded = hex::decode(stripped)
-        .map_err(|_| invalid_params_rpc_err("invalid argument 0: expected 32-byte hex value"))?;
-    Ok(B256::from_slice(&decoded))
-}
-
-fn parse_hex_quantity(raw: &str) -> Result<u64, ErrorObjectOwned> {
-    let Some(stripped) = raw.strip_prefix("0x") else {
-        return Err(invalid_params_rpc_err(
-            "invalid argument 0: hex string without 0x prefix",
-        ));
-    };
-    if !stripped.chars().all(|ch| ch.is_ascii_hexdigit()) {
-        return Err(invalid_params_rpc_err(
-            "invalid argument 0: invalid hex quantity",
-        ));
-    }
-    let normalized = if stripped.is_empty() { "0" } else { stripped };
-    u64::from_str_radix(normalized, 16)
-        .map_err(|_| invalid_params_rpc_err("invalid argument 0: block number overflow"))
-}
-
-fn parse_storage_slot_index(raw: &str) -> Result<U256, ErrorObjectOwned> {
-    let Some(stripped) = raw.strip_prefix("0x") else {
-        return Err(invalid_params_rpc_err(format!(
-            "invalid hex in storage key: \"{raw}\"",
-        )));
-    };
-    if stripped.len() > 64 {
-        return Err(invalid_params_rpc_err(format!(
-            "storage key too long (want at most 32 bytes): \"{raw}\"",
-        )));
-    }
-    if stripped.is_empty() {
-        return Ok(U256::ZERO);
-    }
-
-    let normalized = if stripped.len() % 2 == 0 {
-        stripped.to_string()
-    } else {
-        format!("0{stripped}")
-    };
-    let decoded = hex::decode(normalized)
-        .map_err(|_| invalid_params_rpc_err(format!("invalid hex in storage key: \"{raw}\"")))?;
-    Ok(U256::from_be_slice(&decoded))
-}
-
 const ESTIMATE_GAS_ABSOLUTE_MARGIN: u64 = 100_000;
 
 /// Returns `gas * 1.5 + 100_000`.
@@ -884,36 +782,5 @@ mod estimate_gas_tests {
             apply_estimate_margins(u64::MAX),
             Err(RpcInvalidTransactionError::GasUintOverflow)
         ));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_debug_block_id;
-    use alloy_eips::{BlockId, BlockNumberOrTag};
-
-    #[test]
-    fn parse_debug_block_id_accepts_tags() {
-        assert_eq!(parse_debug_block_id("latest").unwrap(), BlockId::latest());
-        assert_eq!(
-            parse_debug_block_id("pending").unwrap(),
-            BlockId::Number(BlockNumberOrTag::Pending),
-        );
-        assert_eq!(
-            parse_debug_block_id("safe").unwrap(),
-            BlockId::Number(BlockNumberOrTag::Safe),
-        );
-        assert_eq!(
-            parse_debug_block_id("finalized").unwrap(),
-            BlockId::Number(BlockNumberOrTag::Finalized),
-        );
-    }
-
-    #[test]
-    fn parse_debug_block_id_rejects_decimal_number() {
-        let err = parse_debug_block_id("42").unwrap_err();
-        assert!(err
-            .message()
-            .contains("expected block hash, hex block number, or block tag"));
     }
 }

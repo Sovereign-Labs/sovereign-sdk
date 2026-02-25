@@ -1,31 +1,9 @@
-use std::net::SocketAddr;
-
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::evm::evm_test_helper::{setup_test_rollup, EVM_EXTENSION};
+use crate::evm::evm_test_helper::{rpc_call, setup_test_rollup, EVM_EXTENSION};
 
 const INVALID_PARAMS_CODE: i64 = -32602;
-
-async fn rpc_call(
-    client: &Client,
-    http_addr: SocketAddr,
-    method: &str,
-    params: Value,
-) -> anyhow::Result<Value> {
-    Ok(client
-        .post(format!("http://{http_addr}/rpc"))
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        }))
-        .send()
-        .await?
-        .json::<Value>()
-        .await?)
-}
 
 fn assert_invalid_params(response: &Value) {
     let error = response

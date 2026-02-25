@@ -683,6 +683,7 @@ where
                 }
             }
             BlockId::Hash(hash) => {
+                // If the hash is synthetic, handle that special case
                 if let Some((block_number, num_txs)) = parse_synthetic_block_hash(&hash.into()) {
                     // Prerequisite: Check that the synthetic block exists and is recent enough to still be saved.
                     // This ensures that any calls to "getBlockByHash" will succeed only if "eth_call" would succeed given the same hash.
@@ -698,6 +699,9 @@ where
                         }
                     }
 
+                    // Case 1: The synthetic block has the same block number as the pending block;
+                    // that's a harder special case where we need to populate its fields from
+                    // the pending block.
                     let block_env = self.block_env(state).unwrap_infallible();
                     if block_env.number == block_number {
                         let Some(mut newest_pending_block) =
@@ -705,14 +709,18 @@ where
                         else {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         };
+                        // Check that the number of txs requested is no more than the number of
+                        // txs in the pending block. If not, this block doesn't exist.
                         if num_txs as u64 > newest_pending_block.num_transactions() {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         }
+                        // If number of txs matches exactly, this is the pending block.
                         if num_txs as u64 == newest_pending_block.num_transactions() {
                             return Ok(Some(MaybeSealedBlock::PendingSynthetic(
                                 newest_pending_block,
                             )));
                         }
+                        // Otherwise this is the pending block truncated to fewer transactions.
                         newest_pending_block.transactions.end =
                             newest_pending_block.transactions.start + num_txs as u64;
                         return Ok(Some(MaybeSealedBlock::PendingSynthetic(
@@ -1221,6 +1229,11 @@ pub(crate) fn build_rpc_receipt(
         maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
             // Keep compatibility for historical data where metadata may be missing.
             .unwrap_or(eip_1559_effective_gas_price);
+
+    debug_assert!(
+        transaction.inner().is_eip1559() || transaction.inner().is_eip7702(),
+        "sov-evm rollup receipts should only use EIP-1559 or EIP-7702 transaction types",
+    );
 
     TransactionReceipt {
         inner: ReceiptEnvelope::from_typed(

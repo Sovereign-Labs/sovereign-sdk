@@ -1,32 +1,10 @@
-use std::net::SocketAddr;
-
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::evm::evm_test_helper::{setup_with_simple_storage, EVM_EXTENSION};
+use crate::evm::evm_test_helper::{rpc_call, setup_with_simple_storage, EVM_EXTENSION};
 
 const INVALID_PARAMS_CODE: i64 = -32602;
 const REVERT_ERROR_CODE: i64 = 3;
-
-async fn rpc_call(
-    client: &Client,
-    http_addr: SocketAddr,
-    method: &str,
-    params: Value,
-) -> anyhow::Result<Value> {
-    Ok(client
-        .post(format!("http://{http_addr}/rpc"))
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        }))
-        .send()
-        .await?
-        .json::<Value>()
-        .await?)
-}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_call_existing_contract_returns_non_empty_data() -> anyhow::Result<()> {

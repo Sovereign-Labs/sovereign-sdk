@@ -9,6 +9,9 @@ use sov_rpc_eth_types::EthResult;
 
 use crate::evm::primitive_types::TransactionSigned;
 
+// Based on reth's RPC call env preparation:
+// https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
+// It is `pub(crate)` for tests.
 pub(crate) fn prepare_call_env(
     block_env: &BlockEnv,
     request: TransactionRequest,

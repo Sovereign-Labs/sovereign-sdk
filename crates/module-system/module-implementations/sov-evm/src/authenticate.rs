@@ -127,12 +127,12 @@ fn create_auth_tx_and_hash<
     let tx_hash = TxHash::new(**tx.hash());
     ensure_supported_transaction_type(tx)
         .map_err(|err| AuthenticationError::FatalError(err, tx_hash))?;
-    let evm = Evm::<S>::default();
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx.is_eip7702(), tx_hash)?;
 
     let user_max_fee_per_gas = tx.max_fee_per_gas();
     let rollup_base_fee = gas_price.as_ref()[0].0;
 
+    let evm = Evm::<S>::default();
     let multiplier = evm.validate_fee_and_calculate_multiplier(
         user_max_fee_per_gas,
         rollup_base_fee,

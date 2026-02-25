@@ -1,6 +1,5 @@
 #![allow(deprecated)] // Allowed for using alloy things.
-use crate::evm::evm_test_helper::setup_with_simple_storage;
-use crate::evm::evm_test_helper::EVM_EXTENSION;
+use crate::evm::evm_test_helper::{rpc_call, setup_with_simple_storage, EVM_EXTENSION};
 use alloy_primitives::{keccak256, Address, TxHash, B256, U256};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
 use jsonrpsee::core::client::ClientT;
@@ -291,24 +290,17 @@ async fn get_logs_from_greater_than_to_returns_invalid_params() -> anyhow::Resul
 
     rollup_and_client.produce_logs(1, 2, None).await;
 
-    let response: Value = reqwest::Client::new()
-        .post(format!(
-            "http://{}/rpc",
-            rollup_and_client.test_rollup.http_addr
-        ))
-        .json(&serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "eth_getLogs",
-            "params": [{
-                "fromBlock": "latest",
-                "toBlock": "earliest"
-            }],
-            "id": 1
-        }))
-        .send()
-        .await?
-        .json()
-        .await?;
+    let http = reqwest::Client::new();
+    let response = rpc_call(
+        &http,
+        rollup_and_client.test_rollup.http_addr,
+        "eth_getLogs",
+        serde_json::json!([{
+            "fromBlock": "latest",
+            "toBlock": "earliest"
+        }]),
+    )
+    .await?;
 
     let error = response
         .get("error")

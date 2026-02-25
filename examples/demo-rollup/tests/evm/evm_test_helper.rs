@@ -8,7 +8,9 @@ use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::WsConnect;
+use reqwest::Client;
 use reqwest::Url;
+use serde_json::{json, Value};
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
 use sov_eth_client::SimpleStorageClient;
@@ -97,6 +99,26 @@ pub(crate) fn alloy_client_with_signer(socket: SocketAddr, private_key: &str) ->
 
 pub(crate) fn alloy_client(socket: SocketAddr) -> DynProvider {
     alloy_client_with_signer(socket, SENDER_PRIV_KEY)
+}
+
+pub(crate) async fn rpc_call(
+    client: &Client,
+    http_addr: SocketAddr,
+    method: &str,
+    params: Value,
+) -> anyhow::Result<Value> {
+    Ok(client
+        .post(format!("http://{http_addr}/rpc"))
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": 1
+        }))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?)
 }
 
 pub(crate) fn alloy_client_with_reqwest<B>(
