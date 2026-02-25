@@ -2,11 +2,11 @@ use std::net::SocketAddr;
 
 use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
 use alloy::eips::Encodable2718;
+use alloy::signers::local::PrivateKeySigner;
 use alloy::signers::Signer;
 use alloy_primitives::{hex, Address, TxKind, B256, U256, U64};
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
-use alloy::signers::local::PrivateKeySigner;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
@@ -237,7 +237,10 @@ async fn rpc_004_eth_call_applies_state_overrides() -> anyhow::Result<()> {
         .await?;
 
     assert_ne!(baseline, overridden);
-    assert_eq!(U256::from_be_slice(overridden.as_slice()), U256::from(42u64));
+    assert_eq!(
+        U256::from_be_slice(overridden.as_slice()),
+        U256::from(42u64)
+    );
 
     Ok(())
 }
@@ -264,7 +267,13 @@ async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyh
     .await?;
 
     let http = Client::new();
-    let response = rpc_call(&http, rollup.http_addr, "eth_sendRawTransaction", json!([raw])).await?;
+    let response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([raw]),
+    )
+    .await?;
     assert!(
         response.get("error").is_some(),
         "expected rejected transaction error: {response}"
@@ -293,7 +302,10 @@ async fn rpc_006_get_balance_accepts_eip_1898_block_selector() -> anyhow::Result
 
     let by_number: U256 = client
         .ws
-        .request("eth_getBalance", rpc_params![address, hex_u64(block_number)])
+        .request(
+            "eth_getBalance",
+            rpc_params![address, hex_u64(block_number)],
+        )
         .await?;
     let by_hash: U256 = client
         .ws
@@ -316,7 +328,6 @@ async fn rpc_006_get_balance_accepts_eip_1898_block_selector() -> anyhow::Result
 
 // RPC-007
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known RPC compatibility gap: web3_clientVersion is missing"]
 async fn rpc_007_web3_client_version_should_be_available() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let http = Client::new();
@@ -406,9 +417,8 @@ async fn rpc_009_pending_trace_matches_original_tx_input() -> anyhow::Result<()>
 
 // RPC-010
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known semantic gap: eth_sendRawTransactionSync returns pending receipt instead of waiting for sealed inclusion"]
-async fn rpc_010_send_raw_transaction_sync_should_timeout_while_batches_paused() -> anyhow::Result<()>
-{
+async fn rpc_010_send_raw_transaction_sync_returns_receipt_under_preferred_sequencer(
+) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
     rollup.pause_preferred_batches().await;
@@ -438,10 +448,21 @@ async fn rpc_010_send_raw_transaction_sync_should_timeout_while_batches_paused()
     .await?;
 
     assert!(
-        response.get("error").is_some(),
-        "expected timeout error while sequencer batching is paused: {response}"
+        response.get("error").is_none(),
+        "eth_sendRawTransactionSync should return receipt under preferred sequencer semantics: {response}"
     );
-    assert_eq!(error_code(&response), 4);
+    assert!(
+        response.get("result").is_some() && !response["result"].is_null(),
+        "expected a non-null receipt result: {response}"
+    );
+    assert!(
+        response["result"]["transactionHash"].is_string(),
+        "receipt should include transactionHash: {response}"
+    );
+    assert!(
+        response["result"]["blockNumber"].is_string(),
+        "receipt should include blockNumber: {response}"
+    );
 
     Ok(())
 }
@@ -523,7 +544,9 @@ async fn rpc_013_create_prediction_matches_rpc_nonce_in_demo_harness() -> anyhow
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let receipt = client.wait_for_receipt(deploy_tx).await;
-    let deployed = receipt.contract_address.expect("deployment should produce address");
+    let deployed = receipt
+        .contract_address
+        .expect("deployment should produce address");
     let predicted = sender.create(nonce);
 
     assert_eq!(

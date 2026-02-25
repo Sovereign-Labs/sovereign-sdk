@@ -26,6 +26,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 - `eth_maxPriorityFeePerGas` returns `0`.
 - `eth_call` accepts `state_overrides`/`block_overrides` but currently ignores them.
 - EIP-1898 `requireCanonical` is accepted but effectively a no-op in no-reorg semantics.
+- `eth_sendRawTransactionSync` / `realtime_sendRawTransaction` use submit + immediate receipt check semantics (optionally bounded by timeout); they do not guarantee sealed inclusion wait semantics.
 
 ## Wrapper Hotspots
 
@@ -74,7 +75,7 @@ Use shared helpers in `src/lib.rs`; do not introduce ad-hoc codes in handlers.
 ## Tx Submission Guardrails
 
 1. Keep parse -> authenticate -> sequencer accept ordering stable.
-2. Preserve explicit max timeout behavior for `eth_sendRawTransactionSync`.
+2. Preserve explicit max timeout behavior for `eth_sendRawTransactionSync`; timeout code `4` means processing did not complete within caller-provided timeout.
 3. Ensure tx-type rejection remains clear for unsupported tx types.
 4. In local signing flow, keep nonce/chain-id/gas filling explicit and deterministic.
 
@@ -89,7 +90,7 @@ Use shared helpers in `src/lib.rs`; do not introduce ad-hoc codes in handlers.
 
 1. If touching error mapping, test each helper code path at least once.
 2. If touching registration, verify unsupported methods still return stubbed code.
-3. If touching submission, test raw send, sync send timeout, and receipt retrieval flow.
+3. If touching submission, test raw send, sync send immediate-receipt behavior, timeout path, and receipt retrieval flow.
 4. If touching logs, test both no-cursor and cursor pagination paths with limits.
 5. If touching subscriptions, test `logs` and `newHeads` parameter validation and stream behavior.
 6. If touching local signing flow, verify nonce/chain-id/gas defaults and failure mapping.
