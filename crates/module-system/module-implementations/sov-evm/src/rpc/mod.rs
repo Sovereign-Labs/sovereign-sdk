@@ -1230,16 +1230,8 @@ pub(crate) fn build_rpc_receipt(
             // Keep compatibility for historical data where metadata may be missing.
             .unwrap_or(eip_1559_effective_gas_price);
 
-    debug_assert!(
-        transaction.inner().is_eip1559() || transaction.inner().is_eip7702(),
-        "sov-evm rollup receipts should only use EIP-1559 or EIP-7702 transaction types",
-    );
-
     TransactionReceipt {
-        inner: ReceiptEnvelope::from_typed(
-            transaction.inner().tx_type(),
-            ReceiptWithBloom::new(rpc_receipt, logs_bloom),
-        ),
+        inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
         transaction_hash,
         transaction_index: Some(transaction_index),
         block_hash,

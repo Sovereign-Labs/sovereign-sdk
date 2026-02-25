@@ -7,7 +7,6 @@ use std::str::FromStr;
 
 use crate::helpers::EvmAccount;
 use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
@@ -106,13 +105,7 @@ fn setup_prague() -> (TestRunner<RT, S>, EvmAccount) {
     let evm_account = EvmAccount::generate();
 
     let evm_config = EvmGenesisConfig {
-        accounts: vec![AccountData {
-            address: evm_account.address(),
-            code_hash: KECCAK_EMPTY,
-            code: Default::default(),
-            nonce: 0,
-            storage: Default::default(),
-        }],
+        accounts: vec![AccountData::empty_with_address(evm_account.address())],
         chain_spec: EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,
@@ -149,13 +142,7 @@ fn setup_cancun() -> (TestRunner<RT, S>, EvmAccount) {
     let evm_account = EvmAccount::generate();
 
     let evm_config = EvmGenesisConfig {
-        accounts: vec![AccountData {
-            address: evm_account.address(),
-            code_hash: KECCAK_EMPTY,
-            code: Default::default(),
-            nonce: 0,
-            storage: Default::default(),
-        }],
+        accounts: vec![AccountData::empty_with_address(evm_account.address())],
         chain_spec: EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,

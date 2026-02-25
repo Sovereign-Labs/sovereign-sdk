@@ -652,14 +652,6 @@ where
         Ok(true)
     }
 
-    /// Handler for: `eth_syncing`
-    /// Returns sync status. Demo rollup exposes a fully-synced local view for rpc-compat.
-    #[rpc_method(name = "eth_syncing")]
-    pub fn eth_syncing(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<bool> {
-        trace!(method = "eth_syncing", "EVM module JSON-RPC request");
-        Ok(false)
-    }
-
     /// Handler for: `eth_maxPriorityFeePerGas`
     /// Returns the current max priority fee per gas.
     #[rpc_method(name = "eth_maxPriorityFeePerGas")]

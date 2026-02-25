@@ -79,8 +79,8 @@ For the same tx/block, values must agree across:
 
 ### 6. Supported transaction types (Hard Constraint)
 
-- `sov-evm` must accept only `EIP-1559` and `EIP-7702` transaction envelopes.
-- `Legacy`, `EIP-2930`, and `EIP-4844` transactions must be rejected at authentication and execution ingress.
+- `sov-evm` must accept only `EIP-1559` transaction envelope.
+- `Legacy`, `EIP-2930`, `EIP-7702` and `EIP-4844` transactions must be rejected at authentication and execution ingress.
 - Do not relax this policy without explicit product approval and matching tests for the new support matrix.
 
 ## Failure Pattern Matrix (PR Lessons)

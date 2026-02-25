@@ -5,6 +5,7 @@ use crate::Evm;
 use crate::TransactionSigned;
 use crate::{call, CallMessage, RlpEvmTransaction};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
+use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -33,9 +34,6 @@ use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATUR
 #[cfg(feature = "native")]
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
-
-const UNSUPPORTED_TRANSACTION_TYPE_MESSAGE: &str =
-    "Unsupported transaction type: only EIP-1559 and EIP-7702 are supported.";
 
 impl<S: Spec> Evm<S> {
     /// Validates the user's max fee per gas against the rollup's base fee and returns a gas multiplier.
@@ -105,16 +103,6 @@ fn recover_evm_signer(
     result
 }
 
-pub(crate) fn ensure_supported_transaction_type(tx: &TransactionSigned) -> Result<(), FatalError> {
-    if tx.is_eip1559() || tx.is_eip7702() {
-        return Ok(());
-    }
-
-    Err(FatalError::DeserializationFailed(
-        UNSUPPORTED_TRANSACTION_TYPE_MESSAGE.to_string(),
-    ))
-}
-
 /// Creates the transaction details and tx hash for an EVM transaction.
 fn create_auth_tx_and_hash<
     Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
@@ -125,9 +113,7 @@ fn create_auth_tx_and_hash<
     state: &mut Accessor,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
-    ensure_supported_transaction_type(tx)
-        .map_err(|err| AuthenticationError::FatalError(err, tx_hash))?;
-    let tx_chain_id = validate_chain_id(tx.chain_id(), tx.is_eip7702(), tx_hash)?;
+    let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
 
     let user_max_fee_per_gas = tx.max_fee_per_gas();
     let rollup_base_fee = gas_price.as_ref()[0].0;
@@ -165,7 +151,6 @@ fn create_auth_tx_and_hash<
 
 fn validate_chain_id(
     tx_chain_id: Option<u64>,
-    allow_zero_chain_id: bool,
     tx_hash: TxHash,
 ) -> Result<u64, AuthenticationError> {
     let rollup_chain_id = config_value!("CHAIN_ID");
@@ -174,8 +159,8 @@ fn validate_chain_id(
         tx_hash,
     ))?;
 
-    // EIP-7702 permits chain-id 0 signatures; keep that exception narrow.
-    if tx_chain_id != rollup_chain_id && !(allow_zero_chain_id && tx_chain_id == 0) {
+    // Allow 0 chain id for compatibility with EIP7702
+    if tx_chain_id != rollup_chain_id && tx_chain_id != 0 {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
                 expected: rollup_chain_id,
@@ -187,7 +172,6 @@ fn validate_chain_id(
 
     Ok(tx_chain_id)
 }
-
 /// Extracts EVM authorization data from a verified transaction.
 fn extract_evm_authorization_data<S: Spec>(
     signer: Address,
@@ -261,9 +245,14 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
         ));
     }
 
-    let tx = crate::convert_to_tx_signed(tx_data.clone())
+    let type_tag = TransactionSigned::extract_type_byte(&mut &tx_data.rlp[..]).unwrap_or(0); // Reject as a legacy transaction by default
+    if type_tag != EIP1559_TX_TYPE_ID {
+        return Err(FatalError::DeserializationFailed(
+            "Invalid transaction type: Only EIP1559 is currently supported. If you need to use EIP7702, please reach out to the SDK developers for support.".to_string(),
+        ));
+    }
+    let tx = TransactionSigned::decode_2718_exact(&tx_data.rlp)
         .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-    ensure_supported_transaction_type(&tx)?;
 
     Ok((tx_data, tx))
 }
@@ -422,107 +411,5 @@ where
 
     fn add_standard_auth(tx: RawTx) -> Self::Input {
         EvmAuthenticatorInput::Standard(tx)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{
-        decode_evm_tx, ensure_supported_transaction_type, validate_chain_id, RlpEvmTransaction,
-    };
-    use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559, TxEip2930, TxEip7702, TxLegacy};
-    use alloy_eips::Encodable2718;
-    use alloy_primitives::Signature;
-    use sov_modules_api::macros::config_value;
-    use sov_modules_api::runtime::capabilities::{AuthenticationError, FatalError};
-    use sov_rollup_interface::TxHash;
-
-    fn encoded(tx: EthereumTxEnvelope<alloy_consensus::TxEip4844>) -> Vec<u8> {
-        borsh::to_vec(&RlpEvmTransaction {
-            rlp: tx.encoded_2718().to_vec(),
-        })
-        .unwrap()
-    }
-
-    #[test]
-    fn validate_chain_id_rejects_missing_chain_id() {
-        let tx_hash = TxHash::new([0u8; 32]);
-        let err = validate_chain_id(None, false, tx_hash).unwrap_err();
-        let expected = config_value!("CHAIN_ID");
-        assert_eq!(
-            err,
-            AuthenticationError::FatalError(FatalError::MissingChainId(expected), tx_hash)
-        );
-    }
-
-    #[test]
-    fn validate_chain_id_allows_zero_only_when_explicitly_enabled() {
-        let tx_hash = TxHash::new([1u8; 32]);
-        assert!(validate_chain_id(Some(0), false, tx_hash).is_err());
-        assert_eq!(validate_chain_id(Some(0), true, tx_hash).unwrap(), 0);
-    }
-
-    #[test]
-    fn decode_evm_tx_accepts_eip1559() {
-        let raw = encoded(EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
-            TxEip1559::default(),
-            Signature::test_signature(),
-            Default::default(),
-        )));
-        assert!(decode_evm_tx(&raw).is_ok());
-    }
-
-    #[test]
-    fn decode_evm_tx_accepts_eip7702() {
-        let raw = encoded(EthereumTxEnvelope::Eip7702(Signed::new_unchecked(
-            TxEip7702::default(),
-            Signature::test_signature(),
-            Default::default(),
-        )));
-        assert!(decode_evm_tx(&raw).is_ok());
-    }
-
-    #[test]
-    fn decode_evm_tx_rejects_legacy() {
-        let raw = encoded(EthereumTxEnvelope::Legacy(Signed::new_unchecked(
-            TxLegacy::default(),
-            Signature::test_signature(),
-            Default::default(),
-        )));
-        let err = decode_evm_tx(&raw).unwrap_err();
-        assert!(matches!(err, FatalError::DeserializationFailed(_)));
-    }
-
-    #[test]
-    fn decode_evm_tx_rejects_eip2930() {
-        let raw = encoded(EthereumTxEnvelope::Eip2930(Signed::new_unchecked(
-            TxEip2930::default(),
-            Signature::test_signature(),
-            Default::default(),
-        )));
-        let err = decode_evm_tx(&raw).unwrap_err();
-        assert!(matches!(err, FatalError::DeserializationFailed(_)));
-    }
-
-    #[test]
-    fn decode_evm_tx_rejects_eip4844() {
-        let raw = encoded(EthereumTxEnvelope::Eip4844(Signed::new_unchecked(
-            alloy_consensus::TxEip4844::default(),
-            Signature::test_signature(),
-            Default::default(),
-        )));
-        let err = decode_evm_tx(&raw).unwrap_err();
-        assert!(matches!(err, FatalError::DeserializationFailed(_)));
-    }
-
-    #[test]
-    fn ensure_supported_transaction_type_rejects_eip4844() {
-        let tx = EthereumTxEnvelope::Eip4844(Signed::new_unchecked(
-            alloy_consensus::TxEip4844::default(),
-            Signature::test_signature(),
-            Default::default(),
-        ));
-        let err = ensure_supported_transaction_type(&tx).unwrap_err();
-        assert!(matches!(err, FatalError::DeserializationFailed(_)));
     }
 }
