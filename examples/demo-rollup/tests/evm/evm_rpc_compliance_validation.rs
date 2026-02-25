@@ -479,8 +479,7 @@ async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::R
         .block_number
         .expect("log tx should be finalized and have block number");
 
-    // Keep this out of normal CI because pruning requires waiting for retention window turnover.
-    // We need a tx/log-bearing block old enough that receipt lookup goes through the pruned path.
+    // Wait until the tx/log-bearing block is old enough that lookup can go through the pruned path.
     rollup.wait_for_next_blocks(45).await;
 
     let http = Client::new();
