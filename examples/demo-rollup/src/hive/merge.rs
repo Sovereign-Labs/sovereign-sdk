@@ -1,14 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use alloy_primitives::{hex, keccak256, U256};
 use anyhow::{anyhow, bail, Context, Result};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
-use crate::parse::{
-    normalize_hex_address, normalize_hex_data, parse_optional_u64, parse_storage_map,
-    parse_u256_value,
+use crate::types::{
+    decode_hex_address, decode_u256_literal, value_as_u256, AllocStats, GethAllocAccount, U256Like,
 };
-use crate::types::AllocStats;
 
 fn balance_key(address: &str) -> String {
     if address.starts_with("0x") || address.starts_with("0X") {
@@ -37,23 +35,58 @@ fn add_balance(
     Ok(())
 }
 
+fn canonical_hex_data(raw: &str, field_name: &str) -> Result<String> {
+    let body = raw
+        .strip_prefix("0x")
+        .or_else(|| raw.strip_prefix("0X"))
+        .unwrap_or(raw);
+    if body.is_empty() {
+        return Ok("0x".to_string());
+    }
+    if !body.chars().all(|c| c.is_ascii_hexdigit()) {
+        bail!("Invalid hex data for {field_name}: {raw}");
+    }
+    let normalized = if body.len() % 2 == 0 {
+        body.to_ascii_lowercase()
+    } else {
+        format!("0{}", body.to_ascii_lowercase())
+    };
+    Ok(format!("0x{normalized}"))
+}
+
+fn to_quantity_hex(value: U256) -> String {
+    format!("0x{value:x}")
+}
+
+fn normalize_storage(
+    storage: Option<&BTreeMap<String, U256Like>>,
+    account_name: &str,
+) -> Result<serde_json::Map<String, Value>> {
+    let mut normalized = serde_json::Map::new();
+    let Some(storage) = storage else {
+        return Ok(normalized);
+    };
+    for (raw_slot, raw_value) in storage {
+        let slot = decode_u256_literal(raw_slot, &format!("alloc[{account_name}].storage slot"))?;
+        let value = raw_value.to_u256(&format!("alloc[{account_name}].storage value"))?;
+        normalized.insert(to_quantity_hex(slot), Value::String(to_quantity_hex(value)));
+    }
+    Ok(normalized)
+}
+
 pub(crate) fn build_evm_accounts_and_alloc_balances(
-    alloc: &Map<String, Value>,
+    alloc: &BTreeMap<String, GethAllocAccount>,
 ) -> Result<(Vec<Value>, Vec<(String, U256)>, AllocStats)> {
     let mut evm_accounts = Vec::with_capacity(alloc.len());
     let mut alloc_balances: Vec<(String, U256)> = Vec::new();
     let mut stats = AllocStats::default();
 
-    for (raw_address, alloc_entry) in alloc {
-        let address = normalize_hex_address(raw_address)?;
+    for (raw_address, entry) in alloc {
+        let address = decode_hex_address(raw_address)?;
         let checksum_address = address.to_checksum(None);
-        let entry = alloc_entry.as_object();
 
-        let code = normalize_hex_data(
-            entry
-                .and_then(|obj| obj.get("code"))
-                .and_then(Value::as_str)
-                .unwrap_or("0x"),
+        let code = canonical_hex_data(
+            entry.code.as_deref().unwrap_or("0x"),
             &format!("alloc[{raw_address}].code"),
         )?;
         let code_bytes = hex::decode(&code[2..]).context("Failed to decode account code")?;
@@ -62,18 +95,14 @@ pub(crate) fn build_evm_accounts_and_alloc_balances(
             stats.contract_accounts += 1;
         }
 
-        let nonce = parse_optional_u64(
-            entry.and_then(|obj| obj.get("nonce")),
-            &format!("alloc[{raw_address}].nonce"),
-        )?
-        .unwrap_or(0);
+        let nonce = entry
+            .nonce
+            .as_ref()
+            .map(|value| value.to_u64(&format!("alloc[{raw_address}].nonce")))
+            .transpose()?
+            .unwrap_or(0);
 
-        let storage_value = entry.and_then(|obj| obj.get("storage"));
-        let storage_map = match storage_value {
-            Some(Value::Object(storage)) => parse_storage_map(storage, raw_address)?,
-            Some(Value::Null) | None => Map::new(),
-            Some(_) => bail!("alloc[{raw_address}].storage must be an object"),
-        };
+        let storage_map = normalize_storage(entry.storage.as_ref(), raw_address)?;
         stats.storage_slots += storage_map.len();
 
         evm_accounts.push(json!({
@@ -84,12 +113,12 @@ pub(crate) fn build_evm_accounts_and_alloc_balances(
             "storage": storage_map,
         }));
 
-        let balance = parse_u256_value(
-            entry
-                .and_then(|obj| obj.get("balance"))
-                .unwrap_or(&Value::String("0x0".to_string())),
-            &format!("alloc[{raw_address}].balance"),
-        )?;
+        let balance = entry
+            .balance
+            .as_ref()
+            .map(|value| value.to_u256(&format!("alloc[{raw_address}].balance")))
+            .transpose()?
+            .unwrap_or(U256::ZERO);
         if balance > U256::ZERO {
             alloc_balances.push((address.to_checksum(None), balance));
         }
@@ -116,7 +145,7 @@ pub(crate) fn merge_balances(
             .as_str()
             .ok_or_else(|| anyhow!("Invalid bank balance address"))?
             .to_string();
-        let amount = parse_u256_value(&arr[1], &format!("bank.address_and_balances[{addr}]"))?;
+        let amount = value_as_u256(&arr[1], &format!("bank.address_and_balances[{addr}]"))?;
         add_balance(&mut merged, &mut index_by_key, addr, amount)?;
     }
 
@@ -153,7 +182,7 @@ mod tests {
 
     #[test]
     fn build_evm_accounts_counts_contracts_and_storage() {
-        let alloc = json!({
+        let alloc = serde_json::from_value::<BTreeMap<String, GethAllocAccount>>(json!({
             "0x0000000000000000000000000000000000000001": {
                 "code": "0x6000",
                 "storage": {"0x1": "0x2"},
@@ -162,9 +191,9 @@ mod tests {
             "0x0000000000000000000000000000000000000002": {
                 "balance": "0x0"
             }
-        });
-        let alloc_obj = alloc.as_object().unwrap();
-        let (accounts, balances, stats) = build_evm_accounts_and_alloc_balances(alloc_obj).unwrap();
+        }))
+        .unwrap();
+        let (accounts, balances, stats) = build_evm_accounts_and_alloc_balances(&alloc).unwrap();
         assert_eq!(accounts.len(), 2);
         assert_eq!(balances.len(), 1);
         assert_eq!(stats.contract_accounts, 1);

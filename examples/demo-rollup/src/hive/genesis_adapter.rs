@@ -1,5 +1,4 @@
 mod merge;
-mod parse;
 mod rlp_chain;
 mod schedule;
 mod types;
@@ -12,10 +11,12 @@ use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;
 
 use self::merge::{build_evm_accounts_and_alloc_balances, merge_balances};
-use self::parse::{ensure_object_field, normalize_hex_address, parse_optional_u64};
 use self::rlp_chain::load_chain_timestamps;
 use self::schedule::set_hardfork_schedule;
-use self::types::{AdapterPaths, DEFAULT_BLOCK_GAS_LIMIT, DEFAULT_CHAIN_ID};
+use self::types::{
+    decode_hex_address, object_field_or_insert, value_as_optional_u64, AdapterPaths, GethGenesis,
+    DEFAULT_BLOCK_GAS_LIMIT, DEFAULT_CHAIN_ID,
+};
 
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     fs::create_dir_all(dst).with_context(|| format!("Failed to create {}", dst.display()))?;
@@ -69,7 +70,7 @@ fn main() -> Result<()> {
     }
     copy_dir_all(&paths.template_dir, &paths.output_dir)?;
 
-    let geth_genesis: Value = serde_json::from_slice(
+    let geth_genesis: GethGenesis = serde_json::from_slice(
         &fs::read(&paths.input_genesis)
             .with_context(|| format!("Failed to read {}", paths.input_genesis.display()))?,
     )
@@ -106,50 +107,67 @@ fn main() -> Result<()> {
         Vec::new()
     };
 
-    let chain_id = parse_optional_u64(
-        geth_genesis
-            .get("config")
-            .and_then(Value::as_object)
-            .and_then(|c| c.get("chainId")),
-        "config.chainId",
-    )?
-    .unwrap_or(DEFAULT_CHAIN_ID);
+    let chain_id = geth_genesis
+        .config
+        .as_ref()
+        .and_then(|config| config.chain_id.as_ref())
+        .map(|value| value.to_u64("config.chainId"))
+        .transpose()?
+        .unwrap_or(DEFAULT_CHAIN_ID);
 
     let current_timestamp =
-        parse_optional_u64(evm_genesis.get("genesis_timestamp"), "genesis_timestamp")?.unwrap_or(0);
-    let genesis_timestamp = parse_optional_u64(geth_genesis.get("timestamp"), "timestamp")?
+        value_as_optional_u64(evm_genesis.get("genesis_timestamp"), "genesis_timestamp")?
+            .unwrap_or(0);
+    let genesis_timestamp = geth_genesis
+        .timestamp
+        .as_ref()
+        .map(|value| value.to_u64("timestamp"))
+        .transpose()?
         .unwrap_or(current_timestamp);
     evm_genesis["genesis_timestamp"] = Value::from(genesis_timestamp);
 
     let current_base_fee =
-        parse_optional_u64(evm_genesis.get("initial_base_fee"), "initial_base_fee")?.unwrap_or(0);
-    let initial_base_fee = parse_optional_u64(geth_genesis.get("baseFeePerGas"), "baseFeePerGas")?
+        value_as_optional_u64(evm_genesis.get("initial_base_fee"), "initial_base_fee")?
+            .unwrap_or(0);
+    let initial_base_fee = geth_genesis
+        .base_fee_per_gas
+        .as_ref()
+        .map(|value| value.to_u64("baseFeePerGas"))
+        .transpose()?
         .unwrap_or(current_base_fee);
     evm_genesis["initial_base_fee"] = Value::from(initial_base_fee);
 
-    set_hardfork_schedule(&mut evm_genesis, &geth_genesis, &chain_timestamps)?;
+    set_hardfork_schedule(
+        &mut evm_genesis,
+        geth_genesis.config.as_ref(),
+        &chain_timestamps,
+    )?;
 
-    let chain_spec = ensure_object_field(&mut evm_genesis, "chain_spec")?;
-    let existing_block_gas_limit = parse_optional_u64(
+    let chain_spec = object_field_or_insert(&mut evm_genesis, "chain_spec")?;
+    let existing_block_gas_limit = value_as_optional_u64(
         chain_spec.get("block_gas_limit"),
         "chain_spec.block_gas_limit",
     )?
     .unwrap_or(DEFAULT_BLOCK_GAS_LIMIT);
-    let block_gas_limit = parse_optional_u64(geth_genesis.get("gasLimit"), "gasLimit")?
+    let block_gas_limit = geth_genesis
+        .gas_limit
+        .as_ref()
+        .map(|value| value.to_u64("gasLimit"))
+        .transpose()?
         .unwrap_or(existing_block_gas_limit);
     chain_spec.insert("block_gas_limit".to_string(), Value::from(block_gas_limit));
 
     let mut tx_gas_limit =
-        parse_optional_u64(chain_spec.get("tx_gas_limit"), "chain_spec.tx_gas_limit")?
+        value_as_optional_u64(chain_spec.get("tx_gas_limit"), "chain_spec.tx_gas_limit")?
             .unwrap_or(block_gas_limit);
     if tx_gas_limit > block_gas_limit {
         tx_gas_limit = block_gas_limit;
     }
     chain_spec.insert("tx_gas_limit".to_string(), Value::from(tx_gas_limit));
 
-    if let Some(coinbase) = geth_genesis.get("coinbase").and_then(Value::as_str) {
+    if let Some(coinbase) = geth_genesis.coinbase.as_deref() {
         if coinbase.starts_with("0x") || coinbase.starts_with("0X") {
-            if let Ok(address) = normalize_hex_address(coinbase) {
+            if let Ok(address) = decode_hex_address(coinbase) {
                 chain_spec.insert(
                     "coinbase".to_string(),
                     Value::String(format!("0x{}", hex::encode(address.as_slice()))),
@@ -158,10 +176,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let alloc = geth_genesis
-        .get("alloc")
-        .and_then(Value::as_object)
-        .ok_or_else(|| anyhow!("geth genesis alloc must be an object"))?;
+    let alloc = &geth_genesis.alloc;
 
     let (evm_accounts, alloc_balances, alloc_stats) = build_evm_accounts_and_alloc_balances(alloc)?;
     evm_genesis["accounts"] = Value::Array(evm_accounts);
