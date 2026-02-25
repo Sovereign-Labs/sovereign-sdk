@@ -196,7 +196,7 @@ pub async fn initialize_runner(
         {
             handle.await.expect("Metrics task errored");
         } else {
-            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+            tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
     });
 

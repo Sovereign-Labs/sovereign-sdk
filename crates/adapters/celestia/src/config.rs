@@ -187,15 +187,17 @@ impl CelestiaConfig {
         let mut builder = celestia_client::Client::builder()
             .rpc_url(&self.rpc_url)
             .timeout(api_request_timeout);
+
         if let Some(rpc_auth_token) = &self.rpc_auth_token {
             builder = builder.rpc_auth_token(rpc_auth_token);
         }
         // Submission section.
         if let Some(grpc_url) = &self.grpc_url {
-            builder = builder.grpc_url(grpc_url);
+            let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
-                builder = builder.grpc_metadata("x-token", grpc_auth_token);
+                endpoint = endpoint.metadata("x-token", grpc_auth_token);
             }
+            builder = builder.grpc_endpoint(endpoint);
             if let Some(signer_key_hex) = &self.signer_private_key {
                 builder = builder.private_key_hex(signer_key_hex);
             }
