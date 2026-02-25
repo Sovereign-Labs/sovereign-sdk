@@ -154,7 +154,6 @@ async fn rpc_002_block_pinned_nonce_excludes_pending_tx() -> anyhow::Result<()> 
 
 // RPC-003
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known RPC compliance gap: estimateGas accepts explicit stale nonce and behaves like omitted nonce"]
 async fn rpc_003_estimate_gas_uses_account_nonce_when_nonce_omitted() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
