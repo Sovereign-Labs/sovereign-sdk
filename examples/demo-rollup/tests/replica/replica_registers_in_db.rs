@@ -71,7 +71,7 @@ async fn test_stale_nodes_are_filtered_from_cluster_info() {
     // Start a leader node that will keep sending heartbeats.
     let leader = setup.start_node("leader", ConfiguredNodeRole::Leader).await;
     leader.wait_for_sequencer_ready().await.unwrap();
-    // Wait for leader to appear in cluster info.
+    // Wait for the leader to appear in cluster info.
     let _ = setup.wait_for_cluster_change().await;
 
     // Start a replica node.
@@ -81,7 +81,7 @@ async fn test_stale_nodes_are_filtered_from_cluster_info() {
 
     replica.wait_for_sequencer_ready().await.unwrap();
 
-    // Wait for replica to appear in cluster info.
+    // Wait for the replica to appear in cluster info.
     let cluster_info = setup.wait_for_cluster_change().await;
     assert!(
         cluster_info.has_leader("leader"),
