@@ -466,7 +466,6 @@ async fn rpc_010_send_raw_transaction_sync_returns_receipt_under_preferred_seque
 
 // RPC-011
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Long-running pruning validation"]
 async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(2).await;
@@ -497,10 +496,10 @@ async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::R
     .await?;
 
     if response.get("error").is_some() {
-        assert_ne!(
+        assert_eq!(
             error_code(&response),
-            4444,
-            "custom 4444 code is non-standard for JSON-RPC clients"
+            -32001,
+            "pruned log range should use resource-not-found JSON-RPC class"
         );
     } else {
         assert!(
@@ -508,6 +507,57 @@ async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::R
             "eth_getLogs should return either logs array or JSON-RPC error"
         );
     }
+
+    Ok(())
+}
+
+// RPC-011 (trace path)
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc_011_debug_trace_pruned_tx_should_not_use_custom_4444_code() -> anyhow::Result<()> {
+    let override_key = "SOV_TEST_CONST_OVERRIDE_EVM_BLOCK_PRUNING_THRESHOLD";
+    let previous_override = std::env::var(override_key).ok();
+    std::env::set_var(override_key, "5");
+
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(2).await;
+    let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+
+    let tx_hash = client.send_eth(Address::ZERO, U256::from(1)).await;
+    let _receipt = client.wait_for_finalized_receipt(tx_hash).await;
+
+    let http = Client::new();
+    let mut saw_pruned_error = false;
+
+    for _ in 0..30 {
+        rollup.wait_for_next_blocks(1).await;
+        let response = rpc_call(
+            &http,
+            rollup.http_addr,
+            "debug_traceTransaction",
+            json!([tx_hash, {"tracer": "callTracer"}]),
+        )
+        .await?;
+
+        if response.get("error").is_some() {
+            saw_pruned_error = true;
+            assert_eq!(
+                error_code(&response),
+                -32001,
+                "pruned trace should use resource-not-found JSON-RPC class"
+            );
+            break;
+        }
+    }
+
+    match previous_override {
+        Some(value) => std::env::set_var(override_key, value),
+        None => std::env::remove_var(override_key),
+    }
+
+    assert!(
+        saw_pruned_error,
+        "expected debug_traceTransaction to eventually hit pruned history path"
+    );
 
     Ok(())
 }
