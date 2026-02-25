@@ -202,11 +202,22 @@ pub(crate) fn new_inclusion_proof(
         let relevant_len = blob.blob.accumulator().len();
         let start_share = flat_shares[range.start];
         let has_signer = start_share.signer().is_some();
-        let relevant_end = range.start
-            + crate::shares::shares_needed_for_bytes_with_signer(relevant_len, has_signer).max(1);
-        let full_blob_end = range.start
-            + crate::shares::shares_needed_for_bytes_with_signer(blob.blob.total_len(), has_signer)
-                .max(1);
+        let relevant_end = range
+            .start
+            .checked_add(
+                crate::shares::shares_needed_for_bytes_with_signer(relevant_len, has_signer).max(1),
+            )
+            .expect("share index overflow");
+        let full_blob_end = range
+            .start
+            .checked_add(
+                crate::shares::shares_needed_for_bytes_with_signer(
+                    blob.blob.total_len(),
+                    has_signer,
+                )
+                .max(1),
+            )
+            .expect("share index overflow");
         // Guard in depth - should never be false unless share counting is bugged
         // or we read more bytes from the blob than the range has shares (e.g. `BlobWithIter`'s range
         // initialisation is bugged)
