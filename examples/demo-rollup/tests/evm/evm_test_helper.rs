@@ -121,6 +121,46 @@ pub(crate) async fn rpc_call(
         .await?)
 }
 
+pub(crate) fn eth_call_params(from: &str, to: &str, input: &str, block_tag: &str) -> Value {
+    json!([{
+        "from": from,
+        "to": to,
+        "gas": "0x7a120",
+        "input": input
+    }, block_tag])
+}
+
+pub(crate) fn rpc_result_str<'a>(response: &'a Value, method: &str) -> &'a str {
+    response
+        .get("result")
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("{method} should return result"))
+}
+
+pub(crate) fn rpc_error_object<'a>(response: &'a Value, method: &str) -> &'a Value {
+    response
+        .get("error")
+        .unwrap_or_else(|| panic!("{method} should return an error object"))
+}
+
+pub(crate) fn rpc_error_code(error: &Value) -> i64 {
+    error
+        .get("code")
+        .and_then(Value::as_i64)
+        .expect("error.code should be present")
+}
+
+pub(crate) fn rpc_error_message(error: &Value) -> &str {
+    error
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+}
+
+pub(crate) fn rpc_error_data_str(error: &Value) -> Option<&str> {
+    error.get("data").and_then(Value::as_str)
+}
+
 pub(crate) fn alloy_client_with_reqwest<B>(
     socket: SocketAddr,
     b: B,

@@ -1,7 +1,10 @@
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::json;
 
-use crate::evm::evm_test_helper::{rpc_call, setup_with_simple_storage, EVM_EXTENSION};
+use crate::evm::evm_test_helper::{
+    eth_call_params, rpc_call, rpc_error_code, rpc_error_data_str, rpc_error_message,
+    rpc_error_object, rpc_result_str, setup_with_simple_storage, EVM_EXTENSION,
+};
 
 const INVALID_PARAMS_CODE: i64 = -32602;
 const REVERT_ERROR_CODE: i64 = 3;
@@ -20,19 +23,11 @@ async fn eth_call_existing_contract_returns_non_empty_data() -> anyhow::Result<(
         &client,
         rollup.http_addr,
         "eth_call",
-        json!([{
-            "from": from,
-            "to": to,
-            "gas": "0x7a120",
-            "input": input
-        }, "latest"]),
+        eth_call_params(&from, &to, &input, "latest"),
     )
     .await?;
 
-    let result = response
-        .get("result")
-        .and_then(Value::as_str)
-        .expect("eth_call should return result");
+    let result = rpc_result_str(&response, "eth_call");
 
     assert_ne!(result, "0x", "eth_call should return ABI-encoded data");
     assert_eq!(
@@ -58,26 +53,13 @@ async fn eth_call_revert_returns_rpc_error() -> anyhow::Result<()> {
         &client,
         rollup.http_addr,
         "eth_call",
-        json!([{
-            "from": from,
-            "to": to,
-            "gas": "0x7a120",
-            "input": input
-        }, "latest"]),
+        eth_call_params(&from, &to, &input, "latest"),
     )
     .await?;
 
-    let error = response
-        .get("error")
-        .expect("reverting eth_call should return an error object");
-    let code = error
-        .get("code")
-        .and_then(Value::as_i64)
-        .expect("error.code should be present");
-    let message = error
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let error = rpc_error_object(&response, "eth_call");
+    let code = rpc_error_code(error);
+    let message = rpc_error_message(error);
 
     assert_eq!(
         code, REVERT_ERROR_CODE,
@@ -88,10 +70,7 @@ async fn eth_call_revert_returns_rpc_error() -> anyhow::Result<()> {
         "expected revert message, got: {message}"
     );
 
-    let data = error
-        .get("data")
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let data = rpc_error_data_str(error).unwrap_or_default();
     assert!(
         data.starts_with("0x"),
         "revert error should include hex-encoded revert data"
@@ -116,13 +95,8 @@ async fn eth_call_invalid_params_returns_invalid_params_code() -> anyhow::Result
     )
     .await?;
 
-    let error = response
-        .get("error")
-        .expect("invalid call data should return error object");
-    let code = error
-        .get("code")
-        .and_then(Value::as_i64)
-        .expect("error.code should be present");
+    let error = rpc_error_object(&response, "eth_call");
+    let code = rpc_error_code(error);
     assert_eq!(code, INVALID_PARAMS_CODE);
 
     Ok(())
