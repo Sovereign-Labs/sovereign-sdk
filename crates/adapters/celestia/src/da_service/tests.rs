@@ -3,8 +3,9 @@ use std::str::FromStr;
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
 use crate::test_helper::{ADDR_1, ROLLUP_PARAMS_DEV};
-use crate::types::{BlobWithSender, FilteredCelestiaBlock};
+use crate::types::{BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof};
 use crate::verifier::address::CelestiaAddress;
+use crate::verifier::proofs::BlobProof;
 use crate::verifier::{CelestiaVerifier, RollupParams};
 use crate::CelestiaService;
 use anyhow::Context;
@@ -65,6 +66,98 @@ fn assert_single_blob(
     assert_eq!(fetched_blob.hash, expected_hash);
     fetched_blob.blob.advance(fetched_blob.total_len());
     assert_eq!(fetched_blob.verified_data(), expected_data);
+}
+
+fn read_full_blob(blob_with_sender: &mut BlobWithSender) {
+    let total_len = blob_with_sender.blob.total_len();
+    blob_with_sender.blob.advance(total_len);
+    let data = blob_with_sender.blob.accumulator();
+    assert_eq!(data.len(), total_len);
+}
+
+fn read_no_blob(blob_with_sender: &mut BlobWithSender) {
+    let data = blob_with_sender.blob.accumulator();
+    assert_eq!(data.len(), 0);
+}
+
+fn read_single_byte_blob(blob_with_sender: &mut BlobWithSender) {
+    let total_len = blob_with_sender.blob.total_len();
+    if total_len > 0 {
+        blob_with_sender.blob.advance(1);
+    }
+    let data = blob_with_sender.blob.accumulator();
+    let expected_len = std::cmp::min(total_len, 1);
+    assert_eq!(data.len(), expected_len);
+}
+
+fn read_half_blob(blob_with_sender: &mut BlobWithSender) {
+    let total_len = blob_with_sender.blob.total_len();
+    let half_len = total_len / 2;
+    blob_with_sender.blob.advance(half_len);
+    let data = blob_with_sender.blob.accumulator();
+    assert_eq!(data.len(), half_len);
+}
+
+fn assert_subproof_start_indices_align(
+    block: &FilteredCelestiaBlock,
+    namespace_name: &str,
+    inclusion_proof: &[BlobProof],
+) {
+    let row_len = block.header.row_length();
+    for (blob_idx, blob_proof) in inclusion_proof.iter().enumerate() {
+        for (range_idx, range_proof) in blob_proof.range_proofs.iter().enumerate() {
+            let row = block
+                .header
+                .calculate_row_number_for_share(range_proof.start_share_idx);
+            let expected = row
+                .checked_mul(row_len)
+                .and_then(|row_start| row_start.checked_add(range_proof.proof.start_idx() as usize))
+                .expect("overflow while calculating expected share index");
+            assert_eq!(
+                range_proof.start_share_idx, expected,
+                "{namespace_name} proof index mismatch for blob #{blob_idx} range #{range_idx}: expected {expected}, actual {}",
+                range_proof.start_share_idx
+            );
+        }
+    }
+}
+
+fn verify_fixture_with_readers<F1, F2>(
+    fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
+    batch_processing_fn: F1,
+    proof_processing_fn: F2,
+) where
+    F1: Fn(&mut BlobWithSender),
+    F2: Fn(&mut BlobWithSender),
+{
+    let (block, rollup_params, signers) = fixture;
+    let mut signers = signers.into_iter();
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+
+    // Read blobs before constructing extraction proofs.
+    {
+        let blob_iters = relevant_blobs.as_iters();
+        for batch in blob_iters.batch_blobs {
+            let signer = signers
+                .next()
+                .expect("missing signer in test data for batch");
+            assert_eq!(signer, batch.sender);
+            batch_processing_fn(batch);
+        }
+        for proof in blob_iters.proof_blobs {
+            let signer = signers
+                .next()
+                .expect("missing signer in test data for proof");
+            assert_eq!(signer, proof.sender);
+            proof_processing_fn(proof);
+        }
+    }
+
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let verifier = CelestiaVerifier::new(rollup_params);
+    verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -218,81 +311,75 @@ where
         from_mocha_invalid_row_proof::test_case(),
     ];
 
-    for (block, rollup_params, signers) in blocks {
-        let mut signers = signers.into_iter();
-        let mut relevant_blobs = extract_relevant_blobs(&block);
-
-        // Reading all blobs and proofs, so proof is built for the full data.
-        {
-            let blob_iters = relevant_blobs.as_iters();
-            for batch in blob_iters.batch_blobs {
-                let signer = signers
-                    .next()
-                    .expect("missing signer in test data for batch");
-                assert_eq!(signer, batch.sender);
-                batch_processing_fn(batch);
-            }
-            for proof in blob_iters.proof_blobs {
-                let signer = signers
-                    .next()
-                    .expect("missing signer in test data for batch");
-                assert_eq!(signer, proof.sender);
-                proof_processing_fn(proof);
-            }
-        }
-
-        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
-
-        let verifier = CelestiaVerifier::new(rollup_params);
-
-        verifier
-            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-            .unwrap();
+    for fixture in blocks {
+        verify_fixture_with_readers(fixture, &batch_processing_fn, &proof_processing_fn);
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_succeeds_for_correct_blocks() {
-    let read_full = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
-        blob_with_sender.blob.advance(total_len);
-        let data = blob_with_sender.blob.accumulator();
-        assert_eq!(data.len(), total_len);
-    };
-    let no_read = |blob_with_sender: &mut BlobWithSender| {
-        let data = blob_with_sender.blob.accumulator();
-        assert_eq!(data.len(), 0);
-    };
-    let single_byte = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
-        if total_len > 0 {
-            blob_with_sender.blob.advance(1);
-        }
-        let data = blob_with_sender.blob.accumulator();
-        let expected_len = std::cmp::min(total_len, 1);
-        assert_eq!(data.len(), expected_len);
-    };
-    let read_half = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
-        let half_len = total_len / 2;
-        blob_with_sender.blob.advance(half_len);
-        let data = blob_with_sender.blob.accumulator();
-        assert_eq!(data.len(), half_len);
-    };
-
     // No read
-    verification_for_correct_blocks(no_read, no_read).await;
+    verification_for_correct_blocks(read_no_blob, read_no_blob).await;
     // Full read
-    verification_for_correct_blocks(read_full, read_full).await;
-    verification_for_correct_blocks(read_full, no_read).await;
-    verification_for_correct_blocks(no_read, read_full).await;
-    verification_for_correct_blocks(read_full, single_byte).await;
+    verification_for_correct_blocks(read_full_blob, read_full_blob).await;
+    verification_for_correct_blocks(read_full_blob, read_no_blob).await;
+    verification_for_correct_blocks(read_no_blob, read_full_blob).await;
+    verification_for_correct_blocks(read_full_blob, read_single_byte_blob).await;
     // Single byte read
-    verification_for_correct_blocks(single_byte, single_byte).await;
+    verification_for_correct_blocks(read_single_byte_blob, read_single_byte_blob).await;
     // Half Read
-    verification_for_correct_blocks(read_half, read_half).await;
-    verification_for_correct_blocks(read_half, no_read).await;
-    verification_for_correct_blocks(no_read, read_half).await;
+    verification_for_correct_blocks(read_half_blob, read_half_blob).await;
+    verification_for_correct_blocks(read_half_blob, read_no_blob).await;
+    verification_for_correct_blocks(read_no_blob, read_half_blob).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn regression_mocha_invalid_row_proof_minimal_read_mode() {
+    verify_fixture_with_readers(
+        from_mocha_invalid_row_proof::test_case(),
+        read_single_byte_blob,
+        read_single_byte_blob,
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn regression_mocha_invalid_row_proof_full_read_mode() {
+    verify_fixture_with_readers(
+        from_mocha_invalid_row_proof::test_case(),
+        read_full_blob,
+        read_full_blob,
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn proof_start_indexes_match_row_coordinates_for_valid_fixtures() {
+    let fixtures = [
+        with_rollup_batch_data::test_case(),
+        with_namespace_padding::test_case(),
+        from_mocha_invalid_row_proof::test_case(),
+    ];
+
+    for (block, _rollup_params, _signers) in fixtures {
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        for blob in relevant_blobs.batch_blobs.iter_mut() {
+            read_full_blob(blob);
+        }
+        for blob in relevant_blobs.proof_blobs.iter_mut() {
+            read_full_blob(blob);
+        }
+
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert_subproof_start_indices_align(
+            &block,
+            "batch",
+            &relevant_proofs.batch.inclusion_proof,
+        );
+        assert_subproof_start_indices_align(
+            &block,
+            "proof",
+            &relevant_proofs.proof.inclusion_proof,
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -534,9 +621,8 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
     Ok(())
 }
 
-mod adversarial_blocks {
+mod adversarial_tampering {
     use super::*;
-    use crate::types::NamespaceBoundaryProof;
     use crate::verifier::proofs::BlobProof;
     use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
     use sov_rollup_interface::da::RelevantProofs;
@@ -696,9 +782,38 @@ mod adversarial_blocks {
         case
     }
 
+    fn case_with_tail_padding() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(from_testnet_with_tail_padding::test_case());
+        assert!(
+            case.proofs.batch.completeness_proof.is_some(),
+            "expected completeness proof to be present for tail padding fixture"
+        );
+        case
+    }
+
     fn assert_verification_error_contains(case: AdversarialCase, pattern: &str) {
         let params = case.params;
         assert_verification_error_contains_with_params(case, params, pattern);
+    }
+
+    fn assert_verification_error_contains_any(case: AdversarialCase, patterns: &[&str]) {
+        let params = case.params;
+        let verifier = CelestiaVerifier::new(params);
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            verifier.verify_relevant_tx_list(&case.block.header, &case.blobs, case.proofs)
+        }));
+
+        match result {
+            Ok(Ok(_)) => panic!("expected verification to fail, but it succeeded"),
+            Ok(Err(err)) => {
+                let message = err.to_string();
+                assert!(
+                    patterns.iter().any(|pattern| message.contains(pattern)),
+                    "Expected error to contain one of {patterns:?}, got: {message}",
+                );
+            }
+            Err(_) => panic!("verification panicked; expected Err"),
+        }
     }
 
     fn assert_verification_error_contains_with_params(
@@ -794,7 +909,7 @@ mod adversarial_blocks {
                 }
             }
         });
-        assert_verification_error_contains(case, "MissingBlobs");
+        assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
     }
 
     #[test]
@@ -870,7 +985,148 @@ mod adversarial_blocks {
                 }
             }
         });
-        assert_verification_error_contains(case, "MissingBlobs");
+        assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
+    }
+
+    #[test]
+    fn verification_fails_if_boundary_proof_row_alignment_is_manipulated() {
+        let mut case = case_with_tail_padding();
+        case.mutate_batch_completeness_proof(|proof| {
+            let proof = proof
+                .as_mut()
+                .expect("expected completeness proof to be present");
+            let last_share_proof = &mut proof.last_share_proof;
+            match &mut **last_share_proof {
+                NmtNamespaceProof::PresenceProof { proof, .. }
+                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+                    proof.range.start = proof.range.start.saturating_add(1);
+                }
+            }
+        });
+        assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
+    }
+}
+
+mod multirow_absence_spec {
+    use super::*;
+    use crate::proptests::{
+        build_header, make_blob_shares, namespace_rows, NS_BATCH, NS_HIGH_A, NS_LOW_A, NS_PROOF,
+    };
+    use crate::types::{NamespaceRelevantData, APP_VERSION};
+    use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
+
+    fn synthetic_multirow_absence_fixture() -> (FilteredCelestiaBlock, RollupParams) {
+        let ods_width = 4usize;
+        let mut ods_shares = Vec::with_capacity(ods_width * ods_width);
+        for row in 0..ods_width {
+            ods_shares.extend(make_blob_shares(NS_LOW_A, ods_width / 2, None, row as u8));
+            ods_shares.extend(make_blob_shares(
+                NS_HIGH_A,
+                ods_width / 2,
+                None,
+                row as u8 + 0x40,
+            ));
+        }
+
+        let eds =
+            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
+        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+
+        assert!(
+            batch_rows.len() > 1,
+            "synthetic fixture must contain multiple candidate rows"
+        );
+        assert!(
+            batch_rows.iter().all(|row| row.shares.is_empty()),
+            "synthetic fixture must represent namespace absence for all candidate rows"
+        );
+
+        let block = FilteredCelestiaBlock {
+            header: build_header(dah),
+            rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
+            rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
+        };
+        let params = RollupParams {
+            rollup_batch_namespace: NS_BATCH,
+            rollup_proof_namespace: NS_PROOF,
+        };
+        (block, params)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "BUG SPEC: Multi-row empty-namespace absence should be accepted when all candidate rows are proven absent, but current legacy completeness proof (Option<NamespaceBoundaryProof>) cannot express all-row evidence. Expected: verifier accepts this synthetic all-rows-absent block. Actual: verifier rejects ambiguous multi-row emptiness (MissingBlobs). References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, branch nikolai/celestia-fix-empty-namespace-proof, docs/celestia/multirow-absence-redesign-prompt.md."]
+    async fn empty_namespace_multicandidate_rows_all_rows_absent_accepted_after_redesign() {
+        let (block, rollup_params) = synthetic_multirow_absence_fixture();
+        let root_count = block
+            .header
+            .get_row_roots_for_namespace(rollup_params.rollup_batch_namespace)
+            .count();
+        assert!(
+            root_count > 1,
+            "fixture should have more than one candidate row root"
+        );
+
+        let relevant_blobs = RelevantBlobs {
+            batch_blobs: Vec::new(),
+            proof_blobs: Vec::new(),
+        };
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        let verifier = CelestiaVerifier::new(rollup_params);
+        verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn empty_namespace_multicandidate_rows_without_global_evidence_rejected() {
+        let (block, rollup_params) = synthetic_multirow_absence_fixture();
+        let relevant_blobs = RelevantBlobs {
+            batch_blobs: Vec::new(),
+            proof_blobs: Vec::new(),
+        };
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("MissingBlobs"),
+            "expected MissingBlobs, got: {error}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn single_row_legacy_boundary_proof_flow_still_verifies() {
+        let (block, rollup_params, signers) = with_rollup_batch_data::test_case();
+        let root_count = block
+            .header
+            .get_row_roots_for_namespace(rollup_params.rollup_batch_namespace)
+            .count();
+        assert_eq!(
+            root_count, 1,
+            "fixture should have exactly one candidate row"
+        );
+        assert!(
+            !signers.is_empty(),
+            "fixture should contain at least one signer"
+        );
+
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        for blob in relevant_blobs.batch_blobs.iter_mut() {
+            read_full_blob(blob);
+        }
+        for blob in relevant_blobs.proof_blobs.iter_mut() {
+            read_full_blob(blob);
+        }
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+        verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap();
     }
 }
 
