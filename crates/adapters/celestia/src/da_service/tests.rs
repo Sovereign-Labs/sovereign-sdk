@@ -863,14 +863,20 @@ mod adversarial_tampering {
 
     #[test]
     fn verification_fails_if_fake_blob_inserted() {
-        let mut case = case_with_single_batch();
+        let mut case = case_with_multiple_batches();
 
+        // Insert a forged blob at a valid position in the proof sequence.
+        // The proof still points to the original shares, so signer/data checks must fail.
+        let mut forged_blob = case.blobs.batch_blobs[1].clone();
+        forged_blob.sender =
+            CelestiaAddress::from_str(crate::test_helper::ADDR_2).expect("valid test address");
+        case.blobs.batch_blobs.insert(1, forged_blob);
         case.mutate_batch_inclusion_proofs(|proofs| {
-            let proof = proofs[0].clone();
-            proofs.push(proof);
+            let proof = proofs[1].clone();
+            proofs.insert(1, proof);
         });
 
-        assert_verification_error_contains(case, "WrongStartShareIndex");
+        assert_verification_error_contains(case, "WrongSender");
     }
 
     #[test]
@@ -1005,6 +1011,28 @@ mod adversarial_tampering {
         });
         assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
     }
+
+    #[test]
+    #[ignore = "BUG SPEC: verifier should return Err (not panic) when proof start_share_idx maps to row index outside namespace_row_roots. Current code indexes row roots directly by derived row number and may panic. Expected after hardening: graceful Err. References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, docs/celestia/multirow-absence-redesign-prompt.md."]
+    fn verification_handles_out_of_bounds_row_index_without_panic() {
+        let mut case = case_with_single_batch();
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            proofs[0].range_proofs[0].start_share_idx = usize::MAX;
+        });
+
+        let verifier = CelestiaVerifier::new(case.params);
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            verifier.verify_relevant_tx_list(&case.block.header, &case.blobs, case.proofs)
+        }));
+        assert!(
+            result.is_ok(),
+            "verification panicked on out-of-bounds row index"
+        );
+        assert!(
+            result.expect("checked above").is_err(),
+            "expected verifier to reject out-of-bounds row index"
+        );
+    }
 }
 
 mod multirow_absence_spec {
@@ -1042,6 +1070,45 @@ mod multirow_absence_spec {
         assert!(
             batch_rows.iter().all(|row| row.shares.is_empty()),
             "synthetic fixture must represent namespace absence for all candidate rows"
+        );
+
+        let block = FilteredCelestiaBlock {
+            header: build_header(dah),
+            rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
+            rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
+        };
+        let params = RollupParams {
+            rollup_batch_namespace: NS_BATCH,
+            rollup_proof_namespace: NS_PROOF,
+        };
+        (block, params)
+    }
+
+    fn synthetic_single_row_absence_fixture() -> (FilteredCelestiaBlock, RollupParams) {
+        let ods_width = 4usize;
+        let mut ods_shares = Vec::with_capacity(ods_width * ods_width);
+
+        // Row 0: low + high, no target shares (single candidate row with absence).
+        ods_shares.extend(make_blob_shares(NS_LOW_A, 3, None, 0x41));
+        ods_shares.extend(make_blob_shares(NS_HIGH_A, 1, None, 0x42));
+
+        // Rows 1-3: high only, non-candidate rows for NS_BATCH.
+        ods_shares.extend(make_blob_shares(NS_HIGH_A, ods_width * 3, None, 0x43));
+
+        let eds =
+            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
+        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+
+        assert_eq!(
+            batch_rows.len(),
+            1,
+            "synthetic fixture must contain exactly one candidate row"
+        );
+        assert!(
+            batch_rows[0].shares.is_empty(),
+            "synthetic fixture must represent absence in the only candidate row"
         );
 
         let block = FilteredCelestiaBlock {
@@ -1135,19 +1202,89 @@ mod multirow_absence_spec {
     #[tokio::test(flavor = "multi_thread")]
     async fn empty_namespace_multicandidate_rows_without_global_evidence_rejected() {
         let (block, rollup_params) = synthetic_multirow_absence_fixture();
+        let root_count = block
+            .header
+            .get_row_roots_for_namespace(rollup_params.rollup_batch_namespace)
+            .count();
+        assert!(
+            root_count > 1,
+            "fixture should have more than one candidate row root"
+        );
+
         let relevant_blobs = RelevantBlobs {
             batch_blobs: Vec::new(),
             proof_blobs: Vec::new(),
         };
         let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert!(
+            relevant_proofs.batch.completeness_proof.is_some(),
+            "fixture should include a per-row boundary proof, even though global evidence is missing"
+        );
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+        let error_with_boundary = verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap_err();
+        assert!(
+            error_with_boundary.to_string().contains("MissingBlobs"),
+            "expected MissingBlobs with boundary proof present, got: {error_with_boundary}"
+        );
+
+        let mut relevant_proofs_without_boundary = get_extraction_proof(&block, &relevant_blobs);
+        relevant_proofs_without_boundary.batch.completeness_proof = None;
+        let error_without_boundary = verifier
+            .verify_relevant_tx_list(
+                &block.header,
+                &relevant_blobs,
+                relevant_proofs_without_boundary,
+            )
+            .unwrap_err();
+        assert!(
+            error_without_boundary.to_string().contains("MissingBlobs"),
+            "expected MissingBlobs with boundary proof removed, got: {error_without_boundary}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn empty_namespace_single_candidate_row_with_boundary_proof_is_accepted() {
+        let (block, rollup_params) = synthetic_single_row_absence_fixture();
+        let relevant_blobs = RelevantBlobs {
+            batch_blobs: Vec::new(),
+            proof_blobs: Vec::new(),
+        };
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert!(
+            relevant_proofs.batch.completeness_proof.is_some(),
+            "single-row absence should include a boundary proof"
+        );
+
+        let verifier = CelestiaVerifier::new(rollup_params);
+        verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn empty_namespace_single_candidate_row_without_boundary_proof_rejected() {
+        let (block, rollup_params) = synthetic_single_row_absence_fixture();
+        let relevant_blobs = RelevantBlobs {
+            batch_blobs: Vec::new(),
+            proof_blobs: Vec::new(),
+        };
+        let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert!(
+            relevant_proofs.batch.completeness_proof.is_some(),
+            "single-row absence fixture should produce completeness proof"
+        );
+        relevant_proofs.batch.completeness_proof = None;
 
         let verifier = CelestiaVerifier::new(rollup_params);
         let error = verifier
             .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
             .unwrap_err();
         assert!(
-            error.to_string().contains("MissingBlobs"),
-            "expected MissingBlobs, got: {error}"
+            error.to_string().contains("ProofError(Missing)"),
+            "expected ProofError(Missing), got: {error}"
         );
     }
 

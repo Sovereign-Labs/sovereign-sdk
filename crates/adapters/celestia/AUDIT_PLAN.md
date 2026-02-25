@@ -92,25 +92,25 @@
 
 | # | Requirement | Implementation | Test Status | Priority |
 |---|-------------|----------------|-------------|----------|
-| S1 | Reject blob order modifications | `verify_continuity()` in `verifier/proofs.rs` | **MISSING TEST** | CRITICAL |
-| S2 | Reject sender tampering | `authenticate_blob_data()` in `verifier/mod.rs` | Has test | VERIFY |
-| S3 | Reject blob omission | `check_namespace_end_boundary()` in `verifier/mod.rs` | Has test | VERIFY |
-| S4 | Reject blob duplication | Range checks in `verify_continuity()` | **MISSING TEST** | CRITICAL |
-| S5 | Reject extra blobs | `prevalidate_blobs()` + proofs | **PARTIAL** (no explicit test) | HIGH |
+| S1 | Reject blob order modifications | `verify_continuity()` in `verifier/proofs.rs` | **COVERED** (`verification_fails_if_blob_order_swapped`) | CRITICAL |
+| S2 | Reject sender tampering | `authenticate_blob_data()` in `verifier/mod.rs` | **COVERED** (`verification_fails_if_sender_changed`) | VERIFY |
+| S3 | Reject blob omission | `check_namespace_end_boundary()` in `verifier/mod.rs` | **COVERED** (`verification_fails_if_not_all_blobs_are_proven`, `verification_fails_if_right_boundary_missing`) | VERIFY |
+| S4 | Reject blob duplication | Range checks in `verify_continuity()` | **COVERED** (`verification_fails_if_blob_duplicated`) | CRITICAL |
+| S5 | Reject extra blobs | `prevalidate_blobs()` + proofs | **PARTIAL** (coverage exists for proof/blob cardinality mismatch, but still needs explicit panic-free OOB hardening) | HIGH |
 
 ### 2.2 Additional Attack Vectors to Test
 
 | # | Attack Vector | Location | Test Status | Priority |
 |---|--------------|----------|-------------|----------|
-| S6 | Blob insertion (fake blob in proof) | Row proof verification | **MISSING** | CRITICAL |
-| S7 | Index manipulation (wrong start_share_idx) | `verify_left_boundary()` / `verify_continuity()` | **MISSING** | CRITICAL |
-| S8 | Row root index out of bounds | `namespace_row_roots[row_number]` | **MISSING** | CRITICAL |
-| S9 | Namespace confusion (wrong namespace in proof) | NMT verification | **MISSING** | HIGH |
-| S10 | Proof reordering (swap proof order) | `verify_continuity()` | **MISSING** | HIGH |
-| S11 | Left boundary skip (not at namespace start) | `verify_left_boundary()` | **MISSING** | CRITICAL |
-| S12 | Right boundary skip (missing end proof) | `check_namespace_end_boundary()` | **MISSING** | CRITICAL |
-| S13 | Gap between blobs (non-contiguous shares) | `verify_continuity()` | **MISSING** | CRITICAL |
-| S14 | Row root manipulation | Row proof verification | **MISSING** | HIGH |
+| S6 | Blob insertion (fake blob in proof) | Row proof verification | **COVERED** (`verification_fails_if_fake_blob_inserted`) | CRITICAL |
+| S7 | Index manipulation (wrong start_share_idx) | `verify_left_boundary()` / `verify_continuity()` | **COVERED** (`verification_fails_if_start_index_manipulated`) | CRITICAL |
+| S8 | Row root index out of bounds | `namespace_row_roots[row_number]` | **BUG SPEC PRESENT, IGNORED** (`verification_handles_out_of_bounds_row_index_without_panic`) | CRITICAL |
+| S9 | Namespace confusion (wrong namespace in proof) | NMT verification | **COVERED** (`verification_fails_for_wrong_namespace_proof`) | HIGH |
+| S10 | Proof reordering (swap proof order) | `verify_continuity()` | **COVERED** (`verification_fails_if_proofs_reordered`) | HIGH |
+| S11 | Left boundary skip (not at namespace start) | `verify_left_boundary()` | **COVERED** (`verification_fails_if_left_boundary_missing`) | CRITICAL |
+| S12 | Right boundary skip (missing end proof) | `check_namespace_end_boundary()` | **COVERED** (`verification_fails_if_right_boundary_missing`) | CRITICAL |
+| S13 | Gap between blobs (non-contiguous shares) | `verify_continuity()` | **COVERED** (`verification_fails_if_gap_between_blobs`) | CRITICAL |
+| S14 | Row root manipulation | Row proof verification | **PARTIAL** (`verification_fails_if_boundary_proof_row_alignment_is_manipulated`; still missing direct row-root tamper fixture) | HIGH |
 | S15 | Share version spoofing | `is_supported_blob()` | **MISSING** | MEDIUM |
 | S16 | Tail padding contains non-zero bytes | `verify_skipped_blob()` | **MISSING** | HIGH |
 | S17 | Sequence length overflow / truncation | `shares_needed_for_bytes(sequence_length as usize)` | **MISSING** | HIGH |
@@ -126,47 +126,35 @@
 
 ## 3. Test Coverage Expansion
 
-### 3.1 Missing Adversarial Tests (CRITICAL)
+### 3.1 Adversarial Coverage Status (CRITICAL)
 
-Create in `da_service/tests.rs`:
+Implemented in `crates/adapters/celestia/src/da_service/tests.rs`:
 
-```rust
-// S1: Reject blob order modifications
-#[test]
-fn verification_fails_if_blob_order_swapped() {}
+- `verification_fails_if_blob_order_swapped`
+- `verification_fails_if_blob_duplicated`
+- `verification_fails_if_fake_blob_inserted`
+- `verification_fails_if_left_boundary_missing`
+- `verification_fails_if_right_boundary_missing`
+- `verification_fails_if_gap_between_blobs`
+- `verification_fails_if_start_index_manipulated`
+- `verification_fails_for_wrong_namespace_proof`
+- `verification_fails_if_proofs_reordered`
+- `verification_fails_if_boundary_proof_row_alignment_is_manipulated`
 
-// S4: Reject blob duplication
-#[test]
-fn verification_fails_if_blob_duplicated() {}
+Completeness-specific edge cases implemented in `multirow_absence_spec`:
 
-// S6: Reject fake blob insertion
-#[test]
-fn verification_fails_if_fake_blob_inserted() {}
+- `empty_namespace_multicandidate_rows_without_global_evidence_rejected`
+- `empty_namespace_claim_rejected_when_candidate_row_contains_real_shares`
+- `empty_namespace_single_candidate_row_with_boundary_proof_is_accepted`
+- `empty_namespace_single_candidate_row_without_boundary_proof_rejected`
 
-// S10: Left boundary attack
-#[test]
-fn verification_fails_if_left_boundary_missing() {}
+Known bug-spec tests intentionally `#[ignore]`:
 
-// S11: Right boundary attack
-#[test]
-fn verification_fails_if_right_boundary_missing() {}
-
-// S12: Gap attack
-#[test]
-fn verification_fails_if_gap_between_blobs() {}
-
-// S7: Index manipulation
-#[test]
-fn verification_fails_if_start_index_manipulated() {}
-
-// S8: Namespace confusion
-#[test]
-fn verification_fails_for_wrong_namespace_proof() {}
-
-// S9: Proof reordering
-#[test]
-fn verification_fails_if_proofs_reordered() {}
-```
+- `empty_namespace_multicandidate_rows_all_rows_absent_accepted_after_redesign`
+- `verification_handles_out_of_bounds_row_index_without_panic`
+- `proptest_mid_row_full_verification`
+- `proptest_single_row_mid_row_full_verification`
+- `test_mid_row_full_verification_manual`
 
 ### 3.2 Edge Case Tests (HIGH)
 
@@ -417,13 +405,14 @@ After remediation, verify with:
 
 ### Phase 1: Critical Security (Immediate)
 - [ ] P1-P12 - Verifier panics on untrusted inputs
-- [ ] S1, S4, S6-S13 - Missing adversarial tests for ordering/completeness/indexing
+- [x] S1, S4, S6, S7, S9-S13 - Adversarial tests implemented and passing
+- [ ] S8 - Out-of-bounds row/root panic-safety hardening (bug-spec test exists and is ignored)
 - [ ] Add error variants for panic replacement
 - [ ] Proptest/fuzz harnesses that assert "never panic" in verifier
 
 ### Phase 2: High Priority
 - [ ] P13-P31 - Native proof/extraction + share parsing panics
-- [ ] S14-S18 - Additional attack vector tests (padding/version/overflow)
+- [ ] S14-S18 - Additional attack vector tests (padding/version/overflow), with S14 currently partial
 - [ ] Proptest coverage for all input paths + structured generators
 
 ### Phase 3: Medium Priority
@@ -443,16 +432,16 @@ After remediation, verify with:
 ## Appendix: Test Data Requirements
 
 For adversarial tests, need to generate:
-1. Blocks with swapped blob order
-2. Blocks with duplicated blobs
-3. Blocks with fake blob insertion
-4. Blocks with missing left boundary proof
-5. Blocks with missing right boundary proof
-6. Blocks with gaps between blobs
-7. Blocks with manipulated start indices
-8. Blocks with wrong namespace proofs
-9. Blocks with out-of-bounds row/root indices
-10. Blocks with non-zero tail padding
-11. Blocks with oversized sequence_length (overflow/truncation)
+1. [x] Blocks with swapped blob order
+2. [x] Blocks with duplicated blobs
+3. [x] Blocks with fake blob insertion
+4. [x] Blocks with missing left boundary proof
+5. [x] Blocks with missing right boundary proof
+6. [x] Blocks with gaps between blobs
+7. [x] Blocks with manipulated start indices
+8. [x] Blocks with wrong namespace proofs
+9. [ ] Blocks with out-of-bounds row/root indices (test exists as bug-spec, currently ignored)
+10. [ ] Blocks with non-zero tail padding
+11. [ ] Blocks with oversized sequence_length (overflow/truncation)
 
 Can generate using existing test helper infrastructure in `test_helper/files.rs` by modifying serialized test data.
