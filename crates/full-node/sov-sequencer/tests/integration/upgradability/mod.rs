@@ -99,13 +99,14 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let api_client = test_rollup.api_client().clone();
 
     // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    let da = test_rollup.da_service.clone();
-    let mut da_sub = da.subscribe_finalized_header().await.unwrap();
-    for _ in 0..finalization_blocks + 3 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(300)).await;
-    }
-    da_sub.next().await;
+    // Use produce_n_blocks_now (instant) rather than tenderly_produce_blocks to avoid
+    // cascading batch creation that could advance height past stop_at_height.
+    test_rollup
+        .da_service
+        .produce_n_blocks_now(finalization_blocks as usize + 3)
+        .await
+        .unwrap();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Produce enough blocks with transactions to advance rollup height past stop_at_height.
     // Transactions are required to trigger batch production and increment rollup height.
@@ -116,7 +117,6 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         nonce += 1;
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     let slot_height = test_rollup.height().await;
@@ -136,10 +136,13 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         panic!("The rollup should have stopped")
     };
 
-    let mut records = collector.records();
-    let (_, log) = records.remove(0);
-
-    assert!(log.contains("The requested stop_height "));
+    let records = collector.records();
+    assert!(
+        records
+            .iter()
+            .any(|(_, log)| log.contains("The requested stop_height")),
+        "Expected stop-height log in records: {records:?}"
+    );
     assert!(err.to_string().contains("The requested stop_height"));
 }
 
@@ -162,14 +165,15 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
-    let da = test_rollup.da_service.clone();
-    let mut da_sub = da.subscribe_finalized_header().await.unwrap();
-    // We just need at least one finalized block to proceed with the tests.
-    for _ in 0..finalization_blocks + 3 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        tokio::time::sleep(Duration::from_millis(300)).await;
-    }
-    da_sub.next().await;
+    // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
+    // Use produce_n_blocks_now (instant) rather than tenderly_produce_blocks to avoid
+    // cascading batch creation that could advance height past stop_at_height.
+    test_rollup
+        .da_service
+        .produce_n_blocks_now(finalization_blocks as usize + 3)
+        .await
+        .unwrap();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let api_client = test_rollup.api_client().clone();
 
@@ -183,8 +187,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
-
-        tokio::time::sleep(Duration::from_millis(300)).await;
         current_height = test_rollup.height().await;
     }
 
@@ -196,7 +198,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
 
-        tokio::time::sleep(Duration::from_millis(300)).await;
         let err = send_tx(&admin, nonce, &api_client).await.unwrap_err();
         nonce += 1;
         assert!(err.contains(&expected_error));
@@ -205,7 +206,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     for _ in 0..3 {
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
-        tokio::time::sleep(Duration::from_millis(300)).await;
     }
 
     test_rollup

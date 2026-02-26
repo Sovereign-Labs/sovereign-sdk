@@ -1,6 +1,6 @@
 services:
   validator:
-    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v6.4.4-mocha
+    image: ghcr.io/sovereign-labs/celestia-validator-devnet:v7.0.2-mocha
     hostname: validator
     environment:
       NO_COLOR: 1
@@ -15,7 +15,7 @@ services:
       - genesis:/genesis
 
   sequencer-0:
-    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.28.5-mocha
+    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.29.1-mocha
     hostname: sequencer-0
     depends_on:
       - validator

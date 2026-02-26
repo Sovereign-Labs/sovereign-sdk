@@ -24,7 +24,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 - `eth_blockNumber` returns latest sealed block number, not synthetic pending height.
 - `eth_gasPrice` returns current `block_env.basefee`.
 - `eth_maxPriorityFeePerGas` returns `0`.
-- `eth_call` accepts `state_overrides`/`block_overrides` but currently ignores them.
+- `eth_call` and `eth_estimateGas` apply `state_overrides`/`block_overrides` for simulation.
 - EIP-1898 `requireCanonical` is accepted but effectively a no-op in no-reorg semantics.
 
 ## High-Risk Hotspots

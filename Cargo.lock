@@ -2543,9 +2543,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2189137197ca49d776d1a0b931cc925510fcd1094b3182430dfd46a3852bb12"
+checksum = "7c7531886eef1f65e30ba676dba429c98965fb03a3fcf94d8468fecabdc45259"
 dependencies = [
  "async-stream",
  "blockstore",
@@ -2571,9 +2571,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b8dbaf0d7c58c92133425c4995a3684f13d154902f0c00ef08b4c749abbdc40"
+checksum = "4e3d17a7cd950e6387bfb7aa494ab23989035763261a1bb725ef4430a2645ade"
 dependencies = [
  "arc-swap",
  "bytes",
@@ -2610,9 +2610,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc-macros"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9c9a206faf26365a929f943cea383d445a613f794461fdc6b4c8f1e5b24937d"
+checksum = "1d79e42455c42517ad6a7c3bc301640e534ccf37e1e37777b4a3ea12bca93d2a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2621,9 +2621,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9033470dd895f900f97bd674f330ba7d87550fa6a92c92815dd30f31437367a"
+checksum = "65013505b04171f213d833b92bb076e9f229c36e5d144cb2faf25378397e2597"
 dependencies = [
  "bytes",
  "prost 0.13.5",
@@ -2640,9 +2640,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "0.16.1"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5332519c0e0fca2fa477122b22f752dfd51885d1a2b0462e1ab0c82c29954242"
+checksum = "71f5f1ededb6d3398c6f922ad543594b0706d2de19e02d97024037cb750dbd89"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -2666,9 +2666,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b9cc150ce1c20da1a79a9ea3e79d2feed4189bd7243b23fc0752784add94bba"
+checksum = "0fe616393f4c88756ed6b8097167a623c6e4e48e2a3d75109e3ea5d5941587e0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -5599,17 +5599,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "io-uring"
-version = "0.7.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "046fa2d4d00aea763528b4950358d0ead425372445dc8ff86312b3c69ff7727b"
-dependencies = [
- "bitflags 2.9.4",
- "cfg-if",
- "libc",
-]
-
-[[package]]
 name = "ipnet"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6232,9 +6221,9 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lumina-utils"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "949c02e310a43325ec27c258769e93404b789c274b7c8e183a243e75c16be1bf"
+checksum = "2e68ba51207213b3fa8a42465526efdbe6c3c983a78a2a972d3a8e94d2bf9ab8"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",
@@ -6687,7 +6676,7 @@ dependencies = [
  "dashmap 5.5.3",
  "fxhash",
  "imbl",
- "io-uring 0.6.4",
+ "io-uring",
  "libc",
  "loom",
  "lru 0.12.5",
@@ -10993,7 +10982,6 @@ dependencies = [
  "bincode",
  "borsh",
  "celestia-client",
- "celestia-rpc",
  "celestia-types",
  "derive_more 1.0.0",
  "futures",
@@ -13954,30 +13942,27 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.47.1"
+version = "1.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89e49afdadebb872d3145a5638b59eb0691ea23e46ca484037cfab3b76b95038"
+checksum = "72a2903cd7736441aac9df9d7688bd0ce48edccaadf181c3b90be801e81d3d86"
 dependencies = [
- "backtrace",
  "bytes",
- "io-uring 0.7.10",
  "libc",
  "mio",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
- "slab",
  "socket2 0.6.0",
  "tokio-macros",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
 name = "tokio-macros"
-version = "2.5.0"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e06d43f1345a3bcd39f6a56dbb7dcab2ba47e68e8ac134855e7e2bdbaf8cab8"
+checksum = "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
 dependencies = [
  "proc-macro2",
  "quote",

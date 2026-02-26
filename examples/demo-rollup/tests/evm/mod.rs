@@ -5,6 +5,7 @@ mod evm_block_by_number_hash;
 mod evm_block_hash;
 mod evm_block_number;
 mod evm_block_pinned_state_reads;
+mod evm_call_fee_fields;
 mod evm_contract_creation_allowlist;
 mod evm_effective_gas_price;
 mod evm_fee_history;

@@ -367,6 +367,8 @@ async fn test_pinning_after_recovery() {
         if i > max_wait {
             panic!("sequencer never became ready in {max_wait} blocks");
         }
+        // We produce a new DA block above; sleep one DA block interval to avoid a tight poll loop
+        // while recovery catches up.
         tokio::time::sleep(reasonable_time_for_rollup).await;
     }
     test_rollup.wait_for_node_synced().await.unwrap();
@@ -381,6 +383,8 @@ async fn test_pinning_after_recovery() {
             panic!("sequencer never became ready in {max_wait} blocks");
         }
         i += 1;
+        // We produce a new DA block above; sleep one DA block interval to avoid a tight poll loop
+        // while waiting for sequencer readiness to flip back.
         tokio::time::sleep(reasonable_time_for_rollup).await;
     }
     println!("5");

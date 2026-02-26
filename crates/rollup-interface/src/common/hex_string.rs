@@ -182,7 +182,13 @@ impl<T: TryFrom<Vec<u8>> + AsRef<[u8]>> FromStr for HexString<T> {
 
 impl BlockHashTrait for HexHash {}
 
+// TODO: This conversion uses `digest::generic_array::GenericArray`, which is deprecated in
+// the digest 0.10 stack we currently pin for zkVM compatibility.
+// Remove this allow and migrate once digest/generic-array are upgraded to versions
+// that no longer expose the deprecated `generic_array` API.
+#[allow(deprecated)]
 impl From<digest::generic_array::GenericArray<u8, digest::typenum::U32>> for HexHash {
+    #[allow(deprecated)]
     fn from(value: digest::generic_array::GenericArray<u8, digest::typenum::U32>) -> Self {
         HexHash::new(value.into())
     }

@@ -4,6 +4,7 @@
 # 2026-02-17
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
   You can use `SOV_CELESTIA_RPC_URL` for setup.
+- #2500 EVM: Fixes the nonce used for simulation endpoints
 - #2499 EVM: Add block-pinned state isolation tests for all 6 RPC endpoints
 - #2495 Updates examples configs
 
@@ -216,6 +217,7 @@ The purpose of this change is to enable rollups to accept transactions signed wi
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
         This was done because there's no guarantees that any field will remain common across all transaction versions (which was the original motiviation for this design).
+- #1916 Changes demo-rollup to use NOMT storage by default.
 
 # 2025-10-16
 - #1878 Add EVM logs soak test
