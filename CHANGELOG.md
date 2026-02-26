@@ -1,3 +1,6 @@
+# 2026-02-26
+- #2540 Adds a witness generation flag. If witness generation is enabled at the same time as cache pinning a panic with occur at runtime.
+
 # 2026-02-23
 - #2520 reverts #2489
 

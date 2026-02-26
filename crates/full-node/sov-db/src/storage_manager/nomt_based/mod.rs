@@ -266,7 +266,7 @@ where
         // That's why it is created in strict mode.
         // If witness generation is enabled, NomtProverStorage::create will panic
         // if a pinned cache is present — this is intentional because pinned cache is not
-        // compatible with witness generation. 
+        // compatible with witness generation.
         let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
         let state = self.create_state_up_to(
             block_header.prev_hash(),
