@@ -1,9 +1,5 @@
-use super::sov_toxi_proxi_image::{
-    SovToxiProxiImage, ToxiProxySetup, TOXIPROXY_DA_PROXY_NAME, TOXIPROXY_POSTGRES_PROXY_NAME,
-    TOXIPROXY_SLOW_DA_LATENCY_MS, TOXIPROXY_SLOW_DA_TOXIC_NAME,
-};
+use super::sov_toxi_proxi_image::{SovToxiProxiImage, ToxiProxySetup};
 use super::*;
-use serde_json::json;
 use testcontainers::ContainerAsync;
 
 pub(crate) struct NodeTestSetup {
@@ -95,32 +91,20 @@ impl NodeTestSetup {
 
     /// Simulates or heals a Postgres partition by toggling the postgres proxy.
     pub(crate) async fn set_postgres_partition(&self, partitioned: bool) {
-        let update_proxy_body = json!({
-            "enabled": !partitioned,
-        });
-
-        SovToxiProxiImage::post_json(
+        SovToxiProxiImage::set_postgres_partition(
             &self.toxiproxy_client,
-            format!(
-                "{}/proxies/{}",
-                self.toxiproxy_api_url, TOXIPROXY_POSTGRES_PROXY_NAME
-            ),
-            &update_proxy_body,
-            "Failed to update toxiproxy proxy state",
+            &self.toxiproxy_api_url,
+            partitioned,
         )
         .await;
     }
 
     /// Enables or disables high latency on the replica's DA traffic.
     pub(crate) async fn set_replica_da_slow(&self, slow: bool) {
-        SovToxiProxiImage::set_proxy_latency(
+        SovToxiProxiImage::set_replica_da_slow(
             &self.toxiproxy_client,
             &self.toxiproxy_api_url,
-            TOXIPROXY_DA_PROXY_NAME,
-            TOXIPROXY_SLOW_DA_TOXIC_NAME,
-            TOXIPROXY_SLOW_DA_LATENCY_MS,
             slow,
-            "Failed to configure slow replica DA communication toxic",
         )
         .await;
     }

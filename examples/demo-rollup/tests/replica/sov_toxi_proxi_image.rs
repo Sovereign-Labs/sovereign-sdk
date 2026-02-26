@@ -14,10 +14,10 @@ const TOXIPROXY_TAG: &str = "2.12.0";
 const TOXIPROXY_API_PORT: u16 = 8474;
 const TOXIPROXY_POSTGRES_PORT: u16 = 8666;
 const TOXIPROXY_DA_PORT: u16 = 8667;
-pub(super) const TOXIPROXY_POSTGRES_PROXY_NAME: &str = "postgres_replica";
-pub(super) const TOXIPROXY_DA_PROXY_NAME: &str = "da_replica";
-pub(super) const TOXIPROXY_SLOW_DA_TOXIC_NAME: &str = "slow_da_replica";
-pub(super) const TOXIPROXY_SLOW_DA_LATENCY_MS: u64 = 1_000_000;
+const TOXIPROXY_POSTGRES_PROXY_NAME: &str = "postgres_replica";
+const TOXIPROXY_DA_PROXY_NAME: &str = "da_replica";
+const TOXIPROXY_SLOW_DA_TOXIC_NAME: &str = "slow_da_replica";
+const TOXIPROXY_SLOW_DA_LATENCY_MS: u64 = 1_000_000;
 const TOXIPROXY_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const TOXIPROXY_READY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -120,8 +120,45 @@ impl SovToxiProxiImage {
         }
     }
 
+    /// Simulates or heals a Postgres partition by toggling the postgres proxy.
+    pub(super) async fn set_postgres_partition(
+        client: &reqwest::Client,
+        api_base_url: &str,
+        partitioned: bool,
+    ) {
+        let update_proxy_body = json!({
+            "enabled": !partitioned,
+        });
+
+        Self::post_json(
+            client,
+            format!("{api_base_url}/proxies/{TOXIPROXY_POSTGRES_PROXY_NAME}"),
+            &update_proxy_body,
+            "Failed to update toxiproxy proxy state",
+        )
+        .await;
+    }
+
+    /// Enables or disables high latency on the replica's DA traffic.
+    pub(super) async fn set_replica_da_slow(
+        client: &reqwest::Client,
+        api_base_url: &str,
+        slow: bool,
+    ) {
+        Self::set_proxy_latency(
+            client,
+            api_base_url,
+            TOXIPROXY_DA_PROXY_NAME,
+            TOXIPROXY_SLOW_DA_TOXIC_NAME,
+            TOXIPROXY_SLOW_DA_LATENCY_MS,
+            slow,
+            "Failed to configure slow replica DA communication toxic",
+        )
+        .await;
+    }
+
     /// Sends a JSON POST request and fails fast when the response is not successful.
-    pub(super) async fn post_json(
+    async fn post_json(
         client: &reqwest::Client,
         url: String,
         body: &impl serde::Serialize,
@@ -141,7 +178,7 @@ impl SovToxiProxiImage {
     }
 
     /// Idempotently enables or disables a latency toxic on a given toxiproxy proxy.
-    pub(super) async fn set_proxy_latency(
+    async fn set_proxy_latency(
         client: &reqwest::Client,
         api_base_url: &str,
         proxy_name: &str,
