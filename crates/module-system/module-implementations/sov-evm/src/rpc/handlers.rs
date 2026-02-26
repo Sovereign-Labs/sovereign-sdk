@@ -471,7 +471,7 @@ where
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
 
-        Ok(U64::from(apply_estimate_margins(total_gas_used)?))
+        Ok(U64::from(super::apply_margins(total_gas_used)?))
     }
 
     /// Handler for `debug_traceBlockByNumber`
@@ -744,35 +744,4 @@ where
         state,
     );
     Ok(Some(tx))
-}
-
-const ESTIMATE_GAS_ABSOLUTE_MARGIN: u64 = 100_000;
-
-/// Returns `gas * 1.5 + 100_000`.
-fn apply_estimate_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
-    (gas / 2)
-        .checked_mul(3)
-        .and_then(|with_relative_margin| {
-            with_relative_margin.checked_add(ESTIMATE_GAS_ABSOLUTE_MARGIN)
-        })
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
-}
-
-#[cfg(test)]
-mod estimate_gas_tests {
-    use super::apply_estimate_margins;
-    use sov_rpc_eth_types::RpcInvalidTransactionError;
-
-    #[test]
-    fn apply_estimate_margins_adds_relative_and_absolute_components() {
-        assert_eq!(apply_estimate_margins(200_000).unwrap(), 400_000);
-    }
-
-    #[test]
-    fn apply_estimate_margins_detects_overflow() {
-        assert!(matches!(
-            apply_estimate_margins(u64::MAX),
-            Err(RpcInvalidTransactionError::GasUintOverflow)
-        ));
-    }
 }
