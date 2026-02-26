@@ -3,6 +3,7 @@ mod replica_gets_txs_from_master;
 mod replica_partitioned_db;
 mod replica_registers_in_db;
 mod root_hash_checker;
+mod sov_toxi_proxi_image;
 mod start_stop;
 mod toxi_proxy_helper;
 
