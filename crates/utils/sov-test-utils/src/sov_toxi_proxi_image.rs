@@ -1,6 +1,6 @@
-use super::*;
 use serde_json::json;
-use std::net::ToSocketAddrs;
+use std::net::{SocketAddr, ToSocketAddrs};
+use std::time::Duration;
 use testcontainers::core::wait::HttpWaitStrategy;
 use testcontainers::core::{ContainerPort, Host, IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -22,7 +22,7 @@ const TOXIPROXY_SLOW_DA_LATENCY_MS: u64 = 1_000_000;
 const TOXIPROXY_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const TOXIPROXY_READY_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(super) struct SovToxiProxiImage;
+struct SovToxiProxiImage;
 
 impl Image for SovToxiProxiImage {
     fn name(&self) -> &str {
@@ -51,17 +51,18 @@ impl Image for SovToxiProxiImage {
     }
 }
 
-pub(super) struct ToxiProxySetup {
-    pub(super) container: ContainerAsync<SovToxiProxiImage>,
-    pub(super) client: reqwest::Client,
-    pub(super) api_base_url: String,
-    pub(super) proxied_da_addr: SocketAddr,
-    pub(super) proxied_postgres_connection_string: String,
+/// Running toxiproxy setup with computed proxied endpoints for Postgres and DA.
+pub struct ToxiProxySetup {
+    container: ContainerAsync<SovToxiProxiImage>,
+    client: reqwest::Client,
+    api_base_url: String,
+    proxied_da_addr: SocketAddr,
+    proxied_postgres_connection_string: String,
 }
 
 impl ToxiProxySetup {
     /// Starts toxiproxy, creates Postgres/DA proxies, and returns proxied endpoints.
-    pub(super) async fn start_for_postgres_and_da(
+    pub async fn start_for_postgres_and_da(
         postgres_connection_string: &str,
         da_upstream_port: u16,
     ) -> Self {
@@ -126,7 +127,7 @@ impl ToxiProxySetup {
     }
 
     /// Simulates or heals a Postgres partition by toggling the postgres proxy.
-    pub(super) async fn set_postgres_partition(&self, partitioned: bool) {
+    pub async fn set_postgres_partition(&self, partitioned: bool) {
         let update_proxy_body = json!({
             "enabled": !partitioned,
         });
@@ -144,7 +145,7 @@ impl ToxiProxySetup {
     }
 
     /// Enables or disables high latency on the replica's DA traffic.
-    pub(super) async fn set_replica_da_slow(&self, slow: bool) {
+    pub async fn set_replica_da_slow(&self, slow: bool) {
         Self::set_proxy_latency(
             &self.client,
             &self.api_base_url,
@@ -155,6 +156,21 @@ impl ToxiProxySetup {
             "Failed to configure slow replica DA communication toxic",
         )
         .await;
+    }
+
+    /// Returns the DA endpoint that points at toxiproxy.
+    pub fn proxied_da_addr(&self) -> SocketAddr {
+        self.proxied_da_addr
+    }
+
+    /// Returns the Postgres connection string rewritten to point at toxiproxy.
+    pub fn proxied_postgres_connection_string(&self) -> &str {
+        &self.proxied_postgres_connection_string
+    }
+
+    /// Drops the managed toxiproxy container.
+    pub fn shutdown(self) {
+        drop(self.container);
     }
 
     /// Sends a JSON POST request and fails fast when the response is not successful.

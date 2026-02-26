@@ -1,5 +1,5 @@
-use super::sov_toxi_proxi_image::ToxiProxySetup;
 use super::*;
+use sov_test_utils::sov_toxi_proxi_image::ToxiProxySetup;
 
 pub(crate) struct NodeTestSetup {
     postgres: Arc<PostgresData>,
@@ -64,11 +64,11 @@ impl NodeTestSetup {
 
         let replica_proxied_node = self
             .start_db_elected_node(
-                self.toxiproxy_setup.proxied_da_addr,
+                self.toxiproxy_setup.proxied_da_addr(),
                 proxied_node_id,
                 self.toxiproxy_setup
-                    .proxied_postgres_connection_string
-                    .clone(),
+                    .proxied_postgres_connection_string()
+                    .to_string(),
                 SequencerRole::PgSyncReplica,
             )
             .await;
@@ -93,7 +93,7 @@ impl NodeTestSetup {
         let _ = replica.shutdown().await;
         let _ = leader.shutdown().await;
         let _ = self.da_shutdown.send(());
-        drop(self.toxiproxy_setup.container);
+        self.toxiproxy_setup.shutdown();
     }
 
     /// Starts one DB-elected node against the provided DA and Postgres endpoints and checks its role.

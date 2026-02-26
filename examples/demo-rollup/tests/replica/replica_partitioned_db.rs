@@ -12,13 +12,10 @@ const PARTITIONED_TRANSFER_COUNT: u64 = 3;
 /// Verifies a DB-elected replica remain consistent after sequencer db partition.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_replica_catches_up_via_da_after_postgres_partition() {
-    println!("S1");
-
     let Some(mut setup) = NodeTestSetup::new().await else {
         return;
     };
 
-    println!("S2");
     let (leader, replica) = setup
         .start_db_elected_pair("direct_node", "proxied_node")
         .await;
@@ -108,8 +105,6 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
     assert_eq!(replica_balance, expected_balance_after_partitioned_tx);
 
     setup.shutdown(leader, replica).await;
-
-    println!("S3");
 }
 
 async fn wait_for_replica_to_catchup(leader: &TestRollup<Rollup>, replica: &TestRollup<Rollup>) {
