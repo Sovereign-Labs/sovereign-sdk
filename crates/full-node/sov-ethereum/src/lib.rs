@@ -75,6 +75,7 @@ where
         "eth_protocolVersion",
         "eth_coinbase",
         "eth_mining",
+        "eth_syncing",
         "eth_hashrate",
         "eth_getUncleCountByBlockHash",
         "eth_getUncleCountByBlockNumber",
