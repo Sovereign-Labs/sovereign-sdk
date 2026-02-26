@@ -64,6 +64,7 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
     subscriber.init();
 
     // Simulate a partitioned sequencer DB. Now replica is disconnected and the DA is very slow.
+    // `setup.set_replica_da_slow`` ensures that the replica is not updated immediately via DA after a DB partition, allowing the system to diverge for a couple of blocks.
     {
         setup.set_postgres_partition(true).await;
         setup.set_replica_da_slow(true).await;
