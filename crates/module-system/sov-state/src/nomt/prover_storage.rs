@@ -95,7 +95,7 @@ where
         assert!(
             !(with_witness && pinned_cache.is_some()),
             "Pinned cache is incompatible with witness generation: pinned cache serves reads \
-             from RAM, bypassing witness hint recording. See #2514."
+             from RAM, bypassing witness hint recording."
         );
         Self {
             state_session_builder,

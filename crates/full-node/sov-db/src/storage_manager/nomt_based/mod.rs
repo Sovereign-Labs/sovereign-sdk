@@ -134,7 +134,11 @@ where
     S: InitializableNativeNomtStorage<H, Da::SlotHash>,
 {
     /// Create a new [` NomtStorageManager`].
-    pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
+    ///
+    /// `witness_generation` controls whether `create_state_for` will generate witness hints
+    /// for ZK proving. When enabled, pinned cache is disabled since it bypasses witness
+    /// recording. See #2514.
+    pub fn new(config: RollupDbConfig, witness_generation: bool) -> anyhow::Result<Self> {
         let pruner_block_interval = config.get_pruner_interval();
         let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
         let pruner_max_batch_size = config.get_pruner_max_batch_size();
@@ -157,7 +161,7 @@ where
             pruner_block_interval,
             pruner_versions_to_keep,
             pruner_max_batch_size,
-            witness_generation_enabled: false,
+            witness_generation_enabled: witness_generation,
             _phantom_s: Default::default(),
         })
     }
@@ -239,10 +243,6 @@ where
     type StfChangeSet = NomtChangeSet;
     type LedgerState = DeltaReader;
     type LedgerChangeSet = SchemaBatch;
-
-    fn set_witness_generation(&mut self, enabled: bool) {
-        self.witness_generation_enabled = enabled;
-    }
 
     fn create_state_for(
         &mut self,

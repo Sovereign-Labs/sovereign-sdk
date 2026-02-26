@@ -17,10 +17,6 @@ pub trait HierarchicalStorageManager<Da: DaSpec>: Send + Sync {
     /// Type which is produced by a ledger.
     type LedgerChangeSet;
 
-    /// Enable witness generation for ZK proving. When enabled, `create_state_for` will
-    /// generate complete witnesses (at the cost of disabling pinned cache). See #2514.
-    fn set_witness_generation(&mut self, _enabled: bool) {}
-
     /// Creates a state that can be used for execution of given DA block,
     /// meaning that at will have access to previous state in same fork.
     fn create_state_for(

@@ -371,7 +371,7 @@ where
 {
     fn new_in_path(path: impl AsRef<Path>) -> Self {
         let config = RollupDbConfig::default_in_path(path.as_ref().to_path_buf());
-        Self::new(config).unwrap()
+        Self::new(config, false).unwrap()
     }
 }
 
