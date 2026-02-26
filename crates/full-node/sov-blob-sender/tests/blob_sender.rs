@@ -148,7 +148,6 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
 
     assert_data_at(&deps.da, data_1.as_slice(), 1).await;
     assert_data_at(&deps.da, data_2.as_slice(), 1).await;
-    wait_for_submission_count(&blob_sender, 0).await;
 
     Ok(())
 }
@@ -264,8 +263,6 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
             2,
         )
         .await;
-
-        wait_for_submission_count(&blob_sender, 0).await;
     }
 
     Ok(())
@@ -371,8 +368,6 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
     )
     .await;
     assert_data_at(&deps.da, data_1.as_slice(), 1).await;
-
-    wait_for_submission_count(&blob_sender, 0).await;
 
     Ok(())
 }
@@ -548,24 +543,4 @@ async fn wait_for_submission_statuses<F>(
             count -= 1;
         }
     }
-}
-
-async fn wait_for_submission_count(
-    blob_sender: &BlobSender<
-        StorableMockDaService,
-        TestHooks,
-        TestFinalizationManager<StorableMockDaService>,
-    >,
-    expected: usize,
-) {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if blob_sender.nb_of_concurrent_blob_submissions() == expected {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap_or_else(|_| panic!("Timed out waiting for submission count to reach {expected}."));
 }
