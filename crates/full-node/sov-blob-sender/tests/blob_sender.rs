@@ -90,6 +90,7 @@ where
 async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
     let deps = create_deps().await;
     let (status_sender, mut status_receiver) = broadcast::channel(100);
+    let nb_of_blobs = 2;
 
     let (mut blob_sender, _) = create_blob_sender(
         Duration::from_secs(20),
@@ -128,7 +129,7 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
                 BlobSubmissionStatus::Published { .. }
             )
         },
-        2,
+        nb_of_blobs,
     )
     .await;
 
@@ -142,7 +143,7 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
                 BlobSubmissionStatus::Finalized { .. }
             )
         },
-        2,
+        nb_of_blobs,
     )
     .await;
 
@@ -195,6 +196,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Result<()> {
     let deps = create_deps().await;
+    let nb_of_blobs = 2;
 
     // Send blob to the DA and shutdown blob sender.
     {
@@ -248,7 +250,7 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
                     BlobSubmissionStatus::Published { .. }
                 )
             },
-            2,
+            nb_of_blobs,
         )
         .await;
         deps.da.produce_block_now().await?;
@@ -260,7 +262,7 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
                     BlobSubmissionStatus::Finalized { .. }
                 )
             },
-            2,
+            nb_of_blobs,
         )
         .await;
     }
@@ -325,6 +327,7 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
         BlobSelectorStatus::Discarded(BlobDiscardReason::SequenceNumberTooLow),
     )
     .await;
+    let nb_of_blobs = 1;
 
     let data_1 = {
         let blob_id = 11u8;
@@ -346,7 +349,7 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
                 BlobSubmissionStatus::Published { .. }
             )
         },
-        1,
+        nb_of_blobs,
     )
     .await;
 
@@ -364,7 +367,7 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
                 ))
             )
         },
-        1,
+        nb_of_blobs,
     )
     .await;
     assert_data_at(&deps.da, data_1.as_slice(), 1).await;
@@ -389,6 +392,8 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
     )
     .await;
 
+    let nb_of_blobs = 1;
+
     let data_1 = {
         let blob_id = 11u8;
         let data = Arc::new([blob_id, 2, 3, 4, 5]);
@@ -409,7 +414,7 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
                 BlobSubmissionStatus::Published { .. }
             )
         },
-        1,
+        nb_of_blobs,
     )
     .await;
 
@@ -423,7 +428,7 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
                 BlobSubmissionStatus::Published { .. }
             )
         },
-        1,
+        nb_of_blobs,
     )
     .await;
 
