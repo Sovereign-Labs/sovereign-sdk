@@ -357,7 +357,7 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
             matches!(
                 status.blob_submission_status,
                 BlobSubmissionStatus::Finalized { .. }
-            ) & matches!(
+            ) && matches!(
                 status.blob_selector_status,
                 Some(BlobSelectorStatus::Discarded(
                     BlobDiscardReason::SequenceNumberTooLow
