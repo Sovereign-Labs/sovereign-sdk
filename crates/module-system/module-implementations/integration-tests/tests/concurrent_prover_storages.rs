@@ -593,8 +593,7 @@ fn nomt_pinned_cache_without_witness_succeeds() {
 fn jmt_pinned_cache_panics() {
     use sov_state::pinned_cache::PinnedCache;
 
-    type JmtSpec = DefaultStorageSpec<TestHasher>;
-    let storage_manager = SimpleJmtStorageManager::<JmtSpec>::new();
+    let storage_manager = SimpleJmtStorageManager::<NomtSpec>::new();
     let storage = storage_manager.create_storage();
     let state_accesses = StateAccesses {
         user: Default::default(),
@@ -604,7 +603,7 @@ fn jmt_pinned_cache_panics() {
     let _ = storage.compute_state_update(
         state_accesses,
         &Default::default(),
-        <sov_state::ProverStorage<JmtSpec> as Storage>::PRE_GENESIS_ROOT,
+        <sov_state::ProverStorage<NomtSpec> as Storage>::PRE_GENESIS_ROOT,
         Some(PinnedCache::default()),
     );
 }
