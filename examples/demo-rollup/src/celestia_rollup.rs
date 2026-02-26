@@ -54,7 +54,7 @@ where
     CelestiaRollupSpec<WitnessGeneration>: PluggableSpec,
     <CelestiaRollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
 {
-    type Spec = CelestiaRollupSpec<Native>;
+    type Spec = CelestiaRollupSpec<WitnessGeneration>;
     type Runtime = Runtime<Self::Spec>;
 }
 

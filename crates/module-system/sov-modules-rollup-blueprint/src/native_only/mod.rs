@@ -326,7 +326,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 receiver_for_metrics,
             ));
         } else {
-            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+            tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
 
         let operating_mode =
