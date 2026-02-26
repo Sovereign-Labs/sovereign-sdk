@@ -1,5 +1,4 @@
-use alloy_consensus::transaction::{PooledTransaction, Recovered};
-use alloy_consensus::Transaction;
+use alloy_consensus::{transaction::Recovered, Transaction};
 use alloy_eips::eip2718::{Decodable2718, Eip2718Error};
 use alloy_primitives::{Address, Bytes, B256, U256};
 use reth_primitives_traits::SignedTransaction;
@@ -110,10 +109,7 @@ pub fn convert_to_tx_signed(
         return Err(RlpConversionError::EmptyRawTx);
     }
 
-    // Decode both canonical tx envelopes and pooled blob envelopes (type-0x03 with sidecar),
-    // stripping sidecar data from the latter to match internal consensus transaction storage.
-    let tx = TransactionSigned::decode_2718_exact(data.as_ref())
-        .or_else(|_| PooledTransaction::decode_2718_exact(data.as_ref()).map(Into::into))?;
+    let tx = TransactionSigned::decode_2718(&mut data.as_ref())?;
     Ok(tx)
 }
 
