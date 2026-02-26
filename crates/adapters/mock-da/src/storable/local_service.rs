@@ -214,7 +214,7 @@ impl StorableMockDaService {
     /// Resume blob submission in the mock DA.
     pub async fn resume_blob_submission(&self) {
         let mut sender = self.block_producing_pauser.lock().await;
-        sender.as_ref().unwrap().send(()).unwrap();
+        *sender = None;
     }
 
     /// Create a new [` StorableMockDaService `] with the given address.
