@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use super::*;
 use serde_json::json;
 use std::net::ToSocketAddrs;
