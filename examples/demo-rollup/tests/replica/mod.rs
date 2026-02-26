@@ -1,7 +1,7 @@
 mod db_elected;
 mod replica_gets_txs_from_master;
+mod replica_partitioned_db;
 mod replica_registers_in_db;
-mod replica_slow_db;
 mod root_hash_checker;
 mod start_stop;
 mod toxi_proxy_helper;
