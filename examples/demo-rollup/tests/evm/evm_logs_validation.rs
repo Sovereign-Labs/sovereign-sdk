@@ -73,3 +73,22 @@ async fn eth_get_logs_future_block_range_returns_invalid_params() -> anyhow::Res
     assert_invalid_params(&response);
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_get_logs_with_cursor_malformed_filter_returns_invalid_params() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = Client::new();
+
+    let response = rpc_call(
+        &client,
+        rollup.http_addr,
+        "eth_getLogsWithCursor",
+        json!([{
+            "cursor": 1
+        }]),
+    )
+    .await?;
+
+    assert_invalid_params(&response);
+    Ok(())
+}

@@ -67,7 +67,11 @@ where
         _: Extensions,
     ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
         let state = ethereum.api_state_accessor();
-        let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
+        // Keep deserialization failures aligned with eth_getLogs: malformed payloads
+        // should surface as JSON-RPC -32602 invalid params.
+        let FilterWithCursor { cursor, filter } = parameters
+            .one::<FilterWithCursor>()
+            .map_err(|err| rpc_invalid_params(err.to_string()))?;
         let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
         let service = LogsService::<S, Seq>::new(
             filter,
