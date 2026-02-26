@@ -195,7 +195,6 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
     /// Change in which mode storage is going to be created.
     pub fn set_strict_mode(&mut self, use_strict_mode: bool) {
         self.is_strict_mode = use_strict_mode;
-        self.with_witness = use_strict_mode;
     }
 
     /// Set witness generation independently from strict mode.

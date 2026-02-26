@@ -116,7 +116,6 @@ where
     #[cfg(feature = "test-utils")]
     pub fn change_strict_mode(&mut self, use_strict_mode: bool) {
         self.strict_mode = use_strict_mode;
-        self.with_witness = use_strict_mode;
     }
 
     /// Returns a double option: The outer option is `None` if there is no reasonable version to use,
