@@ -36,7 +36,11 @@ where
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
-        let filter = parse_filter(parameters)?;
+        // Force malformed filter payloads to return JSON-RPC -32602 (invalid params)
+        // instead of bubbling up as internal deserialization errors.
+        let filter = parameters
+            .one::<Filter>()
+            .map_err(|err| rpc_invalid_params(err.to_string()))?;
 
         let state = ethereum.api_state_accessor();
         let service = LogsService::<S, Seq>::new(
@@ -74,9 +78,4 @@ where
         );
         Ok(service.logs_for_filter().await?)
     }
-}
-
-fn parse_filter(parameters: JRpcParams<'static>) -> Result<Filter, ErrorObjectOwned> {
-    let raw = parameters.one::<serde_json::Value>()?;
-    serde_json::from_value(raw).map_err(|err| rpc_invalid_params(err.to_string()))
 }
