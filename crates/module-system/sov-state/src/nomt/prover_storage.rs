@@ -14,7 +14,7 @@ use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
 use sov_db::storage_manager::{
-    InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession,
+    InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession, WitnessMode,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
@@ -83,20 +83,17 @@ where
     /// Create the new instance of [`NomtProverStorage`] with the given sessions.
     /// If `strict_mode` is true, consistency checks between NOMT and rocksdb will be performed.
     /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
-    /// If `with_witness` is true, witness hints will be recorded for ZK proving.
     pub fn create(
         state_session_builder: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory: AccessoryDb,
         strict_mode: bool,
-        with_witness: bool,
-        pinned_cache: Option<PinnedCache>,
+        witness_mode: WitnessMode<PinnedCache>,
     ) -> Self {
-        assert!(
-            !(with_witness && pinned_cache.is_some()),
-            "Pinned cache is incompatible with witness generation: pinned cache serves reads \
-             from RAM, bypassing witness hint recording."
-        );
+        let (with_witness, pinned_cache) = match witness_mode {
+            WitnessMode::On => (true, None),
+            WitnessMode::Off { pinned_cache } => (false, pinned_cache),
+        };
         Self {
             state_session_builder,
             historical_state,
@@ -374,17 +371,21 @@ where
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
         strict_mode: bool,
-        with_witness: bool,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        witness_mode: WitnessMode,
     ) -> Self {
-        let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
+        let witness_mode = match witness_mode {
+            WitnessMode::On => WitnessMode::On,
+            WitnessMode::Off { pinned_cache } => {
+                let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
+                WitnessMode::Off { pinned_cache }
+            }
+        };
         Self::create(
             state_db,
             historical_state,
             accessory_db,
             strict_mode,
-            with_witness,
-            pinned_cache,
+            witness_mode,
         )
     }
 }

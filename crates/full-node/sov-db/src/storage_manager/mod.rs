@@ -8,7 +8,7 @@ pub use delta_reader_based::*;
 pub(crate) use nomt_based::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 pub use nomt_based::{
     FlatStateDb, InitializableNativeNomtStorage, NomtChangeSet, NomtStorageManager,
-    PrunerJobOutput, StateFinishedSession,
+    PrunerJobOutput, StateFinishedSession, WitnessMode,
 };
 use rockbound::cache::delta_reader::DeltaReader;
 

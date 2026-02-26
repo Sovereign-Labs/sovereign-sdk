@@ -1,5 +1,3 @@
-#[cfg(test)]
-use std::any::Any;
 use std::cmp::max;
 use std::collections::HashSet;
 
@@ -77,8 +75,7 @@ impl crate::storage_manager::InitializableNativeNomtStorage<H, SlotHash> for Tes
         historical_state: crate::historical_state::HistoricalStateReader,
         accessory_db: AccessoryDb,
         _strict_mode: bool,
-        _with_witness: bool,
-        _pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        _witness_mode: crate::storage_manager::WitnessMode,
     ) -> Self {
         TestNomtStorage {
             state_session_builder,

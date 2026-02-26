@@ -25,6 +25,46 @@ use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob
 pub use groups::PrunerJobOutput;
 pub(crate) use groups::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
+/// Controls witness generation and pinned cache for storage creation.
+///
+/// Witness generation and pinned cache are mutually exclusive: pinned cache
+/// serves reads from RAM, bypassing witness hint recording.
+pub enum WitnessMode<Cache = Box<dyn Any + Send + Sync>> {
+    /// Record witness hints for ZK proving. Pinned cache is not used.
+    On,
+    /// No witness generation. May include a pinned cache for faster reads.
+    Off {
+        #[allow(missing_docs)]
+        pinned_cache: Option<Cache>,
+    },
+}
+
+impl<Cache> WitnessMode<Cache> {
+    /// Creates a [`WitnessMode::Off`] variant with no pinned cache.
+    pub fn off() -> Self {
+        Self::Off { pinned_cache: None }
+    }
+
+    /// Constructs a [`WitnessMode`] from separate `with_witness` and `pinned_cache` values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `with_witness` is true and `pinned_cache` is `Some`, since pinned cache
+    /// serves reads from RAM, bypassing witness hint recording.
+    pub fn new_with_assert(with_witness: bool, pinned_cache: Option<Cache>) -> Self {
+        if with_witness {
+            assert!(
+                pinned_cache.is_none(),
+                "Pinned cache is incompatible with witness generation: pinned cache serves reads \
+                 from RAM, bypassing witness hint recording."
+            );
+            Self::On
+        } else {
+            Self::Off { pinned_cache }
+        }
+    }
+}
+
 #[allow(missing_docs)]
 pub struct StateFinishedSession {
     user: nomt::FinishedSession,
@@ -94,8 +134,7 @@ where
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
         strict_mode: bool,
-        with_witness: bool,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        witness_mode: WitnessMode,
     ) -> Self;
 }
 
@@ -171,8 +210,7 @@ where
         &self,
         block_hash: Da::SlotHash,
         strict_mode: bool,
-        with_witness: bool,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
         tracing::trace!(%block_hash, "Creating storage up to block hash");
         // References are in reversed chronological order,
@@ -202,9 +240,8 @@ where
             rev_references,
             &self.rockbound_snapshots,
             self.nomt_snapshots.clone(),
-            pinned_cache,
             strict_mode,
-            with_witness,
+            witness_mode,
         )
     }
 
@@ -264,16 +301,10 @@ where
         // Storage created "for" a block implies node context,
         // and we expect a change set from this storage to be saved.
         // That's why it is created in strict mode.
-        // If witness generation is enabled, NomtProverStorage::create will panic
-        // if a pinned cache is present — this is intentional because pinned cache is not
-        // compatible with witness generation.
         let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
-        let state = self.create_state_up_to(
-            block_header.prev_hash(),
-            true,
-            self.witness_generation_enabled,
-            pinned_cache,
-        )?;
+        let witness_mode =
+            WitnessMode::new_with_assert(self.witness_generation_enabled, pinned_cache);
+        let state = self.create_state_up_to(block_header.prev_hash(), true, witness_mode)?;
 
         Ok(state)
     }
@@ -290,12 +321,11 @@ where
                 Vec::new(),
                 &self.rockbound_snapshots,
                 self.nomt_snapshots.clone(),
-                None,
                 false,
-                false,
+                WitnessMode::off(),
             )
         } else {
-            self.create_state_up_to(block_header.hash(), false, false, None)
+            self.create_state_up_to(block_header.hash(), false, WitnessMode::off())
         }
     }
 

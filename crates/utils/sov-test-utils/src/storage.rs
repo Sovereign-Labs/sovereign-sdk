@@ -14,7 +14,7 @@ use sov_db::schema::namespace::NomtStateValues;
 use sov_db::state_db::StateDb;
 use sov_db::state_db_nomt::get_session_builder_from_committed;
 use sov_db::storage_manager::{
-    FlatStateDb, InitializableNativeNomtStorage, InitializableNativeStorage,
+    FlatStateDb, InitializableNativeNomtStorage, InitializableNativeStorage, WitnessMode,
 };
 pub use sov_db::storage_manager::{
     NativeChangeSet, NativeStorageManager, NomtChangeSet, NomtStorageManager,
@@ -235,13 +235,14 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             AccessoryDb::with_reader(DeltaReader::new(self.accessory.clone(), Vec::new()))
                 .expect("Failed to create accessory db");
 
+        let pinned_cache = self.pinned_cache.lock().unwrap().take();
+        let witness_mode = WitnessMode::new_with_assert(self.with_witness, pinned_cache);
         NomtProverStorage::create(
             state_session_builder,
             historical_state_reader,
             accessory_db,
             self.is_strict_mode,
-            self.with_witness,
-            self.pinned_cache.lock().unwrap().take(),
+            witness_mode,
         )
     }
 
