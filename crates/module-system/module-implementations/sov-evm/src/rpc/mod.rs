@@ -512,15 +512,25 @@ where
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
 
         // For simulation parity with real execution, omitted nonce defaults to the
-        // caller's current EVM account nonce (not zero).
-        if let (None, Some(from)) = (request.nonce, request.from) {
+        // caller's current uniqueness nonce. Reject explicit nonces that lag the
+        // chain with "nonce too low" so estimateGas mirrors real tx submission.
+        if let Some(from) = request.from {
+            let credential_id = EthereumAddress::from(from).as_credential_id();
             let account_nonce = self
-                .accounts
-                .get(&from, maybe_archival_state.deref_mut())
-                .unwrap_infallible()
-                .map(|acc| acc.nonce)
-                .unwrap_or_default();
-            request.nonce = Some(account_nonce);
+                .uniqueness_module
+                .next_nonce(&credential_id, maybe_archival_state.deref_mut())
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            match request.nonce {
+                Some(tx_nonce) if tx_nonce < account_nonce => {
+                    return Err(RpcInvalidTransactionError::NonceTooLow {
+                        tx: tx_nonce,
+                        state: account_nonce,
+                    }
+                    .into());
+                }
+                None => request.nonce = Some(account_nonce),
+                _ => {}
+            }
         }
 
         if !has_overrides {

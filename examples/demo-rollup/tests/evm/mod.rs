@@ -19,6 +19,7 @@ mod evm_publish_reverted_txs;
 mod evm_ram_pinning;
 mod evm_rate_limit;
 mod evm_rpc;
+mod evm_rpc_compliance_validation;
 mod evm_soft_conf;
 mod evm_subscribe;
 pub(crate) mod evm_test_helper;
