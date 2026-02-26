@@ -1,17 +1,12 @@
 use super::sov_toxi_proxi_image::{SovToxiProxiImage, ToxiProxySetup};
 use super::*;
-use testcontainers::ContainerAsync;
 
 pub(crate) struct NodeTestSetup {
     postgres: Arc<PostgresData>,
     da_shutdown: watch::Sender<()>,
     da_addr: SocketAddr,
-    toxiproxy: ContainerAsync<SovToxiProxiImage>,
-    toxiproxy_client: reqwest::Client,
-    toxiproxy_api_url: String,
-    proxied_da_addr: SocketAddr,
+    toxiproxy_setup: ToxiProxySetup,
     direct_postgres_connection_string: String,
-    proxied_postgres_connection_string: String,
 }
 
 impl NodeTestSetup {
@@ -37,13 +32,7 @@ impl NodeTestSetup {
             .expect("Failed to expose DA service for toxiproxy upstream");
         let direct_postgres_connection_string = postgres.connection_string().to_string();
 
-        let ToxiProxySetup {
-            container: toxiproxy,
-            client: toxiproxy_client,
-            api_base_url: toxiproxy_api_url,
-            proxied_da_addr,
-            proxied_postgres_connection_string,
-        } = SovToxiProxiImage::start_for_postgres_and_da(
+        let toxiproxy_setup = SovToxiProxiImage::start_for_postgres_and_da(
             &direct_postgres_connection_string,
             da_container_addr.port(),
         )
@@ -53,12 +42,8 @@ impl NodeTestSetup {
             postgres,
             da_shutdown,
             da_addr,
-            toxiproxy,
-            toxiproxy_client,
-            toxiproxy_api_url,
-            proxied_da_addr,
+            toxiproxy_setup,
             direct_postgres_connection_string,
-            proxied_postgres_connection_string,
         })
     }
 
@@ -79,9 +64,11 @@ impl NodeTestSetup {
 
         let replica_proxied_node = self
             .start_db_elected_node(
-                self.proxied_da_addr,
+                self.toxiproxy_setup.proxied_da_addr,
                 proxied_node_id,
-                self.proxied_postgres_connection_string.clone(),
+                self.toxiproxy_setup
+                    .proxied_postgres_connection_string
+                    .clone(),
                 SequencerRole::PgSyncReplica,
             )
             .await;
@@ -92,8 +79,8 @@ impl NodeTestSetup {
     /// Simulates or heals a Postgres partition by toggling the postgres proxy.
     pub(crate) async fn set_postgres_partition(&self, partitioned: bool) {
         SovToxiProxiImage::set_postgres_partition(
-            &self.toxiproxy_client,
-            &self.toxiproxy_api_url,
+            &self.toxiproxy_setup.client,
+            &self.toxiproxy_setup.api_base_url,
             partitioned,
         )
         .await;
@@ -102,8 +89,8 @@ impl NodeTestSetup {
     /// Enables or disables high latency on the replica's DA traffic.
     pub(crate) async fn set_replica_da_slow(&self, slow: bool) {
         SovToxiProxiImage::set_replica_da_slow(
-            &self.toxiproxy_client,
-            &self.toxiproxy_api_url,
+            &self.toxiproxy_setup.client,
+            &self.toxiproxy_setup.api_base_url,
             slow,
         )
         .await;
@@ -114,7 +101,7 @@ impl NodeTestSetup {
         let _ = replica.shutdown().await;
         let _ = leader.shutdown().await;
         let _ = self.da_shutdown.send(());
-        drop(self.toxiproxy);
+        drop(self.toxiproxy_setup.container);
     }
 
     /// Starts one DB-elected node against the provided DA and Postgres endpoints and checks its role.
