@@ -120,7 +120,7 @@ impl NodeTestSetup {
                 "{}/proxies/{}",
                 self.toxiproxy_api_url, TOXIPROXY_POSTGRES_PROXY_NAME
             ),
-            update_proxy_body,
+            &update_proxy_body,
             "Failed to update toxiproxy proxy state",
         )
         .await;
@@ -317,7 +317,7 @@ async fn create_postgres_proxy(client: &reqwest::Client, api_base_url: &str, pos
     post_json(
         client,
         format!("{api_base_url}/proxies"),
-        create_proxy_body,
+        &create_proxy_body,
         "Failed to create toxiproxy postgres proxy",
     )
     .await;
@@ -336,7 +336,7 @@ async fn create_da_proxy(client: &reqwest::Client, api_base_url: &str, da_port: 
     post_json(
         client,
         format!("{api_base_url}/proxies"),
-        create_proxy_body,
+        &create_proxy_body,
         "Failed to create toxiproxy DA proxy",
     )
     .await;
@@ -346,13 +346,12 @@ async fn create_da_proxy(client: &reqwest::Client, api_base_url: &str, da_port: 
 async fn post_json(
     client: &reqwest::Client,
     url: String,
-    body: serde_json::Value,
+    body: &impl serde::Serialize,
     send_error_context: &str,
 ) {
     let response = client
         .post(url)
-        .header("content-type", "application/json")
-        .body(body.to_string())
+        .json(body)
         .send()
         .await
         .expect(send_error_context);
@@ -400,7 +399,7 @@ async fn set_proxy_latency(
     post_json(
         client,
         toxic_base_url,
-        json!({
+        &json!({
             "name": toxic_name,
             "type": "latency",
             "stream": "downstream",
