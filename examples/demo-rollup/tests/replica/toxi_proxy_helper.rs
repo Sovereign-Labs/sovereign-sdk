@@ -78,22 +78,14 @@ impl NodeTestSetup {
 
     /// Simulates or heals a Postgres partition by toggling the postgres proxy.
     pub(crate) async fn set_postgres_partition(&self, partitioned: bool) {
-        SovToxiProxiImage::set_postgres_partition(
-            &self.toxiproxy_setup.client,
-            &self.toxiproxy_setup.api_base_url,
-            partitioned,
-        )
-        .await;
+        self.toxiproxy_setup
+            .set_postgres_partition(partitioned)
+            .await;
     }
 
     /// Enables or disables high latency on the replica's DA traffic.
     pub(crate) async fn set_replica_da_slow(&self, slow: bool) {
-        SovToxiProxiImage::set_replica_da_slow(
-            &self.toxiproxy_setup.client,
-            &self.toxiproxy_setup.api_base_url,
-            slow,
-        )
-        .await;
+        self.toxiproxy_setup.set_replica_da_slow(slow).await;
     }
 
     /// Shuts down both rollups, stops the DA producer, and drops the toxiproxy container.

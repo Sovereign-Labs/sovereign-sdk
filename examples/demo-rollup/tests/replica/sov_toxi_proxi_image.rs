@@ -120,43 +120,6 @@ impl SovToxiProxiImage {
         }
     }
 
-    /// Simulates or heals a Postgres partition by toggling the postgres proxy.
-    pub(super) async fn set_postgres_partition(
-        client: &reqwest::Client,
-        api_base_url: &str,
-        partitioned: bool,
-    ) {
-        let update_proxy_body = json!({
-            "enabled": !partitioned,
-        });
-
-        Self::post_json(
-            client,
-            format!("{api_base_url}/proxies/{TOXIPROXY_POSTGRES_PROXY_NAME}"),
-            &update_proxy_body,
-            "Failed to update toxiproxy proxy state",
-        )
-        .await;
-    }
-
-    /// Enables or disables high latency on the replica's DA traffic.
-    pub(super) async fn set_replica_da_slow(
-        client: &reqwest::Client,
-        api_base_url: &str,
-        slow: bool,
-    ) {
-        Self::set_proxy_latency(
-            client,
-            api_base_url,
-            TOXIPROXY_DA_PROXY_NAME,
-            TOXIPROXY_SLOW_DA_TOXIC_NAME,
-            TOXIPROXY_SLOW_DA_LATENCY_MS,
-            slow,
-            "Failed to configure slow replica DA communication toxic",
-        )
-        .await;
-    }
-
     /// Sends a JSON POST request and fails fast when the response is not successful.
     async fn post_json(
         client: &reqwest::Client,
@@ -329,5 +292,39 @@ impl SovToxiProxiImage {
         if !status.is_success() && status != reqwest::StatusCode::NOT_FOUND {
             panic!("Failed to delete toxiproxy toxic: {status}");
         }
+    }
+}
+
+impl ToxiProxySetup {
+    /// Simulates or heals a Postgres partition by toggling the postgres proxy.
+    pub(super) async fn set_postgres_partition(&self, partitioned: bool) {
+        let update_proxy_body = json!({
+            "enabled": !partitioned,
+        });
+
+        SovToxiProxiImage::post_json(
+            &self.client,
+            format!(
+                "{}/proxies/{}",
+                self.api_base_url, TOXIPROXY_POSTGRES_PROXY_NAME
+            ),
+            &update_proxy_body,
+            "Failed to update toxiproxy proxy state",
+        )
+        .await;
+    }
+
+    /// Enables or disables high latency on the replica's DA traffic.
+    pub(super) async fn set_replica_da_slow(&self, slow: bool) {
+        SovToxiProxiImage::set_proxy_latency(
+            &self.client,
+            &self.api_base_url,
+            TOXIPROXY_DA_PROXY_NAME,
+            TOXIPROXY_SLOW_DA_TOXIC_NAME,
+            TOXIPROXY_SLOW_DA_LATENCY_MS,
+            slow,
+            "Failed to configure slow replica DA communication toxic",
+        )
+        .await;
     }
 }
