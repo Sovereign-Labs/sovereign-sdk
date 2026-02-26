@@ -1,4 +1,4 @@
-use super::sov_toxi_proxi_image::{SovToxiProxiImage, ToxiProxySetup};
+use super::sov_toxi_proxi_image::ToxiProxySetup;
 use super::*;
 
 pub(crate) struct NodeTestSetup {
@@ -32,7 +32,7 @@ impl NodeTestSetup {
             .expect("Failed to expose DA service for toxiproxy upstream");
         let direct_postgres_connection_string = postgres.connection_string().to_string();
 
-        let toxiproxy_setup = SovToxiProxiImage::start_for_postgres_and_da(
+        let toxiproxy_setup = ToxiProxySetup::start_for_postgres_and_da(
             &direct_postgres_connection_string,
             da_container_addr.port(),
         )

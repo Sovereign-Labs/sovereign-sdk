@@ -127,7 +127,7 @@ strum = { workspace = true }
 
 reqwest = { workspace = true }
 sov-proxy-utils = { workspace = true }
-testcontainers = { workspace = true }
+testcontainers = { workspace = true, features = ["http_wait"] }
 
 [build-dependencies]
 anyhow = { workspace = true }

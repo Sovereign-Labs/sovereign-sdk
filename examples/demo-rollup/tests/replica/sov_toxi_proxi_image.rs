@@ -1,6 +1,7 @@
 use super::*;
 use serde_json::json;
 use std::net::ToSocketAddrs;
+use testcontainers::core::wait::HttpWaitStrategy;
 use testcontainers::core::{ContainerPort, Host, IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, Image, ImageExt};
@@ -23,14 +24,6 @@ const TOXIPROXY_READY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(super) struct SovToxiProxiImage;
 
-pub(super) struct ToxiProxySetup {
-    pub(super) container: ContainerAsync<SovToxiProxiImage>,
-    pub(super) client: reqwest::Client,
-    pub(super) api_base_url: String,
-    pub(super) proxied_da_addr: SocketAddr,
-    pub(super) proxied_postgres_connection_string: String,
-}
-
 impl Image for SovToxiProxiImage {
     fn name(&self) -> &str {
         TOXIPROXY_IMAGE
@@ -41,7 +34,11 @@ impl Image for SovToxiProxiImage {
     }
 
     fn ready_conditions(&self) -> Vec<WaitFor> {
-        Vec::new()
+        vec![WaitFor::http(
+            HttpWaitStrategy::new("/version")
+                .with_port(TOXIPROXY_API_PORT.tcp())
+                .with_expected_status_code(200u16),
+        )]
     }
 
     fn expose_ports(&self) -> &[ContainerPort] {
@@ -54,14 +51,23 @@ impl Image for SovToxiProxiImage {
     }
 }
 
-impl SovToxiProxiImage {
+pub(super) struct ToxiProxySetup {
+    pub(super) container: ContainerAsync<SovToxiProxiImage>,
+    pub(super) client: reqwest::Client,
+    pub(super) api_base_url: String,
+    pub(super) proxied_da_addr: SocketAddr,
+    pub(super) proxied_postgres_connection_string: String,
+}
+
+impl ToxiProxySetup {
     /// Starts toxiproxy, creates Postgres/DA proxies, and returns proxied endpoints.
     pub(super) async fn start_for_postgres_and_da(
         postgres_connection_string: &str,
         da_upstream_port: u16,
-    ) -> ToxiProxySetup {
+    ) -> Self {
         let toxiproxy = SovToxiProxiImage
             .with_host("host.docker.internal", Host::HostGateway)
+            .with_startup_timeout(TOXIPROXY_READY_TIMEOUT)
             .start()
             .await
             .expect("Failed to start toxiproxy container");
@@ -95,7 +101,6 @@ impl SovToxiProxiImage {
             .expect("Failed to build toxiproxy reqwest client");
 
         let api_base_url = format!("http://{toxiproxy_host}:{toxiproxy_api_port}");
-        Self::wait_for_toxiproxy_ready(&client, &api_base_url).await;
 
         let postgres_port = Self::parse_postgres_port(postgres_connection_string);
         Self::create_postgres_proxy(&client, &api_base_url, postgres_port).await;
@@ -111,13 +116,45 @@ impl SovToxiProxiImage {
             toxiproxy_da_port,
         );
 
-        ToxiProxySetup {
+        Self {
             container: toxiproxy,
             client,
             api_base_url,
             proxied_da_addr,
             proxied_postgres_connection_string,
         }
+    }
+
+    /// Simulates or heals a Postgres partition by toggling the postgres proxy.
+    pub(super) async fn set_postgres_partition(&self, partitioned: bool) {
+        let update_proxy_body = json!({
+            "enabled": !partitioned,
+        });
+
+        Self::post_json(
+            &self.client,
+            format!(
+                "{}/proxies/{}",
+                self.api_base_url, TOXIPROXY_POSTGRES_PROXY_NAME
+            ),
+            &update_proxy_body,
+            "Failed to update toxiproxy proxy state",
+        )
+        .await;
+    }
+
+    /// Enables or disables high latency on the replica's DA traffic.
+    pub(super) async fn set_replica_da_slow(&self, slow: bool) {
+        Self::set_proxy_latency(
+            &self.client,
+            &self.api_base_url,
+            TOXIPROXY_DA_PROXY_NAME,
+            TOXIPROXY_SLOW_DA_TOXIC_NAME,
+            TOXIPROXY_SLOW_DA_LATENCY_MS,
+            slow,
+            "Failed to configure slow replica DA communication toxic",
+        )
+        .await;
     }
 
     /// Sends a JSON POST request and fails fast when the response is not successful.
@@ -222,24 +259,6 @@ impl SovToxiProxiImage {
             .expect("toxiproxy host resolved to no addresses")
     }
 
-    /// Polls toxiproxy's `/version` endpoint until it responds or the timeout is reached.
-    async fn wait_for_toxiproxy_ready(client: &reqwest::Client, api_base_url: &str) {
-        let version_url = format!("{api_base_url}/version");
-        let start = std::time::Instant::now();
-
-        loop {
-            match client.get(&version_url).send().await {
-                Ok(response) if response.status().is_success() => return,
-                Ok(_) | Err(_) => {
-                    if start.elapsed() >= TOXIPROXY_READY_TIMEOUT {
-                        panic!("Timed out waiting for toxiproxy to become ready");
-                    }
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-            }
-        }
-    }
-
     /// Creates the toxiproxy listener that forwards Postgres traffic to the host Postgres container.
     async fn create_postgres_proxy(
         client: &reqwest::Client,
@@ -292,39 +311,5 @@ impl SovToxiProxiImage {
         if !status.is_success() && status != reqwest::StatusCode::NOT_FOUND {
             panic!("Failed to delete toxiproxy toxic: {status}");
         }
-    }
-}
-
-impl ToxiProxySetup {
-    /// Simulates or heals a Postgres partition by toggling the postgres proxy.
-    pub(super) async fn set_postgres_partition(&self, partitioned: bool) {
-        let update_proxy_body = json!({
-            "enabled": !partitioned,
-        });
-
-        SovToxiProxiImage::post_json(
-            &self.client,
-            format!(
-                "{}/proxies/{}",
-                self.api_base_url, TOXIPROXY_POSTGRES_PROXY_NAME
-            ),
-            &update_proxy_body,
-            "Failed to update toxiproxy proxy state",
-        )
-        .await;
-    }
-
-    /// Enables or disables high latency on the replica's DA traffic.
-    pub(super) async fn set_replica_da_slow(&self, slow: bool) {
-        SovToxiProxiImage::set_proxy_latency(
-            &self.client,
-            &self.api_base_url,
-            TOXIPROXY_DA_PROXY_NAME,
-            TOXIPROXY_SLOW_DA_TOXIC_NAME,
-            TOXIPROXY_SLOW_DA_LATENCY_MS,
-            slow,
-            "Failed to configure slow replica DA communication toxic",
-        )
-        .await;
     }
 }
