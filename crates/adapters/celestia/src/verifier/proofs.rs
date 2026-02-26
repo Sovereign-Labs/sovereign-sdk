@@ -86,6 +86,11 @@ impl BlobProof {
         // Even if first row that contains this namespace is not the first row in the block.
         let row_number = block_header.calculate_row_number_for_share(blob_proof_range_start);
         if row_number != 0 {
+            tracing::error!(
+                row_number,
+                start_share_idx = blob_proof_range_start,
+                "MissingBlobs in verify_left_boundary: first blob proof does not start in row 0"
+            );
             return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
 
@@ -106,11 +111,20 @@ impl BlobProof {
         // so there are blobs that have been skipped.
         if first_sub_proof.proof.start_idx() > 0 {
             let Some(rls) = first_sub_proof.proof.rightmost_left_sibling() else {
+                tracing::error!(
+                    start_idx = first_sub_proof.proof.start_idx(),
+                    "MissingBlobs in verify_left_boundary: no rightmost left sibling while start_idx > 0"
+                );
                 return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
             };
 
             // rightmost left sibling should have namespace that strictly smaller than ours.
             if rls.max_namespace() >= *namespace {
+                tracing::error!(
+                    rls_max = ?rls.max_namespace(),
+                    namespace = ?namespace,
+                    "MissingBlobs in verify_left_boundary: left sibling namespace overlaps target namespace"
+                );
                 return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
             }
         }
@@ -153,11 +167,23 @@ pub struct RangeProof {
 }
 
 #[cfg(feature = "native")]
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum InclusionProofBuildError {
+    #[error(
+        "supported shares exist in namespace {namespace:?}, but extracted blobs are empty (namespace share count: {end_of_ns})"
+    )]
+    SupportedSharesWithoutBlobs {
+        namespace: celestia_types::nmt::Namespace,
+        end_of_ns: usize,
+    },
+}
+
+#[cfg(feature = "native")]
 pub(crate) fn new_inclusion_proof(
     header: &crate::CelestiaHeader,
     rollup_data: &crate::types::NamespaceRelevantData,
     blobs: &[crate::types::BlobWithSender],
-) -> Vec<BlobProof> {
+) -> Result<Vec<BlobProof>, InclusionProofBuildError> {
     let mut needed_share_ranges = Vec::new();
 
     let mut prev_range_end: Option<usize> = None;
@@ -168,19 +194,32 @@ pub(crate) fn new_inclusion_proof(
         .flat_map(|r| r.shares.iter())
         .collect::<Vec<_>>();
 
-    // Extract the positions of each blob up to the number of shares actually used.
+    // Extract the positions of each blob up to the number of shares actually read.
+    // At the same time, advance continuity with the full blob occupancy so we can
+    // still prove any trailing skipped shares (e.g. namespace tail padding) safely.
     for blob in blobs.iter() {
         let range = blob.range_in_namespace.clone();
         let relevant_len = blob.blob.accumulator().len();
-        let relevant_end =
-            range.start + crate::shares::shares_needed_for_bytes(relevant_len).max(1);
-        // Guard in depth - should never be false unless either shares_needed_for_bytes() is bugged
+        let start_share = flat_shares[range.start];
+        let has_signer = start_share.signer().is_some();
+        let relevant_end = range.start
+            + crate::shares::shares_needed_for_bytes_with_signer(relevant_len, has_signer).max(1);
+        let full_blob_end = range.start
+            + crate::shares::shares_needed_for_bytes_with_signer(blob.blob.total_len(), has_signer)
+                .max(1);
+        // Guard in depth - should never be false unless share counting is bugged
         // or we read more bytes from the blob than the range has shares (e.g. `BlobWithIter`'s range
         // initialisation is bugged)
         assert!(
             relevant_end <= range.end,
             "relevant_end > range.end: {} > {}",
             relevant_end,
+            range.end
+        );
+        assert!(
+            full_blob_end <= range.end,
+            "full_blob_end > range.end: {} > {}",
+            full_blob_end,
             range.end
         );
 
@@ -196,11 +235,37 @@ pub(crate) fn new_inclusion_proof(
         }
 
         needed_share_ranges.push(range.start..relevant_end);
-        prev_range_end = Some(range.end);
+        prev_range_end = Some(full_blob_end);
     }
 
     let end_of_ns = flat_shares.len();
-    if prev_range_end.is_some() && prev_range_end != Some(end_of_ns) {
+    let namespace_has_supported_shares = flat_shares.iter().any(|share| {
+        !is_tail_padding(share)
+            && share.info_byte().expect("Bug. Missing info byte").version()
+                == SUPPORTED_SHARE_VERSION
+    });
+
+    // Invariant: if namespace has supported shares, extraction is expected to produce
+    // at least one blob. Empty `blobs` in this case indicates inconsistent extraction input.
+    if blobs.is_empty() && end_of_ns > 0 && namespace_has_supported_shares {
+        tracing::error!(
+            namespace = ?rollup_data.namespace,
+            end_of_ns,
+            "Invariant violation: supported shares exist but extracted blob list is empty"
+        );
+        return Err(InclusionProofBuildError::SupportedSharesWithoutBlobs {
+            namespace: rollup_data.namespace,
+            end_of_ns,
+        });
+    }
+
+    if blobs.is_empty() && end_of_ns > 0 && !namespace_has_supported_shares {
+        // If no supported blobs were extracted, the namespace may still contain
+        // unsupported blobs (e.g. v0) that must be proven as skipped.
+        let skipped_blob_ranges =
+            build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares);
+        needed_share_ranges.extend(skipped_blob_ranges);
+    } else if prev_range_end.is_some() && prev_range_end != Some(end_of_ns) {
         let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
             prev_range_end.unwrap()..end_of_ns,
             &flat_shares,
@@ -213,13 +278,13 @@ pub(crate) fn new_inclusion_proof(
         .cloned()
         .collect::<Vec<_>>();
 
-    sub_namespace_inclusion_proofs(
+    Ok(sub_namespace_inclusion_proofs(
         header.row_length(),
         &rollup_data.data,
         rollup_data.namespace,
         &needed_share_ranges,
         &row_roots,
-    )
+    ))
 }
 
 #[cfg(feature = "native")]
@@ -252,8 +317,11 @@ fn build_ranges_to_prove_for_skipped_blobs(
                 "Skipping version 1, bug!"
             );
         }
-        let shares_in_blob =
-            crate::shares::shares_needed_for_bytes(sequence_length as usize).max(1);
+        let shares_in_blob = crate::shares::shares_needed_for_bytes_with_signer(
+            sequence_length as usize,
+            start_share.signer().is_some(),
+        )
+        .max(1);
         start += shares_in_blob;
     }
 

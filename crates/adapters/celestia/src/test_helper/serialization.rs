@@ -55,7 +55,8 @@ pub(crate) async fn test_block_serialization(block: FilteredCelestiaBlock) {
     );
 
     // Extraction proof
-    let extraction_proof = get_extraction_proof(&block, &relevant_blobs);
+    let extraction_proof = get_extraction_proof(&block, &relevant_blobs)
+        .expect("extraction proof should be generated for extracted blobs");
 
     let serialized_bincode_extraction_proof = bincode::serialize(&extraction_proof)
         .expect("extraction proof bincode serialization failed");

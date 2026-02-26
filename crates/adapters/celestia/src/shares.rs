@@ -342,11 +342,16 @@ pub(crate) fn is_tail_padding(share: &celestia_types::Share) -> bool {
 ///
 /// Technically, we rely on constants about size,
 /// and it should be good as long as there are only two types of shares.
-/// Copied from [`celestia_types::Blob::shares_len`]
-pub(crate) fn shares_needed_for_bytes(payload_bytes: usize) -> usize {
-    let Some(without_first_share) =
-        payload_bytes.checked_sub(appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE)
-    else {
+/// Copied from [`celestia_types::Blob::shares_len`], including v1 signer handling.
+pub(crate) fn shares_needed_for_bytes_with_signer(payload_bytes: usize, has_signer: bool) -> usize {
+    let first_share_content_size = if has_signer {
+        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+            .checked_sub(appconsts::SIGNER_SIZE)
+            .expect("signer size should fit into first share content size")
+    } else {
+        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+    };
+    let Some(without_first_share) = payload_bytes.checked_sub(first_share_content_size) else {
         return 1;
     };
     1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
