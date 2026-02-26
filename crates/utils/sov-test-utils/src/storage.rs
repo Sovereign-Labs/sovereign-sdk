@@ -163,6 +163,7 @@ pub struct SimpleStorageManager<S: MerkleProofSpec> {
     accessory: Arc<rockbound::DB>,
     root: StorageRoot<S>,
     is_strict_mode: bool,
+    with_witness: bool,
     pinned_cache: Mutex<Option<PinnedCache>>,
 }
 
@@ -186,6 +187,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             accessory: Arc::new(accessory_rocksdb),
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
+            with_witness: true,
             pinned_cache: Mutex::new(None),
         }
     }
@@ -193,6 +195,17 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
     /// Change in which mode storage is going to be created.
     pub fn set_strict_mode(&mut self, use_strict_mode: bool) {
         self.is_strict_mode = use_strict_mode;
+        self.with_witness = use_strict_mode;
+    }
+
+    /// Set witness generation independently from strict mode.
+    pub fn set_witness_generation(&mut self, with_witness: bool) {
+        self.with_witness = with_witness;
+    }
+
+    /// Inject a pinned cache that will be passed to the next `create_storage` call.
+    pub fn set_pinned_cache(&self, cache: PinnedCache) {
+        *self.pinned_cache.lock().unwrap() = Some(cache);
     }
 
     /// Create a new [`NomtProverStorage`] that has a view only on data written to disc.
@@ -228,6 +241,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             historical_state_reader,
             accessory_db,
             self.is_strict_mode,
+            self.with_witness,
             self.pinned_cache.lock().unwrap().take(),
         )
     }

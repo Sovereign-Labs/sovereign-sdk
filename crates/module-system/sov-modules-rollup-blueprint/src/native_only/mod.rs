@@ -357,6 +357,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
         let mut storage_manager = self.create_storage_manager(&rollup_config)?;
+        if prover_config.is_some() {
+            storage_manager.set_witness_generation(true);
+        }
 
         let (prover_storage, ledger_state) =
             storage_manager.create_state_after(&current_finalized_header)?;

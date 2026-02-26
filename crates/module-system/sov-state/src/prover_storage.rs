@@ -378,8 +378,12 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
-        _pinned_cache: Option<PinnedCache>,
+        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
+        assert!(
+            pinned_cache.is_none(),
+            "JMT ProverStorage does not support pinned cache. See #2514."
+        );
         let prev_user_root = prev_state_root.namespace_root(ProvableNamespace::User);
         let prev_kernel_root = prev_state_root.namespace_root(ProvableNamespace::Kernel);
         let (user_root, user_state_update) = self

@@ -76,6 +76,7 @@ impl crate::storage_manager::InitializableNativeNomtStorage<H, SlotHash> for Tes
         state_session_builder: crate::state_db_nomt::NomtSessionBuilder<H, SlotHash>,
         historical_state: crate::historical_state::HistoricalStateReader,
         accessory_db: AccessoryDb,
+        _strict_mode: bool,
         _with_witness: bool,
         _pinned_cache: Option<Box<dyn Any + Send + Sync>>,
     ) -> Self {

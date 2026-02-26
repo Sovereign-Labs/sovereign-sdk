@@ -93,7 +93,8 @@ where
         state_db: NomtSessionBuilder<H, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        strict_with_witness: bool,
+        strict_mode: bool,
+        with_witness: bool,
         pinned_cache: Option<Box<dyn Any + Send + Sync>>,
     ) -> Self;
 }
@@ -118,6 +119,10 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     pruner_block_interval: Option<u64>,
     pruner_versions_to_keep: usize,
     pruner_max_batch_size: usize,
+
+    /// When true, `create_state_for` will generate witness hints for ZK proving.
+    /// This disables pinned cache since it bypasses witness recording. See #2514.
+    witness_generation_enabled: bool,
 
     _phantom_s: PhantomData<S>,
 }
@@ -152,6 +157,7 @@ where
             pruner_block_interval,
             pruner_versions_to_keep,
             pruner_max_batch_size,
+            witness_generation_enabled: false,
             _phantom_s: Default::default(),
         })
     }
@@ -160,6 +166,7 @@ where
     fn create_state_up_to(
         &self,
         block_hash: Da::SlotHash,
+        strict_mode: bool,
         with_witness: bool,
         pinned_cache: Option<Box<dyn Any + Send + Sync>>,
     ) -> anyhow::Result<(S, DeltaReader)> {
@@ -192,6 +199,7 @@ where
             &self.rockbound_snapshots,
             self.nomt_snapshots.clone(),
             pinned_cache,
+            strict_mode,
             with_witness,
         )
     }
@@ -232,6 +240,10 @@ where
     type LedgerState = DeltaReader;
     type LedgerChangeSet = SchemaBatch;
 
+    fn set_witness_generation(&mut self, enabled: bool) {
+        self.witness_generation_enabled = enabled;
+    }
+
     fn create_state_for(
         &mut self,
         block_header: &Da::BlockHeader,
@@ -251,9 +263,16 @@ where
 
         // Storage created "for" a block implies node context,
         // and we expect a change set from this storage to be saved.
-        // That's why it is created in a strict mode.
+        // That's why it is created in strict mode.
+        // If witness generation is enabled, NomtProverStorage::create will panic
+        // if a pinned cache is present — this is intentional, see #2514.
         let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
-        let state = self.create_state_up_to(block_header.prev_hash(), true, pinned_cache)?;
+        let state = self.create_state_up_to(
+            block_header.prev_hash(),
+            true,
+            self.witness_generation_enabled,
+            pinned_cache,
+        )?;
 
         Ok(state)
     }
@@ -263,8 +282,7 @@ where
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<(Self::StfState, Self::LedgerState)> {
         // Storage created "after" a block is usually used outside of the node context,
-        // So witness is not needed.
-        let with_witness = false;
+        // So neither strict mode nor witness is needed.
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
             tracing::debug!(block_header = %block_header.display(), "Creating new storage from finalized data as block header is not in the saved chain");
             self.db_group.create_storage(
@@ -272,10 +290,11 @@ where
                 &self.rockbound_snapshots,
                 self.nomt_snapshots.clone(),
                 None,
-                with_witness,
+                false,
+                false,
             )
         } else {
-            self.create_state_up_to(block_header.hash(), with_witness, None)
+            self.create_state_up_to(block_header.hash(), false, false, None)
         }
     }
 
