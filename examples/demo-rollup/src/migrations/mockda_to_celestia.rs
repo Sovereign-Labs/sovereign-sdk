@@ -7,9 +7,9 @@ use anyhow::{bail, Context};
 use borsh::BorshDeserialize;
 use clap::Parser;
 use demo_stf::runtime::Runtime;
+use demo_stf::MultiAddressEvmSolana;
 use rockbound::SchemaBatch;
 use serde::Serialize;
-use sov_address::MultiAddressEvm;
 use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::config::RollupDbConfig;
@@ -225,7 +225,7 @@ impl ModuleDiscriminants {
 struct ParsedAddressArgs {
     legacy_new_da_address: Option<CelestiaAddress>,
     requested_old_da_address: Option<MockAddress>,
-    requested_new_rollup_address: Option<MultiAddressEvm>,
+    requested_new_rollup_address: Option<MultiAddressEvmSolana>,
 }
 
 struct MigrationSession {
@@ -503,7 +503,7 @@ fn parse_address_args(args: &Args) -> anyhow::Result<ParsedAddressArgs> {
         .new_sequencer_rollup_address
         .as_deref()
         .map(|value| {
-            MultiAddressEvm::from_str(value)
+            MultiAddressEvmSolana::from_str(value)
                 .with_context(|| format!("invalid --new-sequencer-rollup-address '{value}'"))
         })
         .transpose()?;
@@ -656,8 +656,10 @@ fn inspect_paymaster_state<S: NativeStorage>(
     let mut non_all_policy_payers = Vec::new();
     let mut deleted_non_all_paymaster_policies = Vec::new();
     for (slot_key, slot_value) in &paymaster_payers_entries {
-        let payer =
-            decode_borsh::<MultiAddressEvm>(slot_key.without_prefix(), "paymaster.payers key")?;
+        let payer = decode_borsh::<MultiAddressEvmSolana>(
+            slot_key.without_prefix(),
+            "paymaster.payers key",
+        )?;
         let policy =
             decode_borsh::<PaymasterPolicy<OldSpec>>(slot_value.value(), "paymaster.payers value")?;
 
@@ -950,7 +952,7 @@ fn migrate_slot_information(old_slot_info: &OldSlotInformation) -> NewSlotInform
 }
 
 fn load_storage_config(args: &Args) -> anyhow::Result<RollupDbConfig> {
-    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
         from_toml_path(&args.rollup_config_path).with_context(|| {
             format!(
                 "failed to read rollup config from {}",
@@ -1060,7 +1062,7 @@ fn resolve_sequencer_plan(
     explicit_mappings: &[SequencerMapArg],
     legacy_new_da_address: Option<CelestiaAddress>,
     requested_old_da_address: Option<MockAddress>,
-    requested_new_rollup_address: Option<MultiAddressEvm>,
+    requested_new_rollup_address: Option<MultiAddressEvmSolana>,
 ) -> anyhow::Result<ResolvedSequencerPlan> {
     if explicit_mappings.is_empty() {
         let Some(new_da_address) = legacy_new_da_address else {
