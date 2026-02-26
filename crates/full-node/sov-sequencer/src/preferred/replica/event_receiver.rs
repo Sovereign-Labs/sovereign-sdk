@@ -161,7 +161,7 @@ impl EventReceiver {
                 panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
             }
 
-            debug!("Relica event receiver started.");
+            debug!("Replica event receiver started.");
             loop {
                 let fut = future_or_shutdown(
                     self.fetch_data(start_event_id, prev_event_type, &mut listener),
