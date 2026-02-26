@@ -82,8 +82,8 @@ where
 {
     /// Create the new instance of [`NomtProverStorage`] with the given sessions.
     /// If `strict_mode` is true, consistency checks between NOMT and rocksdb will be performed.
-    /// If `with_witness` is true, witness hints will be recorded for ZK proving.
     /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
+    /// If `with_witness` is true, witness hints will be recorded for ZK proving.
     pub fn create(
         state_session_builder: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,

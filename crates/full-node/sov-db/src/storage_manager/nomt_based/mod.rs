@@ -121,7 +121,7 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     pruner_max_batch_size: usize,
 
     /// When true, `create_state_for` will generate witness hints for ZK proving.
-    /// This disables pinned cache since it bypasses witness recording. See #2514.
+    /// This disables pinned cache since it bypasses witness recording.
     witness_generation_enabled: bool,
 
     _phantom_s: PhantomData<S>,
@@ -137,7 +137,7 @@ where
     ///
     /// `witness_generation` controls whether `create_state_for` will generate witness hints
     /// for ZK proving. When enabled, pinned cache is disabled since it bypasses witness
-    /// recording. See #2514.
+    /// recording.
     pub fn new(config: RollupDbConfig, witness_generation: bool) -> anyhow::Result<Self> {
         let pruner_block_interval = config.get_pruner_interval();
         let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
@@ -265,7 +265,8 @@ where
         // and we expect a change set from this storage to be saved.
         // That's why it is created in strict mode.
         // If witness generation is enabled, NomtProverStorage::create will panic
-        // if a pinned cache is present — this is intentional, see #2514.
+        // if a pinned cache is present — this is intentional because pinned cache is not
+        // compatible with witness generation. 
         let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
         let state = self.create_state_up_to(
             block_header.prev_hash(),
