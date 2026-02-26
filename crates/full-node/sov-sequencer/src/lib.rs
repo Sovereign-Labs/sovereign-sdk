@@ -22,7 +22,7 @@ pub use common::StateUpdateNotification;
 pub use common::{react_to_state_updates, Sequencer};
 pub use config::{SeqConfigExtension, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig};
 pub use preferred::SequencerRole;
-pub use rest_api::SequencerApis;
+pub use rest_api::{RollupHeightResponse, SequencerApis};
 use serde::Serialize;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_rollup_interface::common::SlotNumber;
