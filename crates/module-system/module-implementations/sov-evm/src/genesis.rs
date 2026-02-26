@@ -16,6 +16,10 @@ use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig, EXCESS_BLOB_GAS};
 #[cfg(feature = "native")]
 use std::ops::RangeInclusive;
 
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    value == &T::default()
+}
+
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
 pub struct AccountData {
@@ -26,10 +30,10 @@ pub struct AccountData {
     /// Smart contract code.
     pub code: Bytes,
     /// Account nonce.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub nonce: u64,
     /// Preloaded account storage values.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_default")]
     pub storage: BTreeMap<U256, U256>,
 }
 
@@ -187,5 +191,42 @@ fn evm_chain_config<S: Spec>(
         chain_spec: cfg.chain_spec.clone(),
         hardforks: spec,
         contract_creation_policy: cfg.contract_creation_policy.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn account_data_skips_default_nonce_and_storage_on_serialize() {
+        let account = AccountData::empty_with_address(Address::from([1u8; 20]));
+        let value = serde_json::to_value(account).unwrap();
+        let obj = value.as_object().unwrap();
+        assert!(
+            !obj.contains_key("nonce"),
+            "default nonce should be omitted from serialized genesis account"
+        );
+        assert!(
+            !obj.contains_key("storage"),
+            "empty storage should be omitted from serialized genesis account"
+        );
+    }
+
+    #[test]
+    fn account_data_serializes_non_default_nonce_and_storage() {
+        let mut account = AccountData::empty_with_address(Address::from([2u8; 20]));
+        account.nonce = 7;
+        account.storage.insert(U256::from(1u64), U256::from(2u64));
+
+        let value = serde_json::to_value(account).unwrap();
+        let obj = value.as_object().unwrap();
+        assert_eq!(obj.get("nonce"), Some(&serde_json::Value::from(7u64)));
+        assert!(
+            obj.get("storage")
+                .and_then(serde_json::Value::as_object)
+                .is_some(),
+            "non-empty storage should be serialized"
+        );
     }
 }
