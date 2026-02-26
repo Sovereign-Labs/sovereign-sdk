@@ -225,14 +225,16 @@ where
                 .unwrap_or(config_value!("CHAIN_ID"));
             transaction_request.chain_id = Some(chain_id);
 
-            let estimated_gas = evm.eth_estimate_gas(
-                transaction_request.clone(),
-                Some(BlockId::pending()),
-                None,
-                None,
-                &mut state,
-            )?;
-            transaction_request.gas = Some(estimated_gas.to::<u64>());
+            if transaction_request.gas.is_none() {
+                let estimated_gas = evm.eth_estimate_gas(
+                    transaction_request.clone(),
+                    Some(BlockId::pending()),
+                    None,
+                    None,
+                    &mut state,
+                )?;
+                transaction_request.gas = Some(estimated_gas.to::<u64>());
+            }
 
             // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
             // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,

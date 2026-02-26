@@ -661,7 +661,6 @@ async fn rpc_015_estimate_gas_is_stable_for_identical_input() -> anyhow::Result<
 
 // RPC-016
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known semantic gap: eth_sendTransaction rewrites caller-provided gas with estimate"]
 async fn rpc_016_eth_send_transaction_should_preserve_user_gas() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
