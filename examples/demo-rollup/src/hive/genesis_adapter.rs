@@ -41,38 +41,33 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-fn has_non_null_field(value: &Value, key: &str) -> bool {
-    value.get(key).is_some_and(|field| !field.is_null())
-}
-
-fn has_non_null_nested_field(value: &Value, parent: &str, key: &str) -> bool {
-    value
-        .get(parent)
-        .and_then(Value::as_object)
-        .and_then(|parent| parent.get(key))
-        .is_some_and(|field| !field.is_null())
+fn has_non_null_path(value: &Value, path: &[&str]) -> bool {
+    let mut current = value;
+    for segment in path {
+        current = match current {
+            Value::Object(map) => match map.get(*segment) {
+                Some(next) => next,
+                None => return false,
+            },
+            _ => return false,
+        };
+    }
+    !current.is_null()
 }
 
 fn coinbase_override_and_sanitize(genesis_json: &mut Value) -> Option<Address> {
     let raw_coinbase = genesis_json.get("coinbase").and_then(Value::as_str)?;
 
-    let has_hex_prefix = raw_coinbase.starts_with("0x") || raw_coinbase.starts_with("0X");
-    if !has_hex_prefix {
-        if let Some(root) = genesis_json.as_object_mut() {
-            root.remove("coinbase");
+    if raw_coinbase.starts_with("0x") || raw_coinbase.starts_with("0X") {
+        if let Ok(address) = raw_coinbase.parse::<Address>() {
+            return Some(address);
         }
-        return None;
     }
 
-    match raw_coinbase.parse::<Address>() {
-        Ok(address) => Some(address),
-        Err(_) => {
-            if let Some(root) = genesis_json.as_object_mut() {
-                root.remove("coinbase");
-            }
-            None
-        }
+    if let Some(root) = genesis_json.as_object_mut() {
+        root.remove("coinbase");
     }
+    None
 }
 
 fn main() -> Result<()> {
@@ -108,12 +103,18 @@ fn main() -> Result<()> {
     let geth_genesis_bytes = fs::read(&paths.input_genesis)
         .with_context(|| format!("Failed to read {}", paths.input_genesis.display()))?;
 
-    let geth_genesis_json: Value = serde_json::from_slice(&geth_genesis_bytes)
+    let mut geth_genesis_json: Value = serde_json::from_slice(&geth_genesis_bytes)
         .with_context(|| format!("Failed to parse {}", paths.input_genesis.display()))?;
-    let mut geth_genesis_for_parse = geth_genesis_json.clone();
-    let coinbase_override = coinbase_override_and_sanitize(&mut geth_genesis_for_parse);
+    let has_chain_id_override = has_non_null_path(&geth_genesis_json, &["config", "chainId"]);
+    let has_timestamp_override = has_non_null_path(&geth_genesis_json, &["timestamp"]);
+    let has_base_fee_override = has_non_null_path(&geth_genesis_json, &["baseFeePerGas"]);
+    let has_gas_limit_override = has_non_null_path(&geth_genesis_json, &["gasLimit"]);
+    let has_config_override = geth_genesis_json
+        .get("config")
+        .is_some_and(Value::is_object);
+    let coinbase_override = coinbase_override_and_sanitize(&mut geth_genesis_json);
 
-    let geth_genesis: Genesis = serde_json::from_value(geth_genesis_for_parse)
+    let geth_genesis: Genesis = serde_json::from_value(geth_genesis_json)
         .with_context(|| format!("Failed to parse {}", paths.input_genesis.display()))?;
 
     let evm_path = paths.output_dir.join("evm.json");
@@ -128,8 +129,11 @@ fn main() -> Result<()> {
     )
     .with_context(|| format!("Failed to parse {}", bank_path.display()))?;
 
-    let chain_timestamps = if let Some(chain_path) = paths.chain_rlp_path.as_ref() {
-        if chain_path.exists() {
+    let chain_timestamps = paths
+        .chain_rlp_path
+        .as_deref()
+        .filter(|chain_path| chain_path.exists())
+        .map_or_else(Vec::new, |chain_path| {
             match load_chain_timestamps(chain_path) {
                 Ok(ts) => ts,
                 Err(err) => {
@@ -140,14 +144,9 @@ fn main() -> Result<()> {
                     Vec::new()
                 }
             }
-        } else {
-            Vec::new()
-        }
-    } else {
-        Vec::new()
-    };
+        });
 
-    let chain_id = if has_non_null_nested_field(&geth_genesis_json, "config", "chainId") {
+    let chain_id = if has_chain_id_override {
         geth_genesis.config.chain_id
     } else {
         DEFAULT_CHAIN_ID
@@ -156,7 +155,7 @@ fn main() -> Result<()> {
     let current_timestamp =
         value_as_optional_u64(evm_genesis.get("genesis_timestamp"), "genesis_timestamp")?
             .unwrap_or(0);
-    let genesis_timestamp = if has_non_null_field(&geth_genesis_json, "timestamp") {
+    let genesis_timestamp = if has_timestamp_override {
         geth_genesis.timestamp
     } else {
         current_timestamp
@@ -166,7 +165,7 @@ fn main() -> Result<()> {
     let current_base_fee =
         value_as_optional_u64(evm_genesis.get("initial_base_fee"), "initial_base_fee")?
             .unwrap_or(0);
-    let initial_base_fee = if has_non_null_field(&geth_genesis_json, "baseFeePerGas") {
+    let initial_base_fee = if has_base_fee_override {
         geth_genesis
             .base_fee_per_gas
             .map(|value| u64::try_from(value).context("baseFeePerGas exceeds u64"))
@@ -177,10 +176,7 @@ fn main() -> Result<()> {
     };
     evm_genesis["initial_base_fee"] = Value::from(initial_base_fee);
 
-    let hardfork_config = geth_genesis_json
-        .get("config")
-        .is_some_and(Value::is_object)
-        .then_some(&geth_genesis.config);
+    let hardfork_config = has_config_override.then_some(&geth_genesis.config);
     set_hardfork_schedule(&mut evm_genesis, hardfork_config, &chain_timestamps)?;
 
     let chain_spec = object_field_or_insert(&mut evm_genesis, "chain_spec")?;
@@ -189,19 +185,17 @@ fn main() -> Result<()> {
         "chain_spec.block_gas_limit",
     )?
     .unwrap_or(DEFAULT_BLOCK_GAS_LIMIT);
-    let block_gas_limit = if has_non_null_field(&geth_genesis_json, "gasLimit") {
+    let block_gas_limit = if has_gas_limit_override {
         geth_genesis.gas_limit
     } else {
         existing_block_gas_limit
     };
     chain_spec.insert("block_gas_limit".to_string(), Value::from(block_gas_limit));
 
-    let mut tx_gas_limit =
+    let tx_gas_limit =
         value_as_optional_u64(chain_spec.get("tx_gas_limit"), "chain_spec.tx_gas_limit")?
-            .unwrap_or(block_gas_limit);
-    if tx_gas_limit > block_gas_limit {
-        tx_gas_limit = block_gas_limit;
-    }
+            .unwrap_or(block_gas_limit)
+            .min(block_gas_limit);
     chain_spec.insert("tx_gas_limit".to_string(), Value::from(tx_gas_limit));
 
     if let Some(address) = coinbase_override {
