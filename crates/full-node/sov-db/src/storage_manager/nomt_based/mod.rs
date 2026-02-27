@@ -45,6 +45,20 @@ impl<Cache> WitnessMode<Cache> {
         Self::Off { pinned_cache: None }
     }
 
+    /// Returns `true` if witness generation is enabled.
+    pub fn with_witness(&self) -> bool {
+        matches!(self, Self::On)
+    }
+
+    /// Takes the pinned cache out of the `Off` variant, leaving `None` in its place.
+    /// Returns `None` if witness mode is `On` or no cache is present.
+    pub fn take_pinned_cache(&mut self) -> Option<Cache> {
+        match self {
+            Self::Off { pinned_cache } => pinned_cache.take(),
+            Self::On => None,
+        }
+    }
+
     /// Constructs a [`WitnessMode`] from separate `with_witness` and `pinned_cache` values.
     ///
     /// # Panics

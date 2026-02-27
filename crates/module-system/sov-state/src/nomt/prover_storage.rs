@@ -41,10 +41,8 @@ where
     /// Enable staleness/consistency checks (NOMT vs rocksdb, root hash comparison).
     /// Should be true for all node-context block processing.
     strict_mode: bool,
-    /// Enable witness hint generation for ZK proofs.
-    /// Should only be true for proving nodes.
-    with_witness: bool,
-    pinned_cache: Option<PinnedCache>,
+    /// Controls witness hint generation for ZK proofs and optional pinned cache.
+    witness_mode: WitnessMode<PinnedCache>,
 }
 
 impl<S: MerkleProofSpec, K: Clone> Clone for NomtProverStorage<S, K>
@@ -53,16 +51,20 @@ where
     K: Clone,
 {
     fn clone(&self) -> Self {
-        if self.pinned_cache.is_some() {
+        if matches!(self.witness_mode, WitnessMode::Off { pinned_cache: Some(_) }) {
             tracing::warn!("Cloning NomtProverStorage which has an active pinned cache. The pinned cache will not be propagated to the clone.");
         }
+        let witness_mode = if self.witness_mode.with_witness() {
+            WitnessMode::On
+        } else {
+            WitnessMode::off()
+        };
         Self {
             state_session_builder: self.state_session_builder.clone(),
             historical_state: self.historical_state.clone(),
             accessory: self.accessory.clone(),
             strict_mode: self.strict_mode,
-            with_witness: self.with_witness,
-            pinned_cache: None,
+            witness_mode,
         }
     }
 }
@@ -90,17 +92,12 @@ where
         strict_mode: bool,
         witness_mode: WitnessMode<PinnedCache>,
     ) -> Self {
-        let (with_witness, pinned_cache) = match witness_mode {
-            WitnessMode::On => (true, None),
-            WitnessMode::Off { pinned_cache } => (false, pinned_cache),
-        };
         Self {
             state_session_builder,
             historical_state,
             accessory,
             strict_mode,
-            with_witness,
-            pinned_cache,
+            witness_mode,
         }
     }
     /// Utility method for checking if storage is empty.
@@ -425,7 +422,7 @@ where
         StorageRoot::new(nomt::trie::TERMINATOR, nomt::trie::TERMINATOR);
 
     fn put_in_witness(&self, value: Option<SlotValue>, witness: &Self::Witness) {
-        if self.with_witness {
+        if self.witness_mode.with_witness() {
             witness.add_hint(&value);
         }
     }
@@ -435,7 +432,11 @@ where
         key: &SlotKey,
         witness: &Self::Witness,
     ) -> Option<NodeLeafAndMaybeValue> {
-        let witness_ref = if self.with_witness { Some(witness) } else { None };
+        let witness_ref = if self.witness_mode.with_witness() {
+            Some(witness)
+        } else {
+            None
+        };
         match self.do_get_leaf::<N>(key, None, witness_ref) {
             Ok(val) => val,
             Err(e) => {
@@ -452,7 +453,7 @@ where
     ) -> Option<SlotValue> {
         match self.read_value::<N>(key, None) {
             Ok(val) => {
-                if self.with_witness {
+                if self.witness_mode.with_witness() {
                     witness.add_hint(&val);
                 }
                 val
@@ -495,7 +496,7 @@ where
             kernel: kernel_session,
         } = self
             .state_session_builder
-            .begin_both_sessions(self.with_witness)?;
+            .begin_both_sessions(self.witness_mode.with_witness())?;
         let starting_session_time = start_session.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
@@ -519,7 +520,7 @@ where
                 user_session,
                 nomt_accesses_user,
                 witness,
-                self.with_witness,
+                self.witness_mode.with_witness(),
             )
             .context("user state")?
         };
@@ -530,7 +531,7 @@ where
                 kernel_session,
                 nomt_accesses_kernel,
                 witness,
-                self.with_witness,
+                self.witness_mode.with_witness(),
             )
             .context("kernel state")?
         };
@@ -540,7 +541,7 @@ where
         let user_writes = state_accesses.user.ordered_writes.len();
         let kernel_reads = state_accesses.kernel.ordered_reads.len();
         let kernel_writes = state_accesses.kernel.ordered_writes.len();
-        let with_witness = self.with_witness;
+        let with_witness = self.witness_mode.with_witness();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtProverComputeStateResult {
                 user_reads,
@@ -787,7 +788,7 @@ where
     }
 
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
-        self.pinned_cache.take()
+        self.witness_mode.take_pinned_cache()
     }
 }
 
