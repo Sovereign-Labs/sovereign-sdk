@@ -54,7 +54,7 @@ fn base_request(caller: Address) -> TransactionRequest {
     }
 }
 
-async fn assert_rpc_rejects<T: DeserializeOwned>(
+async fn assert_rpc_rejects<T: DeserializeOwned + std::fmt::Debug>(
     client: &SimpleStorageClient,
     method: &str,
     request: &TransactionRequest,
