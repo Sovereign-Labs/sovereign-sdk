@@ -373,6 +373,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.read_value::<Accessory>(key, None)
     }
 
+    /// # Panics
+    ///
+    /// Panics if `pinned_cache` is `Some`, as JMT prover storage is incompatible with pinned caches.
     fn compute_state_update(
         &self,
         state_accesses: StateAccesses,
