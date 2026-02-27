@@ -425,7 +425,9 @@ where
         StorageRoot::new(nomt::trie::TERMINATOR, nomt::trie::TERMINATOR);
 
     fn put_in_witness(&self, value: Option<SlotValue>, witness: &Self::Witness) {
-        witness.add_hint(&value);
+        if self.with_witness {
+            witness.add_hint(&value);
+        }
     }
 
     fn get_leaf<N: ProvableCompileTimeNamespace>(
@@ -433,7 +435,8 @@ where
         key: &SlotKey,
         witness: &Self::Witness,
     ) -> Option<NodeLeafAndMaybeValue> {
-        match self.do_get_leaf::<N>(key, None, Some(witness)) {
+        let witness_ref = if self.with_witness { Some(witness) } else { None };
+        match self.do_get_leaf::<N>(key, None, witness_ref) {
             Ok(val) => val,
             Err(e) => {
                 // Historical errors are not expected when fetching without a version
