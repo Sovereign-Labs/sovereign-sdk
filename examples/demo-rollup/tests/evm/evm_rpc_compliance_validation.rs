@@ -341,7 +341,6 @@ async fn rpc_007_web3_client_version_should_be_available() -> anyhow::Result<()>
 
 // RPC-008
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known RPC compliance gap: receipt fee fields do not exactly reconcile sender balance delta"]
 async fn rpc_008_receipt_fee_fields_match_balance_delta() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;

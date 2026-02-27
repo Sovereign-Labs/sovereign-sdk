@@ -65,16 +65,9 @@ fn test_receipt_fee_matches_balance_delta() {
                 })
                 .expect("sender balance should decrease by transfer value and a fee");
 
-            assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
-            );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
+            assert_eq!(
+                actual_fee, implied_fee,
+                "receipt-implied fee should match actual sender fee exactly"
             );
         }),
     });
@@ -112,16 +105,9 @@ fn test_block_receipt_fee_matches_balance_delta() {
                 })
                 .expect("sender balance should decrease by transfer value and a fee");
 
-            assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
-            );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
+            assert_eq!(
+                actual_fee, implied_fee,
+                "receipt-implied fee should match actual sender fee exactly"
             );
         }),
     });
