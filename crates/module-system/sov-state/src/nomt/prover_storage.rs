@@ -54,7 +54,7 @@ where
         if matches!(self.witness_mode, WitnessMode::Off { pinned_cache: Some(_) }) {
             tracing::warn!("Cloning NomtProverStorage which has an active pinned cache. The pinned cache will not be propagated to the clone.");
         }
-        let witness_mode = if self.witness_mode.with_witness() {
+        let witness_mode = if self.witness_mode.is_witness_enabled() {
             WitnessMode::On
         } else {
             WitnessMode::off()
@@ -422,7 +422,7 @@ where
         StorageRoot::new(nomt::trie::TERMINATOR, nomt::trie::TERMINATOR);
 
     fn put_in_witness(&self, value: Option<SlotValue>, witness: &Self::Witness) {
-        if self.witness_mode.with_witness() {
+        if self.witness_mode.is_witness_enabled() {
             witness.add_hint(&value);
         }
     }
@@ -432,7 +432,7 @@ where
         key: &SlotKey,
         witness: &Self::Witness,
     ) -> Option<NodeLeafAndMaybeValue> {
-        let witness_ref = if self.witness_mode.with_witness() {
+        let witness_ref = if self.witness_mode.is_witness_enabled() {
             Some(witness)
         } else {
             None
@@ -453,7 +453,7 @@ where
     ) -> Option<SlotValue> {
         match self.read_value::<N>(key, None) {
             Ok(val) => {
-                if self.witness_mode.with_witness() {
+                if self.witness_mode.is_witness_enabled() {
                     witness.add_hint(&val);
                 }
                 val
@@ -496,7 +496,7 @@ where
             kernel: kernel_session,
         } = self
             .state_session_builder
-            .begin_both_sessions(self.witness_mode.with_witness())?;
+            .begin_both_sessions(self.witness_mode.is_witness_enabled())?;
         let starting_session_time = start_session.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
@@ -520,7 +520,7 @@ where
                 user_session,
                 nomt_accesses_user,
                 witness,
-                self.witness_mode.with_witness(),
+                self.witness_mode.is_witness_enabled(),
             )
             .context("user state")?
         };
@@ -531,7 +531,7 @@ where
                 kernel_session,
                 nomt_accesses_kernel,
                 witness,
-                self.witness_mode.with_witness(),
+                self.witness_mode.is_witness_enabled(),
             )
             .context("kernel state")?
         };
@@ -541,7 +541,7 @@ where
         let user_writes = state_accesses.user.ordered_writes.len();
         let kernel_reads = state_accesses.kernel.ordered_reads.len();
         let kernel_writes = state_accesses.kernel.ordered_writes.len();
-        let with_witness = self.witness_mode.with_witness();
+        let with_witness = self.witness_mode.is_witness_enabled();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtProverComputeStateResult {
                 user_reads,

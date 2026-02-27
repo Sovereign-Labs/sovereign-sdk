@@ -46,7 +46,7 @@ impl<Cache> WitnessMode<Cache> {
     }
 
     /// Returns `true` if witness generation is enabled.
-    pub fn with_witness(&self) -> bool {
+    pub fn is_witness_enabled(&self) -> bool {
         matches!(self, Self::On)
     }
 
