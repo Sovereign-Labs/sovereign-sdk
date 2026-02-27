@@ -1,23 +1,9 @@
 use reqwest::Client;
 use serde_json::{json, Value};
 
-use crate::evm::evm_test_helper::{rpc_call, setup_test_rollup, EVM_EXTENSION};
-
-const INVALID_PARAMS_CODE: i64 = -32602;
-
-fn assert_invalid_params(response: &Value) {
-    let error = response
-        .get("error")
-        .expect("expected invalid params error object");
-    let code = error
-        .get("code")
-        .and_then(Value::as_i64)
-        .expect("error.code should be present");
-    assert_eq!(
-        code, INVALID_PARAMS_CODE,
-        "expected JSON-RPC invalid params code"
-    );
-}
+use crate::evm::evm_test_helper::{
+    assert_invalid_params, rpc_call, setup_test_rollup, EVM_EXTENSION,
+};
 
 fn parse_hex_quantity(value: &str) -> u64 {
     let digits = value.strip_prefix("0x").unwrap_or(value);

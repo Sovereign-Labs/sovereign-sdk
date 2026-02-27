@@ -1,9 +1,11 @@
+use std::future::Future;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use crate::test_helpers::test_genesis_source;
 
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, B256, U256};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
@@ -36,6 +38,11 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     max_log_limit: 20000,
     response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
 };
+pub(crate) const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
+pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
+pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
+pub(crate) const POLL_INTERVAL_MS: u64 = 25;
+pub(crate) const INVALID_PARAMS_CODE: i64 = -32602;
 
 /// Starts test rollup node.  
 pub(crate) async fn start_node(
@@ -159,6 +166,60 @@ pub(crate) fn rpc_error_message(error: &Value) -> &str {
 
 pub(crate) fn rpc_error_data_str(error: &Value) -> Option<&str> {
     error.get("data").and_then(Value::as_str)
+}
+
+pub(crate) fn number_selector(n: u64) -> String {
+    format!("0x{n:x}")
+}
+
+pub(crate) fn hash_selector(hash: B256) -> Value {
+    json!({
+        "blockHash": format!("{:#x}", hash),
+        "requireCanonical": true
+    })
+}
+
+pub(crate) async fn poll_until<T, F, Fut, P>(
+    mut fetch: F,
+    mut predicate: P,
+    failure_msg: &str,
+) -> anyhow::Result<T>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = anyhow::Result<T>>,
+    P: FnMut(&T) -> bool,
+{
+    let mut value = fetch().await?;
+    for _ in 0..MAX_POLL_ATTEMPTS {
+        if predicate(&value) {
+            return Ok(value);
+        }
+        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
+        value = fetch().await?;
+    }
+
+    anyhow::bail!("{failure_msg}")
+}
+
+pub(crate) fn assert_invalid_params(response: &Value) {
+    let error = response
+        .get("error")
+        .expect("expected invalid params error object");
+    let code = error
+        .get("code")
+        .and_then(Value::as_i64)
+        .expect("error.code should be present");
+    assert_eq!(
+        code, INVALID_PARAMS_CODE,
+        "expected JSON-RPC invalid params code"
+    );
+}
+
+pub(crate) async fn finalized_block_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
+    let finalized_block = client
+        .eth_get_block_by_number(Some("finalized".to_string()))
+        .await;
+    (finalized_block.header.number, finalized_block.header.hash)
 }
 
 pub(crate) fn alloy_client_with_reqwest<B>(

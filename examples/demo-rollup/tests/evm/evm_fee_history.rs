@@ -20,7 +20,8 @@ use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
-    setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+    setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
+    SENDER_PRIV_KEY,
 };
 
 #[derive(Debug, Deserialize)]
@@ -40,9 +41,6 @@ struct EvmGenesisConfigFixture {
     initial_base_fee: u64,
     chain_spec: ChainSpecFixture,
 }
-
-const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
-const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 #[derive(Debug, Deserialize)]
 struct MapResponse<T> {

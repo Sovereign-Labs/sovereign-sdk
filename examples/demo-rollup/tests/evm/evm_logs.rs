@@ -1,5 +1,7 @@
 #![allow(deprecated)] // Allowed for using alloy things.
-use crate::evm::evm_test_helper::{rpc_call, setup_with_simple_storage, EVM_EXTENSION};
+use crate::evm::evm_test_helper::{
+    assert_invalid_params, rpc_call, setup_with_simple_storage, EVM_EXTENSION,
+};
 use alloy_primitives::{keccak256, Address, TxHash, B256, U256};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
 use jsonrpsee::core::client::ClientT;
@@ -302,14 +304,7 @@ async fn get_logs_from_greater_than_to_returns_invalid_params() -> anyhow::Resul
     )
     .await?;
 
-    let error = response
-        .get("error")
-        .expect("expected invalid params error object");
-    let code = error
-        .get("code")
-        .and_then(Value::as_i64)
-        .expect("error.code should be present");
-    assert_eq!(code, -32602, "expected JSON-RPC invalid params code");
+    assert_invalid_params(&response);
 
     Ok(())
 }
