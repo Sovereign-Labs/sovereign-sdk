@@ -1,11 +1,9 @@
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
-use alloy_consensus::{BlockBody, ReceiptEnvelope, ReceiptWithBloom, TxReceipt};
+use alloy_consensus::ReceiptEnvelope;
 use alloy_eips::BlockId;
-use alloy_eips::Encodable2718;
 use alloy_primitives::{Address, U64};
 use alloy_primitives::{Bytes, B256, U256};
-use alloy_rlp::Encodable;
 use alloy_rpc_types::{
     state::StateOverride, AccessListResult, Block, BlockNumberOrTag, BlockOverrides, FeeHistory,
     Transaction, TransactionReceipt, TransactionRequest,
@@ -499,125 +497,6 @@ where
     ) -> RpcResult<GethTrace> {
         trace!(method = "debug_traceTransaction", %tx_hash, "EVM module JSON-RPC request");
         Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
-    }
-
-    /// Handler for: `debug_getRawBlock`
-    #[rpc_method(name = "debug_getRawBlock")]
-    pub fn debug_get_raw_block(
-        &self,
-        block_id: BlockId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Bytes>> {
-        trace!(
-            ?block_id,
-            method = "debug_getRawBlock",
-            "EVM module JSON-RPC request"
-        );
-        let maybe_block = self.get_maybe_sealed_block_by_id(block_id, state)?;
-        if let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block {
-            let txs = block
-                .transactions()
-                .clone()
-                .map(|tx_idx| self.tx(tx_idx, state).map(|tx| tx.signed_transaction))
-                .collect::<Result<Vec<_>, _>>()?;
-            let body = BlockBody {
-                transactions: txs,
-                ommers: vec![],
-                withdrawals: None,
-            };
-
-            let encoded =
-                alloy_consensus::Block::rlp_encoded_from_parts(block.header.inner(), &body);
-            return Ok(Some(encoded.into()));
-        }
-
-        Ok(None)
-    }
-
-    /// Handler for: `debug_getRawHeader`
-    #[rpc_method(name = "debug_getRawHeader")]
-    pub fn debug_get_raw_header(
-        &self,
-        block_id: BlockId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Bytes>> {
-        trace!(
-            ?block_id,
-            method = "debug_getRawHeader",
-            "EVM module JSON-RPC request"
-        );
-        let maybe_block = self.get_maybe_sealed_block_by_id(block_id, state)?;
-        if let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block {
-            let mut encoded = Vec::new();
-            block.header.inner().encode(&mut encoded);
-            return Ok(Some(encoded.into()));
-        }
-
-        Ok(None)
-    }
-
-    /// Handler for: `debug_getRawReceipts`
-    #[rpc_method(name = "debug_getRawReceipts")]
-    pub fn debug_get_raw_receipts(
-        &self,
-        block_id: BlockId,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Vec<Bytes>> {
-        trace!(
-            ?block_id,
-            method = "debug_getRawReceipts",
-            "EVM module JSON-RPC request"
-        );
-        let maybe_block = self.get_maybe_sealed_block_by_id(block_id, state)?;
-        let Some(crate::MaybeSealedBlock::Sealed(block)) = maybe_block else {
-            return Ok(Vec::new());
-        };
-
-        let tx_range = block.transactions().clone();
-        let mut raw_receipts = Vec::with_capacity((tx_range.end - tx_range.start) as usize);
-        for tx_idx in tx_range {
-            let tx = self.tx(tx_idx, state)?;
-            let Some((receipt, _)) = self.receipt(tx_idx, state) else {
-                return Err(EthApiError::EvmCustom(format!(
-                    "missing receipt for sealed transaction index {tx_idx}",
-                ))
-                .into());
-            };
-            let logs_bloom = receipt.receipt.bloom();
-            let receipt = alloy_consensus::Receipt {
-                status: receipt.receipt.success.into(),
-                cumulative_gas_used: receipt.receipt.cumulative_gas_used,
-                logs: receipt.receipt.logs,
-            };
-            let envelope = ReceiptEnvelope::from_typed(
-                tx.signed_transaction.tx_type(),
-                ReceiptWithBloom::new(receipt, logs_bloom),
-            );
-            raw_receipts.push(envelope.encoded_2718().into());
-        }
-
-        Ok(raw_receipts)
-    }
-
-    /// Handler for: `debug_getRawTransaction`
-    #[rpc_method(name = "debug_getRawTransaction")]
-    pub fn debug_get_raw_transaction(
-        &self,
-        hash: B256,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<Option<Bytes>> {
-        trace!(
-            tx_hash = %hash,
-            method = "debug_getRawTransaction",
-            "EVM module JSON-RPC request"
-        );
-        if let Some(tx_idx) = self.tx_index(&hash, state) {
-            if let Some(tx) = self.transaction(tx_idx, state) {
-                return Ok(Some(tx.signed_transaction.encoded_2718().into()));
-            }
-        }
-
-        Ok(None)
     }
 
     // ========== web3 namespace ==========
