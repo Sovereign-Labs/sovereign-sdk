@@ -51,7 +51,12 @@ where
     K: Clone,
 {
     fn clone(&self) -> Self {
-        if matches!(self.witness_mode, WitnessMode::Off { pinned_cache: Some(_) }) {
+        if matches!(
+            self.witness_mode,
+            WitnessMode::Off {
+                pinned_cache: Some(_)
+            }
+        ) {
             tracing::warn!("Cloning NomtProverStorage which has an active pinned cache. The pinned cache will not be propagated to the clone.");
         }
         let witness_mode = if self.witness_mode.is_witness_enabled() {
