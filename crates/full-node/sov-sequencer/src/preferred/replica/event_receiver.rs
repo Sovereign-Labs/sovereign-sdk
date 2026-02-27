@@ -14,7 +14,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
 
-const MAX_DB_ERRORS_ALLOWED: u32 = 10;
+const MAX_DB_ERRORS_ALLOWED: u32 = 20;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum EventReceiverError {
