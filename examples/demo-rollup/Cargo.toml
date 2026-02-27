@@ -70,6 +70,7 @@ tracing = { workspace = true }
 prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
+alloy = { workspace = true, features = ["genesis"] }
 alloy-primitives = { workspace = true }
 alloy-rlp = { workspace = true }
 
@@ -117,7 +118,6 @@ tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
-alloy = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
 alloy-rpc-types-trace = { workspace = true }

@@ -1,12 +1,9 @@
+use alloy::genesis::ChainConfig;
 use anyhow::Result;
 use serde_json::Value;
 
 use crate::rlp_chain::activation_block_for_timestamp;
-use crate::types::{object_field_or_insert, GethConfig, U64Like};
-
-fn as_u64(value: &Option<U64Like>, field_name: &str) -> Result<Option<u64>> {
-    value.as_ref().map(|v| v.to_u64(field_name)).transpose()
-}
+use crate::types::object_field_or_insert;
 
 fn push_block_fork(
     schedule: &mut Vec<(u64, &'static str)>,
@@ -32,94 +29,48 @@ fn push_time_fork(
 }
 
 fn build_hardfork_schedule(
-    config: &GethConfig,
+    config: &ChainConfig,
     chain_timestamps: &[(u64, u64)],
-) -> Result<Vec<(u64, &'static str)>> {
+) -> Vec<(u64, &'static str)> {
     let mut schedule: Vec<(u64, &'static str)> = vec![(0, "FRONTIER")];
 
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.homestead_block, "config.homesteadBlock")?,
-        "HOMESTEAD",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.eip150_block, "config.eip150Block")?,
-        "TANGERINE",
-    );
+    push_block_fork(&mut schedule, config.homestead_block, "HOMESTEAD");
+    push_block_fork(&mut schedule, config.eip150_block, "TANGERINE");
 
-    let eip155 = as_u64(&config.eip155_block, "config.eip155Block")?;
-    let eip158 = as_u64(&config.eip158_block, "config.eip158Block")?;
-    if let Some(spurious_block) = [eip155, eip158].into_iter().flatten().max() {
+    if let Some(spurious_block) = [config.eip155_block, config.eip158_block]
+        .into_iter()
+        .flatten()
+        .max()
+    {
         schedule.push((spurious_block, "SPURIOUS_DRAGON"));
     }
 
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.byzantium_block, "config.byzantiumBlock")?,
-        "BYZANTIUM",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.constantinople_block, "config.constantinopleBlock")?,
-        "CONSTANTINOPLE",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.petersburg_block, "config.petersburgBlock")?,
-        "PETERSBURG",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.istanbul_block, "config.istanbulBlock")?,
-        "ISTANBUL",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.muir_glacier_block, "config.muirGlacierBlock")?,
-        "MUIR_GLACIER",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.berlin_block, "config.berlinBlock")?,
-        "BERLIN",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.london_block, "config.londonBlock")?,
-        "LONDON",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.arrow_glacier_block, "config.arrowGlacierBlock")?,
-        "ARROW_GLACIER",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.gray_glacier_block, "config.grayGlacierBlock")?,
-        "GRAY_GLACIER",
-    );
-    push_block_fork(
-        &mut schedule,
-        as_u64(&config.merge_netsplit_block, "config.mergeNetsplitBlock")?,
-        "MERGE",
-    );
+    push_block_fork(&mut schedule, config.byzantium_block, "BYZANTIUM");
+    push_block_fork(&mut schedule, config.constantinople_block, "CONSTANTINOPLE");
+    push_block_fork(&mut schedule, config.petersburg_block, "PETERSBURG");
+    push_block_fork(&mut schedule, config.istanbul_block, "ISTANBUL");
+    push_block_fork(&mut schedule, config.muir_glacier_block, "MUIR_GLACIER");
+    push_block_fork(&mut schedule, config.berlin_block, "BERLIN");
+    push_block_fork(&mut schedule, config.london_block, "LONDON");
+    push_block_fork(&mut schedule, config.arrow_glacier_block, "ARROW_GLACIER");
+    push_block_fork(&mut schedule, config.gray_glacier_block, "GRAY_GLACIER");
+    push_block_fork(&mut schedule, config.merge_netsplit_block, "MERGE");
 
     push_time_fork(
         &mut schedule,
-        as_u64(&config.shanghai_time, "config.shanghaiTime")?,
+        config.shanghai_time,
         "SHANGHAI",
         chain_timestamps,
     );
     push_time_fork(
         &mut schedule,
-        as_u64(&config.cancun_time, "config.cancunTime")?,
+        config.cancun_time,
         "CANCUN",
         chain_timestamps,
     );
     push_time_fork(
         &mut schedule,
-        as_u64(&config.prague_time, "config.pragueTime")?,
+        config.prague_time,
         "PRAGUE",
         chain_timestamps,
     );
@@ -136,19 +87,19 @@ fn build_hardfork_schedule(
         deduped.push((block, fork_name));
     }
 
-    Ok(deduped)
+    deduped
 }
 
 pub(crate) fn set_hardfork_schedule(
     evm_genesis: &mut Value,
-    config: Option<&GethConfig>,
+    config: Option<&ChainConfig>,
     chain_timestamps: &[(u64, u64)],
 ) -> Result<()> {
     let Some(config) = config else {
         return Ok(());
     };
 
-    let hardforks = build_hardfork_schedule(config, chain_timestamps)?
+    let hardforks = build_hardfork_schedule(config, chain_timestamps)
         .into_iter()
         .map(|(block, fork)| {
             Value::Array(vec![Value::from(block), Value::String(fork.to_string())])
@@ -169,7 +120,7 @@ mod tests {
     #[test]
     fn set_hardfork_schedule_dedupes_same_block() {
         let mut evm_genesis = json!({});
-        let config: GethConfig = serde_json::from_value(json!({
+        let config: ChainConfig = serde_json::from_value(json!({
             "homesteadBlock": "0x1",
             "eip150Block": "0x1",
             "eip155Block": "0x2",
