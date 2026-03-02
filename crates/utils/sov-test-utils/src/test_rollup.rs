@@ -606,7 +606,7 @@ where
         let mut shutdown_receiver = shutdown_sender.subscribe();
         let blueprint: R = Default::default();
 
-        let mut storage_manager = blueprint.create_storage_manager(&rollup_config)?;
+        let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;
         let finalized_header = secondary_da_service
             .get_last_finalized_block_header()
             .await?;
