@@ -1198,6 +1198,19 @@ async fn generate_mocha_testnet_blocks() -> anyhow::Result<()> {
 
     from_testnet_no_shares::update_test_data(&client).await;
     from_testnet_with_tail_padding::update_test_data(&client).await;
+    from_mocha_multi_candidate_rows_10261831::update_test_data(&client).await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual fixture refresh from Mocha RPC"]
+async fn generate_mocha_multi_candidate_rows_fixture() -> anyhow::Result<()> {
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://127.0.0.1:26658")
+        .build()
+        .await?;
+
+    from_mocha_multi_candidate_rows_10261831::update_test_data(&client).await;
     Ok(())
 }
 

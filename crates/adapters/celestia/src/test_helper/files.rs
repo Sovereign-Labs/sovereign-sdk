@@ -638,6 +638,61 @@ pub mod from_mocha_invalid_row_proof {
     }
 }
 
+pub mod from_mocha_multi_candidate_rows_10261831 {
+    /// Real Mocha fixture kept for deterministic evidence of row-root candidate ambiguity.
+    ///
+    /// Why this fixture exists:
+    /// 1. To prove that `get_row_roots_for_namespace(namespace)` can return multiple candidates.
+    /// 2. To prove candidate selection is range-based (`min <= ns <= max`), not exact-leaf matching.
+    /// 3. To show concrete rows whose NMT ranges contain the target namespace even when ranges are wider.
+    ///
+    /// It is consumed by `mocha_fixture_multi_candidate_row_roots_stats` for stable, reviewer-facing
+    /// assertions and logs that do not depend on live RPC state.
+    ///
+    /// Scope: this fixture proves multi-candidate ambiguity only. It does not, by itself, prove a
+    /// `max_namespace == PARITY_SHARE` case.
+    use super::*;
+    pub const DATA_PATH: &str = "test_data/block_mocha_multi_candidate_rows_10261831";
+    pub const ROLLUP_PARAMS: RollupParams = RollupParams {
+        // Namespace from hex: 0a753d7fa7382f45, left-padded to v0 10-byte namespace id.
+        rollup_batch_namespace: Namespace::const_v0([0, 0, 10, 117, 61, 127, 167, 56, 47, 69]),
+        rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE_EXAMPLES,
+    };
+    pub const HEIGHT: u64 = 10261831;
+
+    pub fn filtered_block() -> FilteredCelestiaBlock {
+        let path = make_test_path(DATA_PATH);
+        filtered_block_from_path(
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+            &path,
+        )
+        .unwrap()
+    }
+
+    pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
+        (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+
+    pub async fn update_test_data(client: &celestia_client::Client) {
+        let path = make_test_path(DATA_PATH);
+        std::fs::create_dir_all(&path).unwrap();
+
+        let signers = serde_json::json!({"signers": Vec::<String>::new()});
+        write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
+
+        let block_header = client.header().get_by_height(HEIGHT).await.unwrap();
+        save_blobs(
+            client,
+            &path,
+            &block_header,
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+        )
+        .await;
+    }
+}
+
 fn generate_payload_with_batches(batches: usize, batch_size: usize) -> PayloadData {
     // Not random, but not the same bytes
     let mut rng = rand::rngs::SmallRng::from_seed([1; 32]);
