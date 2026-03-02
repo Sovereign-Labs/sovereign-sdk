@@ -1,7 +1,8 @@
-# 2026-02-24 
-- #2512 adds the capability to migrate from mockDa -> Celestia to the demo rollup.
 # 2026-03-02
 - #2543 **Breaking change: code** Adds a new constants.toml value `ENABLE_TIMESTAMP_ORACLE_AT` which disables setting the on-chain timestamp oracle metadata from the sequencer context before the provided height. Should be set to 0 for new chains, and some height after the upgrade for existing chains. Alternatively set to `i64::MAX` to effectively disable it.
+
+# 2026-02-24 
+- #2512 adds the capability to migrate from mockDa -> Celestia to the demo rollup.
 
 # 2026-02-26
 - #2540 Adds a witness generation flag. If witness generation is enabled at the same time as cache pinning a panic with occur at runtime.
