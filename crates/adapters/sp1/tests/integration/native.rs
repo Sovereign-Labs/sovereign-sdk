@@ -4,6 +4,7 @@ use sov_sp1_adapter::host::SP1Host;
 use sp1_build::BuildArgs;
 use sp1_sdk::{SP1Proof, SP1PublicValues};
 
+
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct TestStruct {
     ints: Vec<i32>,
@@ -43,14 +44,14 @@ fn build_fibonacci_elf() {
     let test_elf_path = std::path::Path::new(crate_path).join("test_data");
 
     let mut args = BuildArgs::default();
-    args.elf_name = Some("riscv32im-succinct-zkvm-elf".to_string());
+    args.elf_name = Some("riscv64im-succinct-zkvm-elf".to_string());
     args.output_directory = Some(test_elf_path.to_string_lossy().to_string());
     sp1_build::build_program_with_args("fibonacci-program", args);
 }
 
 #[test]
 fn test_fibonnaci_host() {
-    let fibonacci_elf = include_bytes!("../../test_data/riscv32im-succinct-zkvm-elf");
+    let fibonacci_elf = include_bytes!("../../test_data/riscv64im-succinct-zkvm-elf");
 
     let mut host = SP1Host::new(fibonacci_elf);
     // Give the input 7 to the fibonnaci program
