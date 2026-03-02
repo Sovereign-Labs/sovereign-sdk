@@ -795,6 +795,7 @@ where
         from_testnet_with_tail_padding::test_case(),
         from_mocha_shares_mismatch::test_case(),
         from_mocha_invalid_row_proof::test_case(),
+        from_mocha_multi_candidate_rows_10261831::test_case(),
     ];
 
     for (block, rollup_params, signers) in blocks {
