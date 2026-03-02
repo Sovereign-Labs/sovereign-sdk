@@ -278,6 +278,72 @@ where
         }
         Ok(node_leaf_with_fetched_value)
     }
+
+    fn materialize_changes_with_version(
+        self,
+        state_update: NomtStateUpdate<S>,
+        version: SlotNumber,
+    ) -> NomtChangeSet {
+        tracing::trace!(
+            %version,
+            "NomtProverStorage, materializing changes at explicit version"
+        );
+        let NomtStateUpdate {
+            state_accesses:
+                StateAccesses {
+                    user: user_versioned,
+                    kernel: kernel_versioned,
+                },
+            accessory: accessory_writes,
+            user,
+            kernel,
+            next_root_hash,
+            pinned_cache,
+        } = state_update;
+        let user_to_materialize = user_versioned.ordered_writes.into_iter();
+        let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter();
+        let historical_schema_batch = HistoricalStateReader::materialize_values(
+            user_to_materialize,
+            kernel_to_materialize,
+            borsh::to_vec(&next_root_hash).expect("Failed to serialize root hash"),
+            version,
+        )
+        .expect("historical state db materialization must succeed");
+        let accessory_batch = AccessoryDb::materialize_values(
+            accessory_writes
+                .ordered_writes
+                .iter()
+                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
+                .map(|(k, v_opt)| {
+                    (
+                        k.as_ref().to_vec(),
+                        v_opt.as_ref().map(|v| v.value().to_vec()),
+                    )
+                }),
+            version,
+        )
+        .expect("accessory db materialization must succeed");
+        // Erase the type of the pinned cache since the storage manager isn't aware of it.
+        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
+        NomtChangeSet {
+            state: StateFinishedSession::new(user, kernel),
+            historical_state: historical_schema_batch,
+            accessory: accessory_batch,
+            pinned_cache,
+        }
+    }
+
+    /// Materializes a state update at an explicit version.
+    ///
+    /// This is intended for offline migration tooling that updates state in-place at the
+    /// current head version instead of appending a new version.
+    pub fn materialize_changes_at_version(
+        self,
+        state_update: NomtStateUpdate<S>,
+        version: SlotNumber,
+    ) -> NomtChangeSet {
+        self.materialize_changes_with_version(state_update, version)
+    }
 }
 
 fn to_nomt_accesses<S: MerkleProofSpec>(
@@ -594,50 +660,7 @@ where
 
     fn materialize_changes(self, state_update: Self::StateUpdate) -> Self::ChangeSet {
         let next_version = self.historical_state.get_next_version();
-        tracing::trace!(%next_version, "NomtProverStorage, materializing changes");
-        let NomtStateUpdate {
-            state_accesses:
-                StateAccesses {
-                    user: user_versioned,
-                    kernel: kernel_versioned,
-                },
-            accessory: accessory_writes,
-            user,
-            kernel,
-            next_root_hash,
-            pinned_cache,
-        } = state_update;
-        let user_to_materialize = user_versioned.ordered_writes.into_iter();
-        let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter();
-        let historical_schema_batch = HistoricalStateReader::materialize_values(
-            user_to_materialize,
-            kernel_to_materialize,
-            borsh::to_vec(&next_root_hash).expect("Failed to serialize root hash"),
-            next_version,
-        )
-        .expect("historical state db materialization must succeed");
-        let accessory_batch = AccessoryDb::materialize_values(
-            accessory_writes
-                .ordered_writes
-                .iter()
-                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-                .map(|(k, v_opt)| {
-                    (
-                        k.as_ref().to_vec(),
-                        v_opt.as_ref().map(|v| v.value().to_vec()),
-                    )
-                }),
-            next_version,
-        )
-        .expect("accessory db materialization must succeed");
-        // Erase the type of the pinned cache since the storage manager isn't aware of it.
-        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
-        NomtChangeSet {
-            state: StateFinishedSession::new(user, kernel),
-            historical_state: historical_schema_batch,
-            accessory: accessory_batch,
-            pinned_cache,
-        }
+        self.materialize_changes_with_version(state_update, next_version)
     }
 
     fn open_proof(

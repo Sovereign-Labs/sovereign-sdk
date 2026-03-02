@@ -37,10 +37,10 @@ pub(crate) struct DbGroup {
 
 impl DbGroup {
     pub(crate) fn new_write(path: std::path::PathBuf) -> anyhow::Result<Self> {
-        let state_rocksdb = StateDb::get_rockbound_options().default_setup_db_in_path(&path)?;
+        let state_rocksdb = StateDb::get_rockbound_options().default_setup_db_as_subdir(&path)?;
         let accessory_rocksdb =
-            AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?;
-        let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?;
+            AccessoryDb::get_rockbound_options().default_setup_db_as_subdir(&path)?;
+        let ledger_rocksdb = LedgerDb::get_rockbound_options().default_setup_db_as_subdir(&path)?;
 
         Ok(Self {
             state: Arc::new(state_rocksdb),
