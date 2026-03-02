@@ -1,3 +1,5 @@
+# 2026-02-24 
+- #2512 adds the capability to migrate from mockDa -> Celestia to the demo rollup.
 # 2026-02-26
 - #2540 Adds a witness generation flag. If witness generation is enabled at the same time as cache pinning a panic with occur at runtime.
 

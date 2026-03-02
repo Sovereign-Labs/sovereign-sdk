@@ -9,6 +9,7 @@ use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
@@ -79,6 +80,14 @@ where
     }
 
     pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
+        self.commit_helper(group, None)
+    }
+
+    fn commit_helper(
+        &mut self,
+        group: CommitGroup,
+        expected_latest: Option<SlotNumber>,
+    ) -> anyhow::Result<()> {
         tracing::trace!("Commiting a group...");
         // The last commit had to be successful.
         let CommitGroup {
@@ -110,7 +119,22 @@ where
 
         // Flat State
         tracing::trace!("Committing Flat DB..");
-        let flat_metrics = self.flat_state.commit(historical_state)?;
+        #[cfg(feature = "migration-script")]
+        let flat_metrics = if let Some(expected_latest) = expected_latest {
+            self.flat_state
+                .commit_at_latest_checked(historical_state, expected_latest)?
+        } else {
+            self.flat_state.commit(historical_state)?
+        };
+
+        #[cfg(not(feature = "migration-script"))]
+        let flat_metrics = {
+            assert!(
+                expected_latest.is_none(),
+                "expected_latest must be none when not in migration script"
+            );
+            self.flat_state.commit(historical_state)?
+        };
 
         // Metrics
         let merklized_commit_from_caller = merklized_commit.total;
@@ -127,6 +151,23 @@ where
         self.merklized_state.send_metrics();
 
         Ok(())
+    }
+
+    #[cfg(feature = "migration-script")]
+    pub(crate) fn commit_at_latest_checked(
+        &mut self,
+        group: CommitGroup,
+        expected_latest: SlotNumber,
+    ) -> anyhow::Result<()> {
+        self.commit_helper(group, Some(expected_latest))
+    }
+
+    #[cfg(feature = "migration-script")]
+    pub(crate) fn latest_flat_state_version(&self) -> anyhow::Result<Option<SlotNumber>> {
+        Ok(self
+            .flat_state
+            .latest_version_and_root_hash_live_db()?
+            .map(|(v, _)| SlotNumber::new(v)))
     }
 
     fn validate_commit_flag_and_rollback_if_necessary(
