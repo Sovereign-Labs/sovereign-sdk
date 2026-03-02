@@ -628,6 +628,7 @@ mod tests {
         let path = tempfile::tempdir().unwrap();
         let storage_manager = NomtStorageManager::<MockDaSpec, TestHasher, _>::new(
             RollupDbConfig::default_in_path(path.path().to_path_buf()),
+            false,
         )
         .unwrap();
         known_rollup_height_state_root_on_stale_storage_with_deep_jumps::<

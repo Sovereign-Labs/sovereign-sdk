@@ -27,6 +27,60 @@ use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob
 pub use groups::PrunerJobOutput;
 pub(crate) use groups::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
+/// Controls witness generation and pinned cache for storage creation.
+///
+/// Witness generation and pinned cache are mutually exclusive: pinned cache
+/// serves reads from RAM, bypassing witness hint recording.
+pub enum WitnessMode<Cache = Box<dyn Any + Send + Sync>> {
+    /// Record witness hints for ZK proving. Pinned cache is not used.
+    On,
+    /// No witness generation. May include a pinned cache for faster reads.
+    Off {
+        #[allow(missing_docs)]
+        pinned_cache: Option<Cache>,
+    },
+}
+
+impl<Cache> WitnessMode<Cache> {
+    /// Creates a [`WitnessMode::Off`] variant with no pinned cache.
+    pub fn off() -> Self {
+        Self::Off { pinned_cache: None }
+    }
+
+    /// Returns `true` if witness generation is enabled.
+    pub fn is_witness_enabled(&self) -> bool {
+        matches!(self, Self::On)
+    }
+
+    /// Takes the pinned cache out of the `Off` variant, leaving `None` in its place.
+    /// Returns `None` if witness mode is `On` or no cache is present.
+    pub fn take_pinned_cache(&mut self) -> Option<Cache> {
+        match self {
+            Self::Off { pinned_cache } => pinned_cache.take(),
+            Self::On => None,
+        }
+    }
+
+    /// Constructs a [`WitnessMode`] from separate `with_witness` and `pinned_cache` values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `with_witness` is true and `pinned_cache` is `Some`, since pinned cache
+    /// serves reads from RAM, bypassing witness hint recording.
+    pub fn new_with_assert(with_witness: bool, pinned_cache: Option<Cache>) -> Self {
+        if with_witness {
+            assert!(
+                pinned_cache.is_none(),
+                "Pinned cache is incompatible with witness generation: pinned cache serves reads \
+                 from RAM, bypassing witness hint recording."
+            );
+            Self::On
+        } else {
+            Self::Off { pinned_cache }
+        }
+    }
+}
+
 #[allow(missing_docs)]
 pub struct StateFinishedSession {
     user: nomt::FinishedSession,
@@ -95,8 +149,8 @@ where
         state_db: NomtSessionBuilder<H, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        strict_with_witness: bool,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
     ) -> Self;
 }
 
@@ -121,6 +175,10 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     pruner_versions_to_keep: usize,
     pruner_max_batch_size: usize,
 
+    /// When true, `create_state_for` will generate witness hints for ZK proving.
+    /// This disables pinned cache since it bypasses witness recording.
+    witness_generation_enabled: bool,
+
     _phantom_s: PhantomData<S>,
 }
 
@@ -131,7 +189,11 @@ where
     S: InitializableNativeNomtStorage<H, Da::SlotHash>,
 {
     /// Create a new [` NomtStorageManager`].
-    pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
+    ///
+    /// `witness_generation` controls whether `create_state_for` will generate witness hints
+    /// for ZK proving. When enabled, pinned cache is disabled since it bypasses witness
+    /// recording.
+    pub fn new(config: RollupDbConfig, witness_generation: bool) -> anyhow::Result<Self> {
         let pruner_block_interval = config.get_pruner_interval();
         let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
         let pruner_max_batch_size = config.get_pruner_max_batch_size();
@@ -154,6 +216,7 @@ where
             pruner_block_interval,
             pruner_versions_to_keep,
             pruner_max_batch_size,
+            witness_generation_enabled: witness_generation,
             _phantom_s: Default::default(),
         })
     }
@@ -162,8 +225,8 @@ where
     fn create_state_up_to(
         &self,
         block_hash: Da::SlotHash,
-        with_witness: bool,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
         tracing::trace!(%block_hash, "Creating storage up to block hash");
         // References are in reversed chronological order,
@@ -193,8 +256,8 @@ where
             rev_references,
             &self.rockbound_snapshots,
             self.nomt_snapshots.clone(),
-            pinned_cache,
-            with_witness,
+            strict_mode,
+            witness_mode,
         )
     }
 
@@ -323,9 +386,11 @@ where
 
         // Storage created "for" a block implies node context,
         // and we expect a change set from this storage to be saved.
-        // That's why it is created in a strict mode.
+        // That's why it is created in strict mode.
         let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
-        let state = self.create_state_up_to(block_header.prev_hash(), true, pinned_cache)?;
+        let witness_mode =
+            WitnessMode::new_with_assert(self.witness_generation_enabled, pinned_cache);
+        let state = self.create_state_up_to(block_header.prev_hash(), true, witness_mode)?;
 
         Ok(state)
     }
@@ -335,19 +400,18 @@ where
         block_header: &Da::BlockHeader,
     ) -> anyhow::Result<(Self::StfState, Self::LedgerState)> {
         // Storage created "after" a block is usually used outside of the node context,
-        // So witness is not needed.
-        let with_witness = false;
+        // So neither strict mode nor witness is needed.
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
             tracing::debug!(block_header = %block_header.display(), "Creating new storage from finalized data as block header is not in the saved chain");
             self.db_group.create_storage(
                 Vec::new(),
                 &self.rockbound_snapshots,
                 self.nomt_snapshots.clone(),
-                None,
-                with_witness,
+                false,
+                WitnessMode::off(),
             )
         } else {
-            self.create_state_up_to(block_header.hash(), with_witness, None)
+            self.create_state_up_to(block_header.hash(), false, WitnessMode::off())
         }
     }
 

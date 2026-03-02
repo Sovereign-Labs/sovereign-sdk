@@ -115,7 +115,9 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
                 internal_rpc_err(error.to_string())
             }
             EthApiError::InvalidBlockCount(_) => invalid_params_rpc_err(error.to_string()),
-            EthApiError::UnknownBlock | EthApiError::UnknownTxIndex(_) => {
+            EthApiError::UnknownBlock
+            | EthApiError::UnknownTxIndex(_)
+            | EthApiError::PrunedHistoryUnavailable => {
                 rpc_error_with_code(EthRpcErrorCode::ResourceNotFound.code(), error.to_string())
             }
             // TODO(onbjerg): We rewrite the error message here because op-node does string matching
@@ -128,7 +130,6 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             ),
             EthApiError::Unsupported(msg) => internal_rpc_err(msg),
             err @ EthApiError::TransactionInputError(_) => invalid_params_rpc_err(err.to_string()),
-            EthApiError::PrunedHistoryUnavailable => rpc_error_with_code(4444, error.to_string()),
             EthApiError::Other(err) => err.to_rpc_error(),
         }
     }
@@ -156,5 +157,24 @@ where
 impl From<Infallible> for EthApiError {
     fn from(_: Infallible) -> Self {
         unreachable!()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_rpc_types::error::EthRpcErrorCode;
+
+    use super::EthApiError;
+
+    #[test]
+    fn pruned_history_maps_to_resource_not_found() {
+        let err = jsonrpsee_types::error::ErrorObject::from(EthApiError::PrunedHistoryUnavailable);
+        assert_eq!(err.code(), EthRpcErrorCode::ResourceNotFound.code());
+    }
+
+    #[test]
+    fn unknown_tx_index_maps_to_resource_not_found() {
+        let err = jsonrpsee_types::error::ErrorObject::from(EthApiError::UnknownTxIndex(7));
+        assert_eq!(err.code(), EthRpcErrorCode::ResourceNotFound.code());
     }
 }

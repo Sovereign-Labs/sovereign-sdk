@@ -113,7 +113,7 @@ fn prepare_data(size: usize, rocksdb: DB) -> TestData {
 fn bench_random_read(g: &mut BenchmarkGroup<WallTime>, size: usize) {
     let tempdir = tempfile::tempdir().unwrap();
     let state_rocksdb = StateDb::get_rockbound_options()
-        .default_setup_db_in_path(tempdir.path())
+        .default_setup_db_as_subdir(tempdir.path())
         .unwrap();
     let TestData { db, random_key, .. } = prepare_data(size, state_rocksdb);
     let version = db.last_version().unwrap();
@@ -134,7 +134,7 @@ fn bench_random_read(g: &mut BenchmarkGroup<WallTime>, size: usize) {
 fn bench_largest_read(g: &mut BenchmarkGroup<WallTime>, size: usize) {
     let tempdir = tempfile::tempdir().unwrap();
     let state_rocksdb = StateDb::get_rockbound_options()
-        .default_setup_db_in_path(tempdir.path())
+        .default_setup_db_as_subdir(tempdir.path())
         .unwrap();
     let TestData {
         db,
@@ -159,7 +159,7 @@ fn bench_largest_read(g: &mut BenchmarkGroup<WallTime>, size: usize) {
 fn bench_not_found_read(g: &mut BenchmarkGroup<WallTime>, size: usize) {
     let tempdir = tempfile::tempdir().unwrap();
     let state_rocksdb = StateDb::get_rockbound_options()
-        .default_setup_db_in_path(tempdir.path())
+        .default_setup_db_as_subdir(tempdir.path())
         .unwrap();
     let TestData {
         db,

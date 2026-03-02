@@ -151,8 +151,10 @@ where
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        witness_generation: bool,
     ) -> anyhow::Result<Self::StorageManager> {
-        self.inner.create_storage_manager(rollup_config)
+        self.inner
+            .create_storage_manager(rollup_config, witness_generation)
     }
 
     fn create_proof_sender(

@@ -9,6 +9,7 @@ use crate::evm::evm_test_helper::{
     deploy_contract_check, set_value_check, setup_with_simple_storage, EVM_EXTENSION,
 };
 use alloy_primitives::{Address, Bytes, TxHash, B256, U256, U64};
+use alloy_rpc_types_eth::TransactionRequest;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde::Serialize;
@@ -59,9 +60,14 @@ async fn storage_at(
 
 async fn eth_call_at(
     client: &SimpleStorageClient,
-    tx: impl Serialize,
+    tx: &TransactionRequest,
     block: impl Serialize,
 ) -> Bytes {
+    // This suite validates block-pinned state selection, not stale explicit-nonce handling.
+    // RPC-003 enforces nonce-too-low for explicit stale nonce in eth_call/estimate paths.
+    let mut tx = tx.clone();
+    tx.nonce = None;
+
     client
         .ws
         .request("eth_call", rpc_params![tx, block])
@@ -71,9 +77,13 @@ async fn eth_call_at(
 
 async fn estimate_gas_at(
     client: &SimpleStorageClient,
-    tx: impl Serialize,
+    tx: &TransactionRequest,
     block: impl Serialize,
 ) -> U256 {
+    // Keep estimate requests aligned with current-account nonce semantics by omitting nonce.
+    let mut tx = tx.clone();
+    tx.nonce = None;
+
     client
         .ws
         .request("eth_estimateGas", rpc_params![tx, block])

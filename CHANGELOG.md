@@ -1,7 +1,11 @@
 # 2026-02-24 
 - #2512 adds the capability to migrate from mockDa -> Celestia to the demo rollup.
+# 2026-02-26
+- #2540 Adds a witness generation flag. If witness generation is enabled at the same time as cache pinning a panic with occur at runtime.
+
 # 2026-02-23
 - #2520 reverts #2489
+- #2532 EVM: Minor fixes in RPC endpoints
 
 # 2026-02-17
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.

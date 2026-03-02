@@ -1,5 +1,4 @@
 use crate::flat_db::DbCache;
-use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
@@ -24,7 +23,9 @@ use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay, StateRootHashes};
-use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
+use crate::storage_manager::{
+    update_ledger_finalized_height, InitializableNativeNomtStorage, WitnessMode,
+};
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;
 
@@ -47,14 +48,19 @@ where
 {
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
+        let ledger_db_path = config.ledger_db_path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
         let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
         let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
-        let ledger = Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+        let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
+            LedgerDb::get_rockbound_options().default_setup_db(ledger_db_path)?
+        } else {
+            LedgerDb::get_rockbound_options().default_setup_db_as_subdir(&path)?
+        });
 
         let accessory =
-            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_as_subdir(&path)?);
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessary(
@@ -242,8 +248,8 @@ where
         relevant_snapshot_refs: Vec<K>,
         rockbound_snapshots: &HashMap<K, SnapshotGroup>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
-        with_witness: bool,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
@@ -304,8 +310,8 @@ where
             state_session_builder,
             historical_state_mapper,
             accessory_db,
-            with_witness,
-            pinned_cache,
+            strict_mode,
+            witness_mode,
         );
         Ok((storage, ledger_reader))
     }
