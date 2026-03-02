@@ -39,7 +39,7 @@ fn bench_pruner(c: &mut Criterion) {
                 let tempdir = tempfile::tempdir().unwrap();
                 let rocksdb = Arc::new(
                     AccessoryDb::get_rockbound_options()
-                        .default_setup_db_in_path(tempdir.path())
+                        .default_setup_db_as_subdir(tempdir.path())
                         .unwrap(),
                 );
 

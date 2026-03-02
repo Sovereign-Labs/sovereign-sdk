@@ -5,6 +5,7 @@ expression: config
 {
   "storage": {
     "path": "/tmp",
+    "ledger_db_path": "/tmp/ledger-db",
     "state_cache_size": null,
     "user_commit_concurrency": null,
     "user_hashtable_buckets": null,
