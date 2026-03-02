@@ -6,6 +6,7 @@ members = [
     "crates/adapters/mock-da",
     "crates/adapters/mock-zkvm",
     "scripts/switcheroo",
+    "scripts/celestia-namespace-stats",
     # Fuzzing
     "crates/fuzz",
     # Full Node

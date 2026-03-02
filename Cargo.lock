@@ -2620,6 +2620,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia-namespace-stats"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "celestia-client",
+ "celestia-types",
+ "clap",
+ "hex",
+ "tokio",
+]
+
+[[package]]
 name = "celestia-proto"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
