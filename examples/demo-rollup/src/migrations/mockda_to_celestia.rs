@@ -525,7 +525,7 @@ fn prepare_migration_session(
 
     let runtime = Runtime::<OldSpec>::default();
     let module_discriminants = ModuleDiscriminants::from_runtime(&runtime);
-    let storage_manager = MockNomtStorageManager::new(storage_config)
+    let storage_manager = MockNomtStorageManager::new(storage_config, false)
         .with_context(|| format!("failed to open storage manager at {}", db_path.display()))?;
 
     let (storage, ledger_reader) = storage_manager
