@@ -215,6 +215,7 @@ where
         with_mixed_v0_and_v1_blobs::test_case(),
         from_testnet_with_tail_padding::test_case(),
         from_mocha_shares_mismatch::test_case(),
+        from_mocha_invalid_row_proof::test_case(),
     ];
 
     for (block, rollup_params, signers) in blocks {
@@ -612,6 +613,9 @@ async fn mocha_shares_panic() -> anyhow::Result<()> {
         .await?;
 
     from_mocha_shares_mismatch::update_test_data(&client).await;
+
+    // 10207148
+    from_mocha_invalid_row_proof::update_test_data(&client).await;
 
     Ok(())
 }

@@ -31,6 +31,7 @@ sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
+sov-solana-offchain-auth = { workspace = true }
 sov-risc0-adapter = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-sp1-adapter = { workspace = true, features = ["native"] }
@@ -101,6 +102,7 @@ sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
 reth-primitives = { workspace = true, default-features = false }
 futures = { workspace = true }
+demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
 tracing-panic = { version = "0.1.2" }
 
@@ -125,6 +127,7 @@ strum = { workspace = true }
 
 reqwest = { workspace = true }
 sov-proxy-utils = { workspace = true }
+testcontainers = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -132,9 +135,9 @@ serde_json = { workspace = true, features = ["alloc"] }
 borsh = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-modules-api = { workspace = true }
-sov-mock-zkvm = { workspace = true, features = ["native"] }
-sov-mock-da = { workspace = true, features = ["native"] }
-demo-stf = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
+sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
+demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true, features = ["evm"] }
 sov-state = { workspace = true, features = ["native"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }

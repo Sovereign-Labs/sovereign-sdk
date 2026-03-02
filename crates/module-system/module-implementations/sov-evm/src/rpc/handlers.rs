@@ -265,8 +265,8 @@ where
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
-        _state_overrides: Option<StateOverride>,
-        _block_overrides: Option<Box<BlockOverrides>>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Bytes> {
         trace!(
@@ -274,16 +274,21 @@ where
             ?block_id,
             "EVM module JSON-RPC request"
         );
-        let result = self.call(request, block_id, state)?.result;
+        let result = self
+            .call(request, block_id, state_overrides, block_overrides, state)?
+            .result;
         Ok(ensure_success(result)?)
     }
 
-    /// Handler for: `eth_blockNumber`
+    /// Handler for: `eth_blockNumber`.
+    /// Returns pending block if it has any transactions.
+    /// This is in line with sovereign rollup `pending` == `latest` semantics.
     #[rpc_method(name = "eth_blockNumber")]
     pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
-        let block_number_range = self.block_numbers(state);
-        Ok(U256::from(*block_number_range.end()))
+        Ok(U256::from(
+            self.resolve_block_number(BlockNumberOrTag::Latest, state),
+        ))
     }
 
     /// Handler for: `eth_estimateGas`
@@ -293,6 +298,8 @@ where
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<U64> {
         trace!(
@@ -307,7 +314,7 @@ where
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_id, state)?;
+        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
 
         let (gas_used, logs) = match result {
             ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
@@ -319,6 +326,9 @@ where
             }
         };
 
+        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
+        // This intentionally includes override-based hypothetical state, because estimateGas
+        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
         self.db(state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");
@@ -463,17 +473,21 @@ where
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
-        let block = match self.get_maybe_synthetic_block_for_rpc(
-            Some(BlockId::Hash(block_hash.into())),
-            false.into(),
-            state,
-        ) {
-            Ok(block) => block,
-            // ByHash count endpoints return null for not found blocks.
-            Err(EthApiError::HeaderNotFound(_)) => None,
-            Err(err) => return Err(err.into()),
-        };
+        let maybe_block =
+            match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
+                Ok(block) => block,
+                // For synthetic hashes that are not in cache, this endpoint should behave
+                // like unknown block hash and return `null` instead of an RPC error.
+                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
+                Err(err) => return Err(err.into()),
+            };
 
-        Ok(block.map(|b| U64::from(b.transactions.len())))
+        Ok(maybe_block.map(|block| {
+            U64::from(
+                block
+                    .transactions_end()
+                    .saturating_sub(block.transactions_start()),
+            )
+        }))
     }
 }

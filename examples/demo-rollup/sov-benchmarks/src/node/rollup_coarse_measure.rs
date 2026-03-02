@@ -4,9 +4,9 @@ use std::default::Default;
 use std::env;
 use std::time::{Duration, Instant};
 
+use demo_stf::MultiAddressEvmSolana;
 use humantime::format_duration;
 use prettytable::{row, Table};
-use sov_address::MultiAddressEvm;
 use sov_benchmarks::node::{generate_transfers, prefill_state};
 use sov_benchmarks::{setup_with_runner_and_spec, BenchSpec, NomtBenchSpec};
 use sov_mock_da::MockDaSpec;
@@ -108,7 +108,7 @@ where
         InnerZkvm = MockZkvm,
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {

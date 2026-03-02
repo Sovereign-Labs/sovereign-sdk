@@ -2,7 +2,8 @@ use crate::evm::evm_test_helper::setup_with_simple_storage;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use crate::test_helpers::DemoRollupSpec;
 use alloy_primitives::{Address, U256};
-use sov_address::{EthereumAddress, MultiAddress};
+use demo_stf::MultiAddressEvmSolana;
+use sov_address::EthereumAddress;
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
@@ -64,7 +65,7 @@ async fn get_balances(
     test_rollup: &test_rollup::TestRollup<MockDemoRollup<Native>>,
     evm_client: &sov_eth_client::SimpleStorageClient,
 ) -> (u128, u128) {
-    let sov_to_addr = MultiAddress::Vm(EthereumAddress::new(address.0 .0));
+    let sov_to_addr = MultiAddressEvmSolana::Evm(EthereumAddress::new(address.0 .0));
 
     let token_id = config_gas_token_id();
 

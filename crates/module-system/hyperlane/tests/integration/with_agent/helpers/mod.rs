@@ -38,7 +38,7 @@ pub type PrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey
 type Container = ContainerAsync<GenericImage>;
 
 pub const FINALIZED_BLOCKS_AT_START: usize = 3;
-pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
+pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 3;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
@@ -214,9 +214,9 @@ impl HyperlaneBuilder {
         let docker_image = env::var("CUSTOM_HLP_DOCKER_IMAGE");
         let has_custom_image = !matches!(docker_image, Err(env::VarError::NotPresent));
 
-        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/integration-2025-09-17-rebase branch
+        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/sovereign-lander-integration
         let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:integration-8".into());
+            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:integration-lander-1".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));

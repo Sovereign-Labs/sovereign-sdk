@@ -1,3 +1,11 @@
+mod db_elected;
+mod replica_gets_txs_from_master;
+mod replica_partitioned_db;
+mod replica_registers_in_db;
+mod root_hash_checker;
+mod start_stop;
+mod toxi_proxy_helper;
+
 use crate::test_helpers::build_transfer_token_tx;
 use crate::test_helpers::test_genesis_source;
 use futures::stream::BoxStream;
@@ -35,12 +43,6 @@ use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::time::Duration;
 
-mod db_elected;
-mod replica_gets_txs_from_master;
-mod replica_registers_in_db;
-mod root_hash_checker;
-mod start_stop;
-
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
 const AMOUNT: u128 = 100;
@@ -77,9 +79,10 @@ async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<(
     (da_service, shutdown_sender, addr)
 }
 
-async fn start_rollup(
+async fn start_rollup_with_connection_string(
     addr: SocketAddr,
     postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
+    postgres_connection_override: Option<String>,
 ) -> TestRollup<ExternalMockDemoRollup<Native>> {
     let genesis = test_genesis_source(OperatingMode::Operator);
     RollupBuilder::new_with_external_da(
@@ -90,15 +93,35 @@ async fn start_rollup(
         postgres,
     )
     .await
-    .set_config(|c| match &mut c.sequencer_config {
-        SequencerKindConfig::Standard(_) => {}
-        SequencerKindConfig::Preferred(p) => {
-            p.num_cache_warmup_workers = 0;
+    .set_config(move |c| {
+        c.blob_processing_timeout_secs = 300;
+        match &mut c.sequencer_config {
+            SequencerKindConfig::Standard(_) => {
+                panic!("Expected preferred sequencer config");
+            }
+            SequencerKindConfig::Preferred(p) => {
+                p.num_cache_warmup_workers = 0;
+                if let Some(connection_string) = postgres_connection_override.as_ref() {
+                    p.postgres_config
+                        .as_mut()
+                        .expect(
+                            "Expected postgres config when overriding postgres connection string",
+                        )
+                        .postgres_connection_string = connection_string.clone();
+                }
+            }
         }
     })
     .start_test_rollup()
     .await
     .unwrap()
+}
+
+async fn start_rollup(
+    addr: SocketAddr,
+    postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
+) -> TestRollup<ExternalMockDemoRollup<Native>> {
+    start_rollup_with_connection_string(addr, postgres, None).await
 }
 
 async fn send_transfers(
@@ -166,7 +189,6 @@ struct NodeDiscoveryTestSetup {
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
     cluster_info_service: ClusterInfoService,
-    _temp_dir: tempfile::TempDir,
 }
 
 const MAX_AGE: Duration = Duration::from_secs(10);
@@ -191,11 +213,8 @@ impl NodeDiscoveryTestSetup {
 
         let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
 
-        let temp_dir = tempfile::tempdir().unwrap();
-        let path = temp_dir.path().join("cluster_info.txt");
-
         let cluster_info_service =
-            ClusterInfoService::spawn(postgres.connection_string(), max_age, path, None)
+            ClusterInfoService::spawn(postgres.connection_string(), max_age, None)
                 .await
                 .expect("Failed to create ClusterInfoService");
 
@@ -204,7 +223,6 @@ impl NodeDiscoveryTestSetup {
             da_shutdown,
             da_addr,
             cluster_info_service,
-            _temp_dir: temp_dir,
         })
     }
 
@@ -233,13 +251,13 @@ impl NodeDiscoveryTestSetup {
 
     async fn wait_for_root_hash_check_with_timeout(&mut self, timeout: Duration) -> RootHashCheck {
         tokio::time::timeout(timeout, async {
-            let receiver = &mut self.cluster_info_service.root_hash_checker_task.receiver;
+            let receiver = &mut self.cluster_info_service.node_checker_task.receiver;
             receiver
                 .changed()
                 .await
                 .expect("Root hash checker channel closed");
 
-            receiver.borrow_and_update().clone()
+            receiver.borrow_and_update().clone().root_hash_check
         })
         .await
         .expect("Timed out waiting for root hash checker update")

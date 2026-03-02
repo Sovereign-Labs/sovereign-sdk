@@ -28,6 +28,28 @@ pub extern crate tokio_tungstenite;
 
 pub type WsSubscription<T> = Result<BoxStream<'static, anyhow::Result<T>>, WsError>;
 
+/// Message substring returned by the sequencer when it reached the configured stop height.
+const STOP_HEIGHT_ERROR_MARKER: &[u8] = b"The preferred sequencer has reached the stop height ";
+const HTTP_4XX_STATUS_MARKER: &[u8] = b"\"status\":4";
+
+fn contains_subslice(haystack: &[u8], needle: &[u8]) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    haystack
+        .windows(needle.len())
+        .any(|window| window == needle)
+}
+
+/// Checks whether an API client error indicates that the preferred sequencer reached stop height.
+pub fn is_stop_height_error(err: &Error<types::ApiError>) -> bool {
+    matches!(
+        err,
+        Error::ErrorResponse(response)
+            if contains_subslice(response.message.as_bytes(), STOP_HEIGHT_ERROR_MARKER)
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct WsMessage<T> {
     pub id: String,
@@ -142,12 +164,19 @@ impl Client {
             .when(|err| {
                 match err {
                     Error::InvalidRequest(_) | Error::InvalidUpgrade(_) | Error::PreHookError(_) => false,
-                    Error::CommunicationError(_) | Error::ErrorResponse(_) | Error::ResponseBodyError(_) | Error::UnexpectedResponse(_) => true,
+                    Error::ErrorResponse(_) => !is_stop_height_error(err),
+                    Error::CommunicationError(_) | Error::ResponseBodyError(_) | Error::UnexpectedResponse(_) => true,
                     // This needs further improvement on the generated client.
                     // Details in https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/2799
                     Error::InvalidResponsePayload(bytes, _error) => {
-                        // All non-HTTP 4** are retried.
-                        !std::str::from_utf8(bytes.as_ref()).unwrap_or("").contains("\"status\":4")
+                        let response_body = bytes.as_ref();
+                        // We don't retry HTTP 4** errors, and we don't retry "reached the stop
+                        // height" errors since that means the rollup has shut down.
+                        let is_non_retryable = contains_subslice(
+                            response_body,
+                            STOP_HEIGHT_ERROR_MARKER,
+                        ) || contains_subslice(response_body, HTTP_4XX_STATUS_MARKER);
+                        !is_non_retryable
                     }
                 }
             })

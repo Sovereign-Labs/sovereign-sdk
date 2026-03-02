@@ -1,5 +1,4 @@
 use crate::flat_db::DbCache;
-use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
@@ -23,7 +22,9 @@ use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay, StateRootHashes};
-use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
+use crate::storage_manager::{
+    update_ledger_finalized_height, InitializableNativeNomtStorage, WitnessMode,
+};
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;
 
@@ -201,8 +202,8 @@ where
         relevant_snapshot_refs: Vec<K>,
         rockbound_snapshots: &HashMap<K, SnapshotGroup>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
-        with_witness: bool,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
@@ -263,8 +264,8 @@ where
             state_session_builder,
             historical_state_mapper,
             accessory_db,
-            with_witness,
-            pinned_cache,
+            strict_mode,
+            witness_mode,
         );
         Ok((storage, ledger_reader))
     }

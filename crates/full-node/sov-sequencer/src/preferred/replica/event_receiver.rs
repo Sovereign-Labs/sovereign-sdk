@@ -14,7 +14,7 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
 
-const MAX_DB_ERRORS_ALLOWED: u32 = 10;
+const MAX_DB_ERRORS_ALLOWED: u32 = 20;
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum EventReceiverError {
@@ -161,7 +161,7 @@ impl EventReceiver {
                 panic!("Failed to listen on events_changes channel: {e:?}. Replica shutting down.");
             }
 
-            debug!("Relica event receiver started.");
+            debug!("Replica event receiver started.");
             loop {
                 let fut = future_or_shutdown(
                     self.fetch_data(start_event_id, prev_event_type, &mut listener),

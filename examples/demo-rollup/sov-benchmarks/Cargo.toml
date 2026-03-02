@@ -28,7 +28,7 @@ sov-metrics = { workspace = true, default-features = false }
 
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 
-demo-stf = { workspace = true, features = ["test-utils"] }
+demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
 reqwest = { workspace = true, features = ["rustls-tls", "stream"], default-features = false }
 
 sov-risc0-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }

@@ -323,7 +323,7 @@ where
     }
 
     async fn produce_batch(&self) -> anyhow::Result<Option<WithCachedTxHashes<Vec<FullyBakedTx>>>> {
-        tracing::debug!("`produce_batch` has been called");
+        tracing::trace!("`produce_batch` has been called");
         let mut inner = self.inner.lock().await;
 
         // We already have a batch assembled. We'll wait until it's popped
@@ -351,10 +351,12 @@ where
             let mut txs = Vec::new();
 
             let count_before = mempool.len();
-            tracing::debug!(
-                txs_count = count_before,
-                "Going to build batch from transactions in mempool"
-            );
+            if count_before > 0 {
+                tracing::debug!(
+                    txs_count = count_before,
+                    "Going to build batch from transactions in mempool"
+                );
+            }
 
             let mut cursor = self.mempool_cursor(&ctx);
 

@@ -3,12 +3,42 @@
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+# 2026-02-26
+- #2540 Adds a witness generation flag. If witness generation is enabled at the same time as cache pinning a panic with occur at runtime.
+
+# 2026-02-23
+- #2520 reverts #2489
+- #2532 EVM: Minor fixes in RPC endpoints
+
+# 2026-02-17
+- #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
+  You can use `SOV_CELESTIA_RPC_URL` for setup.
+- #2500 EVM: Fixes the nonce used for simulation endpoints
+- #2499 EVM: Add block-pinned state isolation tests for all 6 RPC endpoints
+- #2495 Updates examples configs
+
+# 2026-02-09
+- #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+- #2458 **Infra only breaking change**: for EVM rollups only: added new constant `EVM_RECEIPT_ACTUAL_FEE_HEIGHT` that should be set to 0 for new rollups, or some future height for existing rollups.
 
 # 2026-01-29
 - #2418 **Breaking change**: StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
 
 # 2026-02-10
 - #2462 EVM: Include `base_fee` in Transaction RPC response.
+# 2026-02-12
+- #2476 EVM: Fix `eth_getBlockByNumber` to return correct the same block as `eth_getBlockByNumnber(latest)` for RPC cross endpoint consistency
+- #2463 **Breaking change**: EVM now returns actual non-zero value for BASEFEE opcode.
+  Any EVM rollup that had transactions that relied on this opcode will have consensus breaking change.
+# 2026-02-10
+- #2462 EVM: Include `base_fee` in Transaction RPC response.
+- #2460 Internal sov-demo-rollup updates to support Solana-based signing. Can be used as an example of integrating combined Solana and Ethereum authentication into a single rollup.
+
+# 2026-02-09
+- #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+
+# 2026-01-29
+- #2418 **Breaking change** = StandardSchemaEndpoint's constructor now requires a state checkpoint receiver. This PR adds chain hash override support in `constants.toml` for non-breaking schema upgrades. Overrides specify height ranges with optional grace periods where both old and new hashes are accepted. The `/rollup/schema` endpoint now dynamically returns the correct chain hash for the current height.
 
 # 2026-02-03
 - #2391 EVM: Add RPC compatibility tests for eth_getBlockByNumber and eth_getBlockByHash
@@ -32,6 +62,7 @@
 
 # 2026-01-24
 - #2397: ***Breaking Change*** adds `Sync` bound on module event types. Major rework of "pending" block handling. Now we treat each new EVM transaction as creating a new head block (rather than a pending block) and then getting reorged when the next tx is added. 
+- #2395: Adds tests for `eth_getTransactionCount`
 
 # 2026-01-20
 - #2379 EVM: Add EIP-1898 BlockId support for JSON-RPC endpoints.
@@ -196,6 +227,7 @@ The purpose of this change is to enable rollups to accept transactions signed wi
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
         This was done because there's no guarantees that any field will remain common across all transaction versions (which was the original motiviation for this design).
+- #1916 Changes demo-rollup to use NOMT storage by default.
 
 # 2025-10-16
 - #1878 Add EVM logs soak test

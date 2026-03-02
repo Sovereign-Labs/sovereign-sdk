@@ -1,6 +1,26 @@
 import { SovereignClient } from "@sovereign-sdk/web3";
+import { bech32m } from "bech32";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Bank } from "./bank";
+import { Bank, getTokenId } from "./bank";
+
+describe("getTokenId", () => {
+  it("should match the Rust get_token_id output", () => {
+    // sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv decodes to [11; 28]
+    const originator = new Uint8Array(28).fill(11);
+    const tokenName = "test-token";
+    const decimals = 6;
+
+    const tokenId = getTokenId(originator, tokenName, decimals);
+
+    // Expected token ID from Rust: token_1em6nucpnzadj2zyvdg6yk5rt754kdy07d4qv764mc44hfp30a5rq0539v4
+    const expected = bech32m.decode(
+      "token_1em6nucpnzadj2zyvdg6yk5rt754kdy07d4qv764mc44hfp30a5rq0539v4",
+    );
+    const expectedBytes = new Uint8Array(bech32m.fromWords(expected.words));
+
+    expect(tokenId).toEqual(expectedBytes);
+  });
+});
 
 describe("Bank", () => {
   let mockRollup: any;

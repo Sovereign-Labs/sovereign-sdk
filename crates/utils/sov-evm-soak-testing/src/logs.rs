@@ -47,7 +47,14 @@ pub async fn run_logs_test(
             )
         }
         LogsRetrievalMode::WithCursor => {
-            let from_block = root_client.get_block_number().await?;
+            // Intentionally start from the current head (pending when present, otherwise latest sealed)
+            // to avoid scanning historical logs while workers are producing new ones.
+            let from_block = root_client
+                .get_block_by_number(BlockNumberOrTag::Pending)
+                .await?
+                .expect("head block should exist")
+                .header
+                .number;
             try_join!(
                 produce_logs(rpc_url, private_key, num_workers, tx_count, logs_per_tx),
                 retrieve_logs(root_client, from_block)

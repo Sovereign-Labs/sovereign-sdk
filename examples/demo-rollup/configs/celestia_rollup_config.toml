@@ -2,7 +2,7 @@
 # The address of the Celestia RPC server to interact with.
 # Example for local: ws://127.0.0.1:26658
 # Example for QuickNode: wss://a-b-c.celestia-mocha.quiknode.pro/YOUR_ENDPOINT_ID
-# Default value: ws://127.0.0.1:26658
+# Required. If not specified in the config, it must be provided via `SOV_CELESTIA_RPC_URL`.
 rpc_url = "ws://127.0.0.1:26658"
 
 # JWT token for RPC server.
@@ -12,6 +12,7 @@ rpc_url = "ws://127.0.0.1:26658"
 
 # The address of the Celestia gRPC server for submitting blobs.
 # Example: http://127.0.0.1:9090
+# If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_URL` environment variable.
 # Optional. Set only if DaService needs to submit blobs.
 grpc_url = "http://127.0.0.1:9090"
 
@@ -85,7 +86,13 @@ backoff_max_times = 10
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
-state_cache_size = 4294967296 # 4GB. Default is 1GB.
+state_cache_size = 4294967296 # 4 GiB. Default is 1 GiB.
+user_commit_concurrency = 4 # Number of concurrent commit workers for user state
+user_hashtable_buckets = 1_000_000 # Expected state size, cannot be changed after creation
+user_preallocate_ht = false
+kernel_commit_concurrency = 2 # Number of concurrent commit workers for kernel state
+pruner_block_interval = 100 # How often to run pruner measured by DA blocks
+pruner_versions_to_keep = 20 # Number of versions available for historical querying
 
 [runner]
 # 3 times per regular celestia block
@@ -94,7 +101,7 @@ da_polling_interval_ms = 2_000
 [runner.http_config]
 bind_host = "127.0.0.1"
 bind_port = 12346
-# In case the rollup is running behind a proxy
+# The fully qualified public name of the server, in case the rollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
 
 [monitoring]
@@ -109,7 +116,7 @@ telegraf_address = "udp://127.0.0.1:8094"
 # How many metrics are allowed to be in pending state, before new metrics will be dropped.
 # This is a number of metrics, not serialized bytes.
 # The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
-# max_pending_metrics = 100
+# max_pending_metrics = 1000
 
 [proof_manager]
 aggregated_proof_block_jump = 10

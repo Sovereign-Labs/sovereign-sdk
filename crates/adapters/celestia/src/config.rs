@@ -9,7 +9,9 @@ use std::fmt;
 pub struct CelestiaConfig {
     /// The address of the Celestia RPC server
     /// For example: ws://localhost:26658
-    #[serde(default = "default_rpc_addr", alias = "celestia_rpc_address")]
+    /// Required. If not specified in the config, will be pulled from `SOV_CELESTIA_RPC_URL`.
+    /// Client construction fails if both are missing.
+    #[serde(default = "default_rpc_url_from_env", alias = "celestia_rpc_address")]
     pub rpc_url: String,
     /// JWT token for RPC server.
     /// If not specified in the config will be pulled from `SOV_CELESTIA_RPC_AUTH_TOKEN`
@@ -19,8 +21,10 @@ pub struct CelestiaConfig {
     pub rpc_auth_token: Option<String>,
 
     /// The address of the Celestia gRPC server, for example, http://localhost:9090
+    /// If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_URL`.
     /// Optional.
     /// Set only if DaService needs to submit blobs.
+    #[serde(default = "default_grpc_url")]
     pub grpc_url: Option<String>,
 
     /// The token for accessing Celestia gRPC server.
@@ -176,20 +180,24 @@ impl CelestiaConfig {
     }
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
+        validate_rpc_url(&self.rpc_url)?;
+
         let api_request_timeout =
             std::time::Duration::from_secs(self.api_request_timeout_secs.get());
         let mut builder = celestia_client::Client::builder()
             .rpc_url(&self.rpc_url)
             .timeout(api_request_timeout);
+
         if let Some(rpc_auth_token) = &self.rpc_auth_token {
             builder = builder.rpc_auth_token(rpc_auth_token);
         }
         // Submission section.
         if let Some(grpc_url) = &self.grpc_url {
-            builder = builder.grpc_url(grpc_url);
+            let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
-                builder = builder.grpc_metadata("x-token", grpc_auth_token);
+                endpoint = endpoint.metadata("x-token", grpc_auth_token);
             }
+            builder = builder.grpc_endpoint(endpoint);
             if let Some(signer_key_hex) = &self.signer_private_key {
                 builder = builder.private_key_hex(signer_key_hex);
             }
@@ -202,8 +210,20 @@ pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
-fn default_rpc_addr() -> String {
-    "ws://localhost:26658".into()
+fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
+    if rpc_url.trim().is_empty() {
+        anyhow::bail!("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`");
+    }
+
+    Ok(())
+}
+
+fn default_rpc_url_from_env() -> String {
+    std::env::var("SOV_CELESTIA_RPC_URL").unwrap_or_default()
+}
+
+fn default_grpc_url() -> Option<String> {
+    std::env::var("SOV_CELESTIA_GRPC_URL").ok()
 }
 
 fn default_rpc_auth_token() -> Option<String> {
@@ -271,4 +291,107 @@ pub(crate) fn default_tx_status_polling_millis() -> u64 {
 
 pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
     30
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{validate_rpc_url, CelestiaConfig};
+
+    const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
+    const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
+
+    struct EnvVarGuard {
+        key: &'static str,
+        previous_value: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: Option<&str>) -> Self {
+            let previous_value = std::env::var(key).ok();
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+            Self {
+                key,
+                previous_value,
+            }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            match &self.previous_value {
+                Some(previous_value) => std::env::set_var(self.key, previous_value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    fn deserialize_config(json: &str) -> Result<CelestiaConfig, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+
+    #[test]
+    fn rpc_url_is_read_from_env_when_missing_from_config() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.rpc_url, "ws://env-rpc:26658");
+    }
+
+    #[test]
+    fn rpc_url_validation_fails_when_missing_from_config_and_env() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, None);
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        let error = validate_rpc_url(&config.rpc_url).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn explicit_rpc_url_overrides_env() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config(r#"{"rpc_url":"ws://config-rpc:26658"}"#).unwrap();
+        assert_eq!(config.rpc_url, "ws://config-rpc:26658");
+    }
+
+    #[test]
+    fn grpc_url_is_read_from_env_when_missing_from_config() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, Some("http://env-grpc:9090"));
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.grpc_url.as_deref(), Some("http://env-grpc:9090"));
+    }
+
+    #[test]
+    fn grpc_url_is_none_when_missing_from_config_and_env() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.grpc_url, None);
+    }
+
+    #[test]
+    fn explicit_grpc_url_overrides_env() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, Some("http://env-grpc:9090"));
+
+        let config = deserialize_config(
+            r#"{"rpc_url":"ws://config-rpc:26658","grpc_url":"http://config-grpc:9090"}"#,
+        )
+        .unwrap();
+        assert_eq!(config.grpc_url.as_deref(), Some("http://config-grpc:9090"));
+    }
 }

@@ -1,6 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
-use sov_address::MultiAddressEvm;
+use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
 use sov_demo_rollup::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     let _otel_guard = initialize_logging();
     let args = Args::parse();
 
-    let rollup_config: RollupConfig<MultiAddressEvm, CelestiaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, CelestiaService> =
         from_toml_path(&args.rollup_config_path).with_context(|| {
             format!(
                 "Failed to read rollup configuration from {}",

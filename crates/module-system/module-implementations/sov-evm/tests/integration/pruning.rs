@@ -56,7 +56,7 @@ fn test_pruning() {
                 check_blocks(0, block_number, &evm, state);
 
                 for index in 0..block_number * TX_COUNT_PER_BLOCK {
-                    check_transaction(index, &evm, state);
+                    assert!(check_transaction(index, &evm, state).is_some());
                 }
             }),
         });
@@ -71,7 +71,7 @@ fn test_pruning() {
 
             // Since the genesis block had no transactions, none were removed.
             for index in 0..(block_pruning_threshold - 1) * TX_COUNT_PER_BLOCK {
-                check_transaction(index, &evm, state);
+                assert!(check_transaction(index, &evm, state).is_some());
             }
         }),
     });
@@ -90,17 +90,74 @@ fn test_pruning() {
             for _ in 0..TX_COUNT_PER_BLOCK {
                 assert!(evm.transaction(index, state).is_none());
                 assert!(evm.receipt(index, state).is_none());
+                index += 1;
             }
 
             // Transactions for all the other blocks are still in the state.
-            for _ in TX_COUNT_PER_BLOCK..block_pruning_threshold * TX_COUNT_PER_BLOCK + 1 {
-                check_transaction(index, &evm, state);
+            for _ in TX_COUNT_PER_BLOCK..(block_pruning_threshold - 1) * TX_COUNT_PER_BLOCK + 1 {
+                assert!(check_transaction(index, &evm, state).is_some());
                 index += 1;
             }
 
             // There are no additional transactions
             assert!(evm.transaction(index, state).is_none());
             assert!(evm.receipt(index, state).is_none());
+        }),
+    });
+}
+
+#[test]
+fn test_pruning_tolerates_missing_receipt_fees() {
+    // Adjust the global variables to speed up the test.
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_BLOCK_PRUNING_THRESHOLD", "5");
+    let block_pruning_threshold = config_value!("EVM_BLOCK_PRUNING_THRESHOLD");
+
+    let (mut runner, from, to, _) = setup();
+    let value = 1;
+    let mut nonce = 0;
+
+    // Fill enough blocks to start pruning.
+    for _ in 1..block_pruning_threshold {
+        let transfer_tx = create_transfer_tx(nonce, &from, &to, value).tx;
+        nonce += 1;
+
+        runner.execute_batch(BatchTestCase {
+            input: vec![transfer_tx].into(),
+            assert: Box::new(move |_ctx, _state| {}),
+        });
+    }
+
+    // Evict genesis block and then remove one receipt_fees entry to simulate
+    // transactions that were stored before the accessory map was introduced.
+    let evm = Evm::<S>::default();
+    runner.execute_batch(BatchTestCase {
+        input: vec![].into(),
+        assert: Box::new(move |_ctx, state| {
+            check_blocks(1, block_pruning_threshold, &evm, state);
+
+            assert!(evm.transaction(0, state).is_some());
+            assert!(evm.receipt(0, state).is_some());
+            assert!(evm.receipt_fee(0, state).is_some());
+
+            let removed = evm.receipt_fees.remove(&0, state).unwrap_infallible();
+            assert!(removed.is_some());
+            assert!(evm.receipt_fee(0, state).is_none());
+        }),
+    });
+
+    // Prune the first non-empty block. This used to panic because prune_tx
+    // expected receipt_fees to always exist.
+    let evm = Evm::<S>::default();
+    let transfer_tx = create_transfer_tx(nonce, &from, &to, value).tx;
+    runner.execute_batch(BatchTestCase {
+        input: vec![transfer_tx].into(),
+        assert: Box::new(move |_ctx, state| {
+            check_blocks(2, block_pruning_threshold + 1, &evm, state);
+
+            // First non-empty block was pruned.
+            assert!(evm.transaction(0, state).is_none());
+            assert!(evm.receipt(0, state).is_none());
+            assert!(evm.receipt_fee(0, state).is_none());
         }),
     });
 }

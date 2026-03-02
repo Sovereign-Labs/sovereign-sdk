@@ -21,7 +21,6 @@ use crate::{SequencerNotReadyDetails, TxHash};
 pub(crate) use inner::*;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_db::ledger_db::LedgerDb;
 use sov_full_node_configs::sequencer::{PreferredSequencerConfig, SequencerConfig};
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::GasArray;
@@ -150,7 +149,6 @@ impl<S: Spec, Rt: Runtime<S>> Message<S, Rt> {
 
 pub(crate) fn create<S, Rt>(
     seq_role: SequencerRole,
-    api_ledger_db: LedgerDb,
     latest_info: StateUpdateInfo<S::Storage>,
     tx_queue_id: Arc<AtomicU64>,
     batch_execution_time_limit_micros: u64,
@@ -186,7 +184,6 @@ where
 
     let inner = Inner {
         seq_role,
-        api_ledger_db,
         executor: RollupBlockExecutor::new(
             &latest_info,
             rollup_exec_config.clone(),

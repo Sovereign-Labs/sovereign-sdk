@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::sov_paymaster::PaymasterConfig;
 use demo_stf::genesis_config::EvmGenesisConfig;
 use demo_stf::runtime::{GenesisConfig, Runtime};
-use sov_address::MultiAddressEvm;
+use demo_stf::MultiAddressEvmSolana;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
@@ -43,7 +43,7 @@ pub mod bench_runner;
 pub mod bench_generator;
 
 /// [`ConfigurableSpec`] with [`MockDaSpec`] and a custom inner vm
-pub type BenchSpec<Vm> = ConfigurableSpec<MockDaSpec, Vm, MockZkvm, MultiAddressEvm, Native>;
+pub type BenchSpec<Vm> = ConfigurableSpec<MockDaSpec, Vm, MockZkvm, MultiAddressEvmSolana, Native>;
 /// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`Risc0`] inner vm
 pub type BenchRisc0Spec = BenchSpec<Risc0>;
 /// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`SP1`] inner vm
@@ -54,7 +54,7 @@ pub type NomtBenchSpec = ConfigurableSpec<
     MockDaSpec,
     MockZkvm,
     MockZkvm,
-    MultiAddressEvm,
+    MultiAddressEvmSolana,
     Native,
     <<MockZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec,
     NomtProverStorage<
@@ -87,7 +87,7 @@ pub fn setup<S, Vm>(
     inner_code_commitment: <Vm::Verifier as ZkVerifier>::CodeCommitment,
 ) -> (GenesisConfig<S>, Roles<S>)
 where
-    S: Spec<InnerZkvm = Vm, OuterZkvm = MockZkvm, Da = MockDaSpec, Address = MultiAddressEvm>,
+    S: Spec<InnerZkvm = Vm, OuterZkvm = MockZkvm, Da = MockDaSpec, Address = MultiAddressEvmSolana>,
     Vm: Zkvm,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
 {
@@ -169,7 +169,7 @@ where
         InnerZkvm = Vm,
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
@@ -198,7 +198,7 @@ where
         InnerZkvm = Vm,
         OuterZkvm = MockZkvm,
         Da = MockDaSpec,
-        Address = MultiAddressEvm,
+        Address = MultiAddressEvmSolana,
         Storage = Sm::Storage,
     >,
 {
