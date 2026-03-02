@@ -47,14 +47,19 @@ where
 {
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
+        let ledger_db_path = config.ledger_db_path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
         let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
         let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
-        let ledger = Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+        let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
+            LedgerDb::get_rockbound_options().default_setup_db(ledger_db_path)?
+        } else {
+            LedgerDb::get_rockbound_options().default_setup_db_as_subdir(&path)?
+        });
 
         let accessory =
-            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_as_subdir(&path)?);
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessary(

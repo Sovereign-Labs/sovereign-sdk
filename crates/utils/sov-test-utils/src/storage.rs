@@ -55,10 +55,10 @@ impl<S: MerkleProofSpec> SimpleJmtStorageManager<S> {
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
         let state_rocksdb = StateDb::get_rockbound_options()
-            .default_setup_db_in_path(dir.path())
+            .default_setup_db_as_subdir(dir.path())
             .unwrap();
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
-            .default_setup_db_in_path(dir.path())
+            .default_setup_db_as_subdir(dir.path())
             .unwrap();
         Self {
             state: Arc::new(state_rocksdb),
@@ -126,7 +126,7 @@ impl SimpleLedgerStorageManager {
     /// Initialize a new instance in the given path.
     pub fn new(path: impl AsRef<std::path::Path>) -> Self {
         let db = LedgerDb::get_rockbound_options()
-            .default_setup_db_in_path(path.as_ref())
+            .default_setup_db_as_subdir(path.as_ref())
             .unwrap();
         Self { db: Arc::new(db) }
     }
@@ -177,7 +177,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             .expect("Failed to initialize StateDb for NOMT");
         let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
-            .default_setup_db_in_path(dir.path())
+            .default_setup_db_as_subdir(dir.path())
             .unwrap();
 
         Self {
