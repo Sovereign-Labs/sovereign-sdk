@@ -25,6 +25,7 @@ mod genesis;
 
 pub use gas::{NonZeroRatio, NonZeroRatioConversionError};
 pub use genesis::*;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::OperatingMode;
 use sov_modules_api::{HDTimestamp, TxState};
 
@@ -374,11 +375,16 @@ impl<S: Spec> ChainState<S> {
     /// Updates the oracle time using sequencer-provided sequencing metadata.
     ///
     /// This method is best-effort: invalid, overflowing, or regressing timestamps are ignored.
+    /// Before the `ENABLE_TIMESTAMP_ORACLE_AT` height, this is a no-op.
     pub fn update_oracle_time_from_sequencing_data(
         &mut self,
         timestamp: HDTimestamp,
         state: &mut impl TxState<S>,
     ) -> anyhow::Result<()> {
+        if state.rollup_height_to_access().get() < config_value!("ENABLE_TIMESTAMP_ORACLE_AT") {
+            return Ok(());
+        }
+
         let nanos = timestamp.as_nanos();
         let millis = nanos / NANOS_PER_MILLI;
         if millis > i64::MAX as u128 {
