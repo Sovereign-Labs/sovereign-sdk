@@ -11,6 +11,7 @@ use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::get_cfg_env;
+use crate::fee_activation::should_project_from_actual_fee;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
@@ -1165,12 +1166,12 @@ fn maybe_actual_effective_gas_price(
     gas_used: u64,
     fee_paid: Option<Amount>,
 ) -> Option<u128> {
-    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
-    if block_number <= apply_actual_fee_after_height || gas_used == 0 {
+    if !should_project_from_actual_fee(block_number, fee_paid, gas_used) {
         return None;
     }
 
-    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+    let fee_paid = fee_paid.expect("fee_paid must be present when projection guard passes");
+    Some(fee_paid.0 / u128::from(gas_used))
 }
 
 // modified from: https://github.com/paradigmxyz/reth many times

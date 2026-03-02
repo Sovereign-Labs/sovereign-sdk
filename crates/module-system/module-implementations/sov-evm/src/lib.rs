@@ -8,6 +8,7 @@ mod db;
 mod evm;
 #[cfg(feature = "native")]
 pub mod execution_config;
+mod fee_activation;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]

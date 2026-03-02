@@ -12,7 +12,7 @@ use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_metrics::{save_elapsed, start_timer};
-use sov_modules_api::macros::{config_value, serialize, UniversalWallet};
+use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Context, GasInfo, GasSpec, Spec, StateAccessor, TxState};
 #[cfg(feature = "native")]
@@ -413,21 +413,16 @@ where
             .expect("gas_to_charge_per_evm_gas() should not be zero")
     }
 
-    fn should_project_receipt_from_actual_fee(block_number: u64) -> bool {
-        let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
-        block_number > apply_actual_fee_after_height
-    }
-
     fn project_receipt_gas_from_actual_fee(
         receipt: &Receipt,
         gas_info: &GasInfo<S::Gas>,
     ) -> anyhow::Result<Option<ProjectedReceiptGas>> {
         let tx_fee_paid = gas_info.gas_value;
-        if !Self::should_project_receipt_from_actual_fee(receipt.block_number) {
-            return Ok(None);
-        }
-
-        if tx_fee_paid == sov_bank::Amount::ZERO {
+        if !crate::fee_activation::should_project_from_actual_fee(
+            receipt.block_number,
+            Some(tx_fee_paid),
+            receipt.gas_used,
+        ) {
             return Ok(None);
         }
 
