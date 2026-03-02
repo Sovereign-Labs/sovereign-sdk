@@ -3,13 +3,13 @@
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
-use sp1_sdk::blocking::{Prover, ProverClient};
-use sp1_sdk::{HookEnv, SP1Stdin};
+use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
+use sp1_sdk::{ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
 #[cfg(feature = "bench")]
-fn cycle_count_hook(_env: HookEnv, _buf: &[u8]) -> Vec<Vec<u8>> {
+fn cycle_count_hook(_env: sp1_sdk::HookEnv, _buf: &[u8]) -> Vec<Vec<u8>> {
     // TODO: HookEnv is an empty struct in V6, so we can't access runtime.report.
     // Return 0 as a placeholder — benchmarking is not correctness-critical.
     vec![Vec::from(0u64.to_le_bytes())]
@@ -65,11 +65,7 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let prover = if cfg!(debug_assertions) {
-            ProverClient::builder().mock().build()
-        } else {
-            ProverClient::builder().cpu().build()
-        };
+        let prover = ProverClient::from_env();
         let proof = if with_proof {
             let pk = prover
                 .setup(self.elf.into())
@@ -81,6 +77,7 @@ impl ZkvmHost for SP1Host<'static> {
             Proof::Full(output.proof)
         } else {
             let prover = ProverClient::builder().mock().build();
+            #[allow(unused_mut)]
             let mut execute_request = prover.execute(self.elf.into(), self.stdin.clone());
             #[cfg(feature = "bench")]
             {
@@ -104,6 +101,6 @@ impl ZkvmHost for SP1Host<'static> {
         let pk = sp1_sdk::blocking::ProverClient::from_env()
             .setup(self.elf.into())
             .expect("SP1 setup failed");
-        crate::SP1MethodId(bincode::serialize(&pk.vk).unwrap())
+        crate::SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap())
     }
 }
