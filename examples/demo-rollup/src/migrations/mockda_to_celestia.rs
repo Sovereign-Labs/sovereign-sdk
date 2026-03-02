@@ -83,7 +83,7 @@ struct Args {
         long = "celestia-height-at-cutover",
         visible_alias = "cutover-celestia-height"
     )]
-    celestia_height_at_cutover: Option<u64>,
+    celestia_height_at_cutover: u64,
 
     /// If present, non-`AuthorizedSequencers::All` paymaster policies are deleted.
     /// Otherwise, migration fails if any non-`All` policies are found.
@@ -558,19 +558,14 @@ fn resolve_cutover_calibration(
     db_head_rollup_slot: Option<u64>,
     notes: &mut Vec<String>,
 ) -> anyhow::Result<CutoverCalibration> {
-    let Some(celestia_height_at_cutover) = args.celestia_height_at_cutover else {
-        bail!("--celestia-height-at-cutover is required for migration calibration");
-    };
+    let celestia_height_at_cutover = args.celestia_height_at_cutover;
 
     let (rollup_slot_at_cutover, rollup_slot_at_cutover_source) =
         if let Some(explicit_slot) = args.rollup_slot_at_cutover {
             (explicit_slot, "explicit-arg".to_string())
         } else {
-            let resolved_slot = db_head_rollup_slot.ok_or_else(|| {
-                anyhow::anyhow!(
-                "--rollup-slot-at-cutover-from-db was requested, but DB head slot is unavailable"
-            )
-            })?;
+            let resolved_slot = db_head_rollup_slot
+                .ok_or_else(|| anyhow::anyhow!("DB head slot is unavailable"))?;
             notes.push(format!(
                 "resolved cutover rollup slot from DB head slot: {resolved_slot}"
             ));
