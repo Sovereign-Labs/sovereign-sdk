@@ -96,8 +96,9 @@ impl ZkVerifier for SP1Verifier {
         let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
 
         let prover = sp1_sdk::blocking::ProverClient::from_env();
-        let verifying_key = bincode::deserialize(&code_commitment.0)?;
-        prover.verify(&proof, &verifying_key, None)?;
+        let verifying_key: sp1_sdk::SP1VerifyingKey =
+            bincode::deserialize(&code_commitment.0)?;
+        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
 
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
@@ -161,6 +162,7 @@ mod tests {
     fn test_sp1_method_id_codec_roundtrip() {
         use sov_rollup_interface::zk::CodeCommitment;
         use sp1_sdk::blocking::{Prover, ProverClient};
+        use sp1_sdk::ProvingKey;
 
         use crate::SP1MethodId;
 
@@ -168,7 +170,7 @@ mod tests {
 
         let prover = ProverClient::builder().mock().build();
         let pk = prover.setup(ELF.into()).unwrap();
-        let method_id = SP1MethodId(bincode::serialize(&pk.vk).unwrap());
+        let method_id = SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap());
         let encoded = method_id.encode();
         let decoded = SP1MethodId::decode(&encoded).unwrap();
 
