@@ -31,7 +31,7 @@ risc0-zkvm = { workspace = true, default-features = false, features = [
     "std",
 ], optional = true }
 risc0-zkvm-platform = { workspace = true, features = ["export-syscalls"], optional = true }
-sp1-lib = { version = "5.0.8", default-features = false, optional = true }
+sp1-lib = { version = "6.0.2", default-features = false, optional = true }
 
 chrono = { workspace = true, optional = true }
 

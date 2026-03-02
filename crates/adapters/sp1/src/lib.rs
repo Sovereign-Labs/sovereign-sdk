@@ -13,7 +13,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
 #[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::{ProverClient, SP1ProofWithPublicValues};
+use sp1_sdk::SP1ProofWithPublicValues;
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -95,9 +95,9 @@ impl ZkVerifier for SP1Verifier {
     ) -> Result<T, Self::Error> {
         let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
 
-        let prover = ProverClient::from_env();
+        let prover = sp1_sdk::blocking::ProverClient::from_env();
         let verifying_key = bincode::deserialize(&code_commitment.0)?;
-        prover.verify(&proof, &verifying_key)?;
+        prover.verify(&proof, &verifying_key, None)?;
 
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
@@ -160,15 +160,15 @@ mod tests {
     #[test]
     fn test_sp1_method_id_codec_roundtrip() {
         use sov_rollup_interface::zk::CodeCommitment;
-        use sp1_sdk::{Prover, ProverClient};
+        use sp1_sdk::blocking::{Prover, ProverClient};
 
         use crate::SP1MethodId;
 
-        const ELF: &[u8] = include_bytes!("../test_data/riscv32im-succinct-zkvm-elf");
+        const ELF: &[u8] = include_bytes!("../test_data/riscv64im-succinct-zkvm-elf");
 
         let prover = ProverClient::builder().mock().build();
-        let (_, vk) = prover.setup(ELF);
-        let method_id = SP1MethodId(bincode::serialize(&vk).unwrap());
+        let pk = prover.setup(ELF.into()).unwrap();
+        let method_id = SP1MethodId(bincode::serialize(&pk.vk).unwrap());
         let encoded = method_id.encode();
         let decoded = SP1MethodId::decode(&encoded).unwrap();
 
