@@ -269,8 +269,8 @@ where
             Vec::new(),
             &self.rockbound_snapshots,
             self.nomt_snapshots.clone(),
-            None,
             true,
+            WitnessMode::off(),
         )
     }
 
