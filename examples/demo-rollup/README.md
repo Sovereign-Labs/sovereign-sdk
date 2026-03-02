@@ -122,7 +122,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0xa7b15031b1be61a33ee4127bad4740b9822a674c9926409daef1cdd44ee46be0/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x5dd7cb7f1ed786a5f3275fa597f12ec0cd0748d7298cf7ba16c3ea9c353dd4fd/events | jq
 [
   {
     "type": "event",
@@ -156,7 +156,7 @@ $ curl -sS http://127.0.0.1:12346/ledger/txs/0xa7b15031b1be61a33ee4127bad4740b98
       "type": "moduleRef",
       "name": "Bank"
     },
-    "tx_hash": "0xa7b15031b1be61a33ee4127bad4740b9822a674c9926409daef1cdd44ee46be0"
+    "tx_hash": "0x5dd7cb7f1ed786a5f3275fa597f12ec0cd0748d7298cf7ba16c3ea9c353dd4fd"
   }
 ]
 ```
