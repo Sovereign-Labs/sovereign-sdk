@@ -8,12 +8,12 @@ mod db;
 mod evm;
 #[cfg(feature = "native")]
 pub mod execution_config;
-mod fee_activation;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
 mod metrics;
 mod sov_evm;
+mod sov_fee_and_gas_utils;
 mod state_access;
 use sov_rollup_interface::da::Time;
 use sov_state::{Kernel, User};
