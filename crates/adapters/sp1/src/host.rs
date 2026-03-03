@@ -8,13 +8,6 @@ use sp1_sdk::{ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
-#[cfg(feature = "bench")]
-fn cycle_count_hook(_env: sp1_sdk::HookEnv, _buf: &[u8]) -> Vec<Vec<u8>> {
-    // TODO: HookEnv is an empty struct in V6, so we can't access runtime.report.
-    // Return 0 as a placeholder — benchmarking is not correctness-critical.
-    vec![Vec::from(0u64.to_le_bytes())]
-}
-
 /// SP1 Host implementation.
 pub struct SP1Host<'host> {
     elf: &'host [u8],
@@ -65,11 +58,12 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let prover = if cfg!(debug_assertions) {
-            ProverClient::builder().mock().build()
+        if cfg!(debug_assertions) {
+            std::env::set_var("SP1_PROVER", "mock");
         } else {
-            ProverClient::builder().cpu().build()
-        };
+            std::env::set_var("SP1_PROVER", "cpu");
+        }
+        let prover = ProverClient::from_env();
         let proof = if with_proof {
             let pk = prover
                 .setup(self.elf.into())
@@ -85,17 +79,20 @@ impl ZkvmHost for SP1Host<'static> {
             let mut execute_request = prover.execute(self.elf.into(), self.stdin.clone());
             #[cfg(feature = "bench")]
             {
-                use sov_metrics::cycle_utils::sp1::{FD_CYCLE_COUNT_HOOK, FD_METRICS_HOOK};
-
+                use sov_metrics::cycle_utils::sp1::FD_METRICS_HOOK;
                 use crate::metrics::metrics_hook;
 
                 execute_request = execute_request
-                    .with_hook(FD_CYCLE_COUNT_HOOK, cycle_count_hook)
                     .with_hook(FD_METRICS_HOOK, metrics_hook);
             }
-            let (public_values, _report) = execute_request
+            let (public_values, report) = execute_request
                 .run()
                 .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
+            #[cfg(feature = "bench")]
+            if !report.cycle_tracker.is_empty() {
+                eprintln!("SP1 cycle tracker: {:?}", report.cycle_tracker);
+            }
+            let _ = &report;
             Proof::PublicData(public_values)
         };
         Ok(bincode::serialize(&proof)?)
@@ -108,3 +105,4 @@ impl ZkvmHost for SP1Host<'static> {
         crate::SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap())
     }
 }
+
