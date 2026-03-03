@@ -8,12 +8,11 @@ use derivative::Derivative;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateValue, AuthenticatedTransactionData, Context, CryptoSpec,
     DaSpec, GasSpec, GenesisState, MeteredBorshDeserialize, MeteredBorshDeserializeError,
     MeteredHasher, MeteredSignature, Module, ModuleId, ModuleInfo, ModuleRestApi, SafeVec,
-    SizedSafeString, Spec, StateAccessor, StateMap, StateValue, StateVec, TxHooks, TxState,
+    SizedSafeString, Spec, StateMap, StateValue, StateVec, TxHooks, TxState,
 };
 use strum::{EnumDiscriminants, EnumIs, VariantArray};
 
@@ -506,10 +505,7 @@ impl<S: Spec> TxHooks for AccessPattern<S> {
         _tx: &sov_modules_api::AuthenticatedTransactionData<Self::Spec>,
         state: &mut T,
     ) -> anyhow::Result<()> {
-        let curr_len = {
-            let mut unmetered = state.to_unmetered();
-            self.pre_hooks.len(&mut unmetered).unwrap_infallible()
-        };
+        let curr_len = self.pre_hooks.len(state)?;
 
         for i in 0..curr_len {
             if let Some(hook) = self.pre_hooks.get(i, state)? {
@@ -526,10 +522,7 @@ impl<S: Spec> TxHooks for AccessPattern<S> {
         _ctx: &Context<Self::Spec>,
         state: &mut T,
     ) -> anyhow::Result<()> {
-        let curr_len = {
-            let mut unmetered = state.to_unmetered();
-            self.post_hooks.len(&mut unmetered).unwrap_infallible()
-        };
+        let curr_len = self.post_hooks.len(state)?;
 
         for i in 0..curr_len {
             if let Some(hook) = self.post_hooks.get(i, state)? {
