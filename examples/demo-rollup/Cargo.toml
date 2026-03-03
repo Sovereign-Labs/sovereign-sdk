@@ -76,6 +76,9 @@ rockbound = { workspace = true, optional = true }
 prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
+alloy = { workspace = true, features = ["genesis"] }
+alloy-primitives = { workspace = true }
+alloy-rlp = { workspace = true }
 
 
 [dev-dependencies]
@@ -121,7 +124,6 @@ tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
-alloy = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = "1.0.30"
 alloy-rpc-types-trace = { workspace = true }
@@ -183,3 +185,7 @@ path = "src/da_tester/demo_celestia_tester.rs"
 name = "mockda-to-celestia-migrate"
 path = "src/migrations/mockda_to_celestia.rs"
 required-features = ["migration-script"]
+
+[[bin]]
+name = "sov-hive-genesis-adapter"
+path = "src/hive/genesis_adapter.rs"

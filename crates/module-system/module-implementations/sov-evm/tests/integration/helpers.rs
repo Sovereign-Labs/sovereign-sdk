@@ -1,5 +1,4 @@
 use crate::runtime::{GenesisConfig, TestRuntime, RT, S};
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::crypto::secp256k1::public_key_to_address;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
@@ -82,16 +81,8 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount, TestUser<S>
         .clone();
 
     let accounts = vec![
-        AccountData {
-            address: evm_account.address(),
-            code_hash: KECCAK_EMPTY,
-            code: Default::default(),
-        },
-        AccountData {
-            address: no_balance_account.address(),
-            code_hash: KECCAK_EMPTY,
-            code: Default::default(),
-        },
+        AccountData::empty_with_address(evm_account.address()),
+        AccountData::empty_with_address(no_balance_account.address()),
     ];
 
     let evm_config = EvmGenesisConfig {

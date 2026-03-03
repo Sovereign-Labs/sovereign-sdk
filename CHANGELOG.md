@@ -9,6 +9,7 @@
 
 # 2026-02-23
 - #2520 reverts #2489
+- #2506 EVM: Fixes RPC endpoints and adds base for hive and rpc compat tests
 - #2532 EVM: Minor fixes in RPC endpoints
 
 # 2026-02-17

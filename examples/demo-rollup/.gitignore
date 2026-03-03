@@ -5,3 +5,4 @@
 web3-js-sdk
 mock_da.sqlite*
 .artifacts
+__pycache__

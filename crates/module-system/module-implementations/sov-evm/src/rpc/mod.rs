@@ -89,7 +89,10 @@ impl SyntheticBlocksCache {
     }
 
     fn get_state_by_hash<S: Spec>(&self, hash: B256) -> Option<&ApiStateAccessor<S>> {
-        self.state_by_hash.get(&hash).map(|b| b.downcast_ref::<ApiStateAccessor<S>>().expect("Attempted to get the wrong type out of the SyntheticBlocksCache. This is impossible unless you request a different Spec than you put in. It's a bug, please report it."))
+        self.state_by_hash.get(&hash).map(|b| {
+            b.downcast_ref::<ApiStateAccessor<S>>()
+                .expect("SyntheticBlocksCache: spec type mismatch (bug)")
+        })
     }
     fn prune(&mut self, block_number: u64) {
         let stop_at = block_number.saturating_sub(SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL);
@@ -418,7 +421,9 @@ where
             .code
             .get(&account.code_hash, state.deref_mut())
             .unwrap_infallible()?;
-        Some(code.bytes())
+        // `bytes()` on analyzed legacy bytecode includes the appended STOP byte used for
+        // execution; RPC must return the original deployed bytecode.
+        Some(code.original_bytes())
     }
 
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
@@ -713,7 +718,9 @@ where
                         }
                     }
 
-                    // Case 1: The synthetic block has the same block number as the pending block; that's a harder special case where we need to populate its fields from the pending block
+                    // Case 1: The synthetic block has the same block number as the pending block;
+                    // that's a harder special case where we need to populate its fields from
+                    // the pending block.
                     let block_env = self.block_env(state).unwrap_infallible();
                     if block_env.number == block_number {
                         let Some(mut newest_pending_block) =
@@ -721,17 +728,18 @@ where
                         else {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         };
-                        // Check that the number of txs requested is no more than the number of txs in the pending block. If not, this block doesn't exist - return early
+                        // Check that the number of txs requested is no more than the number of
+                        // txs in the pending block. If not, this block doesn't exist.
                         if num_txs as u64 > newest_pending_block.num_transactions() {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         }
-                        // Check if the number of txs requested is exactly the same as the number of txs in the pending block. If so, this is the pending block! return it
+                        // If number of txs matches exactly, this is the pending block.
                         if num_txs as u64 == newest_pending_block.num_transactions() {
                             return Ok(Some(MaybeSealedBlock::PendingSynthetic(
                                 newest_pending_block,
                             )));
                         }
-                        // Otherwise, this is at the same as the pending block but with fewer txs - truncate the pending block to the number of txs requested
+                        // Otherwise this is the pending block truncated to fewer transactions.
                         newest_pending_block.transactions.end =
                             newest_pending_block.transactions.start + num_txs as u64;
                         return Ok(Some(MaybeSealedBlock::PendingSynthetic(
@@ -817,7 +825,7 @@ where
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
 
-            // Values that never need to be initailized
+            // Values that never need to be initialized
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
             difficulty: U256::ZERO,
@@ -879,7 +887,7 @@ where
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
 
-            // Values that never need to be initailized
+            // Values that never need to be initialized
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
             difficulty: U256::ZERO,

@@ -1,3 +1,4 @@
+use crate::rpc_invalid_params;
 use crate::rpc_limit_exceeded;
 use crate::Ethereum;
 use crate::EthereumAddress;
@@ -35,9 +36,15 @@ where
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
+        // Force malformed filter payloads to return JSON-RPC -32602 (invalid params)
+        // instead of bubbling up as internal deserialization errors.
+        let filter = parameters
+            .one::<Filter>()
+            .map_err(|err| rpc_invalid_params(err.to_string()))?;
+
         let state = ethereum.api_state_accessor();
         let service = LogsService::<S, Seq>::new(
-            parameters.one::<Filter>()?,
+            filter,
             None,
             ethereum.extension.max_log_limit,
             state,
@@ -60,7 +67,11 @@ where
         _: Extensions,
     ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
         let state = ethereum.api_state_accessor();
-        let FilterWithCursor { cursor, filter } = parameters.one::<FilterWithCursor>()?;
+        // Keep deserialization failures aligned with eth_getLogs: malformed payloads
+        // should surface as JSON-RPC -32602 invalid params.
+        let FilterWithCursor { cursor, filter } = parameters
+            .one::<FilterWithCursor>()
+            .map_err(|err| rpc_invalid_params(err.to_string()))?;
         let cursor = cursor.map(|s| Cursor::unpack(&s)).transpose()?;
         let service = LogsService::<S, Seq>::new(
             filter,
