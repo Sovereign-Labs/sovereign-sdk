@@ -21,6 +21,7 @@ fn unfunded_caller() -> Address {
     Address::from([0x11; 20])
 }
 
+/// Returns the rollup handle alongside the client — the rollup must stay alive for the client to function.
 async fn setup_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;

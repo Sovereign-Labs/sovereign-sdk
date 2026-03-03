@@ -202,15 +202,10 @@ where
 }
 
 pub(crate) fn assert_invalid_params(response: &Value) {
-    let error = response
-        .get("error")
-        .expect("expected invalid params error object");
-    let code = error
-        .get("code")
-        .and_then(Value::as_i64)
-        .expect("error.code should be present");
+    let error = rpc_error_object(response, "assert_invalid_params");
     assert_eq!(
-        code, INVALID_PARAMS_CODE,
+        rpc_error_code(error),
+        INVALID_PARAMS_CODE,
         "expected JSON-RPC invalid params code"
     );
 }

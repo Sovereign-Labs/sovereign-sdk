@@ -64,23 +64,16 @@ fn value_as_u256(value: &Value, field_name: &str) -> Result<U256> {
     bail!("Invalid integer for {field_name}: {value}")
 }
 
-fn to_quantity_hex(value: U256) -> String {
-    format!("0x{value:x}")
-}
-
 fn normalize_storage(storage: Option<&BTreeMap<B256, B256>>) -> serde_json::Map<String, Value> {
-    let mut normalized = serde_json::Map::new();
-    let Some(storage) = storage else {
-        return normalized;
-    };
-
-    for (raw_slot, raw_value) in storage {
-        let slot = U256::from_be_slice(raw_slot.as_slice());
-        let value = U256::from_be_slice(raw_value.as_slice());
-        normalized.insert(to_quantity_hex(slot), Value::String(to_quantity_hex(value)));
-    }
-
-    normalized
+    storage.map_or_else(serde_json::Map::new, |s| {
+        s.iter()
+            .map(|(slot, val)| {
+                let slot = U256::from_be_slice(slot.as_slice());
+                let val = U256::from_be_slice(val.as_slice());
+                (format!("0x{slot:x}"), Value::String(format!("0x{val:x}")))
+            })
+            .collect()
+    })
 }
 
 pub(crate) fn build_evm_accounts_and_alloc_balances(
@@ -94,11 +87,7 @@ pub(crate) fn build_evm_accounts_and_alloc_balances(
         let checksum_address = address.to_checksum(None);
 
         let code_bytes = entry.code.as_deref().map_or(&[][..], |code| code);
-        let code = if code_bytes.is_empty() {
-            "0x".to_string()
-        } else {
-            format!("0x{}", hex::encode(code_bytes))
-        };
+        let code = format!("0x{}", hex::encode(code_bytes));
         let code_hash = format!("0x{}", hex::encode(keccak256(code_bytes)));
         if !code_bytes.is_empty() {
             stats.contract_accounts += 1;
