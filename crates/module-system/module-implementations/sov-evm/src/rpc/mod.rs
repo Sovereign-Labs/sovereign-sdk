@@ -1175,6 +1175,8 @@ fn maybe_actual_effective_gas_price(
     }
 
     // Keep zero-fee projection: when metadata says no fee was charged, RPC must return 0 here.
+    // For non-zero fee, we report the block header base fee (primary gas-price dimension).
+    // Invariant: this header value must match the gas meter's `gas_price[0]`; divergence is a bug.
     match fee_paid {
         Some(Amount::ZERO) => Some(0),
         Some(_) => base_fee_per_gas.map(u128::from),
@@ -1244,7 +1246,7 @@ pub(crate) fn build_rpc_receipt(
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
 
     // Once activated, keep zero-fee semantics from metered metadata and otherwise
-    // report the primary gas-price dimension (EVM base fee).
+    // report the primary gas-price dimension (EVM base fee from header).
     let effective_gas_price = maybe_actual_effective_gas_price(
         block.number(),
         receipt.gas_used,

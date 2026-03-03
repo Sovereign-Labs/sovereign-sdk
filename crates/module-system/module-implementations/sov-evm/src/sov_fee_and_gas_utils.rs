@@ -28,6 +28,11 @@ where
     let current_gas_used = receipt.gas_used;
     // Project charged fee into an EVM receipt gas value:
     // projected = ceil(actual_fee / gas_price[0]), where actual_fee = gas_info.gas_value.
+    //
+    // Invariant: RPC/reporting uses the block header base fee as effective gas price and it
+    // must match this same primary gas-price dimension (`gas_price[0]`). Any divergence is a
+    // correctness bug and must fail fast upstream.
+    //
     // This intentionally biases upward for non-uniform gas prices so receipt-implied fee
     // is never below the charged fee.
     let projected_gas_used = derive_receipt_gas_used_from_actual_fee(gas_info)?;
