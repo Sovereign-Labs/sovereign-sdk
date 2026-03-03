@@ -73,11 +73,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting hive services (engine stub :8551 and RPC root proxy :8545)" >&2
-export SOV_HIVE_RPC_BACKEND_URL="http://127.0.0.1:${BACKEND_RPC_PORT}/rpc"
-python3 "${SERVICES_BIN}" &
-SERVICES_PID=$!
-
 echo "Starting sov-demo-rollup backend (mock DA + NOMT) on :${BACKEND_RPC_PORT}" >&2
 "${ROLLUP_BIN}" \
   --da-layer mock \
@@ -103,5 +98,10 @@ if [[ "${READY}" -ne 1 ]]; then
   echo "Backend RPC did not become ready on :${BACKEND_RPC_PORT}" >&2
   exit 1
 fi
+
+echo "Starting hive services (engine stub :8551 and RPC root proxy :8545)" >&2
+export SOV_HIVE_RPC_BACKEND_URL="http://127.0.0.1:${BACKEND_RPC_PORT}/rpc"
+python3 "${SERVICES_BIN}" &
+SERVICES_PID=$!
 
 wait -n "${ROLLUP_PID}" "${SERVICES_PID}"

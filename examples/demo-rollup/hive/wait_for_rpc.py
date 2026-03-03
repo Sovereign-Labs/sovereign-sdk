@@ -42,7 +42,9 @@ def main() -> int:
         return 1
     if parsed.get("jsonrpc") != "2.0" or parsed.get("id") != 1:
         return 1
-    if "result" not in parsed and "error" not in parsed:
+    if "error" in parsed:
+        return 1
+    if "result" not in parsed:
         return 1
     return 0
 
