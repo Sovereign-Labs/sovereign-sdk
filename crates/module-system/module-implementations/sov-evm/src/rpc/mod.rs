@@ -370,9 +370,12 @@ where
         );
         let fee_paid = self.receipt_fee(tx_idx, state);
         if let Some((receipt, _)) = self.receipt(tx_idx, state) {
-            if let Some(actual_effective_gas_price) =
-                maybe_actual_effective_gas_price(block_number, receipt.gas_used, fee_paid)
-            {
+            if let Some(actual_effective_gas_price) = maybe_actual_effective_gas_price(
+                block_number,
+                receipt.gas_used,
+                fee_paid,
+                base_fee_per_gas,
+            ) {
                 tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
             }
         }
@@ -1165,13 +1168,18 @@ fn maybe_actual_effective_gas_price(
     block_number: u64,
     gas_used: u64,
     fee_paid: Option<Amount>,
+    base_fee_per_gas: Option<u64>,
 ) -> Option<u128> {
     if !is_actual_fee_projection_height_active(block_number) || gas_used == 0 {
         return None;
     }
 
     // Keep zero-fee projection: when metadata says no fee was charged, RPC must return 0 here.
-    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+    match fee_paid {
+        Some(Amount::ZERO) => Some(0),
+        Some(_) => base_fee_per_gas.map(u128::from),
+        None => None,
+    }
 }
 
 // modified from: https://github.com/paradigmxyz/reth many times
@@ -1235,12 +1243,16 @@ pub(crate) fn build_rpc_receipt(
         .inner()
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
 
-    // Once activated, prefer the fee paid in the Sovereign gas meter when available.
-    // This keeps receipt fee semantics aligned with balance deltas.
-    let effective_gas_price =
-        maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
-            // Keep compatibility for historical data where metadata may be missing.
-            .unwrap_or(eip_1559_effective_gas_price);
+    // Once activated, keep zero-fee semantics from metered metadata and otherwise
+    // report the primary gas-price dimension (EVM base fee).
+    let effective_gas_price = maybe_actual_effective_gas_price(
+        block.number(),
+        receipt.gas_used,
+        fee_paid,
+        block.maybe_partial_header().base_fee_per_gas,
+    )
+    // Keep compatibility for historical data where metadata may be missing.
+    .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
@@ -1270,7 +1282,7 @@ mod tests {
             .expect("activation height must be strictly below u64::MAX");
 
         assert_eq!(
-            maybe_actual_effective_gas_price(active_block, 21_000, Some(Amount::ZERO)),
+            maybe_actual_effective_gas_price(active_block, 21_000, Some(Amount::ZERO), Some(123)),
             Some(0)
         );
     }
@@ -1280,7 +1292,48 @@ mod tests {
         let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
 
         assert_eq!(
-            maybe_actual_effective_gas_price(activation_height, 21_000, Some(Amount::ZERO)),
+            maybe_actual_effective_gas_price(
+                activation_height,
+                21_000,
+                Some(Amount::ZERO),
+                Some(123),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_base_fee_for_non_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                Some(42),
+            ),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_falls_back_when_base_fee_missing() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                None,
+            ),
             None
         );
     }
