@@ -49,16 +49,16 @@ RUN mkdir -p /opt/sov/bin /opt/sov/hive /hive-bin /hive-data
 COPY --from=builder /src/target/debug/sov-demo-rollup /opt/sov/bin/sov-demo-rollup
 COPY --from=builder /src/target/debug/sov-hive-genesis-adapter /opt/sov/bin/sov-hive-genesis-adapter
 COPY examples/demo-rollup/hive/entrypoint.sh /opt/sov/hive/entrypoint.sh
-COPY examples/demo-rollup/hive/engine_stub.py /opt/sov/hive/engine_stub.py
-COPY examples/demo-rollup/hive/rpc_root_proxy.py /opt/sov/hive/rpc_root_proxy.py
+COPY examples/demo-rollup/hive/hive_services.py /opt/sov/hive/hive_services.py
+COPY examples/demo-rollup/hive/wait_for_rpc.py /opt/sov/hive/wait_for_rpc.py
 COPY examples/demo-rollup/hive/enode.sh /opt/sov/hive/enode.sh
 COPY examples/demo-rollup/hive/mock_nomt_rollup_config.toml /opt/sov/hive/mock_nomt_rollup_config.toml
 COPY examples/test-data/genesis/demo/mock /opt/sov/hive/genesis-template
 
 RUN chmod +x \
     /opt/sov/hive/entrypoint.sh \
-    /opt/sov/hive/engine_stub.py \
-    /opt/sov/hive/rpc_root_proxy.py \
+    /opt/sov/hive/hive_services.py \
+    /opt/sov/hive/wait_for_rpc.py \
     /opt/sov/hive/enode.sh \
     && ln -sf /opt/sov/hive/enode.sh /hive-bin/enode.sh \
     && /opt/sov/bin/sov-demo-rollup --version > /version.txt

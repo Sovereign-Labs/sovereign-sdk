@@ -7,10 +7,14 @@ GENESIS_OUTPUT_DIR="${SOV_HIVE_GENESIS_OUTPUT_DIR:-/tmp/sov-hive-genesis}"
 ROLLUP_CONFIG_PATH="${SOV_HIVE_ROLLUP_CONFIG_PATH:-/opt/sov/hive/mock_nomt_rollup_config.toml}"
 ROLLUP_BIN="${SOV_HIVE_ROLLUP_BIN:-/opt/sov/bin/sov-demo-rollup}"
 GENESIS_ADAPTER_BIN="${SOV_HIVE_GENESIS_ADAPTER_BIN:-/opt/sov/bin/sov-hive-genesis-adapter}"
-ENGINE_STUB_BIN="${SOV_HIVE_ENGINE_STUB_BIN:-/opt/sov/hive/engine_stub.py}"
-RPC_PROXY_BIN="${SOV_HIVE_RPC_PROXY_BIN:-/opt/sov/hive/rpc_root_proxy.py}"
+SERVICES_BIN="${SOV_HIVE_SERVICES_BIN:-/opt/sov/hive/hive_services.py}"
 BACKEND_RPC_PORT="${SOV_HIVE_BACKEND_RPC_PORT:-8546}"
 ROLLUP_CONFIG_RUNTIME_PATH="${SOV_HIVE_RUNTIME_CONFIG_PATH:-/tmp/sov-hive-rollup-config.toml}"
+WAIT_FOR_RPC_BIN="${SOV_HIVE_WAIT_FOR_RPC_BIN:-/opt/sov/hive/wait_for_rpc.py}"
+
+if [[ -n "${SOV_HIVE_ENGINE_STUB_BIN:-}" ]] || [[ -n "${SOV_HIVE_RPC_PROXY_BIN:-}" ]]; then
+  echo "SOV_HIVE_ENGINE_STUB_BIN and SOV_HIVE_RPC_PROXY_BIN are deprecated; use SOV_HIVE_SERVICES_BIN" >&2
+fi
 
 if [[ ! -f "${GENESIS_JSON}" ]]; then
   echo "Expected geth-style genesis at ${GENESIS_JSON}" >&2
@@ -64,16 +68,15 @@ sed -Ei "s/^(bind_port[[:space:]]*=[[:space:]]*).*/\\1${BACKEND_RPC_PORT}/" "${R
 cleanup() {
   kill "${ROLLUP_PID:-}" 2>/dev/null || true
   wait "${ROLLUP_PID:-}" 2>/dev/null || true
-  kill "${RPC_PROXY_PID:-}" 2>/dev/null || true
-  wait "${RPC_PROXY_PID:-}" 2>/dev/null || true
-  kill "${ENGINE_PID:-}" 2>/dev/null || true
-  wait "${ENGINE_PID:-}" 2>/dev/null || true
+  kill "${SERVICES_PID:-}" 2>/dev/null || true
+  wait "${SERVICES_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting engine stub on :8551" >&2
-python3 "${ENGINE_STUB_BIN}" &
-ENGINE_PID=$!
+echo "Starting hive services (engine stub :8551 and RPC root proxy :8545)" >&2
+export SOV_HIVE_RPC_BACKEND_URL="http://127.0.0.1:${BACKEND_RPC_PORT}/rpc"
+python3 "${SERVICES_BIN}" &
+SERVICES_PID=$!
 
 echo "Starting sov-demo-rollup backend (mock DA + NOMT) on :${BACKEND_RPC_PORT}" >&2
 "${ROLLUP_BIN}" \
@@ -86,19 +89,13 @@ ROLLUP_PID=$!
 echo "Waiting for backend RPC on :${BACKEND_RPC_PORT}" >&2
 READY=0
 for _ in $(seq 1 300); do
-  if python3 - <<PY
-import socket
-s = socket.socket()
-s.settimeout(0.2)
-try:
-    s.connect(("127.0.0.1", int("${BACKEND_RPC_PORT}")))
-except OSError:
-    raise SystemExit(1)
-raise SystemExit(0)
-PY
-  then
+  if python3 "${WAIT_FOR_RPC_BIN}" "http://127.0.0.1:${BACKEND_RPC_PORT}/rpc" 0.5; then
     READY=1
     break
+  fi
+  if ! kill -0 "${ROLLUP_PID}" 2>/dev/null; then
+    echo "Backend process exited before becoming ready" >&2
+    exit 1
   fi
   sleep 0.1
 done
@@ -107,9 +104,4 @@ if [[ "${READY}" -ne 1 ]]; then
   exit 1
 fi
 
-echo "Starting RPC root proxy on :8545 -> /rpc backend :${BACKEND_RPC_PORT}" >&2
-export SOV_HIVE_RPC_BACKEND_URL="http://127.0.0.1:${BACKEND_RPC_PORT}/rpc"
-python3 "${RPC_PROXY_BIN}" &
-RPC_PROXY_PID=$!
-
-wait -n "${ROLLUP_PID}" "${RPC_PROXY_PID}" "${ENGINE_PID}"
+wait -n "${ROLLUP_PID}" "${SERVICES_PID}"

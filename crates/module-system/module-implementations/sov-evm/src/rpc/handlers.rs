@@ -618,7 +618,7 @@ where
         block.hash(),
         block.number(),
         block.maybe_partial_header().base_fee_per_gas,
-        index as usize, // safe: index < tx_count which is bounded by block transaction count
+        index as usize, // safe: index < tx_count; block tx counts fit in usize on 64-bit targets
         tx_idx,
         state,
     );
