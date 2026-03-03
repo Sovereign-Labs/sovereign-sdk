@@ -128,6 +128,9 @@ impl FullyBakedTx {
     }
 
     /// Sets sequencing metadata
+    ///
+    /// Note that the `get_maybe_timestamp_from_sequencing_data` function relies on this method to serialize the SequencingData using borsh
+    /// without other modification. Changing that behavior will require a change to `get_maybe_timestamp_from_sequencing_data`
     pub fn set_sequencing_metadata(&mut self, metadata: &impl BorshSerialize) {
         self.sequencing_data = Some(borsh::to_vec(metadata).unwrap().into());
     }

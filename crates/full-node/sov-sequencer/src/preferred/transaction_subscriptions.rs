@@ -5,6 +5,7 @@ use std::sync::Arc;
 use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
+use sov_modules_api::capabilities::get_maybe_timestamp_from_sequencing_data;
 use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
@@ -251,6 +252,11 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         else {
             return Ok(None);
         };
+        let maybe_timestamp = tx
+            .body
+            .as_ref()
+            .and_then(|body| get_maybe_timestamp_from_sequencing_data::<S, Rt>(body, false));
+
         Ok(Some(AcceptedTx {
             tx: tx.body.unwrap_or_default(),
             tx_hash,
@@ -260,6 +266,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                     .expect("TxResponse::events cannot be None when query mode is Full"),
                 receipt: tx.receipt.into(),
                 tx_number,
+                timestamp_nanos: maybe_timestamp,
             },
         }))
     }
@@ -454,16 +461,22 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
             .into_iter()
             .flatten()
             .enumerate()
-            .map(|(idx, tx)| ApiAcceptedTx {
-                tx: tx.body.unwrap_or_default(),
-                id: HexString(tx.hash),
-                confirmation: Confirmation {
-                    events: tx
-                        .events
-                        .expect("TxResponse::events cannot be None when query mode is Full"),
-                    receipt: tx.receipt.into(),
-                    tx_number: starting_from + idx as u64,
-                },
+            .map(|(idx, tx)| {
+                let timestamp_nanos = tx.body.as_ref().and_then(|body| {
+                    get_maybe_timestamp_from_sequencing_data::<S, Rt>(body, false)
+                });
+                ApiAcceptedTx {
+                    tx: tx.body.unwrap_or_default(),
+                    id: HexString(tx.hash),
+                    confirmation: Confirmation {
+                        events: tx
+                            .events
+                            .expect("TxResponse::events cannot be None when query mode is Full"),
+                        receipt: tx.receipt.into(),
+                        tx_number: starting_from + idx as u64,
+                        timestamp_nanos,
+                    },
+                }
             });
         let num_txs_from_cache = txs_from_cache.len();
         let output = txs.chain(txs_from_cache).collect::<Vec<_>>();
@@ -604,6 +617,7 @@ mod tests {
                     },
                 },
                 tx_number,
+                timestamp_nanos: None,
             },
         }
     }

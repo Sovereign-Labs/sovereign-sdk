@@ -1,5 +1,6 @@
-use sov_modules_api::capabilities::SequencingDataHandler;
+use borsh::BorshDeserialize;
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
+use sov_modules_api::capabilities::{HasCapabilities, SequencingDataHandler};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
@@ -127,7 +128,7 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 ) -> Result<(), Error> {
     if let Some(sequencing_data) = ctx.sequencing_data().as_ref() {
         let mut handler = runtime.sequencing_data_handler();
-        match handler.decode_sequencing_data(sequencing_data) {
+        match <RT as HasCapabilities<S>>::SequencingData::try_from_slice(sequencing_data) {
             Ok(decoded) => handler.handle_sequencing_data(decoded, ctx, state)?,
             Err(error) => warn!(%error, "Invalid sequencing metadata; ignoring"),
         }

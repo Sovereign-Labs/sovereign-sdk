@@ -28,14 +28,13 @@ use crate::preferred::{
 use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
 use sov_modules_api::{
-    FullyBakedTx, HDTimestamp, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,19 +44,6 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
-
-const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
-
-fn get_hd_timestamp_with_maybe_override() -> HDTimestamp {
-    if cfg!(debug_assertions) {
-        let Ok(timestamp) = std::env::var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR) else {
-            return HDTimestamp::now();
-        };
-        HDTimestamp::from_str(&timestamp).unwrap_or_else(|_| HDTimestamp::now())
-    } else {
-        HDTimestamp::now()
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
@@ -824,6 +810,10 @@ where
         ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
+        let sequencing_data = self
+            .runtime
+            .sequencing_data_handler()
+            .create_sequencing_data();
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if inner.is_replica_role() {
@@ -868,7 +858,9 @@ where
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
         let mut baked_tx = baked_tx;
-        baked_tx.set_sequencing_metadata(&get_hd_timestamp_with_maybe_override());
+        // Important: we read the sequencing data from the baked tx inside apply_tx_to_in_progress_batch (which is called from do_new_tx)
+        // so this must not be moved without updating do_new_tx. See the comment in apply_tx_to_in_progress_batch for more details.
+        baked_tx.set_sequencing_metadata(&sequencing_data);
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
