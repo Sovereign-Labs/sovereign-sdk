@@ -11,7 +11,7 @@ use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::evm::primitive_types::{Receipt, TransactionSigned, TxSignedAndRecovered};
 use crate::executor::get_cfg_env;
-use crate::fee_activation::should_project_from_actual_fee;
+use crate::fee_activation::is_actual_fee_projection_height_active;
 use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
@@ -1166,12 +1166,12 @@ fn maybe_actual_effective_gas_price(
     gas_used: u64,
     fee_paid: Option<Amount>,
 ) -> Option<u128> {
-    if !should_project_from_actual_fee(block_number, fee_paid, gas_used) {
+    if !is_actual_fee_projection_height_active(block_number) || gas_used == 0 {
         return None;
     }
 
-    let fee_paid = fee_paid.expect("fee_paid must be present when projection guard passes");
-    Some(fee_paid.0 / u128::from(gas_used))
+    // Keep zero-fee projection: when metadata says no fee was charged, RPC must return 0 here.
+    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
 }
 
 // modified from: https://github.com/paradigmxyz/reth many times
@@ -1261,6 +1261,29 @@ pub(crate) fn build_rpc_receipt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(active_block, 21_000, Some(Amount::ZERO)),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_ignores_zero_paid_fee_before_activation() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(activation_height, 21_000, Some(Amount::ZERO)),
+            None
+        );
+    }
 
     #[test]
     fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {

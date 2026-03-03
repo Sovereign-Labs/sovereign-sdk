@@ -321,7 +321,6 @@ where
             .try_as_basic_gas_meter()
             .expect("TxState should have BasicGasMeter")
             .gas_info();
-        let tx_fee_paid = gas_info.gas_value;
 
         if let Some(projected_gas) =
             Self::project_receipt_gas_from_actual_fee(&pending_tx.receipt, &gas_info)?
@@ -344,6 +343,7 @@ where
         #[cfg(feature = "native")]
         let set_accessory_state_time = {
             start_timer!(set_accessory_state);
+            let tx_fee_paid = gas_info.gas_value;
             // Since we just inserted tx above, we need to increment `pending_len`` by 1.
             self.set_accessory_state(head, &pending_tx, pending_len + 1, tx_fee_paid, state)
                 .unwrap_infallible();
@@ -418,15 +418,17 @@ where
         gas_info: &GasInfo<S::Gas>,
     ) -> anyhow::Result<Option<ProjectedReceiptGas>> {
         let tx_fee_paid = gas_info.gas_value;
-        if !crate::fee_activation::should_project_from_actual_fee(
-            receipt.block_number,
-            Some(tx_fee_paid),
-            receipt.gas_used,
-        ) {
+        if !crate::fee_activation::is_actual_fee_projection_height_active(receipt.block_number) {
+            return Ok(None);
+        }
+
+        if tx_fee_paid == sov_bank::Amount::ZERO {
             return Ok(None);
         }
 
         let current_gas_used = receipt.gas_used;
+        // Intentional fail-closed behavior: once projection is active, we reject transactions
+        // whose charged gas dimensions cannot be reconciled into a single exact receipt gas value.
         let projected_gas_used =
             derive_receipt_gas_used_from_actual_fee(tx_fee_paid, gas_info.gas_price.as_ref())?;
 
@@ -569,6 +571,8 @@ fn derive_receipt_gas_used_from_actual_fee(
         uniform_gas_price.0 > 0,
         "EVM: cannot reconcile receipt from actual fee with zero gas price"
     );
+    // Intentional: non-uniform per-dimension prices are treated as a hard correctness error.
+    // If we cannot derive one exact gas_used value, we reject instead of emitting mismatched fees.
     ensure!(
         gas_price_per_dimension
             .iter()

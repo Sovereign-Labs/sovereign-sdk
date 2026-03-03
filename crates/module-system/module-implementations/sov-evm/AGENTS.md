@@ -51,6 +51,12 @@ If you touch fee context, validate all of these together:
 - Receipt `effective_gas_price`
 - `eth_feeHistory` base-fee series
 
+### 1.5 Actual-fee projection invariants
+
+- Activation gate must stay shared via `src/fee_activation.rs:is_actual_fee_projection_height_active` for both receipt projection and RPC effective-gas-price projection.
+- Receipt-side exact-gas projection is intentionally fail-closed: when projection is active, non-uniform gas-price dimensions are treated as a hard error and transaction execution is rejected.
+- RPC projection must still honor zero-fee metadata (`fee_paid == 0`) and return `effectiveGasPrice = 0` when applicable; do not force a fallback to EIP-1559 price in that case.
+
 ### 2. Cross-endpoint value consistency
 
 For the same tx/block, values must agree across:
