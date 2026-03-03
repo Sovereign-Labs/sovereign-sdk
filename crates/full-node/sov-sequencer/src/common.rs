@@ -267,6 +267,11 @@ pub struct StateUpdateNotification {
     pub slot_number: SlotNumber,
     /// The finalized slot number.
     pub finalized_slot_number: SlotNumber,
+    /// True when the update loop explicitly skipped processing because
+    /// `SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE=1` was observed.
+    #[cfg(feature = "test-utils")]
+    #[serde(default)]
+    pub update_skipped_due_to_pause: bool,
 }
 
 /// A notification that the sequencer has processed a forced (non-preferred) batch.
