@@ -39,8 +39,10 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     CryptoSpec, DispatchCall, HexHash, HexString, RawTx, Runtime, SafeVec, Spec,
 };
+use sov_test_utils::docker::pull_image_with_retries;
 use sov_test_utils::{default_test_signed_transaction, TestSpec, TestUser};
 use testcontainers::runners::AsyncRunner;
+use testcontainers::GenericImage;
 use testcontainers::ImageExt;
 use testcontainers_modules::anvil::AnvilNode;
 use tokio_stream::StreamExt;
@@ -738,6 +740,10 @@ async fn regenerate_anvil_core_state() {
     let temp_state_path = fixtures_dir.join("anvil_core_state.json.tmp");
     let _ = std::fs::remove_file(&temp_state_path);
     let _ = std::fs::remove_file(&state_path);
+
+    pull_image_with_retries(GenericImage::new("ghcr.io/foundry-rs/foundry", "v1.3.6"))
+        .await
+        .expect("Failed to pull anvil image");
 
     let anvil = AnvilNode::default()
         .with_chain_id(EVM_CHAIN_ID as u64)

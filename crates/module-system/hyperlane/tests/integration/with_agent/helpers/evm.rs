@@ -9,16 +9,17 @@ use sha3::{Digest, Keccak256};
 use sov_hyperlane_integration::{EthAddress, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, HexHash, HexString};
-use sov_test_utils::docker::print_logs_from_container;
+use sov_test_utils::docker::{print_logs_from_container, pull_image_with_retries};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, ImageExt};
+use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 use testcontainers_modules::anvil::AnvilNode;
 
 pub const ANVIL_PORT: u16 = 8545;
+const ANVIL_IMAGE: &str = "ghcr.io/foundry-rs/foundry";
 const TAG: &str = "v1.3.6";
 const ANVIL_STATE_FILE: &str = "anvil_core_state.json";
 
@@ -32,6 +33,15 @@ pub struct AnvilRunner {
 impl AnvilRunner {
     pub async fn new() -> Self {
         tracing::info!("Starting anvil container...");
+        pull_image_with_retries(GenericImage::new(ANVIL_IMAGE, TAG))
+            .await
+            .unwrap_or_else(|err| {
+                panic!(
+                    "failed to pull anvil image {ANVIL_IMAGE}:{TAG}: {err}. \
+                     Hint: verify GHCR connectivity or pre-pull the image before tests."
+                )
+            });
+
         // Hard code tag, so we don't accidental breakages
         let (container, loaded_state) = {
             let state_dir = fixtures_dir();
@@ -48,7 +58,12 @@ impl AnvilRunner {
                     .with_cmd(vec!["--load-state".to_string(), load_path]);
             }
 
-            let container = node.start().await.expect("failed to start anvil");
+            let container = node.start().await.unwrap_or_else(|err| {
+                panic!(
+                    "failed to start anvil after pulling {ANVIL_IMAGE}:{TAG}: {err}. \
+                     Hint: check local docker health and image availability."
+                )
+            });
             (container, use_state)
         };
 

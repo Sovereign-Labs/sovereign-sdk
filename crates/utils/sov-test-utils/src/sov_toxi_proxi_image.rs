@@ -1,3 +1,4 @@
+use crate::docker::pull_image_with_retries;
 use serde_json::json;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
@@ -22,6 +23,7 @@ const TOXIPROXY_SLOW_DA_LATENCY_MS: u64 = 1_000_000;
 const TOXIPROXY_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const TOXIPROXY_READY_TIMEOUT: Duration = Duration::from_secs(5);
 
+#[derive(Clone)]
 struct SovToxiProxiImage;
 
 impl Image for SovToxiProxiImage {
@@ -66,6 +68,10 @@ impl ToxiProxySetup {
         postgres_connection_string: &str,
         da_upstream_port: u16,
     ) -> Self {
+        pull_image_with_retries(SovToxiProxiImage)
+            .await
+            .expect("Failed to pull toxiproxy image");
+
         let toxiproxy = SovToxiProxiImage
             .with_host("host.docker.internal", Host::HostGateway)
             .with_startup_timeout(TOXIPROXY_READY_TIMEOUT)
