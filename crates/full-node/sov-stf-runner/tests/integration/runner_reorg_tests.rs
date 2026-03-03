@@ -65,9 +65,10 @@ async fn test_runner_with_background_da_service(
 
     let stf = HashStf::new();
 
-    let mut storage_manager = NomtStorageManager::new(RollupDbConfig::default_in_path(
-        tempdir.path().to_path_buf(),
-    ))?;
+    let mut storage_manager = NomtStorageManager::new(
+        RollupDbConfig::default_in_path(tempdir.path().to_path_buf()),
+        false,
+    )?;
 
     let block = da_service.get_block_at(0).await?;
     let genesis_header = block.header().clone();
@@ -397,7 +398,7 @@ fn get_saved_root_hash(
     path: &std::path::Path,
 ) -> anyhow::Result<Option<<TestStorage as Storage>::Root>> {
     let config = RollupDbConfig::default_in_path(path.to_path_buf());
-    let mut storage_manager = TestStorageManager::new(config)?;
+    let mut storage_manager = TestStorageManager::new(config, false)?;
     let mock_block_header = MockBlockHeader::from_height(1000000);
     let (stf_state, ledger_state) = storage_manager.create_state_for(&mock_block_header)?;
 

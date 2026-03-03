@@ -17,7 +17,7 @@ fn test_state_db_simple() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
@@ -109,7 +109,7 @@ fn test_state_db_writing_empty_batch() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
@@ -145,7 +145,7 @@ fn test_state_db_empty_nodes() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
@@ -194,7 +194,7 @@ fn test_state_db_writing_same_node_batch_both_namespaces() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
@@ -248,7 +248,7 @@ fn test_write_node_batches_different_versions() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
@@ -298,7 +298,7 @@ fn test_namespace() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
@@ -397,7 +397,7 @@ fn test_root_hash_at_init() {
     let tempdir = tempfile::tempdir().unwrap();
     let rocksdb = Arc::new(
         StateDb::get_rockbound_options()
-            .default_setup_db_in_path(tempdir.path())
+            .default_setup_db_as_subdir(tempdir.path())
             .unwrap(),
     );
     let state_db = init_state_db(rocksdb.clone());
