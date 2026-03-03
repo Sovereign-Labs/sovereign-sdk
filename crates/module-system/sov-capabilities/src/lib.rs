@@ -261,6 +261,7 @@ impl<S: Spec, T> SequencingDataHandler<S> for StandardProvenRollupCapabilities<'
     }
 }
 
+#[cfg(feature = "native")]
 const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
 
 impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'_, S, T> {
