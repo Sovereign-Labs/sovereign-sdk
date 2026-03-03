@@ -30,8 +30,6 @@ mod sequencing_data;
 pub use sequencing_data::*;
 pub use sov_rollup_interface::common::RollupHeight;
 
-use borsh::BorshDeserialize;
-
 use crate::Spec;
 
 /// Wrapper around an inner type that prevents accessing it.
@@ -69,7 +67,7 @@ pub trait HasCapabilities<S: Spec> {
         Self: 'a;
 
     /// The decoded sequencing metadata type used by this runtime's [`SequencingDataHandler`].
-    type SequencingData: BorshDeserialize + 'static;
+    type SequencingData: SequencingDataTrait;
 
     /// Fetches the capabilities from the runtime.
     ///

@@ -257,7 +257,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                             nb_of_ignored_txs = 0;
 
                             let baked_tx = FullyBakedTxWithMaybeChangeSet::new(tx_with_sender.tx);
-                            let res = executor.apply_tx_to_in_progress_batch(baked_tx, None).await;
+                            let res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
                             match res{
                                 Ok((_, tx_change_set)) => {

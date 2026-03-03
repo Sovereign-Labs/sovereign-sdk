@@ -5,6 +5,8 @@ use std::{
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use crate::capabilities::SequencingDataTrait;
+
 /// High definition execution timestamp, in nanoseconds since the unix epoch.
 #[derive(
     Debug,
@@ -20,6 +22,12 @@ use borsh::{BorshDeserialize, BorshSerialize};
 )]
 #[serde(transparent)]
 pub struct HDTimestamp(u128);
+
+impl SequencingDataTrait for HDTimestamp {
+    fn get_maybe_timestamp(self) -> Option<HDTimestamp> {
+        Some(self)
+    }
+}
 
 impl HDTimestamp {
     /// Creates timestamp with current time
