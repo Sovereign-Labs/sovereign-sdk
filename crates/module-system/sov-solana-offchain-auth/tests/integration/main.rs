@@ -360,7 +360,7 @@ async fn test_submit_raw_signed_message_transaction() {
 
     assert!(
         response.status().is_success(),
-        "Expected transaction to succeed"
+        "Expected transaction to succeed. Response: {response:?}"
     );
 
     let final_balance = query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await;
