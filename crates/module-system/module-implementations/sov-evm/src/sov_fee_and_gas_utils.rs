@@ -26,10 +26,10 @@ where
     }
 
     let current_gas_used = receipt.gas_used;
-    // Project multi-dimensional charged gas into an EVM receipt gas value:
-    // projected = ceil((gas_used · gas_price) / gas_price[0]).
+    // Project charged fee into an EVM receipt gas value:
+    // projected = ceil(actual_fee / gas_price[0]), where actual_fee = gas_info.gas_value.
     // This intentionally biases upward for non-uniform gas prices so receipt-implied fee
-    // is never below the actual charged fee.
+    // is never below the charged fee.
     let projected_gas_used = derive_receipt_gas_used_from_actual_fee(gas_info)?;
 
     if projected_gas_used == current_gas_used {
@@ -61,19 +61,7 @@ fn derive_receipt_gas_used_from_actual_fee<GU: Gas>(gas_info: &GasInfo<GU>) -> a
         "EVM: cannot reconcile receipt from actual fee with zero primary gas price"
     );
 
-    let actual_fee = gas_info
-        .gas_used
-        .as_ref()
-        .iter()
-        .zip(gas_info.gas_price.as_ref().iter())
-        .enumerate()
-        .try_fold(0u128, |acc, (idx, (gas_used, gas_price))| {
-            let fee_for_dimension = u128::from(*gas_used)
-                .checked_mul(gas_price.0)
-                .context(format!("EVM: fee overflow in gas dimension {idx}"))?;
-            acc.checked_add(fee_for_dimension)
-                .context("EVM: overflow while summing multi-dimensional fee")
-        })?;
+    let actual_fee = gas_info.gas_value.0;
 
     if actual_fee == 0 {
         return Ok(0);
@@ -115,10 +103,15 @@ mod tests {
     use sov_modules_api::GasUnit;
 
     fn gas_info(gas_used: [u64; 2], gas_price: [sov_bank::Amount; 2]) -> GasInfo<GasUnit<2>> {
+        let gas_used = GasUnit::<2>::from(gas_used);
+        let gas_price = gas_price.into();
+        let gas_value = gas_used
+            .checked_value(gas_price)
+            .expect("test gas_value should be computable");
         GasInfo {
-            gas_value: sov_bank::Amount::ZERO,
-            gas_used: gas_used.into(),
-            gas_price: gas_price.into(),
+            gas_value,
+            gas_used,
+            gas_price,
         }
     }
 
@@ -180,14 +173,15 @@ mod tests {
     }
 
     #[test]
-    fn derive_receipt_gas_used_from_actual_fee_rejects_fee_overflow() {
-        let gas_info = gas_info(
-            [u64::MAX, 1],
-            [sov_bank::Amount::MAX, sov_bank::Amount::new(1)],
-        );
-        let err =
-            derive_receipt_gas_used_from_actual_fee(&gas_info).expect_err("overflow should fail");
+    fn derive_receipt_gas_used_from_actual_fee_rejects_u64_overflow() {
+        let gas_info: GasInfo<GasUnit<2>> = GasInfo {
+            gas_value: sov_bank::Amount::MAX,
+            gas_used: [0, 0].into(),
+            gas_price: [sov_bank::Amount::new(1), sov_bank::Amount::new(1)].into(),
+        };
+        let err = derive_receipt_gas_used_from_actual_fee(&gas_info)
+            .expect_err("gas_used projection should fail when it does not fit in u64");
 
-        assert!(err.to_string().contains("fee overflow"));
+        assert!(err.to_string().contains("does not fit in u64"));
     }
 }
