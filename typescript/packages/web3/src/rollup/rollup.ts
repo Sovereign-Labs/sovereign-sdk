@@ -366,7 +366,8 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
    */
   async serializer(): Promise<Serializer> {
     if (!this._serializer) await this._fetchSchema();
-    return this._serializer!;
+    // _fetchSchema always sets _serializer
+    return this._serializer as Serializer;
   }
 
   /**
@@ -378,7 +379,8 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
 
   async chainHash(): Promise<Uint8Array> {
     if (!this._chainHash) await this._fetchSchema();
-    return this._chainHash!;
+    // _fetchSchema always sets _chainHash
+    return this._chainHash as Uint8Array;
   }
 
   private async _fetchSchema(): Promise<void> {
