@@ -7,6 +7,7 @@ use revm::primitives::hardfork::SpecId;
 use revm::state::AccountInfo;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{GenesisState, Module, Spec};
+use std::collections::BTreeMap;
 
 use crate::conversions::create_block_env;
 use crate::db::init::InitEvmDb;
@@ -14,6 +15,10 @@ use crate::evm::primitive_types::Block;
 use crate::{Evm, EvmGenesisConfig, EvmRuntimeConfig, EXCESS_BLOB_GAS};
 #[cfg(feature = "native")]
 use std::ops::RangeInclusive;
+
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+    value == &T::default()
+}
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
@@ -24,17 +29,34 @@ pub struct AccountData {
     pub code_hash: B256,
     /// Smart contract code.
     pub code: Bytes,
+    /// Account nonce.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub nonce: u64,
+    /// Preloaded account storage values.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub storage: BTreeMap<U256, U256>,
 }
 
 impl AccountData {
-    /// Empty code hash.
+    #[allow(missing_docs)]
     pub fn empty_code() -> B256 {
         KECCAK_EMPTY
     }
 
-    /// Account balance.
+    #[allow(missing_docs)]
     pub fn balance(balance: u64) -> U256 {
         U256::from(balance)
+    }
+
+    /// Builds an empty EVM account for the given address.
+    pub fn empty_with_address(address: Address) -> Self {
+        AccountData {
+            address,
+            code_hash: KECCAK_EMPTY,
+            code: Default::default(),
+            nonce: 0,
+            storage: Default::default(),
+        }
     }
 }
 
@@ -83,20 +105,32 @@ where
         acc: AccountData,
         state: &mut impl GenesisState<S>,
     ) -> anyhow::Result<()> {
+        let AccountData {
+            address,
+            code_hash,
+            code,
+            nonce,
+            storage,
+        } = acc;
         let mut evm_db = self.db(state);
         evm_db.insert_account_info(
-            acc.address,
+            address,
             AccountInfo {
                 balance: U256::ZERO,
-                code_hash: acc.code_hash,
-                nonce: 0,
+                code_hash,
+                nonce,
                 code: None,
             },
         )?;
 
-        if !acc.code.is_empty() {
-            evm_db.insert_code(acc.code_hash, acc.code.clone())?;
+        if !code.is_empty() {
+            evm_db.insert_code(code_hash, code)?;
         };
+
+        for (slot, value) in storage {
+            self.account_storage
+                .set(&(&address, &slot), &value, state)?;
+        }
 
         Ok(())
     }
@@ -157,5 +191,42 @@ fn evm_chain_config<S: Spec>(
         chain_spec: cfg.chain_spec.clone(),
         hardforks: spec,
         contract_creation_policy: cfg.contract_creation_policy.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn account_data_skips_default_nonce_and_storage_on_serialize() {
+        let account = AccountData::empty_with_address(Address::from([1u8; 20]));
+        let value = serde_json::to_value(account).unwrap();
+        let obj = value.as_object().unwrap();
+        assert!(
+            !obj.contains_key("nonce"),
+            "default nonce should be omitted from serialized genesis account"
+        );
+        assert!(
+            !obj.contains_key("storage"),
+            "empty storage should be omitted from serialized genesis account"
+        );
+    }
+
+    #[test]
+    fn account_data_serializes_non_default_nonce_and_storage() {
+        let mut account = AccountData::empty_with_address(Address::from([2u8; 20]));
+        account.nonce = 7;
+        account.storage.insert(U256::from(1u64), U256::from(2u64));
+
+        let value = serde_json::to_value(account).unwrap();
+        let obj = value.as_object().unwrap();
+        assert_eq!(obj.get("nonce"), Some(&serde_json::Value::from(7u64)));
+        assert!(
+            obj.get("storage")
+                .and_then(serde_json::Value::as_object)
+                .is_some(),
+            "non-empty storage should be serialized"
+        );
     }
 }

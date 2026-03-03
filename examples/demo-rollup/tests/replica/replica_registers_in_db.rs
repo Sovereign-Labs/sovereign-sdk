@@ -16,6 +16,9 @@ async fn test_multiple_replicas_register_in_nodes_table() {
         .start_node("replica_then_leader", ConfiguredNodeRole::Replica)
         .await;
 
+    // Wait for the first replica to appear in cluster info.
+    let _ = setup.wait_for_cluster_change().await;
+
     let replica_rollup = setup
         .start_node("replica", ConfiguredNodeRole::Replica)
         .await;
@@ -68,6 +71,8 @@ async fn test_stale_nodes_are_filtered_from_cluster_info() {
     // Start a leader node that will keep sending heartbeats.
     let leader = setup.start_node("leader", ConfiguredNodeRole::Leader).await;
     leader.wait_for_sequencer_ready().await.unwrap();
+    // Wait for the leader to appear in cluster info.
+    let _ = setup.wait_for_cluster_change().await;
 
     // Start a replica node.
     let replica = setup
@@ -76,7 +81,7 @@ async fn test_stale_nodes_are_filtered_from_cluster_info() {
 
     replica.wait_for_sequencer_ready().await.unwrap();
 
-    // Wait for both nodes to appear in cluster info.
+    // Wait for the replica to appear in cluster info.
     let cluster_info = setup.wait_for_cluster_change().await;
     assert!(
         cluster_info.has_leader("leader"),

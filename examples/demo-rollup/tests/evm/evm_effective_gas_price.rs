@@ -4,11 +4,9 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
+    HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
-
-const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
-const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Result<()> {

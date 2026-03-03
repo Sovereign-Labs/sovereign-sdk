@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{BlockHeader, Header};
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{Address, U256};
 use revm::state::AccountInfo;
 use revm::Database;
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddress};
@@ -113,11 +112,7 @@ fn test_genesis_block() {
 
 fn default_config() -> EvmGenesisConfig<S> {
     EvmGenesisConfig {
-        accounts: vec![AccountData {
-            address: Address::from([1u8; 20]),
-            code_hash: KECCAK_EMPTY,
-            code: Bytes::default(),
-        }],
+        accounts: vec![AccountData::empty_with_address(Address::from([1u8; 20]))],
         initial_base_fee: 70,
         genesis_timestamp: 50,
         chain_spec: EvmChainSpec {

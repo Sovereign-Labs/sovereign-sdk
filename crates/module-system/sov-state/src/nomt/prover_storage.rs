@@ -14,7 +14,7 @@ use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
 use sov_db::storage_manager::{
-    InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession,
+    InitializableNativeNomtStorage, NomtChangeSet, StateFinishedSession, WitnessMode,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
@@ -38,11 +38,11 @@ where
     state_session_builder: NomtSessionBuilder<S::Hasher, K>,
     historical_state: HistoricalStateReader,
     accessory: AccessoryDb,
-    /// If set to true, witness will be populated in all necessary places.
-    /// Also, will do consistency check between NOMT and rocksdb in some cases.
-    /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
-    strict_with_witness: bool,
-    pinned_cache: Option<PinnedCache>,
+    /// Enable staleness/consistency checks (NOMT vs rocksdb, root hash comparison).
+    /// Should be true for all node-context block processing.
+    strict_mode: bool,
+    /// Controls witness hint generation for ZK proofs and optional pinned cache.
+    witness_mode: WitnessMode<PinnedCache>,
 }
 
 impl<S: MerkleProofSpec, K: Clone> Clone for NomtProverStorage<S, K>
@@ -51,15 +51,25 @@ where
     K: Clone,
 {
     fn clone(&self) -> Self {
-        if self.pinned_cache.is_some() {
+        if matches!(
+            self.witness_mode,
+            WitnessMode::Off {
+                pinned_cache: Some(_)
+            }
+        ) {
             tracing::warn!("Cloning NomtProverStorage which has an active pinned cache. The pinned cache will not be propagated to the clone.");
         }
+        let witness_mode = if self.witness_mode.is_witness_enabled() {
+            WitnessMode::On
+        } else {
+            WitnessMode::off()
+        };
         Self {
             state_session_builder: self.state_session_builder.clone(),
             historical_state: self.historical_state.clone(),
             accessory: self.accessory.clone(),
-            strict_with_witness: self.strict_with_witness,
-            pinned_cache: None,
+            strict_mode: self.strict_mode,
+            witness_mode,
         }
     }
 }
@@ -78,22 +88,21 @@ where
     K: Clone,
 {
     /// Create the new instance of [`NomtProverStorage`] with the given sessions.
-    /// If `strict_with_witness` is set to true,
-    /// Witness will be recorded and consistency between NOMT and rocksdb will be checked in some cases.
-    // Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
+    /// If `strict_mode` is true, consistency checks between NOMT and rocksdb will be performed.
+    /// Please check [`NomtProverStorage::should_check_dbs_sync`] for more details.
     pub fn create(
         state_session_builder: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory: AccessoryDb,
-        strict_with_witness: bool,
-        pinned_cache: Option<PinnedCache>,
+        strict_mode: bool,
+        witness_mode: WitnessMode<PinnedCache>,
     ) -> Self {
         Self {
             state_session_builder,
             historical_state,
             accessory,
-            strict_with_witness,
-            pinned_cache,
+            strict_mode,
+            witness_mode,
         }
     }
     /// Utility method for checking if storage is empty.
@@ -105,7 +114,7 @@ where
     /// Allows changing strict mode for the existing storage.
     #[cfg(feature = "test-utils")]
     pub fn change_strict_mode(&mut self, use_strict_mode: bool) {
-        self.strict_with_witness = use_strict_mode;
+        self.strict_mode = use_strict_mode;
     }
 
     /// Returns a double option: The outer option is `None` if there is no reasonable version to use,
@@ -140,7 +149,7 @@ where
     /// not the latest known to this storage.
     fn should_check_dbs_sync(&self, version_to_use: SlotNumber) -> bool {
         cfg!(debug_assertions) &&
-            self.strict_with_witness
+            self.strict_mode
             // latest version can be equal to genesis in 2 cases: pre-genesis and at genesis.
             // Since genesis is a special case and not covered by normal stf transition,
             // we exclude this case for simpler testing.
@@ -269,6 +278,72 @@ where
         }
         Ok(node_leaf_with_fetched_value)
     }
+
+    fn materialize_changes_with_version(
+        self,
+        state_update: NomtStateUpdate<S>,
+        version: SlotNumber,
+    ) -> NomtChangeSet {
+        tracing::trace!(
+            %version,
+            "NomtProverStorage, materializing changes at explicit version"
+        );
+        let NomtStateUpdate {
+            state_accesses:
+                StateAccesses {
+                    user: user_versioned,
+                    kernel: kernel_versioned,
+                },
+            accessory: accessory_writes,
+            user,
+            kernel,
+            next_root_hash,
+            pinned_cache,
+        } = state_update;
+        let user_to_materialize = user_versioned.ordered_writes.into_iter();
+        let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter();
+        let historical_schema_batch = HistoricalStateReader::materialize_values(
+            user_to_materialize,
+            kernel_to_materialize,
+            borsh::to_vec(&next_root_hash).expect("Failed to serialize root hash"),
+            version,
+        )
+        .expect("historical state db materialization must succeed");
+        let accessory_batch = AccessoryDb::materialize_values(
+            accessory_writes
+                .ordered_writes
+                .iter()
+                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
+                .map(|(k, v_opt)| {
+                    (
+                        k.as_ref().to_vec(),
+                        v_opt.as_ref().map(|v| v.value().to_vec()),
+                    )
+                }),
+            version,
+        )
+        .expect("accessory db materialization must succeed");
+        // Erase the type of the pinned cache since the storage manager isn't aware of it.
+        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
+        NomtChangeSet {
+            state: StateFinishedSession::new(user, kernel),
+            historical_state: historical_schema_batch,
+            accessory: accessory_batch,
+            pinned_cache,
+        }
+    }
+
+    /// Materializes a state update at an explicit version.
+    ///
+    /// This is intended for offline migration tooling that updates state in-place at the
+    /// current head version instead of appending a new version.
+    pub fn materialize_changes_at_version(
+        self,
+        state_update: NomtStateUpdate<S>,
+        version: SlotNumber,
+    ) -> NomtChangeSet {
+        self.materialize_changes_with_version(state_update, version)
+    }
 }
 
 fn to_nomt_accesses<S: MerkleProofSpec>(
@@ -363,16 +438,22 @@ where
         state_db: NomtSessionBuilder<S::Hasher, K>,
         historical_state: HistoricalStateReader,
         accessory_db: AccessoryDb,
-        strict_with_witness: bool,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
     ) -> Self {
-        let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
+        let witness_mode = match witness_mode {
+            WitnessMode::On => WitnessMode::On,
+            WitnessMode::Off { pinned_cache } => {
+                let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
+                WitnessMode::Off { pinned_cache }
+            }
+        };
         Self::create(
             state_db,
             historical_state,
             accessory_db,
-            strict_with_witness,
-            pinned_cache,
+            strict_mode,
+            witness_mode,
         )
     }
 }
@@ -412,7 +493,9 @@ where
         StorageRoot::new(nomt::trie::TERMINATOR, nomt::trie::TERMINATOR);
 
     fn put_in_witness(&self, value: Option<SlotValue>, witness: &Self::Witness) {
-        witness.add_hint(&value);
+        if self.witness_mode.is_witness_enabled() {
+            witness.add_hint(&value);
+        }
     }
 
     fn get_leaf<N: ProvableCompileTimeNamespace>(
@@ -420,7 +503,12 @@ where
         key: &SlotKey,
         witness: &Self::Witness,
     ) -> Option<NodeLeafAndMaybeValue> {
-        match self.do_get_leaf::<N>(key, None, Some(witness)) {
+        let witness_ref = if self.witness_mode.is_witness_enabled() {
+            Some(witness)
+        } else {
+            None
+        };
+        match self.do_get_leaf::<N>(key, None, witness_ref) {
             Ok(val) => val,
             Err(e) => {
                 // Historical errors are not expected when fetching without a version
@@ -436,7 +524,7 @@ where
     ) -> Option<SlotValue> {
         match self.read_value::<N>(key, None) {
             Ok(val) => {
-                if self.strict_with_witness {
+                if self.witness_mode.is_witness_enabled() {
                     witness.add_hint(&val);
                 }
                 val
@@ -479,7 +567,7 @@ where
             kernel: kernel_session,
         } = self
             .state_session_builder
-            .begin_both_sessions(self.strict_with_witness)?;
+            .begin_both_sessions(self.witness_mode.is_witness_enabled())?;
         let starting_session_time = start_session.elapsed();
         tracing::debug!(%prev_state_root, %next_version, sesssion_starting_time = ?starting_session_time, "computing state update, sessions are live");
 
@@ -488,7 +576,7 @@ where
         let current_prev_root = StorageRoot::new(current_prev_user_root, current_prev_kernel_root);
 
         // Check staleness, pre-computation:
-        if self.strict_with_witness && current_prev_root != prev_state_root {
+        if self.strict_mode && current_prev_root != prev_state_root {
             anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
                 next_version,
                 prev_state_root,
@@ -503,7 +591,7 @@ where
                 user_session,
                 nomt_accesses_user,
                 witness,
-                self.strict_with_witness,
+                self.witness_mode.is_witness_enabled(),
             )
             .context("user state")?
         };
@@ -514,7 +602,7 @@ where
                 kernel_session,
                 nomt_accesses_kernel,
                 witness,
-                self.strict_with_witness,
+                self.witness_mode.is_witness_enabled(),
             )
             .context("kernel state")?
         };
@@ -523,8 +611,8 @@ where
         let user_reads = state_accesses.user.ordered_reads.len();
         let user_writes = state_accesses.user.ordered_writes.len();
         let kernel_reads = state_accesses.kernel.ordered_reads.len();
-        let kernel_writes = state_accesses.kernel.ordered_reads.len();
-        let with_witness = self.strict_with_witness;
+        let kernel_writes = state_accesses.kernel.ordered_writes.len();
+        let with_witness = self.witness_mode.is_witness_enabled();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(NomtProverComputeStateResult {
                 user_reads,
@@ -544,7 +632,7 @@ where
         );
 
         // Check staleness, post-computation. This should check if storage became stale during the computation.
-        if self.strict_with_witness && prev_state_root != finished_session_prev_root {
+        if self.strict_mode && prev_state_root != finished_session_prev_root {
             anyhow::bail!("stale storage on next_version={}, passed prev_state_root {} does not match the current prev_state_root {}",
                 next_version,
                 prev_state_root,
@@ -572,50 +660,7 @@ where
 
     fn materialize_changes(self, state_update: Self::StateUpdate) -> Self::ChangeSet {
         let next_version = self.historical_state.get_next_version();
-        tracing::trace!(%next_version, "NomtProverStorage, materializing changes");
-        let NomtStateUpdate {
-            state_accesses:
-                StateAccesses {
-                    user: user_versioned,
-                    kernel: kernel_versioned,
-                },
-            accessory: accessory_writes,
-            user,
-            kernel,
-            next_root_hash,
-            pinned_cache,
-        } = state_update;
-        let user_to_materialize = user_versioned.ordered_writes.into_iter();
-        let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter();
-        let historical_schema_batch = HistoricalStateReader::materialize_values(
-            user_to_materialize,
-            kernel_to_materialize,
-            borsh::to_vec(&next_root_hash).expect("Failed to serialize root hash"),
-            next_version,
-        )
-        .expect("historical state db materialization must succeed");
-        let accessory_batch = AccessoryDb::materialize_values(
-            accessory_writes
-                .ordered_writes
-                .iter()
-                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-                .map(|(k, v_opt)| {
-                    (
-                        k.as_ref().to_vec(),
-                        v_opt.as_ref().map(|v| v.value().to_vec()),
-                    )
-                }),
-            next_version,
-        )
-        .expect("accessory db materialization must succeed");
-        // Erase the type of the pinned cache since the storage manager isn't aware of it.
-        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
-        NomtChangeSet {
-            state: StateFinishedSession::new(user, kernel),
-            historical_state: historical_schema_batch,
-            accessory: accessory_batch,
-            pinned_cache,
-        }
+        self.materialize_changes_with_version(state_update, next_version)
     }
 
     fn open_proof(
@@ -771,7 +816,7 @@ where
     }
 
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
-        self.pinned_cache.take()
+        self.witness_mode.take_pinned_cache()
     }
 }
 

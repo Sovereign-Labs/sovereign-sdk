@@ -1,5 +1,16 @@
+# 2026-03-02
+- #2543 **Breaking change: code** Adds a new constants.toml value `ENABLE_TIMESTAMP_ORACLE_AT` which disables setting the on-chain timestamp oracle metadata from the sequencer context before the provided height. Should be set to 0 for new chains, and some height after the upgrade for existing chains. Alternatively set to `i64::MAX` to effectively disable it.
+
+# 2026-02-24 
+- #2512 adds the capability to migrate from mockDa -> Celestia to the demo rollup.
+
+# 2026-02-26
+- #2540 Adds a witness generation flag. If witness generation is enabled at the same time as cache pinning a panic with occur at runtime.
+
 # 2026-02-23
 - #2520 reverts #2489
+- #2506 EVM: Fixes RPC endpoints and adds base for hive and rpc compat tests
+- #2532 EVM: Minor fixes in RPC endpoints
 
 # 2026-02-17
 - #2493 **Infra only breaking change**: CelestiaConfig `rpc_url` param is now mandatory. Please don't rely on previous default value and provide explicit value.
@@ -217,6 +228,7 @@ The purpose of this change is to enable rollups to accept transactions signed wi
 - #1897 Fix gas estimation for transactions with many logs by charging for log storage in receipts.
 - #1893 Removes wrapper `Transaction` structure. Now `Transaction` is a enum of versions directly.
         This was done because there's no guarantees that any field will remain common across all transaction versions (which was the original motiviation for this design).
+- #1916 Changes demo-rollup to use NOMT storage by default.
 
 # 2025-10-16
 - #1878 Add EVM logs soak test

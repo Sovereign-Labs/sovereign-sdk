@@ -373,13 +373,20 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.read_value::<Accessory>(key, None)
     }
 
+    /// # Panics
+    ///
+    /// Panics if `pinned_cache` is `Some`, as JMT prover storage is incompatible with pinned caches.
     fn compute_state_update(
         &self,
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
-        _pinned_cache: Option<PinnedCache>,
+        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
+        assert!(
+            pinned_cache.is_none(),
+            "JMT ProverStorage does not support pinned cache as it is incompatible with ZKPs."
+        );
         let prev_user_root = prev_state_root.namespace_root(ProvableNamespace::User);
         let prev_kernel_root = prev_state_root.namespace_root(ProvableNamespace::Kernel);
         let (user_root, user_state_update) = self

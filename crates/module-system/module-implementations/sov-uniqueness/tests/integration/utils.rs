@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::{eip1559::MIN_PROTOCOL_BASE_FEE, eip2718::Encodable2718};
 use alloy_primitives::{Address, Bytes, TxKind};
@@ -128,11 +127,7 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
     let evm_account = EvmAccount::generate();
 
     let evm_config = EvmGenesisConfig {
-        accounts: vec![AccountData {
-            address: evm_account.address(),
-            code_hash: KECCAK_EMPTY,
-            code: Default::default(),
-        }],
+        accounts: vec![AccountData::empty_with_address(evm_account.address())],
         chain_spec: EvmChainSpec {
             // CANCUN instead of LATEST
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/912

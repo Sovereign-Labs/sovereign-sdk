@@ -177,7 +177,7 @@ type Sm = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
 impl TestableStorageManager for Sm {
     fn new(path: impl AsRef<Path>) -> Self {
         let config = RollupDbConfig::default_in_path(path.as_ref().to_path_buf());
-        Sm::new(config).unwrap()
+        Sm::new(config, false).unwrap()
     }
 
     fn verify_stf_storage(stf_storage: &Self::StfState, expected_values: &[(u64, MockHash)]) {
@@ -302,7 +302,7 @@ async fn test_historical_state_with_pruning() {
     config.pruner_block_interval = Some(pruning_frequency);
     config.pruner_versions_to_keep = Some(versions_to_keep);
     let mut storage_manager =
-        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone()).unwrap();
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone(), false).unwrap();
 
     let blocks: u64 = 14;
 

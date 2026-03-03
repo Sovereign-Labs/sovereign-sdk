@@ -10,21 +10,16 @@ use alloy_rpc_types_eth::BlockNumberOrTag::{
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde_json::json;
-use std::future::Future;
-use std::time::Duration;
 
 use crate::evm::evm_test_helper::{
-    alloy_client, create_simple_storage_client, deploy_contract_check, setup_test_rollup,
-    EVM_EXTENSION, SENDER_PRIV_KEY,
+    alloy_client, create_simple_storage_client, deploy_contract_check, poll_until,
+    setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
 };
 use alloy_primitives::Address;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
-
-const MAX_POLL_ATTEMPTS: usize = 100;
-const POLL_INTERVAL_MS: u64 = 25;
 
 // =============================================================================
 // Setup Helpers
@@ -92,27 +87,6 @@ async fn assert_safe_finalized_consistent(
     }
 
     Ok((safe_block, finalized_block))
-}
-
-async fn poll_until<T, F, Fut, P>(
-    mut fetch: F,
-    mut predicate: P,
-    failure_msg: &str,
-) -> anyhow::Result<T>
-where
-    F: FnMut() -> Fut,
-    Fut: Future<Output = anyhow::Result<T>>,
-    P: FnMut(&T) -> bool,
-{
-    let mut value = fetch().await?;
-    for _ in 0..MAX_POLL_ATTEMPTS {
-        if predicate(&value) {
-            return Ok(value);
-        }
-        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
-        value = fetch().await?;
-    }
-    anyhow::bail!("{failure_msg}")
 }
 
 // =============================================================================
