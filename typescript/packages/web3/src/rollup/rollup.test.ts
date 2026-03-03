@@ -54,8 +54,7 @@ const testRollup = <S extends BaseTypeSpec, C extends RollupContext>(
 describe("Rollup", () => {
   describe("constructor", () => {
     it("should use the provided serializer if it is provided", async () => {
-      const { rollup, client } = testRollup({ getSerializer });
-      client.rollup.schema = vi.fn().mockResolvedValueOnce({});
+      const { rollup } = testRollup({ getSerializer });
       const actual = await rollup.serializer();
       expect(actual).toBe(mockSerializer);
     });
@@ -442,6 +441,60 @@ describe("Rollup", () => {
       const { rollup } = testRollup({ context });
 
       expect(rollup.context).toBe(context);
+    });
+  });
+  describe("hydrate", () => {
+    it("should populate both serializer and chainHash with a single schema call", async () => {
+      const { rollup, client } = testRollup();
+
+      await rollup.hydrate();
+
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+      const serializer = await rollup.serializer();
+      const chainHash = await rollup.chainHash();
+      expect(serializer).toBe(mockSerializer);
+      expect(chainHash).toEqual(new Uint8Array([1, 2, 3, 4]));
+      // No additional calls after hydrate
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not make additional requests when serializer() is called after hydrate()", async () => {
+      const { rollup, client } = testRollup();
+
+      await rollup.hydrate();
+      await rollup.serializer();
+      await rollup.serializer();
+
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not make additional requests when chainHash() is called after hydrate()", async () => {
+      const { rollup, client } = testRollup();
+
+      await rollup.hydrate();
+      await rollup.chainHash();
+      await rollup.chainHash();
+
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+    });
+  });
+  describe("schema fetching consolidation", () => {
+    it("should populate both fields when serializer() is called first", async () => {
+      const { rollup, client } = testRollup();
+
+      await rollup.serializer();
+      await rollup.chainHash();
+
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+    });
+
+    it("should populate both fields when chainHash() is called first", async () => {
+      const { rollup, client } = testRollup();
+
+      await rollup.chainHash();
+      await rollup.serializer();
+
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
     });
   });
   describe("healthcheck", () => {
