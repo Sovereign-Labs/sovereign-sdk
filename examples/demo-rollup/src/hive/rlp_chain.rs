@@ -1,56 +1,9 @@
 use std::fs;
 use std::path::Path;
 
+use alloy::consensus::Header as ConsensusHeader;
 use alloy_rlp::{Decodable, Header, PayloadView};
-use anyhow::{anyhow, bail, Context, Result};
-
-fn next_rlp_item<'a>(input: &mut &'a [u8], context: &str) -> Result<&'a [u8]> {
-    if input.is_empty() {
-        bail!("Unexpected end of RLP stream while decoding {context}");
-    }
-
-    let original = *input;
-    let mut after_header = original;
-    let header = Header::decode(&mut after_header)
-        .with_context(|| format!("Failed to decode RLP header for {context}"))?;
-    let header_len = original
-        .len()
-        .checked_sub(after_header.len())
-        .ok_or_else(|| anyhow!("RLP length underflow"))?;
-    let total_len = header_len
-        .checked_add(header.payload_length)
-        .ok_or_else(|| anyhow!("RLP length overflow"))?;
-    if total_len > original.len() {
-        bail!("RLP item for {context} extends beyond available input");
-    }
-
-    let (item, rest) = original.split_at(total_len);
-    *input = rest;
-    Ok(item)
-}
-
-fn decode_rlp_list_items<'a>(raw: &'a [u8], context: &str) -> Result<Vec<&'a [u8]>> {
-    let mut cursor = raw;
-    let payload = Header::decode_raw(&mut cursor)
-        .with_context(|| format!("Failed to decode RLP payload for {context}"))?;
-    if !cursor.is_empty() {
-        bail!("Malformed RLP list for {context}: trailing bytes");
-    }
-    match payload {
-        PayloadView::List(items) => Ok(items),
-        PayloadView::String(_) => bail!("Expected RLP list for {context}"),
-    }
-}
-
-fn decode_rlp_u64(raw: &[u8], context: &str) -> Result<u64> {
-    let mut field = raw;
-    let value = u64::decode(&mut field)
-        .with_context(|| format!("Failed to decode RLP quantity for {context}"))?;
-    if !field.is_empty() {
-        bail!("Malformed RLP quantity for {context}: trailing bytes");
-    }
-    Ok(value)
-}
+use anyhow::{bail, Context, Result};
 
 pub(crate) fn load_chain_timestamps(chain_rlp_path: &Path) -> Result<Vec<(u64, u64)>> {
     let data = fs::read(chain_rlp_path)
@@ -59,20 +12,27 @@ pub(crate) fn load_chain_timestamps(chain_rlp_path: &Path) -> Result<Vec<(u64, u
     let mut cursor = data.as_slice();
 
     while !cursor.is_empty() {
-        let block_item = next_rlp_item(&mut cursor, "chain.rlp block")?;
-        let block_fields = decode_rlp_list_items(block_item, "chain.rlp block")?;
+        let payload = Header::decode_raw(&mut cursor).with_context(|| {
+            format!(
+                "Failed to decode RLP payload for chain.rlp block from {}",
+                chain_rlp_path.display()
+            )
+        })?;
+        let block_fields = match payload {
+            PayloadView::List(items) => items,
+            PayloadView::String(_) => bail!("Expected RLP list for chain.rlp block"),
+        };
         if block_fields.is_empty() {
             bail!("Malformed block in chain.rlp");
         }
 
-        let header_fields = decode_rlp_list_items(block_fields[0], "chain.rlp block header")?;
-        if header_fields.len() < 12 {
-            bail!("Block header has fewer fields than expected");
+        let mut header_raw = block_fields[0];
+        let header = ConsensusHeader::decode(&mut header_raw)
+            .context("Failed to decode chain.rlp block header")?;
+        if !header_raw.is_empty() {
+            bail!("Malformed chain.rlp block header: trailing bytes");
         }
-
-        let block_number = decode_rlp_u64(header_fields[8], "chain.rlp block number")?;
-        let timestamp = decode_rlp_u64(header_fields[11], "chain.rlp block timestamp")?;
-        out.push((block_number, timestamp));
+        out.push((header.number, header.timestamp));
     }
 
     Ok(out)
@@ -91,9 +51,29 @@ pub(crate) fn activation_block_for_timestamp(
 mod tests {
     use std::fs;
 
-    use alloy_rlp::Encodable;
+    use alloy::consensus::Header as ConsensusHeader;
+    use alloy_rlp::{Encodable, Header as RlpHeader};
 
     use super::*;
+
+    fn encode_block_item(header: &ConsensusHeader) -> Vec<u8> {
+        let mut header_bytes = Vec::new();
+        header.encode(&mut header_bytes);
+
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&header_bytes);
+        payload.push(0xc0); // transactions = empty list
+        payload.push(0xc0); // ommers = empty list
+
+        let mut out = Vec::new();
+        RlpHeader {
+            list: true,
+            payload_length: payload.len(),
+        }
+        .encode(&mut out);
+        out.extend_from_slice(&payload);
+        out
+    }
 
     #[test]
     fn activation_block_uses_first_timestamp_greater_or_equal() {
@@ -104,18 +84,34 @@ mod tests {
     }
 
     #[test]
-    fn decode_rlp_u64_roundtrip() {
-        let mut encoded = Vec::new();
-        42u64.encode(&mut encoded);
-        assert_eq!(decode_rlp_u64(&encoded, "value").unwrap(), 42);
-    }
+    fn load_chain_timestamps_decodes_via_alloy_header() {
+        let path = std::env::temp_dir().join(format!(
+            "sov-hive-genesis-adapter-valid-chain-{}.rlp",
+            std::process::id()
+        ));
 
-    #[test]
-    fn decode_rlp_u64_rejects_trailing_bytes() {
-        let mut encoded = Vec::new();
-        7u64.encode(&mut encoded);
-        encoded.push(0x00);
-        assert!(decode_rlp_u64(&encoded, "value").is_err());
+        let first = ConsensusHeader {
+            number: 7,
+            timestamp: 100,
+            ..Default::default()
+        };
+
+        let second = ConsensusHeader {
+            number: 8,
+            timestamp: 200,
+            base_fee_per_gas: Some(1),
+            ..Default::default()
+        };
+
+        let mut chain = Vec::new();
+        chain.extend_from_slice(&encode_block_item(&first));
+        chain.extend_from_slice(&encode_block_item(&second));
+        fs::write(&path, chain).unwrap();
+
+        let result = load_chain_timestamps(&path).unwrap();
+        let _ = fs::remove_file(&path);
+
+        assert_eq!(result, vec![(7, 100), (8, 200)]);
     }
 
     #[test]

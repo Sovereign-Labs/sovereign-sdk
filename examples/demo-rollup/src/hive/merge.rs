@@ -181,17 +181,29 @@ mod tests {
 
     #[test]
     fn build_evm_accounts_counts_contracts_and_storage() {
-        let alloc = serde_json::from_value::<BTreeMap<Address, GenesisAccount>>(json!({
-            "0x0000000000000000000000000000000000000001": {
-                "code": "0x6000",
-                "storage": {"0x1": "0x2"},
-                "balance": "0x1"
-            },
-            "0x0000000000000000000000000000000000000002": {
-                "balance": "0x0"
-            }
-        }))
-        .unwrap();
+        let first_address: Address = "0x0000000000000000000000000000000000000001"
+            .parse()
+            .unwrap();
+        let second_address: Address = "0x0000000000000000000000000000000000000002"
+            .parse()
+            .unwrap();
+        let first_account = GenesisAccount {
+            balance: U256::from(1u64),
+            code: Some(alloy_primitives::Bytes::from(vec![0x60, 0x00])),
+            storage: Some(BTreeMap::from([(
+                B256::from(U256::from(1u64)),
+                B256::from(U256::from(2u64)),
+            )])),
+            ..Default::default()
+        };
+        let second_account = GenesisAccount {
+            balance: U256::ZERO,
+            ..Default::default()
+        };
+        let alloc = BTreeMap::from([
+            (first_address, first_account),
+            (second_address, second_account),
+        ]);
 
         let (accounts, balances, stats) = build_evm_accounts_and_alloc_balances(&alloc).unwrap();
         assert_eq!(accounts.len(), 2);
