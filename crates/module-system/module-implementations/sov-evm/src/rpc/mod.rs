@@ -15,6 +15,7 @@ use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::primitive_types::{synthetic_block_hash_for, SyntheticBlockWithoutRootsAndBloom};
+use crate::sov_fee_and_gas_utils::is_actual_fee_projection_height_active;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
@@ -372,9 +373,12 @@ where
         );
         let fee_paid = self.receipt_fee(tx_idx, state);
         if let Some((receipt, _)) = self.receipt(tx_idx, state) {
-            if let Some(actual_effective_gas_price) =
-                maybe_actual_effective_gas_price(block_number, receipt.gas_used, fee_paid)
-            {
+            if let Some(actual_effective_gas_price) = maybe_actual_effective_gas_price(
+                block_number,
+                receipt.gas_used,
+                fee_paid,
+                base_fee_per_gas,
+            ) {
                 tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
             }
         }
@@ -1172,13 +1176,20 @@ fn maybe_actual_effective_gas_price(
     block_number: u64,
     gas_used: u64,
     fee_paid: Option<Amount>,
+    base_fee_per_gas: Option<u64>,
 ) -> Option<u128> {
-    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
-    if block_number <= apply_actual_fee_after_height || gas_used == 0 {
+    if !is_actual_fee_projection_height_active(block_number) || gas_used == 0 {
         return None;
     }
 
-    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+    // Keep zero-fee projection: when metadata says no fee was charged, RPC must return 0 here.
+    // For non-zero fee, we report the block header base fee (primary gas-price dimension).
+    // Invariant: this header value must match the gas meter's `gas_price[0]`; divergence is a bug.
+    match fee_paid {
+        Some(Amount::ZERO) => Some(0),
+        Some(_) => base_fee_per_gas.map(u128::from),
+        None => None,
+    }
 }
 
 // modified from: https://github.com/paradigmxyz/reth many times
@@ -1242,12 +1253,16 @@ pub(crate) fn build_rpc_receipt(
         .inner()
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
 
-    // Once activated, prefer the fee paid in the Sovereign gas meter when available.
-    // This keeps receipt fee semantics aligned with balance deltas.
-    let effective_gas_price =
-        maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
-            // Keep compatibility for historical data where metadata may be missing.
-            .unwrap_or(eip_1559_effective_gas_price);
+    // Once activated, keep zero-fee semantics from metered metadata and otherwise
+    // report the primary gas-price dimension (EVM base fee from header).
+    let effective_gas_price = maybe_actual_effective_gas_price(
+        block.number(),
+        receipt.gas_used,
+        fee_paid,
+        block.maybe_partial_header().base_fee_per_gas,
+    )
+    // Keep compatibility for historical data where metadata may be missing.
+    .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
@@ -1268,6 +1283,70 @@ pub(crate) fn build_rpc_receipt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(active_block, 21_000, Some(Amount::ZERO), Some(123)),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_ignores_zero_paid_fee_before_activation() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                activation_height,
+                21_000,
+                Some(Amount::ZERO),
+                Some(123),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_base_fee_for_non_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                Some(42),
+            ),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_falls_back_when_base_fee_missing() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                None,
+            ),
+            None
+        );
+    }
 
     #[test]
     fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {

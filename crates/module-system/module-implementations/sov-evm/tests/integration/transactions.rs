@@ -15,6 +15,33 @@ use sov_test_utils::BatchTestCase;
 use sov_test_utils::TransactionType;
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
 
+fn assert_receipt_implied_fee_is_conservative(
+    actual_fee: U256,
+    implied_fee: U256,
+    effective_gas_price: u128,
+) {
+    assert!(
+        implied_fee >= actual_fee,
+        "receipt-implied fee should not under-report the actual charged fee"
+    );
+
+    let over_reported_fee = implied_fee
+        .checked_sub(actual_fee)
+        .expect("implied fee is checked to be >= actual fee");
+    if effective_gas_price == 0 {
+        assert_eq!(
+            over_reported_fee,
+            U256::ZERO,
+            "zero effective gas price cannot over-report fee"
+        );
+    } else {
+        assert!(
+            over_reported_fee < U256::from(effective_gas_price),
+            "receipt-implied fee overage should stay below one gas-price unit"
+        );
+    }
+}
+
 #[test]
 fn test_simple_transfer() {
     let (mut runner, from, to, _) = setup();
@@ -72,16 +99,10 @@ fn test_receipt_fee_matches_balance_delta() {
                 })
                 .expect("sender balance should decrease by transfer value and a fee");
 
-            assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
-            );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
+            assert_receipt_implied_fee_is_conservative(
+                actual_fee,
+                implied_fee,
+                receipt.effective_gas_price,
             );
         }),
     });
@@ -125,16 +146,10 @@ fn test_block_receipt_fee_matches_balance_delta() {
                 })
                 .expect("sender balance should decrease by transfer value and a fee");
 
-            assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
-            );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
+            assert_receipt_implied_fee_is_conservative(
+                actual_fee,
+                implied_fee,
+                receipt.effective_gas_price,
             );
         }),
     });

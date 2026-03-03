@@ -13,9 +13,8 @@ use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_metrics::{save_elapsed, start_timer};
 use sov_modules_api::macros::{serialize, UniversalWallet};
-#[cfg(feature = "native")]
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Context, GasSpec, Spec, TxState};
+use sov_modules_api::{Context, GasSpec, Spec, StateAccessor, TxState};
 #[cfg(feature = "native")]
 use std::convert::Infallible;
 
@@ -27,6 +26,7 @@ use crate::execution_config::EVM_EXECUTION_CONFIG;
 use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
+use crate::sov_fee_and_gas_utils::project_receipt_gas_from_actual_fee;
 use crate::{
     gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
     ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
@@ -296,7 +296,7 @@ where
         // Note that we get the time unconditionally here, as we want to store the time in the pending transaction and have consistent gas metering across zk/native
         let time = self.chain_state_module.get_oracle_time(state)?;
 
-        let pending_tx = PendingTransaction::new(tx, receipt, time);
+        let mut pending_tx = PendingTransaction::new(tx, receipt, time);
         self.pending_transactions.push(&pending_tx, state)?;
         save_elapsed!(set_state_time SINCE set_state);
 
@@ -310,15 +310,35 @@ where
             .expect("Head is set in genesis and never deleted");
         save_elapsed!(get_head_time SINCE get_head_t);
 
+        // Capture fee after metered state updates are complete so receipts reconcile against
+        // the same charged amount users observe in balance deltas.
+        let gas_info = state
+            .try_as_basic_gas_meter()
+            .expect("TxState should have BasicGasMeter")
+            .gas_info();
+
+        if let Some(projected_gas) =
+            project_receipt_gas_from_actual_fee::<S>(&pending_tx.receipt, &gas_info)?
+        {
+            pending_tx.receipt.gas_used = projected_gas.gas_used;
+            pending_tx.receipt.receipt.cumulative_gas_used = projected_gas.cumulative_gas_used;
+
+            // The pending tx is already pushed in metered mode and contributes to charged fee.
+            // This follow-up write only synchronizes receipt fields with that finalized fee.
+            let mut unmetered_state = state.to_unmetered();
+            let set_result = self
+                .pending_transactions
+                .set(pending_len, &pending_tx, &mut unmetered_state)
+                .unwrap_infallible();
+            set_result.map_err(|err| {
+                anyhow::anyhow!("EVM: failed to update pending projected receipt: {err}")
+            })?;
+        }
+
         #[cfg(feature = "native")]
         let set_accessory_state_time = {
             start_timer!(set_accessory_state);
-            // Places this after timer, so we don't have unmetered parts
-            let tx_fee_paid = state
-                .try_as_basic_gas_meter()
-                .expect("TxState should have BasicGasMeter")
-                .gas_info()
-                .gas_value;
+            let tx_fee_paid = gas_info.gas_value;
             // Since we just inserted tx above, we need to increment `pending_len`` by 1.
             self.set_accessory_state(head, &pending_tx, pending_len + 1, tx_fee_paid, state)
                 .unwrap_infallible();
@@ -682,7 +702,7 @@ fn on_revert<S: Spec>(
     // Revert the sovereign SDK transaction only if
     // 1. We're in the sequencer
     // 2. The submitter of this transaction is the preferred sequencer
-    // 3. The preferred seuqencer is not configured to publish reverted transactions
+    // 3. The preferred sequencer is not configured to publish reverted transactions
     //
     // Reverting the tx *in the preferred sequencer* will cause it to be rejected and excluded from the batch. Reverting it in any other context
     // will simply cause it to be excluded from the EVM's record keeping.
