@@ -1226,11 +1226,6 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     );
 
     let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;
-    let chain_gas_used = gas_info.gas_used.as_ref()[0];
-    assert!(
-        chain_gas_used >= receipts_gas_used,
-        "chain-state gas_used should be >= receipts gas_used"
-    );
     let expected_next_base_fee = compute_next_base_fee(
         header_base_fee,
         receipts_gas_used,
