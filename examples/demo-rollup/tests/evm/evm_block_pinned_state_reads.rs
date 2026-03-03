@@ -156,7 +156,10 @@ async fn block_pinned_nonce_excludes_pending() {
     let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
     let sealed_nonce = nonce_at(&client, address, "latest").await;
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before nonce assertions");
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x1234)).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
@@ -199,7 +202,10 @@ async fn block_pinned_balance_excludes_pending() {
         "Receiver should start with zero balance"
     );
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before balance assertions");
     let transfer_amount = U256::from(0x1_0000_0000u64);
     let tx_hash = client.send_eth(receiver, transfer_amount).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
@@ -235,7 +241,10 @@ async fn block_pinned_code_excludes_pending() {
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
     let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before code assertions");
     let deploy_tx = client.deploy_contract().await.unwrap();
     let receipt = client.wait_for_receipt(deploy_tx).await;
     assert_pause_effect(&client, head_number, finalized_head_before_pause).await;
@@ -283,7 +292,10 @@ async fn block_pinned_storage_excludes_pending() {
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
     let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before storage assertions");
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
