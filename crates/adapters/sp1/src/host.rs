@@ -65,7 +65,11 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let prover = ProverClient::from_env();
+        let prover = if cfg!(debug_assertions) {
+            ProverClient::builder().mock().build()
+        } else {
+            ProverClient::builder().cpu().build()
+        };
         let proof = if with_proof {
             let pk = prover
                 .setup(self.elf.into())
