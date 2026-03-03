@@ -148,6 +148,20 @@ where
     ) -> Result<LogsWithMaybeCursor> {
         let start = self.get_block_nr(from_block)?;
         let end = self.get_block_nr(to_block)?;
+        if start > end {
+            return Err(Error::InvalidBlock(
+                "invalid block range params".to_string(),
+            ));
+        }
+        // Match expected eth_getLogs semantics: explicit numeric ranges that extend past
+        // the current head should fail with invalid params instead of surfacing internal
+        // "block not found/pruned" errors.
+        let latest = self.get_block_nr(Some(BlockNumberOrTag::Latest))?;
+        if end > latest {
+            return Err(Error::InvalidBlock(
+                "invalid block range params".to_string(),
+            ));
+        }
         let maybe_cursor = self.scan_block_range(start..=end)?;
         Ok(LogsWithMaybeCursor::new(
             self.logs,

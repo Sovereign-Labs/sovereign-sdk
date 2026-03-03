@@ -1,6 +1,5 @@
 use crate::helpers::{create_deploy_tx, create_set_arg_tx, setup, EvmAccount};
 use crate::runtime::{GenesisConfig, RT, S};
-use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256};
@@ -146,11 +145,7 @@ fn setup_with_hardforks(hardforks: Vec<(u64, SpecId)>) -> (TestRunner<RT, S>, Ev
         .clone();
 
     let evm_config = EvmGenesisConfig {
-        accounts: vec![AccountData {
-            address: evm_account.address(),
-            code_hash: KECCAK_EMPTY,
-            code: Default::default(),
-        }],
+        accounts: vec![AccountData::empty_with_address(evm_account.address())],
         chain_spec: EvmChainSpec {
             limit_contract_code_size: None,
             coinbase: Address::ZERO,

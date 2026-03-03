@@ -1,6 +1,7 @@
 #![allow(deprecated)] // Allowed for using alloy things.
-use crate::evm::evm_test_helper::setup_with_simple_storage;
-use crate::evm::evm_test_helper::EVM_EXTENSION;
+use crate::evm::evm_test_helper::{
+    assert_invalid_params, rpc_call, setup_with_simple_storage, EVM_EXTENSION,
+};
 use alloy_primitives::{keccak256, Address, TxHash, B256, U256};
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter, Log};
 use jsonrpsee::core::client::ClientT;
@@ -281,7 +282,7 @@ async fn get_logs_default_range_matches_latest() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
+async fn get_logs_from_greater_than_to_returns_invalid_params() -> anyhow::Result<()> {
     let rollup_and_client = RollupAndClient::new_with_default_limits().await;
 
     rollup_and_client
@@ -291,11 +292,19 @@ async fn get_logs_from_greater_than_to_is_empty() -> anyhow::Result<()> {
 
     rollup_and_client.produce_logs(1, 2, None).await;
 
-    let filter = Filter::new()
-        .from_block(BlockNumberOrTag::Latest)
-        .to_block(BlockNumberOrTag::Earliest);
-    let logs = rollup_and_client.client.get_logs(&filter).await;
-    assert!(logs.is_empty());
+    let http = reqwest::Client::new();
+    let response = rpc_call(
+        &http,
+        rollup_and_client.test_rollup.http_addr,
+        "eth_getLogs",
+        serde_json::json!([{
+            "fromBlock": "latest",
+            "toBlock": "earliest"
+        }]),
+    )
+    .await?;
+
+    assert_invalid_params(&response);
 
     Ok(())
 }

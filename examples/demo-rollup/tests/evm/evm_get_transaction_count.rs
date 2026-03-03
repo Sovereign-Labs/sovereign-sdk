@@ -1,6 +1,6 @@
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, setup_with_simple_storage, EVM_EXTENSION,
-    SECONDARY_SENDER_PRIV_KEY,
+    create_simple_storage_client, finalized_block_number_and_hash, number_selector, poll_until,
+    setup_with_simple_storage, EVM_EXTENSION, SECONDARY_SENDER_PRIV_KEY,
 };
 use alloy_primitives::{Address, B256, U256, U64};
 use jsonrpsee::core::client::ClientT;
@@ -11,10 +11,6 @@ use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
-use std::time::Duration;
-
-const MAX_POLL_ATTEMPTS: usize = 100;
-const POLL_INTERVAL_MS: u64 = 25;
 
 async fn setup_rollup() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     setup_rollup_with_finality(0).await
@@ -33,7 +29,7 @@ async fn nonce_at_tag(client: &SimpleStorageClient, address: Address, tag: &str)
 }
 
 async fn nonce_at_number(client: &SimpleStorageClient, address: Address, number: u64) -> u64 {
-    try_get_tx_count(client, address, format!("0x{number:x}"))
+    try_get_tx_count(client, address, number_selector(number))
         .await
         .unwrap()
 }
@@ -49,13 +45,6 @@ async fn nonce_at_hash(
         "requireCanonical": require_canonical
     });
     try_get_tx_count(client, address, selector).await.unwrap()
-}
-
-async fn finalized_block_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
-    let finalized_block = client
-        .eth_get_block_by_number(Some("finalized".to_string()))
-        .await;
-    (finalized_block.header.number, finalized_block.header.hash)
 }
 
 async fn assert_equal_nonces_for_tags(
@@ -92,18 +81,17 @@ async fn wait_for_nonce_at_tag(
     tag: &str,
     expected: u64,
 ) -> anyhow::Result<u64> {
-    let mut last = nonce_at_tag(client, address, tag).await;
-    for _ in 0..MAX_POLL_ATTEMPTS {
-        if last == expected {
-            return Ok(last);
-        }
-        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
-        last = nonce_at_tag(client, address, tag).await;
-    }
-
-    anyhow::bail!(
-        "Timed out waiting for nonce at tag '{tag}' to become {expected}, last observed {last}"
-    );
+    poll_until(
+        || async {
+            let last = nonce_at_tag(client, address, tag).await;
+            Ok(last)
+        },
+        |nonce| *nonce == expected,
+        &format!(
+            "Timed out waiting for nonce at tag '{tag}' to become {expected}, last observed value differed"
+        ),
+    )
+    .await
 }
 
 // ===========================================================================
@@ -341,21 +329,6 @@ async fn eth_get_transaction_count_initial_nonce_is_zero() -> anyhow::Result<()>
     let nonce = nonce_at_tag(&client, fresh_address, "latest").await;
 
     assert_eq!(nonce, 0, "Fresh address should have nonce 0");
-
-    Ok(())
-}
-
-/// TC18: Verify that a non-existent address returns nonce 0.
-#[tokio::test(flavor = "multi_thread")]
-async fn eth_get_transaction_count_non_existent_address_returns_zero() -> anyhow::Result<()> {
-    let (_rollup, client) = setup_rollup().await;
-
-    // Use a deterministic but unlikely-to-exist address
-    let non_existent = Address::repeat_byte(0xDE);
-
-    let nonce = nonce_at_tag(&client, non_existent, "latest").await;
-
-    assert_eq!(nonce, 0, "Non-existent address should return nonce 0");
 
     Ok(())
 }

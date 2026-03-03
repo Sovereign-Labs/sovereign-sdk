@@ -20,7 +20,8 @@ use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
-    setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+    setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
+    SENDER_PRIV_KEY,
 };
 
 #[derive(Debug, Deserialize)]
@@ -40,9 +41,6 @@ struct EvmGenesisConfigFixture {
     initial_base_fee: u64,
     chain_spec: ChainSpecFixture,
 }
-
-const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
-const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 #[derive(Debug, Deserialize)]
 struct MapResponse<T> {
@@ -1226,10 +1224,15 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     );
 
     let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;
-    let chain_gas_used = gas_info.gas_used.as_ref()[0];
+    let chain_gas_used_total = gas_info
+        .gas_used
+        .as_ref()
+        .iter()
+        .copied()
+        .fold(0u64, u64::saturating_add);
     assert!(
-        chain_gas_used >= receipts_gas_used,
-        "chain-state gas_used should be >= receipts gas_used"
+        chain_gas_used_total >= receipts_gas_used,
+        "sum(chain-state gas_used dimensions) should be >= receipts gas_used"
     );
     let expected_next_base_fee = compute_next_base_fee(
         header_base_fee,
