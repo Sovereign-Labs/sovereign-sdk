@@ -9,7 +9,7 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{RawTx, Runtime};
 use sov_node_client::NodeClient;
-use sov_test_utils::logging::LogCollector;
+use sov_test_utils::logging::{initialize_or_change_logging_with_filter, LogCollector};
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
 use sov_test_utils::test_rollup::get_height;
@@ -25,9 +25,12 @@ use std::time::Duration;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry;
+use tracing_subscriber::EnvFilter;
 
 generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, S>, TestRuntime <= value_setter: ValueSetter<S>);
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
+const SHUTDOWN_DIAGNOSTIC_LOG_FILTER: &str =
+    "info,sov_stf_runner=debug,sov_stf_runner::runner=debug,sov_stf_runner::da=debug,sov_sequencer=debug,sqlx=warn,h2=info,hyper=info";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_tests_sequencer_stops_if_stop_at_height_too_small_immediate_finality() {
@@ -149,9 +152,18 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let shutdown_timeout = Duration::from_secs(10);
+    let collector = LogCollector::new(Level::DEBUG);
+    let subscriber = registry()
+        .with(EnvFilter::new(SHUTDOWN_DIAGNOSTIC_LOG_FILTER))
+        .with(tracing_subscriber::fmt::layer())
+        .with(collector.clone());
+    if subscriber.try_init().is_err() {
+        initialize_or_change_logging_with_filter(SHUTDOWN_DIAGNOSTIC_LOG_FILTER);
+    }
+
     let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
 
-    let (test_rollup, admin) = create_test_rollup(
+    let (mut test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
@@ -224,9 +236,45 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         slot_subscription.next().await;
     }
 
-    test_rollup
-        .wait_for_rollup_to_shutdown(shutdown_timeout)
+    if let Err(error) = test_rollup
+        .try_wait_for_rollup_to_shutdown(shutdown_timeout)
+        .await
+    {
+        let ready_response = query_endpoint(&test_rollup.client, "/sequencer/ready").await;
+        let role_response = query_endpoint(&test_rollup.client, "/sequencer/role").await;
+        let latest_slot_response =
+            query_endpoint(&test_rollup.client, "/ledger/slots/latest").await;
+        let finalized_slot_response =
+            query_endpoint(&test_rollup.client, "/ledger/slots/finalized").await;
+        let current_heights_response = query_endpoint(
+            &test_rollup.client,
+            "/modules/chain-state/state/current-heights",
+        )
         .await;
+        let sync_status = match test_rollup.client.client.get_sync_status().await {
+            Ok(status) => format!("{:?}", status.into_inner()),
+            Err(sync_error) => format!("error: {sync_error:?}"),
+        };
+        let rollup_height = match get_height(&test_rollup.client).await {
+            Ok(height) => format!("{height}"),
+            Err(height_error) => format!("error: {height_error:#}"),
+        };
+        let recent_logs = format_recent_logs(&collector.records(), 200);
+
+        panic!(
+            "Failed waiting for rollup shutdown: {error:#}\n\
+            Diagnostics:\n\
+              stop_at_height: {stop_at_height}\n\
+              rollup_height: {rollup_height}\n\
+              sync_status: {sync_status}\n\
+              /sequencer/ready: {ready_response}\n\
+              /sequencer/role: {role_response}\n\
+              /ledger/slots/latest: {latest_slot_response}\n\
+              /ledger/slots/finalized: {finalized_slot_response}\n\
+              /modules/chain-state/state/current-heights: {current_heights_response}\n\
+            Recent logs (tail):\n{recent_logs}"
+        );
+    }
 }
 
 async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finalization_blocks: u32) {
@@ -371,6 +419,27 @@ async fn send_tx(
         Err(err) => {
             panic!("Unexpected error: {err:?}")
         }
+    }
+}
+
+fn format_recent_logs(records: &[(Level, String)], limit: usize) -> String {
+    if records.is_empty() {
+        return "<no captured logs>".to_string();
+    }
+    let total = records.len();
+    let start = total.saturating_sub(limit);
+    records[start..]
+        .iter()
+        .enumerate()
+        .map(|(idx, (level, message))| format!("[{}] {level}: {message}", start + idx))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+async fn query_endpoint(client: &NodeClient, endpoint: &str) -> String {
+    match client.http_get(endpoint).await {
+        Ok(response) => response,
+        Err(error) => format!("error: {error:#}"),
     }
 }
 
