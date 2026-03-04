@@ -99,13 +99,7 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let api_client = test_rollup.api_client().clone();
 
     // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    // Use produce_n_blocks_now (instant) rather than tenderly_produce_blocks to avoid
-    // cascading batch creation that could advance height past stop_at_height.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(finalization_blocks as usize + 3)
-        .await
-        .unwrap();
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Produce enough blocks with transactions to advance rollup height past stop_at_height.
@@ -147,6 +141,7 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
 }
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
+    let shutdown_timeout = Duration::from_secs(10);
     let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
 
     let (test_rollup, admin) = create_test_rollup(
@@ -166,13 +161,8 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
     // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    // Use produce_n_blocks_now (instant) rather than tenderly_produce_blocks to avoid
-    // cascading batch creation that could advance height past stop_at_height.
-    test_rollup
-        .da_service
-        .produce_n_blocks_now(finalization_blocks as usize + 3)
-        .await
-        .unwrap();
+    // Use a "tender" pace so the finalized-header poller deterministically observes updates.
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let api_client = test_rollup.api_client().clone();
@@ -181,14 +171,27 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let mut current_height = test_rollup.height().await;
 
     while current_height.get() < stop_at_height.get() {
-        // All transactions should be accepted until the stop height is reached.
-        send_tx(&admin, nonce, &api_client).await.unwrap();
-        nonce += 1;
+        // Height check and tx submission are not atomic. If the node reaches stop-height
+        // between the check and the submission, rejection is expected and we should exit.
+        match send_tx(&admin, nonce, &api_client).await {
+            Ok(_) => {
+                nonce += 1;
+            }
+            Err(err) => {
+                assert!(
+                    err.contains(&expected_error),
+                    "Unexpected pre-stop tx error: {err}"
+                );
+                break;
+            }
+        }
 
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
         current_height = test_rollup.height().await;
     }
+
+    test_rollup.wait_for_height(stop_at_height.get()).await;
 
     // After the stop height is reached, the sequencer should not accept any transactions. Until the height is finalized.
     for _ in 0..finalization_blocks {
@@ -209,7 +212,7 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     }
 
     test_rollup
-        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT)
+        .wait_for_rollup_to_shutdown(shutdown_timeout)
         .await;
 }
 
