@@ -1557,7 +1557,10 @@ async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
 /// TC06: finalized and safe return identical results
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
-    let (_rollup, client) = setup_fee_history_test(5).await;
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.wait_for_next_blocks(5).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let finalized = client
         .get_fee_history(3, BlockNumberOrTag::Finalized, &[25.0, 75.0])
