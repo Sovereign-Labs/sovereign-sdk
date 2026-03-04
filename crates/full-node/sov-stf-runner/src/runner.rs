@@ -445,17 +445,32 @@ where
                 .get_last_finalized_block_header()?
                 .height();
             if next_da_height > finalized_height {
-                info!(%finalized_height, %next_da_height, "Waiting until next DA height is finalized");
+                info!(
+                    "DEBUG_WAIT_FINALIZED finalized_height={} next_da_height={} polling_interval_ms={}",
+                    finalized_height,
+                    next_da_height,
+                    self.da_polling_interval.as_millis()
+                );
                 match future_or_shutdown(
                     tokio::time::sleep(self.da_polling_interval),
                     shutdown_receiver,
                 )
                 .await
                 {
-                    FutureOrShutdownOutput::Shutdown => return Ok(true),
+                    FutureOrShutdownOutput::Shutdown => {
+                        info!(
+                            "DEBUG_WAIT_FINALIZED_SHUTDOWN finalized_height={} next_da_height={}",
+                            finalized_height, next_da_height
+                        );
+                        return Ok(true);
+                    }
                     FutureOrShutdownOutput::Output(()) => continue,
                 }
             } else {
+                info!(
+                    "DEBUG_WAIT_FINALIZED_EXIT finalized_height={} next_da_height={}",
+                    finalized_height, next_da_height
+                );
                 break;
             }
         }

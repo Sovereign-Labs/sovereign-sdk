@@ -9,7 +9,7 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{RawTx, Runtime};
 use sov_node_client::NodeClient;
-use sov_test_utils::logging::{initialize_or_change_logging_with_filter, LogCollector};
+use sov_test_utils::logging::initialize_or_change_logging_with_filter;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
 use sov_test_utils::test_rollup::get_height;
@@ -22,15 +22,12 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::Level;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::registry;
-use tracing_subscriber::EnvFilter;
+use tracing::info;
 
 generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, S>, TestRuntime <= value_setter: ValueSetter<S>);
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
 const SHUTDOWN_DIAGNOSTIC_LOG_FILTER: &str =
-    "info,sov_stf_runner=debug,sov_stf_runner::runner=debug,sov_stf_runner::da=debug,sov_sequencer=debug,sqlx=warn,h2=info,hyper=info";
+    "info,sov_stf_runner=debug,sov_stf_runner::runner=debug,sov_stf_runner::da=debug,sov_sequencer=debug,sqlx=warn,h2=warn,hyper=warn";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_tests_sequencer_stops_if_stop_at_height_too_small_immediate_finality() {
@@ -83,11 +80,14 @@ async fn test_start_at_finalization_plus_one() {
 }
 
 async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
-    let collector = LogCollector::new(Level::ERROR);
-    let subscriber = registry().with(collector.clone());
-    subscriber.init();
+    initialize_or_change_logging_with_filter(SHUTDOWN_DIAGNOSTIC_LOG_FILTER);
 
     let stop_at_height = RollupHeight::new(3);
+    info!(
+        "DEBUG_UPG_STOP_TOO_SMALL_START finalization_blocks={} stop_at_height={}",
+        finalization_blocks,
+        stop_at_height.get()
+    );
 
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -140,28 +140,20 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         panic!("The rollup should have stopped")
     };
 
-    let records = collector.records();
-    assert!(
-        records
-            .iter()
-            .any(|(_, log)| log.contains("The requested stop_height")),
-        "Expected stop-height log in records: {records:?}"
-    );
     assert!(err.to_string().contains("The requested stop_height"));
 }
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let shutdown_timeout = Duration::from_secs(10);
-    let collector = LogCollector::new(Level::DEBUG);
-    let subscriber = registry()
-        .with(EnvFilter::new(SHUTDOWN_DIAGNOSTIC_LOG_FILTER))
-        .with(tracing_subscriber::fmt::layer())
-        .with(collector.clone());
-    if subscriber.try_init().is_err() {
-        initialize_or_change_logging_with_filter(SHUTDOWN_DIAGNOSTIC_LOG_FILTER);
-    }
+    initialize_or_change_logging_with_filter(SHUTDOWN_DIAGNOSTIC_LOG_FILTER);
 
     let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
+    info!(
+        "DEBUG_UPG_STOP_TX_START finalization_blocks={} stop_at_height={} shutdown_timeout_ms={}",
+        finalization_blocks,
+        stop_at_height.get(),
+        shutdown_timeout.as_millis()
+    );
 
     let (mut test_rollup, admin) = create_test_rollup(
         0,
@@ -189,6 +181,11 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
+    info!(
+        "DEBUG_UPG_STOP_TX_READY stop_at_height={} current_height={}",
+        stop_at_height.get(),
+        test_rollup.height().await.get()
+    );
 
     let api_client = test_rollup.api_client().clone();
 
@@ -196,6 +193,12 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let mut current_height = test_rollup.height().await;
 
     while current_height.get() < stop_at_height.get() {
+        info!(
+            "DEBUG_UPG_STOP_TX_PRE_STOP_LOOP current_height={} stop_at_height={} nonce={}",
+            current_height.get(),
+            stop_at_height.get(),
+            nonce
+        );
         // Height check and tx submission are not atomic. If the node reaches stop-height
         // between the check and the submission, rejection is expected and we should exit.
         match send_tx(&admin, nonce, &api_client).await {
@@ -207,6 +210,13 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
                     err.contains(&expected_error),
                     "Unexpected pre-stop tx error: {err}"
                 );
+                info!(
+                    "DEBUG_UPG_STOP_TX_PRE_STOP_REJECT current_height={} stop_at_height={} nonce={} error={}",
+                    current_height.get(),
+                    stop_at_height.get(),
+                    nonce,
+                    err
+                );
                 break;
             }
         }
@@ -217,6 +227,11 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     }
 
     test_rollup.wait_for_height(stop_at_height.get()).await;
+    info!(
+        "DEBUG_UPG_STOP_TX_AT_STOP_HEIGHT stop_at_height={} nonce={}",
+        stop_at_height.get(),
+        nonce
+    );
 
     // After the stop height is reached, the sequencer should not accept any transactions. Until the height is finalized.
     for _ in 0..finalization_blocks {
@@ -235,6 +250,11 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
     }
+    info!(
+        "DEBUG_UPG_STOP_TX_WAITING_SHUTDOWN stop_at_height={} current_height={}",
+        stop_at_height.get(),
+        test_rollup.height().await.get()
+    );
 
     if let Err(error) = test_rollup
         .try_wait_for_rollup_to_shutdown(shutdown_timeout)
@@ -259,7 +279,15 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
             Ok(height) => format!("{height}"),
             Err(height_error) => format!("error: {height_error:#}"),
         };
-        let recent_logs = format_recent_logs(&collector.records(), 200);
+
+        info!(
+            "DEBUG_UPG_STOP_TX_SHUTDOWN_TIMEOUT stop_at_height={} rollup_height={} sync_status={} latest_slot={} finalized_slot={}",
+            stop_at_height.get(),
+            rollup_height,
+            sync_status,
+            latest_slot_response,
+            finalized_slot_response
+        );
 
         panic!(
             "Failed waiting for rollup shutdown: {error:#}\n\
@@ -272,7 +300,7 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
               /ledger/slots/latest: {latest_slot_response}\n\
               /ledger/slots/finalized: {finalized_slot_response}\n\
               /modules/chain-state/state/current-heights: {current_heights_response}\n\
-            Recent logs (tail):\n{recent_logs}"
+              See stdout logs for DEBUG_UPG_STOP_TX_* and DEBUG_WAIT_FINALIZED_* markers."
         );
     }
 }
@@ -420,20 +448,6 @@ async fn send_tx(
             panic!("Unexpected error: {err:?}")
         }
     }
-}
-
-fn format_recent_logs(records: &[(Level, String)], limit: usize) -> String {
-    if records.is_empty() {
-        return "<no captured logs>".to_string();
-    }
-    let total = records.len();
-    let start = total.saturating_sub(limit);
-    records[start..]
-        .iter()
-        .enumerate()
-        .map(|(idx, (level, message))| format!("[{}] {level}: {message}", start + idx))
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 async fn query_endpoint(client: &NodeClient, endpoint: &str) -> String {
