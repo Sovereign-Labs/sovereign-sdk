@@ -346,7 +346,10 @@ async fn block_pinned_eth_call_excludes_pending() {
 
     let get_tx = client.make_tx(Some(contract_addr), Some(client.contract.get()));
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before eth_call assertions");
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
@@ -399,7 +402,10 @@ async fn block_pinned_estimate_gas_excludes_pending() {
         "Pinned baseline by number and hash should match"
     );
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before estimate_gas assertions");
     // Pending mutation makes slot non-zero in current state, lowering cost for the same call.
     let tx_hash = client.set_value(contract_addr, 0x1234).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
