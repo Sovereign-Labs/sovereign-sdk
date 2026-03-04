@@ -644,14 +644,15 @@ where
         if skip_flag == Ok("1".to_string()) {
             tracing::warn!("skipping state update due to env var flag");
             #[cfg(feature = "test-utils")]
-            let _ = seq
-                .test_only_state_update_notification_sender
-                .send(StateUpdateNotification {
-                    slot_number: info.slot_number,
-                    finalized_slot_number: info.latest_finalized_slot_number,
-                    #[cfg(feature = "test-utils")]
-                    update_skipped_due_to_pause: true,
-                });
+            {
+                let _ =
+                    seq.test_only_state_update_notification_sender
+                        .send(StateUpdateNotification {
+                            slot_number: info.slot_number,
+                            finalized_slot_number: info.latest_finalized_slot_number,
+                            update_skipped_due_to_pause: true,
+                        });
+            }
             return Ok(());
         }
     }
