@@ -98,8 +98,15 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
     let api_client = test_rollup.api_client().clone();
 
-    // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    test_rollup.produce_enough_finalized_slots().await;
+    // Produce the minimum paced DA blocks needed for readiness.
+    // We intentionally avoid `produce_enough_finalized_slots()` here because it also performs
+    // extra sync/lag advancement work, which can move this test into transient
+    // "node not synced yet" states and make pre-stop tx checks flaky.
+    // `+2` gives a deterministic post-genesis finalized update observed by the poller.
+    test_rollup
+        .tenderly_produce_blocks((finalization_blocks + 2) as usize)
+        .await
+        .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Produce enough blocks with transactions to advance rollup height past stop_at_height.
@@ -160,9 +167,15 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
-    // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    // Use a "tender" pace so the finalized-header poller deterministically observes updates.
-    test_rollup.produce_enough_finalized_slots().await;
+    // Produce the minimum paced DA blocks needed for readiness.
+    // We intentionally avoid `produce_enough_finalized_slots()` here because it also performs
+    // extra sync/lag advancement work, which can move this test into transient
+    // "node not synced yet" states and make pre-stop tx checks flaky.
+    // `+2` gives a deterministic post-genesis finalized update observed by the poller.
+    test_rollup
+        .tenderly_produce_blocks((finalization_blocks + 2) as usize)
+        .await
+        .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let api_client = test_rollup.api_client().clone();
