@@ -75,24 +75,10 @@ impl ZkvmHost for SP1Host<'static> {
             Proof::Full(output.proof)
         } else {
             let prover = ProverClient::builder().mock().build();
-            #[allow(unused_mut)]
-            let mut execute_request = prover.execute(self.elf.into(), self.stdin.clone());
-            #[cfg(feature = "bench")]
-            {
-                use sov_metrics::cycle_utils::sp1::FD_METRICS_HOOK;
-                use crate::metrics::metrics_hook;
-
-                execute_request = execute_request
-                    .with_hook(FD_METRICS_HOOK, metrics_hook);
-            }
-            let (public_values, report) = execute_request
+            let execute_request = prover.execute(self.elf.into(), self.stdin.clone());
+            let (public_values, _report) = execute_request
                 .run()
                 .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
-            #[cfg(feature = "bench")]
-            if !report.cycle_tracker.is_empty() {
-                eprintln!("SP1 cycle tracker: {:?}", report.cycle_tracker);
-            }
-            let _ = &report;
             Proof::PublicData(public_values)
         };
         Ok(bincode::serialize(&proof)?)
