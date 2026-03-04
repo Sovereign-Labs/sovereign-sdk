@@ -173,7 +173,7 @@ async fn eth_get_transaction_count_safe_finalized_semantics() -> anyhow::Result<
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
     let (rollup, client) = setup_rollup().await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let address = client.address();
     // In paused mode, `eth_blockNumber`/`latest` may point to pending.
@@ -227,7 +227,7 @@ async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_transaction_count_block_number_and_hash() -> anyhow::Result<()> {
     let (rollup, client) = setup_rollup().await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let (sealed_head_number, sealed_head_hash) = finalized_block_number_and_hash(&client).await;
     assert_ne!(sealed_head_hash, B256::ZERO);

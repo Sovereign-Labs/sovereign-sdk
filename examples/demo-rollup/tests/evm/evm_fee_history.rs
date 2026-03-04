@@ -216,7 +216,10 @@ async fn setup_fee_history_test(
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_next_blocks(wait_blocks).await;
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before fee_history queries");
     (rollup, client)
 }
 
@@ -229,7 +232,10 @@ async fn setup_with_pending_tx(
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before creating pending tx");
     simple_storage.set_value(contract_address, 42).await;
     (simple_storage, contract_address)
 }
@@ -498,7 +504,7 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
         .expect("receipt should include block number");
     // Wait for the slot to complete so gas_info is recorded
     rollup.wait_for_next_blocks(1).await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     assert!(client
         .get_fee_history(2000, BlockNumberOrTag::Number(newest_block), &[])
@@ -1096,7 +1102,7 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
         .expect("deploy receipt should include block number");
 
     rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let newest_block = deploy_block + 1;
     let fee_history = client
@@ -1199,7 +1205,7 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
         .expect("receipt should include block number");
     // Wait for the slot to complete so gas_info is recorded
     rollup.wait_for_next_blocks(1).await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     assert!(
         receipt.gas_used > 0,
@@ -1318,7 +1324,7 @@ async fn test_fee_history_multiple_txs_across_blocks() -> anyhow::Result<()> {
         rollup.wait_for_next_blocks(1).await;
     }
 
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Query fee history covering all transaction blocks
     let latest_block = client.get_block_number().await?;
@@ -1410,7 +1416,7 @@ async fn test_fee_history_consistent_query_methods() -> anyhow::Result<()> {
         .await
         .expect("set_value should succeed");
     rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Get the current block number
     let block_num = client.get_block_number().await?;
@@ -1481,7 +1487,7 @@ async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
         .expect("set_value should succeed");
     rollup.wait_for_next_blocks(1).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Query for 5 blocks after start_block
     let end_block = start_block + 5;
@@ -1562,7 +1568,10 @@ async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
 /// TC06: finalized and safe return identical results
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
-    let (_rollup, client) = setup_fee_history_test(5).await;
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.wait_for_next_blocks(5).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let finalized = client
         .get_fee_history(3, BlockNumberOrTag::Finalized, &[25.0, 75.0])
@@ -1832,7 +1841,7 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     // Ensure the block containing the tx is sealed before pausing.
     rollup.wait_for_next_blocks(1).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let block_after = client.get_block_number().await?;
 

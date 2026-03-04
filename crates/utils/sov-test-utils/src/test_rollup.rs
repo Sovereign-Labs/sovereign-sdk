@@ -971,6 +971,42 @@ where
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
     }
 
+    /// Pauses preferred batch production and waits until the sequencer confirms
+    /// that at least one state update was skipped because of the pause flag.
+    ///
+    /// This is stronger than a timing-based wait because it relies on an explicit
+    /// test notification from the update-state loop.
+    pub async fn pause_preferred_batches_and_wait(&self) -> anyhow::Result<()> {
+        let mut updates = self
+            .subscribe_state_updates()
+            .await
+            .map_err(anyhow::Error::from)?;
+        self.pause_preferred_batches().await;
+
+        let wait_loop = async {
+            loop {
+                let Some(next) = updates.next().await else {
+                    return Err(anyhow::anyhow!(
+                        "state update subscription closed while waiting for pause acknowledgment"
+                    ));
+                };
+                let notification = next?;
+                if notification.update_skipped_due_to_pause {
+                    return Ok(());
+                }
+            }
+        };
+
+        timeout(Self::POLLING_TIMEOUT, wait_loop)
+            .await
+            .with_context(|| {
+                format!(
+                    "Timeout waiting for pause acknowledgment after {:?}",
+                    Self::POLLING_TIMEOUT
+                )
+            })?
+    }
+
     /// Resumes batch production after [`TestRollup::pause_preferred_batches`].
     ///
     /// Note: calling this method MAY NOT immediately produce a batch.

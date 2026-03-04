@@ -290,6 +290,8 @@ where
                         .send(StateUpdateNotification {
                             slot_number,
                             finalized_slot_number,
+                            #[cfg(feature = "test-utils")]
+                            update_skipped_due_to_pause: false,
                         });
             }
             Message::PruneSequencerDb { reason } => {
@@ -332,6 +334,8 @@ where
                         .send(StateUpdateNotification {
                             slot_number,
                             finalized_slot_number,
+                            #[cfg(feature = "test-utils")]
+                            update_skipped_due_to_pause: false,
                         });
             }
             Message::ReplicaBatchStartMsg {
