@@ -1554,7 +1554,7 @@ dependencies = [
  "digest 0.10.7",
  "fiat-crypto",
  "rustc_version 0.4.1",
- "sp1-lib 6.0.2",
+ "sp1-lib",
  "subtle",
  "zeroize",
 ]
@@ -1572,14 +1572,13 @@ dependencies = [
 [[package]]
 name = "curve25519-dalek-ng"
 version = "4.1.1"
-source = "git+https://github.com/sp1-patches/curve25519-dalek-ng.git?branch=patch-v4.1.1#3fb3e7f6047ddeef0f0c9212f4604bd30d64bd28"
+source = "git+https://github.com/sp1-patches/curve25519-dalek-ng?tag=patch-4.1.1-sp1-6.0.0#5854f8bab8842ff6232469b0d93ae4160e4a503d"
 dependencies = [
- "anyhow",
  "byteorder",
  "cfg-if",
  "digest 0.9.0",
  "rand_core 0.6.4",
- "sp1-lib 3.4.0",
+ "sp1-lib",
  "subtle-ng",
  "zeroize",
 ]
@@ -2025,7 +2024,7 @@ dependencies = [
 [[package]]
 name = "ed25519-consensus"
 version = "2.1.0"
-source = "git+https://github.com/sp1-patches/ed25519-consensus?rev=2b2c4b43344bc4daf5b1326f367f2d9d661eeabb#2b2c4b43344bc4daf5b1326f367f2d9d661eeabb"
+source = "git+https://github.com/sp1-patches/ed25519-consensus?rev=78f83b21767077f602f30148e513a52e844abbb6#78f83b21767077f602f30148e513a52e844abbb6"
 dependencies = [
  "curve25519-dalek-ng",
  "hex",
@@ -6367,7 +6366,7 @@ dependencies = [
  "derive-new",
  "hex",
  "serde",
- "sp1-lib 6.0.2",
+ "sp1-lib",
 ]
 
 [[package]]
@@ -6590,7 +6589,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-rollup-interface",
  "sov-zkvm-utils",
- "sp1-lib 6.0.2",
+ "sp1-lib",
  "sp1-sdk",
  "sp1-zkvm",
 ]
@@ -6931,16 +6930,6 @@ dependencies = [
  "serde",
  "tracing",
  "uuid",
-]
-
-[[package]]
-name = "sp1-lib"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a5729da1b05d56c01457e5ecabdc77f1cc941df23f2921163a2f325aec22428"
-dependencies = [
- "bincode",
- "serde",
 ]
 
 [[package]]
@@ -7287,7 +7276,7 @@ dependencies = [
  "libm",
  "rand 0.8.5",
  "sha2 0.10.9",
- "sp1-lib 6.0.2",
+ "sp1-lib",
  "sp1-primitives",
 ]
 
@@ -7629,7 +7618,7 @@ source = "git+https://github.com/sp1-patches/tiny-keccak?tag=patch-2.0.2-sp1-6.0
 dependencies = [
  "cfg-if",
  "crunchy",
- "sp1-lib 6.0.2",
+ "sp1-lib",
 ]
 
 [[package]]
@@ -8974,8 +8963,3 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
-
-[[patch.unused]]
-name = "curve25519-dalek-ng"
-version = "4.1.1"
-source = "git+https://github.com/sp1-patches/curve25519-dalek-ng?tag=patch-4.1.1-sp1-6.0.0#5854f8bab8842ff6232469b0d93ae4160e4a503d"
