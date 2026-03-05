@@ -4,14 +4,20 @@ use std::time::Duration;
 
 use crate::test_helpers::test_genesis_source;
 
+use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
+use alloy::eips::Encodable2718;
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, B256, U256};
+use alloy::signers::Signer;
+use alloy_primitives::{hex, Address, Bytes, TxKind, B256, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::WsConnect;
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
 use reqwest::Client;
 use reqwest::Url;
+use serde::Serialize;
 use serde_json::{json, Value};
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -126,6 +132,109 @@ pub(crate) async fn rpc_call(
         .await?
         .json::<Value>()
         .await?)
+}
+
+pub(crate) fn hex_u64(value: u64) -> String {
+    format!("0x{value:x}")
+}
+
+pub(crate) fn hex_word_u64(value: u64) -> String {
+    format!("0x{value:064x}")
+}
+
+pub(crate) fn hex_u128(value: u128) -> String {
+    format!("0x{value:x}")
+}
+
+pub(crate) fn parse_hex_u64(value: &str) -> u64 {
+    let hex = value.strip_prefix("0x").unwrap_or(value);
+    if hex.is_empty() {
+        return 0;
+    }
+    u64::from_str_radix(hex, 16).expect("valid u64 hex quantity")
+}
+
+pub(crate) fn parse_hex_u128(value: &str) -> u128 {
+    let hex = value.strip_prefix("0x").unwrap_or(value);
+    if hex.is_empty() {
+        return 0;
+    }
+    u128::from_str_radix(hex, 16).expect("valid u128 hex quantity")
+}
+
+pub(crate) fn rpc_result_hex(response: &Value) -> String {
+    response
+        .get("result")
+        .and_then(Value::as_str)
+        .expect("result should be a hex string")
+        .to_string()
+}
+
+pub(crate) fn rpc_error_code_from_response(response: &Value, method: &str) -> i64 {
+    rpc_error_code(rpc_error_object(response, method))
+}
+
+pub(crate) async fn tx_count(
+    client: &SimpleStorageClient,
+    address: Address,
+    block: impl Serialize,
+) -> anyhow::Result<u64> {
+    let count: U64 = client
+        .ws
+        .request("eth_getTransactionCount", rpc_params![address, block])
+        .await?;
+    Ok(count.to::<u64>())
+}
+
+pub(crate) async fn raw_signed_eip1559(
+    signer: &PrivateKeySigner,
+    chain_id: u64,
+    nonce: u64,
+    gas_limit: u64,
+    to: TxKind,
+    value: U256,
+    input: Bytes,
+    max_fee_per_gas: u128,
+    max_priority_fee_per_gas: u128,
+) -> anyhow::Result<String> {
+    let tx = TxEip1559 {
+        chain_id,
+        nonce,
+        gas_limit,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        to,
+        value,
+        input,
+        access_list: Default::default(),
+    };
+    let sig = signer.sign_hash(&tx.signature_hash()).await?;
+    let envelope = TxEnvelope::Eip1559(tx.into_signed(sig));
+    Ok(format!("0x{}", hex::encode(envelope.encoded_2718())))
+}
+
+pub(crate) async fn raw_signed_transfer(
+    signer: &PrivateKeySigner,
+    chain_id: u64,
+    nonce: u64,
+    gas_limit: u64,
+    to: Address,
+    value: U256,
+    max_fee_per_gas: u128,
+    max_priority_fee_per_gas: u128,
+) -> anyhow::Result<String> {
+    raw_signed_eip1559(
+        signer,
+        chain_id,
+        nonce,
+        gas_limit,
+        TxKind::Call(to),
+        value,
+        Bytes::new(),
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+    )
+    .await
 }
 
 pub(crate) fn eth_call_params(from: &str, to: &str, input: &str, block_tag: &str) -> Value {

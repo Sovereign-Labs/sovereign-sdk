@@ -19,6 +19,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 - Pending/soft-confirmed data may appear in block/tx/receipt/log responses.
 - `safe` and `finalized` both resolve to the latest finalized block.
 - `eth_getTransactionCount(..., "latest")` may include pending-inclusive nonce effects.
+- `eth_getTransactionCount` reflects the uniqueness nonce, which can diverge from EVM nonce used by CREATE address derivation; treat CREATE prediction mismatches as known architecture behavior.
 - `eth_getLogs` with `toBlock: "latest"` may include pending-head logs.
 - `newHeads` may surface synthetic/pending-head style headers.
 - `eth_blockNumber` returns latest sealed block number, not synthetic pending height.
