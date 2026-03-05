@@ -59,7 +59,8 @@ impl ZkvmHost for SP1Host<'static> {
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
         if cfg!(debug_assertions) {
-            std::env::set_var("SP1_PROVER", "mock");
+            //std::env::set_var("SP1_PROVER", "mock");
+            std::env::set_var("SP1_PROVER", "cpu");
         } else {
             std::env::set_var("SP1_PROVER", "cpu");
         }
