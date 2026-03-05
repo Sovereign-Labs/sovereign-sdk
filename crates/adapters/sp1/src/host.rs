@@ -4,7 +4,7 @@ use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
-use sp1_sdk::{ProvingKey, SP1Stdin};
+use sp1_sdk::{ProvingKey, SP1PublicValues, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
@@ -40,7 +40,7 @@ impl<'host> SP1Host<'host> {
         }
         //let prover = ProverClient::from_env().await;
         let prover = ProverClient::builder().cpu().build().await;
-        let proof = if with_proof {
+        let proof: Proof<_, SP1PublicValues> = {
             let pk = prover
                 .setup(self.elf.into())
                 .await
@@ -50,10 +50,10 @@ impl<'host> SP1Host<'host> {
                 .compressed()
                 .await
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
+
             Proof::Full(output.proof)
-        } else {
-            todo!()
         };
+
         Ok(bincode::serialize(&proof)?)
     }
 }
