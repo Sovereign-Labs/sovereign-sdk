@@ -655,6 +655,58 @@ mod tests {
         panic!("No fixture with multiple candidate row roots found");
     }
 
+    fn parity_boundary_row_boundary_proof(
+        block: &FilteredCelestiaBlock,
+        namespace: Namespace,
+        fixture_name: &str,
+    ) -> (usize, NamespaceBoundaryProof) {
+        let row_len = block.header.row_length();
+        let rows = block.rollup_batch_data.data.rows();
+        let Some((row_idx, row)) = rows
+            .iter()
+            .enumerate()
+            .take(rows.len().saturating_sub(1))
+            .find(|(idx, row)| {
+                if row.shares.is_empty()
+                    || row.proof.end_idx() as usize != row_len
+                    || row.shares.last().is_none_or(|share| share.is_parity())
+                {
+                    return false;
+                }
+                !rows[idx + 1].shares.is_empty()
+            })
+        else {
+            panic!("{fixture_name} fixture does not contain expected parity-boundary row shape");
+        };
+
+        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+        let last_share = row
+            .shares
+            .last()
+            .expect("Boundary row should contain at least one share")
+            .clone();
+        let last_share_proof = row
+            .proof
+            .narrow_range(all_before_last, &[], *namespace)
+            .expect("Failed to build boundary proof for parity-boundary row");
+        let right_sibling = last_share_proof
+            .leftmost_right_sibling()
+            .expect("Expected right sibling for parity-boundary proof");
+        assert_eq!(
+            right_sibling.min_namespace(),
+            *Namespace::PARITY_SHARE,
+            "Fixture should expose parity right sibling at row boundary"
+        );
+
+        (
+            row_idx,
+            NamespaceBoundaryProof {
+                last_share_proof: last_share_proof.into(),
+                last_share: Some(last_share),
+            },
+        )
+    }
+
     #[test]
     fn prevalidate_rejects_ambiguous_empty_namespace_without_inclusion_proofs() {
         let (block, namespace) = fixture_with_multiple_candidate_row_roots();
@@ -812,49 +864,8 @@ mod tests {
         );
 
         let row_len = block.header.row_length();
-        let rows = block.rollup_batch_data.data.rows();
-        let Some((row_idx, row)) = rows
-            .iter()
-            .enumerate()
-            .take(rows.len().saturating_sub(1))
-            .find(|(idx, row)| {
-                if row.shares.is_empty()
-                    || row.proof.end_idx() as usize != row_len
-                    || row.shares.last().is_none_or(|share| share.is_parity())
-                {
-                    return false;
-                }
-                let next_row = &rows[idx + 1];
-                !next_row.shares.is_empty()
-            })
-        else {
-            panic!("Fixture does not contain expected parity-boundary row shape");
-        };
-
-        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
-        let last_share = row
-            .shares
-            .last()
-            .expect("Boundary row should contain at least one share")
-            .clone();
-        let last_share_proof = row
-            .proof
-            .narrow_range(all_before_last, &[], *namespace)
-            .expect("Failed to build boundary proof for parity-boundary row");
-        let right_sibling = last_share_proof
-            .leftmost_right_sibling()
-            .expect("Expected right sibling for parity-boundary proof");
-        assert_eq!(
-            right_sibling.min_namespace(),
-            *Namespace::PARITY_SHARE,
-            "Fixture should expose parity right sibling at row boundary"
-        );
-
-        let boundary_proof = NamespaceBoundaryProof {
-            last_share_proof: last_share_proof.into(),
-            last_share: Some(last_share),
-        };
-
+        let (row_idx, boundary_proof) =
+            parity_boundary_row_boundary_proof(&block, namespace, "parity boundary");
         let proof_start = boundary_proof.last_share_proof.start_idx() as usize;
         let last_proven_share_idx = row_idx
             .checked_mul(row_len)
@@ -890,49 +901,8 @@ mod tests {
         );
 
         let row_len = block.header.row_length();
-        let rows = block.rollup_batch_data.data.rows();
-        let Some((row_idx, row)) = rows
-            .iter()
-            .enumerate()
-            .take(rows.len().saturating_sub(1))
-            .find(|(idx, row)| {
-                if row.shares.is_empty()
-                    || row.proof.end_idx() as usize != row_len
-                    || row.shares.last().is_none_or(|share| share.is_parity())
-                {
-                    return false;
-                }
-                let next_row = &rows[idx + 1];
-                !next_row.shares.is_empty()
-            })
-        else {
-            panic!("Mixed multi-v1 fixture does not contain expected parity-boundary row shape");
-        };
-
-        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
-        let last_share = row
-            .shares
-            .last()
-            .expect("Boundary row should contain at least one share")
-            .clone();
-        let last_share_proof = row
-            .proof
-            .narrow_range(all_before_last, &[], *namespace)
-            .expect("Failed to build boundary proof for mixed multi-v1 parity-boundary row");
-        let right_sibling = last_share_proof
-            .leftmost_right_sibling()
-            .expect("Expected right sibling for mixed multi-v1 parity-boundary proof");
-        assert_eq!(
-            right_sibling.min_namespace(),
-            *Namespace::PARITY_SHARE,
-            "Mixed multi-v1 fixture should expose parity right sibling at row boundary"
-        );
-
-        let boundary_proof = NamespaceBoundaryProof {
-            last_share_proof: last_share_proof.into(),
-            last_share: Some(last_share),
-        };
-
+        let (row_idx, boundary_proof) =
+            parity_boundary_row_boundary_proof(&block, namespace, "mixed multi-v1 parity boundary");
         let proof_start = boundary_proof.last_share_proof.start_idx() as usize;
         let last_proven_share_idx = row_idx
             .checked_mul(row_len)

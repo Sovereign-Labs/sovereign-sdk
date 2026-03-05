@@ -344,17 +344,32 @@ pub(crate) fn is_tail_padding(share: &celestia_types::Share) -> bool {
 /// and it should be good as long as there are only two types of shares.
 /// Copied from [`celestia_types::Blob::shares_len`], including v1 signer handling.
 pub(crate) fn shares_needed_for_bytes_with_signer(payload_bytes: usize, has_signer: bool) -> usize {
-    let first_share_content_size = if has_signer {
+    let first_share_content_size = payload_bytes_in_first_share(has_signer);
+    let Some(without_first_share) = payload_bytes.checked_sub(first_share_content_size) else {
+        return 1;
+    };
+    1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+}
+
+/// Converts a target share count into payload bytes, accounting for v1 signer bytes.
+#[cfg(test)]
+pub(crate) fn payload_bytes_for_shares_with_signer(share_count: usize, has_signer: bool) -> usize {
+    let first_share_content_size = payload_bytes_in_first_share(has_signer);
+    if share_count <= 1 {
+        return first_share_content_size;
+    }
+    first_share_content_size
+        + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+}
+
+fn payload_bytes_in_first_share(has_signer: bool) -> usize {
+    if has_signer {
         appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
             .checked_sub(appconsts::SIGNER_SIZE)
             .expect("signer size should fit into first share content size")
     } else {
         appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
-    };
-    let Some(without_first_share) = payload_bytes.checked_sub(first_share_content_size) else {
-        return 1;
-    };
-    1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+    }
 }
 
 #[cfg(test)]

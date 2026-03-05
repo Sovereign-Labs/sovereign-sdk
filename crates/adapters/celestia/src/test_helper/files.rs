@@ -2,7 +2,6 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use celestia_types::consts::appconsts;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use celestia_types::ExtendedHeader;
@@ -62,6 +61,55 @@ impl PayloadData {
             .map(|s| hex::decode(s).unwrap())
             .collect()
     }
+}
+
+fn payload_bytes_for_shares(share_count: usize, has_signer: bool) -> usize {
+    crate::shares::payload_bytes_for_shares_with_signer(share_count, has_signer)
+}
+
+pub(crate) fn has_parity_boundary_followed_by_namespace(
+    namespace_data: &NamespaceData,
+    namespace: Namespace,
+    row_len: usize,
+) -> bool {
+    let rows = namespace_data.rows();
+    if rows.len() < 2 {
+        return false;
+    }
+
+    for row_idx in 0..rows.len().saturating_sub(1) {
+        let row = &rows[row_idx];
+        let next_row = &rows[row_idx + 1];
+        if row.shares.is_empty() || next_row.shares.is_empty() {
+            continue;
+        }
+        if !row.proof.is_of_presence() || !next_row.proof.is_of_presence() {
+            continue;
+        }
+        if row.proof.end_idx() as usize != row_len {
+            continue;
+        }
+
+        let Some(last_share) = row.shares.last() else {
+            continue;
+        };
+        if last_share.is_parity() || crate::shares::is_tail_padding(last_share) {
+            continue;
+        }
+
+        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+        let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace) else {
+            continue;
+        };
+        let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
+            continue;
+        };
+        if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
+            return true;
+        }
+    }
+
+    false
 }
 
 pub mod with_rollup_proof_data {
@@ -411,64 +459,6 @@ pub mod with_parity_boundary_followed_by_namespace {
         (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
     }
 
-    fn bytes_for_signed_shares(share_count: usize) -> usize {
-        let first_share_content = appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
-            .checked_sub(appconsts::SIGNER_SIZE)
-            .expect("signer size should fit into first share content size");
-        if share_count <= 1 {
-            return first_share_content;
-        }
-        first_share_content
-            + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
-    }
-
-    fn has_target_parity_boundary_shape(
-        block_header: &ExtendedHeader,
-        namespace_data: &NamespaceData,
-        namespace: Namespace,
-    ) -> bool {
-        let row_len = block_header.dah.square_width() as usize / 2;
-        let rows = namespace_data.rows();
-        if rows.len() < 2 {
-            return false;
-        }
-
-        for row_idx in 0..rows.len().saturating_sub(1) {
-            let row = &rows[row_idx];
-            let next_row = &rows[row_idx + 1];
-            if row.shares.is_empty() || next_row.shares.is_empty() {
-                continue;
-            }
-            if !row.proof.is_of_presence() || !next_row.proof.is_of_presence() {
-                continue;
-            }
-            if row.proof.end_idx() as usize != row_len {
-                continue;
-            }
-
-            let Some(last_share) = row.shares.last() else {
-                continue;
-            };
-            if last_share.is_parity() || crate::shares::is_tail_padding(last_share) {
-                continue;
-            }
-
-            let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
-            let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace)
-            else {
-                continue;
-            };
-            let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
-                continue;
-            };
-            if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
-                return true;
-            }
-        }
-
-        false
-    }
-
     pub async fn update_test_data(
         client: &celestia_client::Client,
         signer: &CelestiaAddress,
@@ -484,7 +474,8 @@ pub mod with_parity_boundary_followed_by_namespace {
                 rng_seed[1] = target_idx as u8;
                 let mut rng = rand::rngs::SmallRng::from_seed(rng_seed);
 
-                let mut preceding_payload = vec![0u8; bytes_for_signed_shares(preceding_shares)];
+                let mut preceding_payload =
+                    vec![0u8; payload_bytes_for_shares(preceding_shares, true)];
                 rng.fill_bytes(&mut preceding_payload);
                 blobs.push(blob_from_data(
                     ROLLUP_OTHER_NAMESPACE_PRECEDING,
@@ -492,7 +483,7 @@ pub mod with_parity_boundary_followed_by_namespace {
                     signer,
                 )?);
 
-                let mut target_payload = vec![0u8; bytes_for_signed_shares(target_shares)];
+                let mut target_payload = vec![0u8; payload_bytes_for_shares(target_shares, true)];
                 rng.fill_bytes(&mut target_payload);
                 blobs.push(blob_from_data(
                     ROLLUP_BATCH_NAMESPACE,
@@ -510,10 +501,10 @@ pub mod with_parity_boundary_followed_by_namespace {
                     )
                     .await?;
 
-                if !has_target_parity_boundary_shape(
-                    &block_header,
+                if !has_parity_boundary_followed_by_namespace(
                     &rollup_batch_rows,
                     ROLLUP_PARAMS.rollup_batch_namespace,
+                    block_header.dah.square_width() as usize / 2,
                 ) {
                     continue;
                 }
@@ -782,68 +773,6 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
         (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
     }
 
-    fn bytes_for_shares(share_count: usize, has_signer: bool) -> usize {
-        let first_share_content = if has_signer {
-            appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
-                .checked_sub(appconsts::SIGNER_SIZE)
-                .expect("signer size should fit into first share content size")
-        } else {
-            appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
-        };
-        if share_count <= 1 {
-            return first_share_content;
-        }
-        first_share_content
-            + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
-    }
-
-    fn has_target_parity_boundary_shape(
-        block_header: &ExtendedHeader,
-        namespace_data: &NamespaceData,
-        namespace: Namespace,
-    ) -> bool {
-        let row_len = block_header.dah.square_width() as usize / 2;
-        let rows = namespace_data.rows();
-        if rows.len() < 2 {
-            return false;
-        }
-
-        for row_idx in 0..rows.len().saturating_sub(1) {
-            let row = &rows[row_idx];
-            let next_row = &rows[row_idx + 1];
-            if row.shares.is_empty() || next_row.shares.is_empty() {
-                continue;
-            }
-            if !row.proof.is_of_presence() || !next_row.proof.is_of_presence() {
-                continue;
-            }
-            if row.proof.end_idx() as usize != row_len {
-                continue;
-            }
-
-            let Some(last_share) = row.shares.last() else {
-                continue;
-            };
-            if last_share.is_parity() || crate::shares::is_tail_padding(last_share) {
-                continue;
-            }
-
-            let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
-            let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace)
-            else {
-                continue;
-            };
-            let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
-                continue;
-            };
-            if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
-                return true;
-            }
-        }
-
-        false
-    }
-
     fn count_sequence_starts_by_share_version(namespace_data: &NamespaceData) -> (usize, usize) {
         let mut v0_starts = 0usize;
         let mut v1_starts = 0usize;
@@ -893,7 +822,7 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                 let mut blobs = Vec::new();
 
                                 let mut preceding_payload =
-                                    vec![0u8; bytes_for_shares(preceding_shares, true)];
+                                    vec![0u8; payload_bytes_for_shares(preceding_shares, true)];
                                 rng.fill_bytes(&mut preceding_payload);
                                 blobs.push(blob_from_data(
                                     ROLLUP_OTHER_NAMESPACE_PRECEDING,
@@ -902,7 +831,7 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                 )?);
 
                                 let mut payload_v0_a =
-                                    vec![0u8; bytes_for_shares(v0a_shares, false)];
+                                    vec![0u8; payload_bytes_for_shares(v0a_shares, false)];
                                 rng.fill_bytes(&mut payload_v0_a);
                                 blobs.push(celestia_types::Blob::new(
                                     ROLLUP_BATCH_NAMESPACE,
@@ -912,7 +841,7 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                 )?);
 
                                 let mut payload_v1_a =
-                                    vec![0u8; bytes_for_shares(v1a_shares, true)];
+                                    vec![0u8; payload_bytes_for_shares(v1a_shares, true)];
                                 rng.fill_bytes(&mut payload_v1_a);
                                 blobs.push(blob_from_data(
                                     ROLLUP_BATCH_NAMESPACE,
@@ -921,7 +850,7 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                 )?);
 
                                 let mut payload_v0_b =
-                                    vec![0u8; bytes_for_shares(v0b_shares, false)];
+                                    vec![0u8; payload_bytes_for_shares(v0b_shares, false)];
                                 rng.fill_bytes(&mut payload_v0_b);
                                 blobs.push(celestia_types::Blob::new(
                                     ROLLUP_BATCH_NAMESPACE,
@@ -931,7 +860,7 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                 )?);
 
                                 let mut payload_v1_b =
-                                    vec![0u8; bytes_for_shares(v1b_shares, true)];
+                                    vec![0u8; payload_bytes_for_shares(v1b_shares, true)];
                                 rng.fill_bytes(&mut payload_v1_b);
                                 blobs.push(blob_from_data(
                                     ROLLUP_BATCH_NAMESPACE,
@@ -940,7 +869,7 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                 )?);
 
                                 let mut payload_v1_c =
-                                    vec![0u8; bytes_for_shares(v1c_shares, true)];
+                                    vec![0u8; payload_bytes_for_shares(v1c_shares, true)];
                                 rng.fill_bytes(&mut payload_v1_c);
                                 blobs.push(blob_from_data(
                                     ROLLUP_BATCH_NAMESPACE,
@@ -958,10 +887,10 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                     )
                                     .await?;
 
-                                if !has_target_parity_boundary_shape(
-                                    &block_header,
+                                if !has_parity_boundary_followed_by_namespace(
                                     &rollup_batch_rows,
                                     ROLLUP_PARAMS.rollup_batch_namespace,
+                                    block_header.dah.square_width() as usize / 2,
                                 ) {
                                     continue;
                                 }

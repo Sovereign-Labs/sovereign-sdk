@@ -17,7 +17,7 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
-use tokio::sync::{mpsc, oneshot};
+use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct BasicJsonRpcRequest {
@@ -86,12 +86,6 @@ impl SubmissionKind {
     }
 }
 
-#[derive(Debug)]
-struct SubmissionRequest {
-    payload: Vec<u8>,
-    response_tx: oneshot::Sender<anyhow::Result<HexHash>>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct BlobRecord {
     sender: CelestiaAddress,
@@ -116,18 +110,7 @@ struct NamespaceRecords {
 }
 
 fn bytes_for_shares(share_count: usize, has_signer: bool) -> usize {
-    let first_share_content_size = if has_signer {
-        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
-            .checked_sub(appconsts::SIGNER_SIZE)
-            .expect("signer size should fit into first share content size")
-    } else {
-        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
-    };
-    if share_count <= 1 {
-        return first_share_content_size;
-    }
-    first_share_content_size
-        + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+    crate::shares::payload_bytes_for_shares_with_signer(share_count, has_signer)
 }
 
 fn deterministic_payload(
@@ -215,73 +198,36 @@ fn multiset_counts(records: &[BlobRecord]) -> std::collections::HashMap<BlobReco
     output
 }
 
-async fn spawn_submission_worker(
-    service: CelestiaService,
-    kind: SubmissionKind,
-    mut rx: mpsc::Receiver<SubmissionRequest>,
-) {
-    while let Some(cmd) = rx.recv().await {
-        let result: anyhow::Result<HexHash> = async {
-            let submit_result = match kind {
-                SubmissionKind::Batch => service.send_transaction(&cmd.payload).await,
-                SubmissionKind::Proof => service.send_proof(&cmd.payload).await,
+async fn execute_phase(
+    phase_name: &str,
+    commands: Vec<PhaseCommand>,
+    services: &[CelestiaService],
+    namespace_records: &mut [NamespaceRecords],
+) -> anyhow::Result<()> {
+    let mut join_set: JoinSet<anyhow::Result<(PhaseCommand, HexHash)>> = JoinSet::new();
+    for command in commands {
+        let service = services[command.namespace_idx].clone();
+        join_set.spawn(async move {
+            let submit_result = match command.kind {
+                SubmissionKind::Batch => service.send_transaction(&command.payload).await,
+                SubmissionKind::Proof => service.send_proof(&command.payload).await,
             };
             let receipt = submit_result
                 .await
                 .context("Submission receiver has been dropped")??;
-            Ok(receipt.blob_hash)
-        }
-        .await;
-
-        let _ = cmd.response_tx.send(result);
+            Ok((command, receipt.blob_hash))
+        });
     }
-}
 
-async fn execute_phase(
-    phase_name: &str,
-    commands: Vec<PhaseCommand>,
-    batch_txs: &[mpsc::Sender<SubmissionRequest>],
-    proof_txs: &[mpsc::Sender<SubmissionRequest>],
-    namespace_records: &mut [NamespaceRecords],
-) -> anyhow::Result<()> {
-    let mut pending = Vec::with_capacity(commands.len());
-
-    for command in commands {
+    while let Some(joined) = join_set.join_next().await {
+        let (command, blob_hash) =
+            joined.with_context(|| format!("Submission task join failure for {phase_name}"))??;
         let PhaseCommand {
             namespace_idx,
             sender,
             kind,
             payload,
         } = command;
-        let payload_for_expected = payload.clone();
-
-        let (response_tx, response_rx) = oneshot::channel();
-        let worker_tx = match kind {
-            SubmissionKind::Batch => batch_txs[namespace_idx].clone(),
-            SubmissionKind::Proof => proof_txs[namespace_idx].clone(),
-        };
-        worker_tx
-            .send(SubmissionRequest {
-                payload,
-                response_tx,
-            })
-            .await
-            .with_context(|| format!("Failed to queue command for {phase_name}"))?;
-
-        pending.push((
-            namespace_idx,
-            sender,
-            kind,
-            payload_for_expected,
-            response_rx,
-        ));
-    }
-
-    for (namespace_idx, sender, kind, payload, response_rx) in pending {
-        let blob_hash = response_rx
-            .await
-            .with_context(|| format!("Submission worker dropped for {phase_name}"))??;
-
         let record = BlobRecord {
             sender,
             hash: blob_hash,
@@ -497,27 +443,6 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         .await?
         .height();
 
-    let mut batch_txs = Vec::new();
-    let mut proof_txs = Vec::new();
-    let mut worker_handles = Vec::new();
-    for service in active_services.iter().cloned() {
-        let (batch_tx, batch_rx) = mpsc::channel(32);
-        batch_txs.push(batch_tx);
-        worker_handles.push(tokio::spawn(spawn_submission_worker(
-            service.clone(),
-            SubmissionKind::Batch,
-            batch_rx,
-        )));
-
-        let (proof_tx, proof_rx) = mpsc::channel(32);
-        proof_txs.push(proof_tx);
-        worker_handles.push(tokio::spawn(spawn_submission_worker(
-            service,
-            SubmissionKind::Proof,
-            proof_rx,
-        )));
-    }
-
     let rounds = batch_payloads[0].len();
     for round_idx in 0..rounds {
         let batch_commands = (0..4)
@@ -531,8 +456,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         execute_phase(
             &format!("round_{round_idx}_all_batch"),
             batch_commands,
-            &batch_txs,
-            &proof_txs,
+            &active_services,
             &mut namespace_records,
         )
         .await?;
@@ -549,8 +473,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
             execute_phase(
                 &format!("round_{round_idx}_all_proof"),
                 proof_commands,
-                &batch_txs,
-                &proof_txs,
+                &active_services,
                 &mut namespace_records,
             )
             .await?;
@@ -576,8 +499,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
             execute_phase(
                 &format!("round_{round_idx}_proof_group"),
                 group_commands,
-                &batch_txs,
-                &proof_txs,
+                &active_services,
                 &mut namespace_records,
             )
             .await?;
@@ -591,21 +513,12 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
                         kind: SubmissionKind::Proof,
                         payload: proof_payloads[sender_idx][round_idx].clone(),
                     }],
-                    &batch_txs,
-                    &proof_txs,
+                    &active_services,
                     &mut namespace_records,
                 )
                 .await?;
             }
         }
-    }
-
-    drop(batch_txs);
-    drop(proof_txs);
-    for handle in worker_handles {
-        handle
-            .await
-            .context("Submission worker task join failure")?;
     }
 
     let head_after_submit = verification_services[0]
@@ -882,45 +795,12 @@ fn parity_boundary_fixture_contains_target_shape() {
     let block = with_parity_boundary_followed_by_namespace::filtered_block();
     let namespace =
         with_parity_boundary_followed_by_namespace::ROLLUP_PARAMS.rollup_batch_namespace;
-    let row_len = block.header.row_length();
-    let rows = block.rollup_batch_data.data.rows();
     assert!(
-        rows.len() >= 2,
-        "Fixture must span at least two namespace rows"
-    );
-
-    let mut found = false;
-    for row_idx in 0..rows.len().saturating_sub(1) {
-        let row = &rows[row_idx];
-        let next_row = &rows[row_idx + 1];
-        if row.shares.is_empty() || next_row.shares.is_empty() {
-            continue;
-        }
-        if row.proof.end_idx() as usize != row_len {
-            continue;
-        }
-
-        let Some(last_share) = row.shares.last() else {
-            continue;
-        };
-        if last_share.is_parity() {
-            continue;
-        }
-
-        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
-        let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace) else {
-            continue;
-        };
-        let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
-            continue;
-        };
-        if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
-            found = true;
-            break;
-        }
-    }
-    assert!(
-        found,
+        has_parity_boundary_followed_by_namespace(
+            &block.rollup_batch_data.data,
+            namespace,
+            block.header.row_length(),
+        ),
         "Fixture must contain a row ending at last non-parity share with parity right sibling and namespace continuation in next row",
     );
 }
@@ -931,14 +811,9 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
     let rollup_params = with_mixed_v0_and_v1_multi_v1_parity_boundary::ROLLUP_PARAMS;
     let verifier = CelestiaVerifier::new(rollup_params);
     let namespace = rollup_params.rollup_batch_namespace;
-    let row_len = block.header.row_length();
-
-    let rows = block.rollup_batch_data.data.rows();
-    let mut has_target_boundary = false;
     let mut v0_starts = 0usize;
     let mut v1_starts = 0usize;
-    for row_idx in 0..rows.len() {
-        let row = &rows[row_idx];
+    for row in block.rollup_batch_data.data.rows() {
         for share in &row.shares {
             if share.is_parity() || crate::shares::is_tail_padding(share) {
                 continue;
@@ -954,34 +829,14 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
                 }
             }
         }
-
-        if row_idx + 1 >= rows.len()
-            || row.shares.is_empty()
-            || rows[row_idx + 1].shares.is_empty()
-            || row.proof.end_idx() as usize != row_len
-        {
-            continue;
-        }
-        let Some(last_share) = row.shares.last() else {
-            continue;
-        };
-        if last_share.is_parity() {
-            continue;
-        }
-        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
-        let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace) else {
-            continue;
-        };
-        let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
-            continue;
-        };
-        if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
-            has_target_boundary = true;
-        }
     }
 
     assert!(
-        has_target_boundary,
+        has_parity_boundary_followed_by_namespace(
+            &block.rollup_batch_data.data,
+            namespace,
+            block.header.row_length(),
+        ),
         "Fixture should include parity boundary shape"
     );
     assert!(v0_starts > 0, "Fixture should include v0 blobs");
