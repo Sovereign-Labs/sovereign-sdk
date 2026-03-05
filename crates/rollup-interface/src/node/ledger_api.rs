@@ -133,12 +133,14 @@ pub enum SlotIdentifier {
 /// A QueryMode specifies how much information to return in response to an RPC query
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, rename_all = "snake_case")]
+#[derive(Default)]
 pub enum QueryMode {
     /// Returns the parent struct but no details about its children.
     /// For example, a `Compact` "get_slots" response would simply state the range of batch
     /// numbers which occurred in the slot, but not the hashes of the batches themselves.
     Compact,
     /// Returns the parent struct and the hashes of all its children.
+    #[default]
     Standard,
     /// Returns the parent struct and all its children, recursively fetching its children
     /// in `Full` mode. For example, a `Full` "get_batch" response would include the `Full`
@@ -147,11 +149,6 @@ pub enum QueryMode {
     Full,
 }
 
-impl Default for QueryMode {
-    fn default() -> Self {
-        Self::Standard
-    }
-}
 
 /// [`IncludeChildren`] is used as a query parameter for [`QueryMode`] inside the ledger-api
 #[derive(

@@ -96,8 +96,7 @@ impl ZkVerifier for SP1Verifier {
         let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
 
         let prover = sp1_sdk::blocking::ProverClient::from_env();
-        let verifying_key: sp1_sdk::SP1VerifyingKey =
-            bincode::deserialize(&code_commitment.0)?;
+        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
         sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
 
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
