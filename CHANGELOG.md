@@ -2,6 +2,8 @@
 - #2554 More stabilization in demo-rollup EVM tests
 # 2026-03-05
 - #2556 **Breaking change**: only for runtimes with AccessPattern module.
+# 2026-03-05
+- #2548 Updates Rust toolchain to 1.91 which was a requirement for upgrading sp1 to v6
 
 # 2026-02-12
 - #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
