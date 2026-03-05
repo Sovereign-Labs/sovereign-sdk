@@ -36,7 +36,7 @@ fn create_simulation_create_params(
 #[tokio::test(flavor = "multi_thread")]
 async fn big_accessory_state_writes() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client).await?;
 
@@ -53,7 +53,7 @@ async fn big_accessory_state_writes() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_revert_returns_error() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client).await?;
 
@@ -69,7 +69,7 @@ async fn eth_estimate_gas_revert_returns_error() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_stale_explicit_nonce_after_nonce_advance() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let from = sender_address()?;
 
@@ -135,7 +135,7 @@ async fn eth_estimate_gas_rejects_stale_explicit_nonce_after_nonce_advance() -> 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_call_omitted_nonce_matches_explicit_nonce_for_create() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let from = sender_address()?;
 

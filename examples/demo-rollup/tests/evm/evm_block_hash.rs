@@ -9,7 +9,7 @@ use crate::evm::evm_test_helper::{alloy_client, setup_test_rollup, EVM_EXTENSION
 async fn block_hash() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let block_hash = BlockHash::deploy(client.clone()).await?;
     rollup.pause_preferred_batches().await;
     let pending_number = client

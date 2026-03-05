@@ -1,10 +1,5 @@
 use super::toxi_proxy_helper::NodeTestSetup;
 use super::*;
-use sov_test_utils::logging::LogCollector;
-use tracing::Level;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::registry;
-use tracing_subscriber::util::SubscriberInitExt;
 
 const BASELINE_TRANSFER_COUNT: u64 = 1;
 const PARTITIONED_TRANSFER_COUNT: u64 = 3;
@@ -54,14 +49,9 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
         .await;
 
         wait_for_replica_to_catchup(&leader, &replica).await;
-
         let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
         assert_eq!(replica_balance, expected_baseline_balance);
     }
-
-    let collector = LogCollector::new(Level::ERROR);
-    let subscriber = registry().with(collector.clone());
-    subscriber.init();
 
     // Simulate a partitioned sequencer DB. Now replica is disconnected and the DA is very slow.
     // `setup.set_replica_da_slow`` ensures that the replica is not updated immediately via DA after a DB partition, allowing the system to diverge for a couple of blocks.
@@ -88,7 +78,7 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
         )
         .await;
 
-        leader.wait_for_height(3).await;
+        leader.wait_for_rollup_height_advance_by(3).await;
         setup.set_replica_da_slow(false).await;
     }
 
@@ -102,6 +92,7 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
 
     // Here the DB partition is ended. We check that we can still query the replica
     setup.set_postgres_partition(false).await;
+
     let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
     assert_eq!(replica_balance, expected_balance_after_partitioned_tx);
 
