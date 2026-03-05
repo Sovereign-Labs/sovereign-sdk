@@ -18,8 +18,8 @@ type S = sov_modules_api::configurable_spec::ConfigurableSpec<
     WitnessGeneration,
 >;
 
-const DEFAULT_BLOCKS: u64 = 10;
-const DEFAULT_TXNS_PER_BLOCK: u64 = 100;
+const DEFAULT_BLOCKS: u64 = 1;
+const DEFAULT_TXNS_PER_BLOCK: u64 = 2;
 
 pub async fn get_blocks_from_da(mode: BlobBuildingCtx) -> anyhow::Result<Vec<MockBlock>> {
     let txns_per_block = match env::var("SOV_BENCH_TXNS_PER_BLOCK") {
