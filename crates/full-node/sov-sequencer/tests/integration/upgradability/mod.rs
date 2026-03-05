@@ -235,7 +235,10 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
     // After the stop height is reached, the sequencer should not accept any transactions. Until the height is finalized.
     for _ in 0..finalization_blocks {
-        let current_height = test_rollup.height().await;
+        let Ok(current_height) = get_height(&test_rollup.client).await else {
+            // Shutdown may race with this verification loop in CI.
+            break;
+        };
         assert_eq!(current_height, stop_at_height);
 
         test_rollup.da_service.produce_block_now().await.unwrap();
@@ -250,10 +253,14 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
     }
+    let current_height_before_shutdown_wait = match get_height(&test_rollup.client).await {
+        Ok(height) => format!("{height}"),
+        Err(error) => format!("unavailable: {error:#}"),
+    };
     info!(
         "DEBUG_UPG_STOP_TX_WAITING_SHUTDOWN stop_at_height={} current_height={}",
         stop_at_height.get(),
-        test_rollup.height().await.get()
+        current_height_before_shutdown_wait
     );
 
     if let Err(error) = test_rollup

@@ -439,18 +439,28 @@ where
         next_da_height: u64,
         shutdown_receiver: &watch::Receiver<()>,
     ) -> anyhow::Result<bool> {
+        // Temporary CI-debug marker for flaky shutdown in upgrade tests.
+        // Keep critical values in message body (not only structured fields) so
+        // copied tails and plain-text artifacts remain informative.
+        let mut poll_count: u64 = 0;
+        let mut last_logged_finalized_height: Option<u64> = None;
         loop {
             let finalized_height = self
                 .finalized_headers_provider
                 .get_last_finalized_block_header()?
                 .height();
             if next_da_height > finalized_height {
-                info!(
-                    "DEBUG_WAIT_FINALIZED finalized_height={} next_da_height={} polling_interval_ms={}",
-                    finalized_height,
-                    next_da_height,
-                    self.da_polling_interval.as_millis()
-                );
+                poll_count += 1;
+                if last_logged_finalized_height != Some(finalized_height) || poll_count % 50 == 0 {
+                    info!(
+                        "DEBUG_WAIT_FINALIZED finalized_height={} next_da_height={} polling_interval_ms={} poll_count={}",
+                        finalized_height,
+                        next_da_height,
+                        self.da_polling_interval.as_millis(),
+                        poll_count
+                    );
+                    last_logged_finalized_height = Some(finalized_height);
+                }
                 match future_or_shutdown(
                     tokio::time::sleep(self.da_polling_interval),
                     shutdown_receiver,
@@ -704,6 +714,10 @@ where
         // If the rollup is upgrading and the current height has reached the stop point,
         // halt further slot processing.
         if let Some(stop_at_rollup_height) = stop_at_rollup_height {
+            info!(
+                "DEBUG_STOP_CHECK slot_rollup_height={} stop_at_rollup_height={} next_da_height={}",
+                slot_result.rollup_height, stop_at_rollup_height, next_da_height
+            );
             if &slot_result.rollup_height == stop_at_rollup_height {
                 info!(rollup_height = %stop_at_rollup_height, "Stopping at rollup the height");
                 return Ok(None);
