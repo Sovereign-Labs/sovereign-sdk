@@ -10,8 +10,6 @@ use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
 use sov_modules_api::{OperatingMode, SlotData, Spec};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
@@ -19,6 +17,8 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{
     StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
 };
+use sov_sp1_adapter::host::SP1Host;
+use sov_sp1_adapter::SP1;
 use sov_state::ProverStorage;
 use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::TestStorageSpec;
@@ -29,7 +29,7 @@ use crate::test_helpers::test_genesis_paths;
 
 type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
-    sov_risc0_adapter::Risc0,
+    sov_sp1_adapter::SP1,
     sov_mock_zkvm::MockZkvm,
     demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
@@ -80,7 +80,7 @@ async fn test_proof_generation() {
         .await
         .expect("Failed to get DA blocks");
 
-    let mut host = Risc0Host::new(risc0::MOCK_DA_ELF);
+    let mut host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
 
     for filtered_block in &mut blocks[..3] {
         let height = filtered_block.header().height();
@@ -107,8 +107,8 @@ async fn test_proof_generation() {
         );
 
         let data = StateTransitionWitness::<
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::StateRoot,
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::Witness,
+            <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot,
+            <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness,
             MockDaSpec,
         > {
             initial_state_root: prev_state_root,
@@ -127,9 +127,7 @@ async fn test_proof_generation() {
         host.add_hint(data);
 
         tracing::info!("Run prover without generating a proof for block {height}\n");
-        let _receipt = host
-            .run_without_proving()
-            .expect("Prover should run successfully");
+        let _proof = host.run(false).expect("Prover should run successfully");
         tracing::info!("==================================================\n");
 
         prev_state_root = result.state_root;
