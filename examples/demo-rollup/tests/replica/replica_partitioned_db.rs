@@ -49,7 +49,6 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
         .await;
 
         wait_for_replica_to_catchup(&leader, &replica).await;
-
         let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
         assert_eq!(replica_balance, expected_baseline_balance);
     }
@@ -87,7 +86,6 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
     // Check that the replica receives the data via DA.
     {
         wait_for_replica_to_catchup(&leader, &replica).await;
-
         let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
         assert_eq!(replica_balance, expected_balance_after_partitioned_tx);
     }
