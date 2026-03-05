@@ -224,7 +224,7 @@ async fn test_block_tags_latest_pending_equivalence() -> anyhow::Result<()> {
         |block| block.header.number == sealed_head_number + 1,
         "pending block number did not advance to sealed_head + 1",
     )
-        .await?;
+    .await?;
     let eth_block_number_with_pending = client.get_block_number().await?;
 
     // TC14: Verify we have a real pending block (not fallback to sealed)
@@ -422,7 +422,7 @@ async fn test_pending_block_properties() -> anyhow::Result<()> {
         },
         "pending block did not include expected transactions",
     )
-        .await?;
+    .await?;
     let latest_block = client.get_block_by_number(Latest).full().await?.unwrap();
     let sealed_block = client
         .get_block_by_hash(pending_block.header.parent_hash)
@@ -531,7 +531,7 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
             },
             "pending block did not reflect expected transaction count",
         )
-            .await?;
+        .await?;
 
         synthetic_hashes.push((
             pending_block.header.hash,
@@ -626,7 +626,7 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
             },
             "pending block did not reflect expected transaction count",
         )
-            .await?;
+        .await?;
 
         synthetic_hashes.push((
             pending_block.header.hash,
@@ -743,7 +743,7 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
         },
         "pending block did not include transactions in time",
     )
-        .await?;
+    .await?;
 
     // TC23: Get pending block with full transactions
     let block_full = client.get_block_by_number(Pending).full().await?.unwrap();
