@@ -1,15 +1,16 @@
+use crate::evm::evm_test_helper::{
+    alloy_client, create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64,
+    parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response,
+    rpc_result_hex, setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION,
+    SENDER_PRIV_KEY,
+};
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
 use serde_json::json;
-
-use crate::evm::evm_test_helper::{
-    create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64, parse_hex_u128,
-    parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_result_hex,
-    setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, SENDER_PRIV_KEY,
-};
+use sov_evm_test_utils::SimpleStorage;
 
 const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
@@ -19,7 +20,6 @@ const EMPTY_WITHDRAWALS_ROOT: &str =
 const GASLEFT_CONTRACT_DEPLOY_CODE: &str = "0x6008600c60003960086000f35a60005260206000f3";
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: estimate/send maxFee admission mismatch"]
 async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -93,7 +93,6 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: estimate/send affordability mismatch"]
 async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -155,7 +154,6 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: eth_call omitted gas uses block gas context"]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -244,7 +242,6 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: eth_estimateGas returns sovereign gas units"]
 async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract = deploy_contract_check(&client)
@@ -271,7 +268,6 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: exact receipt fee reconciliation"]
 async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -301,7 +297,6 @@ async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> a
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: eth_feeHistory(block_count=0) behavior"]
 async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let http = Client::new();
@@ -339,7 +334,6 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: eth_feeHistory reward percentiles always zero"]
 async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -> anyhow::Result<()>
 {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -405,7 +399,6 @@ async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: withdrawals schema for post-Cancun blocks"]
 async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -444,7 +437,6 @@ async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow:
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: hash not-found semantics are inconsistent"]
 async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints(
 ) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -493,7 +485,6 @@ async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: debug_traceTransaction default tracer unsupported"]
 async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -526,7 +517,6 @@ async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Resu
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: newPendingTransactions subscription unsupported"]
 async fn rpc2_011_new_pending_transactions_subscription_is_supported() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
@@ -552,7 +542,6 @@ async fn rpc2_011_new_pending_transactions_subscription_is_supported() -> anyhow
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: safe/finalized lag latest"]
 async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain(
 ) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(2, EVM_EXTENSION).await;
@@ -667,7 +656,6 @@ async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> any
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: explicit future block selector behavior"]
 async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_next_blocks(1).await;
@@ -704,6 +692,32 @@ async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result
     assert!(
         future["result"].is_null(),
         "future block query should return null"
+    );
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_does_not_exceed_tx_gas_limit() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_next_blocks(1).await;
+    let client = alloy_client(rollup.http_addr);
+    let contract = SimpleStorage::deploy(client).await?;
+
+    // 900K iterations of keccak256 ≈ 32.4M gas, exceeding tx_gas_limit (30M).
+    let iterations = U256::from(900_000u64);
+
+    // eth_call succeeds — gas defaults to block_gas_limit (100B), plenty of room.
+    let _call_result = contract.burnGas(iterations).call().await?;
+
+    // eth_estimateGas should cap its result at tx_gas_limit (30M).
+    // BUG: Today it returns ~32M because it simulates with block_gas_limit.
+    let gas_estimate = contract.burnGas(iterations).estimate_gas().await?;
+    let tx_gas_limit = 30_000_000u64;
+    assert!(
+        gas_estimate <= tx_gas_limit,
+        "eth_estimateGas returned {gas_estimate} which exceeds tx_gas_limit ({tx_gas_limit}). \
+          Simulation uses block_gas_limit but real execution caps at tx_gas_limit."
     );
 
     Ok(())
