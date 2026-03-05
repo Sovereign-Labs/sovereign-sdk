@@ -793,6 +793,7 @@ where
         from_testnet::test_case(),
         from_testnet_no_shares::test_case(),
         with_mixed_v0_and_v1_blobs::test_case(),
+        with_mixed_v0_and_v1_multi_v1_parity_boundary::test_case(),
         from_testnet_with_tail_padding::test_case(),
         from_mocha_shares_mismatch::test_case(),
         from_mocha_invalid_row_proof::test_case(),
@@ -922,6 +923,108 @@ fn parity_boundary_fixture_contains_target_shape() {
         found,
         "Fixture must contain a row ending at last non-parity share with parity right sibling and namespace continuation in next row",
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
+    let block = with_mixed_v0_and_v1_multi_v1_parity_boundary::filtered_block();
+    let rollup_params = with_mixed_v0_and_v1_multi_v1_parity_boundary::ROLLUP_PARAMS;
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let namespace = rollup_params.rollup_batch_namespace;
+    let row_len = block.header.row_length();
+
+    let rows = block.rollup_batch_data.data.rows();
+    let mut has_target_boundary = false;
+    let mut v0_starts = 0usize;
+    let mut v1_starts = 0usize;
+    for row_idx in 0..rows.len() {
+        let row = &rows[row_idx];
+        for share in &row.shares {
+            if share.is_parity() || crate::shares::is_tail_padding(share) {
+                continue;
+            }
+            let Some(info_byte) = share.info_byte() else {
+                continue;
+            };
+            if info_byte.is_sequence_start() {
+                match info_byte.version() {
+                    0 => v0_starts += 1,
+                    1 => v1_starts += 1,
+                    _ => {}
+                }
+            }
+        }
+
+        if row_idx + 1 >= rows.len()
+            || row.shares.is_empty()
+            || rows[row_idx + 1].shares.is_empty()
+            || row.proof.end_idx() as usize != row_len
+        {
+            continue;
+        }
+        let Some(last_share) = row.shares.last() else {
+            continue;
+        };
+        if last_share.is_parity() {
+            continue;
+        }
+        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+        let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace) else {
+            continue;
+        };
+        let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
+            continue;
+        };
+        if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
+            has_target_boundary = true;
+        }
+    }
+
+    assert!(
+        has_target_boundary,
+        "Fixture should include parity boundary shape"
+    );
+    assert!(v0_starts > 0, "Fixture should include v0 blobs");
+    assert!(v1_starts >= 2, "Fixture should include multiple v1 blobs");
+
+    for read_mode in ["no_read", "single_byte", "full"] {
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        assert_eq!(
+            relevant_blobs.proof_blobs.len(),
+            0,
+            "Fixture should only target batch namespace for this test"
+        );
+        assert!(
+            relevant_blobs.batch_blobs.len() >= 2,
+            "Fixture should extract multiple supported v1 blobs",
+        );
+
+        for blob in relevant_blobs.batch_blobs.iter_mut() {
+            let total_len = blob.blob.total_len();
+            match read_mode {
+                "no_read" => {}
+                "single_byte" => {
+                    if total_len > 0 {
+                        blob.blob.advance(1);
+                    }
+                }
+                "full" => blob.blob.advance(total_len),
+                _ => unreachable!("unexpected read mode"),
+            }
+        }
+
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert!(
+            relevant_proofs.batch.inclusion_proof.len() > relevant_blobs.batch_blobs.len(),
+            "Expected skipped v0 blobs to contribute extra inclusion proofs (mode={read_mode})",
+        );
+
+        verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap_or_else(|err| {
+                panic!("Mixed multi-v1 verification failed in mode={read_mode}: {err}")
+            });
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1235,6 +1338,7 @@ async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
     with_batch_and_proof_same_block::update_test_data(&client, &signer).await;
     with_parity_boundary_followed_by_namespace::update_test_data(&client, &signer).await?;
     with_mixed_v0_and_v1_blobs::update_test_data(&client, &signer).await;
+    with_mixed_v0_and_v1_multi_v1_parity_boundary::update_test_data(&client, &signer).await?;
     Ok(())
 }
 
@@ -1254,6 +1358,25 @@ async fn generate_parity_boundary_fixture_with_docker() -> anyhow::Result<()> {
         .await?;
 
     with_parity_boundary_followed_by_namespace::update_test_data(&client, &signer).await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual fixture generation; starts dockerized celestia devnet"]
+async fn generate_mixed_multi_v1_parity_boundary_fixture_with_docker() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let signer = dev_node.get_signer_address(0).await?;
+    let signer_private_key = dev_node.export_signer_key(0).await?;
+    let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
+    let grpc_url = format!("http://127.0.0.1:{}", dev_node.validator_port_ipv4().await?);
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url(&rpc_url)
+        .grpc_url(&grpc_url)
+        .private_key_hex(&signer_private_key)
+        .build()
+        .await?;
+
+    with_mixed_v0_and_v1_multi_v1_parity_boundary::update_test_data(&client, &signer).await?;
     Ok(())
 }
 

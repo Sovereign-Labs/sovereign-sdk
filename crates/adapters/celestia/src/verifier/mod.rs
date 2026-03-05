@@ -616,7 +616,8 @@ fn check_namespace_end_boundary(
 mod tests {
     use super::*;
     use crate::test_helper::files::{
-        from_testnet_no_shares, from_testnet_with_tail_padding, with_namespace_padding,
+        from_testnet_no_shares, from_testnet_with_tail_padding,
+        with_mixed_v0_and_v1_multi_v1_parity_boundary, with_namespace_padding,
         with_parity_boundary_followed_by_namespace, with_rollup_batch_data,
     };
     use crate::types::FilteredCelestiaBlock;
@@ -860,6 +861,84 @@ mod tests {
             Some(boundary_proof),
         )
         .expect_err("Boundary proof from non-last namespace row must be rejected");
+
+        assert!(matches!(
+            err,
+            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+        ));
+    }
+
+    #[test]
+    fn mixed_multi_v1_parity_boundary_row_is_rejected_if_used_as_final_boundary() {
+        let block = with_mixed_v0_and_v1_multi_v1_parity_boundary::filtered_block();
+        let namespace =
+            with_mixed_v0_and_v1_multi_v1_parity_boundary::ROLLUP_PARAMS.rollup_batch_namespace;
+        let namespace_row_roots = block
+            .header
+            .get_row_roots_for_namespace(namespace)
+            .collect::<Vec<_>>();
+        assert!(
+            namespace_row_roots.len() > 1,
+            "Mixed multi-v1 fixture must have multiple candidate namespace row roots"
+        );
+
+        let row_len = block.header.row_length();
+        let rows = block.rollup_batch_data.data.rows();
+        let Some((row_idx, row)) = rows
+            .iter()
+            .enumerate()
+            .take(rows.len().saturating_sub(1))
+            .find(|(idx, row)| {
+                if row.shares.is_empty()
+                    || row.proof.end_idx() as usize != row_len
+                    || row.shares.last().is_none_or(|share| share.is_parity())
+                {
+                    return false;
+                }
+                let next_row = &rows[idx + 1];
+                !next_row.shares.is_empty()
+            })
+        else {
+            panic!("Mixed multi-v1 fixture does not contain expected parity-boundary row shape");
+        };
+
+        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+        let last_share = row
+            .shares
+            .last()
+            .expect("Boundary row should contain at least one share")
+            .clone();
+        let last_share_proof = row
+            .proof
+            .narrow_range(all_before_last, &[], *namespace)
+            .expect("Failed to build boundary proof for mixed multi-v1 parity-boundary row");
+        let right_sibling = last_share_proof
+            .leftmost_right_sibling()
+            .expect("Expected right sibling for mixed multi-v1 parity-boundary proof");
+        assert_eq!(
+            right_sibling.min_namespace(),
+            *Namespace::PARITY_SHARE,
+            "Mixed multi-v1 fixture should expose parity right sibling at row boundary"
+        );
+
+        let boundary_proof = NamespaceBoundaryProof {
+            last_share_proof: last_share_proof.into(),
+            last_share: Some(last_share),
+        };
+
+        let proof_start = boundary_proof.last_share_proof.start_idx() as usize;
+        let last_proven_share_idx = row_idx
+            .checked_mul(row_len)
+            .and_then(|offset| offset.checked_add(proof_start))
+            .expect("Share index overflow");
+        let err = check_namespace_end_boundary(
+            &block.header,
+            &namespace_row_roots,
+            namespace,
+            last_proven_share_idx,
+            Some(boundary_proof),
+        )
+        .expect_err("Boundary proof from non-last mixed multi-v1 namespace row must be rejected");
 
         assert!(matches!(
             err,

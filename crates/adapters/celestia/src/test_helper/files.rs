@@ -756,6 +756,249 @@ pub mod with_mixed_v0_and_v1_blobs {
     }
 }
 
+pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
+    use super::*;
+    pub const DATA_PATH: &str = "test_data/block_with_mixed_v0_v1_multi_v1_parity_boundary";
+    pub const ROLLUP_PARAMS: RollupParams = ROLLUP_PARAMS_DEV;
+
+    const PRECEDING_SHARE_COUNTS: [usize; 4] = [1, 2, 3, 5];
+    const V0_A_SHARE_COUNTS: [usize; 3] = [1, 2, 4];
+    const V1_A_SHARE_COUNTS: [usize; 3] = [3, 5, 8];
+    const V0_B_SHARE_COUNTS: [usize; 2] = [1, 3];
+    const V1_B_SHARE_COUNTS: [usize; 3] = [4, 6, 9];
+    const V1_C_SHARE_COUNTS: [usize; 2] = [2, 5];
+
+    pub fn filtered_block() -> FilteredCelestiaBlock {
+        let path = make_test_path(DATA_PATH);
+        filtered_block_from_path(
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+            &path,
+        )
+        .unwrap()
+    }
+
+    pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
+        (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+
+    fn bytes_for_shares(share_count: usize, has_signer: bool) -> usize {
+        let first_share_content = if has_signer {
+            appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+                .checked_sub(appconsts::SIGNER_SIZE)
+                .expect("signer size should fit into first share content size")
+        } else {
+            appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+        };
+        if share_count <= 1 {
+            return first_share_content;
+        }
+        first_share_content
+            + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+    }
+
+    fn has_target_parity_boundary_shape(
+        block_header: &ExtendedHeader,
+        namespace_data: &NamespaceData,
+        namespace: Namespace,
+    ) -> bool {
+        let row_len = block_header.dah.square_width() as usize / 2;
+        let rows = namespace_data.rows();
+        if rows.len() < 2 {
+            return false;
+        }
+
+        for row_idx in 0..rows.len().saturating_sub(1) {
+            let row = &rows[row_idx];
+            let next_row = &rows[row_idx + 1];
+            if row.shares.is_empty() || next_row.shares.is_empty() {
+                continue;
+            }
+            if !row.proof.is_of_presence() || !next_row.proof.is_of_presence() {
+                continue;
+            }
+            if row.proof.end_idx() as usize != row_len {
+                continue;
+            }
+
+            let Some(last_share) = row.shares.last() else {
+                continue;
+            };
+            if last_share.is_parity() || crate::shares::is_tail_padding(last_share) {
+                continue;
+            }
+
+            let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+            let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace)
+            else {
+                continue;
+            };
+            let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
+                continue;
+            };
+            if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn count_sequence_starts_by_share_version(namespace_data: &NamespaceData) -> (usize, usize) {
+        let mut v0_starts = 0usize;
+        let mut v1_starts = 0usize;
+        for row in namespace_data.rows() {
+            for share in &row.shares {
+                if share.is_parity() || crate::shares::is_tail_padding(share) {
+                    continue;
+                }
+                let Some(info_byte) = share.info_byte() else {
+                    continue;
+                };
+                if !info_byte.is_sequence_start() {
+                    continue;
+                }
+                match info_byte.version() {
+                    0 => v0_starts += 1,
+                    1 => v1_starts += 1,
+                    _ => {}
+                }
+            }
+        }
+        (v0_starts, v1_starts)
+    }
+
+    pub async fn update_test_data(
+        client: &celestia_client::Client,
+        signer: &CelestiaAddress,
+    ) -> anyhow::Result<()> {
+        let path = make_test_path(DATA_PATH);
+        std::fs::create_dir_all(&path)?;
+
+        for (preceding_idx, preceding_shares) in PRECEDING_SHARE_COUNTS.into_iter().enumerate() {
+            for (v0a_idx, v0a_shares) in V0_A_SHARE_COUNTS.into_iter().enumerate() {
+                for (v1a_idx, v1a_shares) in V1_A_SHARE_COUNTS.into_iter().enumerate() {
+                    for (v0b_idx, v0b_shares) in V0_B_SHARE_COUNTS.into_iter().enumerate() {
+                        for (v1b_idx, v1b_shares) in V1_B_SHARE_COUNTS.into_iter().enumerate() {
+                            for (v1c_idx, v1c_shares) in V1_C_SHARE_COUNTS.into_iter().enumerate() {
+                                let mut seed = [0u8; 32];
+                                seed[0] = preceding_idx as u8;
+                                seed[1] = v0a_idx as u8;
+                                seed[2] = v1a_idx as u8;
+                                seed[3] = v0b_idx as u8;
+                                seed[4] = v1b_idx as u8;
+                                seed[5] = v1c_idx as u8;
+                                let mut rng = rand::rngs::SmallRng::from_seed(seed);
+
+                                let mut blobs = Vec::new();
+
+                                let mut preceding_payload =
+                                    vec![0u8; bytes_for_shares(preceding_shares, true)];
+                                rng.fill_bytes(&mut preceding_payload);
+                                blobs.push(blob_from_data(
+                                    ROLLUP_OTHER_NAMESPACE_PRECEDING,
+                                    preceding_payload,
+                                    signer,
+                                )?);
+
+                                let mut payload_v0_a =
+                                    vec![0u8; bytes_for_shares(v0a_shares, false)];
+                                rng.fill_bytes(&mut payload_v0_a);
+                                blobs.push(celestia_types::Blob::new(
+                                    ROLLUP_BATCH_NAMESPACE,
+                                    payload_v0_a,
+                                    None,
+                                    APP_VERSION,
+                                )?);
+
+                                let mut payload_v1_a =
+                                    vec![0u8; bytes_for_shares(v1a_shares, true)];
+                                rng.fill_bytes(&mut payload_v1_a);
+                                blobs.push(blob_from_data(
+                                    ROLLUP_BATCH_NAMESPACE,
+                                    payload_v1_a,
+                                    signer,
+                                )?);
+
+                                let mut payload_v0_b =
+                                    vec![0u8; bytes_for_shares(v0b_shares, false)];
+                                rng.fill_bytes(&mut payload_v0_b);
+                                blobs.push(celestia_types::Blob::new(
+                                    ROLLUP_BATCH_NAMESPACE,
+                                    payload_v0_b,
+                                    None,
+                                    APP_VERSION,
+                                )?);
+
+                                let mut payload_v1_b =
+                                    vec![0u8; bytes_for_shares(v1b_shares, true)];
+                                rng.fill_bytes(&mut payload_v1_b);
+                                blobs.push(blob_from_data(
+                                    ROLLUP_BATCH_NAMESPACE,
+                                    payload_v1_b,
+                                    signer,
+                                )?);
+
+                                let mut payload_v1_c =
+                                    vec![0u8; bytes_for_shares(v1c_shares, true)];
+                                rng.fill_bytes(&mut payload_v1_c);
+                                blobs.push(blob_from_data(
+                                    ROLLUP_BATCH_NAMESPACE,
+                                    payload_v1_c,
+                                    signer,
+                                )?);
+
+                                let block_header = submit_blobs(client, blobs).await?;
+                                let rollup_batch_rows = client
+                                    .share()
+                                    .get_namespace_data(
+                                        block_header.height(),
+                                        APP_VERSION,
+                                        ROLLUP_PARAMS.rollup_batch_namespace,
+                                    )
+                                    .await?;
+
+                                if !has_target_parity_boundary_shape(
+                                    &block_header,
+                                    &rollup_batch_rows,
+                                    ROLLUP_PARAMS.rollup_batch_namespace,
+                                ) {
+                                    continue;
+                                }
+
+                                let (v0_starts, v1_starts) =
+                                    count_sequence_starts_by_share_version(&rollup_batch_rows);
+                                if v0_starts < 1 || v1_starts < 2 {
+                                    continue;
+                                }
+
+                                let signers = serde_json::json!({
+                                    "signers": vec![signer.to_string(); v1_starts]
+                                });
+                                write_to_file(&path.join(SIGNERS_JSON), &signers)?;
+
+                                save_blobs(
+                                    client,
+                                    &path,
+                                    &block_header,
+                                    ROLLUP_PARAMS.rollup_batch_namespace,
+                                    ROLLUP_PARAMS.rollup_proof_namespace,
+                                )
+                                .await;
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        anyhow::bail!(
+            "failed to generate mixed v0/v1 multi-v1 parity-boundary fixture: no submitted block matched target shape"
+        )
+    }
+}
+
 pub mod from_mocha_invalid_row_proof {
     use super::*;
     pub const DATA_PATH: &str = "test_data/block_mocha_invalid_row_proof";
