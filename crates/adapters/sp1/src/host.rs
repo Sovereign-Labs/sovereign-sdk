@@ -32,6 +32,9 @@ impl<'host> SP1Host<'host> {
     /// TODO
     pub async fn run_async(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
         use sp1_sdk::{ProveRequest, Prover, ProverClient}; // async API
+
+        self.stdin = SP1Stdin::new();
+
         if cfg!(debug_assertions) {
             //std::env::set_var("SP1_PROVER", "mock");
             std::env::set_var("SP1_PROVER", "cpu");

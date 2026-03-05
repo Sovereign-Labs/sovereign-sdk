@@ -80,12 +80,14 @@ async fn test_proof_generation() {
         .await
         .expect("Failed to get DA blocks");
 
+    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
+
     let mut host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
+
     let code_commitment = host
         .code_commitment_async()
         .await
         .expect("SP1 code commitment should be created successfully");
-    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
 
     for filtered_block in &mut blocks[..3] {
         println!("==");
