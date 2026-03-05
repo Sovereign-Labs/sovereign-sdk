@@ -9,19 +9,17 @@ use crate::types::{
     SUPPORTED_SHARE_VERSION,
 };
 
-/// BlobProof contains proof of each range.
-/// Ranges are different and not as a single, because a blob can span across rows,
-/// so it will have different proofs, as each row has a separate proof.
+/// BlobProof contains per-row range proofs for one blob.
+/// A blob can span multiple rows, so its inclusion proof is split into one range proof per row fragment.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BlobProof {
     pub(crate) range_proofs: Vec<RangeProof>,
 }
 
 impl BlobProof {
-    // Ensures that range proof covers continuous range.
-    // Different blobs will never overlap each other in the same share, because:
-    // Each blob starts from a new share, called a first share in the sequence,
-    // And it can span to several shares, where the following share is called "Continuation Share".
+    // Ensures sub-proofs within this BlobProof cover one continuous range.
+    // Cross-blob continuity is enforced separately by `verify_continuity`.
+    // Each blob starts from a new share ("sequence start") and can span continuation shares.
     // Remaining bytes are padded with zeroes:
     // > The remaining SHARE_SIZE-NAMESPACE_SIZE-SHARE_INFO_BYTES-SEQUENCE_BYTES bytes are filled with 0
     // From
@@ -86,11 +84,6 @@ impl BlobProof {
         // Even if first row that contains this namespace is not the first row in the block.
         let row_number = block_header.calculate_row_number_for_share(blob_proof_range_start);
         if row_number != 0 {
-            tracing::error!(
-                row_number,
-                start_share_idx = blob_proof_range_start,
-                "MissingBlobs in verify_left_boundary: first blob proof does not start in row 0"
-            );
             return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
         }
 
@@ -110,20 +103,11 @@ impl BlobProof {
         // If `start_idx() == 0`, the blob starts at the row boundary, so there is no in-row left gap.
         if first_sub_proof.proof.start_idx() > 0 {
             let Some(rls) = first_sub_proof.proof.rightmost_left_sibling() else {
-                tracing::error!(
-                    start_idx = first_sub_proof.proof.start_idx(),
-                    "MissingBlobs in verify_left_boundary: no rightmost left sibling while start_idx > 0"
-                );
                 return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
             };
 
             // rightmost left sibling should have namespace that strictly smaller than ours.
             if rls.max_namespace() >= *namespace {
-                tracing::error!(
-                    rls_max = ?rls.max_namespace(),
-                    namespace = ?namespace,
-                    "MissingBlobs in verify_left_boundary: left sibling namespace overlaps target namespace"
-                );
                 return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
             }
         }
@@ -478,10 +462,9 @@ fn check_ranges_sorted(ranges: &[std::ops::Range<usize>]) -> bool {
     true
 }
 
-/// Converts namespace relative range into the set of per-row ranges with absolute coordinates inside data square
-/// Blob range is a "flat" range over the whole namespace.
-/// It can span across several rows.
-/// Returns sub-ranges adjusted to the offset.
+/// Converts a namespace-relative flat range into per-row sub-ranges.
+/// Returned coordinates use the namespace-row coordinate system where the first namespace row is row 0,
+/// with `first_row_offset` applied to the first row.
 #[cfg(feature = "native")]
 #[allow(clippy::single_range_in_vec_init)]
 fn split_blob_range_by_rows(

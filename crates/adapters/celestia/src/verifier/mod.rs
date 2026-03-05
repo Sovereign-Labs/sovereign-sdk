@@ -211,6 +211,9 @@ impl CelestiaVerifier {
                     blob_row_proof,
                 )?
             };
+            // Security note: this index is verifier-derived from accepted continuity checks
+            // plus inclusion-verified share occupancy (`shares_checked`), not a direct
+            // prover-trusted coordinate.
             last_validated_share_idx = Some(match last_validated_share_idx {
                 // blob_proof_range_start is used to keep indexes aligned full row, not just relative to namespace.
                 None => blob_proof_range_start + shares_checked - 1,
@@ -242,6 +245,7 @@ impl CelestiaVerifier {
     }
 }
 
+#[derive(Debug)]
 enum PreValidationOutput {
     /// Pre-validation concluded that verification can be completed early.
     EarlyReturn,
@@ -497,7 +501,7 @@ fn verify_skipped_blob(
 }
 
 // After all blobs have been verified, check namespace right boundary for completeness/censorship resistance.
-// This is done with a proof for the last share of the namespace. For a valid boundary,
+// When needed, this is done with a proof for the last share of the namespace. For a valid boundary,
 // the sibling on the right must belong to a strictly greater namespace.
 //
 // Security-critical behavior:
@@ -731,10 +735,13 @@ mod tests {
             Ok(_) => panic!("Expected MissingBlobs for ambiguous empty namespace"),
         };
 
-        assert!(matches!(
-            err,
-            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
-        ));
+        assert!(
+            matches!(
+                err,
+                IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+            ),
+            "Expected MissingBlobs, got: {err:?}"
+        );
     }
 
     #[test]
@@ -762,7 +769,10 @@ mod tests {
         )
         .unwrap();
 
-        assert!(matches!(output, PreValidationOutput::ContinueVerification));
+        assert!(
+            matches!(output, PreValidationOutput::ContinueVerification),
+            "Expected ContinueVerification, got: {output:?}"
+        );
     }
 
     #[test]
@@ -792,10 +802,13 @@ mod tests {
             Ok(_) => panic!("Expected missing completeness proof for single-row absence path"),
         };
 
-        assert!(matches!(
-            err,
-            IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Missing))
-        ));
+        assert!(
+            matches!(
+                err,
+                IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Missing))
+            ),
+            "Expected ProofError::Missing, got: {err:?}"
+        );
     }
 
     #[test]
@@ -842,10 +855,48 @@ mod tests {
         )
         .expect_err("Boundary proof from non-last row must be rejected");
 
-        assert!(matches!(
-            err,
-            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+        assert!(
+            matches!(
+                err,
+                IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+            ),
+            "Expected MissingBlobs, got: {err:?}"
+        );
+    }
+
+    /// Builds a parity-boundary proof for the given block/namespace and asserts that
+    /// `check_namespace_end_boundary` rejects it with `MissingBlobs`.
+    fn assert_parity_boundary_rejected(
+        block: &FilteredCelestiaBlock,
+        namespace: Namespace,
+        namespace_row_roots: &[&NamespacedHash],
+        label: &str,
+    ) {
+        let row_len = block.header.row_length();
+        let (row_idx, boundary_proof) = parity_boundary_row_boundary_proof(block, namespace, label);
+        let proof_start = boundary_proof.last_share_proof.start_idx() as usize;
+        let last_proven_share_idx = row_idx
+            .checked_mul(row_len)
+            .and_then(|offset| offset.checked_add(proof_start))
+            .expect("Share index overflow");
+        let err = check_namespace_end_boundary(
+            &block.header,
+            namespace_row_roots,
+            namespace,
+            last_proven_share_idx,
+            Some(boundary_proof),
+        )
+        .expect_err(&format!(
+            "Boundary proof from non-last {label} namespace row must be rejected"
         ));
+
+        assert!(
+            matches!(
+                err,
+                IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+            ),
+            "Expected MissingBlobs for {label}, got: {err:?}"
+        );
     }
 
     #[test]
@@ -862,27 +913,7 @@ mod tests {
             "Fixture must have multiple candidate namespace row roots"
         );
 
-        let row_len = block.header.row_length();
-        let (row_idx, boundary_proof) =
-            parity_boundary_row_boundary_proof(&block, namespace, "parity boundary");
-        let proof_start = boundary_proof.last_share_proof.start_idx() as usize;
-        let last_proven_share_idx = row_idx
-            .checked_mul(row_len)
-            .and_then(|offset| offset.checked_add(proof_start))
-            .expect("Share index overflow");
-        let err = check_namespace_end_boundary(
-            &block.header,
-            &namespace_row_roots,
-            namespace,
-            last_proven_share_idx,
-            Some(boundary_proof),
-        )
-        .expect_err("Boundary proof from non-last namespace row must be rejected");
-
-        assert!(matches!(
-            err,
-            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
-        ));
+        assert_parity_boundary_rejected(&block, namespace, &namespace_row_roots, "parity boundary");
     }
 
     #[test]
@@ -899,26 +930,11 @@ mod tests {
             "Mixed multi-v1 fixture must have multiple candidate namespace row roots"
         );
 
-        let row_len = block.header.row_length();
-        let (row_idx, boundary_proof) =
-            parity_boundary_row_boundary_proof(&block, namespace, "mixed multi-v1 parity boundary");
-        let proof_start = boundary_proof.last_share_proof.start_idx() as usize;
-        let last_proven_share_idx = row_idx
-            .checked_mul(row_len)
-            .and_then(|offset| offset.checked_add(proof_start))
-            .expect("Share index overflow");
-        let err = check_namespace_end_boundary(
-            &block.header,
-            &namespace_row_roots,
+        assert_parity_boundary_rejected(
+            &block,
             namespace,
-            last_proven_share_idx,
-            Some(boundary_proof),
-        )
-        .expect_err("Boundary proof from non-last mixed multi-v1 namespace row must be rejected");
-
-        assert!(matches!(
-            err,
-            IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
-        ));
+            &namespace_row_roots,
+            "mixed multi-v1 parity boundary",
+        );
     }
 }

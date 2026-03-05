@@ -112,9 +112,10 @@ impl AsRef<[u8]> for CelestiaAddress {
     }
 }
 
-/// Decodes slice of bytes into CelestiaAddress
-/// Treats it as string if it starts with HRP and the rest is valid ASCII
-/// Otherwise just decodes the tendermint Id and creates address from that.
+/// Decodes bytes into `CelestiaAddress`.
+/// If input is ASCII and starts with the account HRP, parses it as bech32 text.
+/// Otherwise expects a raw 20-byte Tendermint account ID.
+/// Note: HRP-prefixed ASCII that fails bech32 parsing returns an error (no raw-ID fallback).
 impl<'a> TryFrom<&'a [u8]> for CelestiaAddress {
     type Error = anyhow::Error;
 
