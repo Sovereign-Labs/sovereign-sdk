@@ -38,7 +38,8 @@ impl<'host> SP1Host<'host> {
         } else {
             std::env::set_var("SP1_PROVER", "cpu");
         }
-        let prover = ProverClient::from_env().await;
+        //let prover = ProverClient::from_env().await;
+        let prover = ProverClient::builder().cpu().build().await;
         let proof = if with_proof {
             let pk = prover
                 .setup(self.elf.into())
@@ -50,7 +51,7 @@ impl<'host> SP1Host<'host> {
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
             Proof::Full(output.proof)
         } else {
-            let prover = ProverClient::builder().mock().build().await;
+            let prover = ProverClient::builder().cpu().build().await;
             let execute_request = prover.execute(self.elf.into(), self.stdin.clone()).await;
             let (public_values, _report) = execute_request
                 .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
@@ -106,7 +107,7 @@ impl ZkvmHost for SP1Host<'static> {
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
             Proof::Full(output.proof)
         } else {
-            let prover = ProverClient::builder().mock().build();
+            let prover = ProverClient::builder().cpu().build();
             let execute_request = prover.execute(self.elf.into(), self.stdin.clone());
             let (public_values, _report) = execute_request
                 .run()
