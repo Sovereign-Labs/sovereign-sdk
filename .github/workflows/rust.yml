@@ -98,6 +98,15 @@ jobs:
           #   allowed-skips: deploy-github-pages
           jobs: ${{ toJSON(needs) }}
 
+  test_runner:
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-91
+    steps:
+      - run: whoami && echo $PATH && cargo --list
+      - run: |
+          echo "PATH=$PATH"
+          which cargo-nextest || echo "cargo-nextest not on PATH"
+          ls -la ~/.cargo/bin/ | grep nextest || echo "not in ~/.cargo/bin"
+          cargo nextest --version || echo "cargo nextest failed"
   check:
     name: check
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-91
