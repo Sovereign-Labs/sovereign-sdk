@@ -9,7 +9,6 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{RawTx, Runtime};
 use sov_node_client::NodeClient;
-use sov_test_utils::logging::initialize_or_change_logging_with_filter;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
 use sov_test_utils::test_rollup::get_height;
@@ -22,12 +21,9 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::info;
 
 generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, S>, TestRuntime <= value_setter: ValueSetter<S>);
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
-const SHUTDOWN_DIAGNOSTIC_LOG_FILTER: &str =
-    "info,sov_stf_runner=debug,sov_stf_runner::runner=debug,sov_stf_runner::da=debug,sov_sequencer=debug,sqlx=warn,h2=warn,hyper=warn";
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_tests_sequencer_stops_if_stop_at_height_too_small_immediate_finality() {
@@ -80,14 +76,7 @@ async fn test_start_at_finalization_plus_one() {
 }
 
 async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
-    initialize_or_change_logging_with_filter(SHUTDOWN_DIAGNOSTIC_LOG_FILTER);
-
     let stop_at_height = RollupHeight::new(3);
-    info!(
-        "DEBUG_UPG_STOP_TOO_SMALL_START finalization_blocks={} stop_at_height={}",
-        finalization_blocks,
-        stop_at_height.get()
-    );
 
     let (test_rollup, admin) = create_test_rollup(
         0,
@@ -145,15 +134,8 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let shutdown_timeout = Duration::from_secs(10);
-    initialize_or_change_logging_with_filter(SHUTDOWN_DIAGNOSTIC_LOG_FILTER);
 
     let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
-    info!(
-        "DEBUG_UPG_STOP_TX_START finalization_blocks={} stop_at_height={} shutdown_timeout_ms={}",
-        finalization_blocks,
-        stop_at_height.get(),
-        shutdown_timeout.as_millis()
-    );
 
     let (mut test_rollup, admin) = create_test_rollup(
         0,
@@ -181,11 +163,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    info!(
-        "DEBUG_UPG_STOP_TX_READY stop_at_height={} current_height={}",
-        stop_at_height.get(),
-        test_rollup.height().await.get()
-    );
 
     let api_client = test_rollup.api_client().clone();
 
@@ -193,12 +170,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let mut current_height = test_rollup.height().await;
 
     while current_height.get() < stop_at_height.get() {
-        info!(
-            "DEBUG_UPG_STOP_TX_PRE_STOP_LOOP current_height={} stop_at_height={} nonce={}",
-            current_height.get(),
-            stop_at_height.get(),
-            nonce
-        );
         // Height check and tx submission are not atomic. If the node reaches stop-height
         // between the check and the submission, rejection is expected and we should exit.
         match send_tx(&admin, nonce, &api_client).await {
@@ -210,13 +181,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
                     err.contains(&expected_error),
                     "Unexpected pre-stop tx error: {err}"
                 );
-                info!(
-                    "DEBUG_UPG_STOP_TX_PRE_STOP_REJECT current_height={} stop_at_height={} nonce={} error={}",
-                    current_height.get(),
-                    stop_at_height.get(),
-                    nonce,
-                    err
-                );
                 break;
             }
         }
@@ -227,11 +191,6 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     }
 
     test_rollup.wait_for_height(stop_at_height.get()).await;
-    info!(
-        "DEBUG_UPG_STOP_TX_AT_STOP_HEIGHT stop_at_height={} nonce={}",
-        stop_at_height.get(),
-        nonce
-    );
 
     // After the stop height is reached, the sequencer should not accept any transactions. Until the height is finalized.
     for _ in 0..finalization_blocks {
@@ -253,20 +212,10 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
     }
-    let current_height_before_shutdown_wait = match get_height(&test_rollup.client).await {
-        Ok(height) => format!("{height}"),
-        Err(error) => format!("unavailable: {error:#}"),
-    };
-    info!(
-        "DEBUG_UPG_STOP_TX_WAITING_SHUTDOWN stop_at_height={} current_height={}",
-        stop_at_height.get(),
-        current_height_before_shutdown_wait
-    );
 
     let mut shutdown_timeout_error = None;
     let shutdown_wait_step = Duration::from_millis(250);
     let shutdown_deadline = tokio::time::Instant::now() + shutdown_timeout;
-    let mut shutdown_drive_blocks = 0u64;
 
     loop {
         match test_rollup
@@ -286,54 +235,13 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
                     break;
                 }
                 test_rollup.da_service.produce_block_now().await.unwrap();
-                shutdown_drive_blocks += 1;
             }
         }
     }
 
     if let Some(error) = shutdown_timeout_error {
-        let ready_response = query_endpoint(&test_rollup.client, "/sequencer/ready").await;
-        let role_response = query_endpoint(&test_rollup.client, "/sequencer/role").await;
-        let latest_slot_response =
-            query_endpoint(&test_rollup.client, "/ledger/slots/latest").await;
-        let finalized_slot_response =
-            query_endpoint(&test_rollup.client, "/ledger/slots/finalized").await;
-        let current_heights_response = query_endpoint(
-            &test_rollup.client,
-            "/modules/chain-state/state/current-heights",
-        )
-        .await;
-        let sync_status = match test_rollup.client.client.get_sync_status().await {
-            Ok(status) => format!("{:?}", status.into_inner()),
-            Err(sync_error) => format!("error: {sync_error:?}"),
-        };
-        let rollup_height = match get_height(&test_rollup.client).await {
-            Ok(height) => format!("{height}"),
-            Err(height_error) => format!("error: {height_error:#}"),
-        };
-
-        info!(
-            "DEBUG_UPG_STOP_TX_SHUTDOWN_TIMEOUT stop_at_height={} rollup_height={} sync_status={} latest_slot={} finalized_slot={} shutdown_drive_blocks={}",
-            stop_at_height.get(),
-            rollup_height,
-            sync_status,
-            latest_slot_response,
-            finalized_slot_response,
-            shutdown_drive_blocks
-        );
-
         panic!(
-            "Failed waiting for rollup shutdown: {error:#}\n\
-            Diagnostics:\n\
-              stop_at_height: {stop_at_height}\n\
-              rollup_height: {rollup_height}\n\
-              sync_status: {sync_status}\n\
-              /sequencer/ready: {ready_response}\n\
-              /sequencer/role: {role_response}\n\
-              /ledger/slots/latest: {latest_slot_response}\n\
-              /ledger/slots/finalized: {finalized_slot_response}\n\
-              /modules/chain-state/state/current-heights: {current_heights_response}\n\
-              See stdout logs for DEBUG_UPG_STOP_TX_* and DEBUG_WAIT_FINALIZED_* markers."
+            "Failed waiting for rollup shutdown before timeout (stop_at_height={stop_at_height}): {error:#}"
         );
     }
 }
@@ -480,13 +388,6 @@ async fn send_tx(
         Err(err) => {
             panic!("Unexpected error: {err:?}")
         }
-    }
-}
-
-async fn query_endpoint(client: &NodeClient, endpoint: &str) -> String {
-    match client.http_get(endpoint).await {
-        Ok(response) => response,
-        Err(error) => format!("error: {error:#}"),
     }
 }
 

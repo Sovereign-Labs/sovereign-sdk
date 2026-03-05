@@ -439,48 +439,23 @@ where
         next_da_height: u64,
         shutdown_receiver: &watch::Receiver<()>,
     ) -> anyhow::Result<bool> {
-        // Temporary CI-debug marker for flaky shutdown in upgrade tests.
-        // Keep critical values in message body (not only structured fields) so
-        // copied tails and plain-text artifacts remain informative.
-        let mut poll_count: u64 = 0;
-        let mut last_logged_finalized_height: Option<u64> = None;
         loop {
             let finalized_height = self
                 .finalized_headers_provider
                 .get_last_finalized_block_header()?
                 .height();
             if next_da_height > finalized_height {
-                poll_count += 1;
-                if last_logged_finalized_height != Some(finalized_height) || poll_count % 50 == 0 {
-                    info!(
-                        "DEBUG_WAIT_FINALIZED finalized_height={} next_da_height={} polling_interval_ms={} poll_count={}",
-                        finalized_height,
-                        next_da_height,
-                        self.da_polling_interval.as_millis(),
-                        poll_count
-                    );
-                    last_logged_finalized_height = Some(finalized_height);
-                }
+                info!(%finalized_height, %next_da_height, "Waiting until next DA height is finalized");
                 match future_or_shutdown(
                     tokio::time::sleep(self.da_polling_interval),
                     shutdown_receiver,
                 )
                 .await
                 {
-                    FutureOrShutdownOutput::Shutdown => {
-                        info!(
-                            "DEBUG_WAIT_FINALIZED_SHUTDOWN finalized_height={} next_da_height={}",
-                            finalized_height, next_da_height
-                        );
-                        return Ok(true);
-                    }
+                    FutureOrShutdownOutput::Shutdown => return Ok(true),
                     FutureOrShutdownOutput::Output(()) => continue,
                 }
             } else {
-                info!(
-                    "DEBUG_WAIT_FINALIZED_EXIT finalized_height={} next_da_height={}",
-                    finalized_height, next_da_height
-                );
                 break;
             }
         }
@@ -639,7 +614,6 @@ where
             .await;
         let get_relevant_proofs_time = get_relevant_proofs_start.elapsed();
         // Handling executed data
-        let created_rollup_block = !slot_result.batch_receipts.is_empty();
         let mut data_to_commit = SlotCommit::new(filtered_block, slot_result.discarded_blobs);
         for mut receipt in slot_result.batch_receipts {
             if !self.save_tx_bodies {
@@ -715,13 +689,6 @@ where
         // If the rollup is upgrading and the current height has reached the stop point,
         // halt further slot processing.
         if let Some(stop_at_rollup_height) = stop_at_rollup_height {
-            info!(
-                "DEBUG_STOP_CHECK slot_rollup_height={} stop_at_rollup_height={} next_da_height={} created_rollup_block={}",
-                slot_result.rollup_height,
-                stop_at_rollup_height,
-                next_da_height,
-                created_rollup_block
-            );
             if &slot_result.rollup_height == stop_at_rollup_height {
                 info!(rollup_height = %stop_at_rollup_height, "Stopping at rollup the height");
                 return Ok(None);
