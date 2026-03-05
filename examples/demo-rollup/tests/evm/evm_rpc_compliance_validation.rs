@@ -360,11 +360,9 @@ async fn rpc_008_receipt_fee_fields_match_balance_delta() -> anyhow::Result<()> 
         .checked_sub(balance_after)
         .expect("balance should decrease");
 
-    // Runtime-level metered operations outside the EVM call path can make sender balance
-    // deltas exceed receipt-implied amount. Follow-up: reconcile at full tx boundary.
-    assert!(
-        actual_spent >= expected_spent,
-        "receipt fee/value accounting lower bound should hold for sender balance delta"
+    assert_eq!(
+        actual_spent, expected_spent,
+        "receipt fee/value accounting should exactly match sender balance delta"
     );
 
     Ok(())

@@ -30,7 +30,7 @@ sov-universal-wallet = { workspace = true }
 derivative = { workspace = true }
 anyhow = { workspace = true }
 strum = { workspace = true }
-sov-modules-api = { workspace = true, features = ["evm"] }
+sov-modules-api = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
