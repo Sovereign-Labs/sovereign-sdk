@@ -100,7 +100,7 @@ jobs:
 
   check:
     name: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-91
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -135,7 +135,7 @@ jobs:
     name: bench_check
     needs: check
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     env:
       RUSTFLAGS: "-D warnings"
@@ -157,7 +157,7 @@ jobs:
     name: rollup_tps_validation
     needs: check
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
@@ -178,7 +178,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-91
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -209,7 +209,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-91
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -234,7 +234,7 @@ jobs:
   nextest:
     name: nextest
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -254,7 +254,7 @@ jobs:
   nextest_all_features:
     name: nextest_all_features
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -274,7 +274,7 @@ jobs:
 
   doctests:
     name: doctests
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-300gb-1-91
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -295,7 +295,7 @@ jobs:
   coverage:
     name: coverage
     # TODO:try coverage 32x64
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-coverage-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-coverage-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 90
     env:
       SKIP_GUEST_BUILD: "1"
@@ -431,7 +431,7 @@ jobs:
         run: git diff --exit-code
 
   check-demo-rollup-bash-commands:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     timeout-minutes: 60
@@ -459,7 +459,7 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-demo-rollup-bash-commands-mock-da:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     timeout-minutes: 60
@@ -481,7 +481,7 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-constant-overriding-is-disabled-in-release-mode:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-300gb-1-91
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -499,7 +499,7 @@ jobs:
         working-directory: .
 
   cargo-switcheroo-default:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-91
     steps:
       - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
@@ -510,7 +510,7 @@ jobs:
       - run: git diff --exit-code
 
   check-web3-js-sdk-integration:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-91;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     timeout-minutes: 60
