@@ -105,7 +105,6 @@ pub fn storage_access_benches(
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -135,7 +134,6 @@ pub fn storage_access_benches(
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -167,7 +165,6 @@ pub fn storage_access_benches(
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -195,12 +192,10 @@ pub fn storage_access_benches(
                         AccessPatternDiscriminants::WriteCustom,
                         AccessPatternDiscriminants::DeleteCells,
                         AccessPatternDiscriminants::UpdateAdmin,
-                        AccessPatternDiscriminants::SetHook,
                     ]),
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -235,7 +230,6 @@ pub fn ops_benches(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<B
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -265,7 +259,6 @@ pub fn ops_benches(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<B
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -295,7 +288,6 @@ pub fn ops_benches(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<B
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -330,7 +322,6 @@ pub fn ops_benches(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<B
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     admin.clone(),
                 ),
             ));
@@ -364,7 +355,6 @@ pub fn mix_accesses(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<
                         AccessPatternDiscriminants::WriteCustom,
                         AccessPatternDiscriminants::DeleteCells,
                         AccessPatternDiscriminants::UpdateAdmin,
-                        AccessPatternDiscriminants::SetHook,
                         AccessPatternDiscriminants::HashBytes,
                         AccessPatternDiscriminants::HashCustom,
                         AccessPatternDiscriminants::StoreSerializedString,
@@ -377,7 +367,6 @@ pub fn mix_accesses(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     value_setter_admin.clone(),
                 ),
             ));
@@ -405,7 +394,6 @@ pub fn mix_accesses(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<
                         AccessPatternDiscriminants::WriteCustom,
                         AccessPatternDiscriminants::DeleteCells,
                         AccessPatternDiscriminants::UpdateAdmin,
-                        AccessPatternDiscriminants::SetHook,
                         AccessPatternDiscriminants::HashBytes,
                         AccessPatternDiscriminants::HashCustom,
                         AccessPatternDiscriminants::StoreSerializedString,
@@ -418,7 +406,6 @@ pub fn mix_accesses(params: &BenchCLICustomArgs, slots: u64, seed: u128) -> Vec<
                     params.pattern_maximum_write_data_length,
                     params.pattern_maximum_write_begin_index,
                     params.pattern_maximum_write_size,
-                    params.pattern_maximum_hooks_ops,
                     value_setter_admin.clone(),
                 ),
             ));

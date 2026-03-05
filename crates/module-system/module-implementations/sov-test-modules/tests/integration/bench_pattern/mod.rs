@@ -2,14 +2,11 @@ use borsh::BorshSerialize;
 use sha2::Digest;
 use sov_modules_api::{CryptoSpec, PrivateKey, Spec};
 use sov_test_modules::access_pattern::{
-    AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages, HooksConfig,
-    MeteredBorshDeserializeString,
+    AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages, MeteredBorshDeserializeString,
 };
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::{
-    generate_zk_runtime, get_gas_used, AsUser, TestSpec, TestUser, TransactionTestCase,
-};
+use sov_test_utils::{generate_zk_runtime, AsUser, TestSpec, TestUser, TransactionTestCase};
 
 generate_zk_runtime!(TestRuntime <= test_module: AccessPattern<S>);
 
