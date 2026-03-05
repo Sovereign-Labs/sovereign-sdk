@@ -277,6 +277,7 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
+    let mut shutdown_receiver = deps.shutdown_sender.subscribe();
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
@@ -292,12 +293,14 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
         .publish_batch_blob(data, blob_id as BlobInternalId)
         .await?;
 
-    // Blob publication failed due to the absence of DA blocks.
-    // After MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, the BlobSender should terminate gracefully.
-    let result = tokio::time::timeout(Duration::from_secs(5), blob_sender_handle).await;
-    result
-        .expect("The BlobSender should exit gracefully after failing to publish blobs.")
-        .unwrap();
+    // Blob publication fails due to the absence of DA blocks.
+    // After MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, BlobSender should request shutdown.
+    shutdown_receiver
+        .changed()
+        .await
+        .expect("The BlobSender should request shutdown after failing to process blobs.");
+
+    blob_sender_handle.await.unwrap();
 
     let mut records = collector.records();
     assert_eq!(records.len(), 4);
