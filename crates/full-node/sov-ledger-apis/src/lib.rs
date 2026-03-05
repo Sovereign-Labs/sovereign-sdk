@@ -363,9 +363,7 @@ where
             PageSelection::First => 0,
             PageSelection::Last => return Err(errors::not_implemented_501()),
         };
-        let end = start
-            .checked_add(pagination.size as u64)
-            .unwrap_or(u64::MAX);
+        let end = start.saturating_add(pagination.size as u64);
         let nums = (start..=end)
             .map(EventIdentifier::Number)
             .collect::<Vec<_>>();

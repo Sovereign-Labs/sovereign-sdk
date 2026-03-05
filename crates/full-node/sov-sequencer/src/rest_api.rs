@@ -694,9 +694,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         };
         // Note: The previous version of this code returned one more than the requested number of events.
         // This is now fixed.
-        let end = start
-            .checked_add(pagination.size as u64)
-            .unwrap_or(u64::MAX);
+        let end = start.saturating_add(pagination.size as u64);
 
         let events =
             state.sequencer.list_events(start..end).await.map_err(|_| {
