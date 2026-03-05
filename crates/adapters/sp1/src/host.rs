@@ -91,4 +91,3 @@ impl ZkvmHost for SP1Host<'static> {
         crate::SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap())
     }
 }
-

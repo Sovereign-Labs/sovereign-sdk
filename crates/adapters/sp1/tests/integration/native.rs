@@ -4,7 +4,6 @@ use sov_sp1_adapter::host::SP1Host;
 use sp1_build::BuildArgs;
 use sp1_sdk::{SP1Proof, SP1PublicValues};
 
-
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct TestStruct {
     ints: Vec<i32>,
