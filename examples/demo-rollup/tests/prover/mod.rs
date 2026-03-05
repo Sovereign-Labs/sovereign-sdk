@@ -88,6 +88,9 @@ async fn test_proof_generation() {
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
 
     for filtered_block in &mut blocks[..3] {
+        println!("==");
+        println!("");
+
         let height = filtered_block.header().height();
         tracing::info!(
             "Requesting data for height {} and prev_state_root 0x{}",
@@ -111,6 +114,7 @@ async fn test_proof_generation() {
             ExecutionContext::Node,
         );
 
+        println!("PREV {}", prev_state_root);
         let data = StateTransitionWitness::<
             <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot,
             <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness,
@@ -145,7 +149,7 @@ async fn test_proof_generation() {
             .await
             .expect("SP1 proof verification should succeed");
 
-        //assert_eq!(proof_public_data.initial_state_root, prev_state_root);
+        assert_eq!(proof_public_data.initial_state_root, prev_state_root);
         //assert_eq!(proof_public_data.final_state_root, result.state_root);
         assert_eq!(proof_public_data.slot_hash, filtered_block.header().hash());
         assert_eq!(proof_public_data.prover_address, prover_address);

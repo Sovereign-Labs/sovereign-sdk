@@ -103,15 +103,15 @@ impl SP1Verifier {
         serialized_proof: &[u8],
         code_commitment: &SP1MethodId,
     ) -> Result<T, anyhow::Error> {
-        print!("START XXX");
+        println!("START XXX");
         let proof = decode_sp1_proof(serialized_proof)?;
         let prover = sp1_sdk::ProverClient::builder().cpu().build().await;
         let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
 
-        print!("START VERIFY");
+        println!("START VERIFY");
         sp1_sdk::Prover::verify(&prover, &proof, &verifying_key, None)?;
 
-        print!("END VERIFY");
+        println!("END VERIFY");
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
