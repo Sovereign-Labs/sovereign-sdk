@@ -277,7 +277,7 @@ impl Iterator for NamespaceDataIterator<'_> {
             while relative_share_idx < current_row.shares.len() {
                 let share = &current_row.shares[relative_share_idx];
                 // We cannot determine the start for any kind of share,
-                // for parity shares we never assume that their at the start.
+                // for parity shares we never assume that they are at the start.
                 // They are not going to be included anyway.
                 let is_start = share
                     .info_byte()

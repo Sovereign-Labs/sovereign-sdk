@@ -25,7 +25,7 @@ impl BlobProof {
     // Remaining bytes are padded with zeroes:
     // > The remaining SHARE_SIZE-NAMESPACE_SIZE-SHARE_INFO_BYTES-SEQUENCE_BYTES bytes are filled with 0
     // From
-    // https://celestiaorg.github.io/celestia-app/specs/shares.html#padding
+    // https://github.com/celestiaorg/celestia-app/blob/c10edd9c49db4f5cef5b6a59eea26add1342a2e7/specs/src/shares.md#L85-L95
     pub(crate) fn enforce_continuity(&self) -> Result<(), RowProofError> {
         for i in 1..self.range_proofs.len() {
             let left_idx = i

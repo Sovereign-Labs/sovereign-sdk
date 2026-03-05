@@ -505,6 +505,13 @@ fn verify_skipped_blob(
 // * Derive boundary row as:
 //   `delta = last_proven_share_idx - proof_start_in_row`, `row_idx = delta / row_len`.
 // * Require row alignment: `delta % row_len == 0`.
+// * Treat right sibling checks as row-local only:
+//   if the boundary proof's right sibling is `PARITY_SHARE`, it only proves there are no more
+//   namespace shares to the right in that row fragment. It does NOT prove global namespace end.
+//   Example:
+//   row r   : ... [N][N][LAST_N] | [PARITY...]
+//   row r+1 : [N][N]...
+//   Therefore completeness still depends on checking candidate-row position.
 // * Require `row_idx` to point to the last candidate row in `namespace_row_roots`.
 //   If it points earlier, later candidate rows could still contain this namespace, so return `MissingBlobs`.
 //
