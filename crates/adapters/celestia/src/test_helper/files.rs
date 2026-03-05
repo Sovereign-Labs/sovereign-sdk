@@ -2,6 +2,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
+use celestia_types::consts::appconsts;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use celestia_types::ExtendedHeader;
@@ -377,6 +378,165 @@ pub mod with_batch_and_proof_same_block {
 
     pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
         (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+}
+
+pub mod with_parity_boundary_followed_by_namespace {
+    use super::*;
+
+    /// Synthetic fixture generated against local dockerized Celestia.
+    /// Target shape:
+    /// 1. A namespace row that ends exactly on the last non-parity share in that row.
+    /// 2. The next row still contains the same namespace.
+    ///
+    /// This lets verifier tests exercise the edge case where a boundary proof can be
+    /// misleading if parity-share siblings are considered without checking following rows.
+    pub const DATA_PATH: &str = "test_data/block_with_parity_boundary_followed_by_namespace";
+    pub const ROLLUP_PARAMS: RollupParams = ROLLUP_PARAMS_DEV;
+
+    const PRECEDING_SHARE_COUNTS: [usize; 6] = [1, 2, 3, 5, 8, 13];
+    const TARGET_SHARE_COUNTS: [usize; 7] = [17, 33, 65, 97, 129, 193, 257];
+
+    pub fn filtered_block() -> FilteredCelestiaBlock {
+        let path = make_test_path(DATA_PATH);
+        filtered_block_from_path(
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+            &path,
+        )
+        .unwrap()
+    }
+
+    pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
+        (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+
+    fn bytes_for_signed_shares(share_count: usize) -> usize {
+        let first_share_content = appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+            .checked_sub(appconsts::SIGNER_SIZE)
+            .expect("signer size should fit into first share content size");
+        if share_count <= 1 {
+            return first_share_content;
+        }
+        first_share_content
+            + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+    }
+
+    fn has_target_parity_boundary_shape(
+        block_header: &ExtendedHeader,
+        namespace_data: &NamespaceData,
+        namespace: Namespace,
+    ) -> bool {
+        let row_len = block_header.dah.square_width() as usize / 2;
+        let rows = namespace_data.rows();
+        if rows.len() < 2 {
+            return false;
+        }
+
+        for row_idx in 0..rows.len().saturating_sub(1) {
+            let row = &rows[row_idx];
+            let next_row = &rows[row_idx + 1];
+            if row.shares.is_empty() || next_row.shares.is_empty() {
+                continue;
+            }
+            if !row.proof.is_of_presence() || !next_row.proof.is_of_presence() {
+                continue;
+            }
+            if row.proof.end_idx() as usize != row_len {
+                continue;
+            }
+
+            let Some(last_share) = row.shares.last() else {
+                continue;
+            };
+            if last_share.is_parity() || crate::shares::is_tail_padding(last_share) {
+                continue;
+            }
+
+            let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+            let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace)
+            else {
+                continue;
+            };
+            let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
+                continue;
+            };
+            if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub async fn update_test_data(
+        client: &celestia_client::Client,
+        signer: &CelestiaAddress,
+    ) -> anyhow::Result<()> {
+        let path = make_test_path(DATA_PATH);
+        std::fs::create_dir_all(&path)?;
+
+        for (preceding_idx, preceding_shares) in PRECEDING_SHARE_COUNTS.into_iter().enumerate() {
+            for (target_idx, target_shares) in TARGET_SHARE_COUNTS.into_iter().enumerate() {
+                let mut blobs = Vec::new();
+                let mut rng_seed = [0u8; 32];
+                rng_seed[0] = preceding_idx as u8;
+                rng_seed[1] = target_idx as u8;
+                let mut rng = rand::rngs::SmallRng::from_seed(rng_seed);
+
+                let mut preceding_payload = vec![0u8; bytes_for_signed_shares(preceding_shares)];
+                rng.fill_bytes(&mut preceding_payload);
+                blobs.push(blob_from_data(
+                    ROLLUP_OTHER_NAMESPACE_PRECEDING,
+                    preceding_payload,
+                    signer,
+                )?);
+
+                let mut target_payload = vec![0u8; bytes_for_signed_shares(target_shares)];
+                rng.fill_bytes(&mut target_payload);
+                blobs.push(blob_from_data(
+                    ROLLUP_BATCH_NAMESPACE,
+                    target_payload,
+                    signer,
+                )?);
+
+                let block_header = submit_blobs(client, blobs).await?;
+                let rollup_batch_rows = client
+                    .share()
+                    .get_namespace_data(
+                        block_header.height(),
+                        APP_VERSION,
+                        ROLLUP_PARAMS.rollup_batch_namespace,
+                    )
+                    .await?;
+
+                if !has_target_parity_boundary_shape(
+                    &block_header,
+                    &rollup_batch_rows,
+                    ROLLUP_PARAMS.rollup_batch_namespace,
+                ) {
+                    continue;
+                }
+
+                // Only the target namespace blob should be extracted.
+                let signers = serde_json::json!({"signers": vec![signer.to_string()]});
+                write_to_file(&path.join(SIGNERS_JSON), &signers)?;
+
+                save_blobs(
+                    client,
+                    &path,
+                    &block_header,
+                    ROLLUP_PARAMS.rollup_batch_namespace,
+                    ROLLUP_PARAMS.rollup_proof_namespace,
+                )
+                .await;
+                return Ok(());
+            }
+        }
+
+        anyhow::bail!(
+            "failed to generate parity-boundary fixture: no submitted block matched target shape"
+        )
     }
 }
 

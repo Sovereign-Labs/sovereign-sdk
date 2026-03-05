@@ -788,6 +788,7 @@ where
         with_preceding_blobs_from_different_namespaces::test_case(),
         with_batch_and_proof_same_block::test_case(),
         with_namespace_padding::test_case(),
+        with_parity_boundary_followed_by_namespace::test_case(),
         medium_from_devnet::test_case(),
         from_testnet::test_case(),
         from_testnet_no_shares::test_case(),
@@ -873,6 +874,54 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(read_half, read_half).await;
     verification_for_correct_blocks(read_half, no_read).await;
     verification_for_correct_blocks(no_read, read_half).await;
+}
+
+#[test]
+fn parity_boundary_fixture_contains_target_shape() {
+    let block = with_parity_boundary_followed_by_namespace::filtered_block();
+    let namespace =
+        with_parity_boundary_followed_by_namespace::ROLLUP_PARAMS.rollup_batch_namespace;
+    let row_len = block.header.row_length();
+    let rows = block.rollup_batch_data.data.rows();
+    assert!(
+        rows.len() >= 2,
+        "Fixture must span at least two namespace rows"
+    );
+
+    let mut found = false;
+    for row_idx in 0..rows.len().saturating_sub(1) {
+        let row = &rows[row_idx];
+        let next_row = &rows[row_idx + 1];
+        if row.shares.is_empty() || next_row.shares.is_empty() {
+            continue;
+        }
+        if row.proof.end_idx() as usize != row_len {
+            continue;
+        }
+
+        let Some(last_share) = row.shares.last() else {
+            continue;
+        };
+        if last_share.is_parity() {
+            continue;
+        }
+
+        let all_before_last = &row.shares[..row.shares.len().saturating_sub(1)];
+        let Ok(last_share_proof) = row.proof.narrow_range(all_before_last, &[], *namespace) else {
+            continue;
+        };
+        let Some(right_sibling) = last_share_proof.leftmost_right_sibling() else {
+            continue;
+        };
+        if right_sibling.min_namespace() == *Namespace::PARITY_SHARE {
+            found = true;
+            break;
+        }
+    }
+    assert!(
+        found,
+        "Fixture must contain a row ending at last non-parity share with parity right sibling and namespace continuation in next row",
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1184,7 +1233,27 @@ async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
     with_several_large_rollup_batches::update_test_data(&client, &signer).await;
     with_preceding_blobs_from_different_namespaces::update_test_data(&client, &signer).await?;
     with_batch_and_proof_same_block::update_test_data(&client, &signer).await;
+    with_parity_boundary_followed_by_namespace::update_test_data(&client, &signer).await?;
     with_mixed_v0_and_v1_blobs::update_test_data(&client, &signer).await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual fixture generation; starts dockerized celestia devnet"]
+async fn generate_parity_boundary_fixture_with_docker() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let signer = dev_node.get_signer_address(0).await?;
+    let signer_private_key = dev_node.export_signer_key(0).await?;
+    let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
+    let grpc_url = format!("http://127.0.0.1:{}", dev_node.validator_port_ipv4().await?);
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url(&rpc_url)
+        .grpc_url(&grpc_url)
+        .private_key_hex(&signer_private_key)
+        .build()
+        .await?;
+
+    with_parity_boundary_followed_by_namespace::update_test_data(&client, &signer).await?;
     Ok(())
 }
 
