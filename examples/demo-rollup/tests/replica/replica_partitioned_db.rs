@@ -4,16 +4,8 @@ use super::*;
 const BASELINE_TRANSFER_COUNT: u64 = 1;
 const PARTITIONED_TRANSFER_COUNT: u64 = 3;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_repl_x() {
-    for i in 0..100 {
-        println!("Iter {i}");
-        test_replica_catches_up_via_da_after_postgres_partition().await;
-    }
-}
-
 /// Verifies a DB-elected replica remain consistent after sequencer db partition.
-
+#[tokio::test(flavor = "multi_thread")]
 async fn test_replica_catches_up_via_da_after_postgres_partition() {
     let Some(mut setup) = NodeTestSetup::new().await else {
         return;
@@ -87,7 +79,7 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
         )
         .await;
 
-        leader.wait_for_height(3).await;
+        leader.wait_for_next_blocks(3).await;
         setup.set_replica_da_slow(false).await;
     }
 
@@ -95,12 +87,14 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
     // Check that the replica receives the data via DA.
     {
         wait_for_replica_to_catchup(&leader, &replica).await;
+
         let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
         assert_eq!(replica_balance, expected_balance_after_partitioned_tx);
     }
 
     // Here the DB partition is ended. We check that we can still query the replica
     setup.set_postgres_partition(false).await;
+
     let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
     assert_eq!(replica_balance, expected_balance_after_partitioned_tx);
 
