@@ -156,7 +156,7 @@ $ curl -sS http://127.0.0.1:12346/ledger/txs/0x4790c218f0b517cd4394baf3388b6047c
       "type": "moduleRef",
       "name": "Bank"
     },
-    "tx_hash": "0xa7b15031b1be61a33ee4127bad4740b9822a674c9926409daef1cdd44ee46be0"
+    "tx_hash": "0x4790c218f0b517cd4394baf3388b6047ce4f0155d9f8cc8af1dc61d0fd5dc683"
   }
 ]
 ```
