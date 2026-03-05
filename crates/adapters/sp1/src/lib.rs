@@ -85,12 +85,14 @@ pub struct SP1Verifier;
 
 #[cfg(not(target_os = "zkvm"))]
 fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<SP1ProofWithPublicValues, Error> {
-    match bincode::deserialize::<Proof<SP1ProofWithPublicValues, SP1PublicValues>>(
-        serialized_proof,
-    ) {
-        Ok(Proof::Full(proof)) => Ok(proof),
-        Ok(Proof::PublicData(_)) => anyhow::bail!("SP1Verifier supports only full proofs"),
-        Err(_) => Ok(bincode::deserialize(serialized_proof)?),
+    match bincode::deserialize::<Proof<SP1ProofWithPublicValues, SP1PublicValues>>(serialized_proof)
+    {
+        Ok(Proof::Full(proof)) => {
+            println!("proof");
+            Ok(proof)
+        }
+        Ok(Proof::PublicData(_)) => todo!("x1"),
+        Err(_) => unimplemented!(),
     }
 }
 
@@ -101,11 +103,15 @@ impl SP1Verifier {
         serialized_proof: &[u8],
         code_commitment: &SP1MethodId,
     ) -> Result<T, anyhow::Error> {
+        print!("START XXX");
         let proof = decode_sp1_proof(serialized_proof)?;
         let prover = sp1_sdk::ProverClient::builder().cpu().build().await;
         let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
+
+        print!("START VERIFY");
         sp1_sdk::Prover::verify(&prover, &proof, &verifying_key, None)?;
 
+        print!("END VERIFY");
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }

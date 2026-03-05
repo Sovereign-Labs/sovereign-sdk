@@ -51,7 +51,7 @@ impl<'host> SP1Host<'host> {
                 .await
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
 
-            Proof::Full(output.proof)
+            Proof::Full(output)
         };
 
         Ok(bincode::serialize(&proof)?)
