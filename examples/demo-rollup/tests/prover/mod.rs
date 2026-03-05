@@ -15,10 +15,11 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{
-    StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
+    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress,
+    ZkvmHost,
 };
 use sov_sp1_adapter::host::SP1Host;
-use sov_sp1_adapter::SP1;
+use sov_sp1_adapter::{SP1Verifier, SP1};
 use sov_state::ProverStorage;
 use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::TestStorageSpec;
@@ -81,6 +82,11 @@ async fn test_proof_generation() {
         .expect("Failed to get DA blocks");
 
     let mut host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
+    let code_commitment = host
+        .code_commitment_async()
+        .await
+        .expect("SP1 code commitment should be created successfully");
+    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
 
     for filtered_block in &mut blocks[..3] {
         let height = filtered_block.header().height();
@@ -121,16 +127,28 @@ async fn test_proof_generation() {
 
         let data = StateTransitionWitnessWithAddress {
             stf_witness: data,
-            prover_address: <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap(),
+            prover_address: prover_address.clone(),
         };
 
         host.add_hint(data);
 
         tracing::info!("Run prover without generating a proof for block {height}\n");
-        let _proof = host
+        let proof = host
             .run_async(true)
             .await
             .expect("Prover should run successfully");
+        let proof_public_data: StateTransitionPublicData<
+            <DefaultSpec as Spec>::Address,
+            MockDaSpec,
+            <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot,
+        > = SP1Verifier::verify_async(&proof, &code_commitment)
+            .await
+            .expect("SP1 proof verification should succeed");
+
+        assert_eq!(proof_public_data.initial_state_root, prev_state_root);
+        assert_eq!(proof_public_data.final_state_root, result.state_root);
+        assert_eq!(proof_public_data.slot_hash, filtered_block.header().hash());
+        assert_eq!(proof_public_data.prover_address, prover_address);
 
         tracing::info!("==================================================\n");
 

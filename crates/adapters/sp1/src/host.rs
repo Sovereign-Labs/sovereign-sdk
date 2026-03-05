@@ -56,6 +56,19 @@ impl<'host> SP1Host<'host> {
 
         Ok(bincode::serialize(&proof)?)
     }
+
+    /// Returns a commitment to the guest ELF using SP1's async prover API.
+    pub async fn code_commitment_async(&self) -> anyhow::Result<crate::SP1MethodId> {
+        use sp1_sdk::{Prover, ProverClient};
+
+        let prover = ProverClient::builder().cpu().build().await;
+        let pk = prover
+            .setup(self.elf.into())
+            .await
+            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+
+        Ok(crate::SP1MethodId(bincode::serialize(pk.verifying_key())?))
+    }
 }
 
 impl Clone for SP1Host<'_> {
