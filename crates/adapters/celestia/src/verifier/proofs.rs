@@ -105,10 +105,9 @@ impl BlobProof {
             }));
         }
 
-        // 3. If the first blob starts not from the beginning of the row (start_idx() == 0),
-        // we need to prove that there are no skipped shares from the namespace.
-        // Otherwise, we safely know that the first column of the related row contains this proof,
-        // so there are blobs that have been skipped.
+        // 3. If the first blob starts after the beginning of the row (`start_idx() > 0`),
+        // prove that the immediate left sibling belongs to a strictly smaller namespace.
+        // If `start_idx() == 0`, the blob starts at the row boundary, so there is no in-row left gap.
         if first_sub_proof.proof.start_idx() > 0 {
             let Some(rls) = first_sub_proof.proof.rightmost_left_sibling() else {
                 tracing::error!(

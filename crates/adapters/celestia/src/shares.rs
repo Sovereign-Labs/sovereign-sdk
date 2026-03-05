@@ -276,9 +276,8 @@ impl Iterator for NamespaceDataIterator<'_> {
 
             while relative_share_idx < current_row.shares.len() {
                 let share = &current_row.shares[relative_share_idx];
-                // We cannot determine the start for any kind of share,
-                // for parity shares we never assume that they are at the start.
-                // They are not going to be included anyway.
+                // Sequence-start flags on parity/padding shares do not define extracted blob boundaries.
+                // We only start collecting when adding the first non-parity, non-tail share.
                 let is_start = share
                     .info_byte()
                     .map(|info_byte| info_byte.is_sequence_start())

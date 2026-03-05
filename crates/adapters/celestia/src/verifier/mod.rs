@@ -120,7 +120,7 @@ impl da::DaVerifier for CelestiaVerifier {
 impl CelestiaVerifier {
     /// Input:
     /// * reference [`CelestiaHeader`] to verify against. This data is trusted by this point.
-    /// * the slice of [`BlobsWithSender`] that has been extracted. Not trusted.
+    /// * the slice of [`BlobWithSender`] that has been extracted. Not trusted.
     /// * Namespace of the blobs. Trusted parameter of the whole rollup
     /// * Option<NamespaceBoundaryProof> is needed to do the whole namespace completeness check
     ///
@@ -255,11 +255,12 @@ impl PreValidationOutput {
     }
 }
 
-/// 1. Checks that blobs quantity matches inclusion proofs quantity.
+/// 1. Checks that blobs quantity does not exceed inclusion proofs quantity.
 /// 2. Checks that row roots are non-empty for non-empty blobs slice.
 /// 3. Handles the case of an empty blobs slice:
 ///    - if inclusion proofs are present, verification continues (unsupported blobs may be proven as skipped);
-///    - otherwise verifies absence proof and returns early.
+///    - if there is exactly one candidate row root, verifies absence proof and returns early;
+///    - if there are multiple candidate row roots and no inclusion proof, fails closed as ambiguous absence.
 fn prevalidate_blobs(
     namespace_row_roots: &[&NamespacedHash],
     blobs: &[BlobWithSender],
@@ -322,16 +323,14 @@ fn prevalidate_blobs(
     Ok(PreValidationOutput::ContinueVerification)
 }
 
-/// 1. Checks that given blob's first share starts immediately after the previous blob.
-///    (i.e. that there are no gaps between blobs)
-/// 2. That the passed `BlobProof` is valid
-/// 3. That the passed `BlobProof` only covers shares touched by the rollup. At least 1 share is always verified.
-/// 4. That the shares in `BlobProof` match the data in `Blob`. This includes the signer and each byte of the payload that was actually read by the rollup.
+/// Authenticates one supported blob against its inclusion proof.
+/// 1. Verifies that the passed `BlobProof` is valid.
+/// 2. Verifies signer and payload bytes against the data actually read by the rollup.
+/// 3. Verifies at least one share and that the number of proven shares matches the bytes read.
 ///
-/// For the very first blob (`blob_idx == 0`) it also checks the left boundary of the whole completeness check.
-/// In other words, it checks that the share preceding the first blob is from another namespace.
+/// Continuity and first-blob left-boundary checks are performed by `verify_blobs` before this call.
 ///
-/// Returns a number of shares checked (proven and skipped)
+/// Returns the total number of shares occupied by this blob.
 fn authenticate_blob_data(
     block_header: &CelestiaHeader,
     namespace_row_roots: &[&NamespacedHash],

@@ -253,12 +253,14 @@ impl FilteredCelestiaBlock {
     }
 }
 
-/// Proof of the last share
+/// Proof of namespace end boundary in the last relevant row.
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamespaceBoundaryProof {
-    // This should be the last share in the namespace
+    /// Namespace proof for the boundary.
+    /// For presence proofs this is narrowed to the last namespace share.
+    /// For absence proofs this proves namespace absence in that row.
     pub last_share_proof: celestia_types::nmt::NamespaceProof,
-    /// The last share of the namespace, if proof is of presence.
+    /// The last namespace share when `last_share_proof` is of presence; `None` for absence proofs.
     pub last_share: Option<celestia_types::Share>,
 }
 
