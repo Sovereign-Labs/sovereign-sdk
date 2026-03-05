@@ -639,6 +639,7 @@ where
             .await;
         let get_relevant_proofs_time = get_relevant_proofs_start.elapsed();
         // Handling executed data
+        let created_rollup_block = !slot_result.batch_receipts.is_empty();
         let mut data_to_commit = SlotCommit::new(filtered_block, slot_result.discarded_blobs);
         for mut receipt in slot_result.batch_receipts {
             if !self.save_tx_bodies {
@@ -714,18 +715,29 @@ where
         // If the rollup is upgrading and the current height has reached the stop point,
         // halt further slot processing.
         if let Some(stop_at_rollup_height) = stop_at_rollup_height {
+            // `slot_result.rollup_height` may reflect the pre-slot height. If this slot produced
+            // a rollup block, effective height after processing is one higher.
+            let effective_rollup_height = if created_rollup_block {
+                slot_result.rollup_height.saturating_add(1)
+            } else {
+                slot_result.rollup_height
+            };
             info!(
-                "DEBUG_STOP_CHECK slot_rollup_height={} stop_at_rollup_height={} next_da_height={}",
-                slot_result.rollup_height, stop_at_rollup_height, next_da_height
+                "DEBUG_STOP_CHECK slot_rollup_height={} effective_rollup_height={} stop_at_rollup_height={} next_da_height={} created_rollup_block={}",
+                slot_result.rollup_height,
+                effective_rollup_height,
+                stop_at_rollup_height,
+                next_da_height,
+                created_rollup_block
             );
-            if &slot_result.rollup_height == stop_at_rollup_height {
+            if &effective_rollup_height >= stop_at_rollup_height {
                 info!(rollup_height = %stop_at_rollup_height, "Stopping at rollup the height");
                 return Ok(None);
             }
             assert!(
-                &slot_result.rollup_height < stop_at_rollup_height,
+                &effective_rollup_height < stop_at_rollup_height,
                 "The rollup height ({}) must be less than the stop height ({})",
-                slot_result.rollup_height,
+                effective_rollup_height,
                 stop_at_rollup_height
             );
         }
