@@ -127,7 +127,11 @@ async fn test_proof_generation() {
         host.add_hint(data);
 
         tracing::info!("Run prover without generating a proof for block {height}\n");
-        let _proof = host.run(true).expect("Prover should run successfully");
+        let _proof = host
+            .run_async(true)
+            .await
+            .expect("Prover should run successfully");
+
         tracing::info!("==================================================\n");
 
         prev_state_root = result.state_root;

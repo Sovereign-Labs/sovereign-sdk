@@ -28,6 +28,37 @@ impl<'host> SP1Host<'host> {
     pub fn simulate_with_hints(&mut self) -> SP1Guest {
         SP1Guest::with_hints(self.stdin.buffer.clone())
     }
+
+    /// TODO
+    pub async fn run_async(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
+        use sp1_sdk::{ProveRequest, Prover, ProverClient}; // async API
+        if cfg!(debug_assertions) {
+            //std::env::set_var("SP1_PROVER", "mock");
+            std::env::set_var("SP1_PROVER", "cpu");
+        } else {
+            std::env::set_var("SP1_PROVER", "cpu");
+        }
+        let prover = ProverClient::from_env().await;
+        let proof = if with_proof {
+            let pk = prover
+                .setup(self.elf.into())
+                .await
+                .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+            let output = prover
+                .prove(&pk, self.stdin.clone())
+                .await
+                .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
+            Proof::Full(output.proof)
+        } else {
+            let prover = ProverClient::builder().mock().build().await;
+            let execute_request = prover.execute(self.elf.into(), self.stdin.clone()).await;
+            let (public_values, _report) = execute_request
+                .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
+
+            Proof::PublicData(public_values)
+        };
+        Ok(bincode::serialize(&proof)?)
+    }
 }
 
 impl Clone for SP1Host<'_> {
