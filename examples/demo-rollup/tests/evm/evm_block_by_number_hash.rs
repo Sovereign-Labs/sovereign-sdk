@@ -501,14 +501,7 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     // Wait for a block to ensure the deploy tx is sealed before we pause
     rollup.wait_for_rollup_height_advance_by(1).await;
-    rollup.pause_preferred_batches().await;
-
-    let sealed_head_number = client
-        .get_block_by_number(Finalized)
-        .await?
-        .expect("finalized block should exist")
-        .header
-        .number;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Send 3 transactions, capturing synthetic hash after each
     let mut synthetic_hashes = Vec::new();
@@ -529,9 +522,6 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
             },
             |block| {
-                if block.header.number != sealed_head_number + 1 {
-                    return false;
-                }
                 let tx_count = match &block.transactions {
                     BlockTransactions::Hashes(h) => h.len(),
                     BlockTransactions::Full(f) => f.len(),
@@ -543,16 +533,22 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
         )
         .await?;
 
-        synthetic_hashes.push(pending_block.header.hash);
+        synthetic_hashes.push((
+            pending_block.header.hash,
+            pending_block.header.number,
+            expected_tx_count,
+        ));
     }
 
     // All 3 synthetic hashes should be different
-    assert_ne!(synthetic_hashes[0], synthetic_hashes[1]);
-    assert_ne!(synthetic_hashes[1], synthetic_hashes[2]);
-    assert_ne!(synthetic_hashes[0], synthetic_hashes[2]);
+    assert_ne!(synthetic_hashes[0].0, synthetic_hashes[1].0);
+    assert_ne!(synthetic_hashes[1].0, synthetic_hashes[2].0);
+    assert_ne!(synthetic_hashes[0].0, synthetic_hashes[2].0);
 
     // Query each synthetic hash and verify tx.block_hash matches
-    for (i, synthetic_hash) in synthetic_hashes.iter().enumerate() {
+    for (i, (synthetic_hash, pending_block_number, expected_tx_count)) in
+        synthetic_hashes.iter().enumerate()
+    {
         let block = client
             .get_block_by_hash(*synthetic_hash)
             .full()
@@ -567,9 +563,9 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
         // Verify transaction count matches expected (i+1 txs)
         assert_eq!(
             txs.len(),
-            i + 1,
+            *expected_tx_count,
             "block from synthetic hash {i} should have {} txs",
-            i + 1
+            expected_tx_count
         );
 
         // Verify all transactions have block_hash matching the synthetic hash we queried
@@ -578,6 +574,11 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
                 tx.block_hash,
                 Some(*synthetic_hash),
                 "tx {j} in block from synthetic hash {i} should have block_hash matching the queried synthetic hash"
+            );
+            assert_eq!(
+                tx.block_number,
+                Some(*pending_block_number),
+                "tx {j} in block from synthetic hash {i} should stay in pending block number"
             );
         }
     }
@@ -597,9 +598,7 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
     let client = alloy_client(rollup.http_addr);
     // Wait for a block to ensure the deploy tx is sealed before we pause
     rollup.wait_for_rollup_height_advance_by(1).await;
-    rollup.pause_preferred_batches().await;
-
-    let sealed_head_number = client.get_block_number().await?;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Send 2 transactions, capturing synthetic hash after each
     let mut synthetic_hashes = Vec::new();
@@ -619,9 +618,6 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
                     .ok_or_else(|| anyhow::anyhow!("pending block should exist"))
             },
             |block| {
-                if block.header.number != sealed_head_number + 1 {
-                    return false;
-                }
                 let tx_count = match &block.transactions {
                     BlockTransactions::Hashes(h) => h.len(),
                     BlockTransactions::Full(f) => f.len(),
@@ -633,7 +629,11 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
         )
         .await?;
 
-        synthetic_hashes.push((pending_block.header.hash, expected_tx_count));
+        synthetic_hashes.push((
+            pending_block.header.hash,
+            pending_block.header.number,
+            expected_tx_count,
+        ));
     }
 
     assert_ne!(
@@ -641,7 +641,9 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
         "synthetic hashes should differ as pending tx set grows"
     );
 
-    for (i, (synthetic_hash, expected_len)) in synthetic_hashes.iter().enumerate() {
+    for (i, (synthetic_hash, pending_block_number, expected_len)) in
+        synthetic_hashes.iter().enumerate()
+    {
         let receipts = client
             .get_block_receipts(BlockId::from(*synthetic_hash))
             .await?
@@ -661,7 +663,7 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
             );
             assert_eq!(
                 receipt.block_number,
-                Some(sealed_head_number + 1),
+                Some(*pending_block_number),
                 "receipt {j} in synthetic block {i} should stay in pending block number"
             );
         }
