@@ -669,12 +669,14 @@ where
                 &mut data.transactions_count,
                 &node_state_root,
                 &mut data.batch_is_in_progress,
+                &mut data.sequence_number_of_open_batch,
             )
             .await?;
         }
 
         // The executor is now caught up. Swap it in
         inner.executor.replace_state(*executor).await;
+        inner.sequence_number_of_open_batch = data.sequence_number_of_open_batch;
         Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
 
         drop(db_event_subscription);

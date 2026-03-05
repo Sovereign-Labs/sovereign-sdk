@@ -251,6 +251,7 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) batches_count: u64,
     pub(crate) transactions_count: usize,
     pub(crate) batch_is_in_progress: bool,
+    pub(crate) sequence_number_of_open_batch: Option<SequenceNumber>,
 }
 
 #[derive(Debug)]
