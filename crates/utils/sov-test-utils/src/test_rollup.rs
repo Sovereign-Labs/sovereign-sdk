@@ -1033,7 +1033,7 @@ where
         }
     }
 
-    /// locks until the sequencer progresses by the specified number of heights.
+    /// Waits until the chain height advances by `delta`.
     pub async fn wait_for_height_advance_by(&self, delta: u64) {
         let current_height = get_height(&self.client).await.unwrap();
         let end_height = current_height.get() + delta;
