@@ -47,16 +47,12 @@ impl<'host> SP1Host<'host> {
                 .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
             let output = prover
                 .prove(&pk, self.stdin.clone())
+                .compressed()
                 .await
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
             Proof::Full(output.proof)
         } else {
-            let prover = ProverClient::builder().cpu().build().await;
-            let execute_request = prover.execute(self.elf.into(), self.stdin.clone()).await;
-            let (public_values, _report) = execute_request
-                .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
-
-            Proof::PublicData(public_values)
+            todo!()
         };
         Ok(bincode::serialize(&proof)?)
     }
