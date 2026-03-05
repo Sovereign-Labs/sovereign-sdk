@@ -82,7 +82,7 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
         exec_config_path.clone(),
     )
     .await;
-    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.wait_for_height_advance_by(1).await;
     let client = alloy_client_with_signer(test_rollup.http_addr, SENDER_PRIV_KEY);
 
     let rpc_nonce_before = client.get_transaction_count(signer.address()).await?;

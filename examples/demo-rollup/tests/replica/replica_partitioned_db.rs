@@ -79,7 +79,7 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
         )
         .await;
 
-        leader.wait_for_next_blocks(3).await;
+        leader.wait_for_height_advance_by(3).await;
         setup.set_replica_da_slow(false).await;
     }
 

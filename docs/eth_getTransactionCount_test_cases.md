@@ -82,7 +82,7 @@ let client_b = create_simple_storage_client(rollup.http_addr, SECONDARY_SENDER_P
 // Control block production
 rollup.pause_preferred_batches().await;
 rollup.resume_preferred_batches().await;
-rollup.wait_for_next_blocks(1).await;
+rollup.wait_for_height_advance_by(1).await;
 ```
 
 ## Core fixture (deterministic, reused)

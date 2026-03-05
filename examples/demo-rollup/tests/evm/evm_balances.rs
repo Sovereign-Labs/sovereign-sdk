@@ -29,7 +29,7 @@ async fn evm_test_balances() -> anyhow::Result<()> {
     evm_client
         .send_eth(reciever_address, U256::from(eth_to_send))
         .await;
-    test_rollup.wait_for_next_blocks(2).await;
+    test_rollup.wait_for_height_advance_by(2).await;
 
     let (sender_bank_balance_end, sender_evm_balance_end) =
         get_balances(sender_address, &test_rollup, &evm_client).await;

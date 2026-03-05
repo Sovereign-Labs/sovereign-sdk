@@ -1033,8 +1033,8 @@ where
         }
     }
 
-    /// Waits until the sequencer advances by the given number of blocks.
-    pub async fn wait_for_next_blocks(&self, delta: u64) {
+    /// locks until the sequencer progresses by the specified number of heights.
+    pub async fn wait_for_height_advance_by(&self, delta: u64) {
         let current_height = get_height(&self.client).await.unwrap();
         let end_height = current_height.get() + delta;
         self.wait_for_height(end_height).await;

@@ -56,7 +56,7 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
     };
 
     let rollup = setup_test_rollup(rate_limiter).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_height_advance_by(1).await;
 
     // Make first request.
     {

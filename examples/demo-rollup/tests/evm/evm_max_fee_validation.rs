@@ -97,7 +97,7 @@ async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
     .await;
 
     // Advance past the threshold (height 15)
-    rollup.wait_for_next_blocks(20).await;
+    rollup.wait_for_height_advance_by(20).await;
 
     // After threshold: low fee should fail, high fee should pass
     send_tx_expect_failure(
@@ -119,7 +119,7 @@ async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_big_call_data() {
     let (rollup, client) = setup().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_height_advance_by(1).await;
     let mut tx = TransactionRequest::default().with_to(Address::ZERO);
 
     tx.input = TransactionInput {
