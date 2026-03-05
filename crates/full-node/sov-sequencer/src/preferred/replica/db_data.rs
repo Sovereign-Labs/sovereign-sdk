@@ -2,6 +2,7 @@ use crate::preferred::db::BatchToStore;
 use crate::preferred::db::StoredBlob;
 use crate::Serialize;
 use serde::Deserialize;
+use sov_blob_storage::SequenceNumber;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::TxHash;
 use sqlx::postgres::PgRow;
@@ -117,7 +118,7 @@ pub(crate) enum DbData {
     BatchStart(BatchToStore),
     Transaction(u64, FullyBakedTx, TxHash),
     BatchEnd(BatchToStore),
-    NewProof,
+    NewProof(SequenceNumber),
 }
 
 impl DbData {
@@ -130,8 +131,9 @@ impl DbData {
             DbData::BatchStart(batch_to_store) | DbData::BatchEnd(batch_to_store) => {
                 batch_to_store.sequence_number
             }
-            DbData::Transaction(sequence_number, _, _) => *sequence_number,
-            DbData::NewProof => 0,
+            DbData::Transaction(sequence_number, _, _) | DbData::NewProof(sequence_number) => {
+                *sequence_number
+            }
         }
     }
 }
@@ -174,7 +176,7 @@ pub(crate) fn row_to_event(row: PgRow) -> Result<(DbData, EventType), ParsingErr
             let batch_to_store = parse_serialized_batch(data, sequence_number)?;
             DbData::BatchEnd(batch_to_store)
         }
-        EventType::NewProof => DbData::NewProof,
+        EventType::NewProof => DbData::NewProof(sequence_number),
     };
 
     Ok((event, event_type))

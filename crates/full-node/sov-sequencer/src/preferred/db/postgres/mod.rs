@@ -212,7 +212,7 @@ impl PostgresBackend {
 
         let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
             sqlx::query_as::<Postgres, _>(
-                "SELECT sequence_number, data FROM events WHERE event_type = 'batch_end' ORDER BY sequence_number",
+                "SELECT sequence_number, data FROM events WHERE event_type IN ('batch_end', 'new_proof') ORDER BY sequence_number",
             )
             .fetch_all(&mut *tx)
             .await?;

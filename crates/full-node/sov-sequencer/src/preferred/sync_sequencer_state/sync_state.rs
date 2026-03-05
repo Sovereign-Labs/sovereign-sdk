@@ -404,7 +404,7 @@ where
 
     async fn process_next_sequence_number(&mut self, reason: &'static str) -> SequenceNumber {
         let inner = self.get_inner_with_timing(reason).await;
-        inner.sequence_number_of_next_blob
+        inner.next_unassigned_sequence_number
     }
 
     async fn process_fetch_completed_batches(
@@ -461,7 +461,7 @@ where
 
         debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
-        let next_sequence_number = inner.sequence_number_of_next_blob;
+        let next_sequence_number = inner.next_unassigned_sequence_number;
         let ((batches_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
             (
                 inner.completed_batches_to_replay(next_sequence_number_according_to_node, true),
@@ -690,8 +690,8 @@ where
         let node_sequence_number =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
 
-        if node_sequence_number > inner.sequence_number_of_next_blob {
-            inner.sequence_number_of_next_blob = node_sequence_number;
+        if node_sequence_number > inner.next_unassigned_sequence_number {
+            inner.next_unassigned_sequence_number = node_sequence_number;
         }
 
         inner.is_ready = Ok(());
@@ -764,7 +764,7 @@ where
         });
 
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);
-        let our_sequence_number = inner.sequence_number_of_next_blob;
+        let our_sequence_number = inner.next_unassigned_sequence_number;
 
         if node_sequence_number > our_sequence_number {
             inner
@@ -799,7 +799,8 @@ where
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let sequence_number = inner.get_and_inc_next_sequence_number();
+        let sequence_number = inner.take_sequence_number_for_proof();
+        // TODO: Process proof blob in the executor
         inner
             .executor_events_sender
             .publish_proof_blob(blob_id, data, sequence_number)
@@ -889,7 +890,7 @@ where
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
+        let seq_nr_of_next_blob_for_this_executor = inner.next_unassigned_sequence_number;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         debug!(
@@ -934,7 +935,9 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
+        let seq_nr_of_current_blob_for_this_executor = inner
+            .sequence_number_of_open_batch
+            .expect("No batch in progress");
 
         validate_db_data_from_replica(
             inner.has_finished_startup,
@@ -956,7 +959,10 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
+        let seq_nr_of_current_blob_for_this_executor = inner
+            .sequence_number_of_open_batch
+            .expect("No batch in progress");
+        inner.sequence_number_of_open_batch = None;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         debug!(

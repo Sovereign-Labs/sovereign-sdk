@@ -321,6 +321,11 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         {
             preferred_sequencer_config.batch_execution_time_limit_millis =
                 max_batch_execution_time_millis;
+            // Proof generation and sequencer state-root consistency checks are currently
+            // incompatible in these integration tests.
+            if c.rollup_prover_config.is_some() {
+                preferred_sequencer_config.disable_state_root_consistency_checks = true;
+            }
         }
         c.max_concurrent_blobs = TEST_MAX_CONCURRENT_BLOBS;
     })
