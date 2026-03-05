@@ -1,16 +1,19 @@
 use super::toxi_proxy_helper::NodeTestSetup;
 use super::*;
-use sov_test_utils::logging::LogCollector;
-use tracing::Level;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::registry;
-use tracing_subscriber::util::SubscriberInitExt;
 
 const BASELINE_TRANSFER_COUNT: u64 = 1;
 const PARTITIONED_TRANSFER_COUNT: u64 = 3;
 
-/// Verifies a DB-elected replica remain consistent after sequencer db partition.
 #[tokio::test(flavor = "multi_thread")]
+async fn test_repl_x() {
+    for i in 0..100 {
+        println!("Iter {i}");
+        test_replica_catches_up_via_da_after_postgres_partition().await;
+    }
+}
+
+/// Verifies a DB-elected replica remain consistent after sequencer db partition.
+
 async fn test_replica_catches_up_via_da_after_postgres_partition() {
     let Some(mut setup) = NodeTestSetup::new().await else {
         return;
@@ -58,10 +61,6 @@ async fn test_replica_catches_up_via_da_after_postgres_partition() {
         let replica_balance = get_balance(&replica, &receiver_addr, &token_id).await;
         assert_eq!(replica_balance, expected_baseline_balance);
     }
-
-    let collector = LogCollector::new(Level::ERROR);
-    let subscriber = registry().with(collector.clone());
-    subscriber.init();
 
     // Simulate a partitioned sequencer DB. Now replica is disconnected and the DA is very slow.
     // `setup.set_replica_da_slow`` ensures that the replica is not updated immediately via DA after a DB partition, allowing the system to diverge for a couple of blocks.
