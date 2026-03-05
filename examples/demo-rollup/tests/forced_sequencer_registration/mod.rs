@@ -372,7 +372,7 @@ async fn setup_with_block_producing(
     if is_manual {
         rollup.tenderly_produce_blocks(10).await.unwrap();
     } else {
-        rollup.wait_for_height_advance_by(10).await;
+        rollup.wait_for_rollup_height_advance_by(10).await;
     }
     rollup.wait_for_sequencer_ready().await.unwrap();
 

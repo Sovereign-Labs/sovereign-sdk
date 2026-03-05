@@ -149,7 +149,7 @@ These test realistic usage patterns with actual blockchain state changes.
 
 #### Setup for state scenarios
 - Use `SimpleStorage` contract for lightweight transactions
-- Use `wait_for_height_advance_by(1)` between transactions to ensure separate blocks
+- Use `wait_for_rollup_height_advance_by(1)` between transactions to ensure separate blocks
 - Record block numbers when transactions are mined for targeted queries
 - Use `pause_preferred_batches()` before final assertions
 
@@ -172,7 +172,7 @@ For reference, these cases are already covered in `evm_fee_history.rs`:
 
 ## Test dependencies
 
-- Requires rollup with multiple sealed blocks (use `wait_for_height_advance_by`)
+- Requires rollup with multiple sealed blocks (use `wait_for_rollup_height_advance_by`)
 - Pause sequencer before assertions to ensure deterministic state
 - For TC21, ensure at least one block includes a transaction (a simple transfer is sufficient)
 - **For state scenarios**: Deploy `SimpleStorage` contract, use `set_value()` for transactions

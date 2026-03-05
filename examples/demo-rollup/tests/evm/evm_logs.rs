@@ -38,7 +38,7 @@ use std::collections::HashMap;
 async fn get_log_from_pending_block() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract_address = client.alloy_deploy_contract().await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let sender = client.address();
@@ -321,7 +321,7 @@ async fn get_logs_single_block_range() -> anyhow::Result<()> {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let block_number = rollup_and_client
@@ -618,7 +618,7 @@ async fn get_logs_safe_finalized_exclude_pending() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let sealed_hash = rollup_and_client
@@ -725,7 +725,7 @@ async fn get_logs_ordered_and_not_removed() -> anyhow::Result<()> {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let logs = rollup_and_client
@@ -743,7 +743,7 @@ async fn get_logs_ordered_and_not_removed() -> anyhow::Result<()> {
 async fn get_logs_time_executed_ms_per_tx() -> anyhow::Result<()> {
     let (test_rollup, evm_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract_address = evm_client.alloy_deploy_contract().await;
-    test_rollup.wait_for_height_advance_by(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     let start_block = evm_client
         .eth_get_block_by_number(Some(BlockNumberOrTag::Latest.to_string()))
@@ -752,7 +752,7 @@ async fn get_logs_time_executed_ms_per_tx() -> anyhow::Result<()> {
 
     let tx1 = evm_client.alloy_emit_logs(contract_address, 0, 3).await;
     let tx2 = evm_client.alloy_emit_logs(contract_address, 1, 2).await;
-    test_rollup.wait_for_height_advance_by(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     let filter = Filter::new()
         .from_block(start_block)
@@ -821,7 +821,7 @@ async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let receipt = rollup_and_client
@@ -889,7 +889,7 @@ async fn get_logs_full_topic_log() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let receipt = rollup_and_client
@@ -944,7 +944,7 @@ async fn get_logs_data_only_log() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let receipt = rollup_and_client
@@ -998,7 +998,7 @@ async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let receipt = rollup_and_client
@@ -1133,7 +1133,7 @@ async fn get_logs_earliest_tag() -> anyhow::Result<()> {
     let tx_hashes = rollup_and_client.produce_logs(3, 2, Some(1)).await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let last_tx = *tx_hashes.last().expect("expected log tx hash");
     let last_receipt = rollup_and_client
@@ -1169,7 +1169,7 @@ async fn get_logs_schema_correctness() -> anyhow::Result<()> {
     let tx_hashes = rollup_and_client.produce_logs(2, 3, Some(1)).await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let last_tx = *tx_hashes.last().expect("expected log tx hash");
     let last_receipt = rollup_and_client
@@ -1210,7 +1210,7 @@ async fn get_logs_eip1898_block_hash_object() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let receipt = rollup_and_client
@@ -1261,7 +1261,7 @@ async fn get_logs_empty_result() -> anyhow::Result<()> {
     rollup_and_client.produce_logs(1, 2, None).await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let empty_address = Address::from([0x11; 20]);
@@ -1281,7 +1281,7 @@ async fn get_logs_empty_topics_matches_all() -> anyhow::Result<()> {
     let tx_hashes = rollup_and_client.produce_logs(2, 2, Some(1)).await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let last_tx = *tx_hashes.last().expect("expected log tx hash");
     let last_receipt = rollup_and_client
@@ -1331,7 +1331,7 @@ async fn get_logs_topic0_only_matches_any_indexed() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let receipt = rollup_and_client
@@ -1402,7 +1402,7 @@ async fn get_logs_topic1_without_topic0() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let simple_receipt = rollup_and_client
         .client
@@ -1490,7 +1490,7 @@ async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let simple_receipt = rollup_and_client
         .client
@@ -1607,7 +1607,7 @@ async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let simple_receipt = rollup_and_client
         .client
@@ -1711,7 +1711,7 @@ async fn get_logs_trailing_null_topics_ignored() -> anyhow::Result<()> {
     let tx_hashes = rollup_and_client.produce_logs(2, 2, Some(1)).await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
     let last_tx = *tx_hashes.last().expect("expected log tx hash");
     let last_receipt = rollup_and_client
@@ -1759,7 +1759,7 @@ async fn evm_test_get_logs() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     // Make sure all the txs are in the same blcok.
@@ -1778,7 +1778,7 @@ async fn evm_test_get_logs() {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let tx_hash = tx_hashes[0];
@@ -1828,7 +1828,7 @@ async fn evm_test_get_logs_range() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let sender = rollup_and_client.client.address();
@@ -1874,7 +1874,7 @@ async fn evm_test_get_logs_range_limit() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let logs = rollup_and_client.client.get_logs_allow_error().await;
@@ -2467,7 +2467,7 @@ async fn evm_test_get_logs_with_cursor_and_filter() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
@@ -2540,7 +2540,7 @@ async fn evm_test_get_logs_with_cursor() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
@@ -2600,7 +2600,7 @@ async fn evm_test_get_logs_at_max_response_size() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
@@ -2641,7 +2641,7 @@ async fn evm_test_get_logs_at_max_response_size_without_cursor_throws_error() {
 
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let err = rollup_and_client
@@ -2663,7 +2663,7 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         RollupAndClient::new(max_log_limit, EVM_EXTENSION.response_size_limit).await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let tx_hashes = rollup_and_client
@@ -2671,7 +2671,7 @@ async fn logs_resumed_from_the_middle_of_tx_have_correct_indices() {
         .await;
     rollup_and_client
         .test_rollup
-        .wait_for_height_advance_by(1)
+        .wait_for_rollup_height_advance_by(1)
         .await;
 
     let plans = simple_log_plans_from_hashes(&tx_hashes, nb_of_logs_per_tx as u64, U256::ZERO);
@@ -2737,7 +2737,7 @@ async fn setup_two_contracts() -> (
     let (test_rollup, evm_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract_a = evm_client.alloy_deploy_contract().await;
     let contract_b = evm_client.alloy_deploy_contract().await;
-    test_rollup.wait_for_height_advance_by(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     (test_rollup, evm_client, contract_a, contract_b)
 }
 
@@ -2764,7 +2764,7 @@ impl RollupAndClient {
 
         let (test_rollup, evm_client, _) = setup_with_simple_storage(0, ext).await;
         let contract_address = evm_client.alloy_deploy_contract().await;
-        test_rollup.wait_for_height_advance_by(1).await;
+        test_rollup.wait_for_rollup_height_advance_by(1).await;
 
         RollupAndClient {
             test_rollup,
@@ -2788,7 +2788,7 @@ impl RollupAndClient {
             tx_hashes.push(hash);
             if let Some(block_interval) = block_interval {
                 if i % block_interval == 0 {
-                    self.test_rollup.wait_for_height_advance_by(1).await;
+                    self.test_rollup.wait_for_rollup_height_advance_by(1).await;
                 }
             }
         }

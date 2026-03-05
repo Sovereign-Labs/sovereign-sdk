@@ -156,7 +156,7 @@ async fn rpc_002_block_pinned_nonce_excludes_pending_tx() -> anyhow::Result<()> 
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc_003_estimate_gas_uses_account_nonce_when_nonce_omitted() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let provider = alloy_client(rollup.http_addr);
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let sender = client.address();
@@ -248,7 +248,7 @@ async fn rpc_004_eth_call_applies_state_overrides() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
     let nonce = tx_count(&ws_client, signer.address(), "latest").await?;
@@ -287,7 +287,7 @@ async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyh
 async fn rpc_006_get_balance_accepts_eip_1898_block_selector() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let address = client.address();
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let provider = alloy_client(rollup.http_addr);
     let finalized = provider
@@ -343,7 +343,7 @@ async fn rpc_007_web3_client_version_should_be_available() -> anyhow::Result<()>
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc_008_receipt_fee_fields_match_balance_delta() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let sender = client.address();
     let recipient = Address::repeat_byte(0x77);
@@ -418,7 +418,7 @@ async fn rpc_009_pending_trace_matches_original_tx_input() -> anyhow::Result<()>
 async fn rpc_010_send_raw_transaction_sync_returns_receipt_under_preferred_sequencer(
 ) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
@@ -469,7 +469,7 @@ async fn rpc_010_send_raw_transaction_sync_returns_receipt_under_preferred_seque
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract = deploy_contract_check(&client)
         .await
@@ -481,7 +481,7 @@ async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::R
         .expect("log tx should be finalized and have block number");
 
     // Wait until the tx/log-bearing block is old enough that lookup can go through the pruned path.
-    rollup.wait_for_height_advance_by(45).await;
+    rollup.wait_for_rollup_height_advance_by(45).await;
 
     let http = Client::new();
     let response = rpc_call(
@@ -519,7 +519,7 @@ async fn rpc_011_debug_trace_pruned_tx_should_not_use_custom_4444_code() -> anyh
     std::env::set_var(override_key, "5");
 
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
     let tx_hash = client.send_eth(Address::ZERO, U256::from(1)).await;
@@ -529,7 +529,7 @@ async fn rpc_011_debug_trace_pruned_tx_should_not_use_custom_4444_code() -> anyh
     let mut saw_pruned_error = false;
 
     for _ in 0..30 {
-        rollup.wait_for_height_advance_by(1).await;
+        rollup.wait_for_rollup_height_advance_by(1).await;
         let response = rpc_call(
             &http,
             rollup.http_addr,
@@ -664,7 +664,7 @@ async fn rpc_015_estimate_gas_is_stable_for_identical_input() -> anyhow::Result<
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc_016_eth_send_transaction_should_preserve_user_gas() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
     let from = signer.address();

@@ -20,7 +20,7 @@ async fn setup_rollup_with_finality(
     finalization_blocks: u32,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let (rollup, client, _) = setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }
 
@@ -155,7 +155,7 @@ async fn eth_get_transaction_count_safe_finalized_semantics() -> anyhow::Result<
     client.wait_for_finalized_receipt(tx_hash).await;
 
     // Wait for the next block to ensure finalization
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     assert_equal_nonces_for_tags(
         &client,
@@ -522,7 +522,7 @@ async fn eth_get_transaction_count_sealed_receipts_nonce_delta() -> anyhow::Resu
     }
 
     // Wait for a new block
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Get nonce at block H1
     let h1_number = client.block_number().await;
@@ -597,7 +597,7 @@ async fn eth_get_transaction_count_historical_block_diverges_from_current() -> a
     // Send transaction and wait for finalization in a new block
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x5432)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let h1_number = client.block_number().await;
     assert!(h1_number > h0_number, "New block should be produced");
@@ -647,7 +647,7 @@ async fn eth_get_transaction_count_block_hash_returns_correct_historical() -> an
     // Send transaction and finalize
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x6543)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Get block H1 info
     let h1_number = client.block_number().await;
@@ -854,7 +854,7 @@ async fn eth_get_transaction_count_latest_after_seal() -> anyhow::Result<()> {
     // Send and wait for finalization
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0xABCD)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let nonce_after = nonce_at_tag(&client, address, "latest").await;
 
@@ -882,7 +882,7 @@ async fn eth_get_transaction_count_block_boundary() -> anyhow::Result<()> {
     // Send tx and wait for finalization
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0xBCDE)).await;
     let receipt = client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let tx_block = receipt
         .block_number
@@ -939,7 +939,7 @@ async fn eth_get_transaction_count_finalized_lags_with_non_instant_finality() ->
     // Send a transaction and wait for it to be sealed into a block
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0xF1A1)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // "latest" should reflect the sealed transaction immediately
     let nonce_latest = nonce_at_tag(&client, address, "latest").await;
@@ -959,7 +959,7 @@ async fn eth_get_transaction_count_finalized_lags_with_non_instant_finality() ->
 
     // Produce enough blocks to push the tx block past the finalization threshold
     rollup
-        .wait_for_height_advance_by(finality_depth as u64)
+        .wait_for_rollup_height_advance_by(finality_depth as u64)
         .await;
 
     // Now "finalized" should have caught up

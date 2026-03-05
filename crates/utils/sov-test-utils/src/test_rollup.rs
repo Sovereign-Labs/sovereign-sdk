@@ -1033,8 +1033,9 @@ where
         }
     }
 
-    /// Waits until the chain height advances by `delta`.
-    pub async fn wait_for_height_advance_by(&self, delta: u64) {
+    /// Waits until the rollup_height advances by `delta`.
+    /// Note that the rollup_height remains the same while DA is progressing if no batches are being created.
+    pub async fn wait_for_rollup_height_advance_by(&self, delta: u64) {
         let current_height = get_height(&self.client).await.unwrap();
         let end_height = current_height.get() + delta;
         self.wait_for_height(end_height).await;

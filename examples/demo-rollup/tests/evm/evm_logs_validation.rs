@@ -33,7 +33,7 @@ async fn eth_get_logs_reversed_block_range_returns_invalid_params() -> anyhow::R
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_logs_future_block_range_returns_invalid_params() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = Client::new();
 
     let block_number_response =

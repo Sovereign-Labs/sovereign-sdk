@@ -75,7 +75,7 @@ async fn test_ram_pinning_config_updates() -> anyhow::Result<()> {
     let test_rollup =
         start_node_with_ram_pinning(RollupProverConfig::Skip, temp_dir, exec_config_path.clone())
             .await;
-    test_rollup.wait_for_height_advance_by(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client_with_signer(test_rollup.http_addr, SENDER_PRIV_KEY);
 
     tracing::info!("Deploying contract");
@@ -116,7 +116,7 @@ async fn test_contract_not_pinned_on_touch() -> anyhow::Result<()> {
     let test_rollup =
         start_node_with_ram_pinning(RollupProverConfig::Skip, temp_dir, exec_config_path.clone())
             .await;
-    test_rollup.wait_for_height_advance_by(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client_with_signer(test_rollup.http_addr, SECONDARY_SENDER_PRIV_KEY);
     let client_with_non_prvileged_signer =
         alloy_client_with_signer(test_rollup.http_addr, SENDER_PRIV_KEY);

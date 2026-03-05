@@ -24,7 +24,7 @@ fn unfunded_caller() -> Address {
 /// Returns the rollup handle alongside the client — the rollup must stay alive for the client to function.
 async fn setup_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     (rollup, client)
 }

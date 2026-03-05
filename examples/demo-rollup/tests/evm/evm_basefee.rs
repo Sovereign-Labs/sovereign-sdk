@@ -17,7 +17,7 @@ use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
 
     // Deploy the SimpleStorage contract
@@ -62,7 +62,7 @@ async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 

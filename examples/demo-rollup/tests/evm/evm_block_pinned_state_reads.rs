@@ -103,7 +103,7 @@ fn assert_pause_window_height(observed: u64, head_before_pause: u64) {
 
 async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }
 
@@ -287,7 +287,7 @@ async fn block_pinned_storage_excludes_pending() {
     set_value_check(&client, contract_addr, initial_value)
         .await
         .unwrap();
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
     let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
@@ -339,7 +339,7 @@ async fn block_pinned_eth_call_excludes_pending() {
     set_value_check(&client, contract_addr, initial_value)
         .await
         .unwrap();
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
     let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
@@ -383,7 +383,7 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     let (rollup, client) = setup_rollup_and_client().await;
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
-    rollup.wait_for_height_advance_by(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
     let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;

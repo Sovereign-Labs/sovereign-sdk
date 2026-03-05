@@ -11,7 +11,7 @@ use crate::evm::evm_test_helper::{
 #[tokio::test(flavor = "multi_thread")]
 async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_height_advance_by(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let sender = client.address();
