@@ -1,8 +1,9 @@
-# 2026-02-12
-- #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
+# 2025-03-05
+- #2554 More stabilization in demo-rollup EVM tests
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
+
 # 2026-03-02
 - #2543 **Breaking change: code** Adds a new constants.toml value `ENABLE_TIMESTAMP_ORACLE_AT` which disables setting the on-chain timestamp oracle metadata from the sequencer context before the provided height. Should be set to 0 for new chains, and some height after the upgrade for existing chains. Alternatively set to `i64::MAX` to effectively disable it.
 - #2547 Updating EVM tests and test-only sequencer change.
@@ -24,6 +25,9 @@
 - #2500 EVM: Fixes the nonce used for simulation endpoints
 - #2499 EVM: Add block-pinned state isolation tests for all 6 RPC endpoints
 - #2495 Updates examples configs
+
+# 2026-02-12
+- #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`
