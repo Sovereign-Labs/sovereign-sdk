@@ -8,11 +8,13 @@ use derivative::Derivative;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::{serialize, UniversalWallet};
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     AccessoryStateMap, AccessoryStateValue, AuthenticatedTransactionData, Context, CryptoSpec,
-    DaSpec, GasSpec, GenesisState, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    MeteredHasher, MeteredSignature, Module, ModuleId, ModuleInfo, ModuleRestApi, SafeVec,
-    SizedSafeString, Spec, StateMap, StateValue, StateVec, TxHooks, TxState,
+    DaSpec, GasSpec, GenesisState, InfallibleStateReaderAndWriter, MeteredBorshDeserialize,
+    MeteredBorshDeserializeError, MeteredHasher, MeteredSignature, Module, ModuleId, ModuleInfo,
+    ModuleRestApi, SafeVec, SizedSafeString, Spec, StateAccessor, StateMap, StateValue, StateVec,
+    TxHooks, TxState, User,
 };
 use strum::{EnumDiscriminants, EnumIs, VariantArray};
 
@@ -469,11 +471,15 @@ impl<S: Spec> AccessPattern<S> {
         Ok(())
     }
 
-    fn inner_hook(&mut self, hook: HooksConfig, state: &mut impl TxState<S>) -> anyhow::Result<()> {
+    fn inner_hook(
+        &mut self,
+        hook: HooksConfig,
+        state: &mut impl InfallibleStateReaderAndWriter<User>,
+    ) {
         match hook {
             HooksConfig::Read { begin, size } => {
                 for i in begin..(begin.saturating_add(size)) {
-                    self.values.get(&i, state)?;
+                    self.values.get(&i, state).unwrap_infallible();
                 }
             }
             HooksConfig::Write {
@@ -483,17 +489,16 @@ impl<S: Spec> AccessPattern<S> {
             } => {
                 for i in begin..(begin.saturating_add(size)) {
                     self.values
-                        .set(&i, &i.to_string().repeat(data_size), state)?;
+                        .set(&i, &i.to_string().repeat(data_size), state)
+                        .unwrap_infallible();
                 }
             }
             HooksConfig::Delete { begin, size } => {
                 for i in begin..(begin.saturating_add(size)) {
-                    self.values.delete(&i, state)?;
+                    self.values.delete(&i, state).unwrap_infallible();
                 }
             }
         }
-
-        Ok(())
     }
 }
 
@@ -505,11 +510,16 @@ impl<S: Spec> TxHooks for AccessPattern<S> {
         _tx: &sov_modules_api::AuthenticatedTransactionData<Self::Spec>,
         state: &mut T,
     ) -> anyhow::Result<()> {
-        let curr_len = self.pre_hooks.len(state)?;
+        let mut unmetered_state = state.to_unmetered();
+        let curr_len = self.pre_hooks.len(&mut unmetered_state).unwrap_infallible();
 
         for i in 0..curr_len {
-            if let Some(hook) = self.pre_hooks.get(i, state)? {
-                self.inner_hook(hook, state)?;
+            if let Some(hook) = self
+                .pre_hooks
+                .get(i, &mut unmetered_state)
+                .unwrap_infallible()
+            {
+                self.inner_hook(hook, &mut unmetered_state);
             }
         }
 
@@ -522,11 +532,16 @@ impl<S: Spec> TxHooks for AccessPattern<S> {
         _ctx: &Context<Self::Spec>,
         state: &mut T,
     ) -> anyhow::Result<()> {
-        let curr_len = self.post_hooks.len(state)?;
+        let mut unmetered_state = state.to_unmetered();
+        let curr_len = self.post_hooks.len(&mut unmetered_state).unwrap_infallible();
 
         for i in 0..curr_len {
-            if let Some(hook) = self.post_hooks.get(i, state)? {
-                self.inner_hook(hook, state)?;
+            if let Some(hook) = self
+                .post_hooks
+                .get(i, &mut unmetered_state)
+                .unwrap_infallible()
+            {
+                self.inner_hook(hook, &mut unmetered_state);
             }
         }
 

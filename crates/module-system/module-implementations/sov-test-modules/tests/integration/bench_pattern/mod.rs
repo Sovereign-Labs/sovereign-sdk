@@ -7,7 +7,9 @@ use sov_test_modules::access_pattern::{
 };
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::{generate_zk_runtime, AsUser, TestSpec, TestUser, TransactionTestCase};
+use sov_test_utils::{
+    generate_zk_runtime, get_gas_used, AsUser, TestSpec, TestUser, TransactionTestCase,
+};
 
 generate_zk_runtime!(TestRuntime <= test_module: AccessPattern<S>);
 
@@ -401,6 +403,52 @@ fn test_set_hooks() {
             }
         }),
     });
+}
+
+#[test]
+fn test_hooks_do_not_affect_gas() {
+    let (mut runner, admin, _) = setup();
+
+    runner.execute(admin.create_plain_message::<RT, AccessPattern<S>>(
+        AccessPatternMessages::SetHook {
+            pre: Some(vec![HooksConfig::Write {
+                begin: 0,
+                size: 20,
+                data_size: 32,
+            }]),
+            post: Some(vec![HooksConfig::Delete { begin: 0, size: 10 }]),
+        },
+    ));
+
+    let (result_with_hooks, _, _) = runner.simulate(
+        admin.create_plain_message::<RT, AccessPattern<S>>(AccessPatternMessages::HashBytes {
+            filler: 7,
+            size: 128,
+        }),
+    );
+
+    let gas_with_hooks = get_gas_used(&result_with_hooks.batch_receipts[0].tx_receipts[0]);
+
+    runner.execute(admin.create_plain_message::<RT, AccessPattern<S>>(
+        AccessPatternMessages::SetHook {
+            pre: None,
+            post: None,
+        },
+    ));
+
+    let (result_without_hooks, _, _) = runner.simulate(
+        admin.create_plain_message::<RT, AccessPattern<S>>(AccessPatternMessages::HashBytes {
+            filler: 7,
+            size: 128,
+        }),
+    );
+
+    let gas_without_hooks = get_gas_used(&result_without_hooks.batch_receipts[0].tx_receipts[0]);
+
+    assert_eq!(
+        gas_with_hooks, gas_without_hooks,
+        "hooks should mutate state without affecting metered gas usage"
+    );
 }
 
 #[test]
