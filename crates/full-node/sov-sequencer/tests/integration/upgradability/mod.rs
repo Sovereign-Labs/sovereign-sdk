@@ -263,10 +263,35 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         current_height_before_shutdown_wait
     );
 
-    if let Err(error) = test_rollup
-        .try_wait_for_rollup_to_shutdown(shutdown_timeout)
-        .await
-    {
+    let mut shutdown_timeout_error = None;
+    let shutdown_wait_step = Duration::from_millis(250);
+    let shutdown_deadline = tokio::time::Instant::now() + shutdown_timeout;
+    let mut shutdown_drive_blocks = 0u64;
+
+    loop {
+        match test_rollup
+            .try_wait_for_rollup_to_shutdown(shutdown_wait_step)
+            .await
+        {
+            Ok(()) => break,
+            Err(error) => {
+                let is_wait_timeout = error
+                    .to_string()
+                    .contains("Failed to join rollup task before timeout");
+                if !is_wait_timeout {
+                    panic!("Rollup shutdown failed unexpectedly: {error:#}");
+                }
+                if tokio::time::Instant::now() >= shutdown_deadline {
+                    shutdown_timeout_error = Some(error);
+                    break;
+                }
+                test_rollup.da_service.produce_block_now().await.unwrap();
+                shutdown_drive_blocks += 1;
+            }
+        }
+    }
+
+    if let Some(error) = shutdown_timeout_error {
         let ready_response = query_endpoint(&test_rollup.client, "/sequencer/ready").await;
         let role_response = query_endpoint(&test_rollup.client, "/sequencer/role").await;
         let latest_slot_response =
@@ -288,12 +313,13 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         };
 
         info!(
-            "DEBUG_UPG_STOP_TX_SHUTDOWN_TIMEOUT stop_at_height={} rollup_height={} sync_status={} latest_slot={} finalized_slot={}",
+            "DEBUG_UPG_STOP_TX_SHUTDOWN_TIMEOUT stop_at_height={} rollup_height={} sync_status={} latest_slot={} finalized_slot={} shutdown_drive_blocks={}",
             stop_at_height.get(),
             rollup_height,
             sync_status,
             latest_slot_response,
-            finalized_slot_response
+            finalized_slot_response,
+            shutdown_drive_blocks
         );
 
         panic!(
