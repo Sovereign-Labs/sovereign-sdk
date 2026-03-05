@@ -149,7 +149,6 @@ pub enum QueryMode {
     Full,
 }
 
-
 /// [`IncludeChildren`] is used as a query parameter for [`QueryMode`] inside the ledger-api
 #[derive(
     Debug, Copy, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Display,
