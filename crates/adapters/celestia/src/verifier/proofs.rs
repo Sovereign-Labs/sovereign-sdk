@@ -5,8 +5,8 @@ use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
 };
 use crate::types::{
-    BlobDataError, IncompleteNamespaceError, NamespaceValidationError, RowProofError,
-    SUPPORTED_SHARE_VERSION,
+    BlobDataError, ExtractionProofError, IncompleteNamespaceError, NamespaceValidationError,
+    ProofError, RowProofError, SUPPORTED_SHARE_VERSION,
 };
 
 /// BlobProof contains per-row range proofs for one blob.
@@ -122,9 +122,12 @@ impl BlobProof {
         &self,
         last_validated_share_idx: usize,
     ) -> Result<usize, NamespaceValidationError> {
-        let expected_range_start = last_validated_share_idx
-            .checked_add(1)
-            .expect("Share index overflow");
+        let expected_range_start =
+            last_validated_share_idx
+                .checked_add(1)
+                .ok_or(InvalidRowProof(RowProofError::ProofError(
+                    ProofError::Corrupted,
+                )))?;
 
         let first_sub_proof = self.get_first_sub_proof().map_err(InvalidRowProof)?;
         let blob_proof_range_start = first_sub_proof.start_share_idx;
@@ -156,6 +159,16 @@ pub(crate) fn new_inclusion_proof(
     rollup_data: &crate::types::NamespaceRelevantData,
     blobs: &[crate::types::BlobWithSender],
 ) -> Vec<BlobProof> {
+    try_new_inclusion_proof(header, rollup_data, blobs)
+        .unwrap_or_else(|err| panic!("failed to build inclusion proof: {err}"))
+}
+
+#[cfg(feature = "native")]
+pub(crate) fn try_new_inclusion_proof(
+    header: &crate::CelestiaHeader,
+    rollup_data: &crate::types::NamespaceRelevantData,
+    blobs: &[crate::types::BlobWithSender],
+) -> Result<Vec<BlobProof>, ExtractionProofError> {
     let mut needed_share_ranges = Vec::new();
 
     let mut prev_range_end: Option<usize> = None;
@@ -171,6 +184,7 @@ pub(crate) fn new_inclusion_proof(
     // still prove any trailing skipped shares (e.g. namespace tail padding) safely.
     for blob in blobs.iter() {
         let range = blob.range_in_namespace.clone();
+        validate_blob_range(&range, flat_shares.len())?;
         let relevant_len = blob.blob.accumulator().len();
         let start_share = flat_shares[range.start];
         let has_signer = start_share.signer().is_some();
@@ -179,7 +193,11 @@ pub(crate) fn new_inclusion_proof(
             .checked_add(
                 crate::shares::shares_needed_for_bytes_with_signer(relevant_len, has_signer).max(1),
             )
-            .expect("share index overflow");
+            .ok_or(ExtractionProofError::BlobRangeCoverageExceeded {
+                start: range.start,
+                declared_end: range.end,
+                required_end: usize::MAX,
+            })?;
         let full_blob_end = range
             .start
             .checked_add(
@@ -189,22 +207,28 @@ pub(crate) fn new_inclusion_proof(
                 )
                 .max(1),
             )
-            .expect("share index overflow");
+            .ok_or(ExtractionProofError::BlobRangeCoverageExceeded {
+                start: range.start,
+                declared_end: range.end,
+                required_end: usize::MAX,
+            })?;
         // Guard in depth - should never be false unless share counting is bugged
         // or we read more bytes from the blob than the range has shares (e.g. `BlobWithIter`'s range
         // initialisation is bugged)
-        assert!(
-            relevant_end <= range.end,
-            "relevant_end > range.end: {} > {}",
-            relevant_end,
-            range.end
-        );
-        assert!(
-            full_blob_end <= range.end,
-            "full_blob_end > range.end: {} > {}",
-            full_blob_end,
-            range.end
-        );
+        if relevant_end > range.end {
+            return Err(ExtractionProofError::BlobRangeCoverageExceeded {
+                start: range.start,
+                declared_end: range.end,
+                required_end: relevant_end,
+            });
+        }
+        if full_blob_end > range.end {
+            return Err(ExtractionProofError::BlobRangeCoverageExceeded {
+                start: range.start,
+                declared_end: range.end,
+                required_end: full_blob_end,
+            });
+        }
 
         if range.start != 0 {
             let prev_range_end = prev_range_end.unwrap_or(0);
@@ -212,7 +236,7 @@ pub(crate) fn new_inclusion_proof(
                 let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
                     prev_range_end..range.start,
                     &flat_shares,
-                );
+                )?;
                 needed_share_ranges.extend(skipped_blob_ranges);
             }
         }
@@ -223,9 +247,12 @@ pub(crate) fn new_inclusion_proof(
 
     let end_of_ns = flat_shares.len();
     let namespace_has_supported_shares = flat_shares.iter().any(|share| {
-        !is_tail_padding(share)
-            && share.info_byte().expect("Bug. Missing info byte").version()
-                == SUPPORTED_SHARE_VERSION
+        share
+            .info_byte()
+            .map(|info_byte| {
+                !is_tail_padding(share) && info_byte.version() == SUPPORTED_SHARE_VERSION
+            })
+            .unwrap_or(false)
     });
 
     // Invariant: if namespace has supported shares, extraction is expected to produce
@@ -237,21 +264,21 @@ pub(crate) fn new_inclusion_proof(
                 end_of_ns,
                 "Invariant violation: supported shares exist but extracted blob list is empty"
             );
-            panic!(
-                "supported shares exist in namespace {:?}, but extracted blobs are empty (namespace share count: {end_of_ns})",
-                rollup_data.namespace,
-            );
+            return Err(ExtractionProofError::MissingBlobsForSupportedNamespace {
+                namespace: rollup_data.namespace,
+                share_count: end_of_ns,
+            });
         } else {
             // If no supported blobs were extracted, the namespace may still contain
             // unsupported blobs (e.g. v0) that must be proven as skipped.
             let skipped_blob_ranges =
-                build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares);
+                build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares)?;
             needed_share_ranges.extend(skipped_blob_ranges);
         }
     } else if let Some(prev_end) = prev_range_end {
         if prev_end != end_of_ns {
             let skipped_blob_ranges =
-                build_ranges_to_prove_for_skipped_blobs(prev_end..end_of_ns, &flat_shares);
+                build_ranges_to_prove_for_skipped_blobs(prev_end..end_of_ns, &flat_shares)?;
             needed_share_ranges.extend(skipped_blob_ranges);
         }
     }
@@ -274,41 +301,59 @@ pub(crate) fn new_inclusion_proof(
 fn build_ranges_to_prove_for_skipped_blobs(
     inner_range: std::ops::Range<usize>,
     flat_namespace_shares: &[&celestia_types::Share],
-) -> Vec<std::ops::Range<usize>> {
+) -> Result<Vec<std::ops::Range<usize>>, ExtractionProofError> {
     let mut ranges = Vec::new();
     let mut start = inner_range.start;
     while start < inner_range.end {
-        let start_share = flat_namespace_shares[start];
+        let Some(start_share) = flat_namespace_shares.get(start) else {
+            return Err(ExtractionProofError::BlobRangeOutOfBounds {
+                start,
+                end: inner_range.end,
+                namespace_shares: flat_namespace_shares.len(),
+            });
+        };
         // Only a single share is enough
-        ranges.push(start..(start + 1));
-        let info_byte = start_share.info_byte().expect("Bug. Missing info byte");
+        let range_end =
+            start
+                .checked_add(1)
+                .ok_or(ExtractionProofError::BlobRangeCoverageExceeded {
+                    start,
+                    declared_end: inner_range.end,
+                    required_end: usize::MAX,
+                })?;
+        ranges.push(start..range_end);
+        let info_byte = start_share
+            .info_byte()
+            .ok_or(ExtractionProofError::MissingInfoByte { share_idx: start })?;
         let sequence_length = start_share
             .sequence_length()
-            .expect("Bug. Missing sequence length");
+            .ok_or(ExtractionProofError::MissingSequenceLength { share_idx: start })?;
         if sequence_length == 0 {
-            let payload_all_zeros = start_share.payload().map(|p| p.iter().all(|b| *b == 0));
-            assert!(
-                payload_all_zeros.is_some(),
-                "Padding share {} has payload with non-zero bytes: {:?}",
-                start,
-                start_share.payload().map(hex::encode),
-            );
-        } else {
-            assert_ne!(
-                info_byte.version(),
-                SUPPORTED_SHARE_VERSION,
-                "Skipping version 1, bug!"
-            );
+            let payload_all_zeros = start_share
+                .payload()
+                .map(|payload| payload.iter().all(|b| *b == 0))
+                .unwrap_or(false);
+            if !payload_all_zeros {
+                return Err(ExtractionProofError::InvalidTailPadding { share_idx: start });
+            }
+        } else if info_byte.version() == SUPPORTED_SHARE_VERSION {
+            return Err(ExtractionProofError::SupportedShareInSkippedRange { share_idx: start });
         }
         let shares_in_blob = crate::shares::shares_needed_for_bytes_with_signer(
             sequence_length as usize,
             start_share.signer().is_some(),
         )
         .max(1);
-        start += shares_in_blob;
+        start = start.checked_add(shares_in_blob).ok_or(
+            ExtractionProofError::BlobRangeCoverageExceeded {
+                start,
+                declared_end: inner_range.end,
+                required_end: usize::MAX,
+            },
+        )?;
     }
 
-    ranges
+    Ok(ranges)
 }
 
 /// The namespace is a contiguous set of shares from the EDS (Extended Data Square).
@@ -345,7 +390,7 @@ fn sub_namespace_inclusion_proofs(
     namespace: celestia_types::nmt::Namespace,
     blob_ranges_to_prove: &[std::ops::Range<usize>],
     row_roots: &[celestia_types::nmt::NamespacedHash],
-) -> Vec<BlobProof> {
+) -> Result<Vec<BlobProof>, ExtractionProofError> {
     #[cfg(debug_assertions)]
     {
         // using regular asser, as whole block is wrapped in debug_assertions
@@ -367,30 +412,66 @@ fn sub_namespace_inclusion_proofs(
     };
 
     for blob_range in blob_ranges_to_prove {
-        let per_row_sub_ranges = split_blob_range_by_rows(blob_range, first_row_offset, row_length);
+        let per_row_sub_ranges =
+            split_blob_range_by_rows(blob_range, first_row_offset, row_length)?;
         let mut current_blob_proof: BlobProof = BlobProof {
             range_proofs: Vec::new(),
         };
 
         let ns_rows = namespace_data.rows();
         for blob_sub_range in per_row_sub_ranges {
-            let row_num = blob_sub_range
-                .start
-                .checked_div(row_length)
-                .expect("row_length cannot be 0");
+            let row_num = blob_sub_range.start.checked_div(row_length).ok_or(
+                ExtractionProofError::InvalidBlobRange {
+                    start: blob_sub_range.start,
+                    end: blob_sub_range.end,
+                },
+            )?;
 
-            let namespace_row = &ns_rows[row_num];
+            let namespace_row =
+                ns_rows
+                    .get(row_num)
+                    .ok_or(ExtractionProofError::NamespaceRowOutOfBounds {
+                        row_num,
+                        rows_len: ns_rows.len(),
+                    })?;
 
             let mut row_relative_start = blob_sub_range.start % row_length;
-            let mut row_relative_end = row_relative_start
-                .checked_add(blob_sub_range.len())
-                .unwrap();
+            let mut row_relative_end = row_relative_start.checked_add(blob_sub_range.len()).ok_or(
+                ExtractionProofError::RowShareRangeOutOfBounds {
+                    row_num,
+                    start: row_relative_start,
+                    end: usize::MAX,
+                    row_shares_len: namespace_row.shares.len(),
+                },
+            )?;
             if row_num == 0 {
-                row_relative_start = row_relative_start.checked_sub(first_row_offset).unwrap();
-                row_relative_end = row_relative_end.checked_sub(first_row_offset).unwrap();
+                row_relative_start = row_relative_start.checked_sub(first_row_offset).ok_or(
+                    ExtractionProofError::RowShareRangeOutOfBounds {
+                        row_num,
+                        start: blob_sub_range.start,
+                        end: blob_sub_range.end,
+                        row_shares_len: namespace_row.shares.len(),
+                    },
+                )?;
+                row_relative_end = row_relative_end.checked_sub(first_row_offset).ok_or(
+                    ExtractionProofError::RowShareRangeOutOfBounds {
+                        row_num,
+                        start: blob_sub_range.start,
+                        end: blob_sub_range.end,
+                        row_shares_len: namespace_row.shares.len(),
+                    },
+                )?;
             }
 
-            let shares = &namespace_row.shares[row_relative_start..row_relative_end];
+            let shares = namespace_row
+                .shares
+                .get(row_relative_start..row_relative_end)
+                .ok_or(ExtractionProofError::RowShareRangeOutOfBounds {
+                    row_num,
+                    start: row_relative_start,
+                    end: row_relative_end,
+                    row_shares_len: namespace_row.shares.len(),
+                })?;
 
             let row_proof = namespace_row
                 .proof
@@ -399,7 +480,7 @@ fn sub_namespace_inclusion_proofs(
                     &namespace_row.shares[row_relative_end..namespace_row.shares.len()],
                     namespace.into(),
                 )
-                .unwrap();
+                .map_err(ExtractionProofError::NarrowRangeProof)?;
 
             let raw_leaves = shares
                 .iter()
@@ -409,7 +490,13 @@ fn sub_namespace_inclusion_proofs(
                 })
                 .collect::<Vec<_>>();
 
-            let this_row_root = &row_roots[row_num];
+            let this_row_root =
+                row_roots
+                    .get(row_num)
+                    .ok_or(ExtractionProofError::RowRootOutOfBounds {
+                        row_num,
+                        row_roots_len: row_roots.len(),
+                    })?;
 
             tracing::trace!("verify while building: row_roots[{}]", row_num,);
             debug_assert!(
@@ -418,7 +505,7 @@ fn sub_namespace_inclusion_proofs(
             );
             row_proof
                 .verify_range(this_row_root, &raw_leaves, namespace.into())
-                .expect("invalid proof self-check");
+                .map_err(ExtractionProofError::ProofSelfCheck)?;
 
             #[cfg(any(debug_assertions, test))]
             if row_num == 0 {
@@ -438,10 +525,13 @@ fn sub_namespace_inclusion_proofs(
         if !current_blob_proof.range_proofs.is_empty() {
             output.push(current_blob_proof);
         } else {
-            panic!("Empty proof for blob range: {blob_range:?}");
+            return Err(ExtractionProofError::EmptyBlobProof {
+                start: blob_range.start,
+                end: blob_range.end,
+            });
         }
     }
-    output
+    Ok(output)
 }
 
 #[cfg(all(feature = "native", any(debug_assertions, test, bench)))]
@@ -472,30 +562,48 @@ fn split_blob_range_by_rows(
     ns_range: &std::ops::Range<usize>,
     first_row_offset: usize,
     square_size: usize,
-) -> Vec<std::ops::Range<usize>> {
+) -> Result<Vec<std::ops::Range<usize>>, ExtractionProofError> {
     if ns_range.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
+    }
+    if ns_range.start > ns_range.end {
+        return Err(ExtractionProofError::InvalidBlobRange {
+            start: ns_range.start,
+            end: ns_range.end,
+        });
+    }
+    if square_size == 0 {
+        return Err(ExtractionProofError::InvalidBlobRange {
+            start: ns_range.start,
+            end: ns_range.end,
+        });
     }
     let std::ops::Range {
         start: start_relative,
         end: end_relative,
     } = *ns_range;
 
-    let start_absolute = start_relative
-        .checked_add(first_row_offset)
-        .expect("Index overflow");
-    let end_absolute = end_relative
-        .checked_add(first_row_offset)
-        .expect("Index overflow");
+    let start_absolute = start_relative.checked_add(first_row_offset).ok_or(
+        ExtractionProofError::BlobRangeCoverageExceeded {
+            start: start_relative,
+            declared_end: end_relative,
+            required_end: usize::MAX,
+        },
+    )?;
+    let end_absolute = end_relative.checked_add(first_row_offset).ok_or(
+        ExtractionProofError::BlobRangeCoverageExceeded {
+            start: start_relative,
+            declared_end: end_relative,
+            required_end: usize::MAX,
+        },
+    )?;
 
     // Function to calculate which row a flat index belongs to
     let calculate_row = |absolute_idx: usize| -> usize {
         if absolute_idx < square_size {
             return 0;
         }
-        absolute_idx
-            .checked_div(square_size)
-            .expect("square_size cannot be 0")
+        absolute_idx / square_size
     };
 
     let start_row = calculate_row(start_absolute);
@@ -504,7 +612,7 @@ fn split_blob_range_by_rows(
 
     // No row crossing boundary.
     if start_row == end_row {
-        return vec![start_absolute..end_absolute];
+        return Ok(vec![start_absolute..end_absolute]);
     }
 
     let mut output = Vec::new();
@@ -515,9 +623,17 @@ fn split_blob_range_by_rows(
         // We need an exclusive range, so it is simply `x * n + n`
         let row_end = current_row
             .checked_mul(square_size)
-            .expect("Row index overflow")
+            .ok_or(ExtractionProofError::BlobRangeCoverageExceeded {
+                start: start_relative,
+                declared_end: end_relative,
+                required_end: usize::MAX,
+            })?
             .checked_add(square_size)
-            .expect("Row index overflow");
+            .ok_or(ExtractionProofError::BlobRangeCoverageExceeded {
+                start: start_relative,
+                declared_end: end_relative,
+                required_end: usize::MAX,
+            })?;
 
         let end = if current_row < end_row {
             row_end
@@ -529,7 +645,34 @@ fn split_blob_range_by_rows(
         start = end;
         current_row += 1;
     }
-    output
+    Ok(output)
+}
+
+#[cfg(feature = "native")]
+fn validate_blob_range(
+    range: &std::ops::Range<usize>,
+    namespace_shares: usize,
+) -> Result<(), ExtractionProofError> {
+    if range.start > range.end {
+        return Err(ExtractionProofError::InvalidBlobRange {
+            start: range.start,
+            end: range.end,
+        });
+    }
+    if range.end > namespace_shares {
+        return Err(ExtractionProofError::BlobRangeOutOfBounds {
+            start: range.start,
+            end: range.end,
+            namespace_shares,
+        });
+    }
+    if range.is_empty() {
+        return Err(ExtractionProofError::InvalidBlobRange {
+            start: range.start,
+            end: range.end,
+        });
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -546,7 +689,8 @@ mod tests {
             let start = end.checked_sub(1).expect("end cannot be 0");
             let range = Range { start, end };
             for first_row_offset in 0..SQUARE_SIZE {
-                let sub_ranges = split_blob_range_by_rows(&range, first_row_offset, SQUARE_SIZE);
+                let sub_ranges = split_blob_range_by_rows(&range, first_row_offset, SQUARE_SIZE)
+                    .expect("single-share split should succeed");
                 assert_eq!(sub_ranges.len(), 1);
                 let expected_range = Range {
                     start: range.start + first_row_offset,
@@ -568,7 +712,8 @@ mod tests {
         ];
 
         for (range, first_row_offset) in cases {
-            let sub_ranges = split_blob_range_by_rows(&range, first_row_offset, SQUARE_SIZE);
+            let sub_ranges = split_blob_range_by_rows(&range, first_row_offset, SQUARE_SIZE)
+                .expect("non-crossing split should succeed");
             assert_eq!(sub_ranges.len(), 1);
             verify_split(&range, &sub_ranges, first_row_offset);
         }
@@ -590,7 +735,8 @@ mod tests {
         ];
 
         for (range, first_row_offset, expected_sub_ranges_len) in cases {
-            let sub_ranges = split_blob_range_by_rows(&range, first_row_offset, SQUARE_SIZE);
+            let sub_ranges = split_blob_range_by_rows(&range, first_row_offset, SQUARE_SIZE)
+                .expect("cross-row split should succeed");
             assert_eq!(sub_ranges.len(), expected_sub_ranges_len);
             verify_split(&range, &sub_ranges, first_row_offset);
         }

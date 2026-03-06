@@ -264,29 +264,38 @@ pub struct NamespaceBoundaryProof {
 #[cfg(feature = "native")]
 impl NamespaceBoundaryProof {
     pub(crate) fn from_namespace_data(namespace_data: &NamespaceRelevantData) -> Option<Self> {
-        let last_row = namespace_data.data.rows().last()?;
+        Self::try_from_namespace_data(namespace_data)
+            .unwrap_or_else(|err| panic!("failed to build namespace boundary proof: {err}"))
+    }
+
+    pub(crate) fn try_from_namespace_data(
+        namespace_data: &NamespaceRelevantData,
+    ) -> Result<Option<Self>, ExtractionProofError> {
+        let Some(last_row) = namespace_data.data.rows().last() else {
+            return Ok(None);
+        };
         if last_row.shares.is_empty() && last_row.proof.is_of_presence() {
-            panic!("Incorrect namespace data: last row proof is of presence, but no shares");
+            return Err(ExtractionProofError::InvalidNamespaceBoundaryData);
         } else if last_row.shares.is_empty() && last_row.proof.is_of_absence() {
-            return Some(Self {
+            return Ok(Some(Self {
                 last_share_proof: last_row.proof.clone(),
                 last_share: None,
-            });
+            }));
         }
         let all_before_last = &last_row.shares[..last_row.shares.len().saturating_sub(1)];
         let last_share = last_row
             .shares
             .last()
-            .expect("Incorrect namespace data: missing shares from last row")
+            .ok_or(ExtractionProofError::InvalidNamespaceBoundaryData)?
             .clone();
         let last_share_proof = last_row
             .proof
             .narrow_range(all_before_last, &[], *namespace_data.namespace)
-            .expect("Incorrect namespace data: cannot narrow range proof last share");
-        Some(Self {
+            .map_err(ExtractionProofError::NarrowRangeProof)?;
+        Ok(Some(Self {
             last_share_proof: last_share_proof.into(),
             last_share: Some(last_share),
-        })
+        }))
     }
 }
 

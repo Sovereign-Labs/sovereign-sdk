@@ -608,6 +608,48 @@ pub(crate) fn get_extraction_proof(
     RelevantProofs { proof, batch }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn try_get_extraction_proof(
+    block: &FilteredCelestiaBlock,
+    blobs: &RelevantBlobs<BlobWithSender>,
+) -> Result<
+    RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>>,
+    crate::types::ExtractionProofError,
+> {
+    let batch = {
+        let inclusion_proof = proofs::try_new_inclusion_proof(
+            &block.header,
+            &block.rollup_batch_data,
+            &blobs.batch_blobs,
+        )?;
+
+        DaProof {
+            inclusion_proof,
+            completeness_proof: NamespaceBoundaryProof::try_from_namespace_data(
+                &block.rollup_batch_data,
+            )?,
+        }
+    };
+
+    let proof = {
+        // Note: The second call to new_inclusion_proof merklizes and parse the executable transactions namespace again.
+        let inclusion_proof = proofs::try_new_inclusion_proof(
+            &block.header,
+            &block.rollup_proof_data,
+            &blobs.proof_blobs,
+        )?;
+
+        DaProof {
+            inclusion_proof,
+            completeness_proof: NamespaceBoundaryProof::try_from_namespace_data(
+                &block.rollup_proof_data,
+            )?,
+        }
+    };
+
+    Ok(RelevantProofs { proof, batch })
+}
+
 fn flatten_timeout<T>(
     response: Result<Result<T, celestia_client::Error>, tokio::time::error::Elapsed>,
 ) -> Result<T, MaybeRetryable<anyhow::Error>> {

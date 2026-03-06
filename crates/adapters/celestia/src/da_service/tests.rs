@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use std::time::Duration;
 
-use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
+use crate::da_service::{extract_relevant_blobs, get_extraction_proof, try_get_extraction_proof};
 use crate::test_helper::files::*;
 use crate::test_helper::{ADDR_1, ROLLUP_PARAMS_DEV};
 use crate::types::{BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof};
@@ -990,11 +990,9 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "invalid proof self-check: InvalidRoot")]
-async fn verification_fails_if_sender_changed() {
+async fn extraction_proof_fails_if_sender_changed() {
     // This is the preparation part, consider it as malicious native code:
     let mut block = with_rollup_batch_data::filtered_block();
-    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
     let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
     let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
     let addr_len = addr_1.as_ref().len();
@@ -1024,29 +1022,13 @@ async fn verification_fails_if_sender_changed() {
     block.rollup_batch_data.data = malicious_ns_data;
 
     // This is how it is observed
-    verification_error(block, "InvalidRoot", rollup_params)
-        .await
-        .unwrap();
-}
-
-async fn verification_error(
-    block: FilteredCelestiaBlock,
-    expected_err_pattern: &str,
-    rollup_params: RollupParams,
-) -> anyhow::Result<()> {
     let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
-
-    let verifier = CelestiaVerifier::new(rollup_params);
-
-    let error = verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-        .unwrap_err();
+    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
+    let message = err.to_string();
     assert!(
-        error.to_string().contains(expected_err_pattern),
-        "Actual error: {error}"
+        message.contains("Invalid proof self-check: InvalidRoot"),
+        "Actual error: {message}"
     );
-    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1075,7 +1057,6 @@ async fn verification_fails_if_tx_missing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "supported shares exist in namespace")]
 async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist() {
     let block = with_mixed_v0_and_v1_blobs::filtered_block();
     let relevant_blobs = RelevantBlobs {
@@ -1083,11 +1064,17 @@ async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist(
         proof_blobs: Default::default(),
     };
 
-    let _ = get_extraction_proof(&block, &relevant_blobs);
+    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            crate::types::ExtractionProofError::MissingBlobsForSupportedNamespace { .. }
+        ),
+        "Actual error: {err}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "supported shares exist in namespace")]
 async fn verification_fails_if_supported_namespace_has_empty_blob_list() {
     let block = with_rollup_batch_data::filtered_block();
     let relevant_blobs = RelevantBlobs {
@@ -1095,7 +1082,34 @@ async fn verification_fails_if_supported_namespace_has_empty_blob_list() {
         proof_blobs: Default::default(),
     };
 
-    let _ = get_extraction_proof(&block, &relevant_blobs);
+    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            crate::types::ExtractionProofError::MissingBlobsForSupportedNamespace { .. }
+        ),
+        "Actual error: {err}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn extraction_proof_rejects_out_of_bounds_blob_range() {
+    let block = with_rollup_batch_data::filtered_block();
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    assert!(
+        !relevant_blobs.batch_blobs.is_empty(),
+        "fixture should contain at least one batch blob"
+    );
+    relevant_blobs.batch_blobs[0].range_in_namespace = 0..usize::MAX;
+
+    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            crate::types::ExtractionProofError::BlobRangeOutOfBounds { .. }
+        ),
+        "Actual error: {err}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1420,6 +1434,24 @@ mod adversarial_tampering {
         case
     }
 
+    fn case_with_mixed_v0_and_v1() -> AdversarialCase {
+        let case = AdversarialCase::from_fixture(with_mixed_v0_and_v1_blobs::test_case());
+        assert!(
+            case.proofs.batch.inclusion_proof.len() > case.blobs.batch_blobs.len(),
+            "expected skipped unsupported blobs to add inclusion proofs"
+        );
+        case
+    }
+
+    fn skipped_batch_proof_index(case: &AdversarialCase) -> usize {
+        case.proofs
+            .batch
+            .inclusion_proof
+            .iter()
+            .position(|proof| matches!(proof.is_supported_blob(), Ok(false)))
+            .expect("expected at least one skipped blob proof")
+    }
+
     fn assert_verification_error_contains(case: AdversarialCase, pattern: &str) {
         let params = case.params;
         assert_verification_error_contains_with_params(case, params, pattern);
@@ -1558,6 +1590,21 @@ mod adversarial_tampering {
     }
 
     #[test]
+    fn verification_fails_if_supported_blob_proves_wrong_share_count() {
+        let mut case = case_with_single_batch();
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            let first_range = &mut proofs[0].range_proofs[0];
+            let duplicate_share = first_range
+                .shares
+                .first()
+                .expect("expected at least one proven share")
+                .clone();
+            first_range.shares.push(duplicate_share);
+        });
+        assert_verification_error_contains(case, "WrongNumberOfShares");
+    }
+
+    #[test]
     fn verification_fails_if_start_index_manipulated() {
         let mut case = case_with_single_batch();
         case.mutate_batch_inclusion_proofs(|proofs| {
@@ -1642,7 +1689,6 @@ mod adversarial_tampering {
     }
 
     #[test]
-    #[ignore = "BUG SPEC: verifier should return Err (not panic) when proof start_share_idx maps to row index outside namespace_row_roots. Current code indexes row roots directly by derived row number and may panic. Expected after hardening: graceful Err. References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, docs/celestia/multirow-absence-redesign-prompt.md."]
     fn verification_handles_out_of_bounds_row_index_without_panic() {
         let mut case = case_with_single_batch();
         case.mutate_batch_inclusion_proofs(|proofs| {
@@ -1661,6 +1707,42 @@ mod adversarial_tampering {
             result.expect("checked above").is_err(),
             "expected verifier to reject out-of-bounds row index"
         );
+    }
+
+    #[test]
+    fn verification_fails_if_skipped_blob_proof_range_is_corrupted() {
+        let mut case = case_with_mixed_v0_and_v1();
+        let skipped_idx = skipped_batch_proof_index(&case);
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            let skipped_proof = &mut proofs[skipped_idx];
+            match &mut *skipped_proof.range_proofs[0].proof {
+                NmtNamespaceProof::PresenceProof { proof, .. }
+                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+                    proof.range.start = proof.range.start.saturating_add(1);
+                    proof.range.end = proof.range.end.saturating_add(1);
+                }
+            }
+        });
+        assert_verification_error_contains(case, "Invalid");
+    }
+
+    #[test]
+    fn verification_fails_if_tail_padding_share_payload_is_non_zero() {
+        let mut case = case_with_tail_padding();
+        let skipped_idx = skipped_batch_proof_index(&case);
+        case.mutate_batch_inclusion_proofs(|proofs| {
+            let first_share = proofs[skipped_idx].range_proofs[0].shares[0].clone();
+            let mut raw_share = first_share.data().to_vec();
+            let last_idx = raw_share
+                .len()
+                .checked_sub(1)
+                .expect("tail padding share should not be empty");
+            raw_share[last_idx] ^= 0x01;
+            let malformed_share =
+                celestia_types::Share::from_raw(&raw_share).expect("mutated share should parse");
+            proofs[skipped_idx].range_proofs[0].shares[0] = malformed_share;
+        });
+        assert_verification_error_contains(case, "NonMatchingShare");
     }
 }
 
