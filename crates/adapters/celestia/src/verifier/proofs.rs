@@ -100,6 +100,7 @@ impl BlobProof {
 
         // 3. If the first blob starts after the beginning of the row (`start_idx() > 0`),
         // prove that the immediate left sibling belongs to a strictly smaller namespace.
+        // We need that to ensure that no blobs are censored.
         // If `start_idx() == 0`, the blob starts at the row boundary, so there is no in-row left gap.
         if first_sub_proof.proof.start_idx() > 0 {
             let Some(rls) = first_sub_proof.proof.rightmost_left_sibling() else {
