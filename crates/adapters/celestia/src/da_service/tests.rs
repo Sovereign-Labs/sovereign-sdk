@@ -145,7 +145,7 @@ fn build_batch_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
     let has_signer = true;
     let small_exact = bytes_for_shares(1, has_signer);
     let small_overflow = small_exact.saturating_add(1);
-    let power_of_two = if sender_idx % 2 == 0 {
+    let power_of_two = if sender_idx.is_multiple_of(2) {
         bytes_for_shares(4, has_signer)
     } else {
         bytes_for_shares(8, has_signer).saturating_add(1)
@@ -166,7 +166,7 @@ fn build_proof_sizes(row_len: usize, sender_idx: usize) -> [usize; 4] {
     let has_signer = true;
     let small_exact = bytes_for_shares(1, has_signer);
     let small_overflow = small_exact.saturating_add(1);
-    let power_of_two = if sender_idx % 2 == 0 {
+    let power_of_two = if sender_idx.is_multiple_of(2) {
         bytes_for_shares(8, has_signer)
     } else {
         bytes_for_shares(4, has_signer).saturating_add(1)
