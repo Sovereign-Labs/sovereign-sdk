@@ -12,7 +12,9 @@ use axum::http::StatusCode;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{BlobExecutionStatus, BlobInternalId, BlobSenderHooks};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::capabilities::{AuthenticationOutput, RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{
+    AuthenticationError, AuthenticationOutput, FatalError, RollupHeight, TransactionAuthenticator,
+};
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::*;
@@ -122,6 +124,55 @@ pub(crate) type SequencerTxStream<Confirmation> = Pin<
             + Send,
     >,
 >;
+
+/// Machine-readable error codes that may appear in `accept_tx` REST error details.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptTxErrorCode {
+    /// The transaction's `max_fee_per_gas` is lower than the rollup base fee.
+    InsufficientMaxFeePerGas,
+}
+
+/// Structured details for `accept_tx` REST errors.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AcceptTxErrorDetails {
+    /// Human-readable description preserved for debugging and compatibility.
+    pub error: String,
+    /// Stable machine-readable error code, when available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<AcceptTxErrorCode>,
+    /// User-specified `max_fee_per_gas`, when the error is fee-related.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_max_fee_per_gas: Option<u128>,
+    /// Rollup base fee, when the error is fee-related.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rollup_base_fee: Option<u128>,
+}
+
+impl AcceptTxErrorDetails {
+    fn from_auth_error(error: &AuthenticationError) -> Self {
+        match error {
+            AuthenticationError::FatalError(
+                FatalError::InsufficientMaxFeePerGas {
+                    user_max_fee_per_gas,
+                    rollup_base_fee,
+                },
+                _,
+            ) => Self {
+                error: error.to_string(),
+                code: Some(AcceptTxErrorCode::InsufficientMaxFeePerGas),
+                user_max_fee_per_gas: Some(*user_max_fee_per_gas),
+                rollup_base_fee: Some(*rollup_base_fee),
+            },
+            _ => Self {
+                error: error.to_string(),
+                code: None,
+                user_max_fee_per_gas: None,
+                rollup_base_fee: None,
+            },
+        }
+    }
+}
 
 pub(crate) type SequencerEventStream<Rt> = Pin<
     Box<
@@ -547,7 +598,7 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
 }
 
 pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
-    match err{
+    match err {
         PreExecError::SequencerError(error) => {
             ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
@@ -566,9 +617,7 @@ pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
             ErrorObject {
                 status: StatusCode::BAD_REQUEST,
                 message: "The transaction is invalid".to_string(),
-                details: json_obj!({
-                    "error": error.to_string()
-                })
+                details: to_json_object(AcceptTxErrorDetails::from_auth_error(&error)),
             }
         },
     }
@@ -684,4 +733,36 @@ pub fn sender_is_allowed<RT: Runtime<S>, S: Spec>(
     let destination_module = <RT as DispatchCall>::module_info(runtime, call.discriminant());
     destination_module.is_safe_for_sequencer(call.contents(), sequencer_address)
         || admins.contains(sender)
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_modules_api::capabilities::{AuthenticationError, FatalError};
+    use sov_modules_stf_blueprint::PreExecError;
+    use sov_rollup_interface::TxHash;
+
+    use super::{pre_exec_err_to_accept_tx_err, AcceptTxErrorCode, AcceptTxErrorDetails};
+
+    #[test]
+    fn low_max_fee_auth_error_serializes_structured_code() {
+        let error = AuthenticationError::FatalError(
+            FatalError::InsufficientMaxFeePerGas {
+                user_max_fee_per_gas: 6,
+                rollup_base_fee: 7,
+            },
+            TxHash::new([0; 32]),
+        );
+
+        let err = pre_exec_err_to_accept_tx_err(PreExecError::AuthError(error));
+        let details: AcceptTxErrorDetails =
+            serde_json::from_value(serde_json::Value::Object(err.details))
+                .expect("details should deserialize");
+
+        assert_eq!(
+            details.code,
+            Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+        );
+        assert_eq!(details.user_max_fee_per_gas, Some(6));
+        assert_eq!(details.rollup_base_fee, Some(7));
+    }
 }

@@ -27,6 +27,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 - `eth_maxPriorityFeePerGas` returns `0`.
 - `eth_call` and `eth_estimateGas` apply `state_overrides`/`block_overrides` for simulation.
 - EIP-1898 `requireCanonical` is accepted but effectively a no-op in no-reorg semantics.
+- Subscription `logs` emit `blockHash` from the synthetic pending block, which changes as new txs arrive and differs from the final sealed block hash. This is inherent to `latest == pending` design.
 
 ## High-Risk Hotspots
 

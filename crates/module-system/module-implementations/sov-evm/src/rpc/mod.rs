@@ -155,21 +155,7 @@ fn call_upfront_cost(
     block_env: &BlockEnv,
     balance: U256,
 ) -> Result<Option<CallUpfrontCost>, EthApiError> {
-    if request.gas_price.is_some()
-        && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
-    {
-        return Err(EthApiError::ConflictingFeeFieldsInRequest);
-    }
-
-    if let (Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) =
-        (request.max_fee_per_gas, request.max_priority_fee_per_gas)
-    {
-        if max_priority_fee_per_gas > max_fee_per_gas {
-            return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
-        }
-    }
-
-    let Some(fee_per_gas) = request.gas_price.or(request.max_fee_per_gas) else {
+    let Some(fee_per_gas) = validate_call_fee_request(request, block_env)? else {
         return Ok(None);
     };
 
@@ -208,6 +194,35 @@ fn call_upfront_cost(
         total_cost,
         gas_limit,
     }))
+}
+
+pub(crate) fn validate_call_fee_request(
+    request: &TransactionRequest,
+    block_env: &BlockEnv,
+) -> Result<Option<u128>, EthApiError> {
+    if request.gas_price.is_some()
+        && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
+    {
+        return Err(EthApiError::ConflictingFeeFieldsInRequest);
+    }
+
+    if let (Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) =
+        (request.max_fee_per_gas, request.max_priority_fee_per_gas)
+    {
+        if max_priority_fee_per_gas > max_fee_per_gas {
+            return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
+        }
+    }
+
+    let Some(fee_per_gas) = request.gas_price.or(request.max_fee_per_gas) else {
+        return Ok(None);
+    };
+
+    if fee_per_gas < u128::from(block_env.basefee) {
+        return Err(RpcInvalidTransactionError::FeeCapTooLow.into());
+    }
+
+    Ok(Some(fee_per_gas))
 }
 
 fn call_caller(request: &TransactionRequest) -> Address {
@@ -313,7 +328,7 @@ where
                     header,
                     transactions,
                     uncles: vec![],
-                    withdrawals: None,
+                    withdrawals: Some(vec![].into()),
                 }))
             }
             // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
@@ -348,7 +363,7 @@ where
                     header,
                     transactions: txs,
                     uncles: vec![],
-                    withdrawals: None,
+                    withdrawals: Some(vec![].into()),
                 }))
             }
         }
@@ -836,7 +851,7 @@ where
             extra_data: Bytes::default(),
             mix_hash: B256::ZERO,
             nonce: B64::ZERO,
-            withdrawals_root: None,
+            withdrawals_root: Some(EMPTY_ROOT_HASH),
             blob_gas_used: None,
             parent_beacon_block_root: None,
             requests_hash: None,
@@ -898,7 +913,7 @@ where
             extra_data: Bytes::default(),
             mix_hash: B256::ZERO,
             nonce: B64::ZERO,
-            withdrawals_root: None,
+            withdrawals_root: Some(EMPTY_ROOT_HASH),
             blob_gas_used: None,
             parent_beacon_block_root: None,
             requests_hash: None,
@@ -1454,6 +1469,45 @@ mod tests {
         assert!(matches!(
             err,
             EthApiError::InvalidTransaction(RpcInvalidTransactionError::TipAboveFeeCap)
+        ));
+    }
+
+    #[test]
+    fn validate_call_fee_request_rejects_fee_cap_below_base_fee() {
+        let block_env = BlockEnv {
+            basefee: 7,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            max_fee_per_gas: Some(6),
+            max_priority_fee_per_gas: Some(0),
+            ..Default::default()
+        };
+
+        let err = validate_call_fee_request(&request, &block_env).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::FeeCapTooLow)
+        ));
+    }
+
+    #[test]
+    fn validate_call_fee_request_rejects_legacy_gas_price_below_base_fee() {
+        let block_env = BlockEnv {
+            basefee: 7,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(6),
+            ..Default::default()
+        };
+
+        let err = validate_call_fee_request(&request, &block_env).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::FeeCapTooLow)
         ));
     }
 

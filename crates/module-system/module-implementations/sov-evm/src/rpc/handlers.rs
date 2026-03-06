@@ -344,6 +344,7 @@ where
         );
         let initial_access_list = request.access_list.clone().unwrap_or_default();
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        super::validate_call_fee_request(&request, &block_env)?;
         let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
         let cfg = self.cfg_infallible(state);
         let cfg_env =

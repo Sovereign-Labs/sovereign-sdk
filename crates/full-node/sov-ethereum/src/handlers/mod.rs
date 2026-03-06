@@ -34,8 +34,8 @@ use sov_modules_api::{RawTx, Spec};
 use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
 #[cfg(feature = "local")]
 use sov_rpc_eth_types::EthApiError;
-use sov_rpc_eth_types::LogWithExecutionTimestamp;
-use sov_sequencer::Sequencer;
+use sov_rpc_eth_types::{LogWithExecutionTimestamp, RpcInvalidTransactionError};
+use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails, Sequencer};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -166,6 +166,9 @@ where
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
         let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
+            if let Some(err) = map_low_max_fee_auth_error(&e) {
+                return err;
+            }
             if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
                 &e
             {
@@ -271,12 +274,32 @@ where
     }
 }
 
+fn map_low_max_fee_auth_error(error: &AuthenticationError) -> Option<ErrorObjectOwned> {
+    match error {
+        AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
+            Some(RpcInvalidTransactionError::FeeCapTooLow.into())
+        }
+        _ => None,
+    }
+}
+
 fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
+    if matches!(
+        accept_tx_error_details(&err).and_then(|details| details.code),
+        Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+    ) {
+        return RpcInvalidTransactionError::FeeCapTooLow.into();
+    }
+
     let err_msg = format!("{} - '{}' ({:?})", err.status, err.message, err.details);
     match err.status.as_u16() {
         400 | 403 | 413 => rpc_invalid_params(err_msg),
         _ => rpc_tx_rejected(err_msg),
     }
+}
+
+fn accept_tx_error_details(err: &RestErrorObject) -> Option<AcceptTxErrorDetails> {
+    serde_json::from_value(serde_json::Value::Object(err.details.clone())).ok()
 }
 
 fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResult<T>) {
@@ -314,6 +337,9 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
 mod tests {
     use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 
+    use sov_rest_utils::to_json_object;
+    use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails};
+
     use super::{map_accept_tx_error, RestErrorObject};
 
     fn sample_accept_tx_error(status: u16) -> RestErrorObject {
@@ -347,5 +373,24 @@ mod tests {
     fn accept_tx_service_unavailable_stays_tx_rejected() {
         let err = map_accept_tx_error(sample_accept_tx_error(503));
         assert_eq!(err.code(), -32003);
+    }
+
+    #[test]
+    fn accept_tx_low_max_fee_maps_to_invalid_input() {
+        let status = 400.try_into().expect("status code should be valid");
+        let err = map_accept_tx_error(RestErrorObject {
+            status,
+            message: "The transaction is invalid".to_string(),
+            details: to_json_object(AcceptTxErrorDetails {
+                error: "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
+                    .to_string(),
+                code: Some(AcceptTxErrorCode::InsufficientMaxFeePerGas),
+                user_max_fee_per_gas: Some(6),
+                rollup_base_fee: Some(7),
+            }),
+        });
+
+        assert_eq!(err.code(), -32000);
+        assert_eq!(err.message(), "max fee per gas less than block base fee");
     }
 }
