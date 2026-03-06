@@ -4,12 +4,13 @@ use std::process::exit;
 use anyhow::Context as _;
 use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
-use sov_address::MultiAddressEvm;
+use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::CelestiaService;
 use sov_demo_rollup::ExternalMockNomtDemoRollup;
 use sov_demo_rollup::{
-    celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, CelestiaNomtDemoRollup,
-    ExternalMockDemoRollup, MockDemoRollup, MockNomtDemoRollup,
+    celestia_nomt_risc0_host_args, celestia_risc0_host_args, mock_da_nomt_risc0_host_args,
+    mock_da_risc0_host_args, CelestiaDemoRollup, CelestiaNomtDemoRollup, ExternalMockDemoRollup,
+    MockDemoRollup, MockNomtDemoRollup,
 };
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -33,7 +34,7 @@ struct Args {
     da_layer: SupportedDaLayer,
 
     /// The storage implementation
-    #[arg(long, default_value = "jmt")]
+    #[arg(long, default_value = "nomt")]
     storage: SupportedStorage,
 
     /// The path to the rollup config.
@@ -123,7 +124,7 @@ async fn run() -> anyhow::Result<()> {
         }
         (SupportedDaLayer::Mock, SupportedStorage::Nomt) => {
             let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+                .map(|config_disc| config_disc.into_config(mock_da_nomt_risc0_host_args()));
             let rollup = new_rollup_with_mock_da_and_nomt(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -152,7 +153,7 @@ async fn run() -> anyhow::Result<()> {
         }
         (SupportedDaLayer::ExternalMock, SupportedStorage::Nomt) => {
             let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+                .map(|config_disc| config_disc.into_config(mock_da_nomt_risc0_host_args()));
             let rollup = new_rollup_with_external_mock_da_and_nomt(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -180,7 +181,7 @@ async fn run() -> anyhow::Result<()> {
         }
         (SupportedDaLayer::Celestia, SupportedStorage::Nomt) => {
             let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(celestia_risc0_host_args()));
+                .map(|config_disc| config_disc.into_config(celestia_nomt_risc0_host_args()));
             let rollup = new_rollup_with_celestia_da_and_nomt(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -221,7 +222,7 @@ async fn new_rollup_with_celestia_da(
 ) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
     debug!(config_path = rollup_config_path, "Starting Celestia rollup");
 
-    let rollup_config: RollupConfig<MultiAddressEvm, CelestiaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, CelestiaService> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
@@ -248,7 +249,7 @@ async fn new_rollup_with_celestia_da_and_nomt(
 ) -> anyhow::Result<Rollup<CelestiaNomtDemoRollup<Native>, Native>> {
     debug!(config_path = rollup_config_path, "Starting Celestia rollup");
 
-    let rollup_config: RollupConfig<MultiAddressEvm, CelestiaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, CelestiaService> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
@@ -278,7 +279,7 @@ async fn new_rollup_with_mock_da_and_jmt(
         "Starting rollup on mock DA"
     );
 
-    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
@@ -308,7 +309,7 @@ async fn new_rollup_with_external_mock_da_and_jmt(
         "Starting rollup on external-mock DA"
     );
 
-    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaClient> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaClient> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
@@ -338,7 +339,7 @@ async fn new_rollup_with_mock_da_and_nomt(
         "Starting NOMT rollup on mock DA"
     );
 
-    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
@@ -349,8 +350,8 @@ async fn new_rollup_with_mock_da_and_nomt(
             rt_genesis_paths,
             rollup_config,
             prover_config,
-            stop_at_rollup_height,
             start_at_rollup_height,
+            stop_at_rollup_height,
             None,
         )
         .await
@@ -368,7 +369,7 @@ async fn new_rollup_with_external_mock_da_and_nomt(
         "Starting NOMT rollup on external-mock DA"
     );
 
-    let rollup_config: RollupConfig<MultiAddressEvm, StorableMockDaClient> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaClient> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;

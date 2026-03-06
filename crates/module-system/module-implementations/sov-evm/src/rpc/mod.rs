@@ -15,6 +15,7 @@ use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::primitive_types::{synthetic_block_hash_for, SyntheticBlockWithoutRootsAndBloom};
+use crate::sov_fee_and_gas_utils::is_actual_fee_projection_height_active;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
@@ -22,20 +23,27 @@ use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::{
-    Block, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
+    state::{AccountOverride, StateOverride},
+    Block, BlockOverrides, BlockTransactions, Log, ReceiptEnvelope, ReceiptWithBloom, Transaction,
     TransactionReceipt, TransactionRequest,
 };
 use alloy_rpc_types::{BlockTransactionsKind, Header};
 use maybe_archival_state::MaybeArchivalState;
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
+use revm::database::State as RevmState;
+use revm::primitives::HashMap as RevmHashMap;
+use revm::state::{Account, AccountStatus, Bytecode, EvmStorageSlot};
+use revm::{Database, DatabaseCommit};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec, VersionReader};
+use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec};
 use sov_rollup_interface::common::RollupHeight;
-use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
+use sov_rpc_eth_types::{
+    invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError,
+};
 
 // Prune synthetic blocks more than this number of blocks away from the latest block.
 const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
@@ -82,7 +90,10 @@ impl SyntheticBlocksCache {
     }
 
     fn get_state_by_hash<S: Spec>(&self, hash: B256) -> Option<&ApiStateAccessor<S>> {
-        self.state_by_hash.get(&hash).map(|b| b.downcast_ref::<ApiStateAccessor<S>>().expect("Attempted to get the wrong type out of the SyntheticBlocksCache. This is impossible unless you request a different Spec than you put in. It's a bug, please report it."))
+        self.state_by_hash.get(&hash).map(|b| {
+            b.downcast_ref::<ApiStateAccessor<S>>()
+                .expect("SyntheticBlocksCache: spec type mismatch (bug)")
+        })
     }
     fn prune(&mut self, block_number: u64) {
         let stop_at = block_number.saturating_sub(SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL);
@@ -123,12 +134,116 @@ pub enum PendingOrBlock {
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
+const MIN_TRANSACTION_GAS: u64 = 21_000;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct CallUpfrontCost {
+    total_cost: U256,
+    gas_limit: u64,
+}
+
 /// gas * 1.5 + 100_000
 pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
         .checked_mul(3)
         .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
         .ok_or(RpcInvalidTransactionError::GasUintOverflow)
+}
+
+fn call_upfront_cost(
+    request: &TransactionRequest,
+    block_env: &BlockEnv,
+    balance: U256,
+) -> Result<Option<CallUpfrontCost>, EthApiError> {
+    if request.gas_price.is_some()
+        && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
+    {
+        return Err(EthApiError::ConflictingFeeFieldsInRequest);
+    }
+
+    if let (Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) =
+        (request.max_fee_per_gas, request.max_priority_fee_per_gas)
+    {
+        if max_priority_fee_per_gas > max_fee_per_gas {
+            return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
+        }
+    }
+
+    let Some(fee_per_gas) = request.gas_price.or(request.max_fee_per_gas) else {
+        return Ok(None);
+    };
+
+    let value = request.value.unwrap_or_default();
+    let gas_limit = match request.gas {
+        Some(gas_limit) => gas_limit,
+        None => {
+            if fee_per_gas == 0 {
+                block_env.gas_limit
+            } else {
+                // When gas is omitted, cap by what the caller can actually afford instead of
+                // requiring balance for the full block gas limit. Still require enough
+                // allowance for intrinsic tx gas, otherwise the request is unaffordable.
+                let allowance = balance.checked_sub(value).unwrap_or_default();
+                let max_affordable_gas = allowance / U256::from(fee_per_gas);
+                let gas_limit = max_affordable_gas
+                    .min(U256::from(block_env.gas_limit))
+                    .to::<u64>();
+                if gas_limit < MIN_TRANSACTION_GAS {
+                    return Err(RpcInvalidTransactionError::GasRequiredExceedsAllowance {
+                        gas_limit,
+                    }
+                    .into());
+                }
+                gas_limit
+            }
+        }
+    };
+    let gas_cost = U256::from(gas_limit)
+        .checked_mul(U256::from(fee_per_gas))
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
+    let total_cost = gas_cost
+        .checked_add(value)
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
+    Ok(Some(CallUpfrontCost {
+        total_cost,
+        gas_limit,
+    }))
+}
+
+fn call_caller(request: &TransactionRequest) -> Address {
+    // Keep `eth_call` parity with Ethereum clients: when `from` is omitted,
+    // execution uses the zero address as the caller.
+    request.from.unwrap_or_default()
+}
+
+fn enforce_call_upfront_cost<DB: Database>(
+    request: &mut TransactionRequest,
+    block_env: &BlockEnv,
+    db: &mut DB,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    let balance = db
+        .basic(call_caller(request))
+        .map_err(Into::into)?
+        .map(|account| account.balance)
+        .unwrap_or_default();
+    if let Some(upfront) = call_upfront_cost(request, block_env, balance)? {
+        if request.gas.is_none() {
+            request.gas = Some(upfront.gas_limit);
+        }
+
+        if balance < upfront.total_cost {
+            return Err(RpcInvalidTransactionError::InsufficientFunds {
+                cost: upfront.total_cost,
+                balance,
+            }
+            .into());
+        }
+    }
+
+    Ok(())
 }
 
 impl<S: Spec> Evm<S>
@@ -258,9 +373,12 @@ where
         );
         let fee_paid = self.receipt_fee(tx_idx, state);
         if let Some((receipt, _)) = self.receipt(tx_idx, state) {
-            if let Some(actual_effective_gas_price) =
-                maybe_actual_effective_gas_price(block_number, receipt.gas_used, fee_paid)
-            {
+            if let Some(actual_effective_gas_price) = maybe_actual_effective_gas_price(
+                block_number,
+                receipt.gas_used,
+                fee_paid,
+                base_fee_per_gas,
+            ) {
                 tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
             }
         }
@@ -307,7 +425,9 @@ where
             .code
             .get(&account.code_hash, state.deref_mut())
             .unwrap_infallible()?;
-        Some(code.bytes())
+        // `bytes()` on analyzed legacy bytecode includes the appended STOP byte used for
+        // execution; RPC must return the original deployed bytecode.
+        Some(code.original_bytes())
     }
 
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
@@ -389,19 +509,69 @@ where
 
     fn call(
         &self,
-        request: TransactionRequest,
+        mut request: TransactionRequest,
         block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let tx_env = prepare_call_env(&block_env, request.clone())?;
-        let caller = tx_env.caller;
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
+        let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
         let cfg = self.cfg_infallible(state);
-        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
-        let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-        let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+
+        // For simulation parity with real execution, omitted nonce defaults to the
+        // caller's current uniqueness nonce. Reject explicit nonces that lag the
+        // chain with "nonce too low" so estimateGas mirrors real tx submission.
+        if let Some(from) = request.from {
+            let credential_id = EthereumAddress::from(from).as_credential_id();
+            let account_nonce = self
+                .uniqueness_module
+                .next_nonce(&credential_id, maybe_archival_state.deref_mut())
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            match request.nonce {
+                Some(tx_nonce) if tx_nonce < account_nonce => {
+                    return Err(RpcInvalidTransactionError::NonceTooLow {
+                        tx: tx_nonce,
+                        state: account_nonce,
+                    }
+                    .into());
+                }
+                None => request.nonce = Some(account_nonce),
+                _ => {}
+            }
+        }
+
+        if !has_overrides {
+            // Fast path for the common case where no call overrides are provided.
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            enforce_call_upfront_cost(&mut request, &block_env, &mut evm_db)?;
+
+            let tx_env = prepare_call_env(&block_env, request)?;
+            let caller = tx_env.caller;
+            let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+            let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
+            verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            return Ok(result);
+        }
+
+        let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+        let mut evm_state = RevmState::builder().with_database(evm_db).build();
+        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
+        apply_call_overrides(
+            &mut evm_state,
+            &mut block_env,
+            state_overrides,
+            block_overrides,
+        )?;
+
+        enforce_call_upfront_cost(&mut request, &block_env, &mut evm_state)?;
+
+        let tx_env = prepare_call_env(&block_env, request)?;
+        let caller = tx_env.caller;
+        let result = executor::transact(&mut evm_state, &block_env, tx_env, cfg_env)?;
+        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_state)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         Ok(result)
     }
@@ -552,7 +722,9 @@ where
                         }
                     }
 
-                    // Case 1: The synthetic block has the same block number as the pending block; that's a harder special case where we need to populate its fields from the pending block
+                    // Case 1: The synthetic block has the same block number as the pending block;
+                    // that's a harder special case where we need to populate its fields from
+                    // the pending block.
                     let block_env = self.block_env(state).unwrap_infallible();
                     if block_env.number == block_number {
                         let Some(mut newest_pending_block) =
@@ -560,17 +732,18 @@ where
                         else {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         };
-                        // Check that the number of txs requested is no more than the number of txs in the pending block. If not, this block doesn't exist - return early
+                        // Check that the number of txs requested is no more than the number of
+                        // txs in the pending block. If not, this block doesn't exist.
                         if num_txs as u64 > newest_pending_block.num_transactions() {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         }
-                        // Check if the number of txs requested is exactly the same as the number of txs in the pending block. If so, this is the pending block! return it
+                        // If number of txs matches exactly, this is the pending block.
                         if num_txs as u64 == newest_pending_block.num_transactions() {
                             return Ok(Some(MaybeSealedBlock::PendingSynthetic(
                                 newest_pending_block,
                             )));
                         }
-                        // Otherwise, this is a the same as the pending block but with fewer txs - truncate the pending block to the number of txs requested
+                        // Otherwise this is the pending block truncated to fewer transactions.
                         newest_pending_block.transactions.end =
                             newest_pending_block.transactions.start + num_txs as u64;
                         return Ok(Some(MaybeSealedBlock::PendingSynthetic(
@@ -656,7 +829,7 @@ where
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
 
-            // Values that never need to be initailized
+            // Values that never need to be initialized
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
             difficulty: U256::ZERO,
@@ -718,7 +891,7 @@ where
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
 
-            // Values that never need to be initailized
+            // Values that never need to be initialized
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
             difficulty: U256::ZERO,
@@ -755,6 +928,13 @@ where
             .expect("Maybe pending block should never return None if allow_empty is true")
     }
 
+    /// Resolves a block ID to either current or archival state.
+    ///
+    /// Explicit numeric selectors are resolved by block kind, not by height arithmetic:
+    /// - if the number identifies the current synthetic pending block, use `Current`
+    /// - otherwise resolve through archival state for that exact block number.
+    ///
+    /// This avoids coupling correctness to `rollup_height` transition timing.
     fn resolve_state_for_block_id<'a>(
         &self,
         block_id: Option<BlockId>,
@@ -765,8 +945,11 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                if number == state.rollup_height_to_access().get()
-                    || (number == state.rollup_height_to_access().get() + 1)
+                // Always prefer archival for explicitly sealed block numbers.
+                if self.blocks.get(&number, state).unwrap_infallible().is_none()
+                    // Treat explicit pending-block numbers as current only when there are pending txs.
+                    && self.has_pending_block(state)
+                    && self.block_env(state).unwrap_infallible().number == number
                 {
                     return Ok(MaybeArchivalState::Current(state));
                 }
@@ -814,6 +997,168 @@ where
     }
 }
 
+fn invalid_override_params(message: impl Into<String>) -> EthApiError {
+    EthApiError::other(invalid_params_rpc_err(message.into()))
+}
+
+fn apply_call_overrides<DB: Database>(
+    db: &mut RevmState<DB>,
+    block_env: &mut BlockEnv,
+    state_overrides: Option<StateOverride>,
+    block_overrides: Option<Box<BlockOverrides>>,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    if let Some(state_overrides) = state_overrides {
+        apply_state_overrides(db, state_overrides)?;
+    }
+    if let Some(block_overrides) = block_overrides {
+        apply_block_overrides(db, block_env, *block_overrides)?;
+    }
+    Ok(())
+}
+
+fn apply_block_overrides<DB: Database>(
+    db: &mut RevmState<DB>,
+    block_env: &mut BlockEnv,
+    block_overrides: BlockOverrides,
+) -> Result<(), EthApiError> {
+    let BlockOverrides {
+        number,
+        difficulty,
+        time,
+        gas_limit,
+        coinbase,
+        random,
+        base_fee,
+        block_hash,
+    } = block_overrides;
+
+    if let Some(block_hash) = block_hash {
+        db.block_hashes.extend(block_hash);
+    }
+    if let Some(number) = number {
+        let block_number = u64::try_from(number).map_err(|_| {
+            invalid_override_params(format!("block number overflow: {number} exceeds u64::MAX"))
+        })?;
+        block_env.number = U256::from(block_number);
+    }
+    if let Some(difficulty) = difficulty {
+        block_env.difficulty = difficulty;
+    }
+    if let Some(time) = time {
+        block_env.timestamp = U256::from(time);
+    }
+    if let Some(gas_limit) = gas_limit {
+        block_env.gas_limit = gas_limit;
+    }
+    if let Some(coinbase) = coinbase {
+        block_env.beneficiary = coinbase;
+    }
+    if let Some(random) = random {
+        block_env.prevrandao = Some(random);
+    }
+    if let Some(base_fee) = base_fee {
+        block_env.basefee = u64::try_from(base_fee).map_err(|_| {
+            invalid_override_params(format!("base fee overflow: {base_fee} exceeds u64::MAX"))
+        })?;
+    }
+    Ok(())
+}
+
+fn apply_state_overrides<DB: Database>(
+    db: &mut RevmState<DB>,
+    state_overrides: StateOverride,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    for (address, account_override) in state_overrides {
+        apply_account_override(db, address, account_override)?;
+    }
+
+    Ok(())
+}
+
+fn apply_account_override<DB: Database>(
+    db: &mut RevmState<DB>,
+    address: Address,
+    account_override: AccountOverride,
+) -> Result<(), EthApiError>
+where
+    DB::Error: Into<EthApiError>,
+{
+    let AccountOverride {
+        balance,
+        nonce,
+        code,
+        state,
+        state_diff,
+        move_precompile_to,
+    } = account_override;
+
+    if let Some(move_precompile_to) = move_precompile_to {
+        return Err(invalid_override_params(format!(
+            "movePrecompileToAddress is not supported: {move_precompile_to}"
+        )));
+    }
+
+    let mut info = db.basic(address).map_err(Into::into)?.unwrap_or_default();
+    if let Some(nonce) = nonce {
+        info.nonce = nonce;
+    }
+    if let Some(code) = code {
+        let bytecode = Bytecode::new_raw_checked(code).map_err(|err| {
+            invalid_override_params(format!("Invalid account override bytecode: {err}"))
+        })?;
+        info.set_code(bytecode);
+    }
+    if let Some(balance) = balance {
+        info.balance = balance;
+    }
+
+    let mut patched_account = Account {
+        info,
+        status: AccountStatus::Touched,
+        storage: Default::default(),
+        transaction_id: 0,
+    };
+
+    let storage_overrides = match (state, state_diff) {
+        (Some(_), Some(_)) => {
+            return Err(invalid_override_params(format!(
+                "Both 'state' and 'stateDiff' are set for account {address}"
+            )));
+        }
+        (Some(state), None) => {
+            db.commit(RevmHashMap::from_iter([(
+                address,
+                Account {
+                    status: AccountStatus::SelfDestructed | AccountStatus::Touched,
+                    ..Default::default()
+                },
+            )]));
+            patched_account.mark_created();
+            Some(state)
+        }
+        (None, Some(state_diff)) => Some(state_diff),
+        (None, None) => None,
+    };
+
+    if let Some(storage_overrides) = storage_overrides {
+        for (slot, value) in storage_overrides {
+            patched_account.storage.insert(
+                slot.into(),
+                EvmStorageSlot::new_changed((!value).into(), value.into(), 0),
+            );
+        }
+    }
+
+    db.commit(RevmHashMap::from_iter([(address, patched_account)]));
+    Ok(())
+}
+
 fn get_cfg_env_template() -> CfgEnv {
     let mut cfg_env = CfgEnv::default();
     // Reth sets this to true and uses only timeout, but other clients use this as a part of DOS attacks protection, with 100mln gas limit
@@ -831,13 +1176,20 @@ fn maybe_actual_effective_gas_price(
     block_number: u64,
     gas_used: u64,
     fee_paid: Option<Amount>,
+    base_fee_per_gas: Option<u64>,
 ) -> Option<u128> {
-    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
-    if block_number <= apply_actual_fee_after_height || gas_used == 0 {
+    if !is_actual_fee_projection_height_active(block_number) || gas_used == 0 {
         return None;
     }
 
-    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+    // Keep zero-fee projection: when metadata says no fee was charged, RPC must return 0 here.
+    // For non-zero fee, we report the block header base fee (primary gas-price dimension).
+    // Invariant: this header value must match the gas meter's `gas_price[0]`; divergence is a bug.
+    match fee_paid {
+        Some(Amount::ZERO) => Some(0),
+        Some(_) => base_fee_per_gas.map(u128::from),
+        None => None,
+    }
 }
 
 // modified from: https://github.com/paradigmxyz/reth many times
@@ -901,12 +1253,16 @@ pub(crate) fn build_rpc_receipt(
         .inner()
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
 
-    // Once activated, prefer the fee paid in the Sovereign gas meter when available.
-    // This keeps receipt fee semantics aligned with balance deltas.
-    let effective_gas_price =
-        maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
-            // Keep compatibility for historical data where metadata may be missing.
-            .unwrap_or(eip_1559_effective_gas_price);
+    // Once activated, keep zero-fee semantics from metered metadata and otherwise
+    // report the primary gas-price dimension (EVM base fee from header).
+    let effective_gas_price = maybe_actual_effective_gas_price(
+        block.number(),
+        receipt.gas_used,
+        fee_paid,
+        block.maybe_partial_header().base_fee_per_gas,
+    )
+    // Keep compatibility for historical data where metadata may be missing.
+    .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
@@ -921,5 +1277,195 @@ pub(crate) fn build_rpc_receipt(
         from,
         to,
         contract_address,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(active_block, 21_000, Some(Amount::ZERO), Some(123)),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_ignores_zero_paid_fee_before_activation() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                activation_height,
+                21_000,
+                Some(Amount::ZERO),
+                Some(123),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_base_fee_for_non_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                Some(42),
+            ),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_falls_back_when_base_fee_missing() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                None,
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            ..Default::default()
+        };
+        let balance = U256::from(1_000_000u64);
+
+        let upfront = call_upfront_cost(&request, &block_env, balance)
+            .unwrap()
+            .expect("fee fields are set");
+
+        assert_eq!(upfront.total_cost, balance);
+        assert_eq!(upfront.gas_limit, 100_000);
+    }
+
+    #[test]
+    fn call_upfront_cost_keeps_explicit_gas_requirements() {
+        let block_env = BlockEnv::default();
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            gas: Some(1_000),
+            ..Default::default()
+        };
+
+        let upfront = call_upfront_cost(&request, &block_env, U256::ZERO)
+            .unwrap()
+            .expect("fee fields are set");
+
+        assert_eq!(upfront.total_cost, U256::from(10_000u64));
+        assert_eq!(upfront.gas_limit, 1_000);
+    }
+
+    #[test]
+    fn call_upfront_cost_reserves_value_before_affordable_gas() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            value: Some(U256::from(100_000u64)),
+            ..Default::default()
+        };
+        let balance = U256::from(310_000u64);
+
+        let upfront = call_upfront_cost(&request, &block_env, balance)
+            .unwrap()
+            .expect("fee fields are set");
+
+        assert_eq!(upfront.total_cost, balance);
+        assert_eq!(upfront.gas_limit, MIN_TRANSACTION_GAS);
+    }
+
+    #[test]
+    fn call_upfront_cost_rejects_omitted_gas_when_allowance_below_intrinsic_cost() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000,
+            ..Default::default()
+        };
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            ..Default::default()
+        };
+        let balance = U256::from(1000u64);
+
+        let err = call_upfront_cost(&request, &block_env, balance).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::GasRequiredExceedsAllowance { gas_limit: 100 }
+            )
+        ));
+    }
+
+    #[test]
+    fn call_upfront_cost_rejects_conflicting_fee_fields() {
+        let request = TransactionRequest {
+            gas_price: Some(1),
+            max_fee_per_gas: Some(1),
+            ..Default::default()
+        };
+
+        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+
+        assert!(matches!(err, EthApiError::ConflictingFeeFieldsInRequest));
+    }
+
+    #[test]
+    fn call_upfront_cost_rejects_tip_above_fee_cap() {
+        let request = TransactionRequest {
+            max_fee_per_gas: Some(1),
+            max_priority_fee_per_gas: Some(2),
+            ..Default::default()
+        };
+
+        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::TipAboveFeeCap)
+        ));
+    }
+
+    #[test]
+    fn call_upfront_cost_returns_none_without_fee_fields() {
+        let upfront = call_upfront_cost(
+            &TransactionRequest::default(),
+            &BlockEnv::default(),
+            U256::ZERO,
+        )
+        .unwrap();
+
+        assert_eq!(upfront, None);
     }
 }

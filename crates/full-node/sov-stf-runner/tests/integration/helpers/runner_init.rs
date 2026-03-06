@@ -196,12 +196,13 @@ pub async fn initialize_runner(
         {
             handle.await.expect("Metrics task errored");
         } else {
-            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+            tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
     });
 
     let db_config = RollupDbConfig::default_in_path(path.to_path_buf());
-    let mut storage_manager: TestStorageManager = NomtStorageManager::new(db_config).unwrap();
+    let mut storage_manager: TestStorageManager =
+        NomtStorageManager::new(db_config, false).unwrap();
 
     let finalized_header = da_service.get_last_finalized_block_header().await.unwrap();
     let (_, ledger_state) = storage_manager

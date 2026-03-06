@@ -76,6 +76,7 @@ arbitrary = [
 	"uuid/arbitrary",
 	"sov-db-types/arbitrary"
 ]
+migration-script = []
 test-utils = ["dep:rand", "strum"]
 
 [[bench]]

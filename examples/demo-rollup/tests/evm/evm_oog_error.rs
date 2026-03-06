@@ -26,7 +26,7 @@ async fn deploy_with_gas(addr: SocketAddr, gas: u64) -> String {
 #[ignore = "see https://github.com/Sovereign-Labs/sovereign-sdk/pull/2100"]
 async fn returns_readable_oog_error() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     assert_eq!(deploy_with_gas(rollup.http_addr, 0).await, "\"400 Bad Request - 'Transaction execution unsuccessful' ({\\\"error\\\": String(\\\"TransactionReceipt { tx_hash: 0x79ac94a6435e0941eca945e2270e649de138f2f3aa973688cc67ded90d817358, body_to_save: \\\\\\\"<removed>\\\\\\\", events: [], receipt: Skipped(SkippedTxContents { gas_used: GasUnit[3426, 3426], error: OutOfGas(\\\\\\\"The amount to charge is greater than the funds available in the meter. Amount to charge 61668, remaining_funds  0, price GasPrice[9, 9]\\\\\\\") }) }\\\")})\"");
     assert_eq!(deploy_with_gas(rollup.http_addr, 20_000).await, "\"400 Bad Request - 'Transaction execution unsuccessful' ({\\\"CoreModuleError\\\": Object {\\\"error_code\\\": String(\\\"generic\\\"), \\\"message\\\": String(\\\"EVM execution error: Halt { reason: OutOfGas(Basic), gas_used: 8614 }\\\")}})\"");

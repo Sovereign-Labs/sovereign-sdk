@@ -31,7 +31,7 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
-use sov_rest_utils::GetIPResult;
+use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
 #[cfg(feature = "local")]
 use sov_rpc_eth_types::EthApiError;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
@@ -150,9 +150,9 @@ where
         Self::authenticate_tx(&tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
-        seq.accept_tx(tx, ip_addr).await.map_err(|e| {
-            rpc_tx_rejected(format!("{} - '{}' ({:?})", e.status, e.message, e.details))
-        })?;
+        seq.accept_tx(tx, ip_addr)
+            .await
+            .map_err(map_accept_tx_error)?;
 
         on_success(tx_hash, ethereum)
     }
@@ -225,12 +225,16 @@ where
                 .unwrap_or(config_value!("CHAIN_ID"));
             transaction_request.chain_id = Some(chain_id);
 
-            let estimated_gas = evm.eth_estimate_gas(
-                transaction_request.clone(),
-                Some(BlockId::pending()),
-                &mut state,
-            )?;
-            transaction_request.gas = Some(estimated_gas.to::<u64>());
+            if transaction_request.gas.is_none() {
+                let estimated_gas = evm.eth_estimate_gas(
+                    transaction_request.clone(),
+                    Some(BlockId::pending()),
+                    None,
+                    None,
+                    &mut state,
+                )?;
+                transaction_request.gas = Some(estimated_gas.to::<u64>());
+            }
 
             // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
             // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,
@@ -261,11 +265,17 @@ where
             .sequencer
             .accept_tx(tx, ip_addr)
             .await
-            .map_err(|e| {
-                rpc_tx_rejected(format!("{} - '{}' ({:?})", e.status, e.message, e.details))
-            })?;
+            .map_err(map_accept_tx_error)?;
 
         Ok(tx_hash)
+    }
+}
+
+fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
+    let err_msg = format!("{} - '{}' ({:?})", err.status, err.message, err.details);
+    match err.status.as_u16() {
+        400 | 403 | 413 => rpc_invalid_params(err_msg),
+        _ => rpc_tx_rejected(err_msg),
     }
 }
 
@@ -297,5 +307,45 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
             let err_msg = format!("IP address error: {err:?}");
             Err(rpc_internal_error(err_msg))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use jsonrpsee::types::error::INVALID_PARAMS_CODE;
+
+    use super::{map_accept_tx_error, RestErrorObject};
+
+    fn sample_accept_tx_error(status: u16) -> RestErrorObject {
+        let status = status.try_into().expect("status code should be valid");
+        RestErrorObject {
+            status,
+            message: "The transaction is invalid".to_string(),
+            details: Default::default(),
+        }
+    }
+
+    #[test]
+    fn accept_tx_bad_request_maps_to_invalid_params() {
+        let err = map_accept_tx_error(sample_accept_tx_error(400));
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    }
+
+    #[test]
+    fn accept_tx_forbidden_maps_to_invalid_params() {
+        let err = map_accept_tx_error(sample_accept_tx_error(403));
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    }
+
+    #[test]
+    fn accept_tx_payload_too_large_maps_to_invalid_params() {
+        let err = map_accept_tx_error(sample_accept_tx_error(413));
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    }
+
+    #[test]
+    fn accept_tx_service_unavailable_stays_tx_rejected() {
+        let err = map_accept_tx_error(sample_accept_tx_error(503));
+        assert_eq!(err.code(), -32003);
     }
 }

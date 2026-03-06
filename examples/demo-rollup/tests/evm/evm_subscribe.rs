@@ -28,7 +28,7 @@ async fn evm_test_log_subscription() {
     let mut log_collector = LogCollector::new();
 
     let contract_address = evm_client.alloy_deploy_contract().await;
-    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Logs from this transactions should not appear in the subscription because we haven't subscribed yet.
     send_txs_and_pause(0..10, contract_address, &evm_client, &test_rollup).await;
@@ -85,7 +85,7 @@ async fn evm_test_log_subscription_with_pending_blcok() {
     let mut log_collector = LogCollector::new();
 
     let contract_address = evm_client.alloy_deploy_contract().await;
-    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     test_rollup.pause_preferred_batches().await;
 
     let nb_of_txs = 100;
@@ -145,7 +145,7 @@ async fn evm_test_log_subscription_with_pending_block_range_is_alllowed() {
     let mut log_collector = LogCollector::new();
 
     let contract_address = evm_client.alloy_deploy_contract().await;
-    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     test_rollup.pause_preferred_batches().await;
 
     let nb_of_txs = 100;
@@ -257,7 +257,7 @@ impl TestCase {
     async fn run(&self) {
         let (test_rollup, evm_client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
         let contract_address = evm_client.alloy_deploy_contract().await;
-        test_rollup.wait_for_next_blocks(1).await;
+        test_rollup.wait_for_rollup_height_advance_by(1).await;
 
         let filter = self.filter();
 
@@ -367,7 +367,7 @@ async fn send_txs_and_pause(
         let set_arg = i;
         let hash = evm_client.alloy_set_value(contract_address, set_arg).await;
         if i % 3 == 0 {
-            test_rollup.wait_for_next_blocks(1).await;
+            test_rollup.wait_for_rollup_height_advance_by(1).await;
         }
         tx_hashes.push(hash);
     }
@@ -411,7 +411,7 @@ async fn get_filtered_logs(
             .await;
 
         if i % 5 == 0 {
-            test_rollup.wait_for_next_blocks(1).await;
+            test_rollup.wait_for_rollup_height_advance_by(1).await;
         }
     }
 

@@ -9,10 +9,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
-    AccessoryStateMap, AccessoryStateValue, AuthenticatedTransactionData, Context, CryptoSpec,
-    DaSpec, GasSpec, GenesisState, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    MeteredHasher, MeteredSignature, Module, ModuleId, ModuleInfo, ModuleRestApi, SafeVec,
-    SizedSafeString, Spec, StateMap, StateValue, StateVec, TxHooks, TxState,
+    AccessoryStateMap, AccessoryStateValue, Context, CryptoSpec, DaSpec, GasSpec, GenesisState,
+    MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, MeteredSignature, Module,
+    ModuleId, ModuleInfo, ModuleRestApi, SafeVec, SizedSafeString, Spec, StateMap, StateValue,
+    StateVec, TxState,
 };
 use strum::{EnumDiscriminants, EnumIs, VariantArray};
 
@@ -95,7 +95,7 @@ pub enum AccessPatternMessages<S: Spec> {
         /// The number of storage cells to read from
         num_cells: u64,
     },
-    /// Hashes the string of bytes made by the repeted filler.
+    /// Hashes the string of bytes made by the repeated filler.
     HashBytes {
         /// The filler bytes to be repeated over
         filler: u8,
@@ -148,14 +148,6 @@ pub enum AccessPatternMessages<S: Spec> {
         begin: u64,
         /// The number of storage cells to delete
         num_cells: u64,
-    },
-    /// Activates the pre/end-exec-hook. Adds a variable number of reads/writes for each tx.
-    SetHook {
-        /// The configuration of the pre-exec hooks. Set to None to disable
-        pre: Option<Vec<HooksConfig>>,
-
-        /// The configuration of the post-exec hooks. Set to None to disable
-        post: Option<Vec<HooksConfig>>,
     },
     /// Updates the admin for the module.
     UpdateAdmin {
@@ -363,22 +355,6 @@ impl<S: Spec> AccessPattern<S> {
                     self.values.delete(&i, state)?;
                 }
             }
-            AccessPatternMessages::SetHook { pre, post: end } => {
-                self.pre_hooks.clear(state)?;
-                self.post_hooks.clear(state)?;
-
-                if let Some(pre_hooks) = pre {
-                    for hook in pre_hooks {
-                        self.pre_hooks.push(&hook, state)?;
-                    }
-                }
-
-                if let Some(post_hooks) = end {
-                    for hook in post_hooks {
-                        self.post_hooks.push(&hook, state)?;
-                    }
-                }
-            }
             AccessPatternMessages::UpdateAdmin { new_admin } => {
                 // Update the admin
                 self.admin.set(&new_admin, state)?;
@@ -463,70 +439,6 @@ impl<S: Spec> AccessPattern<S> {
 
                 self.last_verified_message
                     .set(&message.to_string(), state)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn inner_hook(&mut self, hook: HooksConfig, state: &mut impl TxState<S>) -> anyhow::Result<()> {
-        match hook {
-            HooksConfig::Read { begin, size } => {
-                for i in begin..(begin.saturating_add(size)) {
-                    self.values.get(&i, state)?;
-                }
-            }
-            HooksConfig::Write {
-                begin,
-                size,
-                data_size,
-            } => {
-                for i in begin..(begin.saturating_add(size)) {
-                    self.values
-                        .set(&i, &i.to_string().repeat(data_size), state)?;
-                }
-            }
-            HooksConfig::Delete { begin, size } => {
-                for i in begin..(begin.saturating_add(size)) {
-                    self.values.delete(&i, state)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl<S: Spec> TxHooks for AccessPattern<S> {
-    type Spec = S;
-
-    fn pre_dispatch_tx_hook<T: TxState<Self::Spec>>(
-        &mut self,
-        _tx: &sov_modules_api::AuthenticatedTransactionData<Self::Spec>,
-        state: &mut T,
-    ) -> anyhow::Result<()> {
-        let curr_len = self.pre_hooks.len(state)?;
-
-        for i in 0..curr_len {
-            if let Some(hook) = self.pre_hooks.get(i, state)? {
-                self.inner_hook(hook, state)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn post_dispatch_tx_hook<T: TxState<Self::Spec>>(
-        &mut self,
-        _tx: &AuthenticatedTransactionData<Self::Spec>,
-        _ctx: &Context<Self::Spec>,
-        state: &mut T,
-    ) -> anyhow::Result<()> {
-        let curr_len = self.post_hooks.len(state)?;
-
-        for i in 0..curr_len {
-            if let Some(hook) = self.post_hooks.get(i, state)? {
-                self.inner_hook(hook, state)?;
             }
         }
 

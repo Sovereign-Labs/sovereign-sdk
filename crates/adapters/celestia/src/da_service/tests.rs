@@ -15,14 +15,6 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, Re
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct BasicJsonRpcRequest {
-    jsonrpc: String,
-    id: u64,
-    method: String,
-    params: serde_json::Value,
-}
-
 async fn collect_all_blobs_between(
     da_service: &CelestiaService,
     height_before: u64,
@@ -215,6 +207,7 @@ where
         with_mixed_v0_and_v1_blobs::test_case(),
         from_testnet_with_tail_padding::test_case(),
         from_mocha_shares_mismatch::test_case(),
+        from_mocha_invalid_row_proof::test_case(),
     ];
 
     for (block, rollup_params, signers) in blocks {
@@ -612,6 +605,9 @@ async fn mocha_shares_panic() -> anyhow::Result<()> {
         .await?;
 
     from_mocha_shares_mismatch::update_test_data(&client).await;
+
+    // 10207148
+    from_mocha_invalid_row_proof::update_test_data(&client).await;
 
     Ok(())
 }

@@ -1,6 +1,6 @@
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, setup_with_simple_storage, EVM_EXTENSION,
-    SECONDARY_SENDER_PRIV_KEY,
+    create_simple_storage_client, finalized_block_number_and_hash, number_selector, poll_until,
+    setup_with_simple_storage, EVM_EXTENSION, SECONDARY_SENDER_PRIV_KEY,
 };
 use alloy_primitives::{Address, B256, U256, U64};
 use jsonrpsee::core::client::ClientT;
@@ -11,10 +11,6 @@ use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
-use std::time::Duration;
-
-const MAX_POLL_ATTEMPTS: usize = 100;
-const POLL_INTERVAL_MS: u64 = 25;
 
 async fn setup_rollup() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     setup_rollup_with_finality(0).await
@@ -24,7 +20,7 @@ async fn setup_rollup_with_finality(
     finalization_blocks: u32,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let (rollup, client, _) = setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }
 
@@ -33,7 +29,7 @@ async fn nonce_at_tag(client: &SimpleStorageClient, address: Address, tag: &str)
 }
 
 async fn nonce_at_number(client: &SimpleStorageClient, address: Address, number: u64) -> u64 {
-    try_get_tx_count(client, address, format!("0x{number:x}"))
+    try_get_tx_count(client, address, number_selector(number))
         .await
         .unwrap()
 }
@@ -49,13 +45,6 @@ async fn nonce_at_hash(
         "requireCanonical": require_canonical
     });
     try_get_tx_count(client, address, selector).await.unwrap()
-}
-
-async fn finalized_block_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
-    let finalized_block = client
-        .eth_get_block_by_number(Some("finalized".to_string()))
-        .await;
-    (finalized_block.header.number, finalized_block.header.hash)
 }
 
 async fn assert_equal_nonces_for_tags(
@@ -92,18 +81,17 @@ async fn wait_for_nonce_at_tag(
     tag: &str,
     expected: u64,
 ) -> anyhow::Result<u64> {
-    let mut last = nonce_at_tag(client, address, tag).await;
-    for _ in 0..MAX_POLL_ATTEMPTS {
-        if last == expected {
-            return Ok(last);
-        }
-        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
-        last = nonce_at_tag(client, address, tag).await;
-    }
-
-    anyhow::bail!(
-        "Timed out waiting for nonce at tag '{tag}' to become {expected}, last observed {last}"
-    );
+    poll_until(
+        || async {
+            let last = nonce_at_tag(client, address, tag).await;
+            Ok(last)
+        },
+        |nonce| *nonce == expected,
+        &format!(
+            "Timed out waiting for nonce at tag '{tag}' to become {expected}, last observed value differed"
+        ),
+    )
+    .await
 }
 
 // ===========================================================================
@@ -167,7 +155,7 @@ async fn eth_get_transaction_count_safe_finalized_semantics() -> anyhow::Result<
     client.wait_for_finalized_receipt(tx_hash).await;
 
     // Wait for the next block to ensure finalization
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     assert_equal_nonces_for_tags(
         &client,
@@ -185,7 +173,7 @@ async fn eth_get_transaction_count_safe_finalized_semantics() -> anyhow::Result<
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
     let (rollup, client) = setup_rollup().await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let address = client.address();
     // In paused mode, `eth_blockNumber`/`latest` may point to pending.
@@ -239,7 +227,7 @@ async fn eth_get_transaction_count_latest_vs_pending() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_transaction_count_block_number_and_hash() -> anyhow::Result<()> {
     let (rollup, client) = setup_rollup().await;
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let (sealed_head_number, sealed_head_hash) = finalized_block_number_and_hash(&client).await;
     assert_ne!(sealed_head_hash, B256::ZERO);
@@ -341,21 +329,6 @@ async fn eth_get_transaction_count_initial_nonce_is_zero() -> anyhow::Result<()>
     let nonce = nonce_at_tag(&client, fresh_address, "latest").await;
 
     assert_eq!(nonce, 0, "Fresh address should have nonce 0");
-
-    Ok(())
-}
-
-/// TC18: Verify that a non-existent address returns nonce 0.
-#[tokio::test(flavor = "multi_thread")]
-async fn eth_get_transaction_count_non_existent_address_returns_zero() -> anyhow::Result<()> {
-    let (_rollup, client) = setup_rollup().await;
-
-    // Use a deterministic but unlikely-to-exist address
-    let non_existent = Address::repeat_byte(0xDE);
-
-    let nonce = nonce_at_tag(&client, non_existent, "latest").await;
-
-    assert_eq!(nonce, 0, "Non-existent address should return nonce 0");
 
     Ok(())
 }
@@ -549,7 +522,7 @@ async fn eth_get_transaction_count_sealed_receipts_nonce_delta() -> anyhow::Resu
     }
 
     // Wait for a new block
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Get nonce at block H1
     let h1_number = client.block_number().await;
@@ -624,7 +597,7 @@ async fn eth_get_transaction_count_historical_block_diverges_from_current() -> a
     // Send transaction and wait for finalization in a new block
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x5432)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let h1_number = client.block_number().await;
     assert!(h1_number > h0_number, "New block should be produced");
@@ -674,7 +647,7 @@ async fn eth_get_transaction_count_block_hash_returns_correct_historical() -> an
     // Send transaction and finalize
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x6543)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Get block H1 info
     let h1_number = client.block_number().await;
@@ -881,7 +854,7 @@ async fn eth_get_transaction_count_latest_after_seal() -> anyhow::Result<()> {
     // Send and wait for finalization
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0xABCD)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let nonce_after = nonce_at_tag(&client, address, "latest").await;
 
@@ -909,7 +882,7 @@ async fn eth_get_transaction_count_block_boundary() -> anyhow::Result<()> {
     // Send tx and wait for finalization
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0xBCDE)).await;
     let receipt = client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let tx_block = receipt
         .block_number
@@ -966,7 +939,7 @@ async fn eth_get_transaction_count_finalized_lags_with_non_instant_finality() ->
     // Send a transaction and wait for it to be sealed into a block
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0xF1A1)).await;
     client.wait_for_finalized_receipt(tx_hash).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // "latest" should reflect the sealed transaction immediately
     let nonce_latest = nonce_at_tag(&client, address, "latest").await;
@@ -985,7 +958,9 @@ async fn eth_get_transaction_count_finalized_lags_with_non_instant_finality() ->
     );
 
     // Produce enough blocks to push the tx block past the finalization threshold
-    rollup.wait_for_next_blocks(finality_depth as u64).await;
+    rollup
+        .wait_for_rollup_height_advance_by(finality_depth as u64)
+        .await;
 
     // Now "finalized" should have caught up
     let nonce_finalized_after = nonce_at_tag(&client, address, "finalized").await;

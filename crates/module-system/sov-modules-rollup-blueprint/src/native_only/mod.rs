@@ -130,9 +130,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
     /// Creates an instance of [`Self::StorageManager`].
     /// Panics if initialization fails.
+    ///
+    /// `witness_generation` indicates whether the storage manager should generate witnesses
+    /// for ZK proving. This is a node-level decision known at startup (true when a prover
+    /// config exists).
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        witness_generation: bool,
     ) -> anyhow::Result<Self::StorageManager>;
 
     /// Instantiates [`FullNodeBlueprint::ProofSender`].
@@ -326,7 +331,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 receiver_for_metrics,
             ));
         } else {
-            tracing::warn!("Metics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
+            tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
 
         let operating_mode =
@@ -356,7 +361,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         .await?;
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
-        let mut storage_manager = self.create_storage_manager(&rollup_config)?;
+        let witness_generation = prover_config.as_ref().is_some_and(|c| c.needs_witness());
+        let mut storage_manager =
+            self.create_storage_manager(&rollup_config, witness_generation)?;
 
         let (prover_storage, ledger_state) =
             storage_manager.create_state_after(&current_finalized_header)?;

@@ -607,7 +607,7 @@ where
         let mut shutdown_receiver = shutdown_sender.subscribe();
         let blueprint: R = Default::default();
 
-        let mut storage_manager = blueprint.create_storage_manager(&rollup_config)?;
+        let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;
         let finalized_header = secondary_da_service
             .get_last_finalized_block_header()
             .await?;
@@ -972,6 +972,42 @@ where
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
     }
 
+    /// Pauses preferred batch production and waits until the sequencer confirms
+    /// that at least one state update was skipped because of the pause flag.
+    ///
+    /// This is stronger than a timing-based wait because it relies on an explicit
+    /// test notification from the update-state loop.
+    pub async fn pause_preferred_batches_and_wait(&self) -> anyhow::Result<()> {
+        let mut updates = self
+            .subscribe_state_updates()
+            .await
+            .map_err(anyhow::Error::from)?;
+        self.pause_preferred_batches().await;
+
+        let wait_loop = async {
+            loop {
+                let Some(next) = updates.next().await else {
+                    return Err(anyhow::anyhow!(
+                        "state update subscription closed while waiting for pause acknowledgment"
+                    ));
+                };
+                let notification = next?;
+                if notification.update_skipped_due_to_pause {
+                    return Ok(());
+                }
+            }
+        };
+
+        timeout(Self::POLLING_TIMEOUT, wait_loop)
+            .await
+            .with_context(|| {
+                format!(
+                    "Timeout waiting for pause acknowledgment after {:?}",
+                    Self::POLLING_TIMEOUT
+                )
+            })?
+    }
+
     /// Resumes batch production after [`TestRollup::pause_preferred_batches`].
     ///
     /// Note: calling this method MAY NOT immediately produce a batch.
@@ -998,8 +1034,9 @@ where
         }
     }
 
-    /// Waits until the sequencer advances by the given number of blocks.
-    pub async fn wait_for_next_blocks(&self, delta: u64) {
+    /// Waits until the rollup_height advances by `delta`.
+    /// Note that the rollup_height remains the same while DA is progressing if no batches are being created.
+    pub async fn wait_for_rollup_height_advance_by(&self, delta: u64) {
         let current_height = get_height(&self.client).await.unwrap();
         let end_height = current_height.get() + delta;
         self.wait_for_height(end_height).await;

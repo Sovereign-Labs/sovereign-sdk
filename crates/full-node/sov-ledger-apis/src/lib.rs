@@ -350,6 +350,7 @@ where
     async fn list_events(
         State(state): State<LedgerState<T>>,
         pagination_opt: Option<Query<Pagination<String>>>,
+        event_key_prefix_opt: Option<Query<EventFilter>>,
     ) -> ApiResult<Vec<RuntimeEventResponse<E>>> {
         let pagination = match pagination_opt {
             Some(Query(pagination)) => pagination,
@@ -362,9 +363,7 @@ where
             PageSelection::First => 0,
             PageSelection::Last => return Err(errors::not_implemented_501()),
         };
-        let end = start
-            .checked_add(pagination.size as u64)
-            .unwrap_or(u64::MAX);
+        let end = start.saturating_add(pagination.size as u64);
         let nums = (start..=end)
             .map(EventIdentifier::Number)
             .collect::<Vec<_>>();
@@ -375,6 +374,13 @@ where
             .map_err(errors::database_error_response_500)?
             .into_iter()
             .flatten()
+            .filter(|event| {
+                if let Some(prefix) = &event_key_prefix_opt {
+                    event.key.starts_with(&prefix.prefix)
+                } else {
+                    true
+                }
+            })
             .collect::<Vec<_>>();
         Ok(events.into())
     }

@@ -13,6 +13,7 @@ mod hooks;
 #[cfg(feature = "native")]
 mod metrics;
 mod sov_evm;
+mod sov_fee_and_gas_utils;
 mod state_access;
 use sov_rollup_interface::da::Time;
 use sov_state::{Kernel, User};
@@ -247,7 +248,9 @@ impl<S: Spec> Evm<S> {
             .chain_state_module
             .base_fee_per_gas(state)?
             .expect("Base fee per gas must be set");
-        Ok(price.as_ref()[0].0.try_into().unwrap_or(u64::MAX))
+        Ok(price.as_ref()[0].0.try_into().expect(
+            "EVM invariant violation: primary base fee does not fit in u64; this divergence is a bug",
+        ))
     }
 
     /// Get the admin address.

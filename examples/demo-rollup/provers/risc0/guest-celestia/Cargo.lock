@@ -1074,9 +1074,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9033470dd895f900f97bd674f330ba7d87550fa6a92c92815dd30f31437367a"
+checksum = "65013505b04171f213d833b92bb076e9f229c36e5d144cb2faf25378397e2597"
 dependencies = [
  "bytes",
  "prost",
@@ -1090,9 +1090,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "0.19.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b9cc150ce1c20da1a79a9ea3e79d2feed4189bd7243b23fc0752784add94bba"
+checksum = "0fe616393f4c88756ed6b8097167a623c6e4e48e2a3d75109e3ea5d5941587e0"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -1508,6 +1508,7 @@ dependencies = [
  "sov-prover-incentives",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-solana-offchain-auth",
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
@@ -2435,9 +2436,9 @@ dependencies = [
 
 [[package]]
 name = "lumina-utils"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "949c02e310a43325ec27c258769e93404b789c274b7c8e183a243e75c16be1bf"
+checksum = "2e68ba51207213b3fa8a42465526efdbe6c3c983a78a2a972d3a8e94d2bf9ab8"
 dependencies = [
  "js-sys",
 ]
@@ -4543,6 +4544,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-eips",
  "alloy-primitives",
+ "alloy-rlp",
  "anyhow",
  "borsh",
  "bytes",
@@ -4790,6 +4792,22 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "sov-solana-offchain-auth"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sov-modules-api",
+ "sov-state",
  "tracing",
 ]
 

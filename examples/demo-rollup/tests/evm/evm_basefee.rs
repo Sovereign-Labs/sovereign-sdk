@@ -17,7 +17,7 @@ use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 #[tokio::test(flavor = "multi_thread")]
 async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
 
     // Deploy the SimpleStorage contract
@@ -57,17 +57,21 @@ async fn test_basefee_opcode_returns_nonzero() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
     // Deploy a contract (this sends an EIP-1559 transaction)
     let contract = SimpleStorage::deploy(client.clone()).await?;
 
+    let sender = ws_client.address();
+    let balance_before = ws_client.eth_get_balance(sender).await;
+
     // Send another transaction so we have a confirmed tx to check
     let tx = contract.set(U256::from(12345)).send().await?;
     let receipt = tx.get_receipt().await?;
     let tx_hash = receipt.transaction_hash;
+    let balance_after = ws_client.eth_get_balance(sender).await;
 
     // Make a raw JSON-RPC call to get the transaction and check the gasPrice field
     let tx_json: Value = ws_client
@@ -97,6 +101,15 @@ async fn test_transaction_gas_price_uses_effective_price() -> anyhow::Result<()>
         gas_price, effective_gas_price,
         "Transaction gasPrice ({gas_price}) should match receipt effectiveGasPrice ({effective_gas_price}). \
          maxFeePerGas was {max_fee_per_gas}.",
+    );
+
+    let gas_cost = U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
+    let actual_spent = balance_before
+        .checked_sub(balance_after)
+        .ok_or_else(|| anyhow::anyhow!("sender balance should decrease"))?;
+    assert_eq!(
+        actual_spent, gas_cost,
+        "sender balance delta should exactly match receipt-implied gas cost for zero-value tx"
     );
 
     Ok(())

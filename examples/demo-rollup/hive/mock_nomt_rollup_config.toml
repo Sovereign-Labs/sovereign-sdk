@@ -1,0 +1,49 @@
+[da]
+connection_string = "sqlite:///hive-data/mock_da.sqlite?mode=rwc"
+sender_address = "0000000000000000000000000000000000000000000000000000000000000000"
+finalization_blocks = 0
+
+[da.block_producing.periodic]
+block_time_ms = 1000
+
+[storage]
+path = "/hive-data/demo_data"
+user_commit_concurrency = 2
+user_hashtable_buckets = 500
+user_preallocate_ht = false
+kernel_commit_concurrency = 2
+kernel_hashtable_buckets = 500
+kernel_preallocate_ht = false
+# Pruner stays disabled unless `pruner_block_interval` is set explicitly.
+pruner_versions_to_keep = 20
+
+[runner]
+da_polling_interval_ms = 50
+
+[runner.http_config]
+bind_host = "0.0.0.0"
+bind_port = 8545
+cors = "permissive"
+
+[monitoring]
+telegraf_address = "udp://127.0.0.1:8094"
+tokio_runtime_metrics_interval_millis = 500
+
+[proof_manager]
+aggregated_proof_block_jump = 1
+prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+max_number_of_transitions_in_db = 100
+max_number_of_transitions_in_memory = 30
+
+[sequencer]
+blob_processing_timeout_secs = 3000
+max_batch_size_bytes = 1048576
+max_concurrent_blobs = 128
+max_allowed_node_distance_behind = 10
+rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+
+[sequencer.standard]
+mempool_max_txs_count = 50000
+
+[sequencer.extension]
+max_log_limit = 20000

@@ -22,6 +22,7 @@ use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
+use sov_test_utils::docker::pull_image_with_retries;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
@@ -38,7 +39,7 @@ pub type PrivateKey = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey
 type Container = ContainerAsync<GenericImage>;
 
 pub const FINALIZED_BLOCKS_AT_START: usize = 3;
-pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 10;
+pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 3;
 /// Use `container.get_host_port_ipv4(RELAYER_METRICS_PORT)` to get metrics
 pub const RELAYER_METRICS_PORT: u16 = 9091;
 pub const VALIDATOR_METRICS_PORT: u16 = 9097;
@@ -227,9 +228,7 @@ impl HyperlaneBuilder {
         // try to pull the image from registry before starting tests
         // but don't pull custom images, as they can be local and it would fail
         if !has_custom_image {
-            let _ = image
-                .clone()
-                .pull_image()
+            pull_image_with_retries(image.clone())
                 .await
                 .expect("failed to pull image");
         }

@@ -8,6 +8,11 @@ use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 pub struct RollupDbConfig {
     /// Path where all databases are stored
     pub path: std::path::PathBuf,
+    /// Optional custom path for the ledger database.
+    ///
+    /// When set, ledger DB data is stored at this path. When not set, the ledger DB is stored
+    /// under [`RollupDbConfig::path`] (the existing behavior).
+    pub ledger_db_path: Option<std::path::PathBuf>,
     /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
@@ -68,6 +73,7 @@ impl RollupDbConfig {
     pub fn default_in_path(path: std::path::PathBuf) -> Self {
         Self {
             path,
+            ledger_db_path: None,
             state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
             user_commit_concurrency: Some(2),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {

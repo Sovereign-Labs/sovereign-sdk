@@ -4,20 +4,20 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
+    HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
-
-const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
-const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let sender = client.address();
+    let balance_before = client.eth_get_balance(sender).await;
 
-    let mut tx = client.make_tx(Some(client.address()), None);
+    let mut tx = client.make_tx(Some(sender), None);
     tx = tx
         .value(U256::from(1u64))
         .max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
@@ -29,6 +29,7 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
         .map_err(|err| anyhow::anyhow!(err.to_string()))?;
 
     let tx_hash = receipt.transaction_hash;
+    let balance_after = client.eth_get_balance(sender).await;
     let tx_response = client
         .transaction(tx_hash)
         .await
@@ -83,6 +84,15 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
         block_tx.effective_gas_price,
         Some(receipt.effective_gas_price),
         "eth_getBlockByNumber(full) tx effective_gas_price should match receipt"
+    );
+
+    let gas_cost = U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
+    let actual_spent = balance_before
+        .checked_sub(balance_after)
+        .ok_or_else(|| anyhow::anyhow!("sender balance should decrease"))?;
+    assert_eq!(
+        actual_spent, gas_cost,
+        "sender balance delta should exactly match receipt-implied gas cost for self-transfer"
     );
 
     Ok(())

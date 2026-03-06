@@ -19,14 +19,11 @@ fn main() -> anyhow::Result<()> {
         zkvm_version,
     } = toolchain_cmp_result
     {
-        anyhow::bail!(
-            "Risc0 rustc version {} does not match native rustc version {}. Please \
-            update your Risc0 toolchain or use a rust-toolchain.toml file to force your \
-            native compiler to the correct version.\n\n   To install a specific version of the Risc0 \
-            rust toolchain, use the command `rzup install rust {{tag}}`.\n You can find a \
-            list of available versions at https://github.com/risc0/rust/releases.\n",
-            zkvm_version,
-            native_version
+        println!(
+            "cargo:warning=Risc0 rustc version {} does not match native rustc version {}. \
+            There could be incompatibilities between the two versions. \
+            Guest programs are compiled with the Risc0 toolchain, so this is usually fine.",
+            zkvm_version, native_version
         );
     }
     Ok(())

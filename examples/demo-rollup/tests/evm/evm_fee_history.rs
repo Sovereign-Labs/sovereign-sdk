@@ -20,7 +20,8 @@ use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
-    setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+    setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
+    SENDER_PRIV_KEY,
 };
 
 #[derive(Debug, Deserialize)]
@@ -40,9 +41,6 @@ struct EvmGenesisConfigFixture {
     initial_base_fee: u64,
     chain_spec: ChainSpecFixture,
 }
-
-const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
-const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 #[derive(Debug, Deserialize)]
 struct MapResponse<T> {
@@ -217,8 +215,11 @@ async fn setup_fee_history_test(
 ) -> (TestRollup<MockDemoRollup<Native>>, DynProvider) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(wait_blocks).await;
-    rollup.pause_preferred_batches().await;
+    rollup.wait_for_rollup_height_advance_by(wait_blocks).await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before fee_history queries");
     (rollup, client)
 }
 
@@ -231,7 +232,10 @@ async fn setup_with_pending_tx(
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before creating pending tx");
     simple_storage.set_value(contract_address, 42).await;
     (simple_storage, contract_address)
 }
@@ -487,20 +491,20 @@ async fn test_eth_fee_history_specific_block() -> anyhow::Result<()> {
 async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let receipt = send_high_fee_set_value(&simple_storage, contract_address, 10).await?;
     let newest_block = receipt
         .block_number
         .expect("receipt should include block number");
     // Wait for the slot to complete so gas_info is recorded
-    rollup.wait_for_next_blocks(1).await;
-    rollup.pause_preferred_batches().await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     assert!(client
         .get_fee_history(2000, BlockNumberOrTag::Number(newest_block), &[])
@@ -564,7 +568,7 @@ async fn test_eth_fee_history_large_count_capped() -> anyhow::Result<()> {
 async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
+    rollup.wait_for_rollup_height_advance_by(3).await;
 
     let _ = setup_with_pending_tx(&rollup).await;
 
@@ -628,7 +632,7 @@ async fn test_fee_history_pending_tag() -> anyhow::Result<()> {
 async fn test_fee_history_pending_base_fee_matches_pending_block() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let _ = setup_with_pending_tx(&rollup).await;
 
@@ -744,7 +748,7 @@ async fn test_fee_history_earliest_tag() -> anyhow::Result<()> {
 async fn test_fee_history_latest_equals_pending() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(3).await;
+    rollup.wait_for_rollup_height_advance_by(3).await;
 
     let _ = setup_with_pending_tx(&rollup).await;
 
@@ -1085,7 +1089,7 @@ async fn test_fee_history_earliest_values_match_block_header() -> anyhow::Result
 async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let tx_hash = simple_storage
@@ -1097,8 +1101,8 @@ async fn test_fee_history_values_match_block_headers() -> anyhow::Result<()> {
         .block_number
         .expect("deploy receipt should include block number");
 
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let newest_block = deploy_block + 1;
     let fee_history = client
@@ -1188,20 +1192,20 @@ async fn test_fee_history_empty_blocks_zero_ratio() -> anyhow::Result<()> {
 async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let receipt = send_high_fee_set_value(&simple_storage, contract_address, 100).await?;
     let tx_block = receipt
         .block_number
         .expect("receipt should include block number");
     // Wait for the slot to complete so gas_info is recorded
-    rollup.wait_for_next_blocks(1).await;
-    rollup.pause_preferred_batches().await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     assert!(
         receipt.gas_used > 0,
@@ -1226,10 +1230,15 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     );
 
     let receipts_gas_used = total_gas_used_from_receipts(&client, tx_block).await?;
-    let chain_gas_used = gas_info.gas_used.as_ref()[0];
+    let chain_gas_used_total = gas_info
+        .gas_used
+        .as_ref()
+        .iter()
+        .copied()
+        .fold(0u64, u64::saturating_add);
     assert!(
-        chain_gas_used >= receipts_gas_used,
-        "chain-state gas_used should be >= receipts gas_used"
+        chain_gas_used_total >= receipts_gas_used,
+        "sum(chain-state gas_used dimensions) should be >= receipts gas_used"
     );
     let expected_next_base_fee = compute_next_base_fee(
         header_base_fee,
@@ -1289,7 +1298,7 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
 async fn test_fee_history_multiple_txs_across_blocks() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract_address = deploy_contract_check(&simple_storage)
@@ -1297,7 +1306,7 @@ async fn test_fee_history_multiple_txs_across_blocks() -> anyhow::Result<()> {
         .expect("deploy should succeed");
 
     // Wait for deploy to finalize
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     // Track blocks where transactions land
     let mut tx_blocks = Vec::new();
@@ -1312,10 +1321,10 @@ async fn test_fee_history_multiple_txs_across_blocks() -> anyhow::Result<()> {
             tx_blocks.push(block_num);
         }
         // Ensure next block starts before sending next tx
-        rollup.wait_for_next_blocks(1).await;
+        rollup.wait_for_rollup_height_advance_by(1).await;
     }
 
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Query fee history covering all transaction blocks
     let latest_block = client.get_block_number().await?;
@@ -1362,14 +1371,14 @@ async fn test_fee_history_multiple_txs_across_blocks() -> anyhow::Result<()> {
 async fn test_fee_history_progression() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(5).await;
+    rollup.wait_for_rollup_height_advance_by(5).await;
 
     let history1 = client
         .get_fee_history(3, BlockNumberOrTag::Latest, &[])
         .await?;
     let oldest1 = history1.oldest_block;
 
-    rollup.wait_for_next_blocks(3).await;
+    rollup.wait_for_rollup_height_advance_by(3).await;
 
     let history2 = client
         .get_fee_history(3, BlockNumberOrTag::Latest, &[])
@@ -1395,19 +1404,19 @@ async fn test_fee_history_progression() -> anyhow::Result<()> {
 async fn test_fee_history_consistent_query_methods() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     // Create some gas usage
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
     set_value_check(&simple_storage, contract_address, 999)
         .await
         .expect("set_value should succeed");
-    rollup.wait_for_next_blocks(2).await;
-    rollup.pause_preferred_batches().await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Get the current block number
     let block_num = client.get_block_number().await?;
@@ -1440,7 +1449,7 @@ async fn test_fee_history_consistent_query_methods() -> anyhow::Result<()> {
 async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract_address = deploy_contract_check(&simple_storage)
@@ -1448,37 +1457,37 @@ async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
         .expect("deploy should succeed");
 
     // Wait for deploy block
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Record starting block
     let start_block = client.get_block_number().await?;
 
     // Create pattern: [empty, tx, empty, tx, tx]
     // Block 1: empty
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Block 2: tx
     set_value_check(&simple_storage, contract_address, 1)
         .await
         .expect("set_value should succeed");
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Block 3: empty
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Block 4: tx
     set_value_check(&simple_storage, contract_address, 2)
         .await
         .expect("set_value should succeed");
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Block 5: tx
     set_value_check(&simple_storage, contract_address, 3)
         .await
         .expect("set_value should succeed");
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     // Query for 5 blocks after start_block
     let end_block = start_block + 5;
@@ -1559,7 +1568,10 @@ async fn test_fee_history_base_fee_stability() -> anyhow::Result<()> {
 /// TC06: finalized and safe return identical results
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_finalized_equals_safe() -> anyhow::Result<()> {
-    let (_rollup, client) = setup_fee_history_test(5).await;
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+    rollup.wait_for_rollup_height_advance_by(5).await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let finalized = client
         .get_fee_history(3, BlockNumberOrTag::Finalized, &[25.0, 75.0])
@@ -1814,12 +1826,12 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
 
     let contract_address = deploy_contract_check(&simple_storage)
         .await
         .expect("deploy should succeed");
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let block_before = client.get_block_number().await?;
 
@@ -1827,9 +1839,9 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     let tx_hash = simple_storage.alloy_burn_gas(contract_address, 10000).await;
     simple_storage.wait_for_finalized_receipt(tx_hash).await;
     // Ensure the block containing the tx is sealed before pausing.
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let block_after = client.get_block_number().await?;
 

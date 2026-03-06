@@ -1,5 +1,11 @@
 # @sovereign-sdk/web3
 
+## 0.13.0
+
+### Minor Changes
+
+-   e4a7b37: Consolidate rollup schema fetching so both serializer and chain hash are populated from a single request. Add `hydrate()` method for eager pre-fetching during initialization.
+
 ## 0.12.6
 
 ### Patch Changes

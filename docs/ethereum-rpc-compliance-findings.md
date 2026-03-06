@@ -55,7 +55,7 @@ Parameter handling gaps
   Affects: eth_getBlockByNumber, eth_getBalance, eth_getCode, eth_getStorageAt,
   eth_getTransactionCount, eth_getBlockReceipts, eth_call, eth_estimateGas.
   Files: crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs
-- eth_call ignores state_override and block_overrides; eth_estimateGas does not accept overrides.
+- eth_call and eth_estimateGas support state_override and block_overrides.
   File: crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs
 - eth_call / eth_estimateGas ignore fee fields and transaction type (always EIP-1559, zero fees).
   File: crates/module-system/module-implementations/sov-evm/src/helpers.rs
@@ -86,4 +86,3 @@ Appendix: RPC methods present (non-exhaustive)
 - sov-ethereum wrapper: eth_gasPrice, eth_sendRawTransaction, eth_sendRawTransactionSync,
   realtime_sendRawTransaction, eth_getLogs, eth_getLogsWithCursor, eth_subscribe,
   (local) eth_accounts, eth_sendTransaction.
-

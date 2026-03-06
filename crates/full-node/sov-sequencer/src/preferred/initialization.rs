@@ -174,6 +174,10 @@ where
         let test_only_state_update_notification_receiver = synchronized_state
             .test_only_state_update_notification_sender
             .subscribe();
+        #[cfg(feature = "test-utils")]
+        let test_only_state_update_notification_sender = synchronized_state
+            .test_only_state_update_notification_sender
+            .clone();
         let synchronized_state_task = synchronized_state.start().await;
         handles.push(synchronized_state_task);
 
@@ -219,6 +223,8 @@ where
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_receiver,
+            #[cfg(feature = "test-utils")]
+            test_only_state_update_notification_sender,
             test_only_forced_tx_batch_notification_receiver: forced_tx_batch_notifier.subscribe(),
             runtime: Rt::default(),
         }));

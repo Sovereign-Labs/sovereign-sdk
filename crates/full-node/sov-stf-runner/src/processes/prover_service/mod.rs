@@ -31,6 +31,16 @@ pub enum RollupProverConfig<Vm: Zkvm> {
     Prove(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
 }
 
+impl<Vm: Zkvm> RollupProverConfig<Vm> {
+    /// Returns `true` if witness generation is needed for this prover configuration.
+    ///
+    /// Only [`Execute`](Self::Execute) and [`Prove`](Self::Prove) require witness data;
+    /// [`Skip`](Self::Skip) does not run the verifier, so recording witness hints is wasted work.
+    pub fn needs_witness(&self) -> bool {
+        !matches!(self, Self::Skip)
+    }
+}
+
 /// The associated discriminants of [`RollupProverConfig`]. Possible configurations of the prover
 // Note: it's best if all string conversions to and from this type (even
 // `Debug`) use the same casing, to avoid bad UX or confusion around env. vars

@@ -929,6 +929,13 @@
             "null"
           ]
         },
+        "ledger_db_path": {
+          "description": "Optional custom path for the ledger database.\n\nWhen set, ledger DB data is stored at this path. When not set, the ledger DB is stored under [`RollupDbConfig::path`] (the existing behavior).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "path": {
           "description": "Path where all databases are stored",
           "type": "string"

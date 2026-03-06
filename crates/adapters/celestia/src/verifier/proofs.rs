@@ -200,12 +200,12 @@ pub(crate) fn new_inclusion_proof(
     }
 
     let end_of_ns = flat_shares.len();
-    if prev_range_end.is_some() && prev_range_end != Some(end_of_ns) {
-        let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
-            prev_range_end.unwrap()..end_of_ns,
-            &flat_shares,
-        );
-        needed_share_ranges.extend(skipped_blob_ranges);
+    if let Some(prev_end) = prev_range_end {
+        if prev_end != end_of_ns {
+            let skipped_blob_ranges =
+                build_ranges_to_prove_for_skipped_blobs(prev_end..end_of_ns, &flat_shares);
+            needed_share_ranges.extend(skipped_blob_ranges);
+        }
     }
 
     let row_roots = header
@@ -306,13 +306,11 @@ fn sub_namespace_inclusion_proofs(
     // Should be sorted and non-overlapping
     let mut output = Vec::with_capacity(blob_ranges_to_prove.len());
 
-    // Shares in the first row are aligned right
+    // Align the first row using the row proof start index. This is the canonical position
+    // of the namespace segment in the row and avoids inferring alignment from share counts.
     let rows = namespace_data.rows();
     let first_row_offset = if !rows.is_empty() {
-        let first_row = &rows[0];
-        row_length
-            .checked_sub(first_row.shares.len())
-            .expect("Row cannot be larger that square size")
+        rows[0].proof.start_idx() as usize
     } else {
         0
     };
@@ -370,6 +368,15 @@ fn sub_namespace_inclusion_proofs(
             row_proof
                 .verify_range(this_row_root, &raw_leaves, namespace.into())
                 .expect("invalid proof self-check");
+
+            #[cfg(any(debug_assertions, test))]
+            if row_num == 0 {
+                debug_assert_eq!(
+                    blob_sub_range.start,
+                    row_proof.start_idx() as usize,
+                    "first-row start index mismatch while building inclusion proof"
+                );
+            }
 
             current_blob_proof.range_proofs.push(RangeProof {
                 shares: shares.to_vec(),

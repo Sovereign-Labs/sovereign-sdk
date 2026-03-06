@@ -1,7 +1,11 @@
+use crate::docker::pull_image_with_retries;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig};
 use testcontainers::runners::AsyncRunner;
-pub use testcontainers::{ContainerAsync, ImageExt};
+pub use testcontainers::{ContainerAsync, GenericImage, ImageExt};
 pub use testcontainers_modules::postgres::Postgres;
+
+const POSTGRES_IMAGE: &str = "postgres";
+const POSTGRES_TAG: &str = "17-alpine";
 
 #[derive(Debug, thiserror::Error)]
 /// Error indicating problems when creating a Postgres container.
@@ -21,8 +25,12 @@ pub async fn create_postgres_container() -> Result<ContainerAsync<Postgres>, Cre
         return Err(CreatePostgresError::DockerNotSupported);
     }
 
+    pull_image_with_retries(GenericImage::new(POSTGRES_IMAGE, POSTGRES_TAG))
+        .await
+        .map_err(CreatePostgresError::DockerError)?;
+
     let img = Postgres::default()
-        .with_tag("17-alpine")
+        .with_tag(POSTGRES_TAG)
         .with_shm_size(256 * 1024 * 1024) // 256MB
         .start()
         .await

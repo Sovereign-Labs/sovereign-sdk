@@ -1045,4 +1045,10 @@ mod tests {
     fn get_header_hash(stf_info: &StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec>) -> MockHash {
         stf_info.da_block_header().hash
     }
+
+    fn new_db(path: impl AsRef<Path>) -> rockbound::DB {
+        LedgerDb::get_rockbound_options()
+            .default_setup_db_as_subdir(path.as_ref())
+            .unwrap()
+    }
 }

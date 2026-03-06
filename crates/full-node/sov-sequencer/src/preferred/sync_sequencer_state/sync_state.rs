@@ -28,13 +28,13 @@ use crate::preferred::{
 use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
+use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
 use sov_modules_api::{
-    FullyBakedTx, HDTimestamp, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,19 +44,6 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
-
-const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
-
-fn get_hd_timestamp_with_maybe_override() -> HDTimestamp {
-    if cfg!(debug_assertions) {
-        let Ok(timestamp) = std::env::var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR) else {
-            return HDTimestamp::now();
-        };
-        HDTimestamp::from_str(&timestamp).unwrap_or_else(|_| HDTimestamp::now())
-    } else {
-        HDTimestamp::now()
-    }
-}
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
@@ -303,6 +290,8 @@ where
                         .send(StateUpdateNotification {
                             slot_number,
                             finalized_slot_number,
+                            #[cfg(feature = "test-utils")]
+                            update_skipped_due_to_pause: false,
                         });
             }
             Message::PruneSequencerDb { reason } => {
@@ -345,6 +334,8 @@ where
                         .send(StateUpdateNotification {
                             slot_number,
                             finalized_slot_number,
+                            #[cfg(feature = "test-utils")]
+                            update_skipped_due_to_pause: false,
                         });
             }
             Message::ReplicaBatchStartMsg {
@@ -586,9 +577,9 @@ where
         // Atomically swap in the new storage and prune the old one.
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
-        let new_rollup_height =
-            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
-                .rollup_height_to_access();
+        let mut rt = Rt::default();
+        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None)
+            .rollup_height_to_access();
 
         inner
             .executor
@@ -601,12 +592,37 @@ where
             .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
         tracing::debug!(%new_rollup_height, "Storage has been replaced");
 
-        Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
+        Self::common_for_final_catchup_and_new_storage(&mut inner, info.clone()).await;
+
+        // Compute finalized_rollup_height from the finalized slot to avoid over-pruning during reorgs.
+        // Only prune state roots for heights that are finalized on the DA layer.
+        let finalized_rollup_height = {
+            let concurrent_checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+                StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None),
+            ));
+            let kernel_with_slot_mapping = rt.kernel_with_slot_mapping();
+
+            match ApiStateAccessor::new_archival_with_true_slot_number(
+                concurrent_checkpoint,
+                kernel_with_slot_mapping.clone(),
+                info.latest_finalized_slot_number,
+            ) {
+                Ok(mut api_state) => kernel_with_slot_mapping.current_rollup_height(&mut api_state),
+                Err(e) => {
+                    // Fallback: if archival access fails, don't prune to avoid over-pruning
+                    tracing::warn!(
+                        ?e,
+                        "Failed to get finalized rollup height, skipping state_roots pruning"
+                    );
+                    return;
+                }
+            }
+        };
 
         inner
             .executor
             .state_roots
-            .retain(|height, _| *height > new_rollup_height);
+            .retain(|height, _| *height > finalized_rollup_height);
     }
 
     async fn process_final_catchup(
@@ -798,6 +814,10 @@ where
         ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
+        let sequencing_data = self
+            .runtime
+            .sequencing_data_handler()
+            .create_sequencing_data();
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if inner.is_replica_role() {
@@ -842,7 +862,9 @@ where
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
         let mut baked_tx = baked_tx;
-        baked_tx.set_sequencing_metadata(&get_hd_timestamp_with_maybe_override());
+        // Important: we read the sequencing data from the baked tx inside apply_tx_to_in_progress_batch (which is called from do_new_tx)
+        // so this must not be moved without updating do_new_tx. See the comment in apply_tx_to_in_progress_batch for more details.
+        baked_tx.set_sequencing_metadata(&sequencing_data);
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`

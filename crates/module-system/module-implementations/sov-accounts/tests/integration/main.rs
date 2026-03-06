@@ -166,7 +166,7 @@ fn test_setup_multisig_and_act() {
     ) = setup();
 
     // First, create and register a multisig
-    let multisig_keys = vec![
+    let multisig_keys = [
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),

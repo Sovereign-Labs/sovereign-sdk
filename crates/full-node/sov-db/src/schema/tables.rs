@@ -107,6 +107,11 @@ macro_rules! define_table_without_codec {
         $(#[$docs])*
         ///
         #[doc = concat!("Takes [`", stringify!($key), "`] as a key and returns [`", stringify!($value), "`]")]
+        #[cfg(feature = "migration-script")]
+        #[derive(Clone, Copy, Debug, Default)]
+        pub struct $table_name;
+
+        #[cfg(not(feature = "migration-script"))]
         #[derive(Clone, Copy, Debug, Default)]
         pub(crate) struct $table_name;
 
