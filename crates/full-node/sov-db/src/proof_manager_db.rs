@@ -53,7 +53,7 @@ impl ProofManagerDb {
 
     /// Open the database at the given path.
     pub fn open(path: impl AsRef<std::path::Path>) -> anyhow::Result<Self> {
-        let db = Self::get_rockbound_options().default_setup_db_in_path(path)?;
+        let db = Self::get_rockbound_options().default_setup_db(path)?;
         Ok(Self::new(Arc::new(db)))
     }
 
@@ -332,7 +332,7 @@ mod tests {
     fn create_test_ledger_db(path: impl AsRef<std::path::Path>) -> (LedgerDb, Arc<DB>) {
         let raw_ledger_db = Arc::new(
             LedgerDb::get_rockbound_options()
-                .default_setup_db_in_path(path)
+                .default_setup_db(path)
                 .expect("Failed to open LedgerDb"),
         );
         let ledger_reader = DeltaReader::new(raw_ledger_db.clone(), Vec::new());

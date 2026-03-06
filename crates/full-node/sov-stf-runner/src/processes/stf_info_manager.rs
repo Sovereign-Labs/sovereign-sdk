@@ -75,7 +75,7 @@ pub struct Sender<StateRoot, Witness, Da: DaSpec> {
     /// [`Receiver`] end to catch up.
     ///
     /// It is important to note that this is allowed by the fact that _every transition_ goes through the
-    /// channel, and that the receiver processes them individually and sequencially. Otherwise, the
+    /// channel, and that the receiver processes them individually and sequentially. Otherwise, the
     /// back-pressure assumptions are broken.
     ///
     /// ## Safety
@@ -492,6 +492,7 @@ mod tests {
 
     use super::*;
     use crate::processes::StateTransitionInfo;
+    use sov_db::ledger_db::LedgerDb;
 
     type StateRoot = Vec<u8>;
     type Witness = Vec<u8>;
@@ -758,7 +759,7 @@ mod tests {
         )
         .await?;
 
-        // At the begining the db should be empty.
+        // At the beginning the db should be empty.
         let fetched_stf_info = receiver.get(SlotNumber::ONE)?;
         assert!(fetched_stf_info.is_none());
 
