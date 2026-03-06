@@ -48,7 +48,7 @@ async fn test_db_operations_leader() {
         .await
         .unwrap();
 
-    // Add more txs to the
+    // Add more txs to the batch after the proof blob. They should come back when we read from the DB.
     db.as_mut()
         .add_tx(
             sequence_number,
@@ -69,14 +69,22 @@ async fn test_db_operations_leader() {
 
     let data = db.as_mut().current_data().await.unwrap();
     assert!(
-        data.completed_blobs.len() == 1,
-        "Should have 1 completed blob"
+        data.completed_blobs.len() == 2,
+        "Should have 2 completed blobs but found {}",
+        data.completed_blobs.len()
     );
+
+    let ReadBlob::Batch(batch) = &data.completed_blobs[0] else {
+        panic!("Completed blob must be a batch");
+    };
+    assert_eq!(batch.sequence_number, sequence_number);
+    assert_eq!(batch.txs.len(), 3);
+
     let ReadBlob::Proof {
         sequence_number: proof_sequence_number,
         data: proof_data,
         ..
-    } = &data.completed_blobs[0]
+    } = &data.completed_blobs[1]
     else {
         panic!("Completed blob must be a proof");
     };
@@ -89,11 +97,6 @@ async fn test_db_operations_leader() {
         &**proof_data,
         b"proof_data".as_slice(),
         "Proof data should be correct"
-    );
-    assert!(
-        data.in_progress_batch
-            .is_some_and(|b| b.sequence_number == sequence_number),
-        "Should have an in-progress batch"
     );
 
     db.as_mut().prune(3).await.unwrap();
