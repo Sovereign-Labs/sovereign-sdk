@@ -18,6 +18,7 @@ serde = { workspace = true }
 
 sov-modules-api = { workspace = true }
 sov-state = { workspace = true }
+sov-chain-state = { workspace = true }
 
 [dev-dependencies]
 alloy-consensus = { workspace = true }

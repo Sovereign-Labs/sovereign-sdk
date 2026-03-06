@@ -20,7 +20,8 @@ use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
-    SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage, TxState,
+    SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage,
+    TimeStateAccessor, TxState,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -255,7 +256,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         _context: &Context<S>,
         execution_context: &ExecutionContext,
-        state: &mut impl StateReader<User>,
+        state: &mut impl TimeStateAccessor,
     ) -> anyhow::Result<()> {
         self.uniqueness.check_uniqueness(
             &auth_data.credential_id,
@@ -271,7 +272,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &mut self,
         auth_data: &AuthorizationData<S>,
         _sequencer: &<S::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl TimeStateAccessor,
     ) -> anyhow::Result<()> {
         self.uniqueness.mark_tx_attempted(
             &auth_data.credential_id,

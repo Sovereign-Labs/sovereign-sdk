@@ -25,7 +25,7 @@ pub use traits::{
     GenesisState, InfallibleKernelStateAccessor, InfallibleStateAccessor,
     InfallibleStateReaderAndWriter, PerBlockCache, PrivilegedKernelAccessor, ProvableStateReader,
     ProvableStateWriter, StateAccessor, StateAccessorError, StateReader, StateReaderAndWriter,
-    StateWriter, TxState, VersionReader,
+    StateWriter, TimeStateAccessor, TxState, VersionReader,
 };
 
 #[cfg(feature = "native")]

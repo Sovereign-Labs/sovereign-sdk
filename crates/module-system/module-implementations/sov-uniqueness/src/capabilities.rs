@@ -1,7 +1,6 @@
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::ExecutionContext;
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, TxHash};
-use sov_state::User;
+use sov_modules_api::{CredentialId, Spec, TimeStateAccessor, TxHash};
 
 use crate::Uniqueness;
 
@@ -19,7 +18,7 @@ impl<S: Spec> Uniqueness<S> {
         transaction_uniqueness: UniquenessData,
         transaction_hash: TxHash,
         execution_context: &ExecutionContext,
-        state: &mut impl StateReader<User>,
+        state: &mut impl TimeStateAccessor,
     ) -> anyhow::Result<()> {
         match transaction_uniqueness {
             UniquenessData::Nonce(nonce) => match execution_context {
@@ -30,6 +29,9 @@ impl<S: Spec> Uniqueness<S> {
             },
             UniquenessData::Generation(generation) => {
                 self.check_generation_uniqueness(credential_id, generation, transaction_hash, state)
+            }
+            UniquenessData::Timestamp(ts) | UniquenessData::TimestampNonce(ts) => {
+                self.check_timestamp_uniqueness(credential_id, ts, transaction_hash, state)
             }
         }
     }
@@ -43,7 +45,7 @@ impl<S: Spec> Uniqueness<S> {
         credential_id: &CredentialId,
         transaction_generation: UniquenessData,
         transaction_hash: TxHash,
-        state: &mut impl StateAccessor,
+        state: &mut impl TimeStateAccessor,
     ) -> anyhow::Result<()> {
         match transaction_generation {
             UniquenessData::Nonce(_) => self.mark_nonce_tx_attempted(credential_id, state),
@@ -53,6 +55,12 @@ impl<S: Spec> Uniqueness<S> {
                 transaction_hash,
                 state,
             ),
+            UniquenessData::Timestamp(ts) => {
+                self.mark_timestamp_tx_attempted(None, ts, transaction_hash, state)
+            }
+            UniquenessData::TimestampNonce(ts) => {
+                self.mark_timestamp_tx_attempted(Some(credential_id), ts, transaction_hash, state)
+            }
         }
     }
 }

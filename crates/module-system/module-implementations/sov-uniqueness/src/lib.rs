@@ -3,6 +3,7 @@
 mod capabilities;
 mod generations;
 mod nonces;
+mod timestamp;
 use std::collections::{BTreeMap, HashSet};
 
 use sov_modules_api::{
@@ -33,6 +34,14 @@ pub struct Uniqueness<S: Spec> {
     /// Mapping from a credential id to a nonce.
     #[state]
     pub(crate) nonces: StateMap<CredentialId, u64>,
+
+    /// Buckets of transactions with their expiry timestamp. The
+    /// buckets are taken from the first bytes of the TxHash.
+    #[state]
+    pub(crate) timestamps: StateMap<u16, Vec<(TxHash, u64)>>,
+
+    #[module]
+    pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,

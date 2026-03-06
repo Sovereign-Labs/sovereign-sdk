@@ -11,7 +11,7 @@ use sov_rollup_interface::{Bytes, TxHash};
 use sov_universal_wallet::UniversalWallet;
 
 use crate::transaction::Credentials;
-use crate::{Context, SequencerType, Spec, StateAccessor};
+use crate::{Context, SequencerType, Spec, StateAccessor, TimeStateAccessor};
 
 /// Authorizes transactions to be executed.
 pub trait TransactionAuthorizer<S: Spec> {
@@ -42,7 +42,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         auth_data: &AuthorizationData<S>,
         context: &Context<S>,
         execution_context: &ExecutionContext,
-        state: &mut impl StateAccessor,
+        state: &mut impl TimeStateAccessor,
     ) -> anyhow::Result<()>;
 
     /// Marks a transaction as having been executed, preventing it from executing again.
@@ -50,7 +50,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl TimeStateAccessor,
     ) -> anyhow::Result<()>;
 }
 
@@ -76,6 +76,12 @@ pub enum UniquenessData {
     /// Transactions older than this buffer are invalid, transactions falling within it or with a
     /// higher generation are valid but must have a unique hash within their generation
     Generation(u64),
+    /// Timestamp-based uniqueness: a transaction expires at the point given in microseconds of
+    /// OracleTime.
+    Timestamp(u64),
+    /// Timestamp-based uniqueness: a transaction expires at the point given in microseconds of
+    /// OracleTime but it also updates the nonce so that older transactions get invalidated.
+    TimestampNonce(u64),
 }
 
 /// Data required to authorize a sov-transaction.

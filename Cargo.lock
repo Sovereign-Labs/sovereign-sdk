@@ -12671,6 +12671,7 @@ dependencies = [
  "secp256k1 0.30.0",
  "serde",
  "sov-address",
+ "sov-chain-state",
  "sov-eth-dev-signer",
  "sov-evm",
  "sov-evm-test-utils",

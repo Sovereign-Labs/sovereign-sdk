@@ -49,6 +49,24 @@ pub trait StateAccessor: StateReaderAndWriter<User> {
     }
 }
 
+/// Trait to access time through sov_chain_state.
+pub trait TimeStateAccessor:
+    StateReader<User, Error: Into<anyhow::Error>>
+    + StateWriter<User, Error = <Self as StateReader<User>>::Error>
+    + StateReader<Kernel, Error = <Self as StateReader<User>>::Error>
+    + VersionReader
+{
+}
+
+/// Auto implement trait.
+impl<T> TimeStateAccessor for T where
+    T: StateReader<User, Error: Into<anyhow::Error>>
+        + StateWriter<User, Error = <Self as StateReader<User>>::Error>
+        + StateReader<Kernel, Error = <Self as StateReader<User>>::Error>
+        + VersionReader
+{
+}
+
 /// A trait that represents a [`StateAccessor`] that never fails on state accesses. Accessing the state with structs that implement
 /// this trait will return [`Infallible`].
 ///
