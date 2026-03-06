@@ -38,8 +38,8 @@ Source: `crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs
 | `eth_call` | implemented | Block-tagged call; supports `state_overrides` and `block_overrides`. |
 | `eth_blockNumber` | implemented | Returns latest sealed block number. |
 | `eth_estimateGas` | implemented | Block-tagged estimation with safety margin; supports `state_overrides` and `block_overrides`. |
-| `debug_traceBlockByNumber` | implemented | Geth tracing; only `callTracer` supported. |
-| `debug_traceTransaction` | implemented | Geth tracing; only `callTracer` supported. |
+| `debug_traceBlockByNumber` | implemented | Geth tracing; default struct tracer and `callTracer` supported. |
+| `debug_traceTransaction` | implemented | Geth tracing; default struct tracer and `callTracer` supported. |
 | `web3_clientVersion` | implemented | `sov-evm/<version>`. |
 | `web3_sha3` | implemented | Keccak-256. |
 | `net_listening` | implemented | Always `true`. |

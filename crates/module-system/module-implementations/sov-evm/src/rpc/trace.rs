@@ -160,6 +160,7 @@ where
         db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
     ) -> Result<GethTrace, EthApiError> {
+        let config = opts.config;
         let GethDebugTracingOptions {
             tracer,
             tracer_config,
@@ -192,6 +193,29 @@ where
                 _ => Err(EthApiError::Unsupported("unsupported tracer")),
             };
         }
-        Err(EthApiError::Unsupported("unsupported tracer"))
+
+        let mut inspector_config = TracingInspectorConfig::from_geth_config(&config);
+        inspector_config.record_returndata_snapshots = config.is_return_data_enabled();
+        let mut inspector = TracingInspector::new(inspector_config);
+
+        let gas_limit = tx_env.gas_limit;
+        let ExecResultAndState { result, state } =
+            inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
+        db.try_commit(state)?;
+
+        inspector.set_transaction_gas_limit(gas_limit);
+        let gas_used = result.gas_used();
+        let return_value = result.output().cloned().unwrap_or_default();
+        let mut frame = inspector
+            .geth_builder()
+            .geth_traces(gas_used, return_value, config);
+
+        if let Some(limit) = config.limit.filter(|limit| *limit > 0) {
+            frame
+                .struct_logs
+                .truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+        }
+
+        Ok(frame.into())
     }
 }

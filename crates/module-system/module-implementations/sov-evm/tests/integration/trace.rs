@@ -2,7 +2,8 @@ use crate::helpers::*;
 use crate::runtime::S;
 use alloy_primitives::{Bytes, U256};
 use alloy_rpc_types_trace::geth::{
-    CallFrame, GethDebugBuiltInTracerType, GethDebugTracingOptions, GethTrace,
+    CallFrame, GethDebugBuiltInTracerType, GethDebugTracingOptions, GethDefaultTracingOptions,
+    GethTrace,
 };
 use sov_evm::Evm;
 use sov_evm_test_utils::LegacySimpleStorage;
@@ -62,5 +63,79 @@ fn test_tracing() {
                 ..Default::default()
             })
         );
+    });
+}
+
+#[test]
+fn test_default_tracing() {
+    let (mut runner, account, _, _) = setup();
+    let contract = LegacySimpleStorage::default();
+    let contract_addr = account.address().create(0);
+
+    let mut nonce = 0;
+    runner.execute(create_deploy_tx(nonce, &contract, &account).tx);
+    nonce += 1;
+
+    let traced_tx = create_inc_tx(nonce, &contract, contract_addr, &account);
+    let tx_hash = traced_tx.hash;
+
+    runner.execute_batch(BatchTestCase {
+        input: vec![traced_tx.tx].into(),
+        assert: Box::new(move |_, _| {}),
+    });
+
+    let evm = Evm::<S>::default();
+    runner.query_state(|state| {
+        let trace = evm.debug_trace_transaction(tx_hash, None, state).unwrap();
+        match trace {
+            GethTrace::Default(frame) => {
+                assert!(!frame.failed);
+                assert!(frame.gas > 0);
+                assert!(!frame.struct_logs.is_empty());
+                assert_eq!(
+                    frame.return_value,
+                    "0000000000000000000000000000000000000000000000000000000000000001"
+                        .parse::<Bytes>()
+                        .unwrap()
+                );
+            }
+            other => panic!("expected default tracer frame, got {other:?}"),
+        }
+    });
+}
+
+#[test]
+fn test_default_tracing_respects_struct_log_limit() {
+    let (mut runner, account, _, _) = setup();
+    let contract = LegacySimpleStorage::default();
+    let contract_addr = account.address().create(0);
+
+    let mut nonce = 0;
+    runner.execute(create_deploy_tx(nonce, &contract, &account).tx);
+    nonce += 1;
+
+    let traced_tx = create_inc_tx(nonce, &contract, contract_addr, &account);
+    let tx_hash = traced_tx.hash;
+
+    runner.execute_batch(BatchTestCase {
+        input: vec![traced_tx.tx].into(),
+        assert: Box::new(move |_, _| {}),
+    });
+
+    let evm = Evm::<S>::default();
+    runner.query_state(|state| {
+        let opts = GethDebugTracingOptions {
+            config: GethDefaultTracingOptions::default().with_limit(1),
+            ..Default::default()
+        };
+        let trace = evm
+            .debug_trace_transaction(tx_hash, Some(opts), state)
+            .unwrap();
+        match trace {
+            GethTrace::Default(frame) => {
+                assert_eq!(frame.struct_logs.len(), 1);
+            }
+            other => panic!("expected default tracer frame, got {other:?}"),
+        }
     });
 }

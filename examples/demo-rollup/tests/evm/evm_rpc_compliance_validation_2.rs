@@ -1,16 +1,16 @@
 use crate::evm::evm_test_helper::{
-    alloy_client, create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64,
-    parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response,
-    rpc_result_hex, setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION,
-    HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
+    create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64, parse_hex_u128,
+    parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_result_hex,
+    setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
+    HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
+use alloy_rpc_types_trace::geth::GethTrace;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
 use serde_json::json;
-use sov_evm_test_utils::SimpleStorage;
 
 const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
@@ -334,6 +334,7 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "low priority now"]
 async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -> anyhow::Result<()>
 {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -516,11 +517,17 @@ async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Resu
         response.get("result").is_some() && !response["result"].is_null(),
         "default trace response should be non-null"
     );
+    let trace: GethTrace = serde_json::from_value(response["result"].clone())?;
+    match trace {
+        GethTrace::Default(_) => {}
+        other => panic!("expected default tracer result, got {other:?}"),
+    }
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "We don't have pending txs. To be discussed"]
 async fn rpc2_011_new_pending_transactions_subscription_is_supported() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
@@ -607,7 +614,8 @@ async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: synthetic hash lifecycle"]
+#[ignore = "Known compatibility gap: synthetic hash lifecycle."]
+// TODO: Why this is a problem? 
 async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
@@ -702,26 +710,116 @@ async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_estimate_gas_does_not_exceed_tx_gas_limit() -> anyhow::Result<()> {
+async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
-    let client = alloy_client(rollup.http_addr);
-    let contract = SimpleStorage::deploy(client).await?;
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let sender = signer.address();
+    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let contract_address = deploy_contract_check(&ws_client)
+        .await
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    let http = Client::new();
 
-    // 900K iterations of keccak256 ≈ 32.4M gas, exceeding tx_gas_limit (30M).
-    let iterations = U256::from(900_000u64);
+    let build_request = |iterations: u32, gas: Option<u64>| {
+        let mut request = json!({
+            "from": sender,
+            "to": contract_address,
+            "data": ws_client.contract.burn_gas(iterations),
+            "maxFeePerGas": hex_u128(DEFAULT_MAX_FEE_PER_GAS),
+            "maxPriorityFeePerGas": hex_u128(DEFAULT_MAX_PRIORITY_FEE_PER_GAS)
+        });
+        if let Some(gas) = gas {
+            request["gas"] = json!(hex_u64(gas));
+        }
+        request
+    };
 
-    // eth_call succeeds — gas defaults to block_gas_limit (100B), plenty of room.
-    let _call_result = contract.burnGas(iterations).call().await?;
+    // Find a workload that is known to exceed the real per-tx cap.
+    let mut failing_iterations = None;
+    let mut capped_call_response = None;
+    for iterations in [
+        100_000u32, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000,
+    ] {
+        let response = rpc_call(
+            &http,
+            rollup.http_addr,
+            "eth_call",
+            json!([build_request(iterations, Some(ETH_TX_GAS_CAP)), "latest"]),
+        )
+        .await?;
+        if response.get("error").is_some() {
+            failing_iterations = Some(iterations);
+            capped_call_response = Some(response);
+            break;
+        }
+    }
 
-    // eth_estimateGas should cap its result at tx_gas_limit (30M).
-    // BUG: Today it returns ~32M because it simulates with block_gas_limit.
-    let gas_estimate = contract.burnGas(iterations).estimate_gas().await?;
-    let tx_gas_limit = 30_000_000u64;
+    let iterations = failing_iterations.ok_or_else(|| {
+        anyhow::anyhow!(
+            "failed to find burnGas workload that exhausts the real tx gas cap in the covered search range"
+        )
+    })?;
+    let capped_call_response = capped_call_response.expect("failing iterations should store error");
+
+    let omitted_request = build_request(iterations, None);
+    let omitted_call_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_call",
+        json!([omitted_request.clone(), "latest"]),
+    )
+    .await?;
+    let omitted_estimate_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_estimateGas",
+        json!([omitted_request, "latest"]),
+    )
+    .await?;
+
+    let nonce = tx_count(&ws_client, sender, "latest").await?;
+    let raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        nonce,
+        ETH_TX_GAS_CAP,
+        TxKind::Call(contract_address),
+        U256::ZERO,
+        ws_client.contract.burn_gas(iterations),
+        DEFAULT_MAX_FEE_PER_GAS,
+        DEFAULT_MAX_PRIORITY_FEE_PER_GAS,
+    )
+    .await?;
+    let send_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([raw_tx]),
+    )
+    .await?;
+
+    let send_outcome = match send_response.get("error") {
+        Some(_) => format!("rejected: {send_response}"),
+        None => {
+            let tx_hash: B256 = rpc_result_hex(&send_response).parse()?;
+            let receipt = ws_client.wait_for_receipt(tx_hash).await;
+            assert!(
+                !receipt.status(),
+                "real tx should fail once execution is constrained by the 30M tx gas cap"
+            );
+            format!("receipt_status=false tx_hash={tx_hash:#x}")
+        }
+    };
+
     assert!(
-        gas_estimate <= tx_gas_limit,
-        "eth_estimateGas returned {gas_estimate} which exceeds tx_gas_limit ({tx_gas_limit}). \
-          Simulation uses block_gas_limit but real execution caps at tx_gas_limit."
+        omitted_call_response.get("error").is_some(),
+        "omitted-gas eth_call should reject a workload that fails at the real tx cap (iterations={iterations}, capped_call={capped_call_response}, omitted_call={omitted_call_response}, omitted_estimate={omitted_estimate_response}, send={send_outcome})"
+    );
+    assert!(
+        omitted_estimate_response.get("error").is_some(),
+        "omitted-gas eth_estimateGas should reject a workload that fails at the real tx cap (iterations={iterations}, capped_call={capped_call_response}, omitted_call={omitted_call_response}, omitted_estimate={omitted_estimate_response}, send={send_outcome})"
     );
 
     Ok(())

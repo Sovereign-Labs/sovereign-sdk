@@ -70,9 +70,10 @@ async fn ws_subscribe_new_heads_sizes() -> anyhow::Result<()> {
 
     let header = subscription.recv().await?;
     assert_eq!(header.number, 2);
-    // Block size is 512 bytes with gas_limit = 100_000_000_000 (5-byte RLP encoding)
-    // Previously was 511 bytes with gas_limit = 1_000_000_000 (4-byte RLP encoding)
-    assert_eq!(header.size.unwrap().to::<u64>(), 512);
+    // Block size is 513 bytes with gas_limit = 100_000_000_000 (5-byte RLP encoding).
+    // Post-Cancun compatibility includes an empty withdrawals list in the cached body RLP,
+    // which adds one byte versus the pre-withdrawals-size expectation.
+    assert_eq!(header.size.unwrap().to::<u64>(), 513);
 
     Ok(())
 }
