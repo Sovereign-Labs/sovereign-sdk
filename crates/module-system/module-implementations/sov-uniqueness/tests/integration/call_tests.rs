@@ -1,3 +1,4 @@
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{CredentialId, TxEffect};
 use sov_test_utils::{BatchType, SlotInput, TransactionTestCase, TxProcessingError};
@@ -58,14 +59,18 @@ fn do_max_stored_tx_hashes_per_credential_test() {
     // Generate txs to fill up our "bucket" of stored transaction hashes.
     for i in 0..txs_per_generation {
         for generation in 0..num_generations {
-            txs.push(generate_value_setter_tx(generation, i as u32, &admin));
+            txs.push(generate_value_setter_tx(
+                UniquenessData::Generation(generation),
+                i as u32,
+                &admin,
+            ));
         }
     }
     // We divided txs evenly across generations - if there was a remainder, account for it by putting the
     // extra txs in the first bucket.
     for i in 0..extra_txs_in_first_generation {
         txs.push(generate_value_setter_tx(
-            0,
+            UniquenessData::Generation(0),
             (i + txs_per_generation) as u32,
             &admin,
         ))
@@ -87,7 +92,7 @@ fn do_max_stored_tx_hashes_per_credential_test() {
     // Send one more transaction with a current generation number.
     // This transaction should be skipped because it would cause the bucket to overflow.
     runner.execute_transaction(TransactionTestCase {
-        input: generate_value_setter_tx(0, u32::MAX, &admin),
+        input: generate_value_setter_tx(UniquenessData::Generation(0), u32::MAX, &admin),
         assert: Box::new(move |ctx, _| {
             let TxEffect::Skipped(skipped) = ctx.tx_receipt else {
                 panic!("Transaction should be skipped");
@@ -106,7 +111,11 @@ fn do_max_stored_tx_hashes_per_credential_test() {
     // Increment the generation number. Now the transaction should be accepted because it won't cause the bucket to overflow.
     // Note that we need to add 1 to the number of generations because we have a strict inequality comparison for buckets.
     runner.execute_transaction(TransactionTestCase {
-        input: generate_value_setter_tx(num_generations + 1, txs_per_generation as u32, &admin),
+        input: generate_value_setter_tx(
+            UniquenessData::Generation(num_generations + 1),
+            txs_per_generation as u32,
+            &admin,
+        ),
         assert: Box::new(move |ctx, _| {
             assert!(
                 ctx.tx_receipt.is_successful(),

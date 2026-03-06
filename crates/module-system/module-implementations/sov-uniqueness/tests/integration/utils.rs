@@ -79,12 +79,12 @@ pub(crate) fn generate_default_tx(
                 create_contract_tx,
             ))
         }
-        UniquenessData::Generation(generation) => generate_value_setter_tx(generation, 10, admin),
+        x => generate_value_setter_tx(x, 10, admin),
     }
 }
 
 pub(crate) fn generate_value_setter_tx(
-    generation: u64,
+    nonce: UniquenessData,
     value: u32,
     admin: &TestUser<S>,
 ) -> TransactionType<RT, S> {
@@ -99,7 +99,7 @@ pub(crate) fn generate_value_setter_tx(
         config_chain_id(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
-        UniquenessData::Generation(generation),
+        nonce,
         None,
     );
 
