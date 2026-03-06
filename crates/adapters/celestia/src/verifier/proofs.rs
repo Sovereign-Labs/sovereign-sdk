@@ -200,12 +200,12 @@ pub(crate) fn new_inclusion_proof(
     }
 
     let end_of_ns = flat_shares.len();
-    if prev_range_end.is_some() && prev_range_end != Some(end_of_ns) {
-        let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
-            prev_range_end.unwrap()..end_of_ns,
-            &flat_shares,
-        );
-        needed_share_ranges.extend(skipped_blob_ranges);
+    if let Some(prev_end) = prev_range_end {
+        if prev_end != end_of_ns {
+            let skipped_blob_ranges =
+                build_ranges_to_prove_for_skipped_blobs(prev_end..end_of_ns, &flat_shares);
+            needed_share_ranges.extend(skipped_blob_ranges);
+        }
     }
 
     let row_roots = header

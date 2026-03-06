@@ -280,13 +280,14 @@ impl<S: sov_modules_api::Spec> AddressList<S> {
         public_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
         location: PathBuf,
     ) -> anyhow::Result<()> {
-        if nickname.is_some()
-            && self
+        if let Some(ref name) = nickname {
+            if self
                 .addresses
                 .iter()
-                .any(|entry| entry.nickname == nickname)
-        {
-            anyhow::bail!("Key with nickname '{}' already exists", nickname.unwrap());
+                .any(|entry| entry.nickname.as_ref() == Some(name))
+            {
+                anyhow::bail!("Key with nickname '{}' already exists", name);
+            }
         }
         let entry = AddressEntry {
             address,

@@ -2397,7 +2397,7 @@ fn assert_hex_data(value: &Value) {
     let hex = value.as_str().expect("expected hex string for data field");
     assert!(hex.starts_with("0x"));
     let digits = &hex[2..];
-    assert!(digits.len() % 2 == 0);
+    assert!(digits.len().is_multiple_of(2));
 }
 
 fn assert_log_json_schema(log: &Value) {
