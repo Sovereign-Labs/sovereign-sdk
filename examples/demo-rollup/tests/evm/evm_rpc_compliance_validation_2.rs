@@ -615,7 +615,7 @@ async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known compatibility gap: synthetic hash lifecycle."]
-// TODO: Why this is a problem? 
+// TODO: Why this is a problem?
 async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
