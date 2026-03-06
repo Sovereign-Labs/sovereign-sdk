@@ -2,11 +2,11 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof, try_get_extraction_proof};
+use crate::proptests::assert_subproof_start_indices_align;
 use crate::test_helper::files::*;
 use crate::test_helper::{ADDR_1, ROLLUP_PARAMS_DEV};
 use crate::types::{BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof};
 use crate::verifier::address::CelestiaAddress;
-use crate::verifier::proofs::BlobProof;
 use crate::verifier::{CelestiaVerifier, RollupParams};
 use crate::CelestiaService;
 use anyhow::Context;
@@ -118,8 +118,7 @@ fn deterministic_payload(
     seed[1] = sender_idx as u8;
     seed[2] = kind.as_byte();
     seed[3] = seq_idx as u8;
-    seed[4] = (size & 0xff) as u8;
-    seed[5] = ((size >> 8) & 0xff) as u8;
+    seed[4..6].copy_from_slice(&(size as u16).to_le_bytes());
 
     let mut payload = vec![0u8; size];
     let mut rng = rand::rngs::SmallRng::from_seed(seed);
@@ -286,30 +285,6 @@ fn read_half_blob(blob_with_sender: &mut BlobWithSender) {
     blob_with_sender.blob.advance(half_len);
     let data = blob_with_sender.blob.accumulator();
     assert_eq!(data.len(), half_len);
-}
-
-fn assert_subproof_start_indices_align(
-    block: &FilteredCelestiaBlock,
-    namespace_name: &str,
-    inclusion_proof: &[BlobProof],
-) {
-    let row_len = block.header.row_length();
-    for (blob_idx, blob_proof) in inclusion_proof.iter().enumerate() {
-        for (range_idx, range_proof) in blob_proof.range_proofs.iter().enumerate() {
-            let row = block
-                .header
-                .calculate_row_number_for_share(range_proof.start_share_idx);
-            let expected = row
-                .checked_mul(row_len)
-                .and_then(|row_start| row_start.checked_add(range_proof.proof.start_idx() as usize))
-                .expect("overflow while calculating expected share index");
-            assert_eq!(
-                range_proof.start_share_idx, expected,
-                "{namespace_name} proof index mismatch for blob #{blob_idx} range #{range_idx}: expected {expected}, actual {}",
-                range_proof.start_share_idx
-            );
-        }
-    }
 }
 
 fn verify_fixture_with_readers<F1, F2>(
@@ -771,7 +746,7 @@ async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn verification_for_correct_blocks<F1, F2>(batch_processing_fn: F1, proof_processing_fn: F2)
+fn verification_for_correct_blocks<F1, F2>(batch_processing_fn: F1, proof_processing_fn: F2)
 where
     F1: Fn(&mut BlobWithSender),
     F2: Fn(&mut BlobWithSender),
@@ -831,25 +806,25 @@ where
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_succeeds_for_correct_blocks() {
+#[test]
+fn verification_succeeds_for_correct_blocks() {
     // No read
-    verification_for_correct_blocks(read_no_blob, read_no_blob).await;
+    verification_for_correct_blocks(read_no_blob, read_no_blob);
     // Full read
-    verification_for_correct_blocks(read_full_blob, read_full_blob).await;
-    verification_for_correct_blocks(read_full_blob, read_no_blob).await;
-    verification_for_correct_blocks(read_no_blob, read_full_blob).await;
-    verification_for_correct_blocks(read_full_blob, read_single_byte_blob).await;
+    verification_for_correct_blocks(read_full_blob, read_full_blob);
+    verification_for_correct_blocks(read_full_blob, read_no_blob);
+    verification_for_correct_blocks(read_no_blob, read_full_blob);
+    verification_for_correct_blocks(read_full_blob, read_single_byte_blob);
     // Single byte read
-    verification_for_correct_blocks(read_single_byte_blob, read_single_byte_blob).await;
+    verification_for_correct_blocks(read_single_byte_blob, read_single_byte_blob);
     // Half Read
-    verification_for_correct_blocks(read_half_blob, read_half_blob).await;
-    verification_for_correct_blocks(read_half_blob, read_no_blob).await;
-    verification_for_correct_blocks(read_no_blob, read_half_blob).await;
+    verification_for_correct_blocks(read_half_blob, read_half_blob);
+    verification_for_correct_blocks(read_half_blob, read_no_blob);
+    verification_for_correct_blocks(read_no_blob, read_half_blob);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn regression_mocha_invalid_row_proof_minimal_read_mode() {
+#[test]
+fn regression_mocha_invalid_row_proof_minimal_read_mode() {
     verify_fixture_with_readers(
         from_mocha_invalid_row_proof::test_case(),
         read_single_byte_blob,
@@ -857,8 +832,8 @@ async fn regression_mocha_invalid_row_proof_minimal_read_mode() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn regression_mocha_invalid_row_proof_full_read_mode() {
+#[test]
+fn regression_mocha_invalid_row_proof_full_read_mode() {
     verify_fixture_with_readers(
         from_mocha_invalid_row_proof::test_case(),
         read_full_blob,
@@ -866,8 +841,8 @@ async fn regression_mocha_invalid_row_proof_full_read_mode() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn proof_start_indexes_match_row_coordinates_for_valid_fixtures() {
+#[test]
+fn proof_start_indexes_match_row_coordinates_for_valid_fixtures() {
     let fixtures = [
         with_rollup_batch_data::test_case(),
         with_namespace_padding::test_case(),
@@ -912,8 +887,8 @@ fn parity_boundary_fixture_contains_target_shape() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
+#[test]
+fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
     let block = with_mixed_v0_and_v1_multi_v1_parity_boundary::filtered_block();
     let rollup_params = with_mixed_v0_and_v1_multi_v1_parity_boundary::ROLLUP_PARAMS;
     let verifier = CelestiaVerifier::new(rollup_params);
@@ -989,8 +964,8 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn extraction_proof_fails_if_sender_changed() {
+#[test]
+fn extraction_proof_fails_if_sender_changed() {
     // This is the preparation part, consider it as malicious native code:
     let mut block = with_rollup_batch_data::filtered_block();
     let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
@@ -1031,8 +1006,8 @@ async fn extraction_proof_fails_if_sender_changed() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_fails_if_tx_missing() {
+#[test]
+fn verification_fails_if_tx_missing() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
 
@@ -1056,8 +1031,8 @@ async fn verification_fails_if_tx_missing() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist() {
+#[test]
+fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist() {
     let block = with_mixed_v0_and_v1_blobs::filtered_block();
     let relevant_blobs = RelevantBlobs {
         batch_blobs: Default::default(),
@@ -1074,8 +1049,8 @@ async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist(
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_fails_if_supported_namespace_has_empty_blob_list() {
+#[test]
+fn verification_fails_if_supported_namespace_has_empty_blob_list() {
     let block = with_rollup_batch_data::filtered_block();
     let relevant_blobs = RelevantBlobs {
         batch_blobs: Default::default(),
@@ -1092,8 +1067,8 @@ async fn verification_fails_if_supported_namespace_has_empty_blob_list() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn extraction_proof_rejects_out_of_bounds_blob_range() {
+#[test]
+fn extraction_proof_rejects_out_of_bounds_blob_range() {
     let block = with_rollup_batch_data::filtered_block();
     let mut relevant_blobs = extract_relevant_blobs(&block);
     assert!(
@@ -1112,8 +1087,8 @@ async fn extraction_proof_rejects_out_of_bounds_blob_range() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_fails_if_not_all_blobs_are_proven() {
+#[test]
+fn verification_fails_if_not_all_blobs_are_proven() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
 
@@ -1137,16 +1112,16 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_blobs_from_padded_namespace() {
+#[test]
+fn test_blobs_from_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let relevant_blobs = extract_relevant_blobs(&block);
     assert_eq!(relevant_blobs.batch_blobs.len(), 1);
     assert_eq!(relevant_blobs.proof_blobs.len(), 0);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_for_padded_namespace() {
+#[test]
+fn verification_for_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
 
@@ -1160,8 +1135,8 @@ async fn verification_for_padded_namespace() {
         .unwrap();
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_fails_if_there_is_less_blobs_than_proofs() {
+#[test]
+fn verification_fails_if_there_is_less_blobs_than_proofs() {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
 
@@ -1186,8 +1161,8 @@ async fn verification_fails_if_there_is_less_blobs_than_proofs() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn verification_fails_for_incorrect_namespace() {
+#[test]
+fn verification_fails_for_incorrect_namespace() {
     let block = with_rollup_proof_data::filtered_block();
 
     let relevant_blobs = extract_relevant_blobs(&block);
@@ -1210,8 +1185,8 @@ async fn verification_fails_for_incorrect_namespace() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
+#[test]
+fn test_payload_can_be_read_back() -> anyhow::Result<()> {
     let cases = [
         (
             with_rollup_batch_data::test_case(),
@@ -1288,18 +1263,7 @@ mod adversarial_tampering {
         }
 
         fn from_block(block: FilteredCelestiaBlock, params: RollupParams) -> Self {
-            Self::from_block_with_readers(
-                block,
-                params,
-                |blob| {
-                    let total_len = blob.total_len();
-                    blob.advance(total_len);
-                },
-                |blob| {
-                    let total_len = blob.total_len();
-                    blob.advance(total_len);
-                },
-            )
+            Self::from_block_with_readers(block, params, read_full_blob, read_full_blob)
         }
 
         fn from_block_with_readers<F1, F2>(
@@ -1452,35 +1416,10 @@ mod adversarial_tampering {
             .expect("expected at least one skipped blob proof")
     }
 
-    fn assert_verification_error_contains(case: AdversarialCase, pattern: &str) {
-        let params = case.params;
-        assert_verification_error_contains_with_params(case, params, pattern);
-    }
-
-    fn assert_verification_error_contains_any(case: AdversarialCase, patterns: &[&str]) {
-        let params = case.params;
-        let verifier = CelestiaVerifier::new(params);
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            verifier.verify_relevant_tx_list(&case.block.header, &case.blobs, case.proofs)
-        }));
-
-        match result {
-            Ok(Ok(_)) => panic!("expected verification to fail, but it succeeded"),
-            Ok(Err(err)) => {
-                let message = err.to_string();
-                assert!(
-                    patterns.iter().any(|pattern| message.contains(pattern)),
-                    "Expected error to contain one of {patterns:?}, got: {message}",
-                );
-            }
-            Err(_) => panic!("verification panicked; expected Err"),
-        }
-    }
-
-    fn assert_verification_error_contains_with_params(
+    fn assert_verification_error_matches(
         case: AdversarialCase,
         params: RollupParams,
-        pattern: &str,
+        patterns: &[&str],
     ) {
         let verifier = CelestiaVerifier::new(params);
         let result = catch_unwind(AssertUnwindSafe(|| {
@@ -1492,12 +1431,30 @@ mod adversarial_tampering {
             Ok(Err(err)) => {
                 let message = err.to_string();
                 assert!(
-                    message.contains(pattern),
-                    "Expected error to contain '{pattern}', got: {message}"
+                    patterns.iter().any(|p| message.contains(p)),
+                    "Expected error to contain one of {patterns:?}, got: {message}",
                 );
             }
             Err(_) => panic!("verification panicked; expected Err"),
         }
+    }
+
+    fn assert_verification_error_contains(case: AdversarialCase, pattern: &str) {
+        let params = case.params;
+        assert_verification_error_matches(case, params, &[pattern]);
+    }
+
+    fn assert_verification_error_contains_any(case: AdversarialCase, patterns: &[&str]) {
+        let params = case.params;
+        assert_verification_error_matches(case, params, patterns);
+    }
+
+    fn assert_verification_error_contains_with_params(
+        case: AdversarialCase,
+        params: RollupParams,
+        pattern: &str,
+    ) {
+        assert_verification_error_matches(case, params, &[pattern]);
     }
 
     #[test]
@@ -1886,9 +1843,9 @@ mod multirow_absence_spec {
         (block, params)
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    #[ignore = "BUG SPEC: Multi-row empty-namespace absence should be accepted when all candidate rows are proven absent, but current legacy completeness proof (Option<NamespaceBoundaryProof>) cannot express all-row evidence. Expected: verifier accepts this synthetic all-rows-absent block. Actual: verifier rejects ambiguous multi-row emptiness (MissingBlobs). References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, branch nikolai/celestia-fix-empty-namespace-proof, docs/celestia/multirow-absence-redesign-prompt.md."]
-    async fn empty_namespace_multicandidate_rows_all_rows_absent_accepted_after_redesign() {
+    #[test]
+    #[ignore = "BUG SPEC: multi-row absence proof cannot express all-row evidence (see docs/celestia/multirow-absence-redesign-prompt.md)"]
+    fn empty_namespace_multicandidate_rows_all_rows_absent_accepted_after_redesign() {
         let (block, rollup_params) = synthetic_multirow_absence_fixture();
         let root_count = block
             .header
@@ -1910,8 +1867,8 @@ mod multirow_absence_spec {
             .unwrap();
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn empty_namespace_multicandidate_rows_without_global_evidence_rejected() {
+    #[test]
+    fn empty_namespace_multicandidate_rows_without_global_evidence_rejected() {
         let (block, rollup_params) = synthetic_multirow_absence_fixture();
         let root_count = block
             .header
@@ -1956,8 +1913,8 @@ mod multirow_absence_spec {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn empty_namespace_single_candidate_row_with_boundary_proof_is_accepted() {
+    #[test]
+    fn empty_namespace_single_candidate_row_with_boundary_proof_is_accepted() {
         let (block, rollup_params) = synthetic_single_row_absence_fixture();
         let relevant_blobs = RelevantBlobs {
             batch_blobs: Vec::new(),
@@ -1975,8 +1932,8 @@ mod multirow_absence_spec {
             .unwrap();
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn empty_namespace_single_candidate_row_without_boundary_proof_rejected() {
+    #[test]
+    fn empty_namespace_single_candidate_row_without_boundary_proof_rejected() {
         let (block, rollup_params) = synthetic_single_row_absence_fixture();
         let relevant_blobs = RelevantBlobs {
             batch_blobs: Vec::new(),
@@ -1999,8 +1956,9 @@ mod multirow_absence_spec {
         );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn empty_namespace_claim_rejected_when_candidate_row_contains_real_shares() {
+    #[test]
+    fn empty_namespace_claim_rejected_during_proof_construction_when_candidate_row_contains_real_shares(
+    ) {
         let (block, rollup_params) = synthetic_multirow_mixed_presence_fixture();
         let root_count = block
             .header
@@ -2022,20 +1980,18 @@ mod multirow_absence_spec {
             batch_blobs: Vec::new(),
             proof_blobs: Vec::new(),
         };
-        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
-
-        let verifier = CelestiaVerifier::new(rollup_params);
-        let error = verifier
-            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-            .unwrap_err();
+        let error = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
         assert!(
-            error.to_string().contains("MissingBlobs"),
-            "expected MissingBlobs, got: {error}"
+            matches!(
+                error,
+                crate::types::ExtractionProofError::MissingBlobsForSupportedNamespace { .. }
+            ),
+            "expected MissingBlobsForSupportedNamespace, got: {error}"
         );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn single_row_legacy_boundary_proof_flow_still_verifies() {
+    #[test]
+    fn single_row_legacy_boundary_proof_flow_still_verifies() {
         let (block, rollup_params, signers) = with_rollup_batch_data::test_case();
         let root_count = block
             .header

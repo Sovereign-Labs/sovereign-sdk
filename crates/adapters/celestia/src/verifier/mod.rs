@@ -458,7 +458,7 @@ fn authenticate_blob_data(
     let sequence_length =
         sequence_length.ok_or(InvalidBlobData(BlobDataError::NonMatchingShare))?;
     let shares_occupied_total =
-        shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer);
+        shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer).max(1);
     Ok(shares_occupied_total)
 }
 
@@ -515,7 +515,8 @@ fn verify_skipped_blob(
     let shares_occupied_total = shares_needed_for_bytes_with_signer(
         sequence_length as usize,
         first_share.signer().is_some(),
-    );
+    )
+    .max(1);
 
     Ok(shares_occupied_total)
 }

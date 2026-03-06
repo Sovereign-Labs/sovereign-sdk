@@ -64,23 +64,7 @@ impl MultiRowBatchCase {
     }
 
     pub(crate) fn build_block(&self) -> FilteredCelestiaBlock {
-        let ods_shares = self.build_ods_shares();
-        let eds =
-            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-
-        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
-
-        let batch_data = NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows));
-        let proof_data = NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows));
-
-        let header = build_header(dah);
-        FilteredCelestiaBlock {
-            header,
-            rollup_batch_data: batch_data,
-            rollup_proof_data: proof_data,
-        }
+        build_block_from_ods(self.build_ods_shares())
     }
 
     pub(crate) fn build_ods_shares(&self) -> Vec<Vec<u8>> {
@@ -198,23 +182,7 @@ impl MidRowBatchCase {
     }
 
     pub(crate) fn build_block(&self) -> FilteredCelestiaBlock {
-        let ods_shares = self.build_ods_shares();
-        let eds =
-            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-
-        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
-
-        let batch_data = NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows));
-        let proof_data = NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows));
-
-        let header = build_header(dah);
-        FilteredCelestiaBlock {
-            header,
-            rollup_batch_data: batch_data,
-            rollup_proof_data: proof_data,
-        }
+        build_block_from_ods(self.build_ods_shares())
     }
 
     pub(crate) fn build_ods_shares(&self) -> Vec<Vec<u8>> {
@@ -294,23 +262,7 @@ struct SingleRowMidRowCase {
 
 impl SingleRowMidRowCase {
     fn build_block(&self) -> FilteredCelestiaBlock {
-        let ods_shares = self.build_ods_shares();
-        let eds =
-            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-
-        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
-
-        let batch_data = NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows));
-        let proof_data = NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows));
-
-        let header = build_header(dah);
-        FilteredCelestiaBlock {
-            header,
-            rollup_batch_data: batch_data,
-            rollup_proof_data: proof_data,
-        }
+        build_block_from_ods(self.build_ods_shares())
     }
 
     fn build_ods_shares(&self) -> Vec<Vec<u8>> {
@@ -454,6 +406,18 @@ pub(crate) fn namespace_rows(
         .collect()
 }
 
+pub(crate) fn build_block_from_ods(ods_shares: Vec<Vec<u8>>) -> FilteredCelestiaBlock {
+    let eds = ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
+    let dah = DataAvailabilityHeader::from_eds(&eds);
+    let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
+    let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+    FilteredCelestiaBlock {
+        header: build_header(dah),
+        rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
+        rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
+    }
+}
+
 pub(crate) fn build_header(dah: DataAvailabilityHeader) -> CelestiaHeader {
     let data_hash = match dah.hash() {
         Hash::Sha256(bytes) => Some(ProtobufHash(bytes)),
@@ -478,30 +442,27 @@ pub(crate) fn build_header(dah: DataAvailabilityHeader) -> CelestiaHeader {
     CelestiaHeader::new(dah, compact)
 }
 
-fn assert_first_range_alignment(
+pub(crate) fn assert_subproof_start_indices_align(
     block: &FilteredCelestiaBlock,
     namespace_name: &str,
     inclusion_proof: &[BlobProof],
 ) {
     let row_len = block.header.row_length();
     for (blob_idx, blob_proof) in inclusion_proof.iter().enumerate() {
-        let Some(first_range_proof) = blob_proof.range_proofs.first() else {
-            continue;
-        };
-        let row = block
-            .header
-            .calculate_row_number_for_share(first_range_proof.start_share_idx);
-        let expected = row
-            .checked_mul(row_len)
-            .and_then(|row_start| {
-                row_start.checked_add(first_range_proof.proof.start_idx() as usize)
-            })
-            .expect("overflow while calculating expected range start");
-        assert_eq!(
-            first_range_proof.start_share_idx, expected,
-            "{namespace_name} first range mismatch for blob #{blob_idx}: expected {expected}, actual {}",
-            first_range_proof.start_share_idx
-        );
+        for (range_idx, range_proof) in blob_proof.range_proofs.iter().enumerate() {
+            let row = block
+                .header
+                .calculate_row_number_for_share(range_proof.start_share_idx);
+            let expected = row
+                .checked_mul(row_len)
+                .and_then(|row_start| row_start.checked_add(range_proof.proof.start_idx() as usize))
+                .expect("overflow while calculating expected share index");
+            assert_eq!(
+                range_proof.start_share_idx, expected,
+                "{namespace_name} proof index mismatch for blob #{blob_idx} range #{range_idx}: expected {expected}, actual {}",
+                range_proof.start_share_idx
+            );
+        }
     }
 }
 
@@ -623,7 +584,7 @@ proptest! {
     /// Mid-row layouts can be fully verified if we include lower namespaces
     /// before the batch start and higher namespaces after the batch end.
     #[test]
-    #[ignore = "BUG SPEC: Mid-row namespace extraction should verify when inclusion proofs and boundary proof are internally consistent. Current legacy completeness model (Option<NamespaceBoundaryProof>) can still reject valid mid-row layouts as IncompleteNamespace(MissingBlobs). Expected: Ok for valid synthesized mid-row fixtures. Actual: Err(IncompleteNamespace(MissingBlobs)). References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, branch nikolai/celestia-fix-empty-namespace-proof, docs/celestia/multirow-absence-redesign-prompt.md."]
+    #[ignore = "BUG SPEC: mid-row completeness proof rejects valid layouts (see docs/celestia/multirow-absence-redesign-prompt.md)"]
     fn proptest_mid_row_full_verification(case in mid_row_case_strategy()) {
         let block = case.build_block();
         let mut relevant_blobs = extract_relevant_blobs(&block);
@@ -636,8 +597,8 @@ proptest! {
         }
 
         let proofs = get_extraction_proof(&block, &relevant_blobs);
-        assert_first_range_alignment(&block, "batch", &proofs.batch.inclusion_proof);
-        assert_first_range_alignment(&block, "proof", &proofs.proof.inclusion_proof);
+        assert_subproof_start_indices_align(&block, "batch", &proofs.batch.inclusion_proof);
+        assert_subproof_start_indices_align(&block, "proof", &proofs.proof.inclusion_proof);
         let verifier = CelestiaVerifier::new(RollupParams {
             rollup_batch_namespace: NS_BATCH,
             rollup_proof_namespace: NS_PROOF,
@@ -655,7 +616,7 @@ proptest! {
     /// Single-row mid-row namespace layout:
     /// target namespace starts and ends inside one row (start > 0, end < row_len).
     #[test]
-    #[ignore = "BUG SPEC: Single-row mid-row namespace should verify when the batch occupies an internal subrange of one row and proofs align with that range. Current verifier path can classify these valid layouts as IncompleteNamespace(MissingBlobs) under legacy completeness proof shape. Expected: Ok for valid fixtures. Actual: Err(IncompleteNamespace(MissingBlobs)). References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, branch nikolai/celestia-fix-empty-namespace-proof, docs/celestia/multirow-absence-redesign-prompt.md."]
+    #[ignore = "BUG SPEC: single-row mid-row completeness proof rejects valid layouts (see docs/celestia/multirow-absence-redesign-prompt.md)"]
     fn proptest_single_row_mid_row_full_verification(case in single_row_mid_row_case_strategy()) {
         let block = case.build_block();
         let mut relevant_blobs = extract_relevant_blobs(&block);
@@ -667,8 +628,8 @@ proptest! {
         }
 
         let proofs = get_extraction_proof(&block, &relevant_blobs);
-        assert_first_range_alignment(&block, "batch", &proofs.batch.inclusion_proof);
-        assert_first_range_alignment(&block, "proof", &proofs.proof.inclusion_proof);
+        assert_subproof_start_indices_align(&block, "batch", &proofs.batch.inclusion_proof);
+        assert_subproof_start_indices_align(&block, "proof", &proofs.proof.inclusion_proof);
 
         let verifier = CelestiaVerifier::new(RollupParams {
             rollup_batch_namespace: NS_BATCH,
@@ -779,69 +740,29 @@ proptest! {
 }
 
 /// A focused, deterministic mid-row case that exercises full verification.
-///
-/// This validates whether synthesized data can support boundary proofs when the
-/// target namespace starts and ends mid-row.
 #[test]
-#[ignore = "BUG SPEC: Deterministic mid-row fixture should pass full verification with coherent row-aligned inclusion and boundary proofs. Current legacy completeness handling can still fail with IncompleteNamespace(MissingBlobs). Expected: Ok. Actual: Err(IncompleteNamespace(MissingBlobs)). References: f7ad0a1bb6e74058fa2d192ba393f9c0e9b1c46d, branch nikolai/celestia-fix-empty-namespace-proof, docs/celestia/multirow-absence-redesign-prompt.md."]
+#[ignore = "BUG SPEC: mid-row completeness proof rejects valid layouts (see docs/celestia/multirow-absence-redesign-prompt.md)"]
 fn test_mid_row_full_verification_manual() {
-    // Layout:
-    // - Batch starts mid-row (after 3 low-namespace shares)
-    // - Batch spans multiple rows
-    // - Suffix high namespaces fill the remaining tail
-    let ods_width = 8usize;
-    let prefix_len = 3usize;
-    let batch_rows_full = 5usize;
-    let last_batch_len = 6usize;
-    let suffix_rows = 1usize;
-    let seed = 123u8;
-
-    let prefix_total = prefix_len;
-    let batch_total = (ods_width - prefix_len) + batch_rows_full * ods_width + last_batch_len;
-    let suffix_total = suffix_rows * ods_width + (ods_width - last_batch_len);
-    let total_shares = ods_width * ods_width;
-    assert_eq!(prefix_total + batch_total + suffix_total, total_shares);
-
-    let mut shares = Vec::with_capacity(total_shares);
-    append_segmented_blobs(&mut shares, &[prefix_total], &PREFIX_NAMESPACES, None, seed);
-    let signer = signer_for_index(seed, 0);
-    shares.extend(make_blob_shares(NS_BATCH, batch_total, Some(signer), seed));
-    append_segmented_blobs(
-        &mut shares,
-        &[suffix_total],
-        &SUFFIX_NAMESPACES,
-        None,
-        seed.wrapping_add(0x80),
-    );
-    assert_eq!(shares.len(), total_shares);
-
-    let eds = ExtendedDataSquare::from_ods(shares, APP_VERSION).expect("EDS creation failed");
-    let dah = DataAvailabilityHeader::from_eds(&eds);
-
-    let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-    let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
-
-    let batch_data = NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows));
-    let proof_data = NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows));
-
-    let header = build_header(dah);
-    let block = FilteredCelestiaBlock {
-        header,
-        rollup_batch_data: batch_data,
-        rollup_proof_data: proof_data,
+    let case = MidRowBatchCase {
+        ods_width: 8,
+        prefix_rows: 0,
+        prefix_len: 3,
+        batch_rows_full: 5,
+        last_batch_len: 6,
+        suffix_rows: 1,
+        seed: 123,
     };
+    let block = case.build_block();
 
     let mut relevant_blobs = extract_relevant_blobs(&block);
     assert_eq!(relevant_blobs.batch_blobs.len(), 1);
 
-    // Advance to make full data available prior to proof construction.
     for blob in &mut relevant_blobs.batch_blobs {
         let total_len = blob.total_len();
         blob.advance(total_len);
     }
 
     let proofs = get_extraction_proof(&block, &relevant_blobs);
-
     let verifier = CelestiaVerifier::new(RollupParams {
         rollup_batch_namespace: NS_BATCH,
         rollup_proof_namespace: NS_PROOF,

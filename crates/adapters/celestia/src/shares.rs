@@ -394,6 +394,12 @@ mod tests {
         blob.advance(blob.total_len());
     }
 
+    #[test]
+    fn zero_length_payload_still_occupies_one_share() {
+        assert_eq!(shares_needed_for_bytes_with_signer(0, false), 1);
+        assert_eq!(shares_needed_for_bytes_with_signer(0, true), 1);
+    }
+
     prop_compose! {
         fn share_bytes_strategy()(
             ns in vec(0u8.., NS_ID_V0_SIZE),
