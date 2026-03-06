@@ -2,7 +2,7 @@ use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64,
     parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response,
     rpc_result_hex, setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION,
-    SENDER_PRIV_KEY,
+    HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
@@ -340,44 +340,48 @@ async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let nonce = tx_count(&ws_client, signer.address(), "latest").await?;
-    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
-
-    let raw_tx = raw_signed_eip1559(
-        &signer,
-        chain_id.to::<u64>(),
-        nonce,
-        21_000,
-        TxKind::Call(Address::repeat_byte(0x55)),
-        U256::ZERO,
-        Bytes::new(),
-        DEFAULT_MAX_FEE_PER_GAS,
-        10_000,
-    )
-    .await?;
-
     let http = Client::new();
-    let send_response = rpc_call(
+    let mut tx = ws_client.make_tx(Some(Address::repeat_byte(0x55)), None);
+    tx = tx
+        .value(U256::from(1u64))
+        .max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
+        .max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
+
+    let receipt = ws_client
+        .send_tx_and_wait_finalized(tx)
+        .await
+        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
+    let tx_hash = receipt.transaction_hash;
+    let block_number = receipt
+        .block_number
+        .ok_or_else(|| anyhow::anyhow!("finalized receipt should include block_number"))?;
+
+    let tx_response = rpc_call(
         &http,
         rollup.http_addr,
-        "eth_sendRawTransaction",
-        json!([raw_tx]),
+        "eth_getTransactionByHash",
+        json!([format!("{tx_hash:#x}")]),
     )
     .await?;
     assert!(
-        send_response.get("error").is_none(),
-        "tipped transaction should be accepted: {send_response}"
+        tx_response.get("error").is_none(),
+        "eth_getTransactionByHash should succeed for tipped transaction: {tx_response}"
     );
 
-    let tx_hash: B256 = rpc_result_hex(&send_response).parse()?;
-    let _receipt = ws_client.wait_for_finalized_receipt(tx_hash).await;
+    let max_priority_fee_hex = tx_response["result"]["maxPriorityFeePerGas"]
+        .as_str()
+        .expect("EIP-1559 transaction should include maxPriorityFeePerGas");
+    let max_priority_fee = parse_hex_u128(max_priority_fee_hex);
+    assert!(
+        max_priority_fee > 0,
+        "covered transaction should carry a non-zero maxPriorityFeePerGas"
+    );
 
     let fee_history = rpc_call(
         &http,
         rollup.http_addr,
         "eth_feeHistory",
-        json!(["0x1", "latest", [50]]),
+        json!(["0x1", hex_u64(block_number), [50]]),
     )
     .await?;
 
