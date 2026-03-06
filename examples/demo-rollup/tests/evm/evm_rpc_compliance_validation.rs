@@ -1,5 +1,5 @@
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, B256, U256, U64};
+use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 use jsonrpsee::core::client::ClientT;
@@ -10,7 +10,7 @@ use sov_evm_test_utils::SimpleStorage;
 
 use crate::evm::evm_test_helper::{
     alloy_client, alloy_ws_client, create_simple_storage_client, deploy_contract_check, hex_u64,
-    hex_word_u64, raw_signed_transfer, rpc_call, rpc_error_code_from_response, rpc_result_hex,
+    hex_word_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_result_hex,
     setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, SENDER_PRIV_KEY,
 };
 
@@ -171,13 +171,14 @@ async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyh
     let nonce = tx_count(&ws_client, signer.address(), "latest").await?;
     let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
     // Deliberately invalid gas limit to trigger deterministic tx rejection.
-    let raw = raw_signed_transfer(
+    let raw = raw_signed_eip1559(
         &signer,
         chain_id.to::<u64>(),
         nonce,
         21_000,
-        Address::repeat_byte(0x33),
+        TxKind::Call(Address::repeat_byte(0x33)),
         U256::from(1),
+        Bytes::new(),
         MAX_FEE_PER_GAS,
         MAX_PRIORITY_FEE_PER_GAS,
     )
@@ -346,13 +347,14 @@ async fn rpc_010_send_raw_transaction_sync_returns_receipt_under_preferred_seque
     let nonce = tx_count(&client, signer.address(), "latest").await?;
     let chain_id: U64 = client.ws.request("eth_chainId", rpc_params![]).await?;
 
-    let raw = raw_signed_transfer(
+    let raw = raw_signed_eip1559(
         &signer,
         chain_id.to::<u64>(),
         nonce,
         300_000,
-        Address::repeat_byte(0x22),
+        TxKind::Call(Address::repeat_byte(0x22)),
         U256::from(1),
+        Bytes::new(),
         MAX_FEE_PER_GAS,
         MAX_PRIORITY_FEE_PER_GAS,
     )

@@ -142,11 +142,9 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     )
     .await?;
 
-    let estimate_is_error = estimate_response.get("error").is_some();
-    let send_is_error = send_response.get("error").is_some();
-
     assert_eq!(
-        estimate_is_error, send_is_error,
+        estimate_response.get("error").is_some(),
+        send_response.get("error").is_some(),
         "estimate and send should agree on affordability classification: estimate={estimate_response}, send={send_response}"
     );
 

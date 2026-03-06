@@ -172,6 +172,32 @@ impl AcceptTxErrorDetails {
             },
         }
     }
+
+    fn maybe_from_low_max_fee_message(error: &str) -> Option<Self> {
+        const PREFIX: &str = "Insufficient max_fee_per_gas: user specified ";
+        const SEPARATOR: &str = ", but current base fee is ";
+
+        let suffix = error.strip_prefix(PREFIX)?;
+        let (user_max_fee_per_gas, rollup_base_fee) = suffix.split_once(SEPARATOR)?;
+        let user_max_fee_per_gas = user_max_fee_per_gas.parse().ok()?;
+        let rollup_base_fee = rollup_base_fee.parse().ok()?;
+
+        Some(Self {
+            error: error.to_owned(),
+            code: Some(AcceptTxErrorCode::InsufficientMaxFeePerGas),
+            user_max_fee_per_gas: Some(user_max_fee_per_gas),
+            rollup_base_fee: Some(rollup_base_fee),
+        })
+    }
+
+    pub(crate) fn maybe_from_tx_processing_error(error: &TxProcessingError) -> Option<Self> {
+        match error {
+            TxProcessingError::AuthenticationFailed(error) => {
+                Self::maybe_from_low_max_fee_message(error)
+            }
+            _ => None,
+        }
+    }
 }
 
 pub(crate) type SequencerEventStream<Rt> = Pin<
@@ -738,6 +764,7 @@ pub fn sender_is_allowed<RT: Runtime<S>, S: Spec>(
 #[cfg(test)]
 mod tests {
     use sov_modules_api::capabilities::{AuthenticationError, FatalError};
+    use sov_modules_api::TxProcessingError;
     use sov_modules_stf_blueprint::PreExecError;
     use sov_rollup_interface::TxHash;
 
@@ -764,5 +791,32 @@ mod tests {
         );
         assert_eq!(details.user_max_fee_per_gas, Some(6));
         assert_eq!(details.rollup_base_fee, Some(7));
+    }
+
+    #[test]
+    fn low_max_fee_processing_error_parses_structured_code() {
+        let details = AcceptTxErrorDetails::maybe_from_tx_processing_error(
+            &TxProcessingError::AuthenticationFailed(
+                "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
+                    .to_string(),
+            ),
+        )
+        .expect("low max fee message should deserialize");
+
+        assert_eq!(
+            details.code,
+            Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+        );
+        assert_eq!(details.user_max_fee_per_gas, Some(6));
+        assert_eq!(details.rollup_base_fee, Some(7));
+    }
+
+    #[test]
+    fn unrelated_processing_error_does_not_parse_structured_code() {
+        let details = AcceptTxErrorDetails::maybe_from_tx_processing_error(
+            &TxProcessingError::AuthenticationFailed("Invalid ethereum signature".to_string()),
+        );
+
+        assert!(details.is_none());
     }
 }

@@ -166,8 +166,8 @@ where
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
         let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
-            if let Some(err) = map_low_max_fee_auth_error(&e) {
-                return err;
+            if matches!(&e, AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _)) {
+                return RpcInvalidTransactionError::FeeCapTooLow.into();
             }
             if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
                 &e
@@ -274,18 +274,9 @@ where
     }
 }
 
-fn map_low_max_fee_auth_error(error: &AuthenticationError) -> Option<ErrorObjectOwned> {
-    match error {
-        AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
-            Some(RpcInvalidTransactionError::FeeCapTooLow.into())
-        }
-        _ => None,
-    }
-}
-
 fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
     if matches!(
-        accept_tx_error_details(&err).and_then(|details| details.code),
+        serde_json::from_value::<AcceptTxErrorDetails>(serde_json::Value::Object(err.details.clone())).ok().and_then(|details| details.code),
         Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
     ) {
         return RpcInvalidTransactionError::FeeCapTooLow.into();
@@ -296,10 +287,6 @@ fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
         400 | 403 | 413 => rpc_invalid_params(err_msg),
         _ => rpc_tx_rejected(err_msg),
     }
-}
-
-fn accept_tx_error_details(err: &RestErrorObject) -> Option<AcceptTxErrorDetails> {
-    serde_json::from_value(serde_json::Value::Object(err.details.clone())).ok()
 }
 
 fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResult<T>) {

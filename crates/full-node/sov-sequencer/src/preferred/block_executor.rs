@@ -18,7 +18,7 @@ use sov_modules_api::{
 };
 use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
-use sov_rest_utils::{json_obj, ErrorObject};
+use sov_rest_utils::{json_obj, to_json_object, ErrorObject};
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
@@ -34,8 +34,7 @@ use super::state_root_compute::StateRootComputeRequest;
 use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
-use crate::common::AcceptedTx;
-use crate::common::ForcedTxBatchNotification;
+use crate::common::{AcceptTxErrorDetails, AcceptedTx, ForcedTxBatchNotification};
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -88,9 +87,18 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                 reject_reason_to_error(reason, call)
             }
             RollupBlockExecutorError::UnsuccessfulTransaction { receipt } => {
-                let details = match receipt.receipt {
+                let details = match &receipt.receipt {
                     sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
+                    }
+                    sov_rollup_interface::stf::TxEffect::Skipped(skipped) => {
+                        AcceptTxErrorDetails::maybe_from_tx_processing_error(&skipped.error)
+                            .map(to_json_object)
+                            .unwrap_or_else(|| {
+                                json_obj!({
+                                    "error": format!("{:?}", receipt),
+                                })
+                            })
                     }
                     _ => json_obj!({
                         "error": format!("{:?}", receipt),

@@ -160,8 +160,8 @@ where
         db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
     ) -> Result<GethTrace, EthApiError> {
-        let config = opts.config;
         let GethDebugTracingOptions {
+            config,
             tracer,
             tracer_config,
             ..
@@ -194,7 +194,7 @@ where
             };
         }
 
-        let mut inspector_config = TracingInspectorConfig::from_geth_config(&config);
+        let mut inspector_config = TracingInspectorConfig::from_geth_config(config);
         inspector_config.record_returndata_snapshots = config.is_return_data_enabled();
         let mut inspector = TracingInspector::new(inspector_config);
 
@@ -208,7 +208,7 @@ where
         let return_value = result.output().cloned().unwrap_or_default();
         let mut frame = inspector
             .geth_builder()
-            .geth_traces(gas_used, return_value, config);
+            .geth_traces(gas_used, return_value, *config);
 
         if let Some(limit) = config.limit.filter(|limit| *limit > 0) {
             frame

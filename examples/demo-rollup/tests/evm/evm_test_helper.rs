@@ -213,30 +213,6 @@ pub(crate) async fn raw_signed_eip1559(
     Ok(format!("0x{}", hex::encode(envelope.encoded_2718())))
 }
 
-pub(crate) async fn raw_signed_transfer(
-    signer: &PrivateKeySigner,
-    chain_id: u64,
-    nonce: u64,
-    gas_limit: u64,
-    to: Address,
-    value: U256,
-    max_fee_per_gas: u128,
-    max_priority_fee_per_gas: u128,
-) -> anyhow::Result<String> {
-    raw_signed_eip1559(
-        signer,
-        chain_id,
-        nonce,
-        gas_limit,
-        TxKind::Call(to),
-        value,
-        Bytes::new(),
-        max_fee_per_gas,
-        max_priority_fee_per_gas,
-    )
-    .await
-}
-
 pub(crate) fn eth_call_params(from: &str, to: &str, input: &str, block_tag: &str) -> Value {
     json!([{
         "from": from,
@@ -275,10 +251,6 @@ pub(crate) fn rpc_error_message(error: &Value) -> &str {
 
 pub(crate) fn rpc_error_data_str(error: &Value) -> Option<&str> {
     error.get("data").and_then(Value::as_str)
-}
-
-pub(crate) fn number_selector(n: u64) -> String {
-    format!("0x{n:x}")
 }
 
 pub(crate) fn hash_selector(hash: B256) -> Value {

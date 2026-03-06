@@ -103,12 +103,10 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_fee() -> 
     assert_unfunded_caller(&client, caller).await?;
 
     let request = TransactionRequest {
-        from: Some(caller),
-        to: Some(TxKind::Call(Address::ZERO)),
+        gas: None,
         max_fee_per_gas: Some(NONZERO_FEE_PER_GAS),
         max_priority_fee_per_gas: Some(1),
-        value: Some(U256::ZERO),
-        ..Default::default()
+        ..base_request(caller)
     };
     assert_rpc_rejects::<U64>(
         &client,
@@ -130,11 +128,9 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_gas_price
     assert_unfunded_caller(&client, caller).await?;
 
     let request = TransactionRequest {
-        from: Some(caller),
-        to: Some(TxKind::Call(Address::ZERO)),
+        gas: None,
         gas_price: Some(NONZERO_FEE_PER_GAS),
-        value: Some(U256::ZERO),
-        ..Default::default()
+        ..base_request(caller)
     };
     assert_rpc_rejects::<U64>(
         &client,
