@@ -104,8 +104,9 @@ impl ProofManagerDb {
 
     /// Set next_height_to_receive. Writes immediately to disk.
     ///
-    /// This is the critical method that fixes the duplicate proof submission bug.
-    /// Call this immediately after successful aggregated proof posting.
+    /// Immediate persistence is critical: if this update waited for the next
+    /// ledger commit, a crash after proof posting but before the commit would
+    /// cause the node to re-submit the same aggregated proof on restart.
     pub fn set_next_height_to_receive(&self, slot: SlotNumber) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::new();
         batch.put::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID, &slot)?;
@@ -191,7 +192,10 @@ impl ProofManagerDb {
         ledger_db: &LedgerDb,
         ledger_head: SlotNumber,
     ) -> anyhow::Result<()> {
-        if ledger_head <= SlotNumber::GENESIS {
+        // First-ever startup: ledger is empty (get_head_slot() returned None),
+        // so there is no prior state to reconcile. ProofManagerDb will be
+        // populated as slots are processed.
+        if ledger_head == SlotNumber::GENESIS {
             return Ok(());
         }
 
@@ -240,6 +244,9 @@ impl ProofManagerDb {
         let maybe_write_height = self.get_write_height()?;
         let mut write_height = maybe_write_height.unwrap_or(SlotNumber::GENESIS);
 
+        // Possible if ProofManagerDb persisted write_height but the
+        // corresponding LedgerDb write was lost on crash (fsync race),
+        // or after an external ledger rollback/restore.
         if write_height > ledger_head {
             let old_write_height = write_height;
             let mut batch = SchemaBatch::new();

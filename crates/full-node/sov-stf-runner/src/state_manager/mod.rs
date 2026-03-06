@@ -480,6 +480,13 @@ where
             // Only advance write_height for slots actually finalized to LedgerDb disk.
             // Staged STF data for non-finalized slots is recovered by
             // validate_and_recover_write_height on restart.
+            //
+            // Safety: finalized_slot is always >= the current write_height because:
+            // - state_on_block is empty on startup, so finalized transitions only
+            //   come from blocks processed after startup (slot > ledger_head)
+            // - validate_and_recover_write_height caps write_height at ledger_head
+            // - finality is strictly monotonic (get_effective_finalized_header
+            //   never returns a height below last_processed_finalized_header)
             if let Some(finalized_slot) = last_finalized_slot_number {
                 stf_info_sender.commit_stf_info(finalized_slot).await?;
             }

@@ -345,6 +345,21 @@ where
     }
 
     /// Stage STF info data in ProofManagerDb immediately.
+    ///
+    /// # Two-phase commit pattern
+    ///
+    /// Because ProofManagerDb and LedgerDb are separate databases, they cannot
+    /// be committed atomically. To maintain consistency:
+    ///
+    /// 1. **Stage** (this method): writes STF info data to ProofManagerDb
+    ///    before the ledger commit.
+    /// 2. **Commit** ([`Self::commit_stf_info`]): after the ledger commit
+    ///    succeeds, advances `write_height` metadata to match.
+    ///
+    /// If a crash occurs between staging and committing,
+    /// [`ProofManagerDb::validate_and_recover_write_height`] detects the gap
+    /// on restart and advances `write_height` to cover contiguous
+    /// staged-but-uncommitted STF info.
     pub async fn stage_stf_info(
         &self,
         stf_info: &StateTransitionInfo<StateRoot, Witness, Da>,
