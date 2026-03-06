@@ -396,6 +396,7 @@ mod tests {
                 },
             },
             tx_number: number,
+            timestamp_nanos: None,
         };
         ExecutorEvent::AcceptedTx(AcceptedTxEventContents {
             accepted_tx: AcceptedTx {

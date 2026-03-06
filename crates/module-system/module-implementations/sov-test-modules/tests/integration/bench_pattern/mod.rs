@@ -2,8 +2,7 @@ use borsh::BorshSerialize;
 use sha2::Digest;
 use sov_modules_api::{CryptoSpec, PrivateKey, Spec};
 use sov_test_modules::access_pattern::{
-    AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages, HooksConfig,
-    MeteredBorshDeserializeString,
+    AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages, MeteredBorshDeserializeString,
 };
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -342,61 +341,6 @@ fn test_setting_and_deleting_value() {
                 assert_eq!(
                     AccessPattern::<S>::default().values.get(&i, state).unwrap(),
                     None
-                );
-            }
-        }),
-    });
-}
-
-#[test]
-fn test_set_hooks() {
-    let (mut runner, admin, _) = setup();
-
-    runner.execute_transaction(TransactionTestCase {
-        input: admin.create_plain_message::<RT, AccessPattern<S>>(AccessPatternMessages::SetHook {
-            pre: Some(vec![
-                HooksConfig::Write {
-                    begin: 0,
-                    size: 20,
-                    data_size: 10,
-                },
-                HooksConfig::Write {
-                    begin: 20,
-                    size: 10,
-                    data_size: 20,
-                },
-            ]),
-            post: Some(vec![HooksConfig::Delete { begin: 0, size: 10 }]),
-        }),
-        assert: Box::new(|result, _state| assert!(result.tx_receipt.is_successful())),
-    });
-
-    runner.execute_transaction(TransactionTestCase {
-        input: admin.create_plain_message::<RT, AccessPattern<S>>(
-            AccessPatternMessages::ReadCells {
-                begin: 0,
-                num_cells: 20,
-            },
-        ),
-        assert: Box::new(|_result, state| {
-            for i in 0..10 {
-                assert_eq!(
-                    AccessPattern::<S>::default().values.get(&i, state).unwrap(),
-                    None
-                );
-            }
-
-            for i in 10..20 {
-                assert_eq!(
-                    AccessPattern::<S>::default().values.get(&i, state).unwrap(),
-                    Some(i.to_string().repeat(10))
-                );
-            }
-
-            for i in 20..30 {
-                assert_eq!(
-                    AccessPattern::<S>::default().values.get(&i, state).unwrap(),
-                    Some(i.to_string().repeat(20))
                 );
             }
         }),

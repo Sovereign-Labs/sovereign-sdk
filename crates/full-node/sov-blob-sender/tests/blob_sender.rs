@@ -4,7 +4,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use sov_blob_sender::{
     BlobExecutionStatus, BlobInternalId, BlobSelectorStatus, BlobSender, BlobSenderHooks,
-    FinalizationManager,
+    BlobSubmissionStatus, FinalizationManager,
 };
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
@@ -19,7 +19,6 @@ use std::sync::atomic::AtomicUsize;
 use tempfile::TempDir;
 use tokio::sync::{broadcast, watch, RwLock};
 use tokio::task::JoinHandle;
-use tokio::time::sleep;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry;
@@ -90,10 +89,13 @@ where
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
     let deps = create_deps().await;
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
+    let nb_of_blobs = 2;
+
     let (mut blob_sender, _) = create_blob_sender(
         Duration::from_secs(20),
         &deps,
-        None,
+        Some(status_sender),
         BlobSelectorStatus::Accepted,
     )
     .await;
@@ -116,19 +118,37 @@ async fn blob_sender_posts_data_to_da() -> anyhow::Result<()> {
         data
     };
 
-    sleep(Duration::from_secs(1)).await;
     let submissions = blob_sender.nb_of_concurrent_blob_submissions();
     assert_eq!(submissions, 2);
 
-    {
-        deps.da.produce_block_now().await?;
-        sleep(Duration::from_secs(1)).await;
-        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
-        assert_data_at(&deps.da, data_2.as_slice(), 1).await;
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Published { .. }
+            )
+        },
+        nb_of_blobs,
+    )
+    .await;
 
-        let submissions = blob_sender.nb_of_concurrent_blob_submissions();
-        assert_eq!(submissions, 0);
-    }
+    deps.da.produce_block_now().await?;
+
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Finalized { .. }
+            )
+        },
+        nb_of_blobs,
+    )
+    .await;
+
+    assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+    assert_data_at(&deps.da, data_2.as_slice(), 1).await;
 
     Ok(())
 }
@@ -176,6 +196,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Result<()> {
     let deps = create_deps().await;
+    let nb_of_blobs = 2;
 
     // Send blob to the DA and shutdown blob sender.
     {
@@ -201,10 +222,11 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
 
     // After restart, the blob sender, resubmits the previous blob on the first call to `publish_batch_blob`.
     {
+        let (status_sender, mut status_receiver) = broadcast::channel(100);
         let (mut blob_sender, _) = create_blob_sender(
             Duration::from_secs(20),
             &deps,
-            None,
+            Some(status_sender),
             BlobSelectorStatus::Accepted,
         )
         .await;
@@ -220,13 +242,29 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
         let submissions = blob_sender.nb_of_concurrent_blob_submissions();
         assert_eq!(submissions, 2);
 
-        sleep(Duration::from_secs(1)).await;
+        wait_for_submission_statuses(
+            &mut status_receiver,
+            |status| {
+                matches!(
+                    status.blob_submission_status,
+                    BlobSubmissionStatus::Published { .. }
+                )
+            },
+            nb_of_blobs,
+        )
+        .await;
         deps.da.produce_block_now().await?;
-        // We have to wait a littele bit for the async task in blob sender.
-        sleep(Duration::from_secs(1)).await;
-
-        let submissions = blob_sender.nb_of_concurrent_blob_submissions();
-        assert_eq!(submissions, 0);
+        wait_for_submission_statuses(
+            &mut status_receiver,
+            |status| {
+                matches!(
+                    status.blob_submission_status,
+                    BlobSubmissionStatus::Finalized { .. }
+                )
+            },
+            nb_of_blobs,
+        )
+        .await;
     }
 
     Ok(())
@@ -239,6 +277,7 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
+    let mut shutdown_receiver = deps.shutdown_sender.subscribe();
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
@@ -254,12 +293,14 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
         .publish_batch_blob(data, blob_id as BlobInternalId)
         .await?;
 
-    // Blob publication failed due to the absence of DA blocks.
-    // After MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, the BlobSender should terminate gracefully.
-    let result = tokio::time::timeout(Duration::from_secs(5), blob_sender_handle).await;
-    result
-        .expect("The BlobSender should exit gracefully after failing to publish blobs.")
-        .unwrap();
+    // Blob publication fails due to the absence of DA blocks.
+    // After MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, BlobSender should request shutdown.
+    shutdown_receiver
+        .changed()
+        .await
+        .expect("The BlobSender should request shutdown after failing to process blobs.");
+
+    blob_sender_handle.await.unwrap();
 
     let mut records = collector.records();
     assert_eq!(records.len(), 4);
@@ -281,13 +322,15 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
     let deps = create_deps().await;
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
     let (mut blob_sender, _) = create_blob_sender(
         Duration::from_secs(20),
         &deps,
-        None,
+        Some(status_sender),
         BlobSelectorStatus::Discarded(BlobDiscardReason::SequenceNumberTooLow),
     )
     .await;
+    let nb_of_blobs = 1;
 
     let data_1 = {
         let blob_id = 11u8;
@@ -298,18 +341,39 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
         data
     };
 
-    sleep(Duration::from_secs(1)).await;
     let submissions = blob_sender.nb_of_concurrent_blob_submissions();
     assert_eq!(submissions, 1);
 
-    {
-        deps.da.produce_block_now().await?;
-        sleep(Duration::from_secs(1)).await;
-        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Published { .. }
+            )
+        },
+        nb_of_blobs,
+    )
+    .await;
 
-        let submissions = blob_sender.nb_of_concurrent_blob_submissions();
-        assert_eq!(submissions, 0);
-    }
+    deps.da.produce_block_now().await?;
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Finalized { .. }
+            ) && matches!(
+                status.blob_selector_status,
+                Some(BlobSelectorStatus::Discarded(
+                    BlobDiscardReason::SequenceNumberTooLow
+                ))
+            )
+        },
+        nb_of_blobs,
+    )
+    .await;
+    assert_data_at(&deps.da, data_1.as_slice(), 1).await;
 
     Ok(())
 }
@@ -321,14 +385,17 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
     let (mut blob_sender, _) = create_blob_sender(
         Duration::from_secs(20),
         &deps,
-        None,
+        Some(status_sender),
         // If a blob is discarded for a reason other than BlobDiscardReason::SequenceNumberTooLow, it will be resubmitted.
         BlobSelectorStatus::Discarded(BlobDiscardReason::SenderInsufficientStake),
     )
     .await;
+
+    let nb_of_blobs = 1;
 
     let data_1 = {
         let blob_id = 11u8;
@@ -339,18 +406,38 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
         data
     };
 
-    sleep(Duration::from_secs(1)).await;
     let submissions = blob_sender.nb_of_concurrent_blob_submissions();
     assert_eq!(submissions, 1);
 
-    {
-        deps.da.produce_block_now().await?;
-        sleep(Duration::from_secs(1)).await;
-        assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Published { .. }
+            )
+        },
+        nb_of_blobs,
+    )
+    .await;
 
-        let submissions = blob_sender.nb_of_concurrent_blob_submissions();
-        assert_eq!(submissions, 1);
-    }
+    deps.da.produce_block_now().await?;
+    // The status is Published because the blob was resubmitted.
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Published { .. }
+            )
+        },
+        nb_of_blobs,
+    )
+    .await;
+
+    assert_data_at(&deps.da, data_1.as_slice(), 1).await;
+    let submissions = blob_sender.nb_of_concurrent_blob_submissions();
+    assert_eq!(submissions, 1);
 
     let mut records = collector.records();
     let (_, log) = records.pop().unwrap();
@@ -449,4 +536,19 @@ async fn assert_data_at<Da: DaService>(da: &Da, data: &[u8], height: u64) {
         }
     }
     panic!("Data missing on DA")
+}
+
+async fn wait_for_submission_statuses<F>(
+    status_receiver: &mut broadcast::Receiver<BlobExecutionStatus<MockDaSpec>>,
+    status_matcher: F,
+    mut count: usize,
+) where
+    F: Fn(&BlobExecutionStatus<MockDaSpec>) -> bool,
+{
+    while count > 0 {
+        let status = status_receiver.recv().await.unwrap();
+        if status_matcher(&status) {
+            count -= 1;
+        }
+    }
 }

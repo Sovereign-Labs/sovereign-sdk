@@ -88,9 +88,6 @@ pub struct AccessPatternMessageGenerator<S: Spec> {
     /// The maximum size of the writes to the storage.
     maximum_write_size: u64,
 
-    /// Max number of hooks ops per storage pattern
-    maximum_hooks_ops: u64,
-
     /// The genesis private key of the admin of the access pattern module
     genesis_admin_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
 
@@ -104,7 +101,6 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
         maximum_write_length: usize,
         maximum_write_begin_index: u64,
         maximum_write_size: u64,
-        maximum_hooks_ops: u64,
         admin_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
     ) -> Self {
         Self {
@@ -112,7 +108,6 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
             maximum_write_data_length: maximum_write_length,
             maximum_write_begin_index,
             maximum_write_size,
-            maximum_hooks_ops,
             genesis_admin_key: admin_key,
             phantom: Default::default(),
         }
@@ -352,10 +347,6 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
 
                 AccessPatternMessages::DeleteCells { begin, num_cells }
             }
-            AccessPatternDiscriminants::SetHook => AccessPatternMessages::SetHook {
-                pre: None,
-                post: None,
-            },
             AccessPatternDiscriminants::HashCustom => AccessPatternMessages::HashCustom {
                 input: SafeVec::new(),
             },
@@ -426,7 +417,7 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
     /// Generates valid call messages for the access pattern module
     // TODO(@theochap): this method does not accurately generate logs if the pre/post tx hooks are set.
     // Indeed, state values can be updated by these hooks which causes the logs state to be incorrect.
-    // This is temporary tech debt - the implementation is straighforward (it requires using the `Data`) extension
+    // This is temporary tech debt - the implementation is straightforward (it requires using the `Data`) extension
     // of the `AccountState` - but we are postponing it for now.
     pub fn generate_valid_call_message(
         &self,
@@ -525,81 +516,6 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
 
                 Ok(GeneratedMessage {
                     message: AccessPatternMessages::DeleteCells { begin, num_cells },
-                    sender: sender_acct.private_key,
-                    outcome: MessageOutcome::Successful { changes },
-                })
-            }
-            AccessPatternDiscriminants::SetHook => {
-                let get_arbitrary_hook: &mut dyn FnMut(
-                    &mut arbitrary::Unstructured<'_>,
-                )
-                    -> arbitrary::Result<Vec<HooksConfig>> =
-                    &mut (|u: &mut arbitrary::Unstructured<'_>| {
-                        let num_hooks = u.int_in_range(0..=self.maximum_hooks_ops)?;
-
-                        let mut hooks = Vec::with_capacity(num_hooks as usize);
-
-                        for _ in 0..num_hooks {
-                            let hook = match u.choose(HooksConfigDiscriminants::VARIANTS)? {
-                                HooksConfigDiscriminants::Read => {
-                                    let begin =
-                                        u.int_in_range(0..=self.maximum_write_begin_index)?;
-                                    let size = u.int_in_range(0..=self.maximum_write_size)?;
-
-                                    HooksConfig::Read { begin, size }
-                                }
-                                HooksConfigDiscriminants::Write => {
-                                    let begin =
-                                        u.int_in_range(0..=self.maximum_write_begin_index)?;
-                                    let size = u.int_in_range(0..=self.maximum_write_size)?;
-                                    let data_size =
-                                        u.int_in_range(0..=self.maximum_write_data_length)?;
-
-                                    HooksConfig::Write {
-                                        begin,
-                                        size,
-                                        data_size,
-                                    }
-                                }
-                                HooksConfigDiscriminants::Delete => {
-                                    let begin =
-                                        u.int_in_range(0..=self.maximum_write_begin_index)?;
-                                    let size = u.int_in_range(0..=self.maximum_write_size)?;
-
-                                    HooksConfig::Delete { begin, size }
-                                }
-                            };
-
-                            hooks.push(hook);
-                        }
-
-                        Ok(hooks)
-                    });
-
-                // Selects if we set the pre-hooks
-                let pre = if bool::arbitrary(u)? {
-                    Some(get_arbitrary_hook(u)?)
-                } else {
-                    None
-                };
-
-                let post = if bool::arbitrary(u)? {
-                    Some(get_arbitrary_hook(u)?)
-                } else {
-                    None
-                };
-
-                let changes = vec![
-                    AccessPatternChangeLogEntry::PreHooksUpdated {
-                        values: pre.clone(),
-                    },
-                    AccessPatternChangeLogEntry::PostHooksUpdated {
-                        values: post.clone(),
-                    },
-                ];
-
-                Ok(GeneratedMessage {
-                    message: AccessPatternMessages::SetHook { pre, post },
                     sender: sender_acct.private_key,
                     outcome: MessageOutcome::Successful { changes },
                 })

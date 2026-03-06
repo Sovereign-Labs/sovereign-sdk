@@ -1,5 +1,4 @@
 use crate::flat_db::DbCache;
-use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
@@ -10,6 +9,7 @@ use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::VersionedDeltaReader;
 use rockbound::SchemaBatch;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
@@ -23,7 +23,9 @@ use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
 use crate::schema::tables::ModuleAccessoryState;
 use crate::state_db_nomt::{NomtSessionBuilder, NomtStateDb, StateOverlay, StateRootHashes};
-use crate::storage_manager::{update_ledger_finalized_height, InitializableNativeNomtStorage};
+use crate::storage_manager::{
+    update_ledger_finalized_height, InitializableNativeNomtStorage, WitnessMode,
+};
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;
 
@@ -46,14 +48,19 @@ where
 {
     pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         let path = config.path.clone();
+        let ledger_db_path = config.ledger_db_path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
         let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
         let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
-        let ledger = Arc::new(LedgerDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+        let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
+            LedgerDb::get_rockbound_options().default_setup_db(ledger_db_path)?
+        } else {
+            LedgerDb::get_rockbound_options().default_setup_db_as_subdir(&path)?
+        });
 
         let accessory =
-            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_in_path(&path)?);
+            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_as_subdir(&path)?);
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessary(
@@ -73,6 +80,14 @@ where
     }
 
     pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
+        self.commit_helper(group, None)
+    }
+
+    fn commit_helper(
+        &mut self,
+        group: CommitGroup,
+        expected_latest: Option<SlotNumber>,
+    ) -> anyhow::Result<()> {
         tracing::trace!("Commiting a group...");
         // The last commit had to be successful.
         let CommitGroup {
@@ -104,7 +119,22 @@ where
 
         // Flat State
         tracing::trace!("Committing Flat DB..");
-        let flat_metrics = self.flat_state.commit(historical_state)?;
+        #[cfg(feature = "migration-script")]
+        let flat_metrics = if let Some(expected_latest) = expected_latest {
+            self.flat_state
+                .commit_at_latest_checked(historical_state, expected_latest)?
+        } else {
+            self.flat_state.commit(historical_state)?
+        };
+
+        #[cfg(not(feature = "migration-script"))]
+        let flat_metrics = {
+            assert!(
+                expected_latest.is_none(),
+                "expected_latest must be none when not in migration script"
+            );
+            self.flat_state.commit(historical_state)?
+        };
 
         // Metrics
         let merklized_commit_from_caller = merklized_commit.total;
@@ -121,6 +151,23 @@ where
         self.merklized_state.send_metrics();
 
         Ok(())
+    }
+
+    #[cfg(feature = "migration-script")]
+    pub(crate) fn commit_at_latest_checked(
+        &mut self,
+        group: CommitGroup,
+        expected_latest: SlotNumber,
+    ) -> anyhow::Result<()> {
+        self.commit_helper(group, Some(expected_latest))
+    }
+
+    #[cfg(feature = "migration-script")]
+    pub(crate) fn latest_flat_state_version(&self) -> anyhow::Result<Option<SlotNumber>> {
+        Ok(self
+            .flat_state
+            .latest_version_and_root_hash_live_db()?
+            .map(|(v, _)| SlotNumber::new(v)))
     }
 
     fn validate_commit_flag_and_rollback_if_necessary(
@@ -201,8 +248,8 @@ where
         relevant_snapshot_refs: Vec<K>,
         rockbound_snapshots: &HashMap<K, SnapshotGroup>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
-        pinned_cache: Option<Box<dyn Any + Send + Sync>>,
-        with_witness: bool,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
         let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
         let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
@@ -263,8 +310,8 @@ where
             state_session_builder,
             historical_state_mapper,
             accessory_db,
-            with_witness,
-            pinned_cache,
+            strict_mode,
+            witness_mode,
         );
         Ok((storage, ledger_reader))
     }

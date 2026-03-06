@@ -13,6 +13,7 @@ use crate::{CelestiaConfig, CelestiaService};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
+use sov_test_utils::docker::pull_image_with_retries;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, Image, ImageExt};
@@ -20,14 +21,15 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
-const VALIDATOR_TAG: &str = "v6.2.2-mocha";
+const VALIDATOR_TAG: &str = "v7.0.2-mocha";
 const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
-const BRIDGE_TAG: &str = "v0.28.2-mocha";
+const BRIDGE_TAG: &str = "v0.29.1-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
 const BRIDGE_RPC_PORT: u16 = 26658;
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
 
+#[derive(Clone)]
 pub struct CelestiaValidator;
 
 impl Image for CelestiaValidator {
@@ -53,6 +55,7 @@ impl Image for CelestiaValidator {
     }
 }
 
+#[derive(Clone)]
 pub struct CelestiaBridge;
 
 impl Image for CelestiaBridge {
@@ -88,6 +91,12 @@ impl CelestiaDevNode {
     pub async fn start() -> anyhow::Result<Self> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let start = std::time::Instant::now();
+        pull_image_with_retries(CelestiaValidator)
+            .await
+            .context("failed to pull celestia validator image")?;
+        pull_image_with_retries(CelestiaBridge)
+            .await
+            .context("failed to pull celestia bridge image")?;
         let suffix = Uuid::new_v4().to_string();
 
         let network = format!("celestia-test-{suffix}");

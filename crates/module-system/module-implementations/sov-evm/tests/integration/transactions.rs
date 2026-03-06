@@ -1,6 +1,7 @@
 use crate::helpers::*;
 use crate::runtime::RT;
 use crate::runtime::S;
+use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::BlockId;
 use alloy_primitives::FixedBytes;
 use alloy_primitives::Log;
@@ -13,6 +14,33 @@ use sov_modules_api::GasArray;
 use sov_test_utils::BatchTestCase;
 use sov_test_utils::TransactionType;
 use sov_test_utils::{TransactionTestCase, TEST_DEFAULT_USER_BALANCE};
+
+fn assert_receipt_implied_fee_is_conservative(
+    actual_fee: U256,
+    implied_fee: U256,
+    effective_gas_price: u128,
+) {
+    assert!(
+        implied_fee >= actual_fee,
+        "receipt-implied fee should not under-report the actual charged fee"
+    );
+
+    let over_reported_fee = implied_fee
+        .checked_sub(actual_fee)
+        .expect("implied fee is checked to be >= actual fee");
+    if effective_gas_price == 0 {
+        assert_eq!(
+            over_reported_fee,
+            U256::ZERO,
+            "zero effective gas price cannot over-report fee"
+        );
+    } else {
+        assert!(
+            over_reported_fee < U256::from(effective_gas_price),
+            "receipt-implied fee overage should stay below one gas-price unit"
+        );
+    }
+}
 
 #[test]
 fn test_simple_transfer() {
@@ -28,7 +56,7 @@ fn test_simple_transfer() {
             let mut db = evm.db(state);
             let from_acc = db.basic(from.address()).unwrap().unwrap();
             let to_acc = db.basic(to.address()).unwrap().unwrap();
-            // The only balance changes should be from the trasfer itself and not from gas as it's disabled in SovEvm
+            // The only balance changes should be from the transfer itself and not from gas as it's disabled in SovEvm
             assert_eq!(
                 from_acc.balance,
                 TEST_DEFAULT_USER_BALANCE.0 - value - ctx.gas_value_used.0
@@ -43,8 +71,14 @@ fn test_receipt_fee_matches_balance_delta() {
     set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
-    let transfer =
-        create_transfer_tx_with_fee_params(0, &from, &to, value, 1_000_000_000, 987_654_321);
+    let transfer = create_transfer_tx_with_fee_params(
+        0,
+        &from,
+        &to,
+        value,
+        MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        0,
+    );
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -65,16 +99,10 @@ fn test_receipt_fee_matches_balance_delta() {
                 })
                 .expect("sender balance should decrease by transfer value and a fee");
 
-            assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
-            );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
+            assert_receipt_implied_fee_is_conservative(
+                actual_fee,
+                implied_fee,
+                receipt.effective_gas_price,
             );
         }),
     });
@@ -85,8 +113,14 @@ fn test_block_receipt_fee_matches_balance_delta() {
     set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
-    let transfer =
-        create_transfer_tx_with_fee_params(0, &from, &to, value, 1_000_000_000, 987_654_321);
+    let transfer = create_transfer_tx_with_fee_params(
+        0,
+        &from,
+        &to,
+        value,
+        MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        0,
+    );
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -112,16 +146,10 @@ fn test_block_receipt_fee_matches_balance_delta() {
                 })
                 .expect("sender balance should decrease by transfer value and a fee");
 
-            assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
-            );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
+            assert_receipt_implied_fee_is_conservative(
+                actual_fee,
+                implied_fee,
+                receipt.effective_gas_price,
             );
         }),
     });
@@ -132,8 +160,14 @@ fn test_receipt_uses_eip1559_formula_before_activation_height() {
     set_receipt_actual_fee_height(1_000_000);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
-    let transfer =
-        create_transfer_tx_with_fee_params(0, &from, &to, value, 1_000_000_000, 987_654_321);
+    let transfer = create_transfer_tx_with_fee_params(
+        0,
+        &from,
+        &to,
+        value,
+        MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        0,
+    );
 
     let evm = Evm::<S>::default();
     runner.execute_transaction(TransactionTestCase {
@@ -507,7 +541,7 @@ impl Block {
 
         let mut blocks = vec![];
 
-        // We start from 1 becaue genesis is alredy in the state.
+        // We start from 1 because genesis is already in the state.
         let mut nr = 1;
         for txs in transfers.chunks(batch_size) {
             blocks.push(Block {

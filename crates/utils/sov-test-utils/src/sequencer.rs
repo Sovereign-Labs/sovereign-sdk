@@ -216,7 +216,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             MockDaSpec,
             TestHasher,
             NomtProverStorage<DefaultStorageSpec<TestHasher>, TestSlotHash>,
-        >::new(config)?;
+        >::new(config, false)?;
 
         Self::with_storage_manager(
             dir,

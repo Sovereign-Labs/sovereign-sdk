@@ -51,6 +51,15 @@ If you touch fee context, validate all of these together:
 - Receipt `effective_gas_price`
 - `eth_feeHistory` base-fee series
 
+### 1.5 Actual-fee projection invariants
+
+- Activation gate must stay shared via `src/sov_fee_and_gas_utils.rs:is_actual_fee_projection_height_active` for both receipt projection and RPC effective-gas-price projection.
+- Receipt-side gas projection must support non-uniform gas-price dimensions by computing `ceil(gas_value / gas_price[0])` with checked integer arithmetic.
+- Treat `GasInfo` as the source of truth: `gas_value` must equal `gas_used · gas_price`. Any divergence is a bug, not alternate fee semantics.
+- `gas_price[0]` is the canonical EVM gas price/base fee value. Block header `base_fee_per_gas` must represent the same value exactly (no clamping/truncation). Any mismatch is a bug.
+- Receipt projection is intentionally conservative: receipt-implied paid fee may be slightly above actual charged fee, but must never be below it.
+- RPC projection must still honor zero-fee metadata (`fee_paid == 0`) and return `effectiveGasPrice = 0` when applicable; do not force a fallback to EIP-1559 price in that case.
+
 ### 2. Cross-endpoint value consistency
 
 For the same tx/block, values must agree across:
@@ -76,6 +85,12 @@ For the same tx/block, values must agree across:
 
 - Do not introduce non-deterministic state access in module/core logic.
 - Avoid hidden behavior drift between native and proof-relevant paths.
+
+### 6. Supported transaction types (Hard Constraint)
+
+- `sov-evm` must accept only `EIP-1559` transaction envelope.
+- `Legacy`, `EIP-2930`, `EIP-7702` and `EIP-4844` transactions must be rejected at authentication and execution ingress.
+- Do not relax this policy without explicit product approval and matching tests for the new support matrix.
 
 ## Failure Pattern Matrix (PR Lessons)
 

@@ -246,7 +246,23 @@ impl<S: Spec, T> SequencingDataHandler<S> for StandardProvenRollupCapabilities<'
         self.chain_state
             .update_oracle_time_from_sequencing_data(data, state)
     }
+
+    #[cfg(feature = "native")]
+    fn create_sequencing_data(&self) -> Self::SequencingData {
+        use std::str::FromStr;
+        if cfg!(debug_assertions) {
+            let Ok(timestamp) = std::env::var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR) else {
+                return HDTimestamp::now();
+            };
+            HDTimestamp::from_str(&timestamp).unwrap_or_else(|_| HDTimestamp::now())
+        } else {
+            HDTimestamp::now()
+        }
+    }
 }
+
+#[cfg(feature = "native")]
+const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
 
 impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'_, S, T> {
     /// Prevents duplicate transactions from running.

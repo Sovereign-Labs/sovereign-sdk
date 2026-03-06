@@ -220,6 +220,36 @@ impl FlatStateDb {
         self.commit_internal(state_changes, version, true)
     }
 
+    #[cfg(feature = "migration-script")]
+    /// Commit the `state_changes` at the current latest version after checking an expected head.
+    ///
+    /// This is used by offline migration tooling that rewrites state at the current head version
+    /// rather than appending a new slot/version pair. The expected version acts as a safety check
+    /// against stale callers.
+    pub fn commit_at_latest_checked(
+        &self,
+        state_changes: StateChanges,
+        expected_latest: SlotNumber,
+    ) -> anyhow::Result<FlatStateCommitMetric> {
+        let current_latest = self.latest_version_and_root_hash_live_db()?.map(|(v, _)| v);
+        let Some(current_latest) = current_latest else {
+            anyhow::bail!(
+                "cannot commit at latest: state database is empty (expected latest {})",
+                expected_latest
+            );
+        };
+
+        if current_latest != expected_latest.get() {
+            anyhow::bail!(
+                "latest version mismatch: expected {}, current latest {}",
+                expected_latest,
+                current_latest
+            );
+        }
+
+        self.commit_internal(state_changes, current_latest, true)
+    }
+
     fn commit_internal(
         &self,
         state_changes: StateChanges,

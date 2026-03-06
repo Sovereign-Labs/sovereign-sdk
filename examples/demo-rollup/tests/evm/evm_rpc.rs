@@ -56,7 +56,7 @@ async fn eth_get_block_by_number() -> anyhow::Result<()> {
     assert_eq!(by_number(&client, 2).await?, None);
 
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     assert_eq!(
@@ -105,7 +105,7 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
 
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
     rollup.pause_preferred_batches().await;
 
     let latest_hash = by_number(&client, BlockNumberOrTag::Latest)
@@ -131,7 +131,7 @@ async fn eth_get_block_by_hash() -> anyhow::Result<()> {
 async fn eth_get_block_receipts() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
     usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
@@ -163,7 +163,7 @@ async fn eth_get_block_receipts() -> anyhow::Result<()> {
 async fn block_size() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let header = by_number(&client, 0).await?.unwrap();
@@ -177,7 +177,7 @@ async fn block_size() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_storage_at_returns_32_byte_data_hex() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = crate::evm::evm_test_helper::create_simple_storage_client(
         rollup.http_addr,
@@ -218,7 +218,7 @@ async fn eth_get_storage_at_returns_32_byte_data_hex() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_get_block_transaction_count_by_hash_accepts_synthetic_hash() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let ws_client = crate::evm::evm_test_helper::create_simple_storage_client(
@@ -289,7 +289,7 @@ async fn eth_get_transaction_receipt_fields() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Deploy contract in an isolated block.
     rollup.pause_preferred_batches().await;
@@ -299,7 +299,7 @@ async fn eth_get_transaction_receipt_fields() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let deploy_receipt = fetch_receipt(&client, deploy_tx).await?;
@@ -320,7 +320,7 @@ async fn eth_get_transaction_receipt_fields() -> anyhow::Result<()> {
     assert_pending_block_empty(&client).await?;
     let set_tx = simple_storage.set_value(contract_address, set_arg).await;
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let set_receipt = fetch_receipt(&client, set_tx).await?;
@@ -353,7 +353,7 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let deploy_tx = simple_storage
@@ -377,7 +377,7 @@ async fn eth_get_transaction_receipt_pending_behavior() -> anyhow::Result<()> {
 
     // Seal the block
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let sealed_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
 
@@ -455,7 +455,7 @@ async fn eth_get_transaction_receipt_pending_is_null() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
     assert_pending_block_empty(&client).await?;
 
@@ -469,7 +469,7 @@ async fn eth_get_transaction_receipt_pending_is_null() -> anyhow::Result<()> {
     assert!(pending_receipt.is_some());
 
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let mined = client.get_transaction_receipt(deploy_tx).await?;
     assert!(mined.is_some());
@@ -483,7 +483,7 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Deploy contract in its own block to get a stable address.
     rollup.pause_preferred_batches().await;
@@ -493,7 +493,7 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let deploy_receipt = fetch_receipt(&client, deploy_tx).await?;
@@ -511,7 +511,7 @@ async fn eth_get_transaction_receipt_multi_tx_block() -> anyhow::Result<()> {
     let tx3 = simple_storage.set_value(contract_address, 11).await;
 
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let r1 = fetch_receipt(&client, tx1).await?;
@@ -598,7 +598,7 @@ async fn eth_get_transaction_receipt_many_logs() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Deploy contract
     rollup.pause_preferred_batches().await;
@@ -608,7 +608,7 @@ async fn eth_get_transaction_receipt_many_logs() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let deploy_receipt = client.get_transaction_receipt(deploy_tx).await?.unwrap();
     let contract_address = deploy_receipt.contract_address.unwrap();
 
@@ -619,7 +619,7 @@ async fn eth_get_transaction_receipt_many_logs() -> anyhow::Result<()> {
         .alloy_emit_logs(contract_address, 0, 15)
         .await;
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let receipt = client.get_transaction_receipt(emit_tx).await?.unwrap();
 
@@ -642,14 +642,14 @@ async fn eth_get_transaction_receipt_zero_address() -> anyhow::Result<()> {
     let client = alloy_client(rollup.http_addr);
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Send to zero address
     rollup.pause_preferred_batches().await;
     assert_pending_block_empty(&client).await?;
     let tx = simple_storage.send_eth(Address::ZERO, U256::from(1)).await;
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let receipt = client.get_transaction_receipt(tx).await?.unwrap();
 

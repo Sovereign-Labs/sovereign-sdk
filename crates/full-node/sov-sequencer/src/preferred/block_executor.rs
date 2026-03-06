@@ -6,17 +6,17 @@ use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{
-    BlobSelector, BlobSelectorOutput, ChainState, FatalError, RollupHeight,
-    TransactionAuthenticator,
+    get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
+    FatalError, RollupHeight, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
-use sov_modules_api::CryptoSpec;
 use sov_modules_api::{
     call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
     GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
     RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
     StateUpdateInfo, TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
+use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
 use sov_state::pinned_cache::PinnedCache;
@@ -297,11 +297,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorErrorWithBudget<S>>
     {
+        // Extract the timestamp from the sequencing data. We do this even though we could pass the timestamp directly from the place where it is generated
+        // for symmetry with the replicas. Replicas have to extract the timestamp from the sequencing data, but they can only do so if the runtime is using the standard
+        // sequencing data handler. Doing it the same way here ensures that the replica and the master agree on the timestamp in all cases.
+        let timestamp = get_maybe_timestamp_from_sequencing_data::<S, Rt>(&baked_tx.tx, true);
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
             Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                let accepted_tx = self.process_tx_receipt(&receipt);
+                let accepted_tx = self.process_tx_receipt(&receipt, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
@@ -487,6 +491,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         let tx = FullyBakedTxWithMaybeChangeSet::new(tx);
+
         match self.apply_tx_to_in_progress_batch(tx).await {
             Ok((output, _tx_changes)) => {
                 if tx_hash != output.accepted_tx.tx_hash {
@@ -630,6 +635,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     fn process_tx_receipt(
         &mut self,
         tx_receipt: &TransactionReceipt<S>,
+        timestamp: Option<HDTimestamp>,
     ) -> AcceptedTx<Confirmation<S, Rt>> {
         let tx_number = self.next_tx_number;
         let events = tx_receipt
@@ -656,6 +662,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 events,
                 receipt: tx_receipt.receipt.clone().into(),
                 tx_number,
+                timestamp_nanos: timestamp,
             },
         }
     }
@@ -775,7 +782,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 continue;
             }
             for tx_receipt in batch_receipt.tx_receipts {
-                let accepted_tx = self.process_tx_receipt(&tx_receipt);
+                let accepted_tx = self.process_tx_receipt(&tx_receipt, None);
                 forced_txs.push(accepted_tx);
             }
         }

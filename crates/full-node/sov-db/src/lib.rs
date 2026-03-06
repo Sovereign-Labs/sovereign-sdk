@@ -68,14 +68,22 @@ impl<T> DbOptions<T> {
 }
 
 impl DbOptions {
+    /// Setup [`rockbound::DB`] with default options at an explicit path.
+    pub fn default_setup_db(
+        self,
+        db_path: impl AsRef<std::path::Path>,
+    ) -> anyhow::Result<rockbound::DB> {
+        let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
+        rockbound::DB::open(db_path.as_ref(), self.name, self.columns, &config)
+    }
+
     /// Setup [`rockbound::DB`] with default options
-    pub fn default_setup_db_in_path(
+    pub fn default_setup_db_as_subdir(
         self,
         path: impl AsRef<std::path::Path>,
     ) -> anyhow::Result<rockbound::DB> {
-        let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open(db_path, self.name, self.columns, &config)
+        self.default_setup_db(db_path)
     }
 }
 

@@ -828,7 +828,7 @@ mod tests {
 
     fn new_db(path: impl AsRef<Path>) -> rockbound::DB {
         LedgerDb::get_rockbound_options()
-            .default_setup_db_in_path(path.as_ref())
+            .default_setup_db_as_subdir(path.as_ref())
             .unwrap()
     }
 }

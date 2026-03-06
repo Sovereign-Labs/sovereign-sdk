@@ -1,0 +1,23 @@
+{
+  "name": "@sovereign-sdk/evm-rpc-diff-harness",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Correctness-only differential harness for EVM-compatible JSON-RPC endpoints",
+  "scripts": {
+    "build:contracts": "hardhat compile",
+    "compare": "pnpm run build:contracts && tsx src/run.ts",
+    "test:anvil": "pnpm run build:contracts && tsx src/scripts/testAnvil.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "ethers": "^6.15.0",
+    "viem": "^2.23.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "hardhat": "^2.22.19",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.2"
+  }
+}

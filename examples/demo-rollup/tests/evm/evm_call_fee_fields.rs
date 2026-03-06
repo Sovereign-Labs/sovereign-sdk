@@ -2,7 +2,11 @@ use alloy_primitives::{Address, TxKind, U256, U64};
 use alloy_rpc_types_eth::TransactionRequest;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
+use serde::de::DeserializeOwned;
+use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
+use sov_modules_api::execution_mode::Native;
+use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
@@ -17,10 +21,12 @@ fn unfunded_caller() -> Address {
     Address::from([0x11; 20])
 }
 
-async fn setup_client() -> SimpleStorageClient {
+/// Returns the rollup handle alongside the client — the rollup must stay alive for the client to function.
+async fn setup_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
-    create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await
+    rollup.wait_for_rollup_height_advance_by(1).await;
+    let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    (rollup, client)
 }
 
 async fn assert_unfunded_caller(
@@ -49,17 +55,27 @@ fn base_request(caller: Address) -> TransactionRequest {
     }
 }
 
-fn assert_insufficient_funds_error(err: impl std::fmt::Display) {
+async fn assert_rpc_rejects<T: DeserializeOwned + std::fmt::Debug>(
+    client: &SimpleStorageClient,
+    method: &str,
+    request: &TransactionRequest,
+    expected_error_substring: &str,
+) {
+    let result: Result<T, _> = client
+        .ws
+        .request(method, rpc_params![request, "latest"])
+        .await;
+    let err = result.expect_err(&format!("{method} should reject this request"));
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains(INSUFFICIENT_FUNDS_ERROR),
-        "unexpected error: {err_msg}"
+        err_msg.contains(expected_error_substring),
+        "unexpected error for {method}: {err_msg}"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()> {
-    let client = setup_client().await;
+    let (_rollup, client) = setup_client().await;
 
     let caller = unfunded_caller();
     assert_unfunded_caller(&client, caller).await?;
@@ -68,20 +84,14 @@ async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()>
         gas_price: Some(NONZERO_FEE_PER_GAS),
         ..base_request(caller)
     };
-
-    let result: Result<String, _> = client
-        .ws
-        .request("eth_call", rpc_params![request, "latest"])
-        .await;
-    let err = result.expect_err("eth_call should fail for unfunded caller when gasPrice is set");
-    assert_insufficient_funds_error(err);
+    assert_rpc_rejects::<String>(&client, "eth_call", &request, INSUFFICIENT_FUNDS_ERROR).await;
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_fee() -> anyhow::Result<()> {
-    let client = setup_client().await;
+    let (_rollup, client) = setup_client().await;
 
     let caller = unfunded_caller();
     assert_unfunded_caller(&client, caller).await?;
@@ -94,19 +104,13 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_fee() -> 
         value: Some(U256::ZERO),
         ..Default::default()
     };
-
-    let result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await;
-    let err = result.expect_err(
-        "eth_estimateGas should fail for unfunded caller when maxFeePerGas is set and gas is omitted",
-    );
-    let err_msg = err.to_string();
-    assert!(
-        err_msg.contains(GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR),
-        "unexpected error: {err_msg}"
-    );
+    assert_rpc_rejects::<U64>(
+        &client,
+        "eth_estimateGas",
+        &request,
+        GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR,
+    )
+    .await;
 
     Ok(())
 }
@@ -114,7 +118,7 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_fee() -> 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_gas_price(
 ) -> anyhow::Result<()> {
-    let client = setup_client().await;
+    let (_rollup, client) = setup_client().await;
 
     let caller = unfunded_caller();
     assert_unfunded_caller(&client, caller).await?;
@@ -126,26 +130,20 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_gas_price
         value: Some(U256::ZERO),
         ..Default::default()
     };
-
-    let result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await;
-    let err = result.expect_err(
-        "eth_estimateGas should fail for unfunded caller when gasPrice is set and gas is omitted",
-    );
-    let err_msg = err.to_string();
-    assert!(
-        err_msg.contains(GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR),
-        "unexpected error: {err_msg}"
-    );
+    assert_rpc_rejects::<U64>(
+        &client,
+        "eth_estimateGas",
+        &request,
+        GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR,
+    )
+    .await;
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_missing_from_with_gas_price() -> anyhow::Result<()> {
-    let client = setup_client().await;
+    let (_rollup, client) = setup_client().await;
     assert_unfunded_caller(&client, Address::ZERO).await?;
 
     let request = TransactionRequest {
@@ -155,14 +153,13 @@ async fn eth_estimate_gas_rejects_missing_from_with_gas_price() -> anyhow::Resul
         value: Some(U256::ZERO),
         ..Default::default()
     };
-
-    let result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await;
-    let err =
-        result.expect_err("eth_estimateGas should fail when from is omitted and gasPrice is set");
-    assert_insufficient_funds_error(err);
+    assert_rpc_rejects::<U64>(
+        &client,
+        "eth_estimateGas",
+        &request,
+        INSUFFICIENT_FUNDS_ERROR,
+    )
+    .await;
 
     Ok(())
 }
@@ -170,7 +167,7 @@ async fn eth_estimate_gas_rejects_missing_from_with_gas_price() -> anyhow::Resul
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_missing_from_with_omitted_gas_and_gas_price() -> anyhow::Result<()>
 {
-    let client = setup_client().await;
+    let (_rollup, client) = setup_client().await;
     assert_unfunded_caller(&client, Address::ZERO).await?;
 
     let request = TransactionRequest {
@@ -179,26 +176,20 @@ async fn eth_estimate_gas_rejects_missing_from_with_omitted_gas_and_gas_price() 
         value: Some(U256::ZERO),
         ..Default::default()
     };
-
-    let result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await;
-    let err = result.expect_err(
-        "eth_estimateGas should fail when from is omitted, gasPrice is set, and gas is omitted",
-    );
-    let err_msg = err.to_string();
-    assert!(
-        err_msg.contains(GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR),
-        "unexpected error: {err_msg}"
-    );
+    assert_rpc_rejects::<U64>(
+        &client,
+        "eth_estimateGas",
+        &request,
+        GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR,
+    )
+    .await;
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyhow::Result<()> {
-    let client = setup_client().await;
+    let (_rollup, client) = setup_client().await;
 
     let caller = unfunded_caller();
     assert_unfunded_caller(&client, caller).await?;
@@ -208,14 +199,13 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyh
         max_priority_fee_per_gas: Some(1),
         ..base_request(caller)
     };
-
-    let result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await;
-    let err = result
-        .expect_err("eth_estimateGas should fail for unfunded caller when maxFeePerGas is set");
-    assert_insufficient_funds_error(err);
+    assert_rpc_rejects::<U64>(
+        &client,
+        "eth_estimateGas",
+        &request,
+        INSUFFICIENT_FUNDS_ERROR,
+    )
+    .await;
 
     Ok(())
 }

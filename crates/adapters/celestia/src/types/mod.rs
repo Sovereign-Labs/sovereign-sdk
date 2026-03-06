@@ -1,6 +1,5 @@
 mod error;
 
-use std::convert::Infallible;
 use std::ops::Range;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -18,7 +17,7 @@ use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 
-pub(crate) const APP_VERSION: AppVersion = AppVersion::V6;
+pub(crate) const APP_VERSION: AppVersion = AppVersion::V7;
 pub(crate) const SUPPORTED_SHARE_VERSION: u8 = 1;
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Clone, Eq, Hash, Serialize, Deserialize)]
@@ -78,8 +77,8 @@ impl TmHash {
     pub fn inner(&self) -> &[u8; 32] {
         match self.0 {
             tendermint::Hash::Sha256(ref h) => h,
-            // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
-            // TODO: add special casing for the genesis block at a higher level
+            // `Hash::None` is normalized at a higher layer (genesis predecessor placeholder),
+            // so `TmHash` should never observe it.
             tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placeholder in that corner case")
         }
     }
@@ -93,11 +92,9 @@ impl From<TmHash> for [u8; 32] {
     }
 }
 
-impl TryFrom<[u8; 32]> for TmHash {
-    type Error = Infallible;
-
-    fn try_from(value: [u8; 32]) -> Result<Self, Self::Error> {
-        Ok(Self(tendermint::Hash::Sha256(value)))
+impl From<[u8; 32]> for TmHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self(tendermint::Hash::Sha256(value))
     }
 }
 
@@ -253,12 +250,14 @@ impl FilteredCelestiaBlock {
     }
 }
 
-/// Proof of the last share
+/// Proof of namespace end boundary in the last relevant row.
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamespaceBoundaryProof {
-    // This should be the last share in the namespace
+    /// Namespace proof for the boundary.
+    /// For presence proofs this is narrowed to the last namespace share.
+    /// For absence proofs this proves namespace absence in that row.
     pub last_share_proof: celestia_types::nmt::NamespaceProof,
-    /// The last share of the namespace, if proof is of presence.
+    /// The last namespace share when `last_share_proof` is of presence; `None` for absence proofs.
     pub last_share: Option<celestia_types::Share>,
 }
 
@@ -300,7 +299,7 @@ pub mod tests {
     use crate::types::{NamespaceData, NamespaceRelevantData, TmHash};
 
     fn test_serialize_roundtrip(raw: [u8; 32]) {
-        let tm_hash = TmHash::try_from(raw).unwrap();
+        let tm_hash = TmHash::from(raw);
         let serde_serialized = serde_json::to_string(&tm_hash).unwrap();
         let serde_deserialized: TmHash = serde_json::from_str(&serde_serialized).unwrap();
 
@@ -313,7 +312,7 @@ pub mod tests {
     }
 
     fn test_str_roundtrip(raw: [u8; 32]) {
-        let tm_hash = TmHash::try_from(raw).unwrap();
+        let tm_hash = TmHash::from(raw);
         let s = tm_hash.to_string();
         let restored = TmHash::from_str(&s).expect("TmHash::from_str failed");
 

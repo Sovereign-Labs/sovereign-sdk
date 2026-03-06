@@ -267,6 +267,11 @@ pub struct StateUpdateNotification {
     pub slot_number: SlotNumber,
     /// The finalized slot number.
     pub finalized_slot_number: SlotNumber,
+    /// True when the update loop explicitly skipped processing because
+    /// `SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE=1` was observed.
+    #[cfg(feature = "test-utils")]
+    #[serde(default)]
+    pub update_skipped_due_to_pause: bool,
 }
 
 /// A notification that the sequencer has processed a forced (non-preferred) batch.
@@ -494,14 +499,18 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
     // `Arc<Mutex<...>>` is, I suspect, overkill here. It's just a workaround
     // around the `FnMut` closure issues I was banging my head against while writing
     // this.
-    let latest_processed_slot_number =
-        Arc::new(Mutex::new(state_update_receiver.borrow().slot_number));
+    // This cursor tracks the next slot that still needs notification processing.
+    // Initializing to `current + 1` avoids re-processing historical slots on startup.
+    let next_slot_to_process = Arc::new(Mutex::new(
+        state_update_receiver.borrow().slot_number.next(),
+    ));
 
     react_to_state_updates::<S, _>(state_update_receiver, shutdown_receiver, "loop_send_tx_notifications", move |info| {
-        let latest_processed_slot_number = latest_processed_slot_number.clone();
+        let next_slot_to_process = next_slot_to_process.clone();
         async move {
             let storage_slot_number = info.slot_number;
-            let range = latest_processed_slot_number.lock().await.range_inclusive(storage_slot_number);
+            let start_slot_number = *next_slot_to_process.lock().await;
+            let range = start_slot_number.range_inclusive(storage_slot_number);
 
             trace!(%storage_slot_number, "Querying slot data from node to notify about transaction status");
 
@@ -529,7 +538,7 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
                     }
                 }
             }
-            *latest_processed_slot_number.lock().await = info.slot_number;
+            *next_slot_to_process.lock().await = info.slot_number.next();
 
             Ok(())
         }

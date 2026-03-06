@@ -6,13 +6,14 @@
 //! pre-pending values, while `latest`/`pending` queries reflect pending state.
 
 use crate::evm::evm_test_helper::{
-    deploy_contract_check, set_value_check, setup_with_simple_storage, EVM_EXTENSION,
+    deploy_contract_check, finalized_block_number_and_hash, hash_selector, number_selector,
+    set_value_check, setup_with_simple_storage, EVM_EXTENSION,
 };
 use alloy_primitives::{Address, Bytes, TxHash, B256, U256, U64};
+use alloy_rpc_types_eth::TransactionRequest;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde::Serialize;
-use serde_json::json;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
@@ -59,9 +60,14 @@ async fn storage_at(
 
 async fn eth_call_at(
     client: &SimpleStorageClient,
-    tx: impl Serialize,
+    tx: &TransactionRequest,
     block: impl Serialize,
 ) -> Bytes {
+    // This suite validates block-pinned state selection, not stale explicit-nonce handling.
+    // RPC-003 enforces nonce-too-low for explicit stale nonce in eth_call/estimate paths.
+    let mut tx = tx.clone();
+    tx.nonce = None;
+
     client
         .ws
         .request("eth_call", rpc_params![tx, block])
@@ -71,25 +77,18 @@ async fn eth_call_at(
 
 async fn estimate_gas_at(
     client: &SimpleStorageClient,
-    tx: impl Serialize,
+    tx: &TransactionRequest,
     block: impl Serialize,
 ) -> U256 {
+    // Keep estimate requests aligned with current-account nonce semantics by omitting nonce.
+    let mut tx = tx.clone();
+    tx.nonce = None;
+
     client
         .ws
         .request("eth_estimateGas", rpc_params![tx, block])
         .await
         .unwrap()
-}
-
-fn number_selector(n: u64) -> String {
-    format!("0x{n:x}")
-}
-
-fn hash_selector(hash: B256) -> serde_json::Value {
-    json!({
-        "blockHash": format!("{:#x}", hash),
-        "requireCanonical": true
-    })
 }
 
 /// In tests, pausing preferred batches is signaled via an env var checked by the update-state loop.
@@ -104,7 +103,7 @@ fn assert_pause_window_height(observed: u64, head_before_pause: u64) {
 
 async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }
 
@@ -118,20 +117,13 @@ async fn sealed_head_number_and_hash(client: &SimpleStorageClient) -> (u64, B256
     (head_number, head_hash)
 }
 
-async fn finalized_head_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
-    let finalized_block = client
-        .eth_get_block_by_number(Some("finalized".to_string()))
-        .await;
-    (finalized_block.header.number, finalized_block.header.hash)
-}
-
 async fn assert_pause_effect(
     client: &SimpleStorageClient,
     head_before_pause: u64,
     finalized_head_before_pause: (u64, B256),
 ) {
     assert_pause_window_height(client.block_number().await, head_before_pause);
-    let finalized_after = finalized_head_number_and_hash(client).await;
+    let finalized_after = finalized_block_number_and_hash(client).await;
     assert_eq!(
         finalized_after.0, finalized_head_before_pause.0,
         "Finalized head number should not change while batches are paused"
@@ -161,10 +153,13 @@ async fn block_pinned_nonce_excludes_pending() {
 
     let address = client.address();
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
     let sealed_nonce = nonce_at(&client, address, "latest").await;
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before nonce assertions");
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x1234)).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
@@ -198,7 +193,7 @@ async fn block_pinned_balance_excludes_pending() {
 
     let receiver = Address::repeat_byte(0xBB);
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     let sealed_balance = balance_at(&client, receiver, "latest").await;
     assert_eq!(
@@ -207,7 +202,10 @@ async fn block_pinned_balance_excludes_pending() {
         "Receiver should start with zero balance"
     );
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before balance assertions");
     let transfer_amount = U256::from(0x1_0000_0000u64);
     let tx_hash = client.send_eth(receiver, transfer_amount).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
@@ -241,9 +239,12 @@ async fn block_pinned_code_excludes_pending() {
     let (rollup, client) = setup_rollup_and_client().await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before code assertions");
     let deploy_tx = client.deploy_contract().await.unwrap();
     let receipt = client.wait_for_receipt(deploy_tx).await;
     assert_pause_effect(&client, head_number, finalized_head_before_pause).await;
@@ -286,12 +287,15 @@ async fn block_pinned_storage_excludes_pending() {
     set_value_check(&client, contract_addr, initial_value)
         .await
         .unwrap();
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before storage assertions");
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
@@ -335,14 +339,17 @@ async fn block_pinned_eth_call_excludes_pending() {
     set_value_check(&client, contract_addr, initial_value)
         .await
         .unwrap();
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     let get_tx = client.make_tx(Some(contract_addr), Some(client.contract.get()));
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before eth_call assertions");
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
@@ -376,10 +383,10 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     let (rollup, client) = setup_rollup_and_client().await;
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     // Baseline at sealed state (slot is still zero): set(non-zero) pays higher SSTORE cost.
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
@@ -395,7 +402,10 @@ async fn block_pinned_estimate_gas_excludes_pending() {
         "Pinned baseline by number and hash should match"
     );
 
-    rollup.pause_preferred_batches().await;
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before estimate_gas assertions");
     // Pending mutation makes slot non-zero in current state, lowering cost for the same call.
     let tx_hash = client.set_value(contract_addr, 0x1234).await;
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;

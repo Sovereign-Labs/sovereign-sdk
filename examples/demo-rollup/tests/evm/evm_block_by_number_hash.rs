@@ -10,21 +10,16 @@ use alloy_rpc_types_eth::BlockNumberOrTag::{
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde_json::json;
-use std::future::Future;
-use std::time::Duration;
 
 use crate::evm::evm_test_helper::{
-    alloy_client, create_simple_storage_client, deploy_contract_check, setup_test_rollup,
-    EVM_EXTENSION, SENDER_PRIV_KEY,
+    alloy_client, create_simple_storage_client, deploy_contract_check, poll_until,
+    setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
 };
 use alloy_primitives::Address;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
-
-const MAX_POLL_ATTEMPTS: usize = 100;
-const POLL_INTERVAL_MS: u64 = 25;
 
 // =============================================================================
 // Setup Helpers
@@ -37,7 +32,9 @@ async fn setup_paused_rollup(
     initial_blocks: u64,
 ) -> TestRollup<MockDemoRollup<Native>> {
     let rollup = setup_test_rollup(finalization_blocks as u32, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(initial_blocks).await;
+    rollup
+        .wait_for_rollup_height_advance_by(initial_blocks)
+        .await;
     rollup.pause_preferred_batches().await;
     rollup
 }
@@ -50,7 +47,7 @@ async fn setup_with_contract() -> (
     Address,
 ) {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(2).await;
+    rollup.wait_for_rollup_height_advance_by(2).await;
     let simple_storage = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let contract_address = deploy_contract_check(&simple_storage)
         .await
@@ -92,27 +89,6 @@ async fn assert_safe_finalized_consistent(
     }
 
     Ok((safe_block, finalized_block))
-}
-
-async fn poll_until<T, F, Fut, P>(
-    mut fetch: F,
-    mut predicate: P,
-    failure_msg: &str,
-) -> anyhow::Result<T>
-where
-    F: FnMut() -> Fut,
-    Fut: Future<Output = anyhow::Result<T>>,
-    P: FnMut(&T) -> bool,
-{
-    let mut value = fetch().await?;
-    for _ in 0..MAX_POLL_ATTEMPTS {
-        if predicate(&value) {
-            return Ok(value);
-        }
-        tokio::time::sleep(Duration::from_millis(POLL_INTERVAL_MS)).await;
-        value = fetch().await?;
-    }
-    anyhow::bail!("{failure_msg}")
 }
 
 // =============================================================================
@@ -171,7 +147,7 @@ async fn test_finalized_block_with_non_instant_finality_config() -> anyhow::Resu
     // Use finalization_blocks = 2 (not 0)
     let finalization = 2;
     let rollup = setup_test_rollup(finalization as u32, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(5).await;
+    rollup.wait_for_rollup_height_advance_by(5).await;
     // Ensure finalized slots advance
     rollup.produce_enough_finalized_slots().await;
     rollup.pause_preferred_batches().await;
@@ -524,7 +500,7 @@ async fn test_synthetic_hash_tx_block_hash_consistency() -> anyhow::Result<()> {
     let (rollup, simple_storage, contract_address) = setup_with_contract().await;
     let client = alloy_client(rollup.http_addr);
     // Wait for a block to ensure the deploy tx is sealed before we pause
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let sealed_head_number = client
@@ -620,7 +596,7 @@ async fn test_synthetic_hash_receipt_block_hash_consistency() -> anyhow::Result<
     let (rollup, simple_storage, contract_address) = setup_with_contract().await;
     let client = alloy_client(rollup.http_addr);
     // Wait for a block to ensure the deploy tx is sealed before we pause
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let sealed_head_number = client.get_block_number().await?;
@@ -742,7 +718,7 @@ async fn test_transactions_hashes_vs_full() -> anyhow::Result<()> {
     use sov_evm_test_utils::{Erc20, Submit};
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Deploy contract and mint (creates 2 txs)
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
@@ -847,7 +823,7 @@ async fn test_empty_block_transactions() -> anyhow::Result<()> {
 
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     // Block 0 (genesis) should have no transactions
@@ -945,12 +921,12 @@ async fn test_get_block_by_hash_full_transactions() -> anyhow::Result<()> {
 
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Create a sealed block with transactions
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
     usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let sealed_head = client.get_block_number().await?;
@@ -1197,13 +1173,13 @@ async fn test_block_receipts_cross_check() -> anyhow::Result<()> {
 
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_client(rollup.http_addr);
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Deploy contract and mint (creates 2 txs)
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
     usdc.mint(Address::ZERO, parse_ether("1")?).submit().await?;
 
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     rollup.pause_preferred_batches().await;
 
     let sealed_head = client.get_block_number().await?;

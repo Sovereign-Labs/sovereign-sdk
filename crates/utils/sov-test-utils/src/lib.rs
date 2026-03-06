@@ -66,6 +66,8 @@ pub mod storage;
 pub mod docker;
 /// Utilities that specify an interface for testing.
 pub mod interface;
+/// Utilities for running and controlling toxiproxy containers in tests.
+pub mod sov_toxi_proxi_image;
 
 /// The default test crypto spec type.
 pub type TestCryptoSpec = MockZkvmCryptoSpec;

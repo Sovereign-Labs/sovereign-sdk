@@ -158,6 +158,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _witness_generation: bool,
     ) -> anyhow::Result<Self::StorageManager> {
         NativeStorageManager::new(&rollup_config.storage.path)
     }

@@ -128,6 +128,9 @@ where
     stop_at_rollup_height: Option<RollupHeight>,
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_state_update_notification_receiver: broadcast::Receiver<StateUpdateNotification>,
+    #[cfg(feature = "test-utils")]
+    #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
+    test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_forced_tx_batch_notification_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
     runtime: Rt,
@@ -640,6 +643,16 @@ where
         let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
         if skip_flag == Ok("1".to_string()) {
             tracing::warn!("skipping state update due to env var flag");
+            #[cfg(feature = "test-utils")]
+            {
+                let _ =
+                    seq.test_only_state_update_notification_sender
+                        .send(StateUpdateNotification {
+                            slot_number: info.slot_number,
+                            finalized_slot_number: info.latest_finalized_slot_number,
+                            update_skipped_due_to_pause: true,
+                        });
+            }
             return Ok(());
         }
     }
@@ -899,7 +912,7 @@ where
 }
 
 /// Transaction confirmation data of [`PreferredSequencer`].
-#[derive(derivative::Derivative, serde::Serialize, serde::Deserialize)]
+#[derive(derivative::Derivative, serde::Serialize)]
 #[derivative(Clone(bound = ""), Debug(bound = "S: Spec, Rt: Runtime<S>"))]
 #[serde(bound = "S: Spec, Rt: Runtime<S>")]
 pub struct Confirmation<S, Rt>
@@ -910,6 +923,9 @@ where
     events: Vec<RuntimeEventResponse<<Rt as RuntimeEventProcessor>::RuntimeEvent>>,
     receipt: ApiTxEffect<TxReceiptContents<S>>,
     tx_number: u64,
+    /// The timestamp of the transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp_nanos: Option<HDTimestamp>,
 }
 
 impl<S, Rt> Confirmation<S, Rt>
