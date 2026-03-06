@@ -934,10 +934,7 @@ where
 }
 
 fn migrate_slot_information(old_slot_info: &OldSlotInformation) -> NewSlotInformation {
-    let new_slot_hash = match TmHash::try_from(old_slot_info.slot_hash().0) {
-        Ok(hash) => hash,
-        Err(never) => match never {},
-    };
+    let new_slot_hash = TmHash::from(old_slot_info.slot_hash().0);
 
     NewSlotInformation::new(
         new_slot_hash,

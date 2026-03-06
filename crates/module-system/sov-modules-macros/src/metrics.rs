@@ -200,7 +200,7 @@ where
         ));
     }
 
-    input.block = Box::new(f(&ident, &block, &tagged_inputs));
+    *input.block = f(&ident, &block, &tagged_inputs);
 
     // Add allow attribute to suppress clippy warnings on generated code
     input

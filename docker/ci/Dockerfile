@@ -39,9 +39,9 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
     CARGO_HOME=/home/runner/.cargo \
     PATH=/home/runner/.cargo/bin:$PATH
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --profile minimal \
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0 --profile minimal \
     && . /home/runner/.cargo/env \
-    && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.88.0 \
+    && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.93.0 \
     && rustup toolchain install nightly --component rustfmt --component rust-src --profile minimal \
     && rustup target add wasm32-unknown-unknown
 
