@@ -166,7 +166,10 @@ where
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
         let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
-            if matches!(&e, AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _)) {
+            if matches!(
+                &e,
+                AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _)
+            ) {
                 return RpcInvalidTransactionError::FeeCapTooLow.into();
             }
             if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
@@ -276,7 +279,11 @@ where
 
 fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
     if matches!(
-        serde_json::from_value::<AcceptTxErrorDetails>(serde_json::Value::Object(err.details.clone())).ok().and_then(|details| details.code),
+        serde_json::from_value::<AcceptTxErrorDetails>(serde_json::Value::Object(
+            err.details.clone()
+        ))
+        .ok()
+        .and_then(|details| details.code),
         Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
     ) {
         return RpcInvalidTransactionError::FeeCapTooLow.into();

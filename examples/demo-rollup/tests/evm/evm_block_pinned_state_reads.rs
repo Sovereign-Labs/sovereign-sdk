@@ -301,13 +301,7 @@ async fn block_pinned_storage_excludes_pending() {
     wait_for_pending_tx(&client, tx_hash, head_number, finalized_head_before_pause).await;
 
     assert_eq!(
-        storage_at(
-            &client,
-            contract_addr,
-            U256::ZERO,
-            hex_u64(head_number)
-        )
-        .await,
+        storage_at(&client, contract_addr, U256::ZERO, hex_u64(head_number)).await,
         U256::from(initial_value),
         "Storage at block number N must not include pending change"
     );
