@@ -213,8 +213,9 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         slot_subscription.next().await;
     }
 
-    let mut shutdown_timeout_error = None;
-    let shutdown_wait_step = Duration::from_millis(250);
+    // We use "standard" MockDa block time to not overwhelm node.
+    let shutdown_wait_step =
+        Duration::from_millis(sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
     let shutdown_deadline = tokio::time::Instant::now() + shutdown_timeout;
 
     loop {
@@ -231,18 +232,13 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
                     panic!("Rollup shutdown failed unexpectedly: {error:#}");
                 }
                 if tokio::time::Instant::now() >= shutdown_deadline {
-                    shutdown_timeout_error = Some(error);
-                    break;
+                    panic!(
+                        "Failed waiting for rollup shutdown before timeout (stop_at_height={stop_at_height}): {error:#}"
+                    );
                 }
                 test_rollup.da_service.produce_block_now().await.unwrap();
             }
         }
-    }
-
-    if let Some(error) = shutdown_timeout_error {
-        panic!(
-            "Failed waiting for rollup shutdown before timeout (stop_at_height={stop_at_height}): {error:#}"
-        );
     }
 }
 
