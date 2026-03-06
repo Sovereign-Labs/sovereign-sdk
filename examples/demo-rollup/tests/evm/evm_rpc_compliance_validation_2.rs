@@ -22,7 +22,7 @@ const GASLEFT_CONTRACT_DEPLOY_CODE: &str = "0x6008600c60003960086000f35a60005260
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
@@ -95,7 +95,7 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
@@ -156,7 +156,7 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let sender = ws_client.address();
@@ -270,7 +270,7 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let sender = client.address();
@@ -337,7 +337,7 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
 async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -> anyhow::Result<()>
 {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
@@ -401,7 +401,7 @@ async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let http = Client::new();
     let response = rpc_call(
@@ -487,7 +487,7 @@ async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
 
     let tx_hash = client
@@ -545,7 +545,7 @@ async fn rpc2_011_new_pending_transactions_subscription_is_supported() -> anyhow
 async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain(
 ) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(2, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(5).await;
+    rollup.wait_for_rollup_height_advance_by(5).await;
 
     let http = Client::new();
     let latest = rpc_call(
@@ -606,7 +606,7 @@ async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain
 #[ignore = "Known compatibility gap: synthetic hash lifecycle"]
 async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> anyhow::Result<()> {
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     rollup.pause_preferred_batches().await;
     let tx_hash = client
@@ -633,7 +633,7 @@ async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> any
         .to_string();
 
     rollup.resume_preferred_batches().await;
-    rollup.wait_for_next_blocks(30).await;
+    rollup.wait_for_rollup_height_advance_by(30).await;
 
     let by_hash = rpc_call(
         &http,
@@ -658,7 +658,7 @@ async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> any
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let http = Client::new();
     let latest = rpc_call(
@@ -700,7 +700,7 @@ async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_does_not_exceed_tx_gas_limit() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client).await?;
 

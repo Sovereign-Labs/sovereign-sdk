@@ -165,7 +165,7 @@ impl Block {
         let body = reth_primitives::BlockBody {
             transactions,
             ommers: vec![],
-            withdrawals: None,
+            withdrawals: Some(vec![].into()),
         };
         alloy_consensus::Block::rlp_length_for(&self.header, &body)
     }
@@ -271,7 +271,7 @@ impl SyntheticBlockWithoutRootsAndBloom {
         let body = reth_primitives::BlockBody {
             transactions,
             ommers: vec![],
-            withdrawals: None,
+            withdrawals: Some(vec![].into()),
         };
         let rlp_size = alloy_consensus::Block::rlp_length_for(
             &self.header_without_roots_bloom_and_gas_used,
