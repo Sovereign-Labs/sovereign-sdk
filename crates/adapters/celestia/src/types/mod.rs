@@ -77,8 +77,8 @@ impl TmHash {
     pub fn inner(&self) -> &[u8; 32] {
         match self.0 {
             tendermint::Hash::Sha256(ref h) => h,
-            // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
-            // TODO: add special casing for the genesis block at a higher level
+            // `Hash::None` is normalized at a higher layer (genesis predecessor placeholder),
+            // so `TmHash` should never observe it.
             tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placeholder in that corner case")
         }
     }
@@ -250,12 +250,14 @@ impl FilteredCelestiaBlock {
     }
 }
 
-/// Proof of the last share
+/// Proof of namespace end boundary in the last relevant row.
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamespaceBoundaryProof {
-    // This should be the last share in the namespace
+    /// Namespace proof for the boundary.
+    /// For presence proofs this is narrowed to the last namespace share.
+    /// For absence proofs this proves namespace absence in that row.
     pub last_share_proof: celestia_types::nmt::NamespaceProof,
-    /// The last share of the namespace, if proof is of presence.
+    /// The last namespace share when `last_share_proof` is of presence; `None` for absence proofs.
     pub last_share: Option<celestia_types::Share>,
 }
 

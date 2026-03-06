@@ -26,9 +26,8 @@ impl Blob {
 }
 
 /// Represents blob as a sequence of shares.
-/// The first share in the `shares` vector should always be a sequence start.
-/// There can be only one such share.
-/// The correct data block could be built from this struct.
+/// Invariant: first share is a sequence start and remaining shares are continuation shares.
+/// This is debug-asserted in `check_consistency` and relied on by readers.
 #[cfg(feature = "native")]
 pub(crate) struct ShareSequence {
     pub(crate) shares: Vec<celestia_types::Share>,
@@ -254,9 +253,7 @@ impl Iterator for NamespaceDataIterator<'_> {
             self.current_row_idx
         );
         if self.rows.is_empty() {
-            // This can happen if the target namespace is empty. Then the row will
-            // often contain two namespaces where the first is lower than the target and the second is larger.
-            // In that case, the namespace root will "contain" the namespace, but no shares will be present.
+            // NamespaceData can be empty for the target namespace; then there are no row fragments to iterate.
             return None;
         }
 
@@ -276,9 +273,8 @@ impl Iterator for NamespaceDataIterator<'_> {
 
             while relative_share_idx < current_row.shares.len() {
                 let share = &current_row.shares[relative_share_idx];
-                // We cannot determine the start for any kind of share,
-                // for parity shares we never assume that their at the start.
-                // They are not going to be included anyway.
+                // Sequence-start flags delimit blobs once a sequence is in progress.
+                // Only non-parity, non-tail shares are collected into the returned sequence.
                 let is_start = share
                     .info_byte()
                     .map(|info_byte| info_byte.is_sequence_start())
@@ -342,14 +338,35 @@ pub(crate) fn is_tail_padding(share: &celestia_types::Share) -> bool {
 ///
 /// Technically, we rely on constants about size,
 /// and it should be good as long as there are only two types of shares.
-/// Copied from [`celestia_types::Blob::shares_len`]
-pub(crate) fn shares_needed_for_bytes(payload_bytes: usize) -> usize {
-    let Some(without_first_share) =
-        payload_bytes.checked_sub(appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE)
-    else {
+/// Copied from [`celestia_types::Blob::shares_len`], including v1 signer handling.
+pub(crate) fn shares_needed_for_bytes_with_signer(payload_bytes: usize, has_signer: bool) -> usize {
+    let first_share_content_size = payload_bytes_in_first_share(has_signer);
+    let Some(without_first_share) = payload_bytes.checked_sub(first_share_content_size) else {
         return 1;
     };
     1 + without_first_share.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+}
+
+/// Converts a target share count into payload bytes, accounting for v1 signer bytes.
+/// `share_count <= 1` maps to the first-share payload capacity.
+#[cfg(test)]
+pub(crate) fn payload_bytes_for_shares_with_signer(share_count: usize, has_signer: bool) -> usize {
+    let first_share_content_size = payload_bytes_in_first_share(has_signer);
+    if share_count <= 1 {
+        return first_share_content_size;
+    }
+    first_share_content_size
+        + (share_count - 1).saturating_mul(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE)
+}
+
+fn payload_bytes_in_first_share(has_signer: bool) -> usize {
+    if has_signer {
+        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+            .checked_sub(appconsts::SIGNER_SIZE)
+            .expect("signer size should fit into first share content size")
+    } else {
+        appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE
+    }
 }
 
 #[cfg(test)]

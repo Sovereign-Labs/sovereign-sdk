@@ -735,6 +735,22 @@ where
             .expect("Rollup execution returned an error.");
     }
 
+    /// Waits for the rollup to shutdown without panicking on timeout.
+    ///
+    /// Unlike [`Self::wait_for_rollup_to_shutdown`], this method returns an error when the
+    /// timeout elapses. Useful in flaky-test diagnostics where we want to gather additional
+    /// node state before failing the test.
+    pub async fn try_wait_for_rollup_to_shutdown(
+        &mut self,
+        t: tokio::time::Duration,
+    ) -> anyhow::Result<()> {
+        let join_result = timeout(t, &mut self.rollup_task)
+            .await
+            .with_context(|| format!("Failed to join rollup task before timeout after {t:?}"))?;
+        let join_result = join_result.context("Rollup task panicked.")?;
+        join_result.context("Rollup execution returned an error.")
+    }
+
     /// Waits for the rollup to shutdown.
     pub async fn wait_for_rollup_to_shutdown_with_result(
         self,

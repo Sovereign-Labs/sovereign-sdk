@@ -45,7 +45,7 @@ pub(crate) struct CompactHeader {
     /// Commit from validators from the last block
     pub last_commit_hash: Vec<u8>,
 
-    /// Merkle root of transaction hashes
+    /// Header `data_hash` field; for Celestia this must equal `DataAvailabilityHeader::hash()`.
     pub data_hash: Option<ProtobufHash>,
 
     /// Validators for the current block
@@ -183,8 +183,8 @@ impl CelestiaHeader {
             .expect("square_width must be divisible by 2")
     }
 
-    /// Calculates row number based on row length of given block.
-    /// `share_idx` is a row relative (not namespace relative).
+    /// Calculates namespace-row index from a row-aligned namespace-relative share index.
+    /// `share_idx` follows the same indexing convention as `RangeProof::start_share_idx`.
     pub(crate) fn calculate_row_number_for_share(&self, share_idx: usize) -> usize {
         share_idx
             .checked_div(self.row_length())
@@ -204,9 +204,8 @@ impl CelestiaHeader {
     /// Validates that [`DataAvailabilityHeader`] is correct and not malformed.
     /// This means:
     ///  - Well-formed row_roots and column_roots for [`APP_VERSION`] being used.
-    ///  - Hash of [`DataAvailabilityHeader`] matches the hash of the block header.
-    ///    This validation allows trusting [`DataAvailabilityHeader::row_roots`],
-    ///    as they are included in this hash.
+    ///  - Hash of [`DataAvailabilityHeader`] matches `header.data_hash`.
+    ///    This binds [`DataAvailabilityHeader::row_roots`] and column roots to the signed header.
     pub(crate) fn validate_dah(&self) -> Result<(), ValidationError> {
         self.dah.validate_basic(APP_VERSION)?;
         let data_hash = self
@@ -238,7 +237,7 @@ impl BlockHeader for CelestiaHeader {
 
         // Special case the block following genesis, since genesis has a `None` hash, which
         // we don't want to deal with. In this case, we return a special placeholder for the
-        // block "hash"
+        // previous block hash.
         if Height::decode_vec(&self.header.height)
             .expect("header must be validly encoded")
             .value()
