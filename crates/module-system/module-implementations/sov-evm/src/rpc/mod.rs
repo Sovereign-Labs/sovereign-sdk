@@ -322,8 +322,12 @@ where
             MaybeSealedBlock::Sealed(sealed) => {
                 let block_size = sealed.rlp_size;
                 let transactions = self.get_block_transactions(&sealed, kind, state)?;
-                let header =
+                let mut header =
                     Header::from_consensus(sealed.header, None, Some(U256::from(block_size)));
+                // Override withdrawals root for post cancun compatibility
+                if header.withdrawals_root.is_none() {
+                    header.withdrawals_root = Some(EMPTY_ROOT_HASH);
+                }
                 Ok(Some(Block {
                     header,
                     transactions,
