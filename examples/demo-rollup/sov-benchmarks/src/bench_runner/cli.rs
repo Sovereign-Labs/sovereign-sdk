@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use clap::{command, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use sov_metrics::TelegrafSocketConfig;
 
 use super::{

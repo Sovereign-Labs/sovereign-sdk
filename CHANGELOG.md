@@ -1,5 +1,10 @@
 # 2025-03-05
 - #2554 More stabilization in demo-rollup EVM tests
+# 2026-03-05
+- #2556 **Breaking change**: only for runtimes with AccessPattern module.
+
+# 2026-02-12
+- #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`

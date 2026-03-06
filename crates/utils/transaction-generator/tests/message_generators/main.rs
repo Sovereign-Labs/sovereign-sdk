@@ -201,7 +201,7 @@ fn setup_harness<
     maximum_write_data_length: usize,
     maximum_write_begin_index: u64,
     maximum_write_size: u64,
-    maximum_hooks_ops: u64,
+    _maximum_hooks_ops: u64,
     modules_distribution: &Distribution<ModulesToUse>,
 ) -> TestGenerator<R> {
     use sov_bank::CallMessageDiscriminants::*;
@@ -248,7 +248,6 @@ fn setup_harness<
             maximum_write_data_length,
             maximum_write_begin_index,
             maximum_write_size,
-            maximum_hooks_ops,
             admin.private_key.clone(),
         ));
 
