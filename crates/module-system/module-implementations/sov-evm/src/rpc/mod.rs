@@ -15,6 +15,7 @@ use crate::helpers::{from_recovered_with_block_context, prepare_call_env};
 use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::primitive_types::{synthetic_block_hash_for, SyntheticBlockWithoutRootsAndBloom};
+use crate::sov_fee_and_gas_utils::is_actual_fee_projection_height_active;
 use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
 use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
@@ -89,7 +90,10 @@ impl SyntheticBlocksCache {
     }
 
     fn get_state_by_hash<S: Spec>(&self, hash: B256) -> Option<&ApiStateAccessor<S>> {
-        self.state_by_hash.get(&hash).map(|b| b.downcast_ref::<ApiStateAccessor<S>>().expect("Attempted to get the wrong type out of the SyntheticBlocksCache. This is impossible unless you request a different Spec than you put in. It's a bug, please report it."))
+        self.state_by_hash.get(&hash).map(|b| {
+            b.downcast_ref::<ApiStateAccessor<S>>()
+                .expect("SyntheticBlocksCache: spec type mismatch (bug)")
+        })
     }
     fn prune(&mut self, block_number: u64) {
         let stop_at = block_number.saturating_sub(SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL);
@@ -369,9 +373,12 @@ where
         );
         let fee_paid = self.receipt_fee(tx_idx, state);
         if let Some((receipt, _)) = self.receipt(tx_idx, state) {
-            if let Some(actual_effective_gas_price) =
-                maybe_actual_effective_gas_price(block_number, receipt.gas_used, fee_paid)
-            {
+            if let Some(actual_effective_gas_price) = maybe_actual_effective_gas_price(
+                block_number,
+                receipt.gas_used,
+                fee_paid,
+                base_fee_per_gas,
+            ) {
                 tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
             }
         }
@@ -418,7 +425,9 @@ where
             .code
             .get(&account.code_hash, state.deref_mut())
             .unwrap_infallible()?;
-        Some(code.bytes())
+        // `bytes()` on analyzed legacy bytecode includes the appended STOP byte used for
+        // execution; RPC must return the original deployed bytecode.
+        Some(code.original_bytes())
     }
 
     fn get_transaction(&self, hash: B256, state: &mut ApiStateAccessor<S>) -> Option<Transaction> {
@@ -512,15 +521,25 @@ where
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
 
         // For simulation parity with real execution, omitted nonce defaults to the
-        // caller's current EVM account nonce (not zero).
-        if let (None, Some(from)) = (request.nonce, request.from) {
+        // caller's current uniqueness nonce. Reject explicit nonces that lag the
+        // chain with "nonce too low" so estimateGas mirrors real tx submission.
+        if let Some(from) = request.from {
+            let credential_id = EthereumAddress::from(from).as_credential_id();
             let account_nonce = self
-                .accounts
-                .get(&from, maybe_archival_state.deref_mut())
-                .unwrap_infallible()
-                .map(|acc| acc.nonce)
-                .unwrap_or_default();
-            request.nonce = Some(account_nonce);
+                .uniqueness_module
+                .next_nonce(&credential_id, maybe_archival_state.deref_mut())
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            match request.nonce {
+                Some(tx_nonce) if tx_nonce < account_nonce => {
+                    return Err(RpcInvalidTransactionError::NonceTooLow {
+                        tx: tx_nonce,
+                        state: account_nonce,
+                    }
+                    .into());
+                }
+                None => request.nonce = Some(account_nonce),
+                _ => {}
+            }
         }
 
         if !has_overrides {
@@ -703,7 +722,9 @@ where
                         }
                     }
 
-                    // Case 1: The synthetic block has the same block number as the pending block; that's a harder special case where we need to populate its fields from the pending block
+                    // Case 1: The synthetic block has the same block number as the pending block;
+                    // that's a harder special case where we need to populate its fields from
+                    // the pending block.
                     let block_env = self.block_env(state).unwrap_infallible();
                     if block_env.number == block_number {
                         let Some(mut newest_pending_block) =
@@ -711,17 +732,18 @@ where
                         else {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         };
-                        // Check that the number of txs requested is no more than the number of txs in the pending block. If not, this block doesn't exist - return early
+                        // Check that the number of txs requested is no more than the number of
+                        // txs in the pending block. If not, this block doesn't exist.
                         if num_txs as u64 > newest_pending_block.num_transactions() {
                             return Err(EthApiError::HeaderNotFound(BlockId::Hash(hash)));
                         }
-                        // Check if the number of txs requested is exactly the same as the number of txs in the pending block. If so, this is the pending block! return it
+                        // If number of txs matches exactly, this is the pending block.
                         if num_txs as u64 == newest_pending_block.num_transactions() {
                             return Ok(Some(MaybeSealedBlock::PendingSynthetic(
                                 newest_pending_block,
                             )));
                         }
-                        // Otherwise, this is at the same as the pending block but with fewer txs - truncate the pending block to the number of txs requested
+                        // Otherwise this is the pending block truncated to fewer transactions.
                         newest_pending_block.transactions.end =
                             newest_pending_block.transactions.start + num_txs as u64;
                         return Ok(Some(MaybeSealedBlock::PendingSynthetic(
@@ -807,7 +829,7 @@ where
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
 
-            // Values that never need to be initailized
+            // Values that never need to be initialized
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
             difficulty: U256::ZERO,
@@ -869,7 +891,7 @@ where
             transactions_root: EMPTY_ROOT_HASH,
             receipts_root: EMPTY_ROOT_HASH,
 
-            // Values that never need to be initailized
+            // Values that never need to be initialized
             ommers_hash: EMPTY_OMMER_ROOT_HASH,
             beneficiary: Address::ZERO,
             difficulty: U256::ZERO,
@@ -1154,13 +1176,20 @@ fn maybe_actual_effective_gas_price(
     block_number: u64,
     gas_used: u64,
     fee_paid: Option<Amount>,
+    base_fee_per_gas: Option<u64>,
 ) -> Option<u128> {
-    let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
-    if block_number <= apply_actual_fee_after_height || gas_used == 0 {
+    if !is_actual_fee_projection_height_active(block_number) || gas_used == 0 {
         return None;
     }
 
-    fee_paid.map(|fee_paid| fee_paid.0 / u128::from(gas_used))
+    // Keep zero-fee projection: when metadata says no fee was charged, RPC must return 0 here.
+    // For non-zero fee, we report the block header base fee (primary gas-price dimension).
+    // Invariant: this header value must match the gas meter's `gas_price[0]`; divergence is a bug.
+    match fee_paid {
+        Some(Amount::ZERO) => Some(0),
+        Some(_) => base_fee_per_gas.map(u128::from),
+        None => None,
+    }
 }
 
 // modified from: https://github.com/paradigmxyz/reth many times
@@ -1224,12 +1253,16 @@ pub(crate) fn build_rpc_receipt(
         .inner()
         .effective_gas_price(block.maybe_partial_header().base_fee_per_gas);
 
-    // Once activated, prefer the fee paid in the Sovereign gas meter when available.
-    // This keeps receipt fee semantics aligned with balance deltas.
-    let effective_gas_price =
-        maybe_actual_effective_gas_price(block.number(), receipt.gas_used, fee_paid)
-            // Keep compatibility for historical data where metadata may be missing.
-            .unwrap_or(eip_1559_effective_gas_price);
+    // Once activated, keep zero-fee semantics from metered metadata and otherwise
+    // report the primary gas-price dimension (EVM base fee from header).
+    let effective_gas_price = maybe_actual_effective_gas_price(
+        block.number(),
+        receipt.gas_used,
+        fee_paid,
+        block.maybe_partial_header().base_fee_per_gas,
+    )
+    // Keep compatibility for historical data where metadata may be missing.
+    .unwrap_or(eip_1559_effective_gas_price);
 
     TransactionReceipt {
         inner: ReceiptEnvelope::Eip1559(ReceiptWithBloom::new(rpc_receipt, logs_bloom)),
@@ -1250,6 +1283,70 @@ pub(crate) fn build_rpc_receipt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(active_block, 21_000, Some(Amount::ZERO), Some(123)),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_ignores_zero_paid_fee_before_activation() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                activation_height,
+                21_000,
+                Some(Amount::ZERO),
+                Some(123),
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_uses_base_fee_for_non_zero_paid_fee() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                Some(42),
+            ),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn maybe_actual_effective_gas_price_falls_back_when_base_fee_missing() {
+        let activation_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
+        let active_block = activation_height
+            .checked_add(1)
+            .expect("activation height must be strictly below u64::MAX");
+
+        assert_eq!(
+            maybe_actual_effective_gas_price(
+                active_block,
+                21_000,
+                Some(Amount::new(100_000)),
+                None,
+            ),
+            None
+        );
+    }
 
     #[test]
     fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {

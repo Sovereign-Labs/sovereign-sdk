@@ -353,14 +353,21 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
   }
 
   /**
+   * Pre-fetches the rollup schema, populating the serializer and chain hash caches.
+   * Call this during initialization to avoid the latency of lazy-loading on the first transaction.
+   */
+  hydrate(): Promise<void> {
+    return this._fetchSchema();
+  }
+
+  /**
    * The serializer for the rollup.
    * Can be used to serialize transactions, runtime calls, etc.
    */
   async serializer(): Promise<Serializer> {
-    if (this._serializer) return this._serializer;
-    const { schema } = await this.rollup.schema();
-    this._serializer = this._config.getSerializer(schema);
-    return this._serializer;
+    if (!this._serializer) await this._fetchSchema();
+    // _fetchSchema always sets _serializer
+    return this._serializer as Serializer;
   }
 
   /**
@@ -371,10 +378,15 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
   }
 
   async chainHash(): Promise<Uint8Array> {
-    if (this._chainHash) return this._chainHash;
-    const { chain_hash } = await this.rollup.schema();
+    if (!this._chainHash) await this._fetchSchema();
+    // _fetchSchema always sets _chainHash
+    return this._chainHash as Uint8Array;
+  }
+
+  private async _fetchSchema(): Promise<void> {
+    const { schema, chain_hash } = await this.rollup.schema();
+    this._serializer = this._config.getSerializer(schema);
     this._chainHash = hexToBytes(chain_hash);
-    return this._chainHash;
   }
 }
 

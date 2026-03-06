@@ -193,7 +193,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
     {
         let test_rollup = start_node(temp_dir, da_layer.clone()).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
-        test_rollup.wait_for_next_blocks(10).await;
+        test_rollup.wait_for_rollup_height_advance_by(10).await;
 
         let client = test_rollup.client.clone();
         let mut event_subscription = subscribe_to_bank_events(&test_rollup).await;

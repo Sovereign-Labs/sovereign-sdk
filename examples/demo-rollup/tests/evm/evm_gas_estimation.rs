@@ -36,7 +36,7 @@ fn create_simulation_create_params(
 #[tokio::test(flavor = "multi_thread")]
 async fn big_accessory_state_writes() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client).await?;
 
@@ -53,7 +53,7 @@ async fn big_accessory_state_writes() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_estimate_gas_revert_returns_error() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let contract = SimpleStorage::deploy(client).await?;
 
@@ -67,10 +67,9 @@ async fn eth_estimate_gas_revert_returns_error() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_estimate_gas_omitted_nonce_differs_from_explicit_zero_after_nonce_advance(
-) -> anyhow::Result<()> {
+async fn eth_estimate_gas_rejects_stale_explicit_nonce_after_nonce_advance() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let from = sender_address()?;
 
@@ -108,28 +107,26 @@ async fn eth_estimate_gas_omitted_nonce_differs_from_explicit_zero_after_nonce_a
         omitted_nonce_estimate.is_ok(),
         "omitted nonce estimate should succeed after nonce has advanced"
     );
-    let explicit_zero_value = explicit_zero_nonce_estimate
-        .as_ref()
-        .expect("explicit nonce=0 estimate should succeed");
     let explicit_current_value = explicit_current_nonce_estimate
         .as_ref()
         .expect("explicit current nonce estimate should succeed");
-    assert_eq!(
-        explicit_zero_value, explicit_current_value,
-        "explicit nonce value should not change estimate in current SovHandler execution path"
-    );
-
-    let differs_from_explicit_zero = match (
-        omitted_nonce_estimate.as_ref(),
-        explicit_zero_nonce_estimate.as_ref(),
-    ) {
-        (Ok(left), Ok(right)) => left != right,
-        (Ok(_), Err(_)) | (Err(_), Ok(_)) => true,
-        (Err(_), Err(_)) => false,
-    };
+    let explicit_zero_error = explicit_zero_nonce_estimate
+        .as_ref()
+        .expect_err("explicit stale nonce=0 should be rejected after nonce advance")
+        .to_string()
+        .to_lowercase();
     assert!(
-        differs_from_explicit_zero,
-        "omitted nonce estimate should differ from explicit nonce=0 after nonce has advanced; this captures omitted-nonce lookup side effects in estimate metering; omitted={omitted_nonce_estimate:?}, explicit_zero={explicit_zero_nonce_estimate:?}"
+        explicit_zero_error.contains("nonce too low")
+            || explicit_zero_error.contains("already used")
+            || explicit_zero_error.contains("nonce"),
+        "unexpected stale nonce error: {explicit_zero_error}"
+    );
+    assert_eq!(
+        omitted_nonce_estimate
+            .as_ref()
+            .expect("omitted nonce should succeed"),
+        explicit_current_value,
+        "omitted nonce should resolve to current account nonce in estimate path"
     );
 
     Ok(())
@@ -138,7 +135,7 @@ async fn eth_estimate_gas_omitted_nonce_differs_from_explicit_zero_after_nonce_a
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_call_omitted_nonce_matches_explicit_nonce_for_create() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_client(rollup.http_addr);
     let from = sender_address()?;
 

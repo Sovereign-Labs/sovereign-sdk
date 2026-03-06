@@ -156,8 +156,9 @@ where
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        witness_generation: bool,
     ) -> anyhow::Result<Self::StorageManager> {
-        Manager::from_config(rollup_config)
+        Manager::from_config(rollup_config, witness_generation)
     }
 
     fn create_proof_sender(
@@ -170,7 +171,10 @@ where
 }
 
 trait StorageManagerInitializer<S: Spec, Da: DaService>: Sized {
-    fn from_config(config: &RollupConfig<S::Address, Da>) -> anyhow::Result<Self>;
+    fn from_config(
+        config: &RollupConfig<S::Address, Da>,
+        witness_generation: bool,
+    ) -> anyhow::Result<Self>;
 }
 
 impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
@@ -181,6 +185,7 @@ impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
 {
     fn from_config(
         config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
+        _witness_generation: bool,
     ) -> anyhow::Result<Self> {
         NativeStorageManager::new(&config.storage.path)
     }
@@ -198,7 +203,8 @@ impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
 {
     fn from_config(
         config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
+        witness_generation: bool,
     ) -> anyhow::Result<Self> {
-        NomtStorageManager::new(config.storage.clone())
+        NomtStorageManager::new(config.storage.clone(), witness_generation)
     }
 }

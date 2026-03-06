@@ -19,14 +19,6 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 use tokio::task::JoinSet;
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-struct BasicJsonRpcRequest {
-    jsonrpc: String,
-    id: u64,
-    method: String,
-    params: serde_json::Value,
-}
-
 async fn collect_all_blobs_between(
     da_service: &CelestiaService,
     height_before: u64,

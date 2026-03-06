@@ -887,6 +887,7 @@ mod tests {
     use sov_rollup_interface::common::HexHash;
     use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
     use sov_rollup_interface::node::da::SlotData;
+    use sov_test_utils::docker::pull_image_with_retries;
     use testcontainers_modules::postgres::Postgres;
     use testcontainers_modules::testcontainers::runners::AsyncRunner;
     use tokio::task::JoinHandle;
@@ -1261,6 +1262,9 @@ mod tests {
             return Ok(());
         }
 
+        pull_image_with_retries(Postgres::default())
+            .await
+            .expect("Failed to pull postgres image");
         let node = Postgres::default().start().await?;
 
         // prepare connection string

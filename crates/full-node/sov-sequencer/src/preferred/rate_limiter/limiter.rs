@@ -274,7 +274,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
         let entry_count = self.data.entry_count();
         let limiter_type = self.limiter_type;
 
-        if self.metric_counter % 500 == 0 {
+        if self.metric_counter.is_multiple_of(500) {
             // We don’t need precise real-time values for this metric, so we emit it once every 500 events
             // to reduce pressure on the observability stack.
             sov_metrics::track_metrics(|tracker| {

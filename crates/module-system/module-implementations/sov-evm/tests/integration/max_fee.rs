@@ -114,16 +114,24 @@ fn test_disable_max_fee_check_does_not_mint_value() {
                 U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
 
             assert!(
-                actual_fee >= implied_fee,
-                "receipt-implied fee cannot exceed actual sender fee",
+                implied_fee >= actual_fee,
+                "receipt-implied fee should not under-report the actual charged fee"
             );
-            assert!(
-                actual_fee
-                    .checked_sub(implied_fee)
-                    .expect("validated above")
-                    < U256::from(receipt.gas_used),
-                "difference should be bounded by integer division remainder",
-            );
+            let over_reported_fee = implied_fee
+                .checked_sub(actual_fee)
+                .expect("implied fee is checked to be >= actual fee");
+            if receipt.effective_gas_price == 0 {
+                assert_eq!(
+                    over_reported_fee,
+                    U256::ZERO,
+                    "zero effective gas price cannot over-report fee"
+                );
+            } else {
+                assert!(
+                    over_reported_fee < U256::from(receipt.effective_gas_price),
+                    "receipt-implied fee overage should stay below one gas-price unit"
+                );
+            }
         }),
     });
 }

@@ -559,3 +559,51 @@ fn assert_root_hashes<S: NativeStorage>(storage: &S, expected_root_hashes: Vec<S
     let expected_error = format!("Root node not found for version {next_version}.");
     assert_eq!(expected_error, future_root.to_string());
 }
+
+// Regression tests for #2514: pinned cache is incompatible with witness generation.
+
+use sov_state::DefaultStorageSpec;
+type NomtSpec = DefaultStorageSpec<TestHasher>;
+
+#[test]
+#[should_panic(expected = "Pinned cache is incompatible with witness generation")]
+fn nomt_pinned_cache_with_witness_panics() {
+    use sov_state::pinned_cache::PinnedCache;
+
+    let storage_manager = SimpleStorageManager::<NomtSpec>::new();
+    // Inject a pinned cache and ensure witness generation is enabled (the default).
+    storage_manager.set_pinned_cache(PinnedCache::default());
+    // This should panic because with_witness=true and pinned_cache is Some.
+    let _storage = storage_manager.create_storage();
+}
+
+#[test]
+fn nomt_pinned_cache_without_witness_succeeds() {
+    use sov_state::pinned_cache::PinnedCache;
+
+    let mut storage_manager = SimpleStorageManager::<NomtSpec>::new();
+    storage_manager.set_witness_generation(false);
+    storage_manager.set_pinned_cache(PinnedCache::default());
+    // This should succeed because with_witness=false.
+    let _storage = storage_manager.create_storage();
+}
+
+#[test]
+#[should_panic(expected = "JMT ProverStorage does not support pinned cache")]
+fn jmt_pinned_cache_panics() {
+    use sov_state::pinned_cache::PinnedCache;
+
+    let storage_manager = SimpleJmtStorageManager::<NomtSpec>::new();
+    let storage = storage_manager.create_storage();
+    let state_accesses = StateAccesses {
+        user: Default::default(),
+        kernel: Default::default(),
+    };
+    // This should panic because pinned_cache is Some.
+    let _ = storage.compute_state_update(
+        state_accesses,
+        &Default::default(),
+        <sov_state::ProverStorage<NomtSpec> as Storage>::PRE_GENESIS_ROOT,
+        Some(PinnedCache::default()),
+    );
+}

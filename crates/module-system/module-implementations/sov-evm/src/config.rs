@@ -289,6 +289,8 @@ mod tests {
                 address,
                 code_hash: AccountData::empty_code(),
                 code: Bytes::default(),
+                nonce: 0,
+                storage: Default::default(),
             }],
             chain_spec: EvmChainSpec {
                 limit_contract_code_size: None,

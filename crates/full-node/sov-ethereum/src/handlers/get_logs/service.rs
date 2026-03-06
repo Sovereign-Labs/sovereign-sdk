@@ -19,7 +19,6 @@ use sov_evm::{Evm, MaybeSealedBlock, Receipt};
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
-use sov_rpc_eth_types::rpc_error_with_code;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::LogsWithMaybeCursor;
 use std::marker::PhantomData;
@@ -61,7 +60,7 @@ impl From<Error> for ErrorObjectOwned {
     fn from(err: Error) -> ErrorObjectOwned {
         match err {
             Error::ReceiptPruned(_) | Error::BlockPruned(_) => {
-                rpc_error_with_code(4444, err.to_string())
+                rpc_resource_not_found(err.to_string())
             }
             Error::BlockHashNotFound(_)
             | Error::InvalidCursorBlockNumber { .. }
@@ -149,6 +148,20 @@ where
     ) -> Result<LogsWithMaybeCursor> {
         let start = self.get_block_nr(from_block)?;
         let end = self.get_block_nr(to_block)?;
+        if start > end {
+            return Err(Error::InvalidBlock(
+                "invalid block range params".to_string(),
+            ));
+        }
+        // Match expected eth_getLogs semantics: explicit numeric ranges that extend past
+        // the current head should fail with invalid params instead of surfacing internal
+        // "block not found/pruned" errors.
+        let latest = self.get_block_nr(Some(BlockNumberOrTag::Latest))?;
+        if end > latest {
+            return Err(Error::InvalidBlock(
+                "invalid block range params".to_string(),
+            ));
+        }
         let maybe_cursor = self.scan_block_range(start..=end)?;
         Ok(LogsWithMaybeCursor::new(
             self.logs,
@@ -352,4 +365,37 @@ fn serialized_size(log: &LogWithExecutionTimestamp) -> usize {
         + b",\"removed\":false}".len() // false is longer than true
                                        // See example serialized log below:
                                        // r#"{"address":"0x0000000000000000000000000000000000000069","topics":["0x0000000000000000000000000000000000000000000000000000000000000069"],"data":"0x69","blockHash":"0x0000000000000000000000000000000000000000000000000000000000000069","blockNumber":"0x69","blockTimestamp":"0x69","transactionHash":"0x0000000000000000000000000000000000000000000000000000000000000069","transactionIndex":"0x69","logIndex":"0x69","removed":false}"#
+}
+
+#[cfg(test)]
+mod tests {
+    use alloy_primitives::B256;
+    use jsonrpsee::types::error::INVALID_PARAMS_CODE;
+
+    use super::Error;
+
+    #[test]
+    fn receipt_pruned_maps_to_resource_not_found() {
+        let err = jsonrpsee::types::ErrorObjectOwned::from(Error::ReceiptPruned(7));
+        assert_eq!(err.code(), -32001);
+    }
+
+    #[test]
+    fn block_pruned_maps_to_resource_not_found() {
+        let err = jsonrpsee::types::ErrorObjectOwned::from(Error::BlockPruned(9));
+        assert_eq!(err.code(), -32001);
+    }
+
+    #[test]
+    fn too_many_logs_stays_limit_exceeded() {
+        let err =
+            jsonrpsee::types::ErrorObjectOwned::from(Error::TooManyLogsInBlock(B256::ZERO, 10));
+        assert_eq!(err.code(), -32005);
+    }
+
+    #[test]
+    fn invalid_block_stays_invalid_params() {
+        let err = jsonrpsee::types::ErrorObjectOwned::from(Error::InvalidBlock("oops".into()));
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    }
 }

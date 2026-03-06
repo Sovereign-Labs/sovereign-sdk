@@ -23,13 +23,21 @@ pub struct BasicGasMeter<S: Spec> {
     pub gas_price: <S::Gas as Gas>::Price,
 }
 
-/// Contain information about the gas usage of a gas.
+/// Contains gas usage and valuation for a meter snapshot.
+///
+/// ## Invariant
+/// `gas_value` is the scalar product of `gas_used` and `gas_price`.
+/// Equivalently, `gas_value == gas_used.checked_value(gas_price)`.
+///
+/// Any divergence from this relation is a correctness bug.
 pub struct GasInfo<GU: Gas> {
-    /// The gas value.
+    /// Total charged amount in token units.
+    ///
+    /// This is the scalar product `gas_used · gas_price`.
     pub gas_value: Amount,
-    /// The current gas used accumulated by the stake meter.
+    /// Current gas used per dimension, accumulated by the gas meter.
     pub gas_used: GU,
-    /// The current gas price
+    /// Current gas price per dimension.
     pub gas_price: GU::Price,
 }
 

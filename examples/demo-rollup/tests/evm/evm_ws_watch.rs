@@ -13,7 +13,7 @@ use crate::evm::evm_test_helper::EVM_EXTENSION;
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_watch_returns_receipt() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_ws_client(rollup.http_addr).await;
 
     let tx = TransactionRequest::default().with_to(Address::ZERO);
@@ -31,7 +31,7 @@ async fn ws_watch_returns_receipt() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_get_receipt() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let client = alloy_ws_client(rollup.http_addr).await;
 
     let tx = TransactionRequest::default().with_to(Address::ZERO);
@@ -50,7 +50,7 @@ async fn ws_subscribe_new_heads() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_ws_client(rollup.http_addr).await;
     let subscription = client.subscribe_blocks().await?;
-    rollup.wait_for_next_blocks(3).await;
+    rollup.wait_for_rollup_height_advance_by(3).await;
 
     let headers: Vec<_> = subscription.into_stream().take(3).collect().await;
 
@@ -66,7 +66,7 @@ async fn ws_subscribe_new_heads_sizes() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let client = alloy_ws_client(rollup.http_addr).await;
     let mut subscription = client.subscribe_blocks().await?;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let header = subscription.recv().await?;
     assert_eq!(header.number, 2);

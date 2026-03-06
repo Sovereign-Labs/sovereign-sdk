@@ -12,7 +12,7 @@ use sov_evm_test_utils::SimpleStorage;
 #[tokio::test(flavor = "multi_thread")]
 async fn contract_deploy_via_eth_send_transaction_with_no_gas_limit() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse().unwrap();
     let from = signer.address();
     let client = alloy_client(rollup.http_addr);

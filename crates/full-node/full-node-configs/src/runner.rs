@@ -235,6 +235,7 @@ mod tests {
             block_time_ms = 1_000
             [storage]
             path = "/tmp"
+            ledger_db_path = "/tmp/ledger-db"
             [runner]
             da_polling_interval_ms = 10000
             concurrent_sync_tasks = 18

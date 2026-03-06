@@ -12,7 +12,7 @@ use crate::evm::evm_test_helper::EVM_EXTENSION;
 #[tokio::test(flavor = "multi_thread")]
 async fn debug_trace_pending_tx() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = alloy_client(rollup.http_addr);
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
@@ -50,7 +50,7 @@ async fn debug_trace_pending_tx() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn debug_trace_pending_block() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = alloy_client(rollup.http_addr);
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
@@ -88,12 +88,12 @@ async fn debug_trace_pending_block() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn debug_trace_block_by_number() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_next_blocks(1).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = alloy_client(rollup.http_addr);
     let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
     let mint_tx = usdc.mint(Address::ZERO, parse_ether("1")?).send().await?;
-    rollup.wait_for_next_blocks(1).await; // Block nr 2 mined with 2 transactions
+    rollup.wait_for_rollup_height_advance_by(1).await; // Block nr 2 mined with 2 transactions
 
     let opts = GethDebugTracingOptions::call_tracer(CallConfig::default());
     let trace = client

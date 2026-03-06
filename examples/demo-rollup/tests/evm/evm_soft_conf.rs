@@ -9,7 +9,7 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
         .await
         .unwrap();
 
-    test_rollup.wait_for_next_blocks(1).await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     // Test: Pause the sequencer and verify that the transaction receipt has no assigned block hash,
     // since the block hash is not yet known.
@@ -73,7 +73,7 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
         // Now we created a block and the block hash becomes available.
         test_rollup.resume_preferred_batches().await;
 
-        test_rollup.wait_for_next_blocks(1).await;
+        test_rollup.wait_for_rollup_height_advance_by(1).await;
 
         {
             let rec = evm_client.receipt(tx_hash).await.unwrap();

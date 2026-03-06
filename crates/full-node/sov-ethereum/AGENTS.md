@@ -46,9 +46,9 @@ Use shared helpers in `src/lib.rs`; do not introduce ad-hoc codes in handlers.
 | --- | --- |
 | Method not supported | `-32004` |
 | Limit exceeded | `-32005` |
-| Tx rejected | `-32003` |
+| Tx rejected (non-input sequencer failures) | `-32003` |
 | Resource not found | `-32001` |
-| Invalid params | `-32602` |
+| Invalid params (including `accept_tx` 400/403/413 rejections) | `-32602` |
 | Sync timeout (`eth_sendRawTransactionSync`) | `4` |
 
 ## Failure Pattern Matrix (PR Lessons)

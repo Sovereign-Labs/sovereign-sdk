@@ -232,7 +232,7 @@ fn test_multisig_signature_verification() {
     let (mut runner, admin) = setup();
 
     // First, create and register a multisig
-    let multisig_keys = vec![
+    let multisig_keys = [
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),

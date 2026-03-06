@@ -272,6 +272,7 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S, &'a mut $gas_enforcer_ty>;
+            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -326,6 +327,7 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S>;
+            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
