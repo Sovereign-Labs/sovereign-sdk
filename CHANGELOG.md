@@ -1,5 +1,6 @@
 # 2026-03-05
 - #2556 **Breaking change**: only for runtimes with AccessPattern module.
+- #2563 EVM: Fixes in EVM RPC `eth_estimateGas`, `debug_traceTransaction` and `eth_feeHistory`
 
 # 2026-02-12
 - #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
