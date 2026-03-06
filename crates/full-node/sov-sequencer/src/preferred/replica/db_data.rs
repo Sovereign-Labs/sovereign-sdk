@@ -118,7 +118,7 @@ pub(crate) enum DbData {
     BatchStart(BatchToStore),
     Transaction(u64, FullyBakedTx, TxHash),
     BatchEnd(BatchToStore),
-    NewProof(SequenceNumber),
+    NewProof(SequenceNumber, Vec<u8>),
 }
 
 impl DbData {
@@ -131,7 +131,7 @@ impl DbData {
             DbData::BatchStart(batch_to_store) | DbData::BatchEnd(batch_to_store) => {
                 batch_to_store.sequence_number
             }
-            DbData::Transaction(sequence_number, _, _) | DbData::NewProof(sequence_number) => {
+            DbData::Transaction(sequence_number, _, _) | DbData::NewProof(sequence_number, _) => {
                 *sequence_number
             }
         }
@@ -176,7 +176,7 @@ pub(crate) fn row_to_event(row: PgRow) -> Result<(DbData, EventType), ParsingErr
             let batch_to_store = parse_serialized_batch(data, sequence_number)?;
             DbData::BatchEnd(batch_to_store)
         }
-        EventType::NewProof => DbData::NewProof(sequence_number),
+        EventType::NewProof => DbData::NewProof(sequence_number, data),
     };
 
     Ok((event, event_type))

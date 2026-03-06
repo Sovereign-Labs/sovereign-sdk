@@ -44,7 +44,18 @@ async fn test_db_operations_leader() {
         .unwrap();
 
     db.as_mut()
-        .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
+        .add_proof_blob(sequence_number + 1, 3, Arc::new(*b"proof_data"))
+        .await
+        .unwrap();
+
+    // Add more txs to the
+    db.as_mut()
+        .add_tx(
+            sequence_number,
+            3,
+            FullyBakedTx::new(vec![7, 8, 9]),
+            TxHash::new([3; 32]),
+        )
         .await
         .unwrap();
 
@@ -56,7 +67,36 @@ async fn test_db_operations_leader() {
         "Data should exist after adding transactions"
     );
 
-    db.as_mut().prune(2).await.unwrap();
+    let data = db.as_mut().current_data().await.unwrap();
+    assert!(
+        data.completed_blobs.len() == 1,
+        "Should have 1 completed blob"
+    );
+    let ReadBlob::Proof {
+        sequence_number: proof_sequence_number,
+        data: proof_data,
+        ..
+    } = &data.completed_blobs[0]
+    else {
+        panic!("Completed blob must be a proof");
+    };
+    assert!(
+        *proof_sequence_number == (sequence_number + 1),
+        "Should have a completed proof blob with sequence number {}",
+        sequence_number + 1
+    );
+    assert_eq!(
+        &**proof_data,
+        b"proof_data".as_slice(),
+        "Proof data should be correct"
+    );
+    assert!(
+        data.in_progress_batch
+            .is_some_and(|b| b.sequence_number == sequence_number),
+        "Should have an in-progress batch"
+    );
+
+    db.as_mut().prune(3).await.unwrap();
     let data = db.as_mut().current_data().await.unwrap();
     assert!(data.is_empty(), "Data should be empty after prune");
 }

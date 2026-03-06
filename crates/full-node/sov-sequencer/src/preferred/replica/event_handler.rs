@@ -62,7 +62,7 @@ where
                     .await
             }
             // TODO(@preston-evans98): Handle new proof blobs.
-            DbData::NewProof { .. } => todo!(),
+            DbData::NewProof { .. } => todo!("Proof blobs are not yet supported in the replica. This should be unreachable since the preferred sequencer only accepts proofs via function call.") ,
         };
 
         match res {

@@ -667,7 +667,7 @@ where
 
         let sequence_number = self
             .sequence_number_of_open_batch
-            .expect("No batch in progress");
+            .expect("No batch in progress in Inner::do_new_tx");
         let Inner {
             executor,
             batch_size_tracker,
