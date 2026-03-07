@@ -960,7 +960,7 @@ where
         let seq_nr_of_current_blob_for_this_executor = inner
             .sequence_number_of_open_batch
             .expect("No batch in progress in SyncState::process_close_current_batch_replica");
-        inner.sequence_number_of_open_batch = None;
+
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         debug!(
