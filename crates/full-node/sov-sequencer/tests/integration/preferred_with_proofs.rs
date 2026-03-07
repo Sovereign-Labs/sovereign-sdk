@@ -87,7 +87,6 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
 /// Any errors should cause a panic in the meantime.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
-    sov_test_utils::initialize_logging();
     let (test_rollup, admin) = create_test_rollup_with_prover().await;
 
     test_rollup.produce_enough_finalized_slots().await;
@@ -103,7 +102,7 @@ async fn test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
     for _ in 0..50 {
         let tx = tx_set_value(&admin.private_key, tx_generation, tx_generation);
 
-        // Retry sending the tx 10 times, with a 1 second delay between attempts.
+        // Retry sending the tx 10 times, with a 3 second delay between attempts.
         for attempt in 0..10 {
             match client.send_raw_tx_to_sequencer(&tx).await {
                 Ok(_) => {
@@ -118,7 +117,7 @@ async fn test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
                     if !is_503 || attempt == 9 {
                         anyhow::bail!(e);
                     }
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                 }
             }
         }
