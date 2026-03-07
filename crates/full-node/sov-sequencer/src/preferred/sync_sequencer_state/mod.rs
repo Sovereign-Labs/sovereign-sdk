@@ -199,7 +199,8 @@ where
         shutdown_receiver: shutdown_receiver.clone(),
         shutdown_sender,
         executor_events_sender,
-        sequence_number_of_next_blob,
+        sequence_number_of_open_batch: None,
+        next_unassigned_sequence_number: sequence_number_of_next_blob,
         in_flight_blobs,
         has_finished_startup: false,
         metrics: Vec::with_capacity(128),
@@ -250,6 +251,7 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) batches_count: u64,
     pub(crate) transactions_count: usize,
     pub(crate) batch_is_in_progress: bool,
+    pub(crate) sequence_number_of_open_batch: Option<SequenceNumber>,
 }
 
 #[derive(Debug)]

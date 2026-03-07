@@ -79,7 +79,11 @@ where
     pub(crate) is_ready: Result<(), SequencerNotReadyDetails>,
     pub(crate) in_flight_blobs: Arc<AtomicUsize>,
     pub(crate) executor_events_sender: ExecutorEventsSender<S, Rt>,
-    pub(crate) sequence_number_of_next_blob: SequenceNumber,
+    // We track two sequence numbers: the sequence number of the current open batch, and the next unassigned sequence number.
+    // This is because we might need to assign a sequence number to some proofs while a batch is in progress,
+    // and we don't want to forget what we've assigned.
+    pub(crate) sequence_number_of_open_batch: Option<SequenceNumber>,
+    pub(crate) next_unassigned_sequence_number: SequenceNumber,
     /// A boolean that indicates whether the sequencer has finished its startup phase.
     /// We need this rather than relying on `SequencerNotReadyDetails::Startup` because that state
     /// can be overwritten when the node is resyncing.
@@ -182,26 +186,37 @@ where
         sequence_number: SequenceNumber,
     ) {
         info!(%sequence_number, "Overwriting next sequence number");
-        self.sequence_number_of_next_blob = sequence_number;
-        track_sequence_number(self.sequence_number_of_next_blob);
+        self.next_unassigned_sequence_number = sequence_number;
+        track_sequence_number(self.next_unassigned_sequence_number);
     }
 
-    pub(crate) fn current_sequence_number(&self) -> SequenceNumber {
-        self.sequence_number_of_next_blob.checked_sub(1).expect("Sequence number underflow. Cannot get sequence number if no batch has ever been active. This is a bug, please report")
+    // pub(crate) fn current_sequence_number(&self) -> SequenceNumber {
+    //     self.sequence_number_of_next_blob.checked_sub(1).expect("Sequence number underflow. Cannot get sequence number if no batch has ever been active. This is a bug, please report")
+
+    /// Assign a sequence number to the current open batch.
+    pub(crate) fn assign_sequence_number_to_batch(&mut self) -> SequenceNumber {
+        let sequence_number = self.take_sequence_number_internal();
+        self.sequence_number_of_open_batch = Some(sequence_number);
+        sequence_number
     }
 
-    pub(crate) fn get_and_inc_next_sequence_number(&mut self) -> SequenceNumber {
-        let sequence_number = self.sequence_number_of_next_blob;
-        self.sequence_number_of_next_blob = self
-            .sequence_number_of_next_blob
+    /// Take a sequence number for a proof blob.
+    pub(crate) fn take_sequence_number_for_proof(&mut self) -> SequenceNumber {
+        self.take_sequence_number_internal()
+    }
+
+    fn take_sequence_number_internal(&mut self) -> SequenceNumber {
+        let sequence_number = self.next_unassigned_sequence_number;
+        self.next_unassigned_sequence_number = self
+            .next_unassigned_sequence_number
             .checked_add(1)
             .expect("Sequence number overflow; this should be unreachable for a few billion years");
-        track_sequence_number(self.sequence_number_of_next_blob);
+        track_sequence_number(self.next_unassigned_sequence_number);
         sequence_number
     }
 
     pub(crate) async fn prune_sequencer_db(&mut self) {
-        let next_sequence_number = self.sequence_number_of_next_blob;
+        let next_sequence_number = self.next_unassigned_sequence_number;
         let latest_state_info = &self.latest_info;
         let mut runtime = Rt::default();
         let next_sequence_number_according_to_node =
@@ -571,7 +586,7 @@ where
             .map_err(BatchCreationError::DatabaseError)?;
 
         // DB operations handled by replica-aware db implementation
-        let sequence_number = self.get_and_inc_next_sequence_number();
+        let sequence_number = self.assign_sequence_number_to_batch();
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
 
         let start_block_data = StartBlockData {
@@ -650,7 +665,9 @@ where
             );
         }
 
-        let sequence_number = self.current_sequence_number();
+        let sequence_number = self
+            .sequence_number_of_open_batch
+            .expect("No batch in progress in Inner::do_new_tx");
         let Inner {
             executor,
             batch_size_tracker,
@@ -728,6 +745,7 @@ where
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+        self.sequence_number_of_open_batch = None;
         self.executor_events_sender
             .close_batch(checkpoint, forced_txs)
             .await;
