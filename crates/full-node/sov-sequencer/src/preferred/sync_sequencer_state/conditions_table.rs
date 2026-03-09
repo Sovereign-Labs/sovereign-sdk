@@ -93,7 +93,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
 
     let node_next_sequence_number =
         get_next_sequence_number_according_to_node(info, &mut Rt::default());
-    let next_internal_sequence_number = inner.sequence_number_of_next_blob;
+    let next_internal_sequence_number = inner.next_unassigned_sequence_number;
 
     debug!(
         ?table,

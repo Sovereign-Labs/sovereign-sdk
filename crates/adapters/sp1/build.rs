@@ -8,7 +8,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     let toolchain_cmp_result = does_rustc_match("succinct")
-        .context("Failed to get SP1 rustc version. Is SP1 installed? If not you can install it with the `sp1up` tool. Try running:\n\n   curl -L https://sp1.succinct.xyz | bash && sp1up")?;
+        .context("Failed to get SP1 rustc version. Is SP1 installed? If not you can install it with the `sp1up` tool. Try running:\n\n   curl -L https://sp1up.succinct.xyz | bash && sp1up")?;
 
     if let RustComparisonResult::Different {
         native_version,

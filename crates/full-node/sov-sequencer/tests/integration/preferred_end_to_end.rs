@@ -532,7 +532,8 @@ pub(crate) enum InvalidGeneration {
     TooOld,
 }
 
-fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<TestSpec>) {
+pub(super) fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<TestSpec>)
+{
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let admin = genesis_config.additional_accounts()[0].clone();

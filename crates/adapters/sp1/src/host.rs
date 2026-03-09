@@ -3,54 +3,10 @@
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
-use sp1_sdk::{HookEnv, Prover, ProverClient, SP1Stdin};
+use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
+use sp1_sdk::{ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
-
-/// Necessary since similar functionality on `Prove` and `Execute` do not yet come from a shared trait.
-#[allow(dead_code)]
-trait WithHook<'a> {
-    fn with_hook(
-        self,
-        fd: u32,
-        f: impl FnMut(HookEnv, &[u8]) -> Vec<Vec<u8>> + Send + Sync + 'a,
-    ) -> Self;
-}
-
-// Note: CI didn't like this, so we're just going to ignore it.
-#[allow(dead_code)]
-impl<'a> WithHook<'a> for sp1_sdk::cpu::execute::CpuExecuteBuilder<'a> {
-    fn with_hook(
-        self,
-        fd: u32,
-        f: impl FnMut(HookEnv, &[u8]) -> Vec<Vec<u8>> + Send + Sync + 'a,
-    ) -> Self {
-        self.with_hook(fd, f)
-    }
-}
-
-#[cfg(feature = "bench")]
-fn cycle_count_hook(env: HookEnv, _buf: &[u8]) -> Vec<Vec<u8>> {
-    vec![Vec::from(
-        env.runtime.report.total_instruction_count().to_le_bytes(),
-    )]
-}
-
-#[cfg(feature = "bench")]
-fn add_benchmarking_hooks<'a, T: WithHook<'a>>(action_builder: T) -> T {
-    use sov_metrics::cycle_utils::sp1::{FD_CYCLE_COUNT_HOOK, FD_METRICS_HOOK};
-
-    use crate::metrics::metrics_hook;
-
-    action_builder
-        .with_hook(FD_CYCLE_COUNT_HOOK, cycle_count_hook)
-        .with_hook(FD_METRICS_HOOK, metrics_hook)
-}
-
-#[cfg(not(feature = "bench"))]
-fn add_benchmarking_hooks<'a, T: WithHook<'a>>(action_builder: T) -> T {
-    action_builder
-}
 
 /// SP1 Host implementation.
 pub struct SP1Host<'host> {
@@ -102,31 +58,31 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let prover = if cfg!(debug_assertions) {
-            ProverClient::builder().mock().build()
-        } else {
-            ProverClient::builder().cpu().build()
-        };
+        let prover = ProverClient::builder().cpu().build();
         let proof = if with_proof {
-            let (pk, _) = prover.setup(self.elf);
-            // Bbenchmarking hooks only available for `CpuExecuteBuilder`, not `CpuProverBuilder`
+            let pk = prover
+                .setup(self.elf.into())
+                .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
             let output = prover
-                .prove(&pk, &self.stdin)
+                .prove(&pk, self.stdin.clone())
                 .run()
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
             Proof::Full(output.proof)
         } else {
             let prover = ProverClient::builder().mock().build();
-            let output = add_benchmarking_hooks(prover.execute(self.elf, &self.stdin))
+            let execute_request = prover.execute(self.elf.into(), self.stdin.clone());
+            let (public_values, _report) = execute_request
                 .run()
                 .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
-            Proof::PublicData(output.0)
+            Proof::PublicData(public_values)
         };
         Ok(bincode::serialize(&proof)?)
     }
 
     fn code_commitment(&self) -> <<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment{
-        let verifying_key = ProverClient::from_env().setup(self.elf).1;
-        crate::SP1MethodId(bincode::serialize(&verifying_key).unwrap())
+        let pk = sp1_sdk::blocking::ProverClient::from_env()
+            .setup(self.elf.into())
+            .expect("SP1 setup failed");
+        crate::SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap())
     }
 }

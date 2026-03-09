@@ -434,6 +434,14 @@ export class SolanaSignableRollup<RuntimeCall> {
     return this.inner.chainHash();
   }
 
+  /**
+   * Pre-fetches the rollup schema, populating the serializer and chain hash caches.
+   * Call this during initialization to avoid the latency of lazy-loading on the first transaction.
+   */
+  hydrate(): Promise<void> {
+    return this.inner.hydrate();
+  }
+
   async healthcheck(timeout?: number) {
     return this.inner.healthcheck(timeout);
   }

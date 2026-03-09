@@ -1,3 +1,4 @@
+use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{Runtime, Spec};
 use sov_rollup_interface::node::da::DaService;
 use sov_state::{NativeStorage, Storage};
@@ -124,6 +125,7 @@ where
 
         // Replay the in-progress batch if it exists.
         let mut batch_is_in_progress = false;
+        let mut sequence_number_of_open_batch = None;
         if let Some(batch) = in_progress_batch {
             if let Err(err) = validate_seq_nr_from_node(
                 batch.sequence_number,
@@ -139,6 +141,7 @@ where
             batches_count += 1;
             transactions_count += batch.txs.len();
             batch_is_in_progress = true;
+            sequence_number_of_open_batch = Some(batch.sequence_number);
             let in_progress_batch = PreferredBatchToReplay {
                 is_in_progress: true,
                 visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
@@ -170,6 +173,7 @@ where
                 &mut transactions_count,
                 &node_state_root,
                 &mut batch_is_in_progress,
+                &mut sequence_number_of_open_batch,
             )
             .await
             {
@@ -191,6 +195,7 @@ where
                     batches_count,
                     transactions_count,
                     batch_is_in_progress,
+                    sequence_number_of_open_batch,
                 },
                 "update_state::do_final_catchup",
             )
@@ -302,6 +307,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
     transactions_count: &mut usize,
     node_state_root: &<S::Storage as Storage>::Root,
     batch_is_in_progress: &mut bool,
+    sequence_number_of_open_batch: &mut Option<SequenceNumber>,
 ) -> Result<(), SequenceNumberMismatchError> {
     match event {
         DbEvent::TxAccepted(tx, hash) => {
@@ -322,6 +328,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
                 tx_cache_writer.insert(tx).await;
             }
             *batch_is_in_progress = false;
+            *sequence_number_of_open_batch = None;
         }
         DbEvent::BatchStarted {
             sequence_number,
@@ -345,6 +352,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
                 .await;
 
             *batch_is_in_progress = true;
+            *sequence_number_of_open_batch = Some(sequence_number);
         }
         DbEvent::ProofBlobAccepted(_) => {
             // We don't do anything with proofs yet.
