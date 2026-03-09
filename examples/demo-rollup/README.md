@@ -372,8 +372,9 @@ $ curl -Ss http://127.0.0.1:12346/modules/bank/tokens/token_1nyl0e0yweragfsatygt
 After all transactions are submitted, let's check that aggregated proofs are available. This might take some time, because proof generation can take time and aggregated proof usually consist of several blocks.
 
 
-```bash,test-ci
-$ curl -fsS http://127.0.0.1:12346/ledger/aggregated-proofs/latest | jq -e ".proof" > /dev/null
+```bash,test-ci,bashtestmd:compare-output
+$ curl -fsS http://127.0.0.1:12346/ledger/aggregated-proofs/latest | jq -e -r 'if (.proof | type == "string" and length > 0) then "proof-not-empty" else error("proof is empty") end'
+proof-not-empty
 ```
 
 
