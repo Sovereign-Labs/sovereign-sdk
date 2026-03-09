@@ -11,6 +11,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::types::StoredStfInfo;
+#[cfg(test)]
+use sov_db::test_utils::CrashLocation;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::StateTransitionWitness;
@@ -487,6 +489,8 @@ where
         // If the write fails, in-memory state remains consistent with disk.
         self.proof_manager_db
             .set_next_height_to_receive(new_value)?;
+        #[cfg(test)]
+        CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
 
         self.next_height_to_receive
             .store(old_value + amount, Ordering::SeqCst);
@@ -497,8 +501,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::panic::AssertUnwindSafe;
     use std::path::Path;
 
+    use sov_db::test_utils::{CrashLocation, CRASH_ENV_NAME};
     use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
     use sov_modules_api::da::Time;
     use sov_modules_api::provable_height_tracker::InfiniteHeight;
@@ -511,6 +517,21 @@ mod tests {
 
     type StateRoot = Vec<u8>;
     type Witness = Vec<u8>;
+
+    struct CrashEnvGuard;
+
+    impl CrashEnvGuard {
+        fn set(location: CrashLocation) -> Self {
+            location.set_crash_env();
+            Self
+        }
+    }
+
+    impl Drop for CrashEnvGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(CRASH_ENV_NAME);
+        }
+    }
 
     #[allow(clippy::type_complexity)]
     fn setup(
@@ -911,6 +932,56 @@ mod tests {
                     .unwrap()
                     .get(),
                 4
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_restart_recovers_after_crash_persisting_next_height() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        {
+            let (_proof_manager_db, sender, receiver) = setup_with_startup(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                SlotNumber::ONE,
+            )
+            .await?;
+
+            let stf_info = make_stf_info(1);
+            sender.stage_stf_info(&stf_info).await?;
+            sender.commit_stf_info(stf_info.slot_number).await?;
+
+            let _crash_guard =
+                CrashEnvGuard::set(CrashLocation::AfterPersistingProofManagerNextHeight);
+            let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                receiver
+                    .inc_next_height_to_receive_by_and_persist(1)
+                    .unwrap();
+            }));
+            assert!(
+                result.is_err(),
+                "expected crash after persisting next height"
+            );
+        }
+
+        {
+            let (proof_manager_db, mut sender, receiver) =
+                setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
+            sender
+                .startup_notify_about_infos_from_db(SlotNumber::ONE, &InfiniteHeight)
+                .await?;
+
+            assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(2));
+            assert_eq!(sender.next_height_to_send, SlotNumber::new(2));
+            assert_eq!(
+                proof_manager_db.get_next_height_to_receive()?,
+                Some(SlotNumber::new(2))
             );
         }
 

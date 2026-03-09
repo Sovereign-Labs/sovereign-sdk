@@ -322,6 +322,7 @@ impl ProofManagerDb {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
     use std::sync::Arc;
 
     use rockbound::SchemaBatch;
@@ -332,14 +333,17 @@ mod tests {
 
     use super::*;
 
-    fn create_test_db(path: impl AsRef<std::path::Path>) -> ProofManagerDb {
-        ProofManagerDb::open(path).expect("Failed to open ProofManagerDb")
+    fn create_test_db(path: impl AsRef<Path>) -> ProofManagerDb {
+        let raw_db = ProofManagerDb::get_rockbound_options()
+            .default_setup_db_as_subdir(path)
+            .expect("Failed to open ProofManagerDb");
+        ProofManagerDb::new(Arc::new(raw_db))
     }
 
-    fn create_test_ledger_db(path: impl AsRef<std::path::Path>) -> (LedgerDb, Arc<DB>) {
+    fn create_test_ledger_db(path: impl AsRef<Path>) -> (LedgerDb, Arc<DB>) {
         let raw_ledger_db = Arc::new(
             LedgerDb::get_rockbound_options()
-                .default_setup_db(path)
+                .default_setup_db_as_subdir(path)
                 .expect("Failed to open LedgerDb"),
         );
         let ledger_reader = DeltaReader::new(raw_ledger_db.clone(), Vec::new());

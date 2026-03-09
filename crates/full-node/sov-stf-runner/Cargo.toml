@@ -53,6 +53,7 @@ rand = { workspace = true, features = ["small_rng"] }
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
 tokio-tungstenite = { workspace = true }
 
+sov-db = { workspace = true, features = ["test-utils"] }
 sov-sequencer = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }

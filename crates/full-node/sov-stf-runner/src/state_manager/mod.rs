@@ -13,6 +13,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
+#[cfg(test)]
+use sov_db::test_utils::CrashLocation;
 use sov_metrics::RunnerProcessStfChangesMetrics;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
@@ -433,6 +435,8 @@ where
             // Stage STF info data before ledger commit. Metadata is updated only after
             // the ledger commit succeeds to avoid advancing ProofManager beyond LedgerDb.
             stf_info_sender.stage_stf_info(&stf_info).await?;
+            #[cfg(test)]
+            CrashLocation::AfterStagingProofManagerStfInfo.crash_if_env_set();
             tracing::trace!("StateTransitionInfo is staged in ProofManagerDb");
         }
 
@@ -464,6 +468,8 @@ where
             ?commit_time,
             "All finalized transitions are marked as finalized"
         );
+        #[cfg(test)]
+        CrashLocation::AfterFinalizingLedgerBeforeProofManagerCommit.crash_if_env_set();
 
         // Evict all cached headers below the finalized height — they will
         // never be looked up again and removing them prevents stale
