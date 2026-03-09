@@ -6,8 +6,8 @@ use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
 use sov_modules_api::capabilities::{
-    get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, RollupHeight, TransactionAuthenticator,
+    get_maybe_timestamp_from_sequencing_data, AuthenticationFailureDetails, BlobSelector,
+    BlobSelectorOutput, ChainState, FatalError, RollupHeight, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -34,7 +34,7 @@ use super::state_root_compute::StateRootComputeRequest;
 use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
-use crate::common::{AcceptTxErrorDetails, AcceptedTx, ForcedTxBatchNotification};
+use crate::common::{AcceptedTx, ForcedTxBatchNotification};
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -91,15 +91,14 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                     sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
                     }
-                    sov_rollup_interface::stf::TxEffect::Skipped(skipped) => {
-                        AcceptTxErrorDetails::maybe_from_tx_processing_error(&skipped.error)
-                            .map(to_json_object)
-                            .unwrap_or_else(|| {
-                                json_obj!({
-                                    "error": format!("{:?}", receipt),
-                                })
-                            })
-                    }
+                    sov_rollup_interface::stf::TxEffect::Skipped(skipped) => match &skipped.error {
+                        sov_modules_api::TxProcessingError::AuthenticationFailed(details) => {
+                            to_json_object::<AuthenticationFailureDetails>(details.clone())
+                        }
+                        _ => json_obj!({
+                            "error": format!("{:?}", receipt),
+                        }),
+                    },
                     _ => json_obj!({
                         "error": format!("{:?}", receipt),
                     }),

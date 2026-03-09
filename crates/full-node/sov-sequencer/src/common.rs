@@ -13,7 +13,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{BlobExecutionStatus, BlobInternalId, BlobSenderHooks};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{
-    AuthenticationError, AuthenticationOutput, FatalError, RollupHeight, TransactionAuthenticator,
+    AuthenticationFailureDetails, AuthenticationOutput, RollupHeight, TransactionAuthenticator,
 };
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
@@ -124,81 +124,6 @@ pub(crate) type SequencerTxStream<Confirmation> = Pin<
             + Send,
     >,
 >;
-
-/// Machine-readable error codes that may appear in `accept_tx` REST error details.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum AcceptTxErrorCode {
-    /// The transaction's `max_fee_per_gas` is lower than the rollup base fee.
-    InsufficientMaxFeePerGas,
-}
-
-/// Structured details for `accept_tx` REST errors.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct AcceptTxErrorDetails {
-    /// Human-readable description preserved for debugging and compatibility.
-    pub error: String,
-    /// Stable machine-readable error code, when available.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code: Option<AcceptTxErrorCode>,
-    /// User-specified `max_fee_per_gas`, when the error is fee-related.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub user_max_fee_per_gas: Option<u128>,
-    /// Rollup base fee, when the error is fee-related.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rollup_base_fee: Option<u128>,
-}
-
-impl AcceptTxErrorDetails {
-    fn from_auth_error(error: &AuthenticationError) -> Self {
-        match error {
-            AuthenticationError::FatalError(
-                FatalError::InsufficientMaxFeePerGas {
-                    user_max_fee_per_gas,
-                    rollup_base_fee,
-                },
-                _,
-            ) => Self {
-                error: error.to_string(),
-                code: Some(AcceptTxErrorCode::InsufficientMaxFeePerGas),
-                user_max_fee_per_gas: Some(*user_max_fee_per_gas),
-                rollup_base_fee: Some(*rollup_base_fee),
-            },
-            _ => Self {
-                error: error.to_string(),
-                code: None,
-                user_max_fee_per_gas: None,
-                rollup_base_fee: None,
-            },
-        }
-    }
-
-    fn maybe_from_low_max_fee_message(error: &str) -> Option<Self> {
-        const PREFIX: &str = "Insufficient max_fee_per_gas: user specified ";
-        const SEPARATOR: &str = ", but current base fee is ";
-
-        let suffix = error.strip_prefix(PREFIX)?;
-        let (user_max_fee_per_gas, rollup_base_fee) = suffix.split_once(SEPARATOR)?;
-        let user_max_fee_per_gas = user_max_fee_per_gas.parse().ok()?;
-        let rollup_base_fee = rollup_base_fee.parse().ok()?;
-
-        Some(Self {
-            error: error.to_owned(),
-            code: Some(AcceptTxErrorCode::InsufficientMaxFeePerGas),
-            user_max_fee_per_gas: Some(user_max_fee_per_gas),
-            rollup_base_fee: Some(rollup_base_fee),
-        })
-    }
-
-    pub(crate) fn maybe_from_tx_processing_error(error: &TxProcessingError) -> Option<Self> {
-        match error {
-            TxProcessingError::AuthenticationFailed(error) => {
-                Self::maybe_from_low_max_fee_message(error)
-            }
-            _ => None,
-        }
-    }
-}
 
 pub(crate) type SequencerEventStream<Rt> = Pin<
     Box<
@@ -643,7 +568,9 @@ pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
             ErrorObject {
                 status: StatusCode::BAD_REQUEST,
                 message: "The transaction is invalid".to_string(),
-                details: to_json_object(AcceptTxErrorDetails::from_auth_error(&error)),
+                details: to_json_object(AuthenticationFailureDetails::from_authentication_error(
+                    &error,
+                )),
             }
         },
     }
@@ -763,12 +690,14 @@ pub fn sender_is_allowed<RT: Runtime<S>, S: Spec>(
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::capabilities::{AuthenticationError, FatalError};
+    use sov_modules_api::capabilities::{
+        AuthenticationError, AuthenticationFailureCode, AuthenticationFailureDetails, FatalError,
+    };
     use sov_modules_api::TxProcessingError;
     use sov_modules_stf_blueprint::PreExecError;
     use sov_rollup_interface::TxHash;
 
-    use super::{pre_exec_err_to_accept_tx_err, AcceptTxErrorCode, AcceptTxErrorDetails};
+    use super::pre_exec_err_to_accept_tx_err;
 
     #[test]
     fn low_max_fee_auth_error_serializes_structured_code() {
@@ -781,42 +710,44 @@ mod tests {
         );
 
         let err = pre_exec_err_to_accept_tx_err(PreExecError::AuthError(error));
-        let details: AcceptTxErrorDetails =
+        let details: AuthenticationFailureDetails =
             serde_json::from_value(serde_json::Value::Object(err.details))
                 .expect("details should deserialize");
 
         assert_eq!(
             details.code,
-            Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+            Some(AuthenticationFailureCode::InsufficientMaxFeePerGas)
         );
         assert_eq!(details.user_max_fee_per_gas, Some(6));
         assert_eq!(details.rollup_base_fee, Some(7));
     }
 
     #[test]
-    fn low_max_fee_processing_error_parses_structured_code() {
-        let details = AcceptTxErrorDetails::maybe_from_tx_processing_error(
-            &TxProcessingError::AuthenticationFailed(
-                "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
-                    .to_string(),
-            ),
-        )
-        .expect("low max fee message should deserialize");
+    fn low_max_fee_processing_error_preserves_structured_code() {
+        let details = AuthenticationFailureDetails {
+            error: "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
+                .to_string(),
+            code: Some(AuthenticationFailureCode::InsufficientMaxFeePerGas),
+            user_max_fee_per_gas: Some(6),
+            rollup_base_fee: Some(7),
+        };
 
-        assert_eq!(
-            details.code,
-            Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
-        );
-        assert_eq!(details.user_max_fee_per_gas, Some(6));
-        assert_eq!(details.rollup_base_fee, Some(7));
+        let error = TxProcessingError::AuthenticationFailed(details.clone());
+
+        assert_eq!(error, TxProcessingError::AuthenticationFailed(details));
     }
 
     #[test]
-    fn unrelated_processing_error_does_not_parse_structured_code() {
-        let details = AcceptTxErrorDetails::maybe_from_tx_processing_error(
-            &TxProcessingError::AuthenticationFailed("Invalid ethereum signature".to_string()),
-        );
+    fn unrelated_processing_error_preserves_message_without_code() {
+        let details = AuthenticationFailureDetails {
+            error: "Invalid ethereum signature".to_string(),
+            code: None,
+            user_max_fee_per_gas: None,
+            rollup_base_fee: None,
+        };
 
-        assert!(details.is_none());
+        let error = TxProcessingError::AuthenticationFailed(details.clone());
+
+        assert_eq!(error, TxProcessingError::AuthenticationFailed(details));
     }
 }

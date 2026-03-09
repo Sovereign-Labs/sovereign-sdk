@@ -1,3 +1,4 @@
+use crate::capabilities::AuthenticationFailureDetails;
 pub use crate::common::ModuleError as Error;
 use crate::Spec;
 
@@ -80,7 +81,7 @@ impl<S: Spec> Eq for SkippedTxContents<S> {}
 pub enum TxProcessingError {
     /// Transaction authentication failed.
     #[error(" Transaction authentication failed {0}.")]
-    AuthenticationFailed(String),
+    AuthenticationFailed(AuthenticationFailureDetails),
     /// The uniqueness check failed.
     #[error("The uniqueness check failed. Reason: {0}.")]
     CheckUniquenessFailed(String),
@@ -99,4 +100,28 @@ pub enum TxProcessingError {
     /// The transaction ran out of gas
     #[error("The transaction ran out of gas, reason: {0}.")]
     OutOfGas(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::capabilities::{AuthenticationFailureCode, AuthenticationFailureDetails};
+
+    use super::TxProcessingError;
+
+    #[test]
+    fn authentication_failed_roundtrips_structured_details() {
+        let error = TxProcessingError::AuthenticationFailed(AuthenticationFailureDetails {
+            error: "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
+                .to_string(),
+            code: Some(AuthenticationFailureCode::InsufficientMaxFeePerGas),
+            user_max_fee_per_gas: Some(6),
+            rollup_base_fee: Some(7),
+        });
+
+        let json = serde_json::to_value(&error).expect("tx processing error should serialize");
+        let roundtrip: TxProcessingError =
+            serde_json::from_value(json).expect("tx processing error should deserialize");
+
+        assert_eq!(roundtrip, error);
+    }
 }

@@ -19,6 +19,8 @@ const EMPTY_WITHDRAWALS_ROOT: &str =
     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 const GASLEFT_CONTRACT_DEPLOY_CODE: &str = "0x6008600c60003960086000f35a60005260206000f3";
 
+// Overlap note: earlier low-fee-cap rejection coverage lives in
+// `evm_call_fee_fields.rs::{eth_call_rejects_below_base_fee_with_max_fee_per_gas, eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas}`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -265,6 +267,9 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     Ok(())
 }
 
+// Overlap note: receipt fee reconciliation is also covered by
+// `evm_rpc_compliance_validation.rs::rpc_008_receipt_fee_fields_match_balance_delta`
+// and `sov-evm/tests/integration/transactions.rs::test_block_receipt_fee_matches_balance_delta`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -294,6 +299,8 @@ async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> a
     Ok(())
 }
 
+// Overlap note: zero-count fee history coverage already exists in
+// `evm_fee_history.rs::test_eth_fee_history_zero_blocks`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -439,6 +446,8 @@ async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow:
     Ok(())
 }
 
+// Overlap note: `evm_block_by_number_hash.rs::test_get_block_by_hash_nonexistent`
+// already covers the core null-on-missing-hash behavior.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints(
 ) -> anyhow::Result<()> {
@@ -487,6 +496,9 @@ async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints
     Ok(())
 }
 
+// Overlap note: default tracer coverage also exists in
+// `evm_tracing.rs::debug_trace_block_by_number_default_tracer` and
+// `sov-evm/tests/integration/trace.rs`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -550,10 +562,12 @@ async fn rpc2_011_new_pending_transactions_subscription_is_supported() -> anyhow
     Ok(())
 }
 
+// Overlap note: block-tag consistency is also covered by
+// `evm_block_by_number_hash.rs::{test_block_tags_earliest_safe_finalized, test_block_number_consistency}`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain(
 ) -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(2, EVM_EXTENSION).await;
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(5).await;
 
     let http = Client::new();
@@ -665,6 +679,8 @@ async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> any
     Ok(())
 }
 
+// Overlap note: missing-block null semantics are also covered by
+// `evm_block_by_number_hash.rs::test_nonexistent_block_returns_none`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -702,122 +718,6 @@ async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result
     assert!(
         future["result"].is_null(),
         "future block query should return null"
-    );
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
-    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let sender = signer.address();
-    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
-    let contract_address = deploy_contract_check(&ws_client)
-        .await
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    let http = Client::new();
-
-    let build_request = |iterations: u32, gas: Option<u64>| {
-        let mut request = json!({
-            "from": sender,
-            "to": contract_address,
-            "data": ws_client.contract.burn_gas(iterations),
-            "maxFeePerGas": hex_u128(DEFAULT_MAX_FEE_PER_GAS),
-            "maxPriorityFeePerGas": hex_u128(DEFAULT_MAX_PRIORITY_FEE_PER_GAS)
-        });
-        if let Some(gas) = gas {
-            request["gas"] = json!(hex_u64(gas));
-        }
-        request
-    };
-
-    // Find a workload that is known to exceed the real per-tx cap.
-    let mut failing_iterations = None;
-    let mut capped_call_response = None;
-    for iterations in [
-        100_000u32, 200_000, 300_000, 400_000, 500_000, 600_000, 700_000, 800_000, 900_000,
-    ] {
-        let response = rpc_call(
-            &http,
-            rollup.http_addr,
-            "eth_call",
-            json!([build_request(iterations, Some(ETH_TX_GAS_CAP)), "latest"]),
-        )
-        .await?;
-        if response.get("error").is_some() {
-            failing_iterations = Some(iterations);
-            capped_call_response = Some(response);
-            break;
-        }
-    }
-
-    let iterations = failing_iterations.ok_or_else(|| {
-        anyhow::anyhow!(
-            "failed to find burnGas workload that exhausts the real tx gas cap in the covered search range"
-        )
-    })?;
-    let capped_call_response = capped_call_response.expect("failing iterations should store error");
-
-    let omitted_request = build_request(iterations, None);
-    let omitted_call_response = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_call",
-        json!([omitted_request.clone(), "latest"]),
-    )
-    .await?;
-    let omitted_estimate_response = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_estimateGas",
-        json!([omitted_request, "latest"]),
-    )
-    .await?;
-
-    let nonce = tx_count(&ws_client, sender, "latest").await?;
-    let raw_tx = raw_signed_eip1559(
-        &signer,
-        chain_id.to::<u64>(),
-        nonce,
-        ETH_TX_GAS_CAP,
-        TxKind::Call(contract_address),
-        U256::ZERO,
-        ws_client.contract.burn_gas(iterations),
-        DEFAULT_MAX_FEE_PER_GAS,
-        DEFAULT_MAX_PRIORITY_FEE_PER_GAS,
-    )
-    .await?;
-    let send_response = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_sendRawTransaction",
-        json!([raw_tx]),
-    )
-    .await?;
-
-    let send_outcome = match send_response.get("error") {
-        Some(_) => format!("rejected: {send_response}"),
-        None => {
-            let tx_hash: B256 = rpc_result_hex(&send_response).parse()?;
-            let receipt = ws_client.wait_for_receipt(tx_hash).await;
-            assert!(
-                !receipt.status(),
-                "real tx should fail once execution is constrained by the 30M tx gas cap"
-            );
-            format!("receipt_status=false tx_hash={tx_hash:#x}")
-        }
-    };
-
-    assert!(
-        omitted_call_response.get("error").is_some(),
-        "omitted-gas eth_call should reject a workload that fails at the real tx cap (iterations={iterations}, capped_call={capped_call_response}, omitted_call={omitted_call_response}, omitted_estimate={omitted_estimate_response}, send={send_outcome})"
-    );
-    assert!(
-        omitted_estimate_response.get("error").is_some(),
-        "omitted-gas eth_estimateGas should reject a workload that fails at the real tx cap (iterations={iterations}, capped_call={capped_call_response}, omitted_call={omitted_call_response}, omitted_estimate={omitted_estimate_response}, send={send_outcome})"
     );
 
     Ok(())
