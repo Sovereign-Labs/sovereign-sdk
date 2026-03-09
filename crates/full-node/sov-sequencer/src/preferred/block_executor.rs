@@ -91,14 +91,12 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                     sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
                     }
-                    sov_rollup_interface::stf::TxEffect::Skipped(skipped) => match &skipped.error {
-                        sov_modules_api::TxProcessingError::AuthenticationFailed(details) => {
-                            to_json_object::<AuthenticationFailureDetails>(details.clone())
-                        }
-                        _ => json_obj!({
-                            "error": format!("{:?}", receipt),
-                        }),
-                    },
+                    sov_rollup_interface::stf::TxEffect::Skipped(
+                        sov_modules_api::SkippedTxContents {
+                            error: sov_modules_api::TxProcessingError::AuthenticationFailed(details),
+                            ..
+                        },
+                    ) => to_json_object::<AuthenticationFailureDetails>(details.clone()),
                     _ => json_obj!({
                         "error": format!("{:?}", receipt),
                     }),
