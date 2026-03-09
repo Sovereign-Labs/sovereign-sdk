@@ -31,7 +31,7 @@ curve25519-dalek = { git = "https://github.com/sp1-patches/curve25519-dalek", ta
 # Needed for ed25519-consensus which depends on curve25519-dalek-ng
 curve25519-dalek-ng = { git = "https://github.com/sp1-patches/curve25519-dalek-ng", tag = "patch-4.1.1-sp1-6.0.0" }
 # No V6 tag available yet, using V5 rev
-ed25519-consensus = { git = "https://github.com/sp1-patches/ed25519-consensus", rev = "2b2c4b43344bc4daf5b1326f367f2d9d661eeabb" }
+ed25519-consensus = { git = "https://github.com/sp1-patches/ed25519-consensus", rev = "78f83b21767077f602f30148e513a52e844abbb6" }
 tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", tag = "patch-2.0.2-sp1-6.0.0" }
 
 [profile.dev]
