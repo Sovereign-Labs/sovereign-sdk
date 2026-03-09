@@ -887,7 +887,6 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-
         let seq_nr_of_next_blob_for_this_executor = inner.next_unassigned_sequence_number;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
@@ -933,16 +932,13 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner
-            .sequence_number_of_open_batch
-            .expect("No batch in progress in SyncState::process_do_new_tx_replica");
-
-        validate_db_data_from_replica(
+        let db_data = DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash);
+        validate_db_data_from_replica_for_open_batch(
             inner.has_finished_startup,
             &inner.is_ready,
-            DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash),
-            seq_nr_of_current_blob_for_this_executor,
-            seq_nr_from_master,
+            db_data.clone(),
+            inner.sequence_number_of_open_batch,
+            inner.next_unassigned_sequence_number,
         )?;
 
         let (res, _) = inner.do_new_tx(tx_hash, baked_tx).await;
@@ -957,25 +953,23 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner
-            .sequence_number_of_open_batch
-            .expect("No batch in progress in SyncState::process_close_current_batch_replica");
+        let db_data = DbData::BatchEnd(batch_from_master);
+        let seq_nr_from_master = db_data.sequence_number();
 
-        let seq_nr_from_master = batch_from_master.sequence_number;
+        let seq_nr_of_current_blob_for_this_executor =
+            validate_db_data_from_replica_for_open_batch(
+                inner.has_finished_startup,
+                &inner.is_ready,
+                db_data.clone(),
+                inner.sequence_number_of_open_batch,
+                inner.next_unassigned_sequence_number,
+            )?;
 
         debug!(
             % seq_nr_from_master,
             % seq_nr_of_current_blob_for_this_executor,
             "Entering process_close_current_batch_replica"
         );
-
-        validate_db_data_from_replica(
-            inner.has_finished_startup,
-            &inner.is_ready,
-            DbData::BatchEnd(batch_from_master),
-            seq_nr_of_current_blob_for_this_executor,
-            seq_nr_from_master,
-        )?;
 
         inner.close_current_batch().await;
 
@@ -1021,6 +1015,48 @@ fn validate_db_data_from_replica<S: Spec>(
     }
 
     Ok(())
+}
+
+fn validate_db_data_from_replica_for_open_batch<S: Spec>(
+    has_finished_startup: bool,
+    is_ready: &Result<(), SequencerNotReadyDetails>,
+    ret: DbData,
+    sequence_number_of_open_batch: Option<u64>,
+    next_unassigned_sequence_number: u64,
+) -> Result<u64, ReplicaError<S>> {
+    let seq_nr_from_master = ret.sequence_number();
+    let seq_nr_for_this_executor = match sequence_number_of_open_batch {
+        Some(seq_nr_for_this_executor) => seq_nr_for_this_executor,
+        None => {
+            if next_unassigned_sequence_number > seq_nr_from_master {
+                tracing::debug!(
+                    %next_unassigned_sequence_number,
+                    %seq_nr_from_master,
+                    "Replica is ahead of a stale event from master."
+                );
+                return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
+                    next_unassigned_sequence_number,
+                )));
+            }
+
+            tracing::debug!(
+                %seq_nr_from_master,
+                %next_unassigned_sequence_number,
+                "Replica is missing the matching batch start."
+            );
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(ret)));
+        }
+    };
+
+    validate_db_data_from_replica(
+        has_finished_startup,
+        is_ready,
+        ret,
+        seq_nr_for_this_executor,
+        seq_nr_from_master,
+    )?;
+
+    Ok(seq_nr_for_this_executor)
 }
 
 #[derive(Debug)]
