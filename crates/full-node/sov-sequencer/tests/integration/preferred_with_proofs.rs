@@ -78,6 +78,16 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
     )
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_proof_generation_doesnt_break_sequencer_flaky() {
+    for i in 0..20 {
+        println!("Iteration : {i}");
+        test_proof_generation_doesnt_break_sequencer()
+            .await
+            .unwrap();
+    }
+}
+
 /// Test proof generation doesn't break the sequencer.
 ///
 /// We run for 50 slots while submitting transactions  and ensure that some aggregated proofs were both produced and processed.
@@ -85,7 +95,7 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
 ///
 /// Aggregate proofs are generated automatically about once every 10 slots, so 50 slots gives us plenty of time to produce a few proofs *and land them on chain*.
 /// Any errors should cause a panic in the meantime.
-#[tokio::test(flavor = "multi_thread")]
+
 async fn test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
     let (test_rollup, admin) = create_test_rollup_with_prover().await;
 
