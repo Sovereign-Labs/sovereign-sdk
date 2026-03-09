@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::shares::is_tail_padding;
+#[cfg(feature = "native")]
+use crate::types::ExtractionProofError;
 use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
 };
 use crate::types::{
-    BlobDataError, ExtractionProofError, IncompleteNamespaceError, NamespaceValidationError,
-    ProofError, RowProofError, SUPPORTED_SHARE_VERSION,
+    BlobDataError, IncompleteNamespaceError, NamespaceValidationError, ProofError, RowProofError,
+    SUPPORTED_SHARE_VERSION,
 };
 
 /// BlobProof contains per-row range proofs for one blob.
@@ -154,17 +156,7 @@ pub struct RangeProof {
 }
 
 #[cfg(feature = "native")]
-pub(crate) fn new_inclusion_proof(
-    header: &crate::CelestiaHeader,
-    rollup_data: &crate::types::NamespaceRelevantData,
-    blobs: &[crate::types::BlobWithSender],
-) -> Vec<BlobProof> {
-    try_new_inclusion_proof(header, rollup_data, blobs)
-        .unwrap_or_else(|err| panic!("failed to build inclusion proof: {err}"))
-}
-
-#[cfg(feature = "native")]
-pub(crate) fn try_new_inclusion_proof(
+pub(crate) fn build_inclusion_proof(
     header: &crate::CelestiaHeader,
     rollup_data: &crate::types::NamespaceRelevantData,
     blobs: &[crate::types::BlobWithSender],
@@ -418,7 +410,6 @@ fn sub_namespace_inclusion_proofs(
             range_proofs: Vec::new(),
         };
 
-        let ns_rows = namespace_data.rows();
         for blob_sub_range in per_row_sub_ranges {
             let row_num = blob_sub_range.start.checked_div(row_length).ok_or(
                 ExtractionProofError::InvalidBlobRange {
@@ -428,11 +419,10 @@ fn sub_namespace_inclusion_proofs(
             )?;
 
             let namespace_row =
-                ns_rows
-                    .get(row_num)
+                rows.get(row_num)
                     .ok_or(ExtractionProofError::NamespaceRowOutOfBounds {
                         row_num,
-                        rows_len: ns_rows.len(),
+                        rows_len: rows.len(),
                     })?;
 
             let mut row_relative_start = blob_sub_range.start % row_length;

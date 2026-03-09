@@ -1,10 +1,10 @@
 use std::str::FromStr;
 use std::time::Duration;
 
-use crate::da_service::{extract_relevant_blobs, get_extraction_proof, try_get_extraction_proof};
-use crate::proptests::assert_subproof_start_indices_align;
+use crate::da_service::{build_extraction_proof, extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
 use crate::test_helper::{ADDR_1, ROLLUP_PARAMS_DEV};
+use crate::test_support::assert_subproof_start_indices_align;
 use crate::types::{BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
@@ -19,6 +19,8 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, Re
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 use tokio::task::JoinSet;
+
+type BlobReader = fn(&mut BlobWithSender);
 
 async fn collect_all_blobs_between(
     da_service: &CelestiaService,
@@ -287,36 +289,71 @@ fn read_half_blob(blob_with_sender: &mut BlobWithSender) {
     assert_eq!(data.len(), half_len);
 }
 
-fn verify_fixture_with_readers<F1, F2>(
-    fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
-    batch_processing_fn: F1,
-    proof_processing_fn: F2,
-) where
-    F1: Fn(&mut BlobWithSender),
-    F2: Fn(&mut BlobWithSender),
-{
-    let (block, rollup_params, signers) = fixture;
-    let mut signers = signers.into_iter();
-    let mut relevant_blobs = extract_relevant_blobs(&block);
-
-    // Read blobs before constructing extraction proofs.
-    {
-        let blob_iters = relevant_blobs.as_iters();
-        for batch in blob_iters.batch_blobs {
-            let signer = signers
-                .next()
-                .expect("missing signer in test data for batch");
-            assert_eq!(signer, batch.sender);
-            batch_processing_fn(batch);
-        }
-        for proof in blob_iters.proof_blobs {
-            let signer = signers
-                .next()
-                .expect("missing signer in test data for proof");
-            assert_eq!(signer, proof.sender);
-            proof_processing_fn(proof);
-        }
+fn apply_blob_readers(
+    relevant_blobs: &mut RelevantBlobs<BlobWithSender>,
+    batch_reader: BlobReader,
+    proof_reader: BlobReader,
+) {
+    for blob in &mut relevant_blobs.batch_blobs {
+        batch_reader(blob);
     }
+    for blob in &mut relevant_blobs.proof_blobs {
+        proof_reader(blob);
+    }
+}
+
+fn read_fixture_blobs(
+    relevant_blobs: &mut RelevantBlobs<BlobWithSender>,
+    signers: impl IntoIterator<Item = CelestiaAddress>,
+    batch_reader: BlobReader,
+    proof_reader: BlobReader,
+) {
+    let mut signers = signers.into_iter();
+    let blob_iters = relevant_blobs.as_iters();
+
+    for batch in blob_iters.batch_blobs {
+        let signer = signers
+            .next()
+            .expect("missing signer in test data for batch");
+        assert_eq!(signer, batch.sender);
+        batch_reader(batch);
+    }
+    for proof in blob_iters.proof_blobs {
+        let signer = signers
+            .next()
+            .expect("missing signer in test data for proof");
+        assert_eq!(signer, proof.sender);
+        proof_reader(proof);
+    }
+}
+
+fn assert_missing_supported_namespace_error(
+    block: &FilteredCelestiaBlock,
+    relevant_blobs: RelevantBlobs<BlobWithSender>,
+) {
+    let err = build_extraction_proof(block, &relevant_blobs).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            crate::types::ExtractionProofError::MissingBlobsForSupportedNamespace { .. }
+        ),
+        "Actual error: {err}"
+    );
+}
+
+fn verify_fixture_with_readers(
+    fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
+    batch_processing_fn: BlobReader,
+    proof_processing_fn: BlobReader,
+) {
+    let (block, rollup_params, signers) = fixture;
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    read_fixture_blobs(
+        &mut relevant_blobs,
+        signers,
+        batch_processing_fn,
+        proof_processing_fn,
+    );
 
     let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
     let verifier = CelestiaVerifier::new(rollup_params);
@@ -746,11 +783,10 @@ async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn verification_for_correct_blocks<F1, F2>(batch_processing_fn: F1, proof_processing_fn: F2)
-where
-    F1: Fn(&mut BlobWithSender),
-    F2: Fn(&mut BlobWithSender),
-{
+fn verification_for_correct_blocks(
+    batch_processing_fn: BlobReader,
+    proof_processing_fn: BlobReader,
+) {
     let blocks = [
         with_rollup_batch_data::test_case(),
         with_rollup_proof_data::test_case(),
@@ -774,27 +810,13 @@ where
     ];
 
     for (block, rollup_params, signers) in blocks {
-        let mut signers = signers.into_iter();
         let mut relevant_blobs = extract_relevant_blobs(&block);
-
-        // Reading all blobs and proofs, so proof is built for the full data.
-        {
-            let blob_iters = relevant_blobs.as_iters();
-            for batch in blob_iters.batch_blobs {
-                let signer = signers
-                    .next()
-                    .expect("missing signer in test data for batch");
-                assert_eq!(batch.sender, signer);
-                batch_processing_fn(batch);
-            }
-            for proof in blob_iters.proof_blobs {
-                let signer = signers
-                    .next()
-                    .expect("missing signer in test data for batch");
-                assert_eq!(proof.sender, signer);
-                proof_processing_fn(proof);
-            }
-        }
+        read_fixture_blobs(
+            &mut relevant_blobs,
+            signers,
+            batch_processing_fn,
+            proof_processing_fn,
+        );
 
         let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
@@ -808,19 +830,25 @@ where
 
 #[test]
 fn verification_succeeds_for_correct_blocks() {
-    // No read
-    verification_for_correct_blocks(read_no_blob, read_no_blob);
-    // Full read
-    verification_for_correct_blocks(read_full_blob, read_full_blob);
-    verification_for_correct_blocks(read_full_blob, read_no_blob);
-    verification_for_correct_blocks(read_no_blob, read_full_blob);
-    verification_for_correct_blocks(read_full_blob, read_single_byte_blob);
-    // Single byte read
-    verification_for_correct_blocks(read_single_byte_blob, read_single_byte_blob);
-    // Half Read
-    verification_for_correct_blocks(read_half_blob, read_half_blob);
-    verification_for_correct_blocks(read_half_blob, read_no_blob);
-    verification_for_correct_blocks(read_no_blob, read_half_blob);
+    let read_modes: [(&str, BlobReader, BlobReader); 9] = [
+        ("none/none", read_no_blob, read_no_blob),
+        ("full/full", read_full_blob, read_full_blob),
+        ("full/none", read_full_blob, read_no_blob),
+        ("none/full", read_no_blob, read_full_blob),
+        ("full/single", read_full_blob, read_single_byte_blob),
+        (
+            "single/single",
+            read_single_byte_blob,
+            read_single_byte_blob,
+        ),
+        ("half/half", read_half_blob, read_half_blob),
+        ("half/none", read_half_blob, read_no_blob),
+        ("none/half", read_no_blob, read_half_blob),
+    ];
+
+    for (_, batch_reader, proof_reader) in read_modes {
+        verification_for_correct_blocks(batch_reader, proof_reader);
+    }
 }
 
 #[test]
@@ -851,12 +879,7 @@ fn proof_start_indexes_match_row_coordinates_for_valid_fixtures() {
 
     for (block, _rollup_params, _signers) in fixtures {
         let mut relevant_blobs = extract_relevant_blobs(&block);
-        for blob in relevant_blobs.batch_blobs.iter_mut() {
-            read_full_blob(blob);
-        }
-        for blob in relevant_blobs.proof_blobs.iter_mut() {
-            read_full_blob(blob);
-        }
+        apply_blob_readers(&mut relevant_blobs, read_full_blob, read_full_blob);
 
         let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
         assert_subproof_start_indices_align(
@@ -996,13 +1019,11 @@ fn extraction_proof_fails_if_sender_changed() {
 
     block.rollup_batch_data.data = malicious_ns_data;
 
-    // This is how it is observed
     let relevant_blobs = extract_relevant_blobs(&block);
-    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
-    let message = err.to_string();
+    let err = build_extraction_proof(&block, &relevant_blobs).unwrap_err();
     assert!(
-        message.contains("Invalid proof self-check: InvalidRoot"),
-        "Actual error: {message}"
+        matches!(err, crate::types::ExtractionProofError::ProofSelfCheck(_)),
+        "Actual error: {err}"
     );
 }
 
@@ -1026,7 +1047,15 @@ fn verification_fails_if_tx_missing() {
         .unwrap_err();
 
     assert!(
-        error.to_string().contains("MoreProofsThanBlobs"),
+        matches!(
+            error,
+            crate::types::ValidationError::NamespaceValidationError {
+                error: crate::types::NamespaceValidationError::InvalidBlobData(
+                    crate::types::BlobDataError::MoreProofsThanBlobs
+                ),
+                ..
+            }
+        ),
         "Actual error: {error}"
     );
 }
@@ -1039,14 +1068,7 @@ fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist() {
         proof_blobs: Default::default(),
     };
 
-    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
-    assert!(
-        matches!(
-            err,
-            crate::types::ExtractionProofError::MissingBlobsForSupportedNamespace { .. }
-        ),
-        "Actual error: {err}"
-    );
+    assert_missing_supported_namespace_error(&block, relevant_blobs);
 }
 
 #[test]
@@ -1057,14 +1079,7 @@ fn verification_fails_if_supported_namespace_has_empty_blob_list() {
         proof_blobs: Default::default(),
     };
 
-    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
-    assert!(
-        matches!(
-            err,
-            crate::types::ExtractionProofError::MissingBlobsForSupportedNamespace { .. }
-        ),
-        "Actual error: {err}"
-    );
+    assert_missing_supported_namespace_error(&block, relevant_blobs);
 }
 
 #[test]
@@ -1077,7 +1092,7 @@ fn extraction_proof_rejects_out_of_bounds_blob_range() {
     );
     relevant_blobs.batch_blobs[0].range_in_namespace = 0..usize::MAX;
 
-    let err = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
+    let err = build_extraction_proof(&block, &relevant_blobs).unwrap_err();
     assert!(
         matches!(
             err,
@@ -1105,9 +1120,15 @@ fn verification_fails_if_not_all_blobs_are_proven() {
         .unwrap_err();
 
     assert!(
-        error
-            .to_string()
-            .contains("InvalidRowProof(ProofError(Missing))"),
+        matches!(
+            error,
+            crate::types::ValidationError::NamespaceValidationError {
+                error: crate::types::NamespaceValidationError::InvalidRowProof(
+                    crate::types::RowProofError::ProofError(crate::types::ProofError::Missing)
+                ),
+                ..
+            }
+        ),
         "Actual error: {error}"
     );
 }
@@ -1254,157 +1275,24 @@ mod adversarial_tampering {
         proofs: RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>>,
     }
 
-    impl AdversarialCase {
-        fn from_fixture(
-            fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
-        ) -> Self {
-            let (block, params, _signers) = fixture;
-            Self::from_block(block, params)
+    fn load_case(
+        fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
+    ) -> AdversarialCase {
+        let (block, params, _) = fixture;
+        let mut blobs = extract_relevant_blobs(&block);
+        apply_blob_readers(&mut blobs, read_full_blob, read_full_blob);
+
+        let proofs = get_extraction_proof(&block, &blobs);
+        CelestiaVerifier::new(params)
+            .verify_relevant_tx_list(&block.header, &blobs, get_extraction_proof(&block, &blobs))
+            .expect("baseline block should verify");
+
+        AdversarialCase {
+            block,
+            params,
+            blobs,
+            proofs,
         }
-
-        fn from_block(block: FilteredCelestiaBlock, params: RollupParams) -> Self {
-            Self::from_block_with_readers(block, params, read_full_blob, read_full_blob)
-        }
-
-        fn from_block_with_readers<F1, F2>(
-            block: FilteredCelestiaBlock,
-            params: RollupParams,
-            mut batch_reader: F1,
-            mut proof_reader: F2,
-        ) -> Self
-        where
-            F1: FnMut(&mut BlobWithSender),
-            F2: FnMut(&mut BlobWithSender),
-        {
-            let mut blobs = extract_relevant_blobs(&block);
-            for blob in &mut blobs.batch_blobs {
-                batch_reader(blob);
-            }
-            for blob in &mut blobs.proof_blobs {
-                proof_reader(blob);
-            }
-            let proofs = get_extraction_proof(&block, &blobs);
-
-            let verifier = CelestiaVerifier::new(params);
-            let baseline_proofs = get_extraction_proof(&block, &blobs);
-            verifier
-                .verify_relevant_tx_list(&block.header, &blobs, baseline_proofs)
-                .expect("baseline block should verify");
-
-            Self {
-                block,
-                params,
-                blobs,
-                proofs,
-            }
-        }
-
-        fn mutate_batch_inclusion_proofs<F>(&mut self, mutator: F)
-        where
-            F: FnOnce(&mut Vec<BlobProof>),
-        {
-            mutator(&mut self.proofs.batch.inclusion_proof);
-        }
-
-        fn mutate_batch_completeness_proof<F>(&mut self, mutator: F)
-        where
-            F: FnOnce(&mut Option<NamespaceBoundaryProof>),
-        {
-            mutator(&mut self.proofs.batch.completeness_proof);
-        }
-
-        fn mutate_proof_inclusion_proofs<F>(&mut self, mutator: F)
-        where
-            F: FnOnce(&mut Vec<BlobProof>),
-        {
-            mutator(&mut self.proofs.proof.inclusion_proof);
-        }
-
-        fn mutate_proof_completeness_proof<F>(&mut self, mutator: F)
-        where
-            F: FnOnce(&mut Option<NamespaceBoundaryProof>),
-        {
-            mutator(&mut self.proofs.proof.completeness_proof);
-        }
-    }
-
-    fn case_with_multiple_batches() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(with_several_small_rollup_batches::test_case());
-        assert!(
-            case.blobs.batch_blobs.len() >= 2,
-            "expected fixture to contain at least two batch blobs"
-        );
-        assert!(
-            case.proofs.batch.inclusion_proof.len() >= 2,
-            "expected fixture to contain at least two batch proofs"
-        );
-        case
-    }
-
-    fn case_with_single_batch() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(with_rollup_batch_data::test_case());
-        assert!(
-            !case.blobs.batch_blobs.is_empty(),
-            "expected fixture to contain at least one batch blob"
-        );
-        assert!(
-            !case.proofs.batch.inclusion_proof.is_empty(),
-            "expected fixture to contain at least one batch proof"
-        );
-        case
-    }
-
-    fn case_with_namespace_padding() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(with_namespace_padding::test_case());
-        assert!(
-            case.proofs.batch.completeness_proof.is_some(),
-            "expected completeness proof to be present for padded namespace"
-        );
-        case
-    }
-
-    fn case_with_single_proof() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(with_rollup_proof_data::test_case());
-        assert!(
-            !case.blobs.proof_blobs.is_empty(),
-            "expected fixture to contain at least one proof blob"
-        );
-        assert!(
-            !case.proofs.proof.inclusion_proof.is_empty(),
-            "expected fixture to contain at least one proof inclusion proof"
-        );
-        case
-    }
-
-    fn case_with_multiple_proofs() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(with_batch_and_proof_same_block::test_case());
-        assert!(
-            case.blobs.proof_blobs.len() >= 2,
-            "expected fixture to contain at least two proof blobs"
-        );
-        assert!(
-            case.proofs.proof.inclusion_proof.len() >= 2,
-            "expected fixture to contain at least two proof inclusion proofs"
-        );
-        case
-    }
-
-    fn case_with_tail_padding() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(from_testnet_with_tail_padding::test_case());
-        assert!(
-            case.proofs.batch.completeness_proof.is_some(),
-            "expected completeness proof to be present for tail padding fixture"
-        );
-        case
-    }
-
-    fn case_with_mixed_v0_and_v1() -> AdversarialCase {
-        let case = AdversarialCase::from_fixture(with_mixed_v0_and_v1_blobs::test_case());
-        assert!(
-            case.proofs.batch.inclusion_proof.len() > case.blobs.batch_blobs.len(),
-            "expected skipped unsupported blobs to add inclusion proofs"
-        );
-        case
     }
 
     fn skipped_batch_proof_index(case: &AdversarialCase) -> usize {
@@ -1416,14 +1304,35 @@ mod adversarial_tampering {
             .expect("expected at least one skipped blob proof")
     }
 
-    fn assert_verification_error_matches(
-        case: AdversarialCase,
-        params: RollupParams,
-        patterns: &[&str],
+    fn shift_namespace_proof_range(
+        namespace_proof: &mut celestia_types::nmt::NamespaceProof,
+        shift_end: bool,
     ) {
-        let verifier = CelestiaVerifier::new(params);
+        match &mut **namespace_proof {
+            NmtNamespaceProof::PresenceProof { proof, .. }
+            | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+                proof.range.start = proof.range.start.saturating_add(1);
+                if shift_end {
+                    proof.range.end = proof.range.end.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    fn expect_verification_error(
+        fixture: (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>),
+        patterns: &[&str],
+        mutate: impl FnOnce(&mut AdversarialCase),
+    ) {
+        let mut case = load_case(fixture);
+        mutate(&mut case);
+
         let result = catch_unwind(AssertUnwindSafe(|| {
-            verifier.verify_relevant_tx_list(&case.block.header, &case.blobs, case.proofs)
+            CelestiaVerifier::new(case.params).verify_relevant_tx_list(
+                &case.block.header,
+                &case.blobs,
+                case.proofs,
+            )
         }));
 
         match result {
@@ -1431,7 +1340,7 @@ mod adversarial_tampering {
             Ok(Err(err)) => {
                 let message = err.to_string();
                 assert!(
-                    patterns.iter().any(|p| message.contains(p)),
+                    patterns.is_empty() || patterns.iter().any(|p| message.contains(p)),
                     "Expected error to contain one of {patterns:?}, got: {message}",
                 );
             }
@@ -1439,278 +1348,271 @@ mod adversarial_tampering {
         }
     }
 
-    fn assert_verification_error_contains(case: AdversarialCase, pattern: &str) {
-        let params = case.params;
-        assert_verification_error_matches(case, params, &[pattern]);
-    }
-
-    fn assert_verification_error_contains_any(case: AdversarialCase, patterns: &[&str]) {
-        let params = case.params;
-        assert_verification_error_matches(case, params, patterns);
-    }
-
-    fn assert_verification_error_contains_with_params(
-        case: AdversarialCase,
-        params: RollupParams,
-        pattern: &str,
-    ) {
-        assert_verification_error_matches(case, params, &[pattern]);
-    }
-
     #[test]
     fn verification_fails_if_blob_order_swapped() {
-        let mut case = case_with_multiple_batches();
-        case.blobs.batch_blobs.swap(0, 1);
-        assert_verification_error_contains(case, "NonMatchingShare");
+        expect_verification_error(
+            with_several_small_rollup_batches::test_case(),
+            &["NonMatchingShare"],
+            |case| {
+                assert!(case.blobs.batch_blobs.len() >= 2);
+                case.blobs.batch_blobs.swap(0, 1);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_blob_duplicated() {
-        let mut case = case_with_single_batch();
-
-        let blob = case.blobs.batch_blobs[0].clone();
-        case.blobs.batch_blobs.insert(1, blob);
-
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            let proof = proofs[0].clone();
-            proofs.insert(1, proof);
-        });
-
-        assert_verification_error_contains(case, "WrongStartShareIndex");
+        expect_verification_error(
+            with_rollup_batch_data::test_case(),
+            &["WrongStartShareIndex"],
+            |case| {
+                let blob = case.blobs.batch_blobs[0].clone();
+                let proof = case.proofs.batch.inclusion_proof[0].clone();
+                case.blobs.batch_blobs.insert(1, blob);
+                case.proofs.batch.inclusion_proof.insert(1, proof);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_fake_blob_inserted() {
-        let mut case = case_with_multiple_batches();
-
-        // Insert a forged blob at a valid position in the proof sequence.
-        // The proof still points to the original shares, so signer/data checks must fail.
-        let mut forged_blob = case.blobs.batch_blobs[1].clone();
-        forged_blob.sender =
-            CelestiaAddress::from_str(crate::test_helper::ADDR_2).expect("valid test address");
-        case.blobs.batch_blobs.insert(1, forged_blob);
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            let proof = proofs[1].clone();
-            proofs.insert(1, proof);
-        });
-
-        assert_verification_error_contains(case, "WrongSender");
+        expect_verification_error(
+            with_several_small_rollup_batches::test_case(),
+            &["WrongSender"],
+            |case| {
+                let mut forged_blob = case.blobs.batch_blobs[1].clone();
+                forged_blob.sender = CelestiaAddress::from_str(crate::test_helper::ADDR_2)
+                    .expect("valid test address");
+                let proof = case.proofs.batch.inclusion_proof[1].clone();
+                case.blobs.batch_blobs.insert(1, forged_blob);
+                case.proofs.batch.inclusion_proof.insert(1, proof);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_left_boundary_missing() {
-        let mut case = case_with_multiple_batches();
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            proofs.remove(0);
-        });
-        assert_verification_error_contains(case, "ProofError(Missing)");
+        expect_verification_error(
+            with_several_small_rollup_batches::test_case(),
+            &["ProofError(Missing)"],
+            |case| {
+                case.proofs.batch.inclusion_proof.remove(0);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_right_boundary_missing() {
-        let mut case = case_with_namespace_padding();
-        case.mutate_batch_completeness_proof(|proof| {
-            *proof = None;
-        });
-        assert_verification_error_contains(case, "ProofError(Missing)");
+        expect_verification_error(
+            with_namespace_padding::test_case(),
+            &["ProofError(Missing)"],
+            |case| {
+                assert!(case.proofs.batch.completeness_proof.is_some());
+                case.proofs.batch.completeness_proof = None;
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_right_boundary_missing_blobs() {
-        let mut case = case_with_namespace_padding();
-        case.mutate_batch_completeness_proof(|proof| {
-            let proof = proof
-                .as_mut()
-                .expect("expected completeness proof to be present");
-            let NamespaceBoundaryProof {
-                last_share_proof, ..
-            } = proof;
-            match &mut **last_share_proof {
-                NmtNamespaceProof::PresenceProof { proof, .. }
-                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-                    proof.range.start = proof.range.start.saturating_add(1);
-                    proof.range.end = proof.range.end.saturating_add(1);
-                }
-            }
-        });
-        assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
+        expect_verification_error(
+            with_namespace_padding::test_case(),
+            &["MissingBlobs", "Corrupted"],
+            |case| {
+                let boundary = case
+                    .proofs
+                    .batch
+                    .completeness_proof
+                    .as_mut()
+                    .expect("expected completeness proof to be present");
+                shift_namespace_proof_range(&mut boundary.last_share_proof, true);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_gap_between_blobs() {
-        let mut case = case_with_multiple_batches();
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            proofs[1].range_proofs[0].start_share_idx =
-                proofs[1].range_proofs[0].start_share_idx.saturating_add(1);
-        });
-        assert_verification_error_contains(case, "WrongStartShareIndex");
+        expect_verification_error(
+            with_several_small_rollup_batches::test_case(),
+            &["WrongStartShareIndex"],
+            |case| {
+                case.proofs.batch.inclusion_proof[1].range_proofs[0].start_share_idx =
+                    case.proofs.batch.inclusion_proof[1].range_proofs[0]
+                        .start_share_idx
+                        .saturating_add(1);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_supported_blob_proves_wrong_share_count() {
-        let mut case = case_with_single_batch();
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            let first_range = &mut proofs[0].range_proofs[0];
-            let duplicate_share = first_range
-                .shares
-                .first()
-                .expect("expected at least one proven share")
-                .clone();
-            first_range.shares.push(duplicate_share);
-        });
-        assert_verification_error_contains(case, "WrongNumberOfShares");
+        expect_verification_error(
+            with_rollup_batch_data::test_case(),
+            &["WrongNumberOfShares"],
+            |case| {
+                let first_range = &mut case.proofs.batch.inclusion_proof[0].range_proofs[0];
+                let duplicate_share = first_range
+                    .shares
+                    .first()
+                    .expect("expected at least one proven share")
+                    .clone();
+                first_range.shares.push(duplicate_share);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_start_index_manipulated() {
-        let mut case = case_with_single_batch();
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            proofs[0].range_proofs[0].start_share_idx =
-                proofs[0].range_proofs[0].start_share_idx.saturating_add(1);
-        });
-        assert_verification_error_contains(case, "MissingBlobs");
+        expect_verification_error(
+            with_rollup_batch_data::test_case(),
+            &["MissingBlobs"],
+            |case| {
+                case.proofs.batch.inclusion_proof[0].range_proofs[0].start_share_idx =
+                    case.proofs.batch.inclusion_proof[0].range_proofs[0]
+                        .start_share_idx
+                        .saturating_add(1);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_for_wrong_namespace_proof() {
-        let mut case = case_with_single_batch();
-        case.params.rollup_batch_namespace = Namespace::new_v0(b"xyz").unwrap();
-        case.params.rollup_proof_namespace = Namespace::new_v0(b"abc").unwrap();
-        let params = case.params;
-        assert_verification_error_contains_with_params(case, params, "InvalidRoot");
+        expect_verification_error(
+            with_rollup_batch_data::test_case(),
+            &["InvalidRoot"],
+            |case| {
+                case.params.rollup_batch_namespace = Namespace::new_v0(b"xyz").unwrap();
+                case.params.rollup_proof_namespace = Namespace::new_v0(b"abc").unwrap();
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_proofs_reordered() {
-        let mut case = case_with_multiple_batches();
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            proofs.reverse();
-        });
-        assert_verification_error_contains(case, "MissingBlobs");
+        expect_verification_error(
+            with_several_small_rollup_batches::test_case(),
+            &["MissingBlobs"],
+            |case| {
+                case.proofs.batch.inclusion_proof.reverse();
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_proof_blob_order_swapped() {
-        let mut case = case_with_multiple_proofs();
-        case.blobs.proof_blobs.swap(0, 1);
-        assert_verification_error_contains(case, "NonMatchingShare");
+        expect_verification_error(
+            with_batch_and_proof_same_block::test_case(),
+            &["NonMatchingShare"],
+            |case| {
+                assert!(case.blobs.proof_blobs.len() >= 2);
+                case.blobs.proof_blobs.swap(0, 1);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_fake_proof_blob_inserted() {
-        let mut case = case_with_single_proof();
-        case.mutate_proof_inclusion_proofs(|proofs| {
-            let proof = proofs[0].clone();
-            proofs.push(proof);
-        });
-        assert_verification_error_contains(case, "WrongStartShareIndex");
+        expect_verification_error(
+            with_rollup_proof_data::test_case(),
+            &["WrongStartShareIndex"],
+            |case| {
+                let proof = case.proofs.proof.inclusion_proof[0].clone();
+                case.proofs.proof.inclusion_proof.push(proof);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_proof_right_boundary_missing_blobs() {
-        let mut case = case_with_multiple_proofs();
-        case.mutate_proof_completeness_proof(|proof| {
-            let proof = proof
-                .as_mut()
-                .expect("expected completeness proof to be present");
-            let NamespaceBoundaryProof {
-                last_share_proof, ..
-            } = proof;
-            match &mut **last_share_proof {
-                NmtNamespaceProof::PresenceProof { proof, .. }
-                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-                    proof.range.start = proof.range.start.saturating_add(1);
-                    proof.range.end = proof.range.end.saturating_add(1);
-                }
-            }
-        });
-        assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
+        expect_verification_error(
+            with_batch_and_proof_same_block::test_case(),
+            &["MissingBlobs", "Corrupted"],
+            |case| {
+                let boundary = case
+                    .proofs
+                    .proof
+                    .completeness_proof
+                    .as_mut()
+                    .expect("expected completeness proof to be present");
+                shift_namespace_proof_range(&mut boundary.last_share_proof, true);
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_boundary_proof_row_alignment_is_manipulated() {
-        let mut case = case_with_tail_padding();
-        case.mutate_batch_completeness_proof(|proof| {
-            let proof = proof
-                .as_mut()
-                .expect("expected completeness proof to be present");
-            let last_share_proof = &mut proof.last_share_proof;
-            match &mut **last_share_proof {
-                NmtNamespaceProof::PresenceProof { proof, .. }
-                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-                    proof.range.start = proof.range.start.saturating_add(1);
-                }
-            }
-        });
-        assert_verification_error_contains_any(case, &["MissingBlobs", "Corrupted"]);
+        expect_verification_error(
+            from_testnet_with_tail_padding::test_case(),
+            &["MissingBlobs", "Corrupted"],
+            |case| {
+                let boundary = case
+                    .proofs
+                    .batch
+                    .completeness_proof
+                    .as_mut()
+                    .expect("expected completeness proof to be present");
+                shift_namespace_proof_range(&mut boundary.last_share_proof, false);
+            },
+        );
     }
 
     #[test]
     fn verification_handles_out_of_bounds_row_index_without_panic() {
-        let mut case = case_with_single_batch();
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            proofs[0].range_proofs[0].start_share_idx = usize::MAX;
+        expect_verification_error(with_rollup_batch_data::test_case(), &[], |case| {
+            case.proofs.batch.inclusion_proof[0].range_proofs[0].start_share_idx = usize::MAX;
         });
-
-        let verifier = CelestiaVerifier::new(case.params);
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            verifier.verify_relevant_tx_list(&case.block.header, &case.blobs, case.proofs)
-        }));
-        assert!(
-            result.is_ok(),
-            "verification panicked on out-of-bounds row index"
-        );
-        assert!(
-            result.expect("checked above").is_err(),
-            "expected verifier to reject out-of-bounds row index"
-        );
     }
 
     #[test]
     fn verification_fails_if_skipped_blob_proof_range_is_corrupted() {
-        let mut case = case_with_mixed_v0_and_v1();
-        let skipped_idx = skipped_batch_proof_index(&case);
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            let skipped_proof = &mut proofs[skipped_idx];
-            match &mut *skipped_proof.range_proofs[0].proof {
-                NmtNamespaceProof::PresenceProof { proof, .. }
-                | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-                    proof.range.start = proof.range.start.saturating_add(1);
-                    proof.range.end = proof.range.end.saturating_add(1);
+        expect_verification_error(
+            with_mixed_v0_and_v1_blobs::test_case(),
+            &["Invalid"],
+            |case| {
+                let skipped_idx = skipped_batch_proof_index(case);
+                let skipped_proof = &mut case.proofs.batch.inclusion_proof[skipped_idx];
+                match &mut *skipped_proof.range_proofs[0].proof {
+                    NmtNamespaceProof::PresenceProof { proof, .. }
+                    | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+                        proof.range.start = proof.range.start.saturating_add(1);
+                        proof.range.end = proof.range.end.saturating_add(1);
+                    }
                 }
-            }
-        });
-        assert_verification_error_contains(case, "Invalid");
+            },
+        );
     }
 
     #[test]
     fn verification_fails_if_tail_padding_share_payload_is_non_zero() {
-        let mut case = case_with_tail_padding();
-        let skipped_idx = skipped_batch_proof_index(&case);
-        case.mutate_batch_inclusion_proofs(|proofs| {
-            let first_share = proofs[skipped_idx].range_proofs[0].shares[0].clone();
-            let mut raw_share = first_share.data().to_vec();
-            let last_idx = raw_share
-                .len()
-                .checked_sub(1)
-                .expect("tail padding share should not be empty");
-            raw_share[last_idx] ^= 0x01;
-            let malformed_share =
-                celestia_types::Share::from_raw(&raw_share).expect("mutated share should parse");
-            proofs[skipped_idx].range_proofs[0].shares[0] = malformed_share;
-        });
-        assert_verification_error_contains(case, "NonMatchingShare");
+        expect_verification_error(
+            from_testnet_with_tail_padding::test_case(),
+            &["NonMatchingShare"],
+            |case| {
+                let skipped_idx = skipped_batch_proof_index(case);
+                let first_share = case.proofs.batch.inclusion_proof[skipped_idx].range_proofs[0]
+                    .shares[0]
+                    .clone();
+                let mut raw_share = first_share.data().to_vec();
+                let last_idx = raw_share
+                    .len()
+                    .checked_sub(1)
+                    .expect("tail padding share should not be empty");
+                raw_share[last_idx] ^= 0x01;
+                let malformed_share = celestia_types::Share::from_raw(&raw_share)
+                    .expect("mutated share should parse");
+                case.proofs.batch.inclusion_proof[skipped_idx].range_proofs[0].shares[0] =
+                    malformed_share;
+            },
+        );
     }
 }
 
 mod multirow_absence_spec {
     use super::*;
-    use crate::proptests::{
-        build_header, make_blob_shares, namespace_rows, signer_for_index, NS_BATCH, NS_HIGH_A,
-        NS_LOW_A, NS_PROOF,
+    use crate::test_support::{
+        build_block_from_ods, make_blob_shares, rollup_params, signer_for_index, NS_BATCH,
+        NS_HIGH_A, NS_LOW_A,
     };
-    use crate::types::{NamespaceRelevantData, APP_VERSION};
-    use celestia_types::{DataAvailabilityHeader, ExtendedDataSquare};
 
     fn synthetic_multirow_absence_fixture() -> (FilteredCelestiaBlock, RollupParams) {
         let ods_width = 4usize;
@@ -1725,11 +1627,8 @@ mod multirow_absence_spec {
             ));
         }
 
-        let eds =
-            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+        let block = build_block_from_ods(ods_shares);
+        let batch_rows = block.rollup_batch_data.data.rows();
 
         assert!(
             batch_rows.len() > 1,
@@ -1740,16 +1639,7 @@ mod multirow_absence_spec {
             "synthetic fixture must represent namespace absence for all candidate rows"
         );
 
-        let block = FilteredCelestiaBlock {
-            header: build_header(dah),
-            rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
-            rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
-        };
-        let params = RollupParams {
-            rollup_batch_namespace: NS_BATCH,
-            rollup_proof_namespace: NS_PROOF,
-        };
-        (block, params)
+        (block, rollup_params())
     }
 
     fn synthetic_single_row_absence_fixture() -> (FilteredCelestiaBlock, RollupParams) {
@@ -1763,11 +1653,8 @@ mod multirow_absence_spec {
         // Rows 1-3: high only, non-candidate rows for NS_BATCH.
         ods_shares.extend(make_blob_shares(NS_HIGH_A, ods_width * 3, None, 0x43));
 
-        let eds =
-            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+        let block = build_block_from_ods(ods_shares);
+        let batch_rows = block.rollup_batch_data.data.rows();
 
         assert_eq!(
             batch_rows.len(),
@@ -1779,16 +1666,7 @@ mod multirow_absence_spec {
             "synthetic fixture must represent absence in the only candidate row"
         );
 
-        let block = FilteredCelestiaBlock {
-            header: build_header(dah),
-            rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
-            rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
-        };
-        let params = RollupParams {
-            rollup_batch_namespace: NS_BATCH,
-            rollup_proof_namespace: NS_PROOF,
-        };
-        (block, params)
+        (block, rollup_params())
     }
 
     fn synthetic_multirow_mixed_presence_fixture() -> (FilteredCelestiaBlock, RollupParams) {
@@ -1812,11 +1690,8 @@ mod multirow_absence_spec {
         // Rows 2-3: high only, non-candidate rows for NS_BATCH.
         ods_shares.extend(make_blob_shares(NS_HIGH_A, ods_width * 2, None, 0x31));
 
-        let eds =
-            ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-        let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
-        let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
+        let block = build_block_from_ods(ods_shares);
+        let batch_rows = block.rollup_batch_data.data.rows();
 
         assert!(
             batch_rows.len() > 1,
@@ -1831,16 +1706,7 @@ mod multirow_absence_spec {
             "synthetic fixture must contain at least one presence candidate row"
         );
 
-        let block = FilteredCelestiaBlock {
-            header: build_header(dah),
-            rollup_batch_data: NamespaceRelevantData::new(NS_BATCH, NamespaceData::new(batch_rows)),
-            rollup_proof_data: NamespaceRelevantData::new(NS_PROOF, NamespaceData::new(proof_rows)),
-        };
-        let params = RollupParams {
-            rollup_batch_namespace: NS_BATCH,
-            rollup_proof_namespace: NS_PROOF,
-        };
-        (block, params)
+        (block, rollup_params())
     }
 
     #[test]
@@ -1980,7 +1846,7 @@ mod multirow_absence_spec {
             batch_blobs: Vec::new(),
             proof_blobs: Vec::new(),
         };
-        let error = try_get_extraction_proof(&block, &relevant_blobs).unwrap_err();
+        let error = build_extraction_proof(&block, &relevant_blobs).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -2007,12 +1873,7 @@ mod multirow_absence_spec {
         );
 
         let mut relevant_blobs = extract_relevant_blobs(&block);
-        for blob in relevant_blobs.batch_blobs.iter_mut() {
-            read_full_blob(blob);
-        }
-        for blob in relevant_blobs.proof_blobs.iter_mut() {
-            read_full_blob(blob);
-        }
+        apply_blob_readers(&mut relevant_blobs, read_full_blob, read_full_blob);
         let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
         let verifier = CelestiaVerifier::new(rollup_params);

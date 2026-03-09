@@ -7,7 +7,12 @@ use celestia_types::namespace_data::NamespaceData;
 /// Reexport the [`Namespace`] from `celestia-types`
 pub use celestia_types::nmt::Namespace;
 use celestia_types::AppVersion;
-pub use error::*;
+#[cfg(feature = "native")]
+pub use error::ExtractionProofError;
+pub use error::{
+    BlobDataError, IncompleteNamespaceError, NamespaceType, NamespaceValidationError, ProofError,
+    RowProofError, ValidationError,
+};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader};
@@ -263,12 +268,7 @@ pub struct NamespaceBoundaryProof {
 
 #[cfg(feature = "native")]
 impl NamespaceBoundaryProof {
-    pub(crate) fn from_namespace_data(namespace_data: &NamespaceRelevantData) -> Option<Self> {
-        Self::try_from_namespace_data(namespace_data)
-            .unwrap_or_else(|err| panic!("failed to build namespace boundary proof: {err}"))
-    }
-
-    pub(crate) fn try_from_namespace_data(
+    pub(crate) fn build_from_namespace_data(
         namespace_data: &NamespaceRelevantData,
     ) -> Result<Option<Self>, ExtractionProofError> {
         let Some(last_row) = namespace_data.data.rows().last() else {

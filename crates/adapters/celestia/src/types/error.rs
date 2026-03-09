@@ -1,3 +1,4 @@
+#[cfg(feature = "native")]
 use celestia_types::nmt::Namespace;
 
 #[derive(Debug, thiserror::Error)]
@@ -88,6 +89,7 @@ pub enum ProofError {
     Invalid(nmt_rs::simple_merkle::error::RangeProofError),
 }
 
+#[cfg(feature = "native")]
 #[derive(Debug, thiserror::Error)]
 pub enum ExtractionProofError {
     #[error(

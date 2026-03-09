@@ -12,6 +12,8 @@ mod proptests;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;
+#[cfg(all(test, feature = "native"))]
+mod test_support;
 pub mod types;
 pub mod verifier;
 
