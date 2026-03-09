@@ -79,6 +79,17 @@ async fn assert_rpc_rejects<T: DeserializeOwned + std::fmt::Debug>(
     );
 }
 
+async fn assert_rpc_succeeds<T: DeserializeOwned>(
+    client: &SimpleStorageClient,
+    method: &str,
+    request: &TransactionRequest,
+) -> anyhow::Result<T> {
+    Ok(client
+        .ws
+        .request(method, rpc_params![request, "latest"])
+        .await?)
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()> {
     let (_rollup, client) = setup_client().await;
@@ -213,7 +224,7 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyh
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_call_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()> {
+async fn eth_call_accepts_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()> {
     let (_rollup, client) = setup_client().await;
     let caller = client.address();
     let base_fee = current_base_fee(&client).await?;
@@ -224,13 +235,14 @@ async fn eth_call_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Resul
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
-    assert_rpc_rejects::<String>(&client, "eth_call", &request, FEE_CAP_TOO_LOW_ERROR).await;
+    let result: String = assert_rpc_succeeds(&client, "eth_call", &request).await?;
+    assert_eq!(result, "0x");
 
     Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()>
+async fn eth_create_access_list_accepts_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()>
 {
     let (_rollup, client) = setup_client().await;
     let caller = client.address();
@@ -242,13 +254,30 @@ async fn eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas() ->
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
-    assert_rpc_rejects::<serde_json::Value>(
-        &client,
-        "eth_createAccessList",
-        &request,
-        FEE_CAP_TOO_LOW_ERROR,
-    )
-    .await;
+    let result: serde_json::Value =
+        assert_rpc_succeeds(&client, "eth_createAccessList", &request).await?;
+    assert!(
+        result.get("accessList").is_some(),
+        "missing accessList: {result}"
+    );
+    assert!(result.get("gasUsed").is_some(), "missing gasUsed: {result}");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_client().await;
+    let caller = client.address();
+    let base_fee = current_base_fee(&client).await?;
+    assert!(base_fee > 0, "base fee should be non-zero for this test");
+
+    let request = TransactionRequest {
+        max_fee_per_gas: Some(base_fee - 1),
+        max_priority_fee_per_gas: Some(0),
+        ..base_request(caller)
+    };
+    assert_rpc_rejects::<U64>(&client, "eth_estimateGas", &request, FEE_CAP_TOO_LOW_ERROR).await;
 
     Ok(())
 }

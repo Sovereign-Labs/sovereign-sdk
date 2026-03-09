@@ -323,8 +323,17 @@ where
             "EVM module JSON-RPC request"
         );
 
+        // `eth_call` runs with base-fee charging disabled, so explicit fee fields below
+        // the current base fee should not be rejected before execution.
         let result = self
-            .call(request, block_id, state_overrides, block_overrides, state)?
+            .call(
+                request,
+                block_id,
+                state_overrides,
+                block_overrides,
+                state,
+                false,
+            )?
             .result;
         Ok(ensure_success(result)?)
     }
@@ -344,7 +353,9 @@ where
         );
         let initial_access_list = request.access_list.clone().unwrap_or_default();
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        super::validate_call_fee_request(&request, &block_env)?;
+        // Access-list generation should match `eth_call` here and accept explicit fee fields
+        // below the current base fee.
+        super::requested_call_fee_per_gas(&request, &block_env, false)?;
         let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
         let cfg = self.cfg_infallible(state);
         let cfg_env =
@@ -411,10 +422,19 @@ where
             .unwrap_or(0)
             .saturating_add(1000);
 
+        // `eth_estimateGas` keeps the fee-cap floor check because it models admission
+        // requirements more strictly than `eth_call`.
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
+        } = self.call(
+            request,
+            block_id,
+            state_overrides,
+            block_overrides,
+            state,
+            true,
+        )?;
 
         let (gas_used, logs) = match result {
             ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
