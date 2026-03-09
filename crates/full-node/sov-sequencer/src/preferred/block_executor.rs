@@ -34,7 +34,7 @@ use super::state_root_compute::StateRootComputeRequest;
 use super::{
     Confirmation, PreferredBatchToReplay, PreferredSequencerConfig, VisibleSlotNumberIncrease,
 };
-use crate::common::{accept_tx_fatal_error_details, AcceptedTx, ForcedTxBatchNotification};
+use crate::common::{AcceptedTx, ForcedTxBatchNotification};
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -87,17 +87,10 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                 reject_reason_to_error(reason, call)
             }
             RollupBlockExecutorError::UnsuccessfulTransaction { receipt } => {
-                let details = match &receipt.receipt {
+                let details = match receipt.receipt {
                     sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
                     }
-                    sov_rollup_interface::stf::TxEffect::Skipped(
-                        sov_modules_api::SkippedTxContents {
-                            error:
-                                sov_modules_api::TxProcessingError::AuthenticationFailed(fatal_error),
-                            ..
-                        },
-                    ) => accept_tx_fatal_error_details(fatal_error),
                     _ => json_obj!({
                         "error": format!("{:?}", receipt),
                     }),

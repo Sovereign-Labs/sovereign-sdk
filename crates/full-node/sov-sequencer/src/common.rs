@@ -571,10 +571,6 @@ pub(crate) fn accept_tx_auth_error_details(error: &AuthenticationError) -> JsonO
     }
 }
 
-pub(crate) fn accept_tx_fatal_error_details(error: &FatalError) -> JsonObject {
-    accept_tx_error_details(error.to_string(), Some(error))
-}
-
 pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
     match err {
         PreExecError::SequencerError(error) => {
@@ -716,11 +712,10 @@ pub fn sender_is_allowed<RT: Runtime<S>, S: Spec>(
 #[cfg(test)]
 mod tests {
     use sov_modules_api::capabilities::{AuthenticationError, FatalError};
-    use sov_modules_api::TxProcessingError;
     use sov_modules_stf_blueprint::PreExecError;
     use sov_rollup_interface::TxHash;
 
-    use super::{accept_tx_fatal_error_details, pre_exec_err_to_accept_tx_err};
+    use super::pre_exec_err_to_accept_tx_err;
 
     fn fatal_error_from_details(details: &sov_rest_utils::JsonObject) -> Option<FatalError> {
         details
@@ -780,25 +775,5 @@ mod tests {
             Some("Transaction authentication ran out of gas: signature cache unavailable.")
         );
         assert_eq!(fatal_error_from_details(&err.details), None);
-    }
-
-    #[test]
-    fn fatal_error_details_for_skipped_receipts_are_structured() {
-        let fatal_error = FatalError::InsufficientMaxFeePerGas {
-            user_max_fee_per_gas: 6,
-            rollup_base_fee: 7,
-        };
-        let details = accept_tx_fatal_error_details(&fatal_error);
-        let error = TxProcessingError::AuthenticationFailed(fatal_error.clone());
-
-        assert_eq!(
-            details.get("error").and_then(serde_json::Value::as_str),
-            Some("Insufficient max_fee_per_gas: user specified 6, but current base fee is 7")
-        );
-        assert_eq!(
-            fatal_error_from_details(&details),
-            Some(fatal_error.clone())
-        );
-        assert_eq!(error, TxProcessingError::AuthenticationFailed(fatal_error));
     }
 }

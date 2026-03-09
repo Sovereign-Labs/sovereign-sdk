@@ -1,4 +1,3 @@
-use crate::capabilities::FatalError;
 pub use crate::common::ModuleError as Error;
 use crate::Spec;
 
@@ -81,7 +80,7 @@ impl<S: Spec> Eq for SkippedTxContents<S> {}
 pub enum TxProcessingError {
     /// Transaction authentication failed.
     #[error(" Transaction authentication failed {0}.")]
-    AuthenticationFailed(FatalError),
+    AuthenticationFailed(String),
     /// The uniqueness check failed.
     #[error("The uniqueness check failed. Reason: {0}.")]
     CheckUniquenessFailed(String),
@@ -104,21 +103,42 @@ pub enum TxProcessingError {
 
 #[cfg(test)]
 mod tests {
-    use crate::capabilities::FatalError;
+    use super::{SkippedTxContents, TxEffect, TxProcessingError};
 
-    use super::TxProcessingError;
+    type TestSpec = crate::default_spec::DefaultSpec<
+        sov_mock_da::MockDaSpec,
+        sov_mock_zkvm::MockZkvm,
+        sov_mock_zkvm::MockZkvm,
+        sov_rollup_interface::execution_mode::Native,
+    >;
 
     #[test]
-    fn authentication_failed_roundtrips_fatal_error() {
-        let error = TxProcessingError::AuthenticationFailed(FatalError::InsufficientMaxFeePerGas {
-            user_max_fee_per_gas: 6,
-            rollup_base_fee: 7,
-        });
+    fn authentication_failed_roundtrips_string() {
+        let error = TxProcessingError::AuthenticationFailed(
+            "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7".to_string(),
+        );
 
         let json = serde_json::to_value(&error).expect("tx processing error should serialize");
         let roundtrip: TxProcessingError =
             serde_json::from_value(json).expect("tx processing error should deserialize");
 
         assert_eq!(roundtrip, error);
+    }
+
+    #[test]
+    fn authentication_failed_bincode_roundtrips_string_for_ledger_storage() {
+        let effect = TxEffect::Skipped(SkippedTxContents::<TestSpec> {
+            gas_used: <TestSpec as crate::Spec>::Gas::from([5, 7]),
+            error: TxProcessingError::AuthenticationFailed(
+                "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
+                    .to_string(),
+            ),
+        });
+
+        let bytes = bincode::serialize(&effect).expect("tx effect should serialize");
+        let roundtrip: TxEffect<TestSpec> =
+            bincode::deserialize(&bytes).expect("tx effect should deserialize");
+
+        assert_eq!(roundtrip, effect);
     }
 }

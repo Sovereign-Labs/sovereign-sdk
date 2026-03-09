@@ -791,7 +791,7 @@ where
                         scratchpad,
                         gas_used: gas_used_for_authentication,
                         outcome: AuthAndProcessOutcome::Skipped {
-                            error: TxProcessingError::AuthenticationFailed(err),
+                            error: TxProcessingError::AuthenticationFailed(err.to_string()),
                             tx_hash,
                             tx_body: raw_tx,
                         },

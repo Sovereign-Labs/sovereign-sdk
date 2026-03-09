@@ -255,9 +255,11 @@ where
             let gas_used = gas_info.gas_used;
             match e {
                 UnregisteredAuthenticationError::FatalError(err, tx_hash) => {
-                    warn!(error = %err, "Unregistered sequencer authentication failed");
+                    warn!(%err, "Unregistered sequencer authentication failed");
                     let skipped = SkippedTxContents {
-                        error: TxProcessingError::AuthenticationFailed(err),
+                        error: TxProcessingError::AuthenticationFailed(format!(
+                            "Unregistered sequencer authentication failed: {err}"
+                        )),
                         gas_used,
                     };
 
