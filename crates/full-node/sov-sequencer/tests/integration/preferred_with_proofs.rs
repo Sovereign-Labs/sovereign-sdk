@@ -1,4 +1,3 @@
-use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::{RawTx, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -6,7 +5,8 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::{
     generate_zk_runtime_with_kernel, test_rollup::TestRollup, RtAgnosticBlueprint, TestSpec,
-    TestUser, TEST_DEFAULT_MAX_FEE, TEST_MAX_BATCH_SIZE,
+    TestUser, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+    TEST_MAX_BATCH_SIZE,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio_stream::StreamExt;
@@ -66,7 +66,7 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
             0,
             true,
             TEST_MAX_BATCH_SIZE,
-            BlockProducingConfig::Manual,
+            TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
             Some(RollupProverConfig::Skip),
             60,
             1000,
@@ -132,9 +132,15 @@ async fn test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
             }
         }
 
-        // Produce one block and wait for the corresponding slot notification.
-        test_rollup.da_service.produce_block_now().await?;
-        let _slot = slot_subscription.next().await.unwrap().unwrap();
+        // Wait for the next periodic block and the corresponding slot notification.
+        let _slot = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            slot_subscription.next(),
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
 
         while let Ok(Some(Ok(_proof))) = tokio::time::timeout(
             std::time::Duration::from_millis(150),
