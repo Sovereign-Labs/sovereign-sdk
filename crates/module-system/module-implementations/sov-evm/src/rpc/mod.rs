@@ -322,17 +322,13 @@ where
             MaybeSealedBlock::Sealed(sealed) => {
                 let block_size = sealed.rlp_size;
                 let transactions = self.get_block_transactions(&sealed, kind, state)?;
-                let mut header =
+                let header =
                     Header::from_consensus(sealed.header, None, Some(U256::from(block_size)));
-                // Override withdrawals root for post cancun compatibility
-                if header.withdrawals_root.is_none() {
-                    header.withdrawals_root = Some(EMPTY_ROOT_HASH);
-                }
                 Ok(Some(Block {
                     header,
                     transactions,
                     uncles: vec![],
-                    withdrawals: Some(vec![].into()),
+                    withdrawals: None,
                 }))
             }
             // For pending blocks, we would like to avoid fetching the whole block body for performance reasons
@@ -367,7 +363,7 @@ where
                     header,
                     transactions: txs,
                     uncles: vec![],
-                    withdrawals: Some(vec![].into()),
+                    withdrawals: None,
                 }))
             }
         }
@@ -855,7 +851,7 @@ where
             extra_data: Bytes::default(),
             mix_hash: B256::ZERO,
             nonce: B64::ZERO,
-            withdrawals_root: Some(EMPTY_ROOT_HASH),
+            withdrawals_root: None,
             blob_gas_used: None,
             parent_beacon_block_root: None,
             requests_hash: None,
@@ -917,7 +913,7 @@ where
             extra_data: Bytes::default(),
             mix_hash: B256::ZERO,
             nonce: B64::ZERO,
-            withdrawals_root: Some(EMPTY_ROOT_HASH),
+            withdrawals_root: None,
             blob_gas_used: None,
             parent_beacon_block_root: None,
             requests_hash: None,
