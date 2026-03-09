@@ -137,12 +137,14 @@ async fn test_proof_generation() {
 
         host.add_hint(data);
 
+        println!("X1");
         tracing::info!("Run prover without generating a proof for block {height}\n");
         let proof = host
             .run_async(true)
             .await
             .expect("Prover should run successfully");
 
+        println!("X2");
         let proof_public_data: StateTransitionPublicData<
             <DefaultSpec as Spec>::Address,
             MockDaSpec,
