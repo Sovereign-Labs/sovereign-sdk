@@ -25,10 +25,7 @@ use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::capabilities::{
-    AuthenticationError, AuthenticationFailureCode, AuthenticationFailureDetails, FatalError,
-    HasKernel,
-};
+use sov_modules_api::capabilities::{AuthenticationError, FatalError, HasKernel};
 #[cfg(feature = "local")]
 use sov_modules_api::macros::config_value;
 use sov_modules_api::FullyBakedTx;
@@ -282,12 +279,8 @@ where
 
 fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
     if matches!(
-        serde_json::from_value::<AuthenticationFailureDetails>(serde_json::Value::Object(
-            err.details.clone()
-        ))
-        .ok()
-        .and_then(|details| details.code),
-        Some(AuthenticationFailureCode::InsufficientMaxFeePerGas)
+        accept_tx_fatal_error(&err),
+        Some(FatalError::InsufficientMaxFeePerGas { .. })
     ) {
         return RpcInvalidTransactionError::FeeCapTooLow.into();
     }
@@ -297,6 +290,13 @@ fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
         400 | 403 | 413 => rpc_invalid_params(err_msg),
         _ => rpc_tx_rejected(err_msg),
     }
+}
+
+fn accept_tx_fatal_error(err: &RestErrorObject) -> Option<FatalError> {
+    err.details
+        .get("fatal_error")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
 }
 
 fn track_metrics<T>(request_name: &'static str, start: Instant, result: &RpcResult<T>) {
@@ -334,7 +334,7 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
 mod tests {
     use jsonrpsee::types::error::INVALID_PARAMS_CODE;
 
-    use sov_modules_api::capabilities::{AuthenticationFailureCode, AuthenticationFailureDetails};
+    use sov_modules_api::capabilities::FatalError;
     use sov_rest_utils::to_json_object;
 
     use super::{map_accept_tx_error, RestErrorObject};
@@ -346,6 +346,20 @@ mod tests {
             message: "The transaction is invalid".to_string(),
             details: Default::default(),
         }
+    }
+
+    fn accept_tx_error_details(
+        error: &str,
+        fatal_error: Option<FatalError>,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut details = to_json_object(serde_json::json!({ "error": error }));
+        if let Some(fatal_error) = fatal_error {
+            details.insert(
+                "fatal_error".to_string(),
+                serde_json::to_value(fatal_error).expect("fatal_error should serialize"),
+            );
+        }
+        details
     }
 
     #[test]
@@ -378,13 +392,13 @@ mod tests {
         let err = map_accept_tx_error(RestErrorObject {
             status,
             message: "The transaction is invalid".to_string(),
-            details: to_json_object(AuthenticationFailureDetails {
-                error: "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
-                    .to_string(),
-                code: Some(AuthenticationFailureCode::InsufficientMaxFeePerGas),
-                user_max_fee_per_gas: Some(6),
-                rollup_base_fee: Some(7),
-            }),
+            details: accept_tx_error_details(
+                "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7",
+                Some(FatalError::InsufficientMaxFeePerGas {
+                    user_max_fee_per_gas: 6,
+                    rollup_base_fee: 7,
+                }),
+            ),
         });
 
         assert_eq!(err.code(), -32000);

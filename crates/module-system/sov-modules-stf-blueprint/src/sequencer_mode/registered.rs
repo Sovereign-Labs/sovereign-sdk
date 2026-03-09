@@ -1,7 +1,7 @@
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{
-    AuthenticationError, AuthenticationFailureDetails, ChainState, GasEnforcer,
-    SequencerAuthorization, TransactionAuthenticator, TransactionAuthorizer,
+    AuthenticationError, ChainState, GasEnforcer, SequencerAuthorization, TransactionAuthenticator,
+    TransactionAuthorizer,
 };
 use sov_modules_api::transaction::TransactionConsumption;
 use sov_modules_api::{
@@ -791,9 +791,7 @@ where
                         scratchpad,
                         gas_used: gas_used_for_authentication,
                         outcome: AuthAndProcessOutcome::Skipped {
-                            error: TxProcessingError::AuthenticationFailed(
-                                AuthenticationFailureDetails::from_fatal_error(&err),
-                            ),
+                            error: TxProcessingError::AuthenticationFailed(err),
                             tx_hash,
                             tx_body: raw_tx,
                         },

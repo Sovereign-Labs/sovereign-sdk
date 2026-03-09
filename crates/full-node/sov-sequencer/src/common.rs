@@ -13,14 +13,14 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{BlobExecutionStatus, BlobInternalId, BlobSenderHooks};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{
-    AuthenticationFailureDetails, AuthenticationOutput, RollupHeight, TransactionAuthenticator,
+    AuthenticationError, AuthenticationOutput, FatalError, RollupHeight, TransactionAuthenticator,
 };
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::*;
 use sov_modules_stf_blueprint::{PreExecError, Runtime};
 use sov_rest_utils::errors::ReportableWsError;
-use sov_rest_utils::{json_obj, to_json_object};
+use sov_rest_utils::{json_obj, to_json_object, JsonObject};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
@@ -548,6 +548,33 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
     .await;
 }
 
+fn accept_tx_error_details(error: String, fatal_error: Option<&FatalError>) -> JsonObject {
+    let mut details = json_obj!({
+        "error": error,
+    });
+    if let Some(fatal_error) = fatal_error {
+        details.insert(
+            "fatal_error".to_string(),
+            serde_json::to_value(fatal_error)
+                .expect("FatalError serialization to JSON should be infallible"),
+        );
+    }
+    details
+}
+
+pub(crate) fn accept_tx_auth_error_details(error: &AuthenticationError) -> JsonObject {
+    match error {
+        AuthenticationError::FatalError(fatal_error, _) => {
+            accept_tx_error_details(error.to_string(), Some(fatal_error))
+        }
+        AuthenticationError::OutOfGas(_) => accept_tx_error_details(error.to_string(), None),
+    }
+}
+
+pub(crate) fn accept_tx_fatal_error_details(error: &FatalError) -> JsonObject {
+    accept_tx_error_details(error.to_string(), Some(error))
+}
+
 pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
     match err {
         PreExecError::SequencerError(error) => {
@@ -568,9 +595,7 @@ pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
             ErrorObject {
                 status: StatusCode::BAD_REQUEST,
                 message: "The transaction is invalid".to_string(),
-                details: to_json_object(AuthenticationFailureDetails::from_authentication_error(
-                    &error,
-                )),
+                details: accept_tx_auth_error_details(&error),
             }
         },
     }
@@ -690,17 +715,24 @@ pub fn sender_is_allowed<RT: Runtime<S>, S: Spec>(
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::capabilities::{
-        AuthenticationError, AuthenticationFailureCode, AuthenticationFailureDetails, FatalError,
-    };
+    use sov_modules_api::capabilities::{AuthenticationError, FatalError};
     use sov_modules_api::TxProcessingError;
     use sov_modules_stf_blueprint::PreExecError;
     use sov_rollup_interface::TxHash;
 
-    use super::pre_exec_err_to_accept_tx_err;
+    use super::{accept_tx_fatal_error_details, pre_exec_err_to_accept_tx_err};
+
+    fn fatal_error_from_details(details: &sov_rest_utils::JsonObject) -> Option<FatalError> {
+        details
+            .get("fatal_error")
+            .cloned()
+            .map(serde_json::from_value)
+            .transpose()
+            .expect("fatal_error field should deserialize")
+    }
 
     #[test]
-    fn low_max_fee_auth_error_serializes_structured_code() {
+    fn low_max_fee_auth_error_serializes_fatal_error() {
         let error = AuthenticationError::FatalError(
             FatalError::InsufficientMaxFeePerGas {
                 user_max_fee_per_gas: 6,
@@ -710,44 +742,63 @@ mod tests {
         );
 
         let err = pre_exec_err_to_accept_tx_err(PreExecError::AuthError(error));
-        let details: AuthenticationFailureDetails =
-            serde_json::from_value(serde_json::Value::Object(err.details))
-                .expect("details should deserialize");
+        let details = err.details;
+        let error_message = details
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .expect("error message should be present");
+
+        assert!(
+            error_message.contains(
+                "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
+            ),
+            "unexpected error message: {error_message}"
+        );
+        assert!(
+            error_message.contains(
+                "tx_hash 0x0000000000000000000000000000000000000000000000000000000000000000"
+            ),
+            "unexpected error message: {error_message}"
+        );
+        assert_eq!(
+            fatal_error_from_details(&details),
+            Some(FatalError::InsufficientMaxFeePerGas {
+                user_max_fee_per_gas: 6,
+                rollup_base_fee: 7,
+            })
+        );
+    }
+
+    #[test]
+    fn out_of_gas_auth_error_does_not_serialize_fatal_error() {
+        let err = pre_exec_err_to_accept_tx_err(PreExecError::AuthError(
+            AuthenticationError::OutOfGas("signature cache unavailable".to_string()),
+        ));
 
         assert_eq!(
-            details.code,
-            Some(AuthenticationFailureCode::InsufficientMaxFeePerGas)
+            err.details.get("error").and_then(serde_json::Value::as_str),
+            Some("Transaction authentication ran out of gas: signature cache unavailable.")
         );
-        assert_eq!(details.user_max_fee_per_gas, Some(6));
-        assert_eq!(details.rollup_base_fee, Some(7));
+        assert_eq!(fatal_error_from_details(&err.details), None);
     }
 
     #[test]
-    fn low_max_fee_processing_error_preserves_structured_code() {
-        let details = AuthenticationFailureDetails {
-            error: "Insufficient max_fee_per_gas: user specified 6, but current base fee is 7"
-                .to_string(),
-            code: Some(AuthenticationFailureCode::InsufficientMaxFeePerGas),
-            user_max_fee_per_gas: Some(6),
-            rollup_base_fee: Some(7),
+    fn fatal_error_details_for_skipped_receipts_are_structured() {
+        let fatal_error = FatalError::InsufficientMaxFeePerGas {
+            user_max_fee_per_gas: 6,
+            rollup_base_fee: 7,
         };
+        let details = accept_tx_fatal_error_details(&fatal_error);
+        let error = TxProcessingError::AuthenticationFailed(fatal_error.clone());
 
-        let error = TxProcessingError::AuthenticationFailed(details.clone());
-
-        assert_eq!(error, TxProcessingError::AuthenticationFailed(details));
-    }
-
-    #[test]
-    fn unrelated_processing_error_preserves_message_without_code() {
-        let details = AuthenticationFailureDetails {
-            error: "Invalid ethereum signature".to_string(),
-            code: None,
-            user_max_fee_per_gas: None,
-            rollup_base_fee: None,
-        };
-
-        let error = TxProcessingError::AuthenticationFailed(details.clone());
-
-        assert_eq!(error, TxProcessingError::AuthenticationFailed(details));
+        assert_eq!(
+            details.get("error").and_then(serde_json::Value::as_str),
+            Some("Insufficient max_fee_per_gas: user specified 6, but current base fee is 7")
+        );
+        assert_eq!(
+            fatal_error_from_details(&details),
+            Some(fatal_error.clone())
+        );
+        assert_eq!(error, TxProcessingError::AuthenticationFailed(fatal_error));
     }
 }

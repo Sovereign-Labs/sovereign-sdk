@@ -1,7 +1,6 @@
 use sov_modules_api::capabilities::{
-    AuthenticationFailureDetails, BatchFromUnregisteredSequencer, ChainState, GasEnforcer,
-    SequencerRemuneration, TransactionAuthenticator, TransactionAuthorizer,
-    UnregisteredAuthenticationError,
+    BatchFromUnregisteredSequencer, ChainState, GasEnforcer, SequencerRemuneration,
+    TransactionAuthenticator, TransactionAuthorizer, UnregisteredAuthenticationError,
 };
 use sov_modules_api::*;
 use tracing::{debug, warn};
@@ -256,10 +255,9 @@ where
             let gas_used = gas_info.gas_used;
             match e {
                 UnregisteredAuthenticationError::FatalError(err, tx_hash) => {
-                    let details = AuthenticationFailureDetails::from_unregistered_fatal_error(&err);
-                    warn!(error = ?details.error);
+                    warn!(error = %err, "Unregistered sequencer authentication failed");
                     let skipped = SkippedTxContents {
-                        error: TxProcessingError::AuthenticationFailed(details),
+                        error: TxProcessingError::AuthenticationFailed(err),
                         gas_used,
                     };
 
