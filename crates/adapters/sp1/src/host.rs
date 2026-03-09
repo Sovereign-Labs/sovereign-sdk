@@ -58,12 +58,7 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        if cfg!(debug_assertions) {
-            std::env::set_var("SP1_PROVER", "mock");
-        } else {
-            std::env::set_var("SP1_PROVER", "cpu");
-        }
-        let prover = ProverClient::from_env();
+        let prover = ProverClient::builder().cpu().build();
         let proof = if with_proof {
             let pk = prover
                 .setup(self.elf.into())
