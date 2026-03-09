@@ -338,7 +338,6 @@ proptest! {
     }
 
     #[test]
-    #[ignore = "BUG SPEC: mid-row completeness proof rejects valid layouts (see docs/celestia/multirow-absence-redesign-prompt.md)"]
     fn proptest_mid_row_full_verification(case in mid_row_case_strategy()) {
         let block = case.build_block();
         let mut relevant_blobs = extract_relevant_blobs(&block);
@@ -363,7 +362,6 @@ proptest! {
     }
 
     #[test]
-    #[ignore = "BUG SPEC: single-row mid-row completeness proof rejects valid layouts (see docs/celestia/multirow-absence-redesign-prompt.md)"]
     fn proptest_single_row_mid_row_full_verification(case in single_row_mid_row_case_strategy()) {
         let block = case.build_block();
         let mut relevant_blobs = extract_relevant_blobs(&block);
@@ -465,7 +463,6 @@ proptest! {
 }
 
 #[test]
-#[ignore = "BUG SPEC: mid-row completeness proof rejects valid layouts (see docs/celestia/multirow-absence-redesign-prompt.md)"]
 fn test_mid_row_full_verification_manual() {
     let case = MidRowBatchCase {
         ods_width: 8,
