@@ -1,10 +1,11 @@
+#![allow(dead_code)]
 //! Implementation of the SP1 host for the Sovereign ZkvmHost trait.
 
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
-use sp1_sdk::{ProvingKey, SP1Stdin};
+use sp1_sdk::{ProvingKey, SP1PublicValues, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
@@ -27,6 +28,50 @@ impl<'host> SP1Host<'host> {
     /// Create a new `Sp1Guest` that reads the provided hints
     pub fn simulate_with_hints(&mut self) -> SP1Guest {
         SP1Guest::with_hints(self.stdin.buffer.clone())
+    }
+
+    /// TODO
+    pub async fn run_async(&mut self, _with_proof: bool) -> anyhow::Result<Vec<u8>> {
+        use sp1_sdk::{ProveRequest, Prover, ProverClient}; // async API
+
+        if cfg!(debug_assertions) {
+            //std::env::set_var("SP1_PROVER", "mock");
+            std::env::set_var("SP1_PROVER", "cpu");
+        } else {
+            std::env::set_var("SP1_PROVER", "cpu");
+        }
+        //let prover = ProverClient::from_env().await;
+        let prover = ProverClient::builder().cpu().build().await;
+        let proof: Proof<_, SP1PublicValues> = {
+            let pk = prover
+                .setup(self.elf.into())
+                .await
+                .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+            let output = prover
+                .prove(&pk, self.stdin.clone())
+                .compressed()
+                .await
+                .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
+
+            Proof::Full(output)
+        };
+
+        self.stdin = SP1Stdin::new();
+
+        Ok(bincode::serialize(&proof)?)
+    }
+
+    /// Returns a commitment to the guest ELF using SP1's async prover API.
+    pub async fn code_commitment_async(&self) -> anyhow::Result<crate::SP1MethodId> {
+        use sp1_sdk::{Prover, ProverClient};
+
+        let prover = ProverClient::builder().cpu().build().await;
+        let pk = prover
+            .setup(self.elf.into())
+            .await
+            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+
+        Ok(crate::SP1MethodId(bincode::serialize(pk.verifying_key())?))
     }
 }
 
@@ -58,7 +103,13 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let prover = ProverClient::builder().cpu().build();
+        if cfg!(debug_assertions) {
+            //std::env::set_var("SP1_PROVER", "mock");
+            std::env::set_var("SP1_PROVER", "cpu");
+        } else {
+            std::env::set_var("SP1_PROVER", "cpu");
+        }
+        let prover = ProverClient::from_env();
         let proof = if with_proof {
             let pk = prover
                 .setup(self.elf.into())
@@ -69,7 +120,7 @@ impl ZkvmHost for SP1Host<'static> {
                 .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
             Proof::Full(output.proof)
         } else {
-            let prover = ProverClient::builder().mock().build();
+            let prover = ProverClient::builder().cpu().build();
             let execute_request = prover.execute(self.elf.into(), self.stdin.clone());
             let (public_values, _report) = execute_request
                 .run()

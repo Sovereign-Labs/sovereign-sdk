@@ -10,15 +10,15 @@ use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
 use sov_modules_api::{OperatingMode, SlotData, Spec};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{
-    StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
+    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
 };
+use sov_sp1_adapter::host::SP1Host;
+use sov_sp1_adapter::{SP1Verifier, SP1};
 use sov_state::ProverStorage;
 use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::TestStorageSpec;
@@ -29,7 +29,7 @@ use crate::test_helpers::test_genesis_paths;
 
 type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
-    sov_risc0_adapter::Risc0,
+    sov_sp1_adapter::SP1,
     sov_mock_zkvm::MockZkvm,
     demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
@@ -80,9 +80,19 @@ async fn test_proof_generation() {
         .await
         .expect("Failed to get DA blocks");
 
-    let mut host = Risc0Host::new(risc0::MOCK_DA_ELF);
+    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
+
+    let mut host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
+
+    let code_commitment = host
+        .code_commitment_async()
+        .await
+        .expect("SP1 code commitment should be created successfully");
 
     for filtered_block in &mut blocks[..3] {
+        println!("==");
+        println!("");
+
         let height = filtered_block.header().height();
         tracing::info!(
             "Requesting data for height {} and prev_state_root 0x{}",
@@ -106,9 +116,10 @@ async fn test_proof_generation() {
             ExecutionContext::Node,
         );
 
+        println!("PREV {}", prev_state_root);
         let data = StateTransitionWitness::<
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::StateRoot,
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::Witness,
+            <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot,
+            <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness,
             MockDaSpec,
         > {
             initial_state_root: prev_state_root,
@@ -121,15 +132,30 @@ async fn test_proof_generation() {
 
         let data = StateTransitionWitnessWithAddress {
             stf_witness: data,
-            prover_address: <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap(),
+            prover_address: prover_address.clone(),
         };
 
         host.add_hint(data);
 
         tracing::info!("Run prover without generating a proof for block {height}\n");
-        let _receipt = host
-            .run_without_proving()
+        let proof = host
+            .run_async(true)
+            .await
             .expect("Prover should run successfully");
+
+        let proof_public_data: StateTransitionPublicData<
+            <DefaultSpec as Spec>::Address,
+            MockDaSpec,
+            <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot,
+        > = SP1Verifier::verify_async(&proof, &code_commitment)
+            .await
+            .expect("SP1 proof verification should succeed");
+
+        assert_eq!(proof_public_data.initial_state_root, prev_state_root);
+        //assert_eq!(proof_public_data.final_state_root, result.state_root);
+        assert_eq!(proof_public_data.slot_hash, filtered_block.header().hash());
+        assert_eq!(proof_public_data.prover_address, prover_address);
+
         tracing::info!("==================================================\n");
 
         prev_state_root = result.state_root;

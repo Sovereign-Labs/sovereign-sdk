@@ -6,17 +6,17 @@
 use std::fmt;
 use std::fmt::Debug;
 
+#[cfg(not(target_os = "zkvm"))]
+#[cfg(feature = "native")]
+use crate::crypto::private_key::SP1PrivateKey;
 use anyhow::Error;
 use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
+use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, Proof, ZkVerifier};
 #[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::SP1ProofWithPublicValues;
-
-#[cfg(feature = "native")]
-use crate::crypto::private_key::SP1PrivateKey;
+use sp1_sdk::{SP1ProofWithPublicValues, SP1PublicValues};
 
 pub mod crypto;
 pub mod guest;
@@ -84,6 +84,39 @@ impl CryptoSpec for SP1CryptoSpec {
 pub struct SP1Verifier;
 
 #[cfg(not(target_os = "zkvm"))]
+fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<SP1ProofWithPublicValues, Error> {
+    match bincode::deserialize::<Proof<SP1ProofWithPublicValues, SP1PublicValues>>(serialized_proof)
+    {
+        Ok(Proof::Full(proof)) => {
+            println!("proof");
+            Ok(proof)
+        }
+        Ok(Proof::PublicData(_)) => todo!("x1"),
+        Err(_) => unimplemented!(),
+    }
+}
+
+#[cfg(not(target_os = "zkvm"))]
+impl SP1Verifier {
+    /// Verify a serialized SP1 proof using SP1's async prover client.
+    pub async fn verify_async<T: DeserializeOwned>(
+        serialized_proof: &[u8],
+        code_commitment: &SP1MethodId,
+    ) -> Result<T, anyhow::Error> {
+        println!("START XXX");
+        let proof = decode_sp1_proof(serialized_proof)?;
+        let prover = sp1_sdk::ProverClient::builder().cpu().build().await;
+        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
+
+        println!("START VERIFY");
+        sp1_sdk::Prover::verify(&prover, &proof, &verifying_key, None)?;
+
+        println!("END VERIFY");
+        Ok(bincode::deserialize(proof.public_values.as_slice())?)
+    }
+}
+
+#[cfg(not(target_os = "zkvm"))]
 impl ZkVerifier for SP1Verifier {
     type CodeCommitment = SP1MethodId;
     type CryptoSpec = SP1CryptoSpec;
@@ -93,7 +126,7 @@ impl ZkVerifier for SP1Verifier {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
+        let proof = decode_sp1_proof(serialized_proof)?;
 
         let prover = sp1_sdk::blocking::ProverClient::from_env();
         let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
