@@ -368,15 +368,15 @@ $ curl -Ss http://127.0.0.1:12346/modules/bank/tokens/token_1nyl0e0yweragfsatygt
 
 #### 6. Wait for aggregated proof to be available
 
+
 After all transactions are submitted, let's check that aggregated proofs are available. This might take some time, because proof generation can take time and aggregated proof usually consist of several blocks.
 
 
-```bash,test-ci
-$ ./../../target/debug/sov-cli node wait-for-aggregated-proof 
- 2025-01-23T11:22:35.402610Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-01-23T11:22:35.434135Z  INFO sov_cli::workflows::node: Subscribing for aggregated proofs timeout=120s
-2025-01-23T11:22:40.368366Z  INFO sov_cli::workflows::node: Aggregated proof received aggregated_proof=AggregatedProof { proof: "AAAAAAGLAQAAAAAAAAMAAAAAAAAAAQEBAQAAAAAAAAADAAAAAAAAAEhdYi6hLFLAP89xCVsbdfDdYwxF/WcFFzZGuIp+kaZW15HRe2qk3GxFnMa2Xuo0MGJo7NASojDOchgMtAoCdO1IXWIuoSxSwD/PcQlbG3Xw3WMMRf1nBRc2RriKfpGmVteR0XtqpNxsRZzGtl7qNDBiaOzQEqIwznIYDLQKAnTtwEGc5yzNex7lJXLa3zVI9FW1bv1QdAjVwddcSdTdLnbzj92WaWwpooMcl4rhSsyMSA4p2B1oOwUmM/xOuzFVUwunpBZJt+gXzHoMpgncYUhRoy6g2nn0J3Upj03dcxgzJdTBKEsCYGa+ZG26p+d6YCYTKcxA+Q8421V1spejjb0AAAAAAAAAAAMAAAAAAAAAAAAAAP6mrFuHURIPti//Z7VNLqxmrvMHx93h05TeoeAAAAAA/qasW4dREg+2L/9ntU0urGau8wfH3eHTlN6h4AAAAAD+pqxbh1ESD7Yv/2e1TS6sZq7zB8fd4dOU3qHg", type_: AggregatedProof }
+```bash,test-ci,bashtestmd:compare-output
+$ curl -fsS http://127.0.0.1:12346/ledger/aggregated-proofs/latest | jq -e -r 'if (.proof | type == "string" and length > 0) then "proof-not-empty" else error("proof is empty") end'
+proof-not-empty
 ```
+
 
 ## Disclaimer
 
