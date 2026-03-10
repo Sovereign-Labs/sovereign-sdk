@@ -1,3 +1,5 @@
+# 2025-03-10
+- #2554 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
 # 2025-03-05
 - #2554 More stabilization in demo-rollup EVM tests
 # 2026-03-05

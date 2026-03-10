@@ -108,11 +108,9 @@ impl ZkvmHost for Risc0Host<'static> {
         Ok(bincode::serialize(&proof)?)
     }
 
-    fn code_commitment(&self) -> <<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment{
-        Risc0MethodId(
-            risc0_zkvm::compute_image_id(self.elf)
-                .expect("Invalid ELF; could not compute image ID")
-                .into(),
-        )
+    fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
+        Ok(Risc0MethodId(
+            risc0_zkvm::compute_image_id(self.elf)?.into(),
+        ))
     }
 }
