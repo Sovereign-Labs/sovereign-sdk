@@ -8,7 +8,10 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash};
 
 use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
-use crate::preferred::db::{BatchToStore, DbError, InProgressBatch};
+use crate::{
+    preferred::db::{BatchToStore, DbError, InProgressBatch},
+    PreferredProofDataBytes,
+};
 
 #[derive(Debug)]
 pub struct RocksDbBackend {
@@ -139,12 +142,15 @@ impl DbBackend for RocksDbBackend {
         &mut self,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
     ) -> anyhow::Result<(), DbError> {
         self.db
             .put_async::<tables::CompletedBlobs>(
                 &sequence_number,
-                &StoredBlob::Proof { data, blob_id },
+                &StoredBlob::Proof {
+                    data: data.0,
+                    blob_id,
+                },
             )
             .await?;
         Ok(())
@@ -266,7 +272,7 @@ impl RocksDbBackend {
             }
             StoredBlob::Proof { data, blob_id } => ReadBlob::Proof {
                 sequence_number,
-                data,
+                data: PreferredProofDataBytes(data), // Note: This is the same type that we stored initially. See `add_proof_blob`.
                 blob_id,
             },
         })

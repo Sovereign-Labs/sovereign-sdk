@@ -216,7 +216,7 @@ where
     /// Can be called again with the same [`BlobInternalId`] to resume publishing.
     pub async fn publish_proof_blob(
         &mut self,
-        data: Arc<[u8]>,
+        data: Arc<[u8]>, // A serialized PreferredProofData
         id: BlobInternalId,
     ) -> anyhow::Result<()> {
         self.publish_blob_inner(

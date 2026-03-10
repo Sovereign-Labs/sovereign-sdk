@@ -123,5 +123,8 @@ pub(crate) fn serialize_proof<T: Serialize>(agg_proof: T) -> Vec<u8> {
         raw_aggregated_proof: proof,
     };
 
-    borsh::to_vec(&serialize_proof_blob_with_metadata::<S>(serialized_proof).unwrap()).unwrap()
+    serialize_proof_blob_with_metadata::<S>(serialized_proof)
+        .unwrap()
+        .0
+        .to_vec()
 }

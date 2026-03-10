@@ -2,9 +2,9 @@
 mod tests;
 
 use crate::preferred::db::FailedOperation;
+use crate::PreferredProofDataBytes;
 use anyhow::{anyhow, Result};
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 use std::time::Duration;
 
 use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
@@ -155,7 +155,7 @@ impl PostgresBackend {
             StoredBlob::Proof { data, blob_id } => Ok(ReadBlob::Proof {
                 sequence_number,
                 blob_id,
-                data,
+                data: PreferredProofDataBytes(data), // Note: This is the same type that we stored initially. See `add_proof_blob`.
             }),
         }
     }
@@ -606,9 +606,12 @@ impl DbBackend for PostgresBackend {
         &mut self,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
     ) -> Result<(), DbError> {
-        let blob_data = borsh::to_vec(&StoredBlob::Proof { data, blob_id })?;
+        let blob_data = borsh::to_vec(&StoredBlob::Proof {
+            data: data.0,
+            blob_id,
+        })?;
 
         // Compound CTE statement to avoid multiple roundtrips
         let result = run_with_retries!(

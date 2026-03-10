@@ -1,5 +1,4 @@
 use std::num::NonZero;
-use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
 use sov_blob_sender::BlobInternalId;
@@ -16,7 +15,8 @@ use crate::preferred::db::{BlobsCache, ReadBatch};
 use crate::preferred::{
     exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
 };
-use crate::SlotNumber;
+use crate::preferred::{PreferredBlobToReplay, PreferredProofToReplay};
+use crate::{PreferredProofDataBytes, SlotNumber};
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 
@@ -126,7 +126,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     pub(crate) async fn publish_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
         sequence_number: SequenceNumber,
     ) {
         self.cache
@@ -209,6 +209,14 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .map(|b| b.into())
     }
 
+    /// Fetch the in-progress batch from the database.
+    pub(crate) fn fetch_proofs_for_replay(
+        &self,
+        sequence_number: SequenceNumber,
+    ) -> Vec<PreferredProofToReplay> {
+        self.cache.proofs_for_replay(sequence_number)
+    }
+
     pub(crate) fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
         self.cache.subscribe_to_events(sender);
     }
@@ -252,7 +260,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         &self,
         after_and_including: SequenceNumber,
         include_in_progress_batch: bool,
-    ) -> Vec<PreferredBatchToReplay> {
+    ) -> Vec<PreferredBlobToReplay> {
         let blobs_to_apply = self
             .cache
             .all_completed_blobs_greater_than_or_equal_to(after_and_including);
@@ -280,26 +288,25 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
 
         blobs_to_apply
             .into_iter()
-            .filter_map(|blob| match blob {
-                ReadBlob::Batch(batch) => Some(PreferredBatchToReplay {
+            .map(|blob| match blob {
+                ReadBlob::Batch(batch) => PreferredBlobToReplay::Batch(PreferredBatchToReplay {
                     is_in_progress: false,
                     visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
                     batch: batch.into_with_cached_tx_hashes(),
                 }),
-                // TODO(https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2063): Process proofs.
-                // Note: once we start processing proofs in addition to batches,
-                // we gotta make sure to order everything by sequence number as
-                // proofs can have a sequence number that's greater than the
-                // in-progress batch.
-                _ => {
-                    tracing::trace!(
-                        sequence_number = %blob.sequence_number(),
-                        "Ignoring proof blob"
-                    );
-                    None
+                ReadBlob::Proof {
+                    sequence_number,
+                    data,
+                    ..
+                } => {
+                    tracing::trace!(sequence_number, "Processing proof blob");
+                    PreferredBlobToReplay::Proof(PreferredProofToReplay {
+                        sequence_number,
+                        data,
+                    })
                 }
             })
-            .chain(maybe_in_progress_batch)
+            .chain(maybe_in_progress_batch.map(PreferredBlobToReplay::Batch))
             .collect::<Vec<_>>()
     }
 
@@ -334,7 +341,7 @@ where
         forced_txs: Vec<AcceptedTx<Confirmation<S, Rt>>>,
     },
     /// Publish a proof blob.
-    PublishProofBlob(BlobInternalId, Arc<[u8]>, SequenceNumber),
+    PublishProofBlob(BlobInternalId, PreferredProofDataBytes, SequenceNumber),
     /// Insert an accepted transaction into the database and send out the confirmation
     AcceptedTx(AcceptedTxEventContents<S, Rt>),
     /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery

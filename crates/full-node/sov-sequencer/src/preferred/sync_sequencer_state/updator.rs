@@ -11,6 +11,8 @@ use crate::preferred::DbEvent;
 use crate::preferred::FetchBatches;
 use crate::preferred::PreferredSeqOperation;
 use crate::preferred::ProcessFinalCatchupData;
+use crate::PreferredProofDataBytes;
+use crate::SerializedProofWithDetailsBytes;
 use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
@@ -222,7 +224,7 @@ where
     pub(crate) async fn proof_blob_msg(
         &self,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: SerializedProofWithDetailsBytes,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
         self.send(Message::ProofBlob {
@@ -320,6 +322,24 @@ where
         self.send(Message::ReplicaCloseCurrentBatch {
             resp,
             batch_from_master,
+            reason,
+        })
+        .await?;
+        self.recv(recv).await??;
+        Ok(())
+    }
+
+    pub(crate) async fn do_new_proof_msg_replica(
+        &self,
+        sequence_number: u64,
+        proof_bytes: PreferredProofDataBytes,
+        reason: &'static str,
+    ) -> Result<(), ReplicaError<S>> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::ReplicaNewProof {
+            resp,
+            sequence_number,
+            proof_bytes,
             reason,
         })
         .await?;

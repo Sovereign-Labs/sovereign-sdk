@@ -1,6 +1,6 @@
 use super::*;
 use sov_modules_api::VisibleSlotNumber;
-use std::num::NonZero;
+use std::{num::NonZero, sync::Arc};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_operations_leader() {
@@ -44,7 +44,11 @@ async fn test_db_operations_leader() {
         .unwrap();
 
     db.as_mut()
-        .add_proof_blob(sequence_number + 1, 3, Arc::new(*b"proof_data"))
+        .add_proof_blob(
+            sequence_number + 1,
+            3,
+            PreferredProofDataBytes(Arc::new(*b"proof_data")),
+        )
         .await
         .unwrap();
 
@@ -94,7 +98,7 @@ async fn test_db_operations_leader() {
         sequence_number + 1
     );
     assert_eq!(
-        &**proof_data,
+        &*proof_data.0,
         b"proof_data".as_slice(),
         "Proof data should be correct"
     );
@@ -162,7 +166,11 @@ async fn test_db_operations_replica() {
 
     let err = db_replica
         .as_mut()
-        .add_proof_blob(sequence_number, 3, Arc::new([1, 2, 3]))
+        .add_proof_blob(
+            sequence_number,
+            3,
+            PreferredProofDataBytes(Arc::new([1, 2, 3])),
+        )
         .await
         .unwrap_err();
 

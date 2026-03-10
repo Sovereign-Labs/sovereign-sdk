@@ -14,9 +14,12 @@ use crate::preferred::AcceptedTx;
 use crate::preferred::BatchCreationError;
 use crate::preferred::Confirmation;
 use crate::preferred::DbEvent;
+use crate::preferred::PreferredProofToReplay;
 use crate::preferred::PreferredSeqOperation;
 use crate::preferred::RollupBlockExecutorConfig;
 use crate::preferred::TxResultWriter;
+use crate::PreferredProofDataBytes;
+use crate::SerializedProofWithDetailsBytes;
 use crate::{SequencerNotReadyDetails, TxHash};
 pub(crate) use inner::*;
 use sov_blob_sender::BlobInternalId;
@@ -101,7 +104,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     },
     ProofBlob {
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: SerializedProofWithDetailsBytes,
         reason: &'static str,
     },
     TriggerBatchProductionIfConvenient {
@@ -125,6 +128,12 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     ReplicaCloseCurrentBatch {
         resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
         batch_from_master: BatchToStore,
+        reason: &'static str,
+    },
+    ReplicaNewProof {
+        resp: oneshot::Sender<Result<(), ReplicaError<S>>>,
+        sequence_number: u64,
+        proof_bytes: PreferredProofDataBytes,
         reason: &'static str,
     },
     GetSequencerRole {
@@ -252,6 +261,7 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) transactions_count: usize,
     pub(crate) batch_is_in_progress: bool,
     pub(crate) sequence_number_of_open_batch: Option<SequenceNumber>,
+    pub(crate) unprocessed_proofs: Vec<PreferredProofToReplay>,
 }
 
 #[derive(Debug)]

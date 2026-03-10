@@ -59,7 +59,7 @@ where
         sequencer_rollup_address: &S::Address,
         sequencer_bond: Amount,
         gas_price: <S::Gas as Gas>::Price,
-        raw_proof: Vec<u8>,
+        raw_proof: &[u8],
         checkpoint: StateCheckpoint<S>,
     ) -> (
         ProofReceipt<

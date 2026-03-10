@@ -5,6 +5,8 @@ use std::sync::Arc;
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
+use borsh::BorshDeserialize;
+use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::{
     get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
     FatalError, RollupHeight, TransactionAuthenticator,
@@ -37,8 +39,8 @@ use super::{
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
-use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
+use crate::preferred::{exit_rollup, PreferredProofToReplay};
 use crate::SequencerConfig;
 
 pub(crate) struct AcceptedTxWithBudgetInfo<S, Rt>
@@ -125,6 +127,7 @@ pub struct StartBlockData<S: Spec> {
     pub node_state_root: <S::Storage as Storage>::Root,
     pub minimum_profit_per_tx: u128,
     pub is_responsible_for_gating_admins: bool,
+    pub proofs_to_replay: Vec<PreferredProofToReplay>, // The proofs to replay before starting the batch
 }
 
 #[derive(Clone)]
@@ -402,6 +405,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub async fn replay_batch(
         &mut self,
         batch: &PreferredBatchToReplay,
+        proofs: Vec<PreferredProofToReplay>,
         node_state_root: &<S::Storage as Storage>::Root,
     ) -> anyhow::Result<()> {
         self.start_rollup_block_for_replay(
@@ -409,6 +413,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             batch.batch.inner.visible_slots_to_advance,
             node_state_root,
             batch.batch.inner.data.len(),
+            proofs,
         )
         .await;
 
@@ -448,6 +453,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         // fallible, so it's convenient to front-load the error-checking.
         node_state_root: &<S::Storage as Storage>::Root,
         num_txs: usize,
+        proofs_to_replay: Vec<PreferredProofToReplay>, // The proofs to replay before starting the batch
     ) {
         assert!(
             self.rollup_block_task_state.is_none(),
@@ -474,6 +480,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             minimum_profit_per_tx: 0,
             // During replay, we don't need to enforce admin configs - and we don't want to reject any previously accepted transactions if the config changed.
             is_responsible_for_gating_admins: false,
+            proofs_to_replay,
         };
 
         self.start_rollup_block(start_block_data).await;
@@ -569,6 +576,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             visible_increase,
             minimum_profit_per_tx,
             is_responsible_for_gating_admins,
+            proofs_to_replay,
             ..
         } = start_block_data;
 
@@ -607,6 +615,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 sequencer_da_address: self.da_address,
                 executor_context,
                 is_responsible_for_gating_admins,
+                proofs_to_replay,
             };
 
             move || rollup_block_task_body::<S, Rt>(ctx)
@@ -869,6 +878,7 @@ struct RollupBlockTaskContext<S: Spec> {
     /// Whether this instance of the executor is responsible for gating admins.
     /// This is not true for replicas or when replaying txs that have already been accepted
     is_responsible_for_gating_admins: bool,
+    proofs_to_replay: Vec<PreferredProofToReplay>,
 }
 
 fn rollup_block_task_body<S, Rt>(ctx: RollupBlockTaskContext<S>) -> BlockExecutionOutput<S>
@@ -892,6 +902,7 @@ where
         sequencer_da_address,
         executor_context,
         is_responsible_for_gating_admins,
+        proofs_to_replay,
     } = ctx;
 
     let _span = match executor_context {
@@ -921,6 +932,7 @@ where
     let next_gas_price = kernel
         .base_fee_per_gas(&mut accessor)
         .unwrap_or(S::initial_base_fee_per_gas());
+    // Note that we need to escrow gas for each batch and proof. The escrow amount is `max_tx_check_costs` in each case.
     let needed_gas_escrow = S::max_tx_check_costs()
         .checked_value(next_gas_price)
         .expect("Gas price overflow! This is a bug, please report it.");
@@ -963,8 +975,23 @@ where
 
         tracing::debug!(count = %non_preferred_blobs.len(), "Extracted non-preferred blobs");
 
-        let mut selected_blobs = vec![preferred_blob];
-        selected_blobs.extend(non_preferred_blobs);
+        let selected_blobs = proofs_to_replay
+            .into_iter()
+            .map(|p| {
+                kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+                let proof_with_sequence_number = PreferredProofData::try_from_slice(&p.data.0).expect("Failed to deserialize trusted proof data within the sequencer. This is a bug, please report it.");
+                SelectedBlob {
+                blob_data: BlobDataWithId::Proof {
+                    proof: proof_with_sequence_number.data.into(),
+                    id: [0u8; 32], // Following the preferred batch logic, we use the zero hash for proofs whose blob ID is unknown because they haven't been published yet
+                    sequencer_address: sequencer_rollup_address,
+                },
+                reserved_gas_tokens: Some(needed_gas_escrow),
+                sender: sequencer_da_address,
+            }})
+            .chain(std::iter::once(preferred_blob))
+            .chain(non_preferred_blobs)
+            .collect::<Vec<_>>();
 
         BlobSelectorOutput {
             selected_blobs,

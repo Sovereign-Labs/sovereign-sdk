@@ -87,7 +87,8 @@ use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;
 use crate::{
-    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxStatus, TxStatusManager,
+    PreferredProofDataBytes, ProofBlobSender, SequencerConfig, SequencerNotReadyDetails,
+    SerializedProofWithDetailsBytes, TxStatus, TxStatusManager,
 };
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
@@ -889,6 +890,27 @@ pub(crate) struct PreferredBatchToReplay {
     batch: WithCachedTxHashes<PreferredBatchData>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PreferredProofToReplay {
+    sequence_number: SequenceNumber,
+    data: PreferredProofDataBytes,
+}
+
+#[derive(Debug)]
+pub(crate) enum PreferredBlobToReplay {
+    Batch(PreferredBatchToReplay),
+    Proof(PreferredProofToReplay),
+}
+
+impl PreferredBlobToReplay {
+    pub fn num_txs(&self) -> usize {
+        match self {
+            PreferredBlobToReplay::Batch(b) => b.batch.inner.data.len(),
+            PreferredBlobToReplay::Proof(_) => 0,
+        }
+    }
+}
+
 #[async_trait]
 impl<S, Rt, Da> ProofBlobSender for PreferredSequencer<S, Rt, Da>
 where
@@ -896,7 +918,10 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    async fn produce_and_publish_proof_blob(&self, proof_data: Arc<[u8]>) -> anyhow::Result<()> {
+    async fn produce_and_publish_proof_blob(
+        &self,
+        proof_data: SerializedProofWithDetailsBytes,
+    ) -> anyhow::Result<()> {
         let blob_id = new_blob_id();
         self.synchronized_state_updator
             .proof_blob_msg(

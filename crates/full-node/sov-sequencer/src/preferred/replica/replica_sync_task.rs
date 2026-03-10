@@ -23,7 +23,7 @@ pub(crate) enum DBDataRejected {
 
 #[async_trait]
 pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
-    async fn on_db_event(&self, batch: DbData) -> Result<(), DBDataRejected>;
+    async fn on_db_event(&self, data: DbData) -> Result<(), DBDataRejected>;
 }
 
 pub(crate) struct ReplicaTaskHandles {
@@ -111,7 +111,7 @@ impl ReplicaSyncTask {
                     }
 
                     Err(DBDataRejected::ExecutorAhead(executor_seq_nr)) => {
-                        // The executor is ahead of the db drain the queue and wait until we catch up.
+                        // The executor is ahead of the db. Drain the queue and wait until we catch up.
                         loop {
                             let fut =
                                 future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
@@ -126,7 +126,10 @@ impl ReplicaSyncTask {
                             );
 
                             if new_data.sequence_number() == executor_seq_nr {
-                                assert!(matches!(new_data, DbData::BatchStart(_)));
+                                assert!(
+                                    matches!(new_data, DbData::BatchStart(_))
+                                        || matches!(new_data, DbData::NewProof(_, _))
+                                );
                                 data = new_data;
                                 continue 'inner;
                             }

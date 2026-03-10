@@ -6,7 +6,6 @@ use crate::preferred::block_executor::{
 };
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
-use crate::preferred::comfortable_gas_limit;
 use crate::preferred::db::{latest_finalized_sequence_number, SequencerRole};
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::rate_limiter::ResourceUsed;
@@ -15,13 +14,17 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
+use crate::preferred::{comfortable_gas_limit, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
-    Confirmation, PreferredBatchToReplay, PreferredSequencerConfig,
-    PreferredSequencerFetchBatchesToReplayMetrics, TxResultWriter,
+    Confirmation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
+    TxResultWriter,
 };
-use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
+use crate::{
+    PreferredProofDataBytes, SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash,
+};
+use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::Gas;
@@ -190,9 +193,6 @@ where
         track_sequence_number(self.next_unassigned_sequence_number);
     }
 
-    // pub(crate) fn current_sequence_number(&self) -> SequenceNumber {
-    //     self.sequence_number_of_next_blob.checked_sub(1).expect("Sequence number underflow. Cannot get sequence number if no batch has ever been active. This is a bug, please report")
-
     /// Assign a sequence number to the current open batch.
     pub(crate) fn assign_sequence_number_to_batch(&mut self) -> SequenceNumber {
         let sequence_number = self.take_sequence_number_internal();
@@ -292,12 +292,12 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    pub(crate) fn completed_batches_to_replay(
+    pub(crate) fn completed_blobs_to_replay(
         &self,
         sequence_number: SequenceNumber,
         include_in_progress_batch: bool,
     ) -> (
-        Vec<PreferredBatchToReplay>,
+        Vec<PreferredBlobToReplay>,
         PreferredSequencerFetchBatchesToReplayMetrics,
     )
     where
@@ -312,7 +312,7 @@ where
         let metrics = PreferredSequencerFetchBatchesToReplayMetrics {
             duration,
             num_batches: result.len() as u64,
-            num_transactions: result.iter().map(|b| b.batch.inner.data.len()).sum(),
+            num_transactions: result.iter().map(|b| b.num_txs()).sum(),
         };
         (result, metrics)
     }
@@ -588,6 +588,9 @@ where
         // DB operations handled by replica-aware db implementation
         let sequence_number = self.assign_sequence_number_to_batch();
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+        let proofs_to_replay = self
+            .executor_events_sender
+            .fetch_proofs_for_replay(sequence_number);
 
         let start_block_data = StartBlockData {
             sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
@@ -595,6 +598,7 @@ where
             node_state_root: node_state_root.clone(),
             minimum_profit_per_tx: min_profit_per_tx,
             is_responsible_for_gating_admins: !self.is_replica_role(),
+            proofs_to_replay,
         };
 
         let old_checkpoint = self
@@ -748,6 +752,19 @@ where
         self.sequence_number_of_open_batch = None;
         self.executor_events_sender
             .close_batch(checkpoint, forced_txs)
+            .await;
+    }
+
+    pub(crate) async fn process_proof(
+        &mut self,
+        blob_id: BlobInternalId,
+        proof_bytes: PreferredProofDataBytes,
+        sequence_number: SequenceNumber,
+    ) {
+        // Put the proof blob into the sequencer cache, from which it will get pulled out and processed when the next batch is created.
+        // The side effects task also persists it to postgres.
+        self.executor_events_sender
+            .publish_proof_blob(blob_id, proof_bytes, sequence_number)
             .await;
     }
 }
