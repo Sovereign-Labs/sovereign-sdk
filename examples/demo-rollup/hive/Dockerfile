@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.93-bookworm AS builder
 ARG HIVE_CHAIN_ID=3503995874084926
 
 ENV DEBIAN_FRONTEND=noninteractive \

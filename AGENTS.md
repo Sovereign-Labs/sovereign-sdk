@@ -63,7 +63,7 @@ Always use `SKIP_GUEST_BUILD=1` unless performing specific ZK related changes, b
 3. **Adapters** (`crates/adapters/`) - DA and zkVM integrations
 4. **Full Node** (`crates/full-node/`) - Node infrastructure
 
-Delegate to subagents & CLAUDE.md in those directories for more details.
+Delegate to subagents & AGENTS.md in those directories for more details.
 
 ### Bindings
 
@@ -115,12 +115,6 @@ This codebase will outlive you. Avoid shortcuts that create long-term debt.
 
 ## Code Review
 
- - Base branch for this project is `dev`.
- - Focus on business logic, correctness and code quality which has the highest business impact. Ignore untracked files.
- - Ignore uncommitted changes in Cargo.toml, if it removes `default-members`. This is expected pattern with `cargo switcheroo`
-
-## Toolchain
-
-- Rust 1.88.0
-- cargo-nextest for testing
-- risc0 and SP1 toolchains for ZK proofs
+- Base branch for this project is `dev`.
+- Focus on business logic, correctness and code quality which has the highest business impact. Ignore untracked files.
+- Ignore uncommitted changes in Cargo.toml, if it removes `default-members`. This is expected pattern with `cargo switcheroo`
