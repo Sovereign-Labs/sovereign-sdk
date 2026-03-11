@@ -11,13 +11,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "zkvm"))]
-use sov_rollup_interface::zk::Proof;
 use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
-#[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::blocking::{Prover, ProverClient};
-#[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::{SP1ProofWithPublicValues, SP1PublicValues, SP1VerifyingKey};
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -98,10 +92,10 @@ impl ZkVerifier for SP1Verifier {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         let proof = decode_sp1_proof(serialized_proof)?;
-        let prover = ProverClient::builder().cpu().build();
-        let verifying_key: SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
+        let prover = sp1_sdk::blocking::ProverClient::builder().cpu().build();
+        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
 
-        Prover::verify(&prover, &proof, &verifying_key, None)?;
+        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
@@ -142,12 +136,14 @@ impl ZkVerifier for SP1Verifier {
 }
 
 #[cfg(not(target_os = "zkvm"))]
-fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<SP1ProofWithPublicValues, Error> {
-    match bincode::deserialize::<Proof<SP1ProofWithPublicValues, SP1PublicValues>>(
-        serialized_proof,
-    )? {
-        Proof::Full(proof) => Ok(proof),
-        Proof::PublicData(_) => anyhow::bail!("SP1Verifier supports only full proofs"),
+fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
+    match bincode::deserialize::<
+        sov_rollup_interface::zk::Proof<sp1_sdk::SP1ProofWithPublicValues, sp1_sdk::SP1PublicValues>,
+    >(serialized_proof)? {
+        sov_rollup_interface::zk::Proof::Full(proof) => Ok(proof),
+        sov_rollup_interface::zk::Proof::PublicData(_) => {
+            anyhow::bail!("SP1Verifier supports only full proofs")
+        }
     }
 }
 
