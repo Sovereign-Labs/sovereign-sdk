@@ -165,22 +165,16 @@ where
     // This will also be moved into the sequencer, but for now is kept here.
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
-            if matches!(
-                &e,
-                AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _)
-            ) {
-                return RpcInvalidTransactionError::FeeCapTooLow.into();
-            }
-            if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
-                &e
-            {
-                if err_msg.contains("Only EIP1559") {
-                    return rpc_tx_rejected(format!("transaction type not supported: {err_msg}"));
+        let _ =
+            <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| match &e {
+                AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
+                    RpcInvalidTransactionError::FeeCapTooLow.into()
                 }
-            };
-            rpc_invalid_params(format!("Authentication failed: {e}"))
-        })?;
+                AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) => {
+                    rpc_tx_rejected(format!("transaction type not supported: {err_msg}"))
+                }
+                _ => rpc_invalid_params(format!("Authentication failed: {e}")),
+            })?;
         Ok(())
     }
 
