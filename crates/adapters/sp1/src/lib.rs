@@ -138,8 +138,12 @@ impl ZkVerifier for SP1Verifier {
 #[cfg(not(target_os = "zkvm"))]
 fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
     match bincode::deserialize::<
-        sov_rollup_interface::zk::Proof<sp1_sdk::SP1ProofWithPublicValues, sp1_sdk::SP1PublicValues>,
-    >(serialized_proof)? {
+        sov_rollup_interface::zk::Proof<
+            sp1_sdk::SP1ProofWithPublicValues,
+            sp1_sdk::SP1PublicValues,
+        >,
+    >(serialized_proof)?
+    {
         sov_rollup_interface::zk::Proof::Full(proof) => Ok(proof),
         sov_rollup_interface::zk::Proof::PublicData(_) => {
             anyhow::bail!("SP1Verifier supports only full proofs")
