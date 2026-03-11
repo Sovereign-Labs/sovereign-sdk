@@ -29,7 +29,7 @@ fn empty_namespace_multicandidate_is_not_verified_because_divergence_from_spec()
         err.to_string().contains("MissingBlobs"),
         "MissingBlobs should be in error={}",
         err
-    )
+    );
 }
 
 #[test]
