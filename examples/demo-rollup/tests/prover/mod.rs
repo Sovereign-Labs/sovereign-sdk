@@ -129,7 +129,7 @@ async fn test_proof_generation() {
 
         let data: ProofInput = StateTransitionWitnessWithAddress {
             stf_witness: data,
-            prover_address: prover_address.clone(),
+            prover_address,
         };
 
         tracing::info!("Run prover without generating a proof for block {height}\n");
