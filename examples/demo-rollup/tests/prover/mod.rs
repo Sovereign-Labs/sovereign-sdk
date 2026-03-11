@@ -1,14 +1,18 @@
+use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
+use borsh::BorshDeserialize;
+use borsh::BorshSerialize;
 use demo_stf::genesis_config::create_genesis_config;
 use demo_stf::runtime::Runtime;
+use serde::{Deserialize, Serialize};
 use sov_db::schema::SchemaBatch;
 use sov_db::storage_manager::NativeStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
-use sov_modules_api::{OperatingMode, SlotData, Spec, ZkVerifier};
+use sov_modules_api::{DaSpec, OperatingMode, SlotData, Spec, ZkVerifier};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
@@ -50,19 +54,44 @@ type ProofInput = StateTransitionWitnessWithAddress<
     MockDaSpec,
 >;
 
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "TODO"]
+#[derive(Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+struct BlockHeaderWithProof<Da: DaSpec> {
+    da_block_header: Da::BlockHeader,
+    proof: Vec<u8>,
+}
 
-async fn save_proofs() {}
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
+async fn test_save_proofs() {
+    let host = TestHost::new().await;
+    let proof_data = generate_proofs(true, &host).await;
+    let proofs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("test_data")
+        .join("tmp");
+
+    std::fs::create_dir_all(&proofs_dir).unwrap();
+
+    for (i, data) in proof_data.into_iter().enumerate() {
+        let proof_public_data = host.verify(data.proof.clone()).await;
+        assert_eq!(proof_public_data.slot_hash, data.da_block_header.hash());
+        let json = serde_json::to_string(&data).unwrap();
+        std::fs::write(proofs_dir.join(format!("inner_{i}_proof.json")), &json).unwrap();
+    }
+}
 
 /// This test reproduces the proof generation process for the rollup used in benchmarks.
 #[tokio::test(flavor = "multi_thread")]
 #[cfg_attr(skip_guest_build, ignore)]
 async fn test_proof_generation() {
-    let _ = generate_proofs(false).await;
+    let host = TestHost::new().await;
+    let _ = generate_proofs(false, &host).await;
 }
 
-async fn generate_proofs(with_proof: bool) -> Vec<Vec<u8>> {
+async fn generate_proofs(
+    with_proof: bool,
+    host: &TestHost,
+) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     tracing::info!("Creating temp dir at {}", temp_dir.path().display());
     let da_service = MockDaService::new(MockAddress::default());
@@ -100,8 +129,6 @@ async fn generate_proofs(with_proof: bool) -> Vec<Vec<u8>> {
         .expect("Failed to get DA blocks");
 
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
-
-    let host = TestHost::new().await;
 
     let mut proofs = Vec::new();
 
@@ -146,7 +173,10 @@ async fn generate_proofs(with_proof: bool) -> Vec<Vec<u8>> {
         tracing::info!("Run prover without generating a proof for block {height}\n");
 
         let proof = host.run(data, with_proof).await;
-        proofs.push(proof);
+        proofs.push(BlockHeaderWithProof {
+            da_block_header: filtered_block.header().clone(),
+            proof,
+        });
 
         prev_state_root = result.state_root;
         storage_manager
