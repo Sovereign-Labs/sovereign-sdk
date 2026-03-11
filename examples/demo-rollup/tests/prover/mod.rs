@@ -170,8 +170,6 @@ async fn generate_proofs(
             prover_address,
         };
 
-        tracing::info!("Run prover without generating a proof for block {height}\n");
-
         let proof = host.run(data, with_proof).await;
         proofs.push(BlockHeaderWithProof {
             da_block_header: filtered_block.header().clone(),
