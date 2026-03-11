@@ -15,19 +15,19 @@ fn load_elf(path: &str) -> &'static [u8] {
 // but because we don't include the guest ELFs in the GitHub build, they may potentially not exist.
 lazy_static! {
     pub static ref SP1_GUEST_MOCK_ELF: &'static [u8] = load_elf(&format!(
-        "{}/guest-mock/elf/riscv64im-succinct-zkvm-elf",
+        "{}/guest-mock/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-demo-prover-guest-mock-sp1",
         env!("CARGO_MANIFEST_DIR")
     ));
     pub static ref SP1_GUEST_CELESTIA_ELF: &'static [u8] = load_elf(&format!(
-        "{}/guest-celestia/elf/riscv64im-succinct-zkvm-elf",
+        "{}/guest-celestia/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-demo-prover-guest-celestia-sp1",
         env!("CARGO_MANIFEST_DIR")
     ));
     pub static ref SP1_GUEST_MOCK_NOMT_ELF: &'static [u8] = load_elf(&format!(
-        "{}/guest-mock-nomt/elf/riscv64im-succinct-zkvm-elf",
+        "{}/guest-mock-nomt/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-demo-prover-guest-mock-nomt-sp1",
         env!("CARGO_MANIFEST_DIR")
     ));
     pub static ref SP1_GUEST_CELESTIA_NOMT_ELF: &'static [u8] = load_elf(&format!(
-        "{}/guest-celestia-nomt/elf/riscv64im-succinct-zkvm-elf",
+        "{}/guest-celestia-nomt/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-demo-prover-guest-celestia-nomt-sp1",
         env!("CARGO_MANIFEST_DIR")
     ));
 }
