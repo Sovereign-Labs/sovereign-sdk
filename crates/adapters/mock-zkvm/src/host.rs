@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 
-use serde::Serialize;
-
 use crate::notifier::NotificationManager;
 use crate::{Empty, Inner, MockCodeCommitment, MockZkGuest, Proof};
+use serde::Serialize;
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
@@ -65,8 +64,8 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         self.committed_data.push_back(data);
     }
 
-    fn code_commitment(&self) -> <<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment{
-        MockCodeCommitment::default()
+    fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
+        Ok(MockCodeCommitment::default())
     }
 
     fn run(&mut self, _with_proof: bool) -> anyhow::Result<Vec<u8>> {
