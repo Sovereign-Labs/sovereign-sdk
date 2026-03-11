@@ -151,6 +151,8 @@ async fn test_proof_generation() {
     }
 }
 
+// The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
+// To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
 struct TestHost {
     host: SP1Host<'static>,
     code_commitment: SP1MethodId,
