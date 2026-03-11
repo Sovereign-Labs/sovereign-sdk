@@ -50,10 +50,19 @@ type ProofInput = StateTransitionWitnessWithAddress<
     MockDaSpec,
 >;
 
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "TODO"]
+
+async fn save_proofs() {}
+
 /// This test reproduces the proof generation process for the rollup used in benchmarks.
 #[tokio::test(flavor = "multi_thread")]
 #[cfg_attr(skip_guest_build, ignore)]
 async fn test_proof_generation() {
+    let _ = generate_proofs(false).await;
+}
+
+async fn generate_proofs(with_proof: bool) -> Vec<Vec<u8>> {
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     tracing::info!("Creating temp dir at {}", temp_dir.path().display());
     let da_service = MockDaService::new(MockAddress::default());
@@ -93,6 +102,8 @@ async fn test_proof_generation() {
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
 
     let host = TestHost::new().await;
+
+    let mut proofs = Vec::new();
 
     for filtered_block in &mut blocks[..3] {
         let height = filtered_block.header().height();
@@ -134,7 +145,8 @@ async fn test_proof_generation() {
 
         tracing::info!("Run prover without generating a proof for block {height}\n");
 
-        let _proof = host.run(data, false).await;
+        let proof = host.run(data, with_proof).await;
+        proofs.push(proof);
 
         prev_state_root = result.state_root;
         storage_manager
@@ -145,6 +157,8 @@ async fn test_proof_generation() {
             )
             .unwrap();
     }
+
+    proofs
 }
 
 // The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
