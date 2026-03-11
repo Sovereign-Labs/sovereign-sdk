@@ -8,17 +8,17 @@ use sov_db::storage_manager::NativeStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
-use sov_modules_api::{OperatingMode, SlotData, Spec};
+use sov_modules_api::{OperatingMode, SlotData, Spec, ZkVerifier};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{
-    StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
+    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
 };
+use sov_sp1_adapter::host::SP1Host;
+use sov_sp1_adapter::{SP1MethodId, SP1Verifier, SP1};
 use sov_state::ProverStorage;
 use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::TestStorageSpec;
@@ -29,7 +29,7 @@ use crate::test_helpers::test_genesis_paths;
 
 type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
-    sov_risc0_adapter::Risc0,
+    sov_sp1_adapter::SP1,
     sov_mock_zkvm::MockZkvm,
     demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
@@ -38,7 +38,17 @@ type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
 
 mod datagen;
 
-type TestSTF<'a> = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
+type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
+type ProofStateRoot = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
+type ProofWitness = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness;
+type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
+
+type ProofInput = StateTransitionWitnessWithAddress<
+    <DefaultSpec as Spec>::Address,
+    ProofStateRoot,
+    ProofWitness,
+    MockDaSpec,
+>;
 
 /// This test reproduces the proof generation process for the rollup used in benchmarks.
 #[tokio::test(flavor = "multi_thread")]
@@ -80,7 +90,9 @@ async fn test_proof_generation() {
         .await
         .expect("Failed to get DA blocks");
 
-    let mut host = Risc0Host::new(risc0::MOCK_DA_ELF);
+    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
+
+    let host = TestHost::new().await;
 
     for filtered_block in &mut blocks[..3] {
         let height = filtered_block.header().height();
@@ -106,11 +118,7 @@ async fn test_proof_generation() {
             ExecutionContext::Node,
         );
 
-        let data = StateTransitionWitness::<
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::StateRoot,
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::Witness,
-            MockDaSpec,
-        > {
+        let data = StfWitness {
             initial_state_root: prev_state_root,
             da_block_header: filtered_block.header().clone(),
             relevant_proofs,
@@ -119,18 +127,14 @@ async fn test_proof_generation() {
             final_state_root: result.state_root,
         };
 
-        let data = StateTransitionWitnessWithAddress {
+        let data: ProofInput = StateTransitionWitnessWithAddress {
             stf_witness: data,
-            prover_address: <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap(),
+            prover_address,
         };
 
-        host.add_hint(data);
-
         tracing::info!("Run prover without generating a proof for block {height}\n");
-        let _receipt = host
-            .run_without_proving()
-            .expect("Prover should run successfully");
-        tracing::info!("==================================================\n");
+
+        let _proof = host.run(data, false).await;
 
         prev_state_root = result.state_root;
         storage_manager
@@ -140,5 +144,56 @@ async fn test_proof_generation() {
                 SchemaBatch::new(),
             )
             .unwrap();
+    }
+}
+
+// The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
+// To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
+struct TestHost {
+    host: SP1Host<'static>,
+    code_commitment: SP1MethodId,
+}
+
+impl TestHost {
+    async fn new() -> Self {
+        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
+        let host_clone = host.clone();
+        let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
+            host_clone
+                .code_commitment()
+                .expect("SP1 code commitment should be created successfully")
+        })
+        .await
+        .unwrap();
+
+        Self {
+            host,
+            code_commitment,
+        }
+    }
+
+    async fn run(&self, data: ProofInput, with_proof: bool) -> Vec<u8> {
+        let mut host = self.host.clone();
+        tokio::task::spawn_blocking(move || -> Vec<u8> {
+            host.add_hint(data);
+            host.run(with_proof)
+                .expect("Prover should run successfully")
+        })
+        .await
+        .unwrap()
+    }
+
+    #[allow(dead_code)]
+    async fn verify(
+        &self,
+        proof: Vec<u8>,
+    ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
+        let code_commitment = self.code_commitment.clone();
+        tokio::task::spawn_blocking(move || -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
+            SP1Verifier::verify(&proof, &code_commitment)
+                .expect("SP1 proof verification should succeed")
+        })
+        .await
+        .unwrap()
     }
 }
