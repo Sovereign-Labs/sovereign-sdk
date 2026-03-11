@@ -101,7 +101,6 @@ RUN . /home/runner/.cargo/env \
     && cargo install cargo-insta@1.43.1 --locked \
     && cargo install zepter@1.78.2 --locked \
     && cargo install bashtestmd@0.5.0 --locked \
-    # Clear cargo cache to reduce image size
     && rm -rf /home/runner/.cargo/registry \
     && rm -rf /home/runner/.cargo/git \
     && rm -rf /tmp/cargo-*
