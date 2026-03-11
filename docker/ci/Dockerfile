@@ -84,11 +84,11 @@ SHELL ["/bin/sh", "-c"]
 
 # Install SP1 toolchain (AMD64 only - SP1 doesn't support ARM64)
 RUN . /home/runner/.cargo/env \
-    && curl -L https://sp1up.succinct.xyz | bash \
-    && /home/runner/.sp1/bin/sp1up --version 6.0.2 \
-    && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
-    && rm -rf /home/runner/.cargo/registry \
-    && rm -rf /home/runner/.cargo/git
+        && curl -L https://sp1up.succinct.xyz | bash \
+        && /home/runner/.sp1/bin/sp1up --version 6.0.2 \
+        && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
+        && rm -rf /home/runner/.cargo/registry \
+        && rm -rf /home/runner/.cargo/git
 
 ## Move it to bottom for now for faster iteration
 
