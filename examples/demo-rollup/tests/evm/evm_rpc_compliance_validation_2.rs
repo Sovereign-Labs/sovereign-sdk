@@ -1,8 +1,8 @@
 use crate::evm::evm_test_helper::{
     create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64, parse_hex_u128,
-    parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_result_hex,
-    setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
-    HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
+    parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_error_message,
+    rpc_error_object, rpc_result_hex, setup_test_rollup, setup_with_simple_storage, tx_count,
+    EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
@@ -16,6 +16,10 @@ const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
 const ETH_TX_GAS_CAP: u64 = 30_000_000;
 const GAS_LEFT_CONTRACT_DEPLOY_CODE: &str = "0x6008600c60003960086000f35a60005260206000f3";
+const AFFORDABILITY_SIGNER_PRIV_KEY: &str =
+    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+const AFFORDABILITY_BALANCE_MULTIPLIER: u64 = 100;
+const INSUFFICIENT_FUNDS_FOR_GAS_ERROR: &str = "insufficient funds for gas * price + value";
 
 // Overlap note: earlier low-fee-cap rejection coverage lives in
 // `evm_call_fee_fields.rs::{eth_call_rejects_below_base_fee_with_max_fee_per_gas, eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas}`.
@@ -93,23 +97,83 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
 }
 
 #[tokio::test(flavor = "multi_thread")]
+/// Documents a rollup-specific admission mismatch:
+/// `eth_estimateGas` checks affordability against the caller-requested
+/// `maxFeePerGas`, while raw submission is admitted against the rollup gas-price
+/// path. The signer is funded into the window
+/// `gas_limit * rollup_gas_price < B < gas_limit * maxFeePerGas`, so estimate
+/// must reject while `eth_sendRawTransaction` succeeds.
+///
+/// This is not an `eth_call` parity test. Local call/base-fee semantics live in
+/// `evm_call_fee_fields.rs`.
 async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let nonce = tx_count(&ws_client, signer.address(), "latest").await?;
+    let affordability_signer: PrivateKeySigner = AFFORDABILITY_SIGNER_PRIV_KEY.parse()?;
+    let affordability_address = affordability_signer.address();
     let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let gas_limit = 1_000_000u64;
+    let recipient = Address::repeat_byte(0x22);
+    let initial_rollup_gas_price = ws_client.eth_gas_price().await;
+    let initial_send_floor = U256::from(gas_limit)
+        .checked_mul(U256::from(initial_rollup_gas_price))
+        .expect("send floor should fit in U256");
+    let affordability_balance = initial_send_floor
+        .checked_mul(U256::from(AFFORDABILITY_BALANCE_MULTIPLIER))
+        .expect("affordability balance should fit in U256");
+    let estimate_ceiling = U256::from(gas_limit)
+        .checked_mul(U256::from(HIGH_MAX_FEE_PER_GAS))
+        .expect("estimate ceiling should fit in U256");
 
-    let huge_max_fee = u128::MAX / 4;
+    assert!(
+        initial_rollup_gas_price > 0,
+        "rollup gas price should be non-zero for this test"
+    );
+    assert_eq!(
+        ws_client.eth_get_balance(affordability_address).await,
+        U256::ZERO,
+        "fresh affordability signer must start unfunded"
+    );
+    assert!(
+        initial_send_floor < affordability_balance,
+        "funding balance must exceed raw-send affordability floor"
+    );
+    assert!(
+        affordability_balance < estimate_ceiling,
+        "funding balance must remain below estimateGas affordability ceiling"
+    );
+
+    let funding_hash = ws_client
+        .send_eth(affordability_address, affordability_balance)
+        .await;
+    let funding_receipt = ws_client.wait_for_receipt(funding_hash).await;
+    assert!(funding_receipt.status(), "funding transfer should succeed");
+    assert_eq!(
+        ws_client.eth_get_balance(affordability_address).await,
+        affordability_balance,
+        "recipient balance should exactly match the funded affordability window"
+    );
+
+    let current_rollup_gas_price = ws_client.eth_gas_price().await;
+    let current_send_floor = U256::from(gas_limit)
+        .checked_mul(U256::from(current_rollup_gas_price))
+        .expect("current send floor should fit in U256");
+    assert!(
+        current_send_floor < affordability_balance,
+        "fresh signer must remain able to pay raw-send affordability floor after funding"
+    );
+
+    let nonce = tx_count(&ws_client, affordability_address, "latest").await?;
+    assert_eq!(nonce, 0, "receiving funds should not change sender nonce");
     let estimate_request = json!({
-        "from": signer.address(),
-        "to": Address::repeat_byte(0x22),
+        "from": affordability_address,
+        "to": recipient,
         "value": "0x0",
-        "gas": "0x5208",
-        "maxFeePerGas": hex_u128(huge_max_fee),
-        "maxPriorityFeePerGas": "0x1"
+        "gas": hex_u64(gas_limit),
+        "maxFeePerGas": hex_u128(HIGH_MAX_FEE_PER_GAS),
+        "maxPriorityFeePerGas": "0x0"
     });
 
     let http = Client::new();
@@ -122,15 +186,15 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     .await?;
 
     let raw_tx = raw_signed_eip1559(
-        &signer,
+        &affordability_signer,
         chain_id.to::<u64>(),
         nonce,
-        21_000,
-        TxKind::Call(Address::repeat_byte(0x22)),
+        gas_limit,
+        TxKind::Call(recipient),
         U256::ZERO,
         Bytes::new(),
-        huge_max_fee,
-        1,
+        HIGH_MAX_FEE_PER_GAS,
+        0,
     )
     .await?;
 
@@ -141,17 +205,31 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         json!([raw_tx]),
     )
     .await?;
+    assert!(
+        estimate_response.get("error").is_some(),
+        "estimate should reject with insufficient funds in the affordability gap: {estimate_response}"
+    );
+    assert_eq!(
+        rpc_error_code_from_response(&estimate_response, "eth_estimateGas"),
+        -32003,
+        "estimate should use transaction-rejected error class for insufficient funds"
+    );
+    assert!(
+        rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
+            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
+        "estimate should report insufficient-funds affordability failure: {estimate_response}"
+    );
 
-
-    // let estimate_response_err = estimate_response.get("error").expect("eth_estimateGas should have error");
-    // let send_response_err =send_response.get("error").expect("eth_sendRawTransaction should have error") ;
-    //
-    //
-    // assert_eq!(
-    //     estimate_response_err,
-    //     send_response_err,
-    //     "estimate and send should agree on affordability classification: estimate={estimate_response}, send={send_response}"
-    // );
+    assert!(
+        send_response.get("error").is_none(),
+        "raw send should succeed when balance covers rollup-priced admission cost: {send_response}"
+    );
+    let send_hash: B256 = rpc_result_hex(&send_response).parse()?;
+    let send_receipt = ws_client.wait_for_receipt(send_hash).await;
+    assert!(
+        send_receipt.status(),
+        "raw send should produce a successful receipt in the affordability gap"
+    );
 
     Ok(())
 }
