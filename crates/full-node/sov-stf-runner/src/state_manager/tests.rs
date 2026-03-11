@@ -240,6 +240,57 @@ async fn test_instant_finality() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_non_instant_finality_notifies_only_finalized_slots() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 2;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let (_proof_manager_db, sender, mut receiver) = setup_proof_manager_channel(tempdir.path())?;
+    state_manager.stf_info_sender = Some(sender);
+
+    for height in 1..=4 {
+        da_service
+            .send_transaction(&[height as u8; 10])
+            .await
+            .await??;
+        let filtered_block = da_service.get_block_at(height).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
+            .await?;
+
+        match height {
+            1 | 2 => {
+                assert!(
+                    tokio::time::timeout(
+                        std::time::Duration::from_millis(100),
+                        receiver.read_next(),
+                    )
+                    .await
+                    .is_err(),
+                    "non-finalized slots must not be emitted before finality"
+                );
+            }
+            3 | 4 => {
+                let finalized = receiver.read_next().await?.unwrap();
+                assert_eq!(finalized.slot_number.get(), height - finality as u64);
+                state_manager
+                    .stf_info_sender
+                    .as_ref()
+                    .expect("proof manager sender should be configured")
+                    .inc_next_height_to_receive();
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    shutdown_sender.send(())?;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_proof_manager_crash_after_staging_hides_uncommitted_slot() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS);
@@ -289,7 +340,7 @@ async fn test_proof_manager_crash_after_staging_hides_uncommitted_slot() -> anyh
         assert_eq!(proof_manager_db.get_write_height()?, None);
 
         sender
-            .startup_notify_about_infos_from_db(ledger_head, &InfiniteHeight)
+            .startup_notify_about_infos_from_db(ledger_head, ledger_head, &InfiniteHeight)
             .await?;
 
         assert!(
@@ -355,7 +406,7 @@ async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> an
         assert_eq!(proof_manager_db.get_write_height()?, None);
 
         sender
-            .startup_notify_about_infos_from_db(ledger_head, &InfiniteHeight)
+            .startup_notify_about_infos_from_db(ledger_head, ledger_head, &InfiniteHeight)
             .await?;
 
         assert_eq!(proof_manager_db.get_write_height()?, Some(SlotNumber::ONE));

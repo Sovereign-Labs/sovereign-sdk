@@ -100,18 +100,18 @@ impl<
     /// This method is only called when starting up the stf info manager. It
     /// ensures that the state is correctly set and synchronized.
     ///
-    /// The `ledger_head` parameter is used to reconcile ProofManagerDb with the ledger
-    /// state on startup, ensuring the proof manager never has data beyond the committed
-    /// ledger head.
+    /// The `ledger_head` and `latest_finalized_slot_number` parameters are used to reconcile
+    /// ProofManagerDb with the ledger state on startup, ensuring the proof manager never exposes
+    /// data beyond the latest finalized slot while still preserving staged future rows.
     pub(crate) async fn startup_notify_about_infos_from_db(
         &mut self,
         ledger_head: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
         max_provable_slot_number: &dyn ProvableHeightTracker,
     ) -> anyhow::Result<()> {
-        // Validate and recover ProofManagerDb metadata against ledger head.
-        // This enforces that ProofManager never advances beyond LedgerDb.
+        // Validate and recover ProofManagerDb metadata against the finalized ledger view.
         self.proof_manager_db
-            .validate_and_recover_write_height(ledger_head)?;
+            .validate_and_recover_write_height(ledger_head, latest_finalized_slot_number)?;
 
         // Re-sync in-memory cursors from DB after recovery, because validation may
         // have rewritten metadata (for example when ProofManagerDb was ahead).
@@ -128,33 +128,19 @@ impl<
 
         match maybe_write_rollup_height {
             Some(write_rollup_height) => {
-                assert_eq!(
-                    db_next_height_to_receive.get(),
-                    next_rollup_height_to_receive,
-                    "The next height to receive should be the same as the one stored in the db"
-                );
-
-                // Sanity check for `write_rollup_height & next_rollup_height_to_receive`.
-                // `next_rollup_height_to_receive` may be `write_rollup_height + 1` when the receiver
-                // has fully caught up and persisted progress immediately.
-                assert!(
-                    next_rollup_height_to_receive <= write_rollup_height.get().saturating_add(1),
-                    "The `next_rollup_height_to_receive` should be <= write_rollup_height + 1"
-                );
-
-                assert!(
-                    write_rollup_height
-                        .get()
-                        .saturating_sub(next_rollup_height_to_receive)
-                        <= self.max_nb_of_infos_in_db.get(),
-                    "Too many STF infos in the db: {}, vs max allowed {} last_submitted={} write={}",
-                    write_rollup_height
-                        .get()
-                        .saturating_sub(next_rollup_height_to_receive),
-                    self.max_nb_of_infos_in_db,
-                    next_rollup_height_to_receive,
-                    write_rollup_height,
-                );
+                let unread_visible_infos = write_rollup_height
+                    .get()
+                    .saturating_sub(next_rollup_height_to_receive);
+                if next_rollup_height_to_receive <= write_rollup_height.get() {
+                    assert!(
+                        unread_visible_infos <= self.max_nb_of_infos_in_db.get(),
+                        "Too many STF infos in the db: {}, vs max allowed {} last_submitted={} write={}",
+                        unread_visible_infos,
+                        self.max_nb_of_infos_in_db,
+                        next_rollup_height_to_receive,
+                        write_rollup_height,
+                    );
+                }
             }
             // Db is empty
             None => {
@@ -216,7 +202,7 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
 
     // Internally, the Db keeps the following entries:
     // 1. The STF info data.
-    // 2. The latest height of the written STF info (increased on every `materialize_stf_info`` operation)
+    // 2. The highest finalized STF height currently visible to proof-manager consumers.
     // 3. The next height of the retrieved STF info (increased on every `read_next`` operation).
 
     // On startup, we need to fill the notification channel with the pending STF info from the db.
@@ -255,7 +241,7 @@ where
 {
     /// Sends the stf update notifications and updates the last submitted height.
     pub async fn notify(&mut self, max_provable_slot_number: SlotNumber) -> anyhow::Result<()> {
-        // The `write_rollup_height` is the maximum stf height that is available in the DB.
+        // The `write_rollup_height` is the highest finalized STF slot visible to consumers.
         let Some(write_rollup_height) = self.proof_manager_db.get_write_height()? else {
             // DB is empty, so we don't have to notify anything.
             return Ok(());
@@ -264,8 +250,8 @@ where
         // The `next_height_to_receive` is the minimum height that should be notified next to the receiver.
         let next_height_to_send = self.next_height_to_send;
 
-        // We always have to ensure we don't notify for a height that is not already written to the DB.
-        // So we always notify up to the `write_rollup_height`, even if the `max_provable_slot_number` is higher.
+        // We always have to ensure we don't notify for a height that is not finalized and visible
+        // in the proof-manager metadata, even if later STF rows have already been staged.
         let height_to_notify = std::cmp::min(max_provable_slot_number, write_rollup_height);
 
         let range_to_notify = next_height_to_send.range_inclusive(height_to_notify);
@@ -356,12 +342,11 @@ where
     /// 1. **Stage** (this method): writes STF info data to ProofManagerDb
     ///    before the ledger commit.
     /// 2. **Commit** ([`Self::commit_stf_info`]): after the ledger commit
-    ///    succeeds, advances `write_height` metadata to match.
+    ///    succeeds, advances `write_height` metadata only to the latest finalized slot.
     ///
     /// If a crash occurs between staging and committing,
-    /// [`ProofManagerDb::validate_and_recover_write_height`] detects the gap
-    /// on restart and advances `write_height` to cover contiguous
-    /// staged-but-uncommitted STF info.
+    /// [`ProofManagerDb::validate_and_recover_write_height`] keeps the staged STF rows and
+    /// re-exposes only the contiguous portion that is finalized according to LedgerDb.
     pub async fn stage_stf_info(
         &self,
         stf_info: &StateTransitionInfo<StateRoot, Witness, Da>,
@@ -371,9 +356,13 @@ where
         Ok(())
     }
 
-    /// Commit STF info metadata after ledger commit.
+    /// Commit STF info metadata after ledger finality advances.
     pub async fn commit_stf_info(&self, write_rollup_height: SlotNumber) -> anyhow::Result<()> {
         let next_rollup_height_to_receive = self.next_height_to_receive();
+        let current_write_rollup_height = self
+            .proof_manager_db
+            .get_write_height()?
+            .unwrap_or(SlotNumber::GENESIS);
         let mut schema = self
             .proof_manager_db
             .materialize_write_height(write_rollup_height)?;
@@ -382,8 +371,8 @@ where
         schema.merge(self.prune_entries(next_rollup_height_to_receive, write_rollup_height)?);
 
         assert!(
-            next_rollup_height_to_receive <= write_rollup_height,
-            "write({write_rollup_height}) is smaller than next height to receive({next_rollup_height_to_receive})"
+            current_write_rollup_height <= write_rollup_height,
+            "write({write_rollup_height}) is smaller than current write_height({current_write_rollup_height})"
         );
 
         self.write_batch_blocking(schema).await?;
@@ -568,7 +557,7 @@ mod tests {
             setup(path, max_channel_size, max_nb_of_infos_in_db)?;
 
         sender
-            .startup_notify_about_infos_from_db(ledger_head, &InfiniteHeight)
+            .startup_notify_about_infos_from_db(ledger_head, ledger_head, &InfiniteHeight)
             .await?;
 
         Ok((proof_manager_db, sender, receiver))
@@ -974,7 +963,11 @@ mod tests {
             let (proof_manager_db, mut sender, receiver) =
                 setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
             sender
-                .startup_notify_about_infos_from_db(SlotNumber::ONE, &InfiniteHeight)
+                .startup_notify_about_infos_from_db(
+                    SlotNumber::ONE,
+                    SlotNumber::ONE,
+                    &InfiniteHeight,
+                )
                 .await?;
 
             assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(2));
@@ -1050,7 +1043,11 @@ mod tests {
 
         // Recovery truncates write_height to 7 and next_height_to_receive to 8.
         sender
-            .startup_notify_about_infos_from_db(SlotNumber::new(7), &InfiniteHeight)
+            .startup_notify_about_infos_from_db(
+                SlotNumber::new(7),
+                SlotNumber::new(7),
+                &InfiniteHeight,
+            )
             .await?;
 
         assert_eq!(
@@ -1063,6 +1060,45 @@ mod tests {
         );
         assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(8));
         assert_eq!(sender.next_height_to_send, SlotNumber::new(8));
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_future_only_bootstrap_accepts_next_height_greater_than_write_height(
+    ) -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        {
+            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
+            proof_manager_db.set_write_height(SlotNumber::new(5))?;
+            proof_manager_db.set_next_height_to_receive(SlotNumber::new(8))?;
+            proof_manager_db.set_oldest_height(SlotNumber::new(8))?;
+        }
+
+        let (_proof_manager_db, mut sender, mut receiver) =
+            setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
+
+        sender
+            .startup_notify_about_infos_from_db(
+                SlotNumber::new(7),
+                SlotNumber::new(5),
+                &InfiniteHeight,
+            )
+            .await?;
+
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(8));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(8));
+
+        let stf_info = make_stf_info(8);
+        sender.stage_stf_info(&stf_info).await?;
+        sender.commit_stf_info(stf_info.slot_number).await?;
+        sender.notify(stf_info.slot_number).await?;
+
+        let received = receiver.read_next().await?.unwrap();
+        assert_eq!(received.slot_number, SlotNumber::new(8));
 
         Ok(())
     }

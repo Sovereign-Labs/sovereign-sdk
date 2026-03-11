@@ -194,9 +194,13 @@ where
                 .get_head_slot()?
                 .map(|(slot, _)| slot)
                 .unwrap_or(SlotNumber::GENESIS);
+            let latest_finalized_slot_number = ledger_db
+                .get_latest_finalized_slot_number()
+                .await?
+                .min(ledger_head);
             proof_manager_db
-                .ensure_initialized_for_ledger_head(&ledger_db, ledger_head)
-                .context("Failed to validate ProofManagerDb startup state")?;
+                .ensure_initialized_for_ledger_head(ledger_head, latest_finalized_slot_number)
+                .context("Failed to initialize ProofManagerDb startup state")?;
 
             let channel = new_stf_info_channel(
                 proof_manager_db,

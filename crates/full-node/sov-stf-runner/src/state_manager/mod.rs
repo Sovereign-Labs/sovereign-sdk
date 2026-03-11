@@ -19,6 +19,7 @@ use sov_metrics::RunnerProcessStfChangesMetrics;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::stf::TxReceiptContents;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -189,10 +190,16 @@ where
                 .get_head_slot()?
                 .map(|(slot, _)| slot)
                 .unwrap_or(SlotNumber::GENESIS);
+            let latest_finalized_slot_number = self
+                .ledger_db
+                .get_latest_finalized_slot_number()
+                .await?
+                .min(ledger_head);
 
             sender
                 .startup_notify_about_infos_from_db(
                     ledger_head,
+                    latest_finalized_slot_number,
                     &*self.max_provable_slot_number_tracker,
                 )
                 .await?;
@@ -483,14 +490,14 @@ where
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
-            // Only advance write_height for slots actually finalized to LedgerDb disk.
-            // Staged STF data for non-finalized slots is recovered by
-            // validate_and_recover_write_height on restart.
+            // Only advance write_height for slots finalized in LedgerDb.
+            // Later STF rows stay staged in ProofManagerDb but remain hidden from `notify()`
+            // until finality reaches them.
             //
             // Safety: finalized_slot is always >= the current write_height because:
             // - state_on_block is empty on startup, so finalized transitions only
             //   come from blocks processed after startup (slot > ledger_head)
-            // - validate_and_recover_write_height caps write_height at ledger_head
+            // - validate_and_recover_write_height caps write_height at the latest finalized slot
             // - finality is strictly monotonic (get_effective_finalized_header
             //   never returns a height below last_processed_finalized_header)
             if let Some(finalized_slot) = last_finalized_slot_number {

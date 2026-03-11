@@ -9,7 +9,6 @@ use std::sync::Arc;
 use rockbound::{SchemaBatch, DB};
 use sov_rollup_interface::common::SlotNumber;
 
-use crate::ledger_db::LedgerDb;
 use crate::schema::tables::{StfInfoByNumber, StfInfoMetadata, PROOF_MANAGER_TABLES};
 use crate::schema::types::{StfInfoUniqueId, StoredStfInfo};
 use crate::schema::DeltaReader;
@@ -21,7 +20,6 @@ const WRITE_ROLLUP_HEIGHT_ID: StfInfoUniqueId = StfInfoUniqueId(0);
 const NEXT_SLOT_NUMBER_TO_RECEIVE_ID: StfInfoUniqueId = StfInfoUniqueId(1);
 /// DB key for the oldest saved STF info (used for pruning).
 const OLDEST_SLOT_NUMBER_ID: StfInfoUniqueId = StfInfoUniqueId(2);
-
 /// Database for proof manager state that persists independently from ledger commits.
 ///
 /// This allows critical proof manager metadata (like `next_height_to_receive`) to be
@@ -89,7 +87,10 @@ impl ProofManagerDb {
 
     // ==================== Metadata Operations ====================
 
-    /// Set the write height (latest STF info written). Writes immediately to disk.
+    /// Set the write height (highest finalized STF slot visible to proof-manager consumers).
+    ///
+    /// STF rows for later non-finalized slots may already be staged in the DB, but they must
+    /// remain hidden until ledger finality reaches them.
     pub fn set_write_height(&self, slot: SlotNumber) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::new();
         batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &slot)?;
@@ -97,7 +98,7 @@ impl ProofManagerDb {
         Ok(())
     }
 
-    /// Get the write height (latest STF info written).
+    /// Get the write height (highest finalized STF slot visible to proof-manager consumers).
     pub fn get_write_height(&self) -> anyhow::Result<Option<SlotNumber>> {
         self.db.get::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)
     }
@@ -179,123 +180,140 @@ impl ProofManagerDb {
 
     // ==================== Startup Checks ====================
 
-    /// Ensures startup is safe for the given `ledger_head` without backfilling legacy state.
+    /// Initializes ProofManagerDb on startup when it is still empty.
     ///
     /// Rules:
-    /// - If `ledger_head` is genesis, startup is allowed.
-    /// - If ProofManagerDb already has STF state/metadata, startup is allowed.
-    /// - If `ledger_head` is above genesis and ProofManagerDb is empty, startup fails fast.
-    ///
-    /// By design this does not migrate STF state from legacy LedgerDb tables.
+    /// - If ProofManagerDb already has STF state/metadata, startup is a no-op.
+    /// - If ProofManagerDb is empty and the ledger is non-genesis, the DB is bootstrapped so that
+    ///   proving starts from future finalized slots only.
     pub fn ensure_initialized_for_ledger_head(
         &self,
-        ledger_db: &LedgerDb,
         ledger_head: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
     ) -> anyhow::Result<()> {
-        // First-ever startup: ledger is empty (get_head_slot() returned None),
-        // so there is no prior state to reconcile. ProofManagerDb will be
-        // populated as slots are processed.
-        if ledger_head == SlotNumber::GENESIS {
+        if self.has_any_state()? || ledger_head == SlotNumber::GENESIS {
             return Ok(());
         }
 
-        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
-        let proof_manager_has_data = self.get_write_height()?.is_some()
-            || self.get_next_height_to_receive()?.is_some()
-            || self.get_oldest_height()?.is_some()
-            || proof_manager_reader
-                .get_largest::<StfInfoByNumber>()?
-                .is_some();
-        if proof_manager_has_data {
-            return Ok(());
-        }
+        let latest_finalized_slot_number = latest_finalized_slot_number.min(ledger_head);
+        self.bootstrap_future_only(ledger_head, latest_finalized_slot_number)?;
 
-        let legacy_reader = ledger_db.clone_reader();
-        let ledger_has_legacy_stf_state = legacy_reader
-            .get::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)?
-            .is_some()
-            || legacy_reader
-                .get::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID)?
-                .is_some()
-            || legacy_reader
-                .get::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID)?
-                .is_some()
-            || legacy_reader.get_largest::<StfInfoByNumber>()?.is_some();
-
-        if ledger_has_legacy_stf_state {
-            anyhow::bail!(
-                "ProofManagerDb is empty while ledger head is {ledger_head}. Legacy STF state exists in LedgerDb, but no backfill is performed by design. Please initialize or restore ProofManagerDb before startup."
-            );
-        }
-
-        anyhow::bail!(
-            "ProofManagerDb is empty while ledger head is {ledger_head}. Startup is blocked to avoid reopening from slot 1. Please initialize or restore ProofManagerDb before startup."
-        );
+        Ok(())
     }
 
     // ==================== Startup Validation ====================
 
-    /// Validate ProofManagerDb state against the ledger head on startup and
-    /// recover `write_height` if metadata lagged behind actual stored STF info.
+    /// Validate ProofManagerDb state against the ledger view on startup and
+    /// recover finalized-visible `write_height` if metadata lagged behind stored STF info.
     ///
-    /// Enforces the invariant: proof_manager_write_height <= ledger_head.
-    /// If the invariant is violated, truncate ProofManagerDb to `ledger_head`.
-    pub fn validate_and_recover_write_height(&self, ledger_head: SlotNumber) -> anyhow::Result<()> {
+    /// Enforces the invariants:
+    /// - proof-manager STF rows must not exist above `ledger_head`
+    /// - `write_height` must not advance above `latest_finalized_slot_number`
+    ///
+    /// Staged STF rows between `latest_finalized_slot_number + 1` and `ledger_head` are preserved
+    /// but remain hidden from `notify()` until those slots finalize.
+    pub fn validate_and_recover_write_height(
+        &self,
+        ledger_head: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
+    ) -> anyhow::Result<()> {
+        let latest_finalized_slot_number = latest_finalized_slot_number.min(ledger_head);
         let maybe_write_height = self.get_write_height()?;
         let mut write_height = maybe_write_height.unwrap_or(SlotNumber::GENESIS);
+        let maybe_next_height_to_receive = self.get_next_height_to_receive()?;
+        let maybe_oldest_height = self.get_oldest_height()?;
+        let max_next_height = ledger_head.saturating_add(1);
+        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
+        let highest_stored_slot = proof_manager_reader
+            .get_largest::<StfInfoByNumber>()?
+            .map(|v| v.0);
+        let highest_retained_slot = match highest_stored_slot {
+            Some(highest_stored_slot) if highest_stored_slot > ledger_head => {
+                self.find_largest_stored_slot_at_or_below(ledger_head)?
+            }
+            Some(highest_stored_slot) => Some(highest_stored_slot),
+            None => None,
+        };
+        let mut batch = SchemaBatch::new();
+        let mut batch_changed = false;
 
-        // Possible if ProofManagerDb persisted write_height but the
-        // corresponding LedgerDb write was lost on crash (fsync race),
-        // or after an external ledger rollback/restore.
-        if write_height > ledger_head {
-            let old_write_height = write_height;
-            let mut batch = SchemaBatch::new();
-
-            // Remove STF infos beyond current ledger head.
+        // Remove staged rows beyond the current ledger head. This must use the largest stored slot,
+        // not `write_height`, because non-finalized rows are staged ahead of finalized visibility.
+        if let Some(highest_stored_slot) = highest_stored_slot {
             if let Some(first_to_remove) = ledger_head.checked_add(1) {
-                for slot in first_to_remove.range_inclusive(old_write_height) {
-                    batch.delete::<StfInfoByNumber>(&slot)?;
+                if highest_stored_slot >= first_to_remove {
+                    for slot in first_to_remove.range_inclusive(highest_stored_slot) {
+                        batch.delete::<StfInfoByNumber>(&slot)?;
+                    }
+                    batch_changed = true;
                 }
             }
+        }
 
-            // Clamp metadata to ledger view.
-            batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &ledger_head)?;
-
-            if let Some(next_height) = self.get_next_height_to_receive()? {
-                let max_next_height = ledger_head.saturating_add(1);
-                if next_height > max_next_height {
-                    batch.put::<StfInfoMetadata>(
-                        &NEXT_SLOT_NUMBER_TO_RECEIVE_ID,
-                        &max_next_height,
-                    )?;
-                }
-            }
-
-            if let Some(oldest_height) = self.get_oldest_height()? {
-                if oldest_height > ledger_head {
-                    batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &ledger_head)?;
-                }
-            }
-
-            self.write_batch(&batch)?;
-            write_height = ledger_head;
+        if write_height > latest_finalized_slot_number {
+            let old_write_height = write_height;
+            batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &latest_finalized_slot_number)?;
+            batch_changed = true;
+            write_height = latest_finalized_slot_number;
 
             tracing::warn!(
                 %ledger_head,
+                %latest_finalized_slot_number,
                 old_proof_manager_write_height = %old_write_height,
-                "ProofManagerDb was ahead of LedgerDb. Truncated ProofManagerDb to ledger head"
+                "Clamped ProofManagerDb write_height to the latest finalized slot"
             );
         }
 
-        // Recover write_height if metadata lagged (e.g., crash after staging STF info
-        // but before updating metadata). We only advance while STF info is contiguous.
+        let min_next_height = if highest_retained_slot.is_some() {
+            maybe_oldest_height.unwrap_or(SlotNumber::ONE)
+        } else {
+            write_height.saturating_add(1)
+        };
+        let clamped_next_height = match maybe_next_height_to_receive {
+            Some(next_height) => Some(next_height.max(min_next_height).min(max_next_height)),
+            None if maybe_write_height.is_some() => Some(min_next_height.min(max_next_height)),
+            None => None,
+        };
+        if clamped_next_height != maybe_next_height_to_receive {
+            if let Some(clamped_next_height) = clamped_next_height {
+                batch.put::<StfInfoMetadata>(
+                    &NEXT_SLOT_NUMBER_TO_RECEIVE_ID,
+                    &clamped_next_height,
+                )?;
+                batch_changed = true;
+            }
+        }
+
+        let min_oldest_height = if highest_retained_slot.is_some() {
+            maybe_oldest_height.unwrap_or(SlotNumber::ONE)
+        } else {
+            max_next_height
+        };
+        let clamped_oldest_height = match maybe_oldest_height {
+            Some(oldest_height) => Some(oldest_height.max(min_oldest_height).min(max_next_height)),
+            None if maybe_write_height.is_some() => Some(min_oldest_height),
+            None => None,
+        };
+        if clamped_oldest_height != maybe_oldest_height {
+            if let Some(clamped_oldest_height) = clamped_oldest_height {
+                batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &clamped_oldest_height)?;
+                batch_changed = true;
+            }
+        }
+
+        if batch_changed {
+            self.write_batch(&batch)?;
+        }
+
+        // Recover write_height if metadata lagged behind finalized slots. We only advance while
+        // STF info is contiguous and already finalized according to the ledger.
         let mut current = write_height;
         let mut advanced = false;
         loop {
             let Some(next) = current.checked_add(1) else {
                 break;
             };
-            if next > ledger_head {
+            if next > latest_finalized_slot_number {
                 break;
             }
             if self.get_stf_info(next)?.is_some() {
@@ -318,6 +336,55 @@ impl ProofManagerDb {
 
         Ok(())
     }
+
+    fn has_any_state(&self) -> anyhow::Result<bool> {
+        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
+        Ok(self.get_write_height()?.is_some()
+            || self.get_next_height_to_receive()?.is_some()
+            || self.get_oldest_height()?.is_some()
+            || proof_manager_reader
+                .get_largest::<StfInfoByNumber>()?
+                .is_some())
+    }
+
+    fn find_largest_stored_slot_at_or_below(
+        &self,
+        upper_bound: SlotNumber,
+    ) -> anyhow::Result<Option<SlotNumber>> {
+        let mut current = upper_bound;
+        loop {
+            if self.get_stf_info(current)?.is_some() {
+                return Ok(Some(current));
+            }
+
+            let Some(previous) = current.checked_sub(1) else {
+                return Ok(None);
+            };
+            current = previous;
+        }
+    }
+
+    fn bootstrap_future_only(
+        &self,
+        ledger_head: SlotNumber,
+        latest_finalized_slot_number: SlotNumber,
+    ) -> anyhow::Result<()> {
+        let first_future_slot = ledger_head.saturating_add(1);
+        let mut batch = SchemaBatch::new();
+        batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &latest_finalized_slot_number)?;
+        batch.put::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID, &first_future_slot)?;
+        batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &first_future_slot)?;
+        self.write_batch(&batch)?;
+
+        tracing::info!(
+            %ledger_head,
+            %latest_finalized_slot_number,
+            %first_future_slot,
+            "Initialized ProofManagerDb for future finalized slots"
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -325,11 +392,7 @@ mod tests {
     use std::path::Path;
     use std::sync::Arc;
 
-    use rockbound::SchemaBatch;
     use sov_rollup_interface::common::SlotNumber;
-
-    use crate::ledger_db::LedgerDb;
-    use crate::schema::DeltaReader;
 
     use super::*;
 
@@ -338,17 +401,6 @@ mod tests {
             .default_setup_db_as_subdir(path)
             .expect("Failed to open ProofManagerDb");
         ProofManagerDb::new(Arc::new(raw_db))
-    }
-
-    fn create_test_ledger_db(path: impl AsRef<Path>) -> (LedgerDb, Arc<DB>) {
-        let raw_ledger_db = Arc::new(
-            LedgerDb::get_rockbound_options()
-                .default_setup_db_as_subdir(path)
-                .expect("Failed to open LedgerDb"),
-        );
-        let ledger_reader = DeltaReader::new(raw_ledger_db.clone(), Vec::new());
-        let ledger_db = LedgerDb::with_reader(ledger_reader).expect("Failed to create LedgerDb");
-        (ledger_db, raw_ledger_db)
     }
 
     fn make_stf_info(slot: u64) -> StoredStfInfo {
@@ -438,7 +490,7 @@ mod tests {
         let db = create_test_db(temp_dir.path());
 
         // Empty db should validate without issues
-        db.validate_and_recover_write_height(SlotNumber::new(100))
+        db.validate_and_recover_write_height(SlotNumber::new(100), SlotNumber::new(50))
             .unwrap();
     }
 
@@ -454,14 +506,15 @@ mod tests {
 
         // Validate with ledger_head >= write_height
         let ledger_head = SlotNumber::new(100);
-        db.validate_and_recover_write_height(ledger_head).unwrap();
+        db.validate_and_recover_write_height(ledger_head, write_height)
+            .unwrap();
 
         // State should remain unchanged
         assert_eq!(db.get_write_height().unwrap(), Some(write_height));
     }
 
     #[test]
-    fn test_validate_truncates_when_ahead() {
+    fn test_validate_clamps_write_height_to_latest_finalized() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
@@ -472,11 +525,13 @@ mod tests {
         db.set_write_height(SlotNumber::new(10)).unwrap();
         db.set_next_height_to_receive(SlotNumber::new(12)).unwrap();
 
-        db.validate_and_recover_write_height(SlotNumber::new(7))
+        db.validate_and_recover_write_height(SlotNumber::new(7), SlotNumber::new(5))
             .unwrap();
 
-        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(7)));
+        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(5)));
         assert!(db.get_stf_info(SlotNumber::new(8)).unwrap().is_none());
+        assert!(db.get_stf_info(SlotNumber::new(6)).unwrap().is_some());
+        assert!(db.get_stf_info(SlotNumber::new(7)).unwrap().is_some());
         assert_eq!(
             db.get_next_height_to_receive().unwrap(),
             Some(SlotNumber::new(8))
@@ -495,11 +550,11 @@ mod tests {
         }
 
         // Metadata lags behind (write_height is None)
-        db.validate_and_recover_write_height(SlotNumber::new(10))
+        db.validate_and_recover_write_height(SlotNumber::new(10), SlotNumber::new(2))
             .unwrap();
 
-        // write_height should advance to the last contiguous slot
-        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(3)));
+        // write_height should advance only to the last contiguous finalized slot.
+        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(2)));
     }
 
     #[test]
@@ -530,55 +585,36 @@ mod tests {
     #[test]
     fn test_ensure_initialized_for_ledger_head_allows_non_empty_proof_manager_db() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let (ledger_db, _raw_ledger_db) = create_test_ledger_db(temp_dir.path());
         let proof_manager_db = create_test_db(temp_dir.path());
         proof_manager_db
             .set_write_height(SlotNumber::new(2))
             .unwrap();
 
         proof_manager_db
-            .ensure_initialized_for_ledger_head(&ledger_db, SlotNumber::new(3))
+            .ensure_initialized_for_ledger_head(SlotNumber::new(3), SlotNumber::new(2))
             .unwrap();
     }
 
     #[test]
-    fn test_ensure_initialized_for_ledger_head_fails_when_empty_and_ledger_non_genesis() {
+    fn test_ensure_initialized_for_ledger_head_bootstraps_future_only_on_non_genesis_ledger() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let (ledger_db, _raw_ledger_db) = create_test_ledger_db(temp_dir.path());
         let proof_manager_db = create_test_db(temp_dir.path());
 
-        let err = proof_manager_db
-            .ensure_initialized_for_ledger_head(&ledger_db, SlotNumber::new(3))
-            .unwrap_err();
-
-        assert!(err
-            .to_string()
-            .contains("Startup is blocked to avoid reopening from slot 1"));
-        assert!(proof_manager_db.get_write_height().unwrap().is_none());
-    }
-
-    #[test]
-    fn test_ensure_initialized_for_ledger_head_fails_when_legacy_stf_state_exists() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let (ledger_db, raw_ledger_db) = create_test_ledger_db(temp_dir.path());
-        let proof_manager_db = create_test_db(temp_dir.path());
-
-        let mut legacy_batch = SchemaBatch::new();
-        legacy_batch
-            .put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &SlotNumber::new(5))
+        proof_manager_db
+            .ensure_initialized_for_ledger_head(SlotNumber::new(7), SlotNumber::new(5))
             .unwrap();
-        raw_ledger_db.write_schemas(&legacy_batch).unwrap();
 
-        let err = proof_manager_db
-            .ensure_initialized_for_ledger_head(&ledger_db, SlotNumber::new(3))
-            .unwrap_err();
-
-        assert!(err
-            .to_string()
-            .contains("Legacy STF state exists in LedgerDb"));
-        assert!(proof_manager_db
-            .get_next_height_to_receive()
-            .unwrap()
-            .is_none());
+        assert_eq!(
+            proof_manager_db.get_write_height().unwrap(),
+            Some(SlotNumber::new(5))
+        );
+        assert_eq!(
+            proof_manager_db.get_next_height_to_receive().unwrap(),
+            Some(SlotNumber::new(8))
+        );
+        assert_eq!(
+            proof_manager_db.get_oldest_height().unwrap(),
+            Some(SlotNumber::new(8))
+        );
     }
 }
