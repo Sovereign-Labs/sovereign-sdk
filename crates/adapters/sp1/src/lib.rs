@@ -12,8 +12,6 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
-#[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::{ProverClient, SP1ProofWithPublicValues};
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -93,12 +91,11 @@ impl ZkVerifier for SP1Verifier {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
+        let proof = decode_sp1_proof(serialized_proof)?;
+        let prover = sp1_sdk::blocking::ProverClient::builder().cpu().build();
+        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
 
-        let prover = ProverClient::from_env();
-        let verifying_key = bincode::deserialize(&code_commitment.0)?;
-        prover.verify(&proof, &verifying_key)?;
-
+        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
@@ -138,6 +135,22 @@ impl ZkVerifier for SP1Verifier {
     }
 }
 
+#[cfg(not(target_os = "zkvm"))]
+fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
+    match bincode::deserialize::<
+        sov_rollup_interface::zk::Proof<
+            sp1_sdk::SP1ProofWithPublicValues,
+            sp1_sdk::SP1PublicValues,
+        >,
+    >(serialized_proof)?
+    {
+        sov_rollup_interface::zk::Proof::Full(proof) => Ok(proof),
+        sov_rollup_interface::zk::Proof::PublicData(_) => {
+            anyhow::bail!("SP1Verifier supports only full proofs")
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -160,15 +173,16 @@ mod tests {
     #[test]
     fn test_sp1_method_id_codec_roundtrip() {
         use sov_rollup_interface::zk::CodeCommitment;
-        use sp1_sdk::{Prover, ProverClient};
+        use sp1_sdk::blocking::{Prover, ProverClient};
+        use sp1_sdk::ProvingKey;
 
         use crate::SP1MethodId;
 
-        const ELF: &[u8] = include_bytes!("../test_data/riscv32im-succinct-zkvm-elf");
+        const ELF: &[u8] = include_bytes!("../test_data/riscv64im-succinct-zkvm-elf");
 
         let prover = ProverClient::builder().mock().build();
-        let (_, vk) = prover.setup(ELF);
-        let method_id = SP1MethodId(bincode::serialize(&vk).unwrap());
+        let pk = prover.setup(ELF.into()).unwrap();
+        let method_id = SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap());
         let encoded = method_id.encode();
         let decoded = SP1MethodId::decode(&encoded).unwrap();
 

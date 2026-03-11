@@ -27,23 +27,23 @@ serde = { workspace = true, features = [
     "derive",
 ] }
 sha2 = { workspace = true }
-sp1-lib = { version = "5.0.8" }
+sp1-lib = { version = "6.0.2" }
 
 sov-rollup-interface = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sp1-sdk = { version = "5.0.8", default-features = false }
+sp1-sdk = { version = "6.0.2", default-features = false, features = ["blocking"] }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-zkvm = { version = "5.0.8" }
+sp1-zkvm = { version = "6.0.2" }
 
 [dev-dependencies]
 reltester = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 sov-sp1-adapter = { path = ".", features = ["arbitrary", "native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sp1-build = { version = "5.0.8" }
+sp1-build = { version = "6.0.2" }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -59,7 +59,8 @@ native = [
 ]
 bench = [
     "sov-metrics/sp1",
-    "sov-sp1-adapter/bench"
+    "sov-sp1-adapter/bench",
+    "sp1-sdk/profiling",
 ]
 arbitrary = [
     "dep:arbitrary",

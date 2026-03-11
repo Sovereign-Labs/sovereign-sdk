@@ -96,7 +96,7 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     #[cfg(feature = "native")]
     fn code_commitment(
         &self,
-    ) -> <<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment;
+    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment>;
 
     /// Run the guest in the true zk environment using the provided hints.
     ///

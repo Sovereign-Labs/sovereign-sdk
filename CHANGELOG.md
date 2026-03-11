@@ -1,5 +1,12 @@
+# 2025-03-10
+- #2569 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
+- #2554 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
+# 2025-03-05
+- #2554 More stabilization in demo-rollup EVM tests
 # 2026-03-05
 - #2556 **Breaking change**: only for runtimes with AccessPattern module.
+# 2026-03-05
+- #2548 Updates sp1 to v6.
 
 # 2026-02-12
 - #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
@@ -28,6 +35,9 @@
 - #2500 EVM: Fixes the nonce used for simulation endpoints
 - #2499 EVM: Add block-pinned state isolation tests for all 6 RPC endpoints
 - #2495 Updates examples configs
+
+# 2026-02-12
+- #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`

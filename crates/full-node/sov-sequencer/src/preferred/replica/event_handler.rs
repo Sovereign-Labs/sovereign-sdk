@@ -61,7 +61,8 @@ where
                 self.close_current_batch_msg_replica(batch_to_store, "replica_close_batch")
                     .await
             }
-            DbData::NewProof => Ok(()),
+            // TODO(@preston-evans98): Handle new proof blobs.
+            DbData::NewProof { .. } => todo!("Proof blobs are not yet supported in the replica. This should be unreachable since the preferred sequencer only accepts proofs via function call.") ,
         };
 
         match res {

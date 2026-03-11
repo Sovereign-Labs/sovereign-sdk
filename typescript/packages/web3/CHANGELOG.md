@@ -1,5 +1,11 @@
 # @sovereign-sdk/web3
 
+## 0.13.1
+
+### Patch Changes
+
+-   c6b4d0f: add `hydrate` method to solana signable rollup impl
+
 ## 0.13.0
 
 ### Minor Changes

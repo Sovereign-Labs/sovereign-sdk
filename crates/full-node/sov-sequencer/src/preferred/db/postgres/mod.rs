@@ -210,12 +210,17 @@ impl PostgresBackend {
             });
         }
 
-        let completed_blobs_metadata: Vec<(i64, Vec<u8>)> =
-            sqlx::query_as::<Postgres, _>(
-                "SELECT sequence_number, data FROM events WHERE event_type = 'batch_end' ORDER BY sequence_number",
-            )
-            .fetch_all(&mut *tx)
-            .await?;
+        let completed_blobs_metadata: Vec<(i64, Vec<u8>)> = sqlx::query_as::<Postgres, _>(
+            "SELECT e.sequence_number, COALESCE(e.data, p.borsh_value) AS data
+             FROM events e
+             LEFT JOIN proof_blobs p
+               ON p.sequence_number = e.sequence_number
+              AND e.event_type = 'new_proof'
+             WHERE e.event_type IN ('batch_end', 'new_proof')
+             ORDER BY e.sequence_number",
+        )
+        .fetch_all(&mut *tx)
+        .await?;
 
         // Fill out completed blobs with transaction data
         let mut completed_blobs = Vec::new();
