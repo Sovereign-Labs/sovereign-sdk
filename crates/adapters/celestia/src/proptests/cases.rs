@@ -8,6 +8,25 @@ use crate::test_support::{
 };
 use crate::types::FilteredCelestiaBlock;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReadMode {
+    None,
+    SingleByte,
+    Full,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MixedVersionFixtureKind {
+    Basic,
+    ParityBoundary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProofFixtureKind {
+    ProofOnly,
+    BatchAndProof,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct MultiRowBatchCase {
     pub(crate) ods_width: usize,
@@ -370,6 +389,31 @@ pub fn zero_row_absence_case_strategy() -> BoxedStrategy<ZeroRowAbsenceCase> {
             any::<u8>().prop_map(move |seed| ZeroRowAbsenceCase { ods_width, seed })
         })
         .boxed()
+}
+
+pub fn read_mode_strategy() -> BoxedStrategy<ReadMode> {
+    prop_oneof![
+        Just(ReadMode::None),
+        Just(ReadMode::SingleByte),
+        Just(ReadMode::Full),
+    ]
+    .boxed()
+}
+
+pub fn mixed_version_fixture_strategy() -> BoxedStrategy<MixedVersionFixtureKind> {
+    prop_oneof![
+        Just(MixedVersionFixtureKind::Basic),
+        Just(MixedVersionFixtureKind::ParityBoundary),
+    ]
+    .boxed()
+}
+
+pub fn proof_fixture_strategy() -> BoxedStrategy<ProofFixtureKind> {
+    prop_oneof![
+        Just(ProofFixtureKind::ProofOnly),
+        Just(ProofFixtureKind::BatchAndProof),
+    ]
+    .boxed()
 }
 
 fn split_total_across_segments(total: usize, max_parts: usize, seed: u8) -> Vec<usize> {
