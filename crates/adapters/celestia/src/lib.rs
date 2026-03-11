@@ -7,7 +7,7 @@ mod config;
 mod da_service;
 #[cfg(feature = "native")]
 mod metrics;
-#[cfg(all(test, feature = "native"))]
+#[cfg(test)]
 mod proptests;
 pub mod shares;
 #[cfg(test)]
