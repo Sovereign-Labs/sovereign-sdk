@@ -16,26 +16,12 @@ pub(crate) fn project_receipt_gas_from_actual_fee<S>(
 where
     S: Spec,
 {
-    let tx_fee_paid = gas_info.gas_value;
-    if !is_actual_fee_projection_height_active(receipt.block_number) {
-        return Ok(None);
-    }
-
-    if tx_fee_paid == sov_bank::Amount::ZERO {
-        return Ok(None);
-    }
-
     let current_gas_used = receipt.gas_used;
-    // Project charged fee into an EVM receipt gas value:
-    // projected = ceil(actual_fee / gas_price[0]), where actual_fee = gas_info.gas_value.
-    //
-    // Invariant: RPC/reporting uses the block header base fee as effective gas price and it
-    // must match this same primary gas-price dimension (`gas_price[0]`). Any divergence is a
-    // correctness bug and must fail fast upstream.
-    //
-    // This intentionally biases upward for non-uniform gas prices so receipt-implied fee
-    // is never below the charged fee.
-    let projected_gas_used = derive_receipt_gas_used_from_actual_fee(gas_info)?;
+    let Some(projected_gas_used) =
+        projected_gas_used_from_actual_fee::<S>(receipt.block_number, gas_info)?
+    else {
+        return Ok(None);
+    };
 
     if projected_gas_used == current_gas_used {
         return Ok(None);
@@ -54,6 +40,24 @@ where
         gas_used: projected_gas_used,
         cumulative_gas_used: projected_cumulative,
     }))
+}
+
+pub(crate) fn projected_gas_used_from_actual_fee<S>(
+    block_number: u64,
+    gas_info: &GasInfo<S::Gas>,
+) -> anyhow::Result<Option<u64>>
+where
+    S: Spec,
+{
+    if !is_actual_fee_projection_height_active(block_number) {
+        return Ok(None);
+    }
+
+    if gas_info.gas_value == sov_bank::Amount::ZERO {
+        return Ok(None);
+    }
+
+    Ok(Some(derive_receipt_gas_used_from_actual_fee(gas_info)?))
 }
 
 fn derive_receipt_gas_used_from_actual_fee<GU: Gas>(gas_info: &GasInfo<GU>) -> anyhow::Result<u64> {

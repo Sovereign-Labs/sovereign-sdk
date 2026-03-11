@@ -1,5 +1,7 @@
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
+use crate::sov_fee_and_gas_utils::projected_gas_used_from_actual_fee;
+use crate::{Evm, Receipt};
 use alloy_consensus::ReceiptEnvelope;
 use alloy_eips::BlockId;
 use alloy_primitives::{Address, U64};
@@ -18,15 +20,12 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
+use sov_modules_api::{ApiStateAccessor, GasMeter, GasSpec, Spec};
 use sov_rpc_eth_types::{
     EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
 };
-use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use std::ops::DerefMut;
 use tracing::trace;
-
-use crate::Evm;
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -413,6 +412,9 @@ where
             "EVM module JSON-RPC request"
         );
 
+        let request_for_accounting = request.clone();
+        let block_id_for_projection = block_id.clone();
+
         // Add 1,000 bytes to account for all Transaction fields besides calldata.
         let tx_size = request
             .input
@@ -421,6 +423,13 @@ where
             .map(|input| input.len())
             .unwrap_or(0)
             .saturating_add(1000);
+        let projection_block_number = {
+            let mut projection_state = state.clone_without_local_writes();
+            self.resolve_block_env_for_call(block_id_for_projection, &mut projection_state)?
+                .number
+                .to::<u64>()
+        };
+        let chain_id: u64 = config_value!("CHAIN_ID");
 
         // `eth_estimateGas` keeps the fee-cap floor check because it models admission
         // requirements more strictly than `eth_call`.
@@ -446,30 +455,18 @@ where
             }
         };
 
+        // Mirror the success path's receipt initialization read before metering the rest of the
+        // submission overheads.
+        self.pending_transactions
+            .last(state)
+            .map_err(into_rpc_error)?;
+
         // Commit into the RPC-local DB so state-write metering is charged for this simulation.
         // This intentionally includes override-based hypothetical state, because estimateGas
         // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
         self.db(state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");
-
-        // Charge for logs storage in the receipt.
-        // Other receipt fields are small and covered by the constant margin.
-        let logs_size = self
-            .receipts
-            .codec()
-            .value_codec()
-            .encode_to_vec(&logs)
-            .len();
-        let logs_size =
-            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        charge_write(
-            state,
-            Accessory::NAMESPACE,
-            &self.receipts.slot_key(&u64::MAX),
-            logs_size,
-        )
-        .map_err(into_rpc_error)?;
 
         let gas_meter = state
             .try_as_basic_gas_meter()
@@ -487,10 +484,46 @@ where
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
             .expect("Gas meter is initialized with INF");
 
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+        let time = self
+            .chain_state_module
+            .get_oracle_time(state)
+            .map_err(into_rpc_error)?;
+        let estimated_receipt = Receipt {
+            receipt: reth_primitives::Receipt {
+                tx_type: reth_primitives::TxType::Eip1559,
+                success: true,
+                cumulative_gas_used: u64::from(gas_used),
+                logs,
+            },
+            transaction_hash: B256::ZERO,
+            transaction_index: 0,
+            block_number: projection_block_number,
+            gas_used: u64::from(gas_used),
+            log_index_start: 0,
+        };
+        let estimated_pending_tx = crate::helpers::prepare_estimate_pending_transaction(
+            request_for_accounting,
+            projection_block_number,
+            chain_id,
+            estimated_receipt,
+            time,
+        )?;
+        let mut pending_transactions = self.pending_transactions.clone();
+        pending_transactions
+            .push(&estimated_pending_tx, state)
+            .map_err(into_rpc_error)?;
+        let _ = self.head(state);
 
-        Ok(U64::from(super::apply_margins(total_gas_used)?))
+        let gas_info = state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter")
+            .gas_info();
+        let projected_gas_used =
+            projected_gas_used_from_actual_fee::<S>(projection_block_number, &gas_info)
+                .map_err(|err| EthApiError::other(into_rpc_error(err)))?
+                .unwrap_or(gas_info.gas_used.as_ref()[0]);
+
+        Ok(U64::from(projected_gas_used))
     }
 
     /// Handler for `debug_traceBlockByNumber`

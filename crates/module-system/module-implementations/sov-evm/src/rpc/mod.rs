@@ -133,21 +133,12 @@ pub enum PendingOrBlock {
     },
 }
 
-const ABSOLUTE_MARGIN: u64 = 100_000;
 const MIN_TRANSACTION_GAS: u64 = 21_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct CallUpfrontCost {
     total_cost: U256,
     gas_limit: u64,
-}
-
-/// gas * 1.5 + 100_000
-pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
-    (gas / 2)
-        .checked_mul(3)
-        .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
 }
 
 fn call_upfront_cost_with_base_fee_floor(

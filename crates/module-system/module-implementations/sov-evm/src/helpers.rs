@@ -1,12 +1,14 @@
 use alloy_consensus::transaction::Recovered;
-use alloy_primitives::BlockNumber;
-use alloy_primitives::TxKind;
-use alloy_primitives::B256;
+use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
+use alloy_primitives::{BlockNumber, Signature, TxKind, B256};
 use alloy_rpc_types::{TransactionInfo, TransactionRequest};
 use revm::context::{BlockEnv, TransactionType, TxEnv};
+use sov_modules_api::da::Time;
 use sov_rpc_eth_types::EthResult;
 
-use crate::evm::primitive_types::TransactionSigned;
+use crate::evm::primitive_types::{
+    PendingTransaction, Receipt, TransactionSigned, TxSignedAndRecovered,
+};
 
 // Based on reth's RPC call env preparation:
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
@@ -69,10 +71,55 @@ pub(crate) fn from_recovered_with_block_context(
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }
 
+pub(crate) fn prepare_estimate_pending_transaction(
+    request: TransactionRequest,
+    block_number: u64,
+    fallback_chain_id: u64,
+    receipt: Receipt,
+    time: Time,
+) -> EthResult<PendingTransaction> {
+    let TransactionRequest {
+        from,
+        to,
+        gas,
+        gas_price,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        value,
+        input,
+        nonce,
+        access_list,
+        chain_id,
+        ..
+    } = request;
+
+    let max_fee_per_gas = max_fee_per_gas.or(gas_price).unwrap_or_default();
+    let max_priority_fee_per_gas = max_priority_fee_per_gas
+        .unwrap_or_default()
+        .min(max_fee_per_gas);
+
+    let signed_transaction = EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+        TxEip1559 {
+            chain_id: chain_id.unwrap_or(fallback_chain_id),
+            nonce: nonce.unwrap_or_default(),
+            gas_limit: gas.unwrap_or_default(),
+            max_fee_per_gas,
+            max_priority_fee_per_gas,
+            to: to.unwrap_or(TxKind::Create),
+            value: value.unwrap_or_default(),
+            input: input.try_into_unique_input()?.unwrap_or_default(),
+            access_list: access_list.unwrap_or_default(),
+        },
+        Signature::test_signature(),
+        Default::default(),
+    ));
+    let tx = TxSignedAndRecovered::new(from.unwrap_or_default(), signed_transaction, block_number);
+
+    Ok(PendingTransaction::new(tx, receipt, time))
+}
+
 #[cfg(test)]
 mod tests {
-    use alloy_consensus::{EthereumTxEnvelope, Signed, TxEip1559};
-    use alloy_primitives::Signature;
     use alloy_primitives::{Address, B256, U256};
     use revm::context::TransactTo;
 
