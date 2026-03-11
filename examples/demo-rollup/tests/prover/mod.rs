@@ -50,10 +50,6 @@ type ProofInput = StateTransitionWitnessWithAddress<
     MockDaSpec,
 >;
 
-#[allow(dead_code)]
-type ProofPublicData =
-    StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot>;
-
 /// This test reproduces the proof generation process for the rollup used in benchmarks.
 #[tokio::test(flavor = "multi_thread")]
 #[cfg_attr(skip_guest_build, ignore)]
@@ -188,9 +184,12 @@ impl TestHost {
     }
 
     #[allow(dead_code)]
-    async fn verify(&self, proof: Vec<u8>) -> ProofPublicData {
+    async fn verify(
+        &self,
+        proof: Vec<u8>,
+    ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
         let code_commitment = self.code_commitment.clone();
-        tokio::task::spawn_blocking(move || -> ProofPublicData {
+        tokio::task::spawn_blocking(move || -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
             SP1Verifier::verify(&proof, &code_commitment)
                 .expect("SP1 proof verification should succeed")
         })
