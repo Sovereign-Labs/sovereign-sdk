@@ -1,5 +1,6 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
+use celestia_types::nmt::NS_SIZE;
 use celestia_types::state::AddressTrait;
 use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use proptest::prelude::*;
@@ -9,10 +10,13 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaVerifier};
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_support::{
     append_segmented_blobs, assert_subproof_start_indices_align, build_block_from_ods,
-    make_blob_shares, rollup_params, signer_for_index, NS_BATCH, PREFIX_NAMESPACES,
-    SUFFIX_NAMESPACES,
+    make_blob_shares, rollup_params, signer_for_index, NS_BATCH, NS_HIGH_A, NS_LOW_A,
+    PREFIX_NAMESPACES, SUFFIX_NAMESPACES,
 };
-use crate::types::{FilteredCelestiaBlock, NamespaceBoundaryProof};
+use crate::types::{
+    FilteredCelestiaBlock, IncompleteNamespaceError, NamespaceBoundaryProof, NamespaceType,
+    NamespaceValidationError, ProofError, ValidationError,
+};
 use crate::verifier::proofs::BlobProof;
 use crate::verifier::CelestiaVerifier;
 
@@ -80,15 +84,52 @@ impl MultiRowBatchCase {
             self.seed.wrapping_add(0x80),
         );
         assert_eq!(shares.len(), total_shares);
+        assert_canonical_ods_namespaces(&shares);
 
         shares
     }
 }
 
+fn split_total_across_segments(total: usize, max_parts: usize, seed: u8) -> Vec<usize> {
+    if total == 0 {
+        return Vec::new();
+    }
+
+    let max_parts = max_parts.min(total);
+    let parts = 1 + (seed as usize % max_parts);
+    let mut segments = vec![1; parts];
+
+    for offset in 0..(total - parts) {
+        let idx = (seed as usize + offset) % parts;
+        segments[idx] += 1;
+    }
+
+    segments
+}
+
+fn assert_canonical_ods_namespaces(ods_shares: &[Vec<u8>]) {
+    for (idx, pair) in ods_shares.windows(2).enumerate() {
+        assert!(
+            pair[0].len() >= NS_SIZE && pair[1].len() >= NS_SIZE,
+            "generated share is shorter than namespace prefix at index {idx}"
+        );
+        assert!(
+            pair[0][..NS_SIZE] <= pair[1][..NS_SIZE],
+            "generated ODS namespaces are not globally non-decreasing between shares {idx} and {}",
+            idx + 1
+        );
+    }
+}
+
+fn build_canonical_block_from_ods(ods_shares: Vec<Vec<u8>>) -> FilteredCelestiaBlock {
+    assert_canonical_ods_namespaces(&ods_shares);
+    build_block_from_ods(ods_shares)
+}
+
 fn multi_row_case_strategy() -> BoxedStrategy<MultiRowBatchCase> {
     prop_oneof![Just(4usize), Just(8usize)]
         .prop_flat_map(|ods_width| {
-            (1..ods_width).prop_flat_map(move |prefix_rows| {
+            (0..ods_width).prop_flat_map(move |prefix_rows| {
                 let remaining = ods_width - prefix_rows - 1;
                 (0..=remaining, any::<u8>()).prop_map(move |(suffix_rows, seed)| {
                     let batch_rows = ods_width - prefix_rows - suffix_rows;
@@ -101,13 +142,21 @@ fn multi_row_case_strategy() -> BoxedStrategy<MultiRowBatchCase> {
                         prefix_rows,
                         batch_rows_full: batch_rows,
                         suffix_rows,
-                        batch_blob_shares: vec![batch_total],
-                        prefix_segments: vec![prefix_total],
-                        suffix_segments: if suffix_total == 0 {
-                            Vec::new()
-                        } else {
-                            vec![suffix_total]
-                        },
+                        batch_blob_shares: split_total_across_segments(
+                            batch_total,
+                            3,
+                            seed.wrapping_add(0x20),
+                        ),
+                        prefix_segments: split_total_across_segments(
+                            prefix_total,
+                            PREFIX_NAMESPACES.len(),
+                            seed,
+                        ),
+                        suffix_segments: split_total_across_segments(
+                            suffix_total,
+                            SUFFIX_NAMESPACES.len(),
+                            seed.wrapping_add(0x40),
+                        ),
                         seed,
                     }
                 })
@@ -173,7 +222,7 @@ impl MidRowBatchCase {
         );
         assert_eq!(shares.len(), total_shares);
 
-        build_block_from_ods(shares)
+        build_canonical_block_from_ods(shares)
     }
 }
 
@@ -253,7 +302,7 @@ impl SingleRowMidRowCase {
         }
         assert_eq!(shares.len(), total_shares);
 
-        build_block_from_ods(shares)
+        build_canonical_block_from_ods(shares)
     }
 }
 
@@ -273,6 +322,100 @@ fn single_row_mid_row_case_strategy() -> BoxedStrategy<SingleRowMidRowCase> {
                     })
                 },
             )
+        })
+        .boxed()
+}
+
+#[derive(Debug, Clone)]
+struct SingleRowAbsenceCase {
+    ods_width: usize,
+    candidate_low_len: usize,
+    seed: u8,
+}
+
+impl SingleRowAbsenceCase {
+    fn build_block(&self) -> FilteredCelestiaBlock {
+        let suffix_rows = self
+            .ods_width
+            .checked_sub(1)
+            .expect("single-row absence requires exactly one candidate row");
+        let candidate_high_len = self
+            .ods_width
+            .checked_sub(self.candidate_low_len)
+            .expect("candidate low_len must fit within row width");
+        let total_shares = self.ods_width * self.ods_width;
+        assert!(self.candidate_low_len > 0);
+        assert!(candidate_high_len > 0);
+
+        let mut shares = Vec::with_capacity(total_shares);
+        shares.extend(make_blob_shares(
+            NS_LOW_A,
+            self.candidate_low_len,
+            None,
+            self.seed.wrapping_add(0x20),
+        ));
+        shares.extend(make_blob_shares(
+            NS_HIGH_A,
+            candidate_high_len,
+            None,
+            self.seed.wrapping_add(0x21),
+        ));
+        for row_idx in 0..suffix_rows {
+            shares.extend(make_blob_shares(
+                NS_HIGH_A,
+                self.ods_width,
+                None,
+                self.seed.wrapping_add(0x40).wrapping_add(row_idx as u8),
+            ));
+        }
+
+        assert_eq!(shares.len(), total_shares);
+        build_canonical_block_from_ods(shares)
+    }
+}
+
+fn single_row_absence_case_strategy() -> BoxedStrategy<SingleRowAbsenceCase> {
+    prop_oneof![Just(4usize), Just(8usize), Just(32),]
+        .prop_flat_map(|ods_width| {
+            (1..ods_width, any::<u8>()).prop_map(move |(candidate_low_len, seed)| {
+                SingleRowAbsenceCase {
+                    ods_width,
+                    candidate_low_len,
+                    seed,
+                }
+            })
+        })
+        .boxed()
+}
+
+#[derive(Debug, Clone)]
+struct ZeroRowAbsenceCase {
+    ods_width: usize,
+    seed: u8,
+}
+
+impl ZeroRowAbsenceCase {
+    fn build_block(&self) -> FilteredCelestiaBlock {
+        let total_shares = self.ods_width * self.ods_width;
+        let mut shares = Vec::with_capacity(total_shares);
+        // Fill all rows with NS_HIGH_A (ns=4 > NS_BATCH=3), so no row contains NS_BATCH.
+        for row_idx in 0..self.ods_width {
+            shares.extend(make_blob_shares(
+                NS_HIGH_A,
+                self.ods_width,
+                None,
+                self.seed.wrapping_add(row_idx as u8),
+            ));
+        }
+        assert_eq!(shares.len(), total_shares);
+        build_canonical_block_from_ods(shares)
+    }
+}
+
+fn zero_row_absence_case_strategy() -> BoxedStrategy<ZeroRowAbsenceCase> {
+    prop_oneof![Just(4usize), Just(8usize)]
+        .prop_flat_map(|ods_width| {
+            any::<u8>().prop_map(move |seed| ZeroRowAbsenceCase { ods_width, seed })
         })
         .boxed()
 }
@@ -331,10 +474,64 @@ proptest! {
         }
 
         let proofs = get_extraction_proof(&block, &relevant_blobs);
+        prop_assert!(!proofs.batch.inclusion_proof.is_empty());
         let verifier = CelestiaVerifier::new(rollup_params());
         relevant_blobs.batch_blobs.clear();
 
         prop_assert!(verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, proofs).is_err());
+    }
+
+    #[test]
+    fn proptest_multi_blob_full_verification(case in multi_row_case_strategy()) {
+        let block = case.build_block();
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        prop_assert_eq!(relevant_blobs.batch_blobs.len(), case.batch_blob_shares.len());
+        prop_assert!(relevant_blobs.proof_blobs.is_empty());
+        for blob in &mut relevant_blobs.batch_blobs {
+            blob.advance(blob.total_len());
+        }
+        let proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert_subproof_start_indices_align(&block, "batch", &proofs.batch.inclusion_proof);
+        assert_subproof_start_indices_align(&block, "proof", &proofs.proof.inclusion_proof);
+        let result = CelestiaVerifier::new(rollup_params())
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, proofs);
+        prop_assert!(
+            result.is_ok(),
+            "multi-blob verification failed with {:?} for case: {:?}",
+            result.err(),
+            case
+        );
+    }
+
+    // Multi-candidate empty-namespace ambiguity is covered by deterministic tests in
+    // `da_service/tests.rs` and `verifier/mod.rs`, not by generated end-to-end ODS layouts.
+    #[test]
+    fn proptest_single_row_empty_namespace_with_boundary_proof_verifies(
+        case in single_row_absence_case_strategy()
+    ) {
+        let block = case.build_block();
+        let candidate_rows = block.rollup_batch_data.data.rows();
+        let namespace_row_root_count = block.header.get_row_roots_for_namespace(NS_BATCH).count();
+        let relevant_blobs = extract_relevant_blobs(&block);
+
+        prop_assert_eq!(candidate_rows.len(), 1);
+        prop_assert_eq!(namespace_row_root_count, 1);
+        prop_assert!(candidate_rows[0].shares.is_empty());
+        prop_assert!(relevant_blobs.batch_blobs.is_empty());
+        prop_assert!(relevant_blobs.proof_blobs.is_empty());
+
+        let proofs = get_extraction_proof(&block, &relevant_blobs);
+        prop_assert!(proofs.batch.inclusion_proof.is_empty());
+        prop_assert!(proofs.batch.completeness_proof.is_some());
+
+        let result = CelestiaVerifier::new(rollup_params())
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, proofs);
+        prop_assert!(
+            result.is_ok(),
+            "single-row empty namespace should verify, got {:?} for case {:?}",
+            result.err(),
+            case
+        );
     }
 
     #[test]
@@ -458,6 +655,59 @@ proptest! {
             &relevant_blobs,
             proofs,
             "mutated boundary range",
+        );
+    }
+
+    #[test]
+    fn proptest_zero_candidate_rows_early_return(case in zero_row_absence_case_strategy()) {
+        let block = case.build_block();
+        let namespace_row_root_count = block.header.get_row_roots_for_namespace(NS_BATCH).count();
+        let relevant_blobs = extract_relevant_blobs(&block);
+
+        prop_assert_eq!(namespace_row_root_count, 0);
+        prop_assert!(relevant_blobs.batch_blobs.is_empty());
+        prop_assert!(relevant_blobs.proof_blobs.is_empty());
+
+        let proofs = get_extraction_proof(&block, &relevant_blobs);
+        let result = CelestiaVerifier::new(rollup_params())
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, proofs);
+        prop_assert!(
+            result.is_ok(),
+            "zero candidate rows with empty blobs should verify, got {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn proptest_single_row_absence_without_boundary_proof_rejected(
+        case in single_row_absence_case_strategy()
+    ) {
+        let block = case.build_block();
+        let candidate_rows = block.rollup_batch_data.data.rows();
+        let relevant_blobs = extract_relevant_blobs(&block);
+
+        prop_assert_eq!(candidate_rows.len(), 1);
+        prop_assert!(relevant_blobs.batch_blobs.is_empty());
+
+        let mut proofs = get_extraction_proof(&block, &relevant_blobs);
+        prop_assert!(proofs.batch.completeness_proof.is_some());
+        proofs.batch.completeness_proof = None;
+
+        let err = CelestiaVerifier::new(rollup_params())
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, proofs)
+            .expect_err("missing boundary proof should fail");
+        prop_assert!(
+            matches!(
+                err,
+                ValidationError::NamespaceValidationError {
+                    namespace: NamespaceType::Batch,
+                    error: NamespaceValidationError::IncompleteNamespace(
+                        IncompleteNamespaceError::ProofError(ProofError::Missing)
+                    ),
+                }
+            ),
+            "unexpected verifier error: {:?}",
+            err
         );
     }
 }
