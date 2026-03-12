@@ -303,7 +303,7 @@ where
             .map_err(EthApiError::from)?
             .map(|account| account.balance)
             .unwrap_or_default();
-        let total_cost = raw_transaction_upfront_cost(&tx)?;
+        let total_cost = raw_transaction_upfront_cost(tx)?;
 
         ensure_balance_covers_upfront_cost(balance, total_cost)
     }
