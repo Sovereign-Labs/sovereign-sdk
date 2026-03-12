@@ -2,6 +2,7 @@ pub struct BatchSizeTracker {
     pub max_batch_size: usize,
     pub current_batch_size: usize,
     pub batch_execution_time_micros: u64,
+    pub last_tx_timestamp_secs: Option<u64>,
 }
 
 impl BatchSizeTracker {
@@ -25,6 +26,7 @@ impl BatchSizeTracker {
             max_batch_size,
             current_batch_size: Self::BATCH_SIZE_OVERHEAD,
             batch_execution_time_micros: 0,
+            last_tx_timestamp_secs: None,
         }
     }
 
@@ -36,9 +38,20 @@ impl BatchSizeTracker {
         self.current_batch_size + Self::serialized_tx_size(tx_size) <= self.max_batch_size
     }
 
-    pub fn add_tx(&mut self, tx_size: usize, execution_time_micros: u64) {
+    pub fn add_tx(
+        &mut self,
+        tx_size: usize,
+        execution_time_micros: u64,
+        tx_timestamp_secs: Option<u64>,
+    ) {
         self.current_batch_size += Self::serialized_tx_size(tx_size);
         self.batch_execution_time_micros += execution_time_micros;
+        if let Some(tx_timestamp_secs) = tx_timestamp_secs {
+            self.last_tx_timestamp_secs = Some(
+                self.last_tx_timestamp_secs
+                    .map_or(tx_timestamp_secs, |current| current.max(tx_timestamp_secs)),
+            );
+        }
     }
 }
 
@@ -71,7 +84,7 @@ mod tests {
         // The tracker can fit all the transactions...
         for tx_size in tx_sizes {
             assert!(tracker.can_fit_tx_bytes(tx_size as _));
-            tracker.add_tx(tx_size, 0);
+            tracker.add_tx(tx_size, 0, None);
         }
 
         assert_eq!(tracker.current_batch_size, batch_size);
@@ -101,8 +114,25 @@ mod tests {
 
         let mut tracker = BatchSizeTracker::new(100);
         for tx_time in tx_times {
-            tracker.add_tx(0, tx_time);
+            tracker.add_tx(0, tx_time, None);
         }
         assert_eq!(tracker.batch_execution_time_micros, batch_time);
+    }
+
+    #[test]
+    fn last_tx_timestamp_secs_tracks_max_present_value() {
+        let mut tracker = BatchSizeTracker::new(100);
+
+        tracker.add_tx(0, 0, Some(10));
+        assert_eq!(tracker.last_tx_timestamp_secs, Some(10));
+
+        tracker.add_tx(0, 0, Some(8));
+        assert_eq!(tracker.last_tx_timestamp_secs, Some(10));
+
+        tracker.add_tx(0, 0, None);
+        assert_eq!(tracker.last_tx_timestamp_secs, Some(10));
+
+        tracker.add_tx(0, 0, Some(12));
+        assert_eq!(tracker.last_tx_timestamp_secs, Some(12));
     }
 }

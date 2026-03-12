@@ -23,6 +23,7 @@ use crate::preferred::{
 };
 use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
 use sov_blob_storage::SequenceNumber;
+use sov_modules_api::capabilities::get_maybe_timestamp_from_sequencing_data;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::Gas;
 use sov_modules_api::{
@@ -35,6 +36,7 @@ use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{oneshot, watch};
 use tracing::{debug, info, warn};
 
@@ -47,6 +49,7 @@ const COMFORTABLE_SIZE_LIMIT_DIVISOR: u64 = 100;
 const COMFORTABLE_IN_FLIGHT_BLOBS: usize = 5;
 
 const METRICS_BATCH_SIZE: usize = 32;
+const NANOS_PER_SECOND: u128 = 1_000_000_000;
 
 #[derive(Debug)]
 pub(crate) enum DoNewTxError<S: Spec> {
@@ -173,6 +176,19 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
+    fn current_unix_timestamp_secs() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("SystemTime::now() returned something earlier than the UNIX epoch")
+            .as_secs()
+    }
+
+    fn current_batch_must_wait_for_next_second(&self) -> bool {
+        self.batch_size_tracker
+            .last_tx_timestamp_secs
+            .is_some_and(|last| Self::current_unix_timestamp_secs() <= last)
+    }
+
     pub(crate) fn nb_of_concurrent_blob_submissions(&self) -> usize {
         self.in_flight_blobs.load(Ordering::Acquire)
     }
@@ -307,6 +323,14 @@ where
         &mut self,
         remaining_slot_gas: <S as GasSpec>::Gas,
     ) {
+        if self.current_batch_must_wait_for_next_second() {
+            tracing::trace!(
+                last_tx_timestamp_secs = ?self.batch_size_tracker.last_tx_timestamp_secs,
+                "Keeping the current preferred batch open until the next second boundary"
+            );
+            return;
+        }
+
         // Check if we're close to the gas limit and close the batch if we are.
         // We want to close when gas used is at least 95% of the initial gas limit.
         let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
@@ -398,6 +422,14 @@ where
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
             info!(
                 "The sequencer is shutting down. Exiting trigger_batch_production_if_convenient."
+            );
+            return;
+        }
+
+        if self.current_batch_must_wait_for_next_second() {
+            tracing::trace!(
+                last_tx_timestamp_secs = ?self.batch_size_tracker.last_tx_timestamp_secs,
+                "Keeping the current preferred batch open until the next second boundary"
             );
             return;
         }
@@ -660,6 +692,8 @@ where
         } = &mut *self;
 
         let tx_len = baked_tx.len();
+        let tx_timestamp_secs = get_maybe_timestamp_from_sequencing_data::<S, Rt>(&baked_tx, false)
+            .and_then(|timestamp| u64::try_from(timestamp.as_nanos() / NANOS_PER_SECOND).ok());
         if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
             return (
                 Err(DoNewTxError::TxTooBig {
@@ -704,7 +738,7 @@ where
         let gas_used = accepted_tx.confirmation.gas_used();
         let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
 
-        batch_size_tracker.add_tx(tx_len, execution_time_micros);
+        batch_size_tracker.add_tx(tx_len, execution_time_micros, tx_timestamp_secs);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
