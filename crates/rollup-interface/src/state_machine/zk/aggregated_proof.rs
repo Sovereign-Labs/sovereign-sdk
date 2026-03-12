@@ -67,10 +67,21 @@ impl<Address, Da: DaSpec, Root: AsRef<[u8]>> core::fmt::Display
 }
 
 /// Represents a serialized aggregated proof.
-#[derive(Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
+#[derive(
+    Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Default,
+)]
 pub struct SerializedAggregatedProof {
     /// Serialized proof.
     pub raw_aggregated_proof: Vec<u8>,
+}
+
+/// A serialized partial proof receipt.
+#[derive(
+    Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Default,
+)]
+pub struct SerializedPartialProofReceipt {
+    /// Serialized proof receipt.
+    pub raw_proof_receipt: Vec<u8>,
 }
 
 /// Validates an Aggregated Proof.

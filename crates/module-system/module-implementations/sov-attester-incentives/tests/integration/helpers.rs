@@ -189,10 +189,12 @@ pub(crate) fn make_attestation_blob(
 ) -> Vec<u8> {
     let serialized_attestation = SerializedAttestation::from_attestation(&attestation).unwrap();
 
-    serialize_attestation_blob_with_metadata::<S>(serialized_attestation)
-        .unwrap()
-        .0
-        .to_vec()
+    borsh::to_vec(
+        &serialize_attestation_blob_with_metadata::<S>(serialized_attestation)
+            .unwrap()
+            .0,
+    )
+    .unwrap()
 }
 
 pub(crate) fn create_test_case(
@@ -284,8 +286,10 @@ pub(crate) fn make_challenge_blob(
         raw_challenge: serialized_challenge,
     };
 
-    serialize_challenge_blob_with_metadata::<S>(serialized_challenge, challenge_slot)
-        .unwrap()
-        .0
-        .to_vec()
+    borsh::to_vec(
+        &serialize_challenge_blob_with_metadata::<S>(serialized_challenge, challenge_slot)
+            .unwrap()
+            .0,
+    )
+    .unwrap()
 }

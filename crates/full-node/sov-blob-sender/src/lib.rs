@@ -437,7 +437,10 @@ impl FinalizationManager for LedgerDb {
                     blob.slot_number,
                     BlobSelectorStatus::Discarded(blob.discarded_blob.reason),
                 ),
-                None => return Ok(None),
+                None => match self.get_proof_receipt_by_hash(blob_hash).await? {
+                    Some(proof_receipt) => (proof_receipt.0, BlobSelectorStatus::Accepted),
+                    None => return Ok(None),
+                },
             },
         };
 

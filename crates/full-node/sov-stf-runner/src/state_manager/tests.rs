@@ -30,6 +30,9 @@ use sov_state::{
 };
 
 use super::*;
+// We need a proof receipt type whose first and last generics are serializable, and middle two params are daspec and state root.
+// This is never constructed - just used to satisfy the type checker.
+type DummyProofReceipt = PartialProofReceipt<u64, MockDaSpec, StateRoot, u64>;
 
 const DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
 
@@ -322,6 +325,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                     transition_witness,
                     slot_commit,
                     Vec::new(),
+                    Vec::<DummyProofReceipt>::new(),
                 )
                 .await?;
             check_internal_consistency(&state_manager, finality as usize);
@@ -407,6 +411,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             transition_witness,
             slot_commit,
             Vec::new(),
+            Vec::<DummyProofReceipt>::new(),
         )
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
@@ -517,6 +522,7 @@ async fn test_progressing_with_shuffle(
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -733,6 +739,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -830,6 +837,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -1274,6 +1282,7 @@ async fn process_continuous_transition(
             transition_witness,
             slot_commit,
             Vec::new(),
+            Vec::<DummyProofReceipt>::new(),
         )
         .await?;
     check_internal_consistency(state_manager, finality as usize);
@@ -1555,6 +1564,7 @@ async fn test_progressing_with_rewind_below_finalized(
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         // Skip check_internal_consistency - this test exercises abnormal DA behavior
@@ -1622,6 +1632,7 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
     }
@@ -1720,6 +1731,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
     }
@@ -1771,6 +1783,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
             transition_witness,
             slot_commit,
             Vec::new(),
+            Vec::<DummyProofReceipt>::new(),
         )
         .await?;
 
@@ -1890,6 +1903,7 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
                 transition_witness,
                 slot_commit,
                 Vec::new(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
 

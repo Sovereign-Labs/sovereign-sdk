@@ -224,7 +224,7 @@ pub(crate) enum DbEvent {
 }
 
 pub struct BlobsCache {
-    completed_blobs: VecDeque<ReadBlob>,
+    completed_blobs_out_of_order: VecDeque<ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
     shutdown_sender: watch::Sender<()>,
@@ -237,7 +237,7 @@ impl BlobsCache {
         shutdown_sender: watch::Sender<()>,
     ) -> Self {
         Self {
-            completed_blobs,
+            completed_blobs_out_of_order: completed_blobs,
             in_progress_batch,
             event_stream: None,
             shutdown_sender,
@@ -248,8 +248,8 @@ impl BlobsCache {
         self.in_progress_batch.as_ref()
     }
 
-    pub fn all_completed_blobs(&self) -> Vec<ReadBlob> {
-        self.completed_blobs.clone().into()
+    pub fn all_completed_blobs_unordered(&self) -> Vec<ReadBlob> {
+        self.completed_blobs_out_of_order.clone().into()
     }
 
     // Ensure that the provided batch number is wihin the range of sequence numbers that might plausibly be needed for replay.
@@ -264,24 +264,26 @@ impl BlobsCache {
             .as_ref()
             .map(|b| b.sequence_number)
             .unwrap_or_else(|| {
-                self.completed_blobs
-                    .back()
+                self.completed_blobs_out_of_order
+                    .iter()
                     .map(|b| b.sequence_number().saturating_add(1))
+                    .max()
                     .unwrap_or(u64::MAX)
             });
 
         // The lowest allowed sequence number is either the sequence number of the first completed blob (if one exists) or the sequence number of the in-progress batch (if one exists).
         // If no batch is in progress *and* we don't have any completed blobs in cache, we don't know what the next sequence number should be so we allow any value.
-        let lowest_allowed_sequence_number = self
-            .completed_blobs
-            .front()
-            .map(|b| b.sequence_number())
-            .unwrap_or_else(|| {
-                self.in_progress_batch
-                    .as_ref()
-                    .map(|b| b.sequence_number)
-                    .unwrap_or(0)
-            });
+        let mut lowest_allowed_sequence_number = u64::MAX;
+        self.completed_blobs_out_of_order.front().map(|b| {
+            lowest_allowed_sequence_number = lowest_allowed_sequence_number.min(b.sequence_number())
+        });
+        if lowest_allowed_sequence_number == u64::MAX {
+            lowest_allowed_sequence_number = self
+                .in_progress_batch
+                .as_ref()
+                .map(|b| b.sequence_number)
+                .unwrap_or(0)
+        }
 
         assert!(batch_sequence_number <= highest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is greater than the highest allowed sequence number {highest_allowed_sequence_number}. This is a bug, please report it.");
         assert!(batch_sequence_number >= lowest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is less than the lowest allowed sequence number {lowest_allowed_sequence_number}. This is a bug, please report it.");
@@ -298,14 +300,16 @@ impl BlobsCache {
         // We have alternating runs of proofs and batches: [proof1, batch1, batch2, proof2, proof3, batch3, ...]
         // Given the sequence number of a batch, we want to return all proofs between the previous batch and the requested batch.
         // Using the above example, if the caller provided batch3, we would need to return [proof2, proof3].
-        for blob in self.completed_blobs.iter() {
+        for blob in self.completed_blobs_out_of_order.iter() {
             match blob {
                 ReadBlob::Batch(batch) => {
                     // If it's a batch, either we've hit our target or we need to reset our output.
                     if batch.sequence_number == batch_sequence_number {
                         break;
                     }
-                    output.clear();
+                    output.retain(|p: &PreferredProofToReplay| {
+                        p.sequence_number > batch_sequence_number
+                    });
                 }
                 ReadBlob::Proof {
                     sequence_number,
@@ -331,11 +335,11 @@ impl BlobsCache {
         output
     }
 
-    pub fn all_completed_blobs_greater_than_or_equal_to(
+    pub fn all_completed_blobs_greater_than_or_equal_to_unordered(
         &self,
         sequence_number: SequenceNumber,
     ) -> Vec<ReadBlob> {
-        self.completed_blobs
+        self.completed_blobs_out_of_order
             .iter()
             .filter(|b| {
                 // Pruning invariants say it MAY remove older blobs, but we don't know for sure.
@@ -419,7 +423,7 @@ impl BlobsCache {
     }
 
     pub fn clean_all_batches(&mut self) {
-        self.completed_blobs.clear();
+        self.completed_blobs_out_of_order.clear();
         self.in_progress_batch = None;
     }
 
@@ -429,11 +433,12 @@ impl BlobsCache {
         data: PreferredProofDataBytes,
         sequence_number: SequenceNumber,
     ) {
-        self.completed_blobs.push_back(ReadBlob::Proof {
-            blob_id,
-            sequence_number,
-            data: data.clone(),
-        });
+        self.completed_blobs_out_of_order
+            .push_back(ReadBlob::Proof {
+                blob_id,
+                sequence_number,
+                data: data.clone(),
+            });
 
         self.send_event_if_necessary(DbEvent::ProofBlobAccepted {
             sequence_number,
@@ -458,7 +463,7 @@ impl BlobsCache {
 
         let batch: ReadBatch = batch.into();
 
-        self.completed_blobs
+        self.completed_blobs_out_of_order
             .push_back(ReadBlob::Batch(batch.clone()));
 
         self.send_event_if_necessary(DbEvent::BatchClosed(sequence_number))
@@ -476,12 +481,12 @@ impl BlobsCache {
 
     pub async fn prune(&mut self, prune_up_to_including: SequenceNumber) {
         // We could also do binary search, but this seems fast enough.
-        while let Some(blob) = self.completed_blobs.front() {
+        while let Some(blob) = self.completed_blobs_out_of_order.front() {
             if blob.sequence_number() > prune_up_to_including {
                 break;
             }
 
-            self.completed_blobs.pop_front();
+            self.completed_blobs_out_of_order.pop_front();
         }
     }
 

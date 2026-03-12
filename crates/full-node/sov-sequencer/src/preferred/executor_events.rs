@@ -240,7 +240,9 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         // 2. Flush all batches to the BlobSender
         let blobs_to_flush = self
             .cache
-            .all_completed_blobs_greater_than_or_equal_to(next_sequence_number_according_to_node);
+            .all_completed_blobs_greater_than_or_equal_to_unordered(
+                next_sequence_number_according_to_node,
+            );
 
         self.send(ExecutorEvent::TriggerRecovery {
             blobs_to_flush,
@@ -263,7 +265,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     ) -> Vec<PreferredBlobToReplay> {
         let blobs_to_apply = self
             .cache
-            .all_completed_blobs_greater_than_or_equal_to(after_and_including);
+            .all_completed_blobs_greater_than_or_equal_to_unordered(after_and_including);
         let first_sequence_number = blobs_to_apply.first().map(|b| b.sequence_number());
 
         tracing::trace!(

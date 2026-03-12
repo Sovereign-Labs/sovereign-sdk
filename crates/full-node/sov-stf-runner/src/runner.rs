@@ -18,7 +18,8 @@ use sov_rollup_interface::node::{
     future_or_shutdown, DaSyncState, FutureOrShutdownOutput, SyncStatus,
 };
 use sov_rollup_interface::stf::{
-    ExecutionContext, ProofOutcome, ProofReceipt, ProofReceiptContents, StateTransitionFunction,
+    ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
+    StateTransitionFunction,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -636,8 +637,8 @@ where
                 witness: slot_result.witness,
             };
 
-        let aggregated_proofs =
-            Self::collect_aggregated_proofs(slot_result.proof_receipts.into_iter());
+        let (aggregated_proofs, proof_receipts) =
+            Self::collect_aggregated_proofs_and_receipts(slot_result.proof_receipts.into_iter());
 
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
@@ -647,6 +648,7 @@ where
                 transition_data,
                 data_to_commit,
                 aggregated_proofs,
+                proof_receipts,
             )
             .await?;
         trace!("Stf changes processing is completed");
@@ -709,19 +711,25 @@ where
         self.da_service.clone()
     }
 
-    fn collect_aggregated_proofs(
+    fn collect_aggregated_proofs_and_receipts(
         receipts: impl Iterator<
             Item = ProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
         >,
-    ) -> Vec<SerializedAggregatedProof> {
+    ) -> (
+        Vec<SerializedAggregatedProof>,
+        Vec<PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>>,
+    ) {
         let mut aggregated_proofs: Vec<SerializedAggregatedProof> = Vec::new();
-        for receipt in receipts {
-            match receipt.outcome {
+        let mut partial_receipts: Vec<
+            PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
+        > = Vec::new();
+        for mut receipt in receipts {
+            match &mut receipt.outcome {
                 ProofOutcome::Valid(ProofReceiptContents::AggregateProof(
                     _public_data,
                     raw_proof,
                 )) => {
-                    aggregated_proofs.push(raw_proof);
+                    aggregated_proofs.push(std::mem::take(raw_proof));
                 }
                 ProofOutcome::Valid(_) => {
                     tracing::info!("Not aggregated proof, probably running in a different mode. Will be fixed in the future.");
@@ -733,9 +741,10 @@ where
                         "Invalid proof outcome");
                 }
             }
+            partial_receipts.push(receipt.into());
         }
 
-        aggregated_proofs
+        (aggregated_proofs, partial_receipts)
     }
 }
 
