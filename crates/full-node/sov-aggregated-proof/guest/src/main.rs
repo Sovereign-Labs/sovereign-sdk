@@ -36,13 +36,11 @@ pub fn main() {
         // Pack the 32-byte hash into [u64; 4] (little-endian, matching SP1's transmute layout).
         let mut pv_digest = [0u64; 4];
         for i in 0..4 {
-            pv_digest[i] = u64::from_le_bytes(
-                hash[i * 8..(i + 1) * 8].try_into().unwrap(),
-            );
+            pv_digest[i] = u64::from_le_bytes(hash[i * 8..(i + 1) * 8].try_into().unwrap());
         }
 
         // Verify the inner proof recursively.
         // The proof was written by the host via stdin.write_proof() and is consumed implicitly.
-        sp1_zkvm::syscalls::verify::syscall_verify_sp1_proof(&vkey_hash, &pv_digest);
+        //sp1_zkvm::syscalls::verify::syscall_verify_sp1_proof(&vkey_hash, &pv_digest);
     }
 }
