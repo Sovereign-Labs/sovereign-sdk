@@ -1,16 +1,21 @@
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64, parse_hex_u128,
-    parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_error_message,
-    rpc_error_object, rpc_result_hex, setup_test_rollup, setup_with_simple_storage, tx_count,
-    EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
+    alloy_ws_client, create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64,
+    parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response,
+    rpc_error_message, rpc_error_object, rpc_result_hex, setup_test_rollup,
+    setup_with_simple_storage, tx_count, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
+    HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
+use alloy_provider::Provider;
+use alloy_rpc_types_eth::Filter;
 use alloy_rpc_types_trace::geth::GethTrace;
+use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
 use serde_json::json;
+use tokio::time::{timeout, Duration};
 
 const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
@@ -22,6 +27,10 @@ const AFFORDABILITY_SIGNER_PRIV_KEY: &str =
     "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const AFFORDABILITY_BALANCE_MULTIPLIER: u64 = 100;
 const INSUFFICIENT_FUNDS_FOR_GAS_ERROR: &str = "insufficient funds for gas * price + value";
+const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
+const EMPTY_WITHDRAWALS_ROOT: &str =
+    "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
+const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 // Overlap note: earlier low-fee-cap rejection coverage lives in
 // `evm_call_fee_fields.rs::{eth_call_rejects_below_base_fee_with_max_fee_per_gas, eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas}`.
@@ -59,6 +68,13 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
         json!([estimate_request, "latest"]),
     )
     .await?;
+    let call_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_call",
+        json!([estimate_request, "latest"]),
+    )
+    .await?;
 
     let raw_tx = raw_signed_eip1559(
         &signer,
@@ -86,13 +102,54 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
         "estimate should reject maxFeePerGas below base fee: {estimate_response}"
     );
     assert!(
+        call_response.get("error").is_some(),
+        "eth_call should reject maxFeePerGas below base fee: {call_response}"
+    );
+    assert!(
         send_response.get("error").is_some(),
         "send should reject maxFeePerGas below base fee: {send_response}"
+    );
+    assert!(
+        estimate_response.get("result").is_none() || estimate_response["result"].is_null(),
+        "estimate should not return a result on fee-cap rejection: {estimate_response}"
+    );
+    assert!(
+        call_response.get("result").is_none() || call_response["result"].is_null(),
+        "eth_call should not return a result on fee-cap rejection: {call_response}"
+    );
+    assert!(
+        send_response.get("result").is_none() || send_response["result"].is_null(),
+        "send should not return a result on fee-cap rejection: {send_response}"
     );
     assert_eq!(
         rpc_error_code_from_response(&estimate_response, "eth_estimateGas"),
         rpc_error_code_from_response(&send_response, "eth_sendRawTransaction"),
         "estimate and send should reject with the same JSON-RPC error class"
+    );
+    assert_eq!(
+        rpc_error_code_from_response(&call_response, "eth_call"),
+        rpc_error_code_from_response(&send_response, "eth_sendRawTransaction"),
+        "eth_call and send should reject with the same JSON-RPC error class"
+    );
+    assert!(
+        rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
+            .contains(FEE_CAP_TOO_LOW_ERROR),
+        "estimate should reject for the exact below-base-fee reason: {estimate_response}"
+    );
+    assert!(
+        rpc_error_message(rpc_error_object(&call_response, "eth_call"))
+            .contains(FEE_CAP_TOO_LOW_ERROR),
+        "eth_call should reject for the exact below-base-fee reason: {call_response}"
+    );
+    assert!(
+        rpc_error_message(rpc_error_object(&send_response, "eth_sendRawTransaction"))
+            .contains(FEE_CAP_TOO_LOW_ERROR),
+        "send should reject for the exact below-base-fee reason: {send_response}"
+    );
+    assert_eq!(
+        tx_count(&ws_client, signer.address(), "latest").await?,
+        nonce,
+        "failed raw send must not advance sender nonce"
     );
 
     Ok(())
@@ -348,6 +405,163 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let contract_address = deploy_contract_check(&ws_client)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let http = Client::new();
+    let sender = ws_client.address();
+    let simulation_max_fee_per_gas = DEFAULT_MAX_FEE_PER_GAS;
+    let simulation_priority_fee_per_gas = DEFAULT_MAX_PRIORITY_FEE_PER_GAS;
+
+    let capped_eth_call_succeeds = |calldata: Bytes| {
+        let http = &http;
+        async move {
+            let response = rpc_call(
+                http,
+                rollup.http_addr,
+                "eth_call",
+                json!([{
+                    "from": sender,
+                    "to": contract_address,
+                    "data": format!("0x{}", hex::encode(calldata.as_ref())),
+                    "gas": hex_u64(ETH_TX_GAS_CAP),
+                    "value": "0x0",
+                    "maxFeePerGas": hex_u128(simulation_max_fee_per_gas),
+                    "maxPriorityFeePerGas": hex_u128(simulation_priority_fee_per_gas)
+                }, "latest"]),
+            )
+            .await?;
+            Ok::<bool, anyhow::Error>(response.get("error").is_none())
+        }
+    };
+
+    let mut last_success = None;
+    let mut first_failure = None;
+    let mut probe = 1u32;
+    while probe <= 1_000_000 {
+        if capped_eth_call_succeeds(ws_client.contract.burn_gas(probe)).await? {
+            last_success = Some(probe);
+            probe = probe
+                .checked_mul(2)
+                .ok_or_else(|| anyhow::anyhow!("burn_gas probe overflow"))?;
+        } else {
+            first_failure = Some(probe);
+            break;
+        }
+    }
+    let control_iterations = last_success
+        .ok_or_else(|| anyhow::anyhow!("failed to find a workload below tx gas cap"))?;
+    let failing_iterations = first_failure
+        .ok_or_else(|| anyhow::anyhow!("failed to find a burn_gas workload beyond tx gas cap"))?;
+
+    assert!(
+        capped_eth_call_succeeds(ws_client.contract.burn_gas(control_iterations)).await?,
+        "the largest observed successful workload should still fit inside the real tx gas cap"
+    );
+
+    let failing_calldata = ws_client.contract.burn_gas(failing_iterations);
+    let explicit_capped_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_call",
+        json!([{
+            "from": sender,
+            "to": contract_address,
+            "data": format!("0x{}", hex::encode(failing_calldata.as_ref())),
+            "gas": hex_u64(ETH_TX_GAS_CAP),
+            "value": "0x0",
+            "maxFeePerGas": hex_u128(simulation_max_fee_per_gas),
+            "maxPriorityFeePerGas": hex_u128(simulation_priority_fee_per_gas)
+        }, "latest"]),
+    )
+    .await?;
+    assert!(
+        explicit_capped_response.get("error").is_some(),
+        "explicit 30M-gas eth_call should fail for the threshold workload: {explicit_capped_response}"
+    );
+
+    let omitted_gas_call_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_call",
+        json!([{
+            "from": sender,
+            "to": contract_address,
+            "data": format!("0x{}", hex::encode(failing_calldata.as_ref())),
+            "value": "0x0",
+            "maxFeePerGas": hex_u128(simulation_max_fee_per_gas),
+            "maxPriorityFeePerGas": hex_u128(simulation_priority_fee_per_gas)
+        }, "latest"]),
+    )
+    .await?;
+    assert!(
+        omitted_gas_call_response.get("error").is_some(),
+        "omitted-gas eth_call should classify the threshold workload as failing too: {omitted_gas_call_response}"
+    );
+
+    let estimate_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_estimateGas",
+        json!([{
+            "from": sender,
+            "to": contract_address,
+            "data": format!("0x{}", hex::encode(failing_calldata.as_ref())),
+            "value": "0x0",
+            "maxFeePerGas": hex_u128(simulation_max_fee_per_gas),
+            "maxPriorityFeePerGas": hex_u128(simulation_priority_fee_per_gas)
+        }, "latest"]),
+    )
+    .await?;
+    assert!(
+        estimate_response.get("error").is_some(),
+        "omitted-gas estimateGas should reject the threshold workload: {estimate_response}"
+    );
+    assert!(
+        estimate_response.get("result").is_none() || estimate_response["result"].is_null(),
+        "estimateGas should not return a gas value for the threshold workload: {estimate_response}"
+    );
+
+    let nonce = tx_count(&ws_client, signer.address(), "latest").await?;
+    let raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        nonce,
+        ETH_TX_GAS_CAP,
+        TxKind::Call(contract_address),
+        U256::ZERO,
+        failing_calldata,
+        simulation_max_fee_per_gas,
+        simulation_priority_fee_per_gas,
+    )
+    .await?;
+    let send_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([raw_tx]),
+    )
+    .await?;
+    if send_response.get("error").is_none() {
+        let tx_hash: B256 = rpc_result_hex(&send_response).parse()?;
+        let receipt = ws_client.wait_for_finalized_receipt(tx_hash).await;
+        assert!(
+            !receipt.status(),
+            "a real 30M-gas tx should not complete successfully for the threshold workload"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract = deploy_contract_check(&client)
@@ -427,6 +641,11 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
 
     assert_eq!(response["result"]["oldestBlock"].as_str(), Some("0x0"));
     assert_eq!(
+        response["result"]["baseFeePerGas"],
+        json!([]),
+        "baseFeePerGas should be exactly [] for zero-block feeHistory"
+    );
+    assert_eq!(
         response["result"]["baseFeePerGas"]
             .as_array()
             .map(Vec::len)
@@ -434,11 +653,20 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
         0
     );
     assert_eq!(
+        response["result"]["gasUsedRatio"],
+        json!([]),
+        "gasUsedRatio should be exactly [] for zero-block feeHistory"
+    );
+    assert_eq!(
         response["result"]["gasUsedRatio"]
             .as_array()
             .map(Vec::len)
             .unwrap_or_default(),
         0
+    );
+    assert!(
+        response["result"].get("reward").is_none() || response["result"]["reward"].is_null(),
+        "reward should be omitted for zero-block feeHistory with empty percentiles: {response}"
     );
 
     Ok(())
@@ -516,7 +744,7 @@ async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known issue. To be discussed and prioritized"]
-async fn rpc2_008_block_omits_withdrawals_fields() -> anyhow::Result<()> {
+async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
 
@@ -535,14 +763,21 @@ async fn rpc2_008_block_omits_withdrawals_fields() -> anyhow::Result<()> {
     );
 
     let block = &response["result"];
-    assert!(
-        block.get("withdrawals").is_none(),
-        "block should omit withdrawals when they are unavailable: {block}"
+    let withdrawals = block
+        .get("withdrawals")
+        .and_then(|value| value.as_array())
+        .expect("post-Cancun blocks should expose withdrawals as an array");
+    assert_eq!(
+        withdrawals.len(),
+        0,
+        "post-Cancun blocks should expose an empty withdrawals array: {block}"
     );
     assert_eq!(
-        block.get("withdrawalsRoot"),
-        None,
-        "block should omit withdrawalsRoot when it is unavailable: {block}"
+        block
+            .get("withdrawalsRoot")
+            .and_then(|value| value.as_str()),
+        Some(EMPTY_WITHDRAWALS_ROOT),
+        "post-Cancun blocks should expose the canonical empty withdrawals root: {block}"
     );
 
     Ok(())
@@ -639,27 +874,32 @@ async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Resu
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "We don't have pending txs. To be discussed"]
-async fn rpc2_011_new_pending_transactions_subscription_is_supported() -> anyhow::Result<()> {
+#[ignore = "Known compatibility gap: newPendingTransactions subscription unsupported"]
+async fn rpc2_011_new_pending_transactions_subscription_emits_pending_hashes() -> anyhow::Result<()>
+{
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let provider = alloy_ws_client(rollup.http_addr).await;
 
-    let sub_id: Result<String, _> = ws_client
-        .ws
-        .request("eth_subscribe", rpc_params!["newPendingTransactions"])
-        .await;
-
+    rollup.pause_preferred_batches_and_wait().await?;
+    let sub = provider.subscribe_pending_transactions().await;
     assert!(
-        sub_id.is_ok(),
+        sub.is_ok(),
         "eth_subscribe(newPendingTransactions) should be supported"
     );
-
-    if let Ok(id) = sub_id {
-        let _: Result<bool, _> = ws_client
-            .ws
-            .request("eth_unsubscribe", rpc_params![id])
-            .await;
-    }
+    let mut stream = sub.expect("subscription should be created").into_stream();
+    let tx_hash = ws_client
+        .send_eth(Address::repeat_byte(0x99), U256::from(1u64))
+        .await;
+    let pending_hash = timeout(SUBSCRIPTION_TIMEOUT, stream.next())
+        .await
+        .map_err(|_| anyhow::anyhow!("timed out waiting for pending tx subscription event"))?
+        .ok_or_else(|| anyhow::anyhow!("pending tx subscription closed without an event"))?;
+    assert_eq!(
+        pending_hash, tx_hash,
+        "newPendingTransactions should emit the submitted pending tx hash"
+    );
 
     Ok(())
 }
@@ -728,54 +968,141 @@ async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known compatibility gap: synthetic hash lifecycle."]
-// TODO: Why this is a problem?
-async fn rpc2_013_synthetic_block_hash_remains_resolvable_after_sealing() -> anyhow::Result<()> {
+#[ignore = "Known compatibility gap: surfaced pending block hashes are not lifecycle-stable"]
+async fn rpc2_013_surfaced_pending_block_hash_stays_stable_across_lifecycle() -> anyhow::Result<()>
+{
     let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
-
-    rollup.pause_preferred_batches().await;
-    let tx_hash = client
-        .send_eth(Address::repeat_byte(0x88), U256::from(1u64))
-        .await;
-    let _receipt = client.wait_for_receipt(tx_hash).await;
-
+    let ws_provider = alloy_ws_client(rollup.http_addr).await;
+    let contract_address = client.alloy_deploy_contract().await;
     let http = Client::new();
-    let pending_block = rpc_call(
+
+    rollup.pause_preferred_batches_and_wait().await?;
+
+    // Once a blockHash is surfaced to clients, it should remain the stable
+    // cross-RPC identifier for that block across pending growth, sealing, and pruning.
+    let mut log_stream = ws_provider
+        .subscribe_logs(&Filter::new().address(contract_address))
+        .await?
+        .into_stream();
+
+    let tx1 = client.alloy_emit_logs(contract_address, 1, 1).await;
+    let first_log = timeout(SUBSCRIPTION_TIMEOUT, log_stream.next())
+        .await
+        .map_err(|_| anyhow::anyhow!("timed out waiting for first pending log"))?
+        .ok_or_else(|| anyhow::anyhow!("log subscription closed before first event"))?;
+    let first_hash = first_log
+        .block_hash
+        .expect("first pending log should include blockHash");
+    let first_hash_hex = format!("{first_hash:#x}");
+    let first_block_number = first_log
+        .block_number
+        .expect("first pending log should include blockNumber");
+
+    let pending_tx1_before_growth = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_getTransactionByHash",
+        json!([format!("{tx1:#x}")]),
+    )
+    .await?;
+    assert!(
+        pending_tx1_before_growth.get("error").is_none(),
+        "pending tx lookup should succeed: {pending_tx1_before_growth}"
+    );
+    assert_eq!(
+        pending_tx1_before_growth["result"]["blockHash"].as_str(),
+        Some(first_hash_hex.as_str()),
+        "pending tx lookup should agree with the first surfaced pending blockHash"
+    );
+
+    let tx2 = client.alloy_emit_logs(contract_address, 2, 1).await;
+    let second_log = timeout(SUBSCRIPTION_TIMEOUT, log_stream.next())
+        .await
+        .map_err(|_| anyhow::anyhow!("timed out waiting for second pending log"))?
+        .ok_or_else(|| anyhow::anyhow!("log subscription closed before second event"))?;
+    let second_hash = second_log
+        .block_hash
+        .expect("second pending log should include blockHash");
+    assert_eq!(
+        second_log.block_number,
+        Some(first_block_number),
+        "both logs should stay in the same pending block"
+    );
+    assert_eq!(
+        second_hash, first_hash,
+        "the surfaced pending blockHash should stay stable as the pending block grows"
+    );
+
+    let pending_tx1_after_growth = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_getTransactionByHash",
+        json!([format!("{tx1:#x}")]),
+    )
+    .await?;
+    assert!(
+        pending_tx1_after_growth.get("error").is_none(),
+        "pending tx lookup after growth should succeed: {pending_tx1_after_growth}"
+    );
+    assert_eq!(
+        pending_tx1_after_growth["result"]["blockHash"].as_str(),
+        Some(first_hash_hex.as_str()),
+        "pending tx lookup should keep the original surfaced blockHash while still pending"
+    );
+
+    rollup.resume_preferred_batches().await;
+    let _ = client.wait_for_finalized_receipt(tx1).await;
+    let _ = client.wait_for_finalized_receipt(tx2).await;
+
+    let sealed_block = rpc_call(
         &http,
         rollup.http_addr,
         "eth_getBlockByNumber",
-        json!(["pending", false]),
+        json!([hex_u64(first_block_number), false]),
     )
     .await?;
-
     assert!(
-        pending_block.get("error").is_none(),
-        "pending block query should succeed: {pending_block}"
+        sealed_block.get("error").is_none(),
+        "sealed block lookup should succeed: {sealed_block}"
     );
-    let pending_hash = pending_block["result"]["hash"]
-        .as_str()
-        .expect("pending block hash should be present")
-        .to_string();
+    assert_eq!(
+        sealed_block["result"]["hash"].as_str(),
+        Some(first_hash_hex.as_str()),
+        "sealed block should keep the original surfaced blockHash"
+    );
 
-    rollup.resume_preferred_batches().await;
+    let sealed_tx1 = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_getTransactionByHash",
+        json!([format!("{tx1:#x}")]),
+    )
+    .await?;
+    assert!(
+        sealed_tx1.get("error").is_none(),
+        "sealed tx lookup should succeed: {sealed_tx1}"
+    );
+    assert_eq!(
+        sealed_tx1["result"]["blockHash"].as_str(),
+        Some(first_hash_hex.as_str()),
+        "sealed tx lookup should keep the original surfaced blockHash"
+    );
+
     rollup.wait_for_rollup_height_advance_by(30).await;
-
     let by_hash = rpc_call(
         &http,
         rollup.http_addr,
         "eth_getBlockByHash",
-        json!([pending_hash, false]),
+        json!([first_hash_hex, false]),
     )
     .await?;
-
     assert!(
         by_hash.get("error").is_none(),
-        "synthetic hash should remain queryable after sealing/pruning: {by_hash}"
+        "the originally surfaced blockHash should remain queryable after the prune window: {by_hash}"
     );
     assert!(
         by_hash["result"].is_object(),
-        "synthetic hash should resolve to a block object"
+        "the originally surfaced blockHash should still resolve to a block object after the prune window"
     );
 
     Ok(())
