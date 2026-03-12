@@ -16,6 +16,7 @@ use crate::preferred::update_state::SequenceNumberMismatchError;
 use crate::preferred::DoNewTxError;
 use crate::preferred::Inner;
 use crate::preferred::InnerGuard;
+use crate::preferred::PreferredProofToReplay;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::preferred::SequencerStateUpdatorError;
 use crate::preferred::StateUpdateNotification;
@@ -420,11 +421,12 @@ where
 
         let (completed_blobs, metrics) =
             inner.completed_blobs_to_replay(next_sequence_number, false);
+        let has_completed_batch = completed_blobs_contain_batch(&completed_blobs);
 
         // Once we've caught up to the in-progress batch, we're done.
         let (db_events_sender, subscription) =
             mpsc::channel(inner.seq_config.sequencer_kind_config.db_event_channel_size);
-        if completed_blobs.is_empty() {
+        if !has_completed_batch {
             inner
                 .executor_events_sender
                 .subscribe_to_events(db_events_sender);
@@ -432,11 +434,27 @@ where
             let fetch_in_progress_batch_time_start = std::time::Instant::now();
             let in_progress_batch = inner.executor_events_sender.fetch_in_progress_batch();
             let fetch_in_progress_batch_time = fetch_in_progress_batch_time_start.elapsed();
+            let pending_completed_proofs = completed_blobs
+                .into_iter()
+                .filter_map(|blob| match blob {
+                    PreferredBlobToReplay::Batch(_) => None,
+                    PreferredBlobToReplay::Proof(proof) => Some(proof),
+                })
+                .collect::<Vec<_>>();
+
+            if !pending_completed_proofs.is_empty() {
+                debug!(
+                    pending_completed_proofs = pending_completed_proofs.len(),
+                    next_sequence_number,
+                    "Completed proofs found without a completed batch; carrying them into final catchup",
+                );
+            }
 
             drop(inner);
             return FetchBatches {
                 metrics,
                 flow: Flow::Break {
+                    pending_completed_proofs,
                     in_progress_batch,
                     subscription,
                     fetch_in_progress_batch_time,
@@ -479,7 +497,7 @@ where
                 PreferredBlobToReplay::Batch(b) => Some(b),
                 PreferredBlobToReplay::Proof(_) => None,
             })
-            .last()
+            .next_back()
         {
             None => node_visible_slot_number,
             Some(b) => {
@@ -543,14 +561,7 @@ where
 
         // Are there ANY soft confirmations to replay at all?
         // Note that we're holding a lock on the sequencer, so this is guaranteed to be up to date.
-        let are_there_batches_to_replay = !blobs_to_replay
-            .iter()
-            .filter_map(|b| match b {
-                PreferredBlobToReplay::Batch(b) => Some(b),
-                PreferredBlobToReplay::Proof(_) => None,
-            })
-            .next()
-            .is_some();
+        let are_there_batches_to_replay = completed_blobs_contain_batch(&blobs_to_replay);
 
         let table = ConditionsTable {
             nodes_sequence_number_is_fresher,
@@ -1092,6 +1103,7 @@ fn validate_db_data_from_replica<S: Spec>(
 #[derive(Debug)]
 pub(crate) enum Flow {
     Break {
+        pending_completed_proofs: Vec<PreferredProofToReplay>,
         in_progress_batch: Option<ReadBatch>,
         subscription: mpsc::Receiver<DbEvent>,
         fetch_in_progress_batch_time: Duration,
@@ -1105,4 +1117,10 @@ pub(crate) enum Flow {
 pub(crate) struct FetchBatches {
     pub(crate) metrics: PreferredSequencerFetchBatchesToReplayMetrics,
     pub(crate) flow: Flow,
+}
+
+fn completed_blobs_contain_batch(blobs: &[PreferredBlobToReplay]) -> bool {
+    blobs
+        .iter()
+        .any(|blob| matches!(blob, PreferredBlobToReplay::Batch(_)))
 }

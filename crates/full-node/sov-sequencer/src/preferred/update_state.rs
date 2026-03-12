@@ -82,6 +82,7 @@ where
 
             let completed_blobs = match flow {
                 Flow::Break {
+                    pending_completed_proofs,
                     in_progress_batch,
                     subscription,
                     fetch_in_progress_batch_time,
@@ -95,6 +96,10 @@ where
                         });
                     }
 
+                    extend_pending_completed_proofs(
+                        &mut unprocessed_proofs,
+                        pending_completed_proofs,
+                    );
                     break (in_progress_batch, subscription, unprocessed_proofs);
                 }
                 Flow::Continue { completed_blobs } => completed_blobs,
@@ -282,6 +287,22 @@ where
                 .map_err(|e| e.into_state_update_error())?;
         }
         Ok(())
+    }
+}
+
+fn extend_pending_completed_proofs(
+    unprocessed_proofs: &mut Vec<PreferredProofToReplay>,
+    pending_completed_proofs: Vec<PreferredProofToReplay>,
+) {
+    for proof in pending_completed_proofs {
+        if unprocessed_proofs
+            .iter()
+            .any(|existing| existing.sequence_number == proof.sequence_number)
+        {
+            continue;
+        }
+
+        unprocessed_proofs.push(proof);
     }
 }
 

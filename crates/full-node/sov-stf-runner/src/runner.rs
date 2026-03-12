@@ -711,6 +711,7 @@ where
         self.da_service.clone()
     }
 
+    #[allow(clippy::type_complexity)] // Any type alias needs the STF bounds, which are more complex than the original type
     fn collect_aggregated_proofs_and_receipts(
         receipts: impl Iterator<
             Item = ProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
@@ -720,6 +721,8 @@ where
         Vec<PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>>,
     ) {
         let mut aggregated_proofs: Vec<SerializedAggregatedProof> = Vec::new();
+        #[allow(clippy::type_complexity)]
+        // Any type alias needs the STF bounds, which are more complex than the original type
         let mut partial_receipts: Vec<
             PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
         > = Vec::new();

@@ -274,15 +274,16 @@ impl BlobsCache {
         // The lowest allowed sequence number is either the sequence number of the first completed blob (if one exists) or the sequence number of the in-progress batch (if one exists).
         // If no batch is in progress *and* we don't have any completed blobs in cache, we don't know what the next sequence number should be so we allow any value.
         let mut lowest_allowed_sequence_number = u64::MAX;
-        self.completed_blobs_out_of_order.front().map(|b| {
-            lowest_allowed_sequence_number = lowest_allowed_sequence_number.min(b.sequence_number())
-        });
+        if let Some(b) = self.completed_blobs_out_of_order.front() {
+            lowest_allowed_sequence_number =
+                lowest_allowed_sequence_number.min(b.sequence_number());
+        };
         if lowest_allowed_sequence_number == u64::MAX {
             lowest_allowed_sequence_number = self
                 .in_progress_batch
                 .as_ref()
                 .map(|b| b.sequence_number)
-                .unwrap_or(0)
+                .unwrap_or(0);
         }
 
         assert!(batch_sequence_number <= highest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is greater than the highest allowed sequence number {highest_allowed_sequence_number}. This is a bug, please report it.");
@@ -480,14 +481,8 @@ impl BlobsCache {
     }
 
     pub async fn prune(&mut self, prune_up_to_including: SequenceNumber) {
-        // We could also do binary search, but this seems fast enough.
-        while let Some(blob) = self.completed_blobs_out_of_order.front() {
-            if blob.sequence_number() > prune_up_to_including {
-                break;
-            }
-
-            self.completed_blobs_out_of_order.pop_front();
-        }
+        self.completed_blobs_out_of_order
+            .retain(|blob| blob.sequence_number() > prune_up_to_including);
     }
 
     pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
