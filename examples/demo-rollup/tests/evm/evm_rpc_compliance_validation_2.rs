@@ -15,7 +15,9 @@ use serde_json::json;
 const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
 const ETH_TX_GAS_CAP: u64 = 30_000_000;
-const GAS_LEFT_CONTRACT_DEPLOY_CODE: &str = "0x6008600c60003960086000f35a60005260206000f3";
+const GAS_LEFT_CONTRACT_DEPLOY_CODE: &str = "0x6009600c60003960096000f35a60005260206000f3";
+const GAS_LEFT_CONTRACT_RUNTIME_CODE: &[u8] =
+    &[0x5a, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
 const AFFORDABILITY_SIGNER_PRIV_KEY: &str =
     "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
 const AFFORDABILITY_BALANCE_MULTIPLIER: u64 = 100;
@@ -259,9 +261,26 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
 
     let deploy_hash: B256 = rpc_result_hex(&deploy_response).parse()?;
     let deploy_receipt = ws_client.wait_for_receipt(deploy_hash).await;
+    assert!(
+        deploy_receipt.status(),
+        "deployment should execute successfully"
+    );
     let contract_address = deploy_receipt
         .contract_address
         .expect("deployment should return contract address");
+    let deployed_code: Bytes = ws_client
+        .ws
+        .request("eth_getCode", rpc_params![contract_address, "latest"])
+        .await?;
+    assert!(
+        deployed_code.len() >= GAS_LEFT_CONTRACT_RUNTIME_CODE.len(),
+        "deployment should return runtime code, got {deployed_code:?}"
+    );
+    assert_eq!(
+        &deployed_code[..GAS_LEFT_CONTRACT_RUNTIME_CODE.len()],
+        GAS_LEFT_CONTRACT_RUNTIME_CODE,
+        "deployment should publish the expected gasleft runtime"
+    );
 
     let no_gas_response = rpc_call(
         &http,
@@ -292,29 +311,33 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
     )
     .await?;
 
-    println!("rpc2_003 no_gas_response: {no_gas_response}");
-    println!("rpc2_003 capped_response: {capped_response}");
-
     assert!(
         no_gas_response.get("error").is_none() && capped_response.get("error").is_none(),
         "eth_call variants should both succeed: no_gas={no_gas_response}, capped={capped_response}"
     );
+    let no_gas_result = rpc_result_hex(&no_gas_response);
+    let capped_result = rpc_result_hex(&capped_response);
+    assert_ne!(
+        no_gas_result, "0x",
+        "omitted-gas eth_call should return ABI-encoded gasleft bytes"
+    );
+    assert_ne!(
+        capped_result, "0x",
+        "capped eth_call should return ABI-encoded gasleft bytes"
+    );
+    assert_eq!(
+        no_gas_result.len(),
+        66,
+        "omitted-gas eth_call should return a 32-byte ABI word"
+    );
+    assert_eq!(
+        capped_result.len(),
+        66,
+        "capped eth_call should return a 32-byte ABI word"
+    );
 
-    let gas_left_without_cap = parse_hex_u64(
-        no_gas_response["result"]
-            .as_str()
-            .expect("eth_call should return quantity bytes"),
-    );
-    let gas_left_with_cap = parse_hex_u64(
-        capped_response["result"]
-            .as_str()
-            .expect("eth_call should return quantity bytes"),
-    );
-
-    println!(
-        "rpc2_003 gasleft values: without_cap={gas_left_without_cap}, with_cap={gas_left_with_cap}, delta={}",
-        gas_left_without_cap.saturating_sub(gas_left_with_cap)
-    );
+    let gas_left_without_cap = parse_hex_u64(&no_gas_result);
+    let gas_left_with_cap = parse_hex_u64(&capped_result);
 
     assert!(
         gas_left_without_cap <= gas_left_with_cap.saturating_add(500_000),
@@ -342,7 +365,7 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
 
     let estimate_value = estimate.to::<u64>();
     assert!(
-        estimate_value <= receipt.gas_used.saturating_add(10_000),
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
         "estimate should be near actual execution gasUsed (estimate={estimate_value}, gasUsed={})",
         receipt.gas_used
     );
