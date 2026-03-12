@@ -303,7 +303,6 @@ define_table_with_default_codec!(
     (ProofReceiptByHash) DbHash => (SlotNumber, SerializedPartialProofReceipt)
 );
 
-
 define_table_with_default_codec!(
     /// Secondary index for proof receipts by slot number. Used to support rollback for proof receipts.
     (ProofReceiptHashesBySlot) SlotNumber => Vec<DbHash>

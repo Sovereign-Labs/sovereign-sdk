@@ -449,7 +449,10 @@ where
             ledger_change_set.merge(this_height_data);
             tracing::trace!("Proof Receipt materialized into Ledger ChangeSet");
         }
-        ledger_change_set.merge(self.ledger_db.materialize_proof_receipt_hashes(proof_receipt_hashes, slot_number)?);
+        ledger_change_set.merge(
+            self.ledger_db
+                .materialize_proof_receipt_hashes(proof_receipt_hashes, slot_number)?,
+        );
         let ledger_materialization_time = ledger_materialization_start.elapsed();
         tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
 

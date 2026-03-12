@@ -16,7 +16,9 @@ use sov_rollup_interface::zk::aggregated_proof::{
 };
 
 use crate::schema::tables::{
-    BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey, FinalizedSlots, LEDGER_TABLES, ProofByUniqueId, ProofReceiptHashesBySlot, SlotByHash, SlotByNumber, StfInfoByNumber, StfInfoMetadata, TxByHash, TxByNumber
+    BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey,
+    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot, SlotByHash, SlotByNumber,
+    StfInfoByNumber, StfInfoMetadata, TxByHash, TxByNumber, LEDGER_TABLES,
 };
 use crate::schema::tables::{DiscardedBlobHahsByNumber, ProofReceiptByHash};
 use crate::schema::types::{
@@ -768,12 +770,9 @@ impl LedgerDb {
         }
 
         // Delete all proof receipts for this slot
-        if let Some(proof_receipt_hashes)  = db.get::<ProofReceiptHashesBySlot>(&head_slot_number)? {
+        if let Some(proof_receipt_hashes) = db.get::<ProofReceiptHashesBySlot>(&head_slot_number)? {
             for proof_receipt_hash in proof_receipt_hashes {
-                Self::delete_proof_receipt(
-                    &mut schema_batch,
-                    proof_receipt_hash,
-                )?;
+                Self::delete_proof_receipt(&mut schema_batch, proof_receipt_hash)?;
             }
             schema_batch.delete::<ProofReceiptHashesBySlot>(&head_slot_number)?;
         }
