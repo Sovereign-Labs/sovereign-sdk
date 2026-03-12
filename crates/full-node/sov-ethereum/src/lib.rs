@@ -7,6 +7,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
 pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
+use sov_evm::TransactionSigned;
 use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, Spec};
@@ -19,6 +20,12 @@ use std::future::ready;
 pub use handlers::Cursor;
 
 use crate::handlers::Handlers;
+
+struct PreparedRawTx {
+    tx_hash: B256,
+    raw_message: Vec<u8>,
+    signed_tx: TransactionSigned,
+}
 
 #[derive(Clone)]
 pub struct EthRpcConfig {
@@ -164,14 +171,17 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
-        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
-        let signed_transaction = convert_to_tx_signed(raw_tx)
+    fn prepare_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<PreparedRawTx, ErrorObjectOwned> {
+        let raw_message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
+        let signed_tx = convert_to_tx_signed(raw_tx)
             .map_err(|err| ErrorObjectOwned::from(EthApiError::from(err)))?;
+        let tx_hash = *signed_tx.hash();
 
-        let tx_hash = signed_transaction.hash();
-
-        Ok((*tx_hash, message))
+        Ok(PreparedRawTx {
+            tx_hash,
+            raw_message,
+            signed_tx,
+        })
     }
 
     fn api_state_accessor(&self) -> ApiStateAccessor<S> {

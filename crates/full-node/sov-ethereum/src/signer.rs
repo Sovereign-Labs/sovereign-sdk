@@ -71,9 +71,10 @@ where
                     rlp: signed_tx.envelope_encoded().to_vec(),
                 }
             };
-            let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
+            let prepared_tx = ethereum.prepare_raw_tx(raw_evm_tx)?;
+            let tx_hash = prepared_tx.tx_hash;
 
-            let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+            let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(prepared_tx.raw_message));
 
             ethereum
                 .sequencer

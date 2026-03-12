@@ -5,10 +5,8 @@ use alloy_eips::BlockId;
 #[cfg(feature = "local")]
 use alloy_eips::Encodable2718;
 #[cfg(feature = "local")]
-use alloy_primitives::Address;
-#[cfg(feature = "local")]
 use alloy_primitives::TxKind;
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Address, Bytes, B256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
 #[cfg(feature = "local")]
@@ -20,7 +18,6 @@ use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
-#[cfg(feature = "local")]
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
@@ -44,8 +41,8 @@ use std::time::Instant;
 pub use subscribe::eth_subscribe;
 use tokio::time::timeout;
 
-use crate::Ethereum;
 use crate::{rpc_internal_error, rpc_invalid_params, rpc_tx_rejected};
+use crate::{Ethereum, PreparedRawTx};
 
 const TIMEOUT_CODE: i32 = 4;
 
@@ -130,7 +127,7 @@ where
     }
 
     fn get_receipt(tx_hash: B256, ethereum: Arc<Ethereum<S, Seq>>) -> RpcResult<Option<Receipt>> {
-        let evm = sov_evm::Evm::<S>::default();
+        let evm = Evm::<S>::default();
         let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
         evm.get_transaction_receipt(tx_hash, state)
     }
@@ -144,12 +141,27 @@ where
     where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
     {
-        let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
-        let raw_evm_tx_for_precheck = raw_evm_tx.clone();
-        let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
-        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_tx(&tx, &raw_evm_tx_for_precheck, &ethereum)?;
+        let prepared_tx = ethereum.prepare_raw_tx(RlpEvmTransaction { rlp: data.to_vec() })?;
 
+        Self::submit_prepared_transaction(prepared_tx, ethereum, on_success, ip_addr).await
+    }
+
+    async fn submit_prepared_transaction<T, F>(
+        prepared_tx: PreparedRawTx,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        on_success: F,
+        ip_addr: IpAddr,
+    ) -> RpcResult<T>
+    where
+        F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
+    {
+        let PreparedRawTx {
+            tx_hash,
+            raw_message,
+            signed_tx,
+        } = prepared_tx;
+        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+        Self::authenticate_tx(&tx, &signed_tx, &ethereum)?;
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
             .await
@@ -167,12 +179,12 @@ where
     // This will also be moved into the sequencer, but for now is kept here.
     fn authenticate_tx(
         tx: &FullyBakedTx,
-        raw_evm_tx: &RlpEvmTransaction,
+        signed_tx: &sov_evm::TransactionSigned,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _output =
-            <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| match &e {
+        let (_, auth_data, _) = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
+            .map_err(|e| match &e {
                 AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
                     RpcInvalidTransactionError::FeeCapTooLow.into()
                 }
@@ -181,11 +193,20 @@ where
                 }
                 _ => rpc_invalid_params(format!("Authentication failed: {e}")),
             })?;
-        // let default_address = output.1.default_address;
-        // let x = output.1.credential_id;
-        // let y = output.0.authenticated_tx.0.gas_limit;
-        sov_evm::Evm::<S>::default()
-            .ensure_raw_transaction_sender_affordability(raw_evm_tx, &mut state.api_state_accessor)
+        let signer = auth_data
+            .credentials
+            .get::<Address>()
+            .copied()
+            .ok_or_else(|| {
+                tracing::error!("Authenticated EVM transaction is missing signer credentials");
+                rpc_internal_error("Authenticated EVM transaction is missing signer credentials")
+            })?;
+        Evm::<S>::default()
+            .ensure_transaction_sender_affordability(
+                signed_tx,
+                signer,
+                &mut state.api_state_accessor,
+            )
             .map_err(ErrorObjectOwned::from)?;
         Ok(())
     }
@@ -269,19 +290,10 @@ where
                 rlp: signed_tx.encoded_2718(),
             }
         };
-        let raw_evm_tx_for_precheck = raw_evm_tx.clone();
-        let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
+        let prepared_tx = ethereum.prepare_raw_tx(raw_evm_tx)?;
 
-        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_tx(&tx, &raw_evm_tx_for_precheck, &ethereum)?;
-
-        ethereum
-            .sequencer
-            .accept_tx(tx, ip_addr)
+        Self::submit_prepared_transaction(prepared_tx, ethereum, |tx_hash, _| Ok(tx_hash), ip_addr)
             .await
-            .map_err(map_accept_tx_error)?;
-
-        Ok(tx_hash)
     }
 }
 

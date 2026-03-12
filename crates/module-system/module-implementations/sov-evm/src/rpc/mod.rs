@@ -16,11 +16,8 @@ use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::primitive_types::{synthetic_block_hash_for, SyntheticBlockWithoutRootsAndBloom};
 use crate::sov_fee_and_gas_utils::is_actual_fee_projection_height_active;
-use crate::{verify_contract_creation_allowlist, Evm, RlpEvmTransaction, SealedBlock};
-use alloy_consensus::{
-    transaction::{Recovered, SignerRecoverable},
-    Transaction as TransactionTrait, TxReceipt,
-};
+use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
+use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
@@ -292,17 +289,14 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    /// Ensures a raw signed transaction can afford Ethereum-style upfront cost using the
+    /// Ensures a signed transaction can afford Ethereum-style upfront cost using the
     /// same bank-backed balance view exposed through the EVM RPC.
-    pub fn ensure_raw_transaction_sender_affordability<Accessor: TxState<S>>(
+    pub fn ensure_transaction_sender_affordability<Accessor: TxState<S>>(
         &self,
-        raw_tx: &RlpEvmTransaction,
+        tx: &TransactionSigned,
+        signer: Address,
         state: &mut Accessor,
     ) -> Result<(), EthApiError> {
-        let tx = crate::convert_to_tx_signed(raw_tx.clone())?;
-        let signer = tx
-            .recover_signer()
-            .map_err(|_| EthApiError::InvalidTransactionSignature)?;
         let balance = self
             .db(state)
             .basic(signer)
