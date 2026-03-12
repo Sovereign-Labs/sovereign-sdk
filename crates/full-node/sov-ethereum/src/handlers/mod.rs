@@ -145,9 +145,10 @@ where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
     {
         let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
+        let raw_evm_tx_for_precheck = raw_evm_tx.clone();
         let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_tx(&tx, &ethereum)?;
+        Self::authenticate_tx(&tx, &raw_evm_tx_for_precheck, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
@@ -157,15 +158,20 @@ where
         on_success(tx_hash, ethereum)
     }
 
-    // Authenticate the transaction.
+    // Authenticate the transaction and apply the same sender-affordability semantics as
+    // `eth_estimateGas` before admitting it to the sequencer.
     // This was used earlier to get the credential and nonce, for retries. This has now been
     // implemented in the sequencer and is therefore no longer needed. However, calling
     // `authenticate()` here pre-calculates and caches the signature check in the async API
     // handler, which is important for performance.
     // This will also be moved into the sequencer, but for now is kept here.
-    fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
+    fn authenticate_tx(
+        tx: &FullyBakedTx,
+        raw_evm_tx: &RlpEvmTransaction,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _ =
+        let _output =
             <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| match &e {
                 AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
                     RpcInvalidTransactionError::FeeCapTooLow.into()
@@ -175,6 +181,12 @@ where
                 }
                 _ => rpc_invalid_params(format!("Authentication failed: {e}")),
             })?;
+        // let default_address = output.1.default_address;
+        // let x = output.1.credential_id;
+        // let y = output.0.authenticated_tx.0.gas_limit;
+        sov_evm::Evm::<S>::default()
+            .ensure_raw_transaction_sender_affordability(raw_evm_tx, &mut state.api_state_accessor)
+            .map_err(ErrorObjectOwned::from)?;
         Ok(())
     }
 
@@ -257,9 +269,11 @@ where
                 rlp: signed_tx.encoded_2718(),
             }
         };
+        let raw_evm_tx_for_precheck = raw_evm_tx.clone();
         let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
 
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+        Self::authenticate_tx(&tx, &raw_evm_tx_for_precheck, &ethereum)?;
 
         ethereum
             .sequencer

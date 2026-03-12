@@ -97,12 +97,10 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
 }
 
 #[tokio::test(flavor = "multi_thread")]
-/// Documents a rollup-specific admission mismatch:
-/// `eth_estimateGas` checks affordability against the caller-requested
-/// `maxFeePerGas`, while raw submission is admitted against the rollup gas-price
-/// path. The signer is funded into the window
-/// `gas_limit * rollup_gas_price < B < gas_limit * maxFeePerGas`, so estimate
-/// must reject while `eth_sendRawTransaction` succeeds.
+/// The signer is funded into the window
+/// `gas_limit * rollup_gas_price < B < gas_limit * maxFeePerGas`, so both
+/// `eth_estimateGas` and `eth_sendRawTransaction` must reject with an
+/// insufficient-funds affordability error.
 ///
 /// This is not an `eth_call` parity test. Local call/base-fee semantics live in
 /// `evm_call_fee_fields.rs`.
@@ -205,10 +203,6 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         json!([raw_tx]),
     )
     .await?;
-    assert!(
-        estimate_response.get("error").is_some(),
-        "estimate should reject with insufficient funds in the affordability gap: {estimate_response}"
-    );
     assert_eq!(
         rpc_error_code_from_response(&estimate_response, "eth_estimateGas"),
         -32003,
@@ -220,15 +214,15 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         "estimate should report insufficient-funds affordability failure: {estimate_response}"
     );
 
-    assert!(
-        send_response.get("error").is_none(),
-        "raw send should succeed when balance covers rollup-priced admission cost: {send_response}"
+    assert_eq!(
+        rpc_error_code_from_response(&estimate_response, "eth_estimateGas"),
+        rpc_error_code_from_response(&send_response, "eth_sendRawTransaction"),
+        "estimate and send should reject with the same JSON-RPC error class"
     );
-    let send_hash: B256 = rpc_result_hex(&send_response).parse()?;
-    let send_receipt = ws_client.wait_for_receipt(send_hash).await;
     assert!(
-        send_receipt.status(),
-        "raw send should produce a successful receipt in the affordability gap"
+        rpc_error_message(rpc_error_object(&send_response, "eth_sendRawTransaction"))
+            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
+        "raw send should report insufficient-funds affordability failure: {send_response}"
     );
 
     Ok(())
@@ -298,6 +292,9 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
     )
     .await?;
 
+    println!("rpc2_003 no_gas_response: {no_gas_response}");
+    println!("rpc2_003 capped_response: {capped_response}");
+
     assert!(
         no_gas_response.get("error").is_none() && capped_response.get("error").is_none(),
         "eth_call variants should both succeed: no_gas={no_gas_response}, capped={capped_response}"
@@ -312,6 +309,11 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
         capped_response["result"]
             .as_str()
             .expect("eth_call should return quantity bytes"),
+    );
+
+    println!(
+        "rpc2_003 gasleft values: without_cap={gas_left_without_cap}, with_cap={gas_left_with_cap}, delta={}",
+        gas_left_without_cap.saturating_sub(gas_left_with_cap)
     );
 
     assert!(

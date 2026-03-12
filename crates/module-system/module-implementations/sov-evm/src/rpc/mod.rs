@@ -16,8 +16,11 @@ use crate::primitive_types::parse_synthetic_block_hash;
 pub use crate::primitive_types::MaybeSealedBlock;
 use crate::primitive_types::{synthetic_block_hash_for, SyntheticBlockWithoutRootsAndBloom};
 use crate::sov_fee_and_gas_utils::is_actual_fee_projection_height_active;
-use crate::{verify_contract_creation_allowlist, Evm, SealedBlock};
-use alloy_consensus::{transaction::Recovered, Transaction as TransactionTrait, TxReceipt};
+use crate::{verify_contract_creation_allowlist, Evm, RlpEvmTransaction, SealedBlock};
+use alloy_consensus::{
+    transaction::{Recovered, SignerRecoverable},
+    Transaction as TransactionTrait, TxReceipt,
+};
 use alloy_consensus::{BlockHeader, EMPTY_OMMER_ROOT_HASH, EMPTY_ROOT_HASH};
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, B64};
@@ -39,7 +42,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec};
+use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec, TxState};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{
     invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError,
@@ -198,6 +201,30 @@ fn call_upfront_cost_with_base_fee_floor(
     }))
 }
 
+fn raw_transaction_upfront_cost(
+    tx: &TransactionSigned,
+) -> Result<U256, RpcInvalidTransactionError> {
+    let gas_cost = U256::from(tx.gas_limit())
+        .checked_mul(U256::from(tx.max_fee_per_gas()))
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
+
+    gas_cost
+        .checked_add(tx.value())
+        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
+}
+
+fn ensure_balance_covers_upfront_cost(balance: U256, total_cost: U256) -> Result<(), EthApiError> {
+    if balance < total_cost {
+        return Err(RpcInvalidTransactionError::InsufficientFunds {
+            cost: total_cost,
+            balance,
+        }
+        .into());
+    }
+
+    Ok(())
+}
+
 pub(crate) fn requested_call_fee_per_gas(
     request: &TransactionRequest,
     block_env: &BlockEnv,
@@ -255,13 +282,7 @@ where
             request.gas = Some(upfront.gas_limit);
         }
 
-        if balance < upfront.total_cost {
-            return Err(RpcInvalidTransactionError::InsufficientFunds {
-                cost: upfront.total_cost,
-                balance,
-            }
-            .into());
-        }
+        ensure_balance_covers_upfront_cost(balance, upfront.total_cost)?;
     }
 
     Ok(())
@@ -271,6 +292,28 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    /// Ensures a raw signed transaction can afford Ethereum-style upfront cost using the
+    /// same bank-backed balance view exposed through the EVM RPC.
+    pub fn ensure_raw_transaction_sender_affordability<Accessor: TxState<S>>(
+        &self,
+        raw_tx: &RlpEvmTransaction,
+        state: &mut Accessor,
+    ) -> Result<(), EthApiError> {
+        let tx = crate::convert_to_tx_signed(raw_tx.clone())?;
+        let signer = tx
+            .recover_signer()
+            .map_err(|_| EthApiError::InvalidTransactionSignature)?;
+        let balance = self
+            .db(state)
+            .basic(signer)
+            .map_err(EthApiError::from)?
+            .map(|account| account.balance)
+            .unwrap_or_default();
+        let total_cost = raw_transaction_upfront_cost(&tx)?;
+
+        ensure_balance_covers_upfront_cost(balance, total_cost)
+    }
+
     fn get_block_transactions(
         &self,
         block: &SealedBlock,
@@ -1579,5 +1622,18 @@ mod tests {
         .unwrap();
 
         assert_eq!(upfront, None);
+    }
+
+    #[test]
+    fn ensure_balance_covers_upfront_cost_rejects_insufficient_funds() {
+        let err = ensure_balance_covers_upfront_cost(U256::from(5), U256::from(6)).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::InsufficientFunds {
+                cost,
+                balance,
+            }) if cost == U256::from(6) && balance == U256::from(5)
+        ));
     }
 }
