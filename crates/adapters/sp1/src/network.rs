@@ -10,7 +10,7 @@ mod _impl {
     use serde::Serialize;
     use sov_rollup_interface::zk::{Proof, ZkvmNetwork};
     use sp1_sdk::network::proto::auction_types::FulfillmentStatus;
-    use sp1_sdk::network::{B256, NetworkMode};
+    use sp1_sdk::network::{NetworkMode, B256};
     use sp1_sdk::prover::{ProveRequest, Prover};
     use sp1_sdk::{NetworkProver, ProverClient, SP1ProvingKey, SP1Stdin};
 
@@ -31,8 +31,10 @@ mod _impl {
         ///
         /// Connects to the Succinct proving network (mainnet) and runs setup.
         pub async fn new(elf: &[u8]) -> anyhow::Result<Self> {
-            let prover: NetworkProver =
-                ProverClient::builder().network_for(NetworkMode::Mainnet).build().await;
+            let prover: NetworkProver = ProverClient::builder()
+                .network_for(NetworkMode::Mainnet)
+                .build()
+                .await;
             let pk = prover
                 .setup(elf.into())
                 .await
@@ -75,9 +77,10 @@ mod _impl {
             }
 
             match maybe_proof {
-                Some(proof) => Ok(Some(bincode::serialize(
-                    &Proof::<_, sp1_sdk::SP1PublicValues>::Full(proof),
-                )?)),
+                Some(proof) => Ok(Some(bincode::serialize(&Proof::<
+                    _,
+                    sp1_sdk::SP1PublicValues,
+                >::Full(proof))?)),
                 None => Ok(None),
             }
         }
