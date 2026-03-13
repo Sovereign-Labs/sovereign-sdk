@@ -44,12 +44,15 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     max_log_limit: 20000,
     response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
 };
+pub(crate) const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 pub(crate) const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
 pub(crate) const PAYER_SOV_BANK_BALANCE: u128 = 5_000_000_000_000_000;
 pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
 pub(crate) const POLL_INTERVAL_MS: u64 = 25;
 pub(crate) const INVALID_PARAMS_CODE: i64 = -32602;
+pub(crate) const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
+pub(crate) const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 
 /// Starts test rollup node.  
 pub(crate) async fn start_node(

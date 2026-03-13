@@ -9,14 +9,12 @@ use sov_modules_api::execution_mode::Native;
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY,
+    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, FEE_CAP_TOO_LOW_ERROR,
+    INSUFFICIENT_FUNDS_ERROR, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
 const GAS_LIMIT: u64 = 21_000;
-const NONZERO_FEE_PER_GAS: u128 = 1_000_000_000;
-const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
 const GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR: &str = "gas required exceeds allowance";
-const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 
 fn unfunded_caller() -> Address {
     Address::from([0x11; 20])
@@ -98,7 +96,7 @@ async fn eth_call_rejects_unfunded_caller_with_gas_price() -> anyhow::Result<()>
     assert_unfunded_caller(&client, caller).await?;
 
     let request = TransactionRequest {
-        gas_price: Some(NONZERO_FEE_PER_GAS),
+        gas_price: Some(MAX_FEE_PER_GAS),
         ..base_request(caller)
     };
     assert_rpc_rejects::<String>(&client, "eth_call", &request, INSUFFICIENT_FUNDS_ERROR).await;
@@ -115,7 +113,7 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_fee() -> 
 
     let request = TransactionRequest {
         gas: None,
-        max_fee_per_gas: Some(NONZERO_FEE_PER_GAS),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
         max_priority_fee_per_gas: Some(1),
         ..base_request(caller)
     };
@@ -140,7 +138,7 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_omitted_gas_and_gas_price
 
     let request = TransactionRequest {
         gas: None,
-        gas_price: Some(NONZERO_FEE_PER_GAS),
+        gas_price: Some(MAX_FEE_PER_GAS),
         ..base_request(caller)
     };
     assert_rpc_rejects::<U64>(
@@ -161,7 +159,7 @@ async fn eth_estimate_gas_rejects_missing_from_with_gas_price() -> anyhow::Resul
 
     let request = TransactionRequest {
         to: Some(TxKind::Call(Address::ZERO)),
-        gas_price: Some(NONZERO_FEE_PER_GAS),
+        gas_price: Some(MAX_FEE_PER_GAS),
         gas: Some(GAS_LIMIT),
         value: Some(U256::ZERO),
         ..Default::default()
@@ -185,7 +183,7 @@ async fn eth_estimate_gas_rejects_missing_from_with_omitted_gas_and_gas_price() 
 
     let request = TransactionRequest {
         to: Some(TxKind::Call(Address::ZERO)),
-        gas_price: Some(NONZERO_FEE_PER_GAS),
+        gas_price: Some(MAX_FEE_PER_GAS),
         value: Some(U256::ZERO),
         ..Default::default()
     };
@@ -208,7 +206,7 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyh
     assert_unfunded_caller(&client, caller).await?;
 
     let request = TransactionRequest {
-        max_fee_per_gas: Some(NONZERO_FEE_PER_GAS),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
         max_priority_fee_per_gas: Some(1),
         ..base_request(caller)
     };

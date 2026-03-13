@@ -11,10 +11,10 @@ use sov_evm_test_utils::SimpleStorage;
 use crate::evm::evm_test_helper::{
     alloy_client, alloy_ws_client, create_simple_storage_client, deploy_contract_check, hex_u64,
     hex_word_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_result_hex,
-    setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, SENDER_PRIV_KEY,
+    setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, MAX_FEE_PER_GAS,
+    SENDER_PRIV_KEY,
 };
 
-const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
 
 // RPC-001

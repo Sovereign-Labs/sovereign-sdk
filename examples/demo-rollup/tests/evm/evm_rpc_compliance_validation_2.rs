@@ -3,7 +3,8 @@ use crate::evm::evm_test_helper::{
     parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response,
     rpc_error_message, rpc_error_object, rpc_result_hex, setup_test_rollup,
     setup_test_rollup_with_paymaster, setup_with_simple_storage, tx_count, EVM_EXTENSION,
-    HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, PAYER_SOV_BANK_BALANCE, SENDER_PRIV_KEY,
+    FEE_CAP_TOO_LOW_ERROR, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
+    INSUFFICIENT_FUNDS_ERROR, MAX_FEE_PER_GAS, PAYER_SOV_BANK_BALANCE, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
@@ -17,7 +18,6 @@ use reqwest::Client;
 use serde_json::json;
 use tokio::time::{timeout, Duration};
 
-const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
 const ETH_TX_GAS_CAP: u64 = 30_000_000;
 const GAS_LEFT_CONTRACT_DEPLOY_CODE: &str = "0x6009600c60003960096000f35a60005260206000f3";
@@ -25,28 +25,11 @@ const GAS_LEFT_CONTRACT_RUNTIME_CODE: &[u8] =
     &[0x5a, 0x60, 0x00, 0x52, 0x60, 0x20, 0x60, 0x00, 0xf3];
 const AFFORDABILITY_SIGNER_PRIV_KEY: &str =
     "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const AFFORDABILITY_BALANCE_MULTIPLIER: u64 = 100;
-const INSUFFICIENT_FUNDS_FOR_GAS_ERROR: &str = "insufficient funds for gas * price + value";
-const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 const EMPTY_WITHDRAWALS_ROOT: &str =
     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// RPC2-001: Fee-cap admission consistency across simulation and submission.
-///
-/// **Discrepancy**: Ethereum uniformly rejects `maxFeePerGas < baseFee` across
-/// `eth_estimateGas`, `eth_call`, and `eth_sendRawTransaction`. The SDK can let
-/// simulation accept a below-basefee tx while the send path rejects it (or vice
-/// versa), producing a false-positive preflight result.
-///
-/// **Impact**: Wallets and SDKs (MetaMask, ethers.js, viem) that preflight via
-/// `eth_estimateGas` before signing can show "estimate OK" then fail at send time.
-///
-/// **Test strategy**: Submits the same below-basefee transaction to all three
-/// endpoints and asserts they return identical error codes.
-///
-/// Overlap note: earlier low-fee-cap rejection coverage lives in
-/// `evm_call_fee_fields.rs::{eth_call_rejects_below_base_fee_with_max_fee_per_gas, eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas}`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Result<()> {
@@ -170,19 +153,6 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
 }
 
 /// RPC2-002: Affordability check consistency between estimation and send path.
-///
-/// **Discrepancy**: `eth_estimateGas` affordability uses the request fee cap,
-/// while the submission path charges via the rollup pricing model. A sender
-/// whose balance falls in the window `gas_limit * rollup_price < B < gas_limit *
-/// maxFeePerGas` can pass estimation but fail submission, or vice versa.
-///
-/// **Impact**: Wallets treating estimation failure as a hard gate can block valid
-/// transactions (false negative before send).
-///
-/// **Test strategy**: Funds a signer into the affordability window and submits
-/// via both `eth_estimateGas` and `eth_sendRawTransaction`, asserting both
-/// reject with the same insufficient-funds error. Not an `eth_call` parity
-/// test — local call/base-fee semantics live in `evm_call_fee_fields.rs`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()> {
@@ -196,15 +166,10 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     let gas_limit = 1_000_000u64;
     let recipient = Address::repeat_byte(0x22);
     let initial_rollup_gas_price = ws_client.eth_gas_price().await;
-    let initial_send_floor = U256::from(gas_limit)
-        .checked_mul(U256::from(initial_rollup_gas_price))
-        .expect("send floor should fit in U256");
-    let affordability_balance = initial_send_floor
-        .checked_mul(U256::from(AFFORDABILITY_BALANCE_MULTIPLIER))
-        .expect("affordability balance should fit in U256");
-    let estimate_ceiling = U256::from(gas_limit)
-        .checked_mul(U256::from(HIGH_MAX_FEE_PER_GAS))
-        .expect("estimate ceiling should fit in U256");
+    let initial_send_floor = U256::from(gas_limit) * U256::from(initial_rollup_gas_price);
+    // 100x the send floor to land inside the affordability window
+    let affordability_balance = initial_send_floor * U256::from(100u64);
+    let estimate_ceiling = U256::from(gas_limit) * U256::from(HIGH_MAX_FEE_PER_GAS);
 
     assert!(
         initial_rollup_gas_price > 0,
@@ -236,9 +201,7 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     );
 
     let current_rollup_gas_price = ws_client.eth_gas_price().await;
-    let current_send_floor = U256::from(gas_limit)
-        .checked_mul(U256::from(current_rollup_gas_price))
-        .expect("current send floor should fit in U256");
+    let current_send_floor = U256::from(gas_limit) * U256::from(current_rollup_gas_price);
     assert!(
         current_send_floor < affordability_balance,
         "fresh signer must remain able to pay raw-send affordability floor after funding"
@@ -291,7 +254,7 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     );
     assert!(
         rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
-            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
+            .contains(INSUFFICIENT_FUNDS_ERROR),
         "estimate should report insufficient-funds affordability failure: {estimate_response}"
     );
 
@@ -302,27 +265,14 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     );
     assert!(
         rpc_error_message(rpc_error_object(&send_response, "eth_sendRawTransaction"))
-            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
+            .contains(INSUFFICIENT_FUNDS_ERROR),
         "raw send should report insufficient-funds affordability failure: {send_response}"
     );
 
     Ok(())
 }
 
-/// RPC2-003 (gasleft probe): Omitted-gas `eth_call` should default to the tx
-/// gas cap, not the block gas limit.
-///
-/// **Discrepancy**: When `gas` is omitted, `eth_call` can execute against the
-/// block gas limit (1B) instead of the 30M tx gas cap. This gives simulation
-/// more headroom than a real transaction would have.
-///
-/// **Impact**: `callStatic` and gas-estimation flows can succeed on workloads
-/// that are unreachable once the tx is sent under the real cap.
-///
-/// **Test strategy**: Deploys a `gasleft()` contract and compares the gas
-/// available in an omitted-gas `eth_call` vs an explicit 30M-gas call. Asserts
-/// the two values are within 500K of each other (not orders of magnitude apart
-/// as they would be if the block gas limit were used).
+/// RPC2-003 (gasleft probe): Omitted-gas `eth_call` should default to the tx gas cap.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
@@ -342,7 +292,7 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
             "data": GAS_LEFT_CONTRACT_DEPLOY_CODE,
             "gas": "0x2dc6c0",
             "value": "0x0",
-            "maxFeePerGas": hex_u128(DEFAULT_MAX_FEE_PER_GAS),
+            "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
             "maxPriorityFeePerGas": hex_u128(DEFAULT_MAX_PRIORITY_FEE_PER_GAS)
         }]),
     )
@@ -441,19 +391,7 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// RPC2-003 (end-to-end burnGas): Omitted-gas simulation agrees with real tx
-/// cap on workload classification.
-///
-/// **Discrepancy**: Same as the gasleft probe above — simulation may run under a
-/// broader gas context than the real tx cap allows.
-///
-/// **Impact**: Wallets preview a workload as feasible that then fails on-chain.
-///
-/// **Test strategy**: Binary-searches for a `burnGas(N)` workload that fails
-/// under the real 30M tx cap, then verifies 4-way consistency: (1) omitted-gas
-/// `eth_call` also fails, (2) omitted-gas `eth_estimateGas` also rejects,
-/// (3) a real tx with explicit 30M gas also fails, and (4) the same workload
-/// succeeds when given enough gas headroom below the boundary.
+/// RPC2-003 (end-to-end burnGas): Omitted-gas simulation agrees with real tx cap on workload classification.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result<()> {
@@ -468,7 +406,7 @@ async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let http = Client::new();
     let sender = ws_client.address();
-    let simulation_max_fee_per_gas = DEFAULT_MAX_FEE_PER_GAS;
+    let simulation_max_fee_per_gas = MAX_FEE_PER_GAS;
     let simulation_priority_fee_per_gas = DEFAULT_MAX_PRIORITY_FEE_PER_GAS;
 
     let capped_eth_call_succeeds = |calldata: Bytes| {
@@ -612,23 +550,7 @@ async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result
     Ok(())
 }
 
-/// RPC2-004: `eth_estimateGas` units track receipt `gasUsed` (internal
-/// consistency only).
-///
-/// **Discrepancy**: `eth_estimateGas` returns sovereign-metered gas with rollup
-/// overheads and margins, not raw EVM execution gas. Wallets see unexpectedly
-/// large `gasLimit` values compared to mainnet for equivalent operations.
-///
-/// **Impact**: Gas-limit displays, fee-estimation UIs, and gas-comparison logic
-/// in wallets and SDKs can be misleading or trigger user-facing warnings.
-///
-/// **Test strategy**: Compares `eth_estimateGas` against the receipt `gasUsed`
-/// for the same contract call, asserting the two are within 10K of each other.
-/// **Note (moderate faithfulness)**: this validates estimate-receipt *internal
-/// consistency*, not whether either value matches Ethereum's raw EVM gas. Both
-/// values use sovereign metering, so the test passes even if both are inflated
-/// relative to mainnet. The full finding's claim about absolute unit divergence
-/// is not directly exercised here.
+/// RPC2-004: `eth_estimateGas` units track receipt `gasUsed` (internal consistency).
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
@@ -657,23 +579,6 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
 }
 
 /// RPC2-005: Receipt fee fields reconcile exactly with sender balance delta.
-///
-/// **Discrepancy**: `gasUsed * effectiveGasPrice` in the receipt can diverge
-/// from the actual fee charged (observable as sender balance delta). Historical
-/// receipts and the sovereign pricing model can produce fee fields that do not
-/// tell a coherent cost story.
-///
-/// **Impact**: Explorers, accounting tools, and wallet history views that derive
-/// cost from receipt fields show fees that do not match the sender's observed
-/// balance change.
-///
-/// **Test strategy**: Sends a value transfer, records balance before/after, and
-/// asserts `balance_before - balance_after == value + gasUsed *
-/// effectiveGasPrice`.
-///
-/// Overlap note: receipt fee reconciliation is also covered by
-/// `evm_rpc_compliance_validation.rs::rpc_008_receipt_fee_fields_match_balance_delta`
-/// and `sov-evm/tests/integration/transactions.rs::test_block_receipt_fee_matches_balance_delta`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -703,19 +608,7 @@ async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> a
     Ok(())
 }
 
-/// RPC2-006: `eth_feeHistory(block_count=0)` should return an empty result, not
-/// an error.
-///
-/// **Discrepancy**: Ethereum returns an empty-shaped success result for
-/// `block_count=0`. The SDK returns `-32602` ("block_count must be greater
-/// than 0"), breaking defensive clients that probe this edge case.
-///
-/// **Impact**: Low severity. Most wallets request one or more blocks, but
-/// generic or spec-surface clients can fail unexpectedly.
-///
-/// **Test strategy**: Calls `eth_feeHistory(0, "latest", [])` and asserts the
-/// response is a success with correct empty-shape fields (empty `baseFeePerGas`
-/// array, `oldestBlock`, no reward array).
+/// RPC2-006: `eth_feeHistory(block_count=0)` should return an empty result, not an error.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyhow::Result<()> {
@@ -742,23 +635,9 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
         "baseFeePerGas should be exactly [] for zero-block feeHistory"
     );
     assert_eq!(
-        response["result"]["baseFeePerGas"]
-            .as_array()
-            .map(Vec::len)
-            .unwrap_or_default(),
-        0
-    );
-    assert_eq!(
         response["result"]["gasUsedRatio"],
         json!([]),
         "gasUsedRatio should be exactly [] for zero-block feeHistory"
-    );
-    assert_eq!(
-        response["result"]["gasUsedRatio"]
-            .as_array()
-            .map(Vec::len)
-            .unwrap_or_default(),
-        0
     );
     assert!(
         response["result"].get("reward").is_none() || response["result"]["reward"].is_null(),
@@ -769,19 +648,6 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
 }
 
 /// RPC2-007: `eth_feeHistory.reward` percentiles should reflect actual tips.
-///
-/// **Discrepancy**: Reward percentiles are always returned as zero regardless of
-/// the `maxPriorityFeePerGas` paid by transactions in the block. EIP-1559
-/// wallets that extract tip signal from `eth_feeHistory.reward` get no
-/// differentiation between fee tiers.
-///
-/// **Impact**: Fee estimation UIs (MetaMask, ethers.js, viem) collapse low,
-/// medium, and high tip tiers into the same value, degrading fee suggestion
-/// quality.
-///
-/// **Test strategy**: Sends a finalized EIP-1559 tx with non-zero
-/// `maxPriorityFeePerGas`, queries `eth_feeHistory` for that block's 50th
-/// percentile reward, and asserts it is non-zero.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: low priority"]
 async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -> anyhow::Result<()>
@@ -852,20 +718,7 @@ async fn rpc2_007_fee_history_reward_percentiles_reflect_tipped_transactions() -
     Ok(())
 }
 
-/// RPC2-008: Post-Cancun blocks should include `withdrawals: []` and a
-/// canonical empty `withdrawalsRoot`.
-///
-/// **Discrepancy**: Block responses use `withdrawals: null` (pre-Shanghai shape)
-/// instead of `[]`, and omit the canonical empty withdrawals root
-/// (`0x56e81f...b421`). Strict decoders interpret this as a hardfork-era
-/// mismatch.
-///
-/// **Impact**: Block decoders and explorers can reject or flag blocks as
-/// internally inconsistent with expected Cancun-era schema.
-///
-/// **Test strategy**: Fetches `eth_getBlockByNumber("latest", false)` and
-/// asserts `withdrawals == []` and `withdrawalsRoot` equals the canonical empty
-/// root.
+/// RPC2-008: Post-Cancun blocks should include `withdrawals: []` and canonical empty `withdrawalsRoot`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: low priority"]
 async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow::Result<()> {
@@ -908,21 +761,6 @@ async fn rpc2_008_post_cancun_block_reports_empty_withdrawals_array() -> anyhow:
 }
 
 /// RPC2-009: Missing-hash behavior should be consistent across block endpoints.
-///
-/// **Discrepancy**: The same absent block hash can yield an RPC error on one
-/// endpoint and `null` on another. Ethereum uniformly returns `result: null` for
-/// any unknown hash.
-///
-/// **Impact**: Retry, pruning, and not-found handling in providers and indexers
-/// breaks when callers cannot rely on one consistent response shape for missing
-/// hashes.
-///
-/// **Test strategy**: Queries `eth_getBlockByHash` and
-/// `eth_getBlockTransactionCountByHash` with a fabricated never-existed hash
-/// (`0x42` repeated) and asserts both return `result: null` without RPC errors.
-/// **Note (moderate faithfulness)**: the finding's strongest repro uses pruned
-/// synthetic hashes (see RPC2-013), not fabricated ones. This test still
-/// validates the basic cross-endpoint consistency requirement.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints(
 ) -> anyhow::Result<()> {
@@ -972,21 +810,6 @@ async fn rpc2_009_hash_not_found_semantics_are_consistent_across_block_endpoints
 }
 
 /// RPC2-010: `debug_traceTransaction` should support the default tracer.
-///
-/// **Discrepancy**: Only `callTracer` is supported. Calling
-/// `debug_traceTransaction` without specifying a tracer returns
-/// `{"code":-32603,"message":"unsupported tracer"}` instead of the default
-/// struct-log trace Geth produces.
-///
-/// **Impact**: Foundry, Hardhat, Tenderly, and custom debugging flows that rely
-/// on the default tracer path fail immediately.
-///
-/// **Test strategy**: Sends a tx, then calls `debug_traceTransaction` with an
-/// empty params object (no tracer specified) and asserts the result is a valid
-/// `GethTrace::Default`.
-/// Overlap note: default tracer coverage also exists in
-/// `evm_tracing.rs::debug_trace_block_by_number_default_tracer` and
-/// `sov-evm/tests/integration/trace.rs`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Result<()> {
@@ -1026,18 +849,6 @@ async fn rpc2_010_default_debug_trace_transaction_is_supported() -> anyhow::Resu
 }
 
 /// RPC2-011: `eth_subscribe("newPendingTransactions")` should be supported.
-///
-/// **Discrepancy**: The subscription type is unsupported. `newHeads` and `logs`
-/// exist, but pending transaction subscription does not, even though it is part
-/// of the standard Ethereum subscription surface.
-///
-/// **Impact**: Mempool monitoring, pending-tx dashboards, and tooling that
-/// assumes the standard pending subscription cannot operate without a custom
-/// fallback.
-///
-/// **Test strategy**: Pauses batch production, subscribes to
-/// `newPendingTransactions`, sends a tx, and asserts the subscription emits the
-/// pending tx hash within a timeout.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known compatibility gap: newPendingTransactions subscription unsupported"]
 async fn rpc2_011_new_pending_transactions_subscription_emits_pending_hashes() -> anyhow::Result<()>
@@ -1069,22 +880,7 @@ async fn rpc2_011_new_pending_transactions_subscription_emits_pending_hashes() -
     Ok(())
 }
 
-/// RPC2-012: `safe` and `finalized` tags should match `latest` on an
-/// instant-finality chain.
-///
-/// **Discrepancy**: `safe` and `finalized` can resolve behind `latest` under
-/// finality lag. On a chain with near-instant finality this creates unexpected
-/// staleness for clients polling these tags.
-///
-/// **Impact**: Clients polling `safe` or `finalized` see unexpectedly stale
-/// state relative to `latest`, confusing finality-aware UX and chain-state
-/// polling logic.
-///
-/// **Test strategy**: Runs on the default instant-finality configuration,
-/// queries all three tags (`latest`, `safe`, `finalized`) via
-/// `eth_getBlockByNumber`, and asserts all three return the same block number.
-/// Overlap note: block-tag consistency is also covered by
-/// `evm_block_by_number_hash.rs::{test_block_tags_earliest_safe_finalized, test_block_number_consistency}`.
+/// RPC2-012: `safe` and `finalized` tags should match `latest` on an instant-finality chain.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain(
 ) -> anyhow::Result<()> {
@@ -1148,23 +944,7 @@ async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain
     Ok(())
 }
 
-/// RPC2-013: Synthetic pending `blockHash` should remain stable and resolvable
-/// across the pending-to-sealed-to-pruned lifecycle.
-///
-/// **Discrepancy**: Pending logs and tx lookups expose synthetic `blockHash`
-/// values that change once the block is sealed and can become unresolvable
-/// after pruning. Ethereum expects that once a hash is surfaced, it remains a
-/// stable cross-RPC identifier.
-///
-/// **Impact**: Indexers, explorers, and log-correlation tooling fail to join
-/// pending and sealed data by hash or encounter stale hashes that no longer
-/// resolve.
-///
-/// **Test strategy**: Exercises a 3-phase lifecycle — (1) captures the pending
-/// `blockHash` from a log subscription, (2) seals the block and verifies the
-/// hash resolves to the same block, (3) advances past the pruning window and
-/// checks the hash still resolves. Strongest multi-source finding (confirmed by
-/// all three audit agents).
+/// RPC2-013: Synthetic pending `blockHash` should remain stable across the pending-to-sealed-to-pruned lifecycle.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known compatibility gap: surfaced pending block hashes are not lifecycle-stable"]
 async fn rpc2_013_surfaced_pending_block_hash_stays_stable_across_lifecycle() -> anyhow::Result<()>
@@ -1307,19 +1087,6 @@ async fn rpc2_013_surfaced_pending_block_hash_stays_stable_across_lifecycle() ->
 }
 
 /// RPC2-014: Explicit future numeric block selectors should return `null`.
-///
-/// **Discrepancy**: A request for block `N+1` (one beyond the current height)
-/// can alias to the current block `N` instead of returning `null`. This violates
-/// the `last_seen + 1` polling model indexers rely on.
-///
-/// **Impact**: Indexers and provider poll loops ingest incorrect block-to-height
-/// mappings instead of receiving a clean future-block miss.
-///
-/// **Test strategy**: Fetches `latest` to get the current block number, then
-/// queries `eth_getBlockByNumber` with `N+1` and asserts the result is `null`.
-///
-/// Overlap note: missing-block null semantics are also covered by
-/// `evm_block_by_number_hash.rs::test_nonexistent_block_returns_none`.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -1370,20 +1137,6 @@ const PAYMASTER_SIGNER_PRIV_KEY: &str =
     "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a";
 
 /// RPC2-015: Paymaster-aware affordability checks in simulation and send paths.
-///
-/// **Discrepancy**: When a paymaster covers gas, `eth_estimateGas` and
-/// `eth_sendRawTransaction` should check affordability against the paymaster's
-/// SOV bank balance, not the sender's (possibly zero) EVM balance. Currently
-/// the RPC paths are not paymaster-aware.
-///
-/// **Impact**: Zero-balance senders backed by a paymaster are incorrectly
-/// rejected by estimation, even though the signed transaction would succeed
-/// on-chain.
-///
-/// **Test strategy**: Two phases — (1) confirms a zero-balance sender can
-/// transact when a paymaster is configured and willing to cover gas, (2) mirrors
-/// the rpc2_002 affordability window test but checks against the paymaster's SOV
-/// bank balance instead of the sender's EVM balance.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Paymaster-aware RPC affordability checks not yet implemented"]
 async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow::Result<()> {
@@ -1510,7 +1263,7 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
     );
     assert!(
         rpc_error_message(rpc_error_object(&high_fee_estimate, "eth_estimateGas"))
-            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
+            .contains(INSUFFICIENT_FUNDS_ERROR),
         "estimate should report insufficient-funds against paymaster balance: {high_fee_estimate}"
     );
 
@@ -1541,7 +1294,7 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
     );
     assert!(
         rpc_error_message(rpc_error_object(&high_fee_send, "eth_sendRawTransaction"))
-            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
+            .contains(INSUFFICIENT_FUNDS_ERROR),
         "send should report insufficient-funds against paymaster balance: {high_fee_send}"
     );
 
