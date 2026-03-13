@@ -163,14 +163,14 @@ pub trait ZkvmNetwork: Send + Sync + 'static {
     type ProofHandle: Send + Sync + Clone + core::fmt::Debug + 'static;
 
     /// Give the guest a piece of advice non-deterministically.
-    fn add_hint<T: Serialize>(&mut self, item: T);
+    fn add_hint<T: Serialize>(&mut self, item: &T);
 
     /// Submit the current program and hints for remote proving.
     ///
-    /// Returns a [`Self::ProofHandle`] that can be passed to [`ZkvmNetwork::check`] to poll for the result.
+    /// Network proving always generates a real proof.
+    /// Returns a [`Self::ProofHandle`] that can be passed to [`ZkvmNetwork::poll`] to check for the result.
     fn submit(
         &mut self,
-        with_proof: bool,
     ) -> impl core::future::Future<Output = anyhow::Result<Self::ProofHandle>> + Send;
 
     /// Check whether a previously submitted proof is ready.

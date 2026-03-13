@@ -20,6 +20,8 @@ pub mod crypto;
 pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
+#[cfg(feature = "native")]
+pub mod network;
 
 #[cfg(all(feature = "native", feature = "bench"))]
 pub mod metrics;
@@ -110,6 +112,9 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
 
     #[cfg(feature = "native")]
     type Host = crate::host::SP1Host<'static>;
+
+    #[cfg(feature = "native")]
+    type Network = crate::network::SP1Network;
 }
 
 #[cfg(target_os = "zkvm")]
