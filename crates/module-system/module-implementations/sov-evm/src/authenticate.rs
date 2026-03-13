@@ -114,15 +114,40 @@ fn create_auth_tx_and_hash<
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
+    let tx_details = build_auth_tx_details_with_chain_id::<Accessor, S>(
+        tx.max_fee_per_gas(),
+        tx.gas_limit(),
+        tx_hash,
+        tx_chain_id,
+        gas_price,
+        state,
+    )?;
 
-    let user_max_fee_per_gas = tx.max_fee_per_gas();
+    Ok(AuthenticatedTransactionAndRawHash {
+        raw_tx_hash: tx_hash,
+        authenticated_tx: tx_details.into(),
+    })
+}
+
+fn build_auth_tx_details_with_chain_id<Accessor, S>(
+    user_max_fee_per_gas: u128,
+    gas_limit: u64,
+    tx_hash: TxHash,
+    chain_id: u64,
+    gas_price: <<S as Spec>::Gas as Gas>::Price,
+    state: &mut Accessor,
+) -> Result<TxDetails<S>, AuthenticationError>
+where
+    Accessor: StateReader<User> + VersionReader,
+    S: Spec,
+{
     let rollup_base_fee = gas_price.as_ref()[0].0;
 
     let evm = Evm::<S>::default();
     let multiplier =
         evm.auth_gas_limit_multiplier(user_max_fee_per_gas, rollup_base_fee, tx_hash, state)?;
 
-    let gas_limit = tx.gas_limit().saturating_mul(multiplier);
+    let gas_limit = gas_limit.saturating_mul(multiplier);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
 
     let max_fee = gas_limit
@@ -132,17 +157,34 @@ fn create_auth_tx_and_hash<
             tx_hash,
         ))?;
 
-    let tx_details = TxDetails {
-        chain_id: tx_chain_id,
+    Ok(TxDetails {
+        chain_id,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee,
         gas_limit: Some(gas_limit),
-    };
-
-    Ok(AuthenticatedTransactionAndRawHash {
-        raw_tx_hash: tx_hash,
-        authenticated_tx: tx_details.into(),
     })
+}
+
+/// Builds rollup auth `TxDetails` using the same fee-cap and gas-limit logic as raw EVM auth.
+pub fn build_auth_tx_details<Accessor, S>(
+    user_max_fee_per_gas: u128,
+    gas_limit: u64,
+    tx_hash: TxHash,
+    gas_price: <<S as Spec>::Gas as Gas>::Price,
+    state: &mut Accessor,
+) -> Result<TxDetails<S>, AuthenticationError>
+where
+    Accessor: StateReader<User> + VersionReader,
+    S: Spec,
+{
+    build_auth_tx_details_with_chain_id::<Accessor, S>(
+        user_max_fee_per_gas,
+        gas_limit,
+        tx_hash,
+        config_value!("CHAIN_ID"),
+        gas_price,
+        state,
+    )
 }
 
 fn validate_chain_id(
@@ -168,8 +210,8 @@ fn validate_chain_id(
 
     Ok(tx_chain_id)
 }
-/// Extracts EVM authorization data from a verified transaction.
-fn extract_evm_authorization_data<S: Spec>(
+/// Builds EVM authorization data using the same signer-to-rollup mapping as raw EVM auth.
+pub fn authorization_data_from_signer<S: Spec>(
     signer: Address,
     tx_hash: TxHash,
     nonce: u64,
@@ -216,7 +258,7 @@ where
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
     let nonce = tx.nonce();
-    let auth_data = extract_evm_authorization_data::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
+    let auth_data = authorization_data_from_signer::<S>(signer, tx_and_raw_hash.raw_tx_hash, nonce);
 
     let call = CallMessage::<S>::Call(rlp);
 

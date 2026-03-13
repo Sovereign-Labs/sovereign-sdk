@@ -101,6 +101,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub automatic_batch_production: bool,
     pub max_allowed_node_distance_behind: u64,
     pub sequencer_config: SequencerKindConfig<S::Address>,
+    pub admin_addresses: Vec<S::Address>,
     pub prover_address: String,
     pub sequencer_address: String,
     pub aggregated_proof_block_jump: usize,
@@ -372,7 +373,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 dropped_tx_ttl_secs: 0,
                 rollup_address: FromStr::from_str(&self.config.sequencer_address)
                     .expect("Sequencer address is not valid"),
-                admin_addresses: vec![],
+                admin_addresses: self.config.admin_addresses.clone(),
                 sequencer_kind_config: self.config.sequencer_config.clone(),
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
                 max_concurrent_blobs: self.config.max_concurrent_blobs,
@@ -405,6 +406,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 postgres_config,
                 ..PreferredSequencerConfig::default()
             }),
+            admin_addresses: vec![],
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
             sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
             aggregated_proof_block_jump: 1,

@@ -1,12 +1,14 @@
 mod get_logs;
 mod subscribe;
-use alloy_eips::BlockId;
 #[cfg(feature = "local")]
 use alloy_eips::Encodable2718;
+use alloy_eips::{BlockId, BlockNumberOrTag};
+#[cfg(feature = "local")]
+use alloy_primitives::Address;
 #[cfg(feature = "local")]
 use alloy_primitives::TxKind;
 use alloy_primitives::U64;
-use alloy_primitives::{Address, Bytes, B256};
+use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types::{
     state::StateOverride, BlockOverrides, ReceiptEnvelope, TransactionReceipt, TransactionRequest,
 };
@@ -21,11 +23,16 @@ use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::capabilities::{AuthenticationError, FatalError, HasKernel};
+use sov_modules_api::capabilities::{
+    AuthenticationError, AuthorizationData, FatalError, GasEnforcer, HasCapabilities, HasKernel,
+    TransactionAuthorizer,
+};
 #[cfg(feature = "local")]
 use sov_modules_api::macros::config_value;
-use sov_modules_api::FullyBakedTx;
+use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::Runtime;
+use sov_modules_api::{Bytes as RollupBytes, ExecutionContext, TxHash};
+use sov_modules_api::{FullyBakedTx, GetGasPrice};
 use sov_modules_api::{RawTx, Spec};
 use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
 #[cfg(feature = "local")]
@@ -81,20 +88,33 @@ where
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> RpcResult<U64> {
-        let _sequencer_context = (
-            &ethereum.sequencer_rollup_address,
-            &ethereum.sequencer_da_address,
-            ethereum.sequencer_type,
-        );
-
         let mut params = parameters.sequence();
         let request: TransactionRequest = params.next()?;
         let block_id: Option<BlockId> = params.optional_next()?;
         let state_overrides: Option<StateOverride> = params.optional_next()?;
         let block_overrides: Option<Box<BlockOverrides>> = params.optional_next()?;
 
+        let evm = Evm::<S>::default();
+        if Self::estimate_request_supports_paymaster_path(
+            &request,
+            block_id.as_ref(),
+            &state_overrides,
+            &block_overrides,
+        ) {
+            let effective_payer = Self::resolve_estimate_effective_payer(&request, &ethereum);
+            let mut state = ethereum.api_state_accessor();
+            return evm.estimate_gas_with_rollup_payer_affordability(
+                request,
+                block_id,
+                state_overrides,
+                block_overrides,
+                Some(effective_payer),
+                &mut state,
+            );
+        }
+
         let mut state = ethereum.api_state_accessor();
-        Evm::<S>::default().eth_estimate_gas(
+        evm.eth_estimate_gas(
             request,
             block_id,
             state_overrides,
@@ -187,7 +207,24 @@ where
             signed_tx,
         } = prepared_tx;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_tx(&tx, &signed_tx, &ethereum)?;
+        let effective_payer = {
+            let (authenticated_tx, auth_data) = Self::authenticate_tx(&tx, &ethereum)?;
+            Self::resolve_effective_payer_on_cloned_state(
+                &authenticated_tx,
+                &auth_data,
+                tx.sequencing_data.clone(),
+                auth_data.default_address.clone(),
+                &ethereum,
+            )
+        };
+        let mut affordability_state = ethereum.api_state_accessor();
+        Evm::<S>::default()
+            .ensure_transaction_rollup_payer_affordability(
+                &signed_tx,
+                &effective_payer,
+                &mut affordability_state,
+            )
+            .map_err(ErrorObjectOwned::from)?;
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
             .await
@@ -196,8 +233,8 @@ where
         on_success(tx_hash, ethereum)
     }
 
-    // Authenticate the transaction and apply the same sender-affordability semantics as
-    // `eth_estimateGas` before admitting it to the sequencer.
+    // Authenticate the transaction in the async RPC handler so the signature verification result
+    // is cached before sequencer admission.
     // This was used earlier to get the credential and nonce, for retries. This has now been
     // implemented in the sequencer and is therefore no longer needed. However, calling
     // `authenticate()` here pre-calculates and caches the signature check in the async API
@@ -205,36 +242,149 @@ where
     // This will also be moved into the sequencer, but for now is kept here.
     fn authenticate_tx(
         tx: &FullyBakedTx,
-        signed_tx: &sov_evm::TransactionSigned,
         ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> RpcResult<()> {
+    ) -> RpcResult<(AuthenticatedTransactionData<S>, AuthorizationData<S>)> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let (_, auth_data, _) = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
-            .map_err(|e| match &e {
-                AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
-                    RpcInvalidTransactionError::FeeCapTooLow.into()
+        let (auth_tx, auth_data, _) = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
+            .map_err(|e| Self::map_authentication_error(&e))?;
+
+        Ok((auth_tx.authenticated_tx, auth_data))
+    }
+
+    fn map_authentication_error(err: &AuthenticationError) -> ErrorObjectOwned {
+        match err {
+            AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
+                RpcInvalidTransactionError::FeeCapTooLow.into()
+            }
+            AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) => {
+                rpc_tx_rejected(format!("transaction type not supported: {err_msg}"))
+            }
+            _ => rpc_invalid_params(format!("Authentication failed: {err}")),
+        }
+    }
+
+    fn estimate_request_supports_paymaster_path(
+        request: &TransactionRequest,
+        block_id: Option<&BlockId>,
+        state_overrides: &Option<StateOverride>,
+        block_overrides: &Option<Box<BlockOverrides>>,
+    ) -> bool {
+        let is_supported_block = match block_id {
+            None => true,
+            Some(BlockId::Number(BlockNumberOrTag::Latest | BlockNumberOrTag::Pending)) => true,
+            Some(_) => false,
+        };
+
+        request.from.is_some()
+            && request.gas.is_some()
+            && (request.gas_price.is_some() || request.max_fee_per_gas.is_some())
+            && is_supported_block
+            && state_overrides.is_none()
+            && block_overrides.is_none()
+    }
+
+    fn resolve_estimate_effective_payer(
+        request: &TransactionRequest,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> S::Address {
+        let evm = Evm::<S>::default();
+        let sender = request
+            .from
+            .expect("paymaster-aware estimate path requires a sender");
+        let fallback_payer = S::Address::from_vm_address(EthereumAddress::from(sender));
+        let mut dry_run_state = ethereum.api_state_accessor();
+        let tx_hash = TxHash::new([0; 32]);
+        let nonce = match request.nonce {
+            Some(nonce) => nonce,
+            None => match evm.next_uniqueness_nonce_for_signer(sender, &mut dry_run_state) {
+                Ok(nonce) => nonce,
+                Err(err) => {
+                    tracing::debug!(
+                        reason = %err,
+                        sender = %sender,
+                        "Failed to resolve estimate nonce on cloned state; falling back to sender affordability",
+                    );
+                    return fallback_payer;
                 }
-                AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) => {
-                    rpc_tx_rejected(format!("transaction type not supported: {err_msg}"))
-                }
-                _ => rpc_invalid_params(format!("Authentication failed: {e}")),
-            })?;
-        let signer = auth_data
-            .credentials
-            .get::<Address>()
-            .copied()
-            .ok_or_else(|| {
-                tracing::error!("Authenticated EVM transaction is missing signer credentials");
-                rpc_internal_error("Authenticated EVM transaction is missing signer credentials")
-            })?;
-        Evm::<S>::default()
-            .ensure_transaction_sender_affordability(
-                signed_tx,
-                signer,
-                &mut state.api_state_accessor,
-            )
-            .map_err(ErrorObjectOwned::from)?;
-        Ok(())
+            },
+        };
+        let user_max_fee_per_gas = request
+            .gas_price
+            .or(request.max_fee_per_gas)
+            .expect("paymaster-aware estimate path requires an explicit fee field");
+        let gas_limit = request
+            .gas
+            .expect("paymaster-aware estimate path requires an explicit gas limit");
+        let authenticated_tx = match sov_evm::build_auth_tx_details::<_, S>(
+            user_max_fee_per_gas,
+            gas_limit,
+            tx_hash,
+            dry_run_state.gas_price(),
+            &mut dry_run_state,
+        ) {
+            Ok(tx_details) => AuthenticatedTransactionData(tx_details),
+            Err(err) => {
+                tracing::debug!(
+                    reason = %err,
+                    sender = %sender,
+                    "Failed to build estimate auth details on cloned state; falling back to sender affordability",
+                );
+                return fallback_payer;
+            }
+        };
+        let auth_data = sov_evm::authorization_data_from_signer::<S>(sender, tx_hash, nonce);
+
+        Self::resolve_effective_payer_on_cloned_state(
+            &authenticated_tx,
+            &auth_data,
+            None,
+            fallback_payer,
+            ethereum,
+        )
+    }
+
+    fn resolve_effective_payer_on_cloned_state(
+        authenticated_tx: &AuthenticatedTransactionData<S>,
+        auth_data: &AuthorizationData<S>,
+        sequencing_data: Option<RollupBytes>,
+        fallback_payer: S::Address,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> S::Address {
+        let mut runtime = Seq::Rt::default();
+        let mut state = ethereum.api_state_accessor();
+        let mut ctx = match runtime.transaction_authorizer().resolve_context(
+            auth_data,
+            &ethereum.sequencer_da_address,
+            ethereum.sequencer_rollup_address.clone(),
+            &mut state,
+            sequencing_data,
+            ExecutionContext::Sequencer,
+            ethereum.sequencer_type,
+        ) {
+            Ok(ctx) => ctx,
+            Err(err) => {
+                tracing::debug!(
+                    reason = %err,
+                    "Failed to resolve effective gas payer on cloned state; falling back to sender affordability",
+                );
+                return fallback_payer;
+            }
+        };
+
+        if let Err(err) = runtime.gas_enforcer().try_reserve_gas(
+            authenticated_tx,
+            state.gas_price(),
+            &mut ctx,
+            &mut state,
+        ) {
+            tracing::debug!(
+                reason = %err,
+                "Failed to reserve gas on cloned state; falling back to sender affordability",
+            );
+            return fallback_payer;
+        }
+
+        ctx.gas_refund_recipient().clone()
     }
 
     #[cfg(feature = "local")]

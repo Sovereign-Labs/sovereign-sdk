@@ -41,7 +41,8 @@ mod helpers;
 use alloy_primitives::{Address, BlockHash, B256};
 use alloy_primitives::{BlockNumber, U256};
 pub use authenticate::{
-    authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
+    authenticate, authorization_data_from_signer, build_auth_tx_details, decode_evm_tx,
+    EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
 };
 pub use revm::primitives::hardfork::SpecId;
 use serde::Serialize;

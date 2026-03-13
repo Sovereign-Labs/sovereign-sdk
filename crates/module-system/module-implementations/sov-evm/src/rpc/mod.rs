@@ -267,15 +267,19 @@ fn enforce_call_upfront_cost_with_base_fee_floor<DB: Database>(
     block_env: &BlockEnv,
     db: &mut DB,
     enforce_base_fee_floor: bool,
+    affordability_balance_override: Option<U256>,
 ) -> Result<(), EthApiError>
 where
     DB::Error: Into<EthApiError>,
 {
-    let balance = db
-        .basic(call_caller(request))
-        .map_err(Into::into)?
-        .map(|account| account.balance)
-        .unwrap_or_default();
+    let balance = if let Some(balance) = affordability_balance_override {
+        balance
+    } else {
+        db.basic(call_caller(request))
+            .map_err(Into::into)?
+            .map(|account| account.balance)
+            .unwrap_or_default()
+    };
     if let Some(upfront) =
         call_upfront_cost_with_base_fee_floor(request, block_env, balance, enforce_base_fee_floor)?
     {
@@ -333,6 +337,18 @@ where
     ) -> Result<(), EthApiError> {
         let payer = crate::to_rollup_address::<S>(signer);
         self.ensure_transaction_rollup_payer_affordability(tx, &payer, state)
+    }
+
+    /// Returns the current uniqueness nonce used by estimate/send admission for the signer.
+    pub fn next_uniqueness_nonce_for_signer<Accessor: StateAccessor>(
+        &self,
+        signer: Address,
+        state: &mut Accessor,
+    ) -> Result<u64, EthApiError> {
+        let credential_id = EthereumAddress::from(signer).as_credential_id();
+        self.uniqueness_module
+            .next_nonce(&credential_id, state)
+            .map_err(|err| EthApiError::other(into_rpc_error(err)))
     }
 
     fn get_block_transactions(
@@ -600,6 +616,7 @@ where
         block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
         enforce_base_fee_floor: bool,
+        effective_payer_balance: Option<U256>,
     ) -> Result<ResultAndState, EthApiError> {
         let has_overrides = state_overrides.is_some() || block_overrides.is_some();
         let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
@@ -636,6 +653,7 @@ where
                 &block_env,
                 &mut evm_db,
                 enforce_base_fee_floor,
+                effective_payer_balance,
             )?;
 
             let tx_env = prepare_call_env(&block_env, request)?;
@@ -662,6 +680,7 @@ where
             &block_env,
             &mut evm_state,
             enforce_base_fee_floor,
+            effective_payer_balance,
         )?;
 
         let tx_env = prepare_call_env(&block_env, request)?;
