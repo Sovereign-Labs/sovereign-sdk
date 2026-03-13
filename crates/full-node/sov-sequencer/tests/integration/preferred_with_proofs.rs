@@ -86,7 +86,7 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
 /// Aggregate proofs are generated automatically about once every 10 slots, so 50 slots gives us plenty of time to produce a few proofs *and land them on chain*.
 /// Any errors should cause a panic in the meantime.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
+async fn flaky_test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<()> {
     let (test_rollup, admin) = create_test_rollup_with_prover().await;
 
     test_rollup.produce_enough_finalized_slots().await;
