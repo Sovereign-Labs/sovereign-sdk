@@ -81,11 +81,12 @@ async fn assert_rpc_succeeds<T: DeserializeOwned>(
     client: &SimpleStorageClient,
     method: &str,
     request: &TransactionRequest,
-) -> anyhow::Result<T> {
-    Ok(client
+) -> T {
+    client
         .ws
         .request(method, rpc_params![request, "latest"])
-        .await?)
+        .await
+        .expect("RPC call must succeed")
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -233,7 +234,7 @@ async fn eth_call_accepts_below_base_fee_with_max_fee_per_gas() -> anyhow::Resul
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
-    let result: String = assert_rpc_succeeds(&client, "eth_call", &request).await?;
+    let result: String = assert_rpc_succeeds(&client, "eth_call", &request).await;
     assert_eq!(result, "0x");
 
     Ok(())
@@ -253,7 +254,7 @@ async fn eth_create_access_list_accepts_below_base_fee_with_max_fee_per_gas() ->
         ..base_request(caller)
     };
     let result: serde_json::Value =
-        assert_rpc_succeeds(&client, "eth_createAccessList", &request).await?;
+        assert_rpc_succeeds(&client, "eth_createAccessList", &request).await;
     assert!(
         result.get("accessList").is_some(),
         "missing accessList: {result}"
