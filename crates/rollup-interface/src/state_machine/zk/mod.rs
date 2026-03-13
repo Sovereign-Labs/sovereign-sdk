@@ -67,6 +67,11 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
     /// The proof generator. Only available under the `"native"` feature.
     #[cfg(feature = "native")]
     type Host: ZkvmHost<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
+
+    /// Network proving implementation for this Zkvm.
+    /// Only available under the `"native"` feature.
+    #[cfg(feature = "native")]
+    type Network: ZkvmNetwork<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
 }
 
 /// The arguments required by the [`Zkvm::Host`]'s constructor function.
@@ -141,6 +146,41 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error>;
+}
+
+/// A network prover that can submit proofs asynchronously and poll for results.
+///
+/// Unlike [`ZkvmHost`] which runs proofs synchronously via [`ZkvmHost::run`],
+/// a `ZkvmNetwork` submits proof requests to a remote proving service and returns
+/// a handle that can be polled for completion. This enables concurrent proof generation
+/// across multiple blocks.
+#[cfg(feature = "native")]
+pub trait ZkvmNetwork: Send + Sync + 'static {
+    /// The associated guest type.
+    type Guest: ZkvmGuest;
+
+    /// An opaque handle returned by [`ZkvmNetwork::submit`] that identifies a pending proof.
+    type ProofHandle: Send + Sync + Clone + core::fmt::Debug + 'static;
+
+    /// Give the guest a piece of advice non-deterministically.
+    fn add_hint<T: Serialize>(&mut self, item: T);
+
+    /// Submit the current program and hints for remote proving.
+    ///
+    /// Returns a [`Self::ProofHandle`] that can be passed to [`ZkvmNetwork::check`] to poll for the result.
+    fn submit(
+        &mut self,
+        with_proof: bool,
+    ) -> impl core::future::Future<Output = anyhow::Result<Self::ProofHandle>> + Send;
+
+    /// Check whether a previously submitted proof is ready.
+    ///
+    /// Returns `Ok(Some(proof_bytes))` when the proof is complete,
+    /// `Ok(None)` if it is still pending, or an error if proving failed.
+    fn poll(
+        &self,
+        handle: &Self::ProofHandle,
+    ) -> impl core::future::Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send;
 }
 
 /// A trait which is accessible from within a zkVM program.
