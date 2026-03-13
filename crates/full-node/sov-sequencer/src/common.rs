@@ -584,7 +584,7 @@ pub enum AcceptTxErrorCode {
 }
 
 /// Structured details attached to `accept_tx` failures.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct AcceptTxErrorDetails {
     /// Optional stable machine-readable code for callers that need deterministic remapping.
     #[serde(skip_serializing_if = "Option::is_none")]
