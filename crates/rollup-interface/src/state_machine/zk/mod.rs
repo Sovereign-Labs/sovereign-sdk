@@ -70,6 +70,9 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
 
     /// Network proving implementation for this Zkvm.
     /// Only available under the `"native"` feature.
+    ///
+    /// This is an optional component - if the Zkvm does not support network proving, this can be set to `NoopZkvmNetwork<Self::Guest>`,
+    /// which is a dummy implementation that cannot be used or constructed.
     #[cfg(feature = "native")]
     type Network: ZkvmNetwork<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
 }
