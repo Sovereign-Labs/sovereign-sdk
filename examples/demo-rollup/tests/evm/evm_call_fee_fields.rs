@@ -227,7 +227,7 @@ async fn eth_call_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Resul
     let (_rollup, client) = setup_client().await;
     let caller = client.address();
     let base_fee = current_base_fee(&client).await?;
-    assert!(base_fee > 1, "base fee should be non-zero for this test");
+    assert!(base_fee > 1, "base fee should be above 1 for meaningful test");
 
     let request = TransactionRequest {
         max_fee_per_gas: Some(base_fee - 1),
