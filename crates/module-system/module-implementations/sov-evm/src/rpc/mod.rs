@@ -142,6 +142,12 @@ struct CallUpfrontCost {
     gas_limit: u64,
 }
 
+fn simulation_gas_ceiling(block_env: &BlockEnv, tx_gas_limit: Option<u64>) -> u64 {
+    block_env
+        .gas_limit
+        .min(tx_gas_limit.unwrap_or(block_env.gas_limit))
+}
+
 /// gas * 1.5 + 100_000
 pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
@@ -152,7 +158,7 @@ pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError>
 
 fn call_upfront_cost(
     request: &TransactionRequest,
-    block_env: &BlockEnv,
+    omitted_gas_limit: u64,
     balance: U256,
 ) -> Result<Option<CallUpfrontCost>, EthApiError> {
     if request.gas_price.is_some()
@@ -178,15 +184,15 @@ fn call_upfront_cost(
         Some(gas_limit) => gas_limit,
         None => {
             if fee_per_gas == 0 {
-                block_env.gas_limit
+                omitted_gas_limit
             } else {
                 // When gas is omitted, cap by what the caller can actually afford instead of
-                // requiring balance for the full block gas limit. Still require enough
+                // requiring balance for the full simulation ceiling. Still require enough
                 // allowance for intrinsic tx gas, otherwise the request is unaffordable.
                 let allowance = balance.checked_sub(value).unwrap_or_default();
                 let max_affordable_gas = allowance / U256::from(fee_per_gas);
                 let gas_limit = max_affordable_gas
-                    .min(U256::from(block_env.gas_limit))
+                    .min(U256::from(omitted_gas_limit))
                     .to::<u64>();
                 if gas_limit < MIN_TRANSACTION_GAS {
                     return Err(RpcInvalidTransactionError::GasRequiredExceedsAllowance {
@@ -218,7 +224,7 @@ fn call_caller(request: &TransactionRequest) -> Address {
 
 fn enforce_call_upfront_cost<DB: Database>(
     request: &mut TransactionRequest,
-    block_env: &BlockEnv,
+    omitted_gas_limit: u64,
     db: &mut DB,
 ) -> Result<(), EthApiError>
 where
@@ -229,7 +235,7 @@ where
         .map_err(Into::into)?
         .map(|account| account.balance)
         .unwrap_or_default();
-    if let Some(upfront) = call_upfront_cost(request, block_env, balance)? {
+    if let Some(upfront) = call_upfront_cost(request, omitted_gas_limit, balance)? {
         if request.gas.is_none() {
             request.gas = Some(upfront.gas_limit);
         }
@@ -244,6 +250,12 @@ where
     }
 
     Ok(())
+}
+
+fn default_omitted_call_gas_limit(request: &mut TransactionRequest, omitted_gas_limit: u64) {
+    if request.gas.is_none() {
+        request.gas = Some(omitted_gas_limit);
+    }
 }
 
 impl<S: Spec> Evm<S>
@@ -545,7 +557,12 @@ where
         if !has_overrides {
             // Fast path for the common case where no call overrides are provided.
             let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            enforce_call_upfront_cost(&mut request, &block_env, &mut evm_db)?;
+            let simulation_gas_ceiling =
+                simulation_gas_ceiling(&block_env, cfg.chain_spec.tx_gas_limit);
+            enforce_call_upfront_cost(&mut request, simulation_gas_ceiling, &mut evm_db)?;
+            // Rollup RPC simulation intentionally clamps omitted gas to the real tx cap
+            // instead of following Ethereum clients' separate RPC gas-cap semantics.
+            default_omitted_call_gas_limit(&mut request, simulation_gas_ceiling);
 
             let tx_env = prepare_call_env(&block_env, request)?;
             let caller = tx_env.caller;
@@ -565,8 +582,11 @@ where
             state_overrides,
             block_overrides,
         )?;
+        let simulation_gas_ceiling =
+            simulation_gas_ceiling(&block_env, cfg.chain_spec.tx_gas_limit);
 
-        enforce_call_upfront_cost(&mut request, &block_env, &mut evm_state)?;
+        enforce_call_upfront_cost(&mut request, simulation_gas_ceiling, &mut evm_state)?;
+        default_omitted_call_gas_limit(&mut request, simulation_gas_ceiling);
 
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
@@ -1350,17 +1370,13 @@ mod tests {
 
     #[test]
     fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {
-        let block_env = BlockEnv {
-            gas_limit: 1_000_000,
-            ..Default::default()
-        };
         let request = TransactionRequest {
             gas_price: Some(10),
             ..Default::default()
         };
         let balance = U256::from(1_000_000u64);
 
-        let upfront = call_upfront_cost(&request, &block_env, balance)
+        let upfront = call_upfront_cost(&request, 1_000_000, balance)
             .unwrap()
             .expect("fee fields are set");
 
@@ -1370,14 +1386,13 @@ mod tests {
 
     #[test]
     fn call_upfront_cost_keeps_explicit_gas_requirements() {
-        let block_env = BlockEnv::default();
         let request = TransactionRequest {
             gas_price: Some(10),
             gas: Some(1_000),
             ..Default::default()
         };
 
-        let upfront = call_upfront_cost(&request, &block_env, U256::ZERO)
+        let upfront = call_upfront_cost(&request, 1_000_000, U256::ZERO)
             .unwrap()
             .expect("fee fields are set");
 
@@ -1387,10 +1402,6 @@ mod tests {
 
     #[test]
     fn call_upfront_cost_reserves_value_before_affordable_gas() {
-        let block_env = BlockEnv {
-            gas_limit: 1_000_000,
-            ..Default::default()
-        };
         let request = TransactionRequest {
             gas_price: Some(10),
             value: Some(U256::from(100_000u64)),
@@ -1398,7 +1409,7 @@ mod tests {
         };
         let balance = U256::from(310_000u64);
 
-        let upfront = call_upfront_cost(&request, &block_env, balance)
+        let upfront = call_upfront_cost(&request, 1_000_000, balance)
             .unwrap()
             .expect("fee fields are set");
 
@@ -1408,17 +1419,13 @@ mod tests {
 
     #[test]
     fn call_upfront_cost_rejects_omitted_gas_when_allowance_below_intrinsic_cost() {
-        let block_env = BlockEnv {
-            gas_limit: 1_000_000,
-            ..Default::default()
-        };
         let request = TransactionRequest {
             gas_price: Some(10),
             ..Default::default()
         };
         let balance = U256::from(1000u64);
 
-        let err = call_upfront_cost(&request, &block_env, balance).unwrap_err();
+        let err = call_upfront_cost(&request, 1_000_000, balance).unwrap_err();
 
         assert!(matches!(
             err,
@@ -1436,7 +1443,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+        let err = call_upfront_cost(&request, 1_000_000, U256::ZERO).unwrap_err();
 
         assert!(matches!(err, EthApiError::ConflictingFeeFieldsInRequest));
     }
@@ -1449,7 +1456,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+        let err = call_upfront_cost(&request, 1_000_000, U256::ZERO).unwrap_err();
 
         assert!(matches!(
             err,
@@ -1459,13 +1466,69 @@ mod tests {
 
     #[test]
     fn call_upfront_cost_returns_none_without_fee_fields() {
-        let upfront = call_upfront_cost(
-            &TransactionRequest::default(),
-            &BlockEnv::default(),
-            U256::ZERO,
-        )
-        .unwrap();
+        let upfront =
+            call_upfront_cost(&TransactionRequest::default(), 1_000_000, U256::ZERO).unwrap();
 
         assert_eq!(upfront, None);
+    }
+
+    #[test]
+    fn simulation_gas_ceiling_clamps_to_tx_gas_limit() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000_000,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            simulation_gas_ceiling(&block_env, Some(30_000_000)),
+            30_000_000
+        );
+    }
+
+    #[test]
+    fn simulation_gas_ceiling_respects_lower_block_override_limit() {
+        let block_env = BlockEnv {
+            gas_limit: 12_345,
+            ..Default::default()
+        };
+
+        assert_eq!(simulation_gas_ceiling(&block_env, Some(30_000_000)), 12_345);
+    }
+
+    #[test]
+    fn call_upfront_cost_caps_omitted_gas_by_simulation_ceiling() {
+        let request = TransactionRequest {
+            gas_price: Some(10),
+            ..Default::default()
+        };
+        let balance = U256::from(1_000_000_000u64);
+
+        let upfront = call_upfront_cost(&request, 30_000_000, balance)
+            .unwrap()
+            .expect("fee fields are set");
+
+        assert_eq!(upfront.gas_limit, 30_000_000);
+        assert_eq!(upfront.total_cost, U256::from(300_000_000u64));
+    }
+
+    #[test]
+    fn default_omitted_call_gas_limit_sets_fee_less_requests() {
+        let mut request = TransactionRequest::default();
+
+        default_omitted_call_gas_limit(&mut request, 30_000_000);
+
+        assert_eq!(request.gas, Some(30_000_000));
+    }
+
+    #[test]
+    fn default_omitted_call_gas_limit_preserves_explicit_gas() {
+        let mut request = TransactionRequest {
+            gas: Some(123),
+            ..Default::default()
+        };
+
+        default_omitted_call_gas_limit(&mut request, 30_000_000);
+
+        assert_eq!(request.gas, Some(123));
     }
 }
