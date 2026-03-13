@@ -155,21 +155,7 @@ fn call_upfront_cost(
     block_env: &BlockEnv,
     balance: U256,
 ) -> Result<Option<CallUpfrontCost>, EthApiError> {
-    if request.gas_price.is_some()
-        && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
-    {
-        return Err(EthApiError::ConflictingFeeFieldsInRequest);
-    }
-
-    if let (Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) =
-        (request.max_fee_per_gas, request.max_priority_fee_per_gas)
-    {
-        if max_priority_fee_per_gas > max_fee_per_gas {
-            return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
-        }
-    }
-
-    let Some(fee_per_gas) = request.gas_price.or(request.max_fee_per_gas) else {
+    let Some(fee_per_gas) = requested_call_fee_per_gas(request, block_env)? else {
         return Ok(None);
     };
 
@@ -208,6 +194,35 @@ fn call_upfront_cost(
         total_cost,
         gas_limit,
     }))
+}
+
+fn requested_call_fee_per_gas(
+    request: &TransactionRequest,
+    block_env: &BlockEnv,
+) -> Result<Option<u128>, EthApiError> {
+    if request.gas_price.is_some()
+        && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
+    {
+        return Err(EthApiError::ConflictingFeeFieldsInRequest);
+    }
+
+    if let (Some(max_fee_per_gas), Some(max_priority_fee_per_gas)) =
+        (request.max_fee_per_gas, request.max_priority_fee_per_gas)
+    {
+        if max_priority_fee_per_gas > max_fee_per_gas {
+            return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
+        }
+    }
+
+    // The simulated call context still executes with zero revm fees, but `eth_call` and
+    // `eth_estimateGas` must reject EIP-1559 requests that real tx admission would reject.
+    if let Some(max_fee_per_gas) = request.max_fee_per_gas {
+        if max_fee_per_gas < u128::from(block_env.basefee) {
+            return Err(RpcInvalidTransactionError::FeeCapTooLow.into());
+        }
+    }
+
+    Ok(request.gas_price.or(request.max_fee_per_gas))
 }
 
 fn call_caller(request: &TransactionRequest) -> Address {
@@ -1455,6 +1470,47 @@ mod tests {
             err,
             EthApiError::InvalidTransaction(RpcInvalidTransactionError::TipAboveFeeCap)
         ));
+    }
+
+    #[test]
+    fn call_upfront_cost_rejects_fee_cap_below_base_fee() {
+        let request = TransactionRequest {
+            max_fee_per_gas: Some(9),
+            max_priority_fee_per_gas: Some(0),
+            gas: Some(MIN_TRANSACTION_GAS),
+            ..Default::default()
+        };
+        let block_env = BlockEnv {
+            basefee: 10,
+            ..Default::default()
+        };
+
+        let err = call_upfront_cost(&request, &block_env, U256::MAX).unwrap_err();
+
+        assert!(matches!(
+            err,
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::FeeCapTooLow)
+        ));
+    }
+
+    #[test]
+    fn call_upfront_cost_keeps_legacy_gas_price_behavior_below_base_fee() {
+        let request = TransactionRequest {
+            gas_price: Some(9),
+            gas: Some(MIN_TRANSACTION_GAS),
+            ..Default::default()
+        };
+        let block_env = BlockEnv {
+            basefee: 10,
+            ..Default::default()
+        };
+
+        let upfront = call_upfront_cost(&request, &block_env, U256::MAX)
+            .unwrap()
+            .expect("legacy gasPrice still participates in affordability checks");
+
+        assert_eq!(upfront.gas_limit, MIN_TRANSACTION_GAS);
+        assert_eq!(upfront.total_cost, U256::from(MIN_TRANSACTION_GAS * 9));
     }
 
     #[test]

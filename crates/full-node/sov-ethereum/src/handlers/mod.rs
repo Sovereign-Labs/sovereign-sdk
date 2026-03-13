@@ -32,10 +32,8 @@ use sov_modules_api::FullyBakedTx;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
-#[cfg(feature = "local")]
-use sov_rpc_eth_types::EthApiError;
-use sov_rpc_eth_types::LogWithExecutionTimestamp;
-use sov_sequencer::Sequencer;
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
+use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails, Sequencer};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -165,16 +163,8 @@ where
     // This will also be moved into the sequencer, but for now is kept here.
     fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
         let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state).map_err(|e| {
-            if let AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _) =
-                &e
-            {
-                if err_msg.contains("Only EIP1559") {
-                    return rpc_tx_rejected(format!("transaction type not supported: {err_msg}"));
-                }
-            };
-            rpc_invalid_params(format!("Authentication failed: {e}"))
-        })?;
+        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
+            .map_err(map_authentication_error)?;
         Ok(())
     }
 
@@ -271,7 +261,40 @@ where
     }
 }
 
+fn map_authentication_error(error: AuthenticationError) -> ErrorObjectOwned {
+    match &error {
+        AuthenticationError::FatalError(FatalError::DeserializationFailed(err_msg), _)
+            if err_msg.contains("Only EIP-1559") =>
+        {
+            rpc_tx_rejected(format!("transaction type not supported: {err_msg}"))
+        }
+        AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
+            rpc_fee_cap_too_low()
+        }
+        _ => rpc_invalid_params(format!("Authentication failed: {error}")),
+    }
+}
+
+fn rpc_fee_cap_too_low() -> ErrorObjectOwned {
+    ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+        RpcInvalidTransactionError::FeeCapTooLow,
+    ))
+}
+
+fn accept_tx_error_code(err: &RestErrorObject) -> Option<AcceptTxErrorCode> {
+    serde_json::from_value::<AcceptTxErrorDetails>(serde_json::Value::Object(err.details.clone()))
+        .ok()?
+        .code
+}
+
 fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
+    if matches!(
+        accept_tx_error_code(&err),
+        Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+    ) {
+        return rpc_fee_cap_too_low();
+    }
+
     let err_msg = format!("{} - '{}' ({:?})", err.status, err.message, err.details);
     match err.status.as_u16() {
         400 | 403 | 413 => rpc_invalid_params(err_msg),
@@ -312,9 +335,14 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
 
 #[cfg(test)]
 mod tests {
+    use alloy_rpc_types::error::EthRpcErrorCode;
     use jsonrpsee::types::error::INVALID_PARAMS_CODE;
+    use sov_modules_api::capabilities::{AuthenticationError, FatalError};
+    use sov_modules_api::TxHash;
+    use sov_rest_utils::to_json_object;
 
-    use super::{map_accept_tx_error, RestErrorObject};
+    use super::{map_accept_tx_error, map_authentication_error, RestErrorObject};
+    use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails};
 
     fn sample_accept_tx_error(status: u16) -> RestErrorObject {
         let status = status.try_into().expect("status code should be valid");
@@ -322,6 +350,18 @@ mod tests {
             status,
             message: "The transaction is invalid".to_string(),
             details: Default::default(),
+        }
+    }
+
+    fn sample_accept_tx_error_with_details(
+        status: u16,
+        details: AcceptTxErrorDetails,
+    ) -> RestErrorObject {
+        let status = status.try_into().expect("status code should be valid");
+        RestErrorObject {
+            status,
+            message: "The transaction is invalid".to_string(),
+            details: to_json_object(details),
         }
     }
 
@@ -347,5 +387,33 @@ mod tests {
     fn accept_tx_service_unavailable_stays_tx_rejected() {
         let err = map_accept_tx_error(sample_accept_tx_error(503));
         assert_eq!(err.code(), -32003);
+    }
+
+    #[test]
+    fn accept_tx_low_fee_cap_maps_to_invalid_input() {
+        let err = map_accept_tx_error(sample_accept_tx_error_with_details(
+            400,
+            AcceptTxErrorDetails {
+                code: Some(AcceptTxErrorCode::InsufficientMaxFeePerGas),
+                error: Some("Authentication failed".to_string()),
+            },
+        ));
+
+        assert_eq!(err.code(), EthRpcErrorCode::InvalidInput.code());
+        assert_eq!(err.message(), "max fee per gas less than block base fee");
+    }
+
+    #[test]
+    fn authentication_low_fee_cap_maps_to_invalid_input() {
+        let err = map_authentication_error(AuthenticationError::FatalError(
+            FatalError::InsufficientMaxFeePerGas {
+                user_max_fee_per_gas: 1,
+                rollup_base_fee: 2,
+            },
+            TxHash::new([0; 32]),
+        ));
+
+        assert_eq!(err.code(), EthRpcErrorCode::InvalidInput.code());
+        assert_eq!(err.message(), "max fee per gas less than block base fee");
     }
 }

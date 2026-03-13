@@ -57,7 +57,8 @@ Parameter handling gaps
   Files: crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs
 - eth_call and eth_estimateGas support state_override and block_overrides.
   File: crates/module-system/module-implementations/sov-evm/src/rpc/handlers.rs
-- eth_call / eth_estimateGas ignore fee fields and transaction type (always EIP-1559, zero fees).
+- eth_call / eth_estimateGas still execute with an EIP-1559 zero-fee call context, but now
+  pre-validate conflicting fee fields and reject `maxFeePerGas < block.baseFeePerGas`.
   File: crates/module-system/module-implementations/sov-evm/src/helpers.rs
 - Pending semantics:
   - eth_getTransactionByHash and eth_getTransactionCount do not include pending txs even when
