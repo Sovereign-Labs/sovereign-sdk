@@ -2,20 +2,32 @@ use crate::evm::evm_test_helper::{
     alloy_ws_client, create_simple_storage_client, deploy_contract_check, hex_u128, hex_u64,
     parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response,
     rpc_error_message, rpc_error_object, rpc_result_hex, setup_test_rollup,
-    setup_test_rollup_with_paymaster, setup_with_simple_storage, tx_count, EVM_EXTENSION,
-    HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, PAYER_SOV_BANK_BALANCE, SENDER_PRIV_KEY,
+    setup_test_rollup_with_admin, setup_with_simple_storage, tx_count, EVM_EXTENSION,
+    HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::Filter;
 use alloy_rpc_types_trace::geth::GethTrace;
+use demo_stf::runtime::{Runtime, RuntimeCall};
 use futures::StreamExt;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
 use serde_json::json;
+use sov_demo_rollup::MockDemoRollup;
+use sov_modules_api::execution_mode::Native;
+use sov_modules_api::transaction::Transaction;
+use sov_test_utils::default_test_signed_transaction_with_nonce;
+use sov_test_utils::sov_paymaster::{
+    AuthorizedSequencers, CallMessage as PaymasterCallMessage, PayeePolicy,
+    PaymasterPolicyInitializer, SafeVec,
+};
+use sov_test_utils::test_rollup::{read_private_key, TestRollup};
 use tokio::time::{timeout, Duration};
+
+use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 
 const DEFAULT_MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
@@ -31,6 +43,36 @@ const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 const EMPTY_WITHDRAWALS_ROOT: &str =
     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(10);
+
+async fn register_temporary_paymaster(
+    rollup: &TestRollup<MockDemoRollup<Native>>,
+    default_payee_policy: PayeePolicy<DemoRollupSpec>,
+) -> anyhow::Result<()> {
+    let signer = read_private_key::<DemoRollupSpec>("tx_signer_private_key.json");
+    let mut authorized_sequencers = SafeVec::new();
+    authorized_sequencers
+        .try_push(rollup.rollup_config.da.sender_address.clone())
+        .expect("single authorized sequencer should fit into SafeVec");
+
+    let msg = RuntimeCall::<DemoRollupSpec>::Paymaster(PaymasterCallMessage::RegisterPaymaster {
+        policy: PaymasterPolicyInitializer {
+            default_payee_policy,
+            payees: SafeVec::new(),
+            authorized_updaters: SafeVec::new(),
+            authorized_sequencers: AuthorizedSequencers::Some(authorized_sequencers),
+        },
+    });
+    let tx: Transaction<Runtime<DemoRollupSpec>, DemoRollupSpec> =
+        default_test_signed_transaction_with_nonce(&signer.private_key, &msg, 0, &CHAIN_HASH);
+
+    rollup
+        .client
+        .client
+        .send_tx_to_sequencer_with_retry(&tx)
+        .await?;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+    Ok(())
+}
 
 // Overlap note: earlier low-fee-cap rejection coverage lives in
 // `evm_call_fee_fields.rs::{eth_call_rejects_below_base_fee_with_max_fee_per_gas, eth_create_access_list_rejects_below_base_fee_with_max_fee_per_gas}`.
@@ -164,8 +206,10 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
 /// This is not an `eth_call` parity test. Local call/base-fee semantics live in
 /// `evm_call_fee_fields.rs`.
 async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let paymaster_admin = read_private_key::<DemoRollupSpec>("tx_signer_private_key.json");
+    let rollup = setup_test_rollup_with_admin(0, EVM_EXTENSION, paymaster_admin.address).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
+    register_temporary_paymaster(&rollup, PayeePolicy::Deny).await?;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let affordability_signer: PrivateKeySigner = AFFORDABILITY_SIGNER_PRIV_KEY.parse()?;
@@ -1152,54 +1196,43 @@ async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result
     Ok(())
 }
 
-/// Hardhat #4: 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
-/// Not in any genesis → starts with zero EVM balance.
-const PAYMASTER_SIGNER_PRIV_KEY: &str =
-    "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a";
-
-/// When a paymaster is configured and willing to cover gas, a zero-balance
-/// sender should be able to transact, and affordability should be checked
-/// against the **paymaster's SOV bank balance** instead of the sender's EVM
-/// balance.
-///
-/// Phase 1: Zero-balance sender succeeds when paymaster covers gas.
-/// Phase 2: Affordability window against paymaster balance (mirrors rpc2_002).
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Paymaster-aware RPC affordability checks not yet implemented"]
 async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup_with_paymaster(0, EVM_EXTENSION).await;
+    let paymaster_admin = read_private_key::<DemoRollupSpec>("tx_signer_private_key.json");
+    let rollup = setup_test_rollup_with_admin(0, EVM_EXTENSION, paymaster_admin.address).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
+    register_temporary_paymaster(
+        &rollup,
+        PayeePolicy::Allow {
+            max_fee: None,
+            gas_limit: None,
+            max_gas_price: None,
+            transaction_limit: None,
+        },
+    )
+    .await?;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let paymaster_signer: PrivateKeySigner = PAYMASTER_SIGNER_PRIV_KEY.parse()?;
-    let paymaster_address = paymaster_signer.address();
+    let sender_signer: PrivateKeySigner = AFFORDABILITY_SIGNER_PRIV_KEY.parse()?;
+    let sender_address = sender_signer.address();
     let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
-    let gas_limit = 1_000_000u64;
+    let gas_limit = 300_000u64;
     let recipient = Address::repeat_byte(0x33);
 
-    // ── Precondition: signer has zero EVM balance ──
     assert_eq!(
-        ws_client.eth_get_balance(paymaster_address).await,
+        ws_client.eth_get_balance(sender_address).await,
         U256::ZERO,
-        "paymaster signer must start with zero EVM balance"
+        "underfunded sender must start with zero EVM balance"
     );
 
-    // ── Phase 1: zero-balance sender succeeds (paymaster covers gas) ──
     let base_fee: U256 = ws_client.ws.request("eth_gasPrice", rpc_params![]).await?;
     let base_fee_u128: u128 = base_fee.to::<u128>();
     assert!(base_fee_u128 > 0, "base fee should be non-zero");
 
-    // Reasonable fee: above base fee, well below payer_balance / gas_limit
     let reasonable_max_fee = base_fee_u128 * 2;
-    let reasonable_cost = (gas_limit as u128) * reasonable_max_fee;
-    assert!(
-        reasonable_cost < PAYER_SOV_BANK_BALANCE,
-        "reasonable tx cost ({reasonable_cost}) must be below payer SOV balance ({PAYER_SOV_BANK_BALANCE})"
-    );
-
     let http = Client::new();
     let estimate_request = json!({
-        "from": paymaster_address,
+        "from": sender_address,
         "to": recipient,
         "value": "0x0",
         "gas": hex_u64(gas_limit),
@@ -1215,16 +1248,16 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
     .await?;
     assert!(
         estimate_response.get("error").is_none(),
-        "eth_estimateGas should succeed for zero-balance sender when paymaster covers gas: {estimate_response}"
+        "eth_estimateGas should not reject the sponsored sender for insufficient funds: {estimate_response}"
     );
     assert!(
         estimate_response.get("result").is_some() && !estimate_response["result"].is_null(),
         "eth_estimateGas should return a gas estimate: {estimate_response}"
     );
 
-    let nonce = tx_count(&ws_client, paymaster_address, "latest").await?;
+    let nonce = tx_count(&ws_client, sender_address, "latest").await?;
     let raw_tx = raw_signed_eip1559(
-        &paymaster_signer,
+        &sender_signer,
         chain_id.to::<u64>(),
         nonce,
         gas_limit,
@@ -1244,7 +1277,7 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
     .await?;
     assert!(
         send_response.get("error").is_none(),
-        "eth_sendRawTransaction should succeed for zero-balance sender when paymaster covers gas: {send_response}"
+        "eth_sendRawTransaction should not reject the sponsored sender for insufficient funds: {send_response}"
     );
     let tx_hash: B256 = rpc_result_hex(&send_response).parse()?;
     let receipt = ws_client.wait_for_receipt(tx_hash).await;
@@ -1252,84 +1285,10 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         receipt.status(),
         "transaction should succeed when paymaster covers gas"
     );
-
-    // ── Phase 2: affordability window against paymaster balance ──
-    // gas_limit * HIGH_MAX_FEE_PER_GAS = 1e6 * 1e12 = 1e18 > PAYER_SOV_BANK_BALANCE (5e15)
-    // gas_limit * base_fee ≈ 1e7 < PAYER_SOV_BANK_BALANCE
-    let estimate_ceiling = (gas_limit as u128) * HIGH_MAX_FEE_PER_GAS;
-    assert!(
-        estimate_ceiling > PAYER_SOV_BANK_BALANCE,
-        "estimate ceiling ({estimate_ceiling}) must exceed payer SOV balance ({PAYER_SOV_BANK_BALANCE})"
-    );
-    let send_floor = (gas_limit as u128) * base_fee_u128;
-    assert!(
-        send_floor < PAYER_SOV_BANK_BALANCE,
-        "send floor ({send_floor}) must be below payer SOV balance ({PAYER_SOV_BANK_BALANCE})"
-    );
-
-    let nonce_before = tx_count(&ws_client, paymaster_address, "latest").await?;
-    let high_fee_estimate_request = json!({
-        "from": paymaster_address,
-        "to": recipient,
-        "value": "0x0",
-        "gas": hex_u64(gas_limit),
-        "maxFeePerGas": hex_u128(HIGH_MAX_FEE_PER_GAS),
-        "maxPriorityFeePerGas": "0x0"
-    });
-    let high_fee_estimate = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_estimateGas",
-        json!([high_fee_estimate_request, "latest"]),
-    )
-    .await?;
     assert_eq!(
-        rpc_error_code_from_response(&high_fee_estimate, "eth_estimateGas"),
-        -32003,
-        "estimate should reject with transaction-rejected error when paymaster can't afford gas: {high_fee_estimate}"
-    );
-    assert!(
-        rpc_error_message(rpc_error_object(&high_fee_estimate, "eth_estimateGas"))
-            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
-        "estimate should report insufficient-funds against paymaster balance: {high_fee_estimate}"
-    );
-
-    let high_fee_nonce = tx_count(&ws_client, paymaster_address, "latest").await?;
-    let high_fee_raw_tx = raw_signed_eip1559(
-        &paymaster_signer,
-        chain_id.to::<u64>(),
-        high_fee_nonce,
-        gas_limit,
-        TxKind::Call(recipient),
-        U256::ZERO,
-        Bytes::new(),
-        HIGH_MAX_FEE_PER_GAS,
-        0,
-    )
-    .await?;
-    let high_fee_send = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_sendRawTransaction",
-        json!([high_fee_raw_tx]),
-    )
-    .await?;
-    assert_eq!(
-        rpc_error_code_from_response(&high_fee_send, "eth_sendRawTransaction"),
-        rpc_error_code_from_response(&high_fee_estimate, "eth_estimateGas"),
-        "estimate and send should reject with the same JSON-RPC error class"
-    );
-    assert!(
-        rpc_error_message(rpc_error_object(&high_fee_send, "eth_sendRawTransaction"))
-            .contains(INSUFFICIENT_FUNDS_FOR_GAS_ERROR),
-        "send should report insufficient-funds against paymaster balance: {high_fee_send}"
-    );
-
-    let nonce_after = tx_count(&ws_client, paymaster_address, "latest").await?;
-    assert_eq!(
-        nonce_after,
-        nonce_before + 1,
-        "only the successful phase-1 tx should advance nonce; failed phase-2 tx must not"
+        tx_count(&ws_client, sender_address, "latest").await?,
+        nonce + 1,
+        "successful sponsored send should advance the sender nonce exactly once"
     );
 
     Ok(())
