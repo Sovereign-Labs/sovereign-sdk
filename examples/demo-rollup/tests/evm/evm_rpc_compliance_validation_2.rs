@@ -1240,7 +1240,7 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         "send floor ({send_floor}) must be below payer SOV balance ({PAYER_SOV_BANK_BALANCE})"
     );
 
-    let nonce_before = tx_count(&ws_client, paymaster_address, "latest").await?;
+    let nonce_after_phase_1 = tx_count(&ws_client, paymaster_address, "latest").await?;
     let high_fee_estimate_request = json!({
         "from": paymaster_address,
         "to": recipient,
@@ -1300,8 +1300,7 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
 
     let nonce_after = tx_count(&ws_client, paymaster_address, "latest").await?;
     assert_eq!(
-        nonce_after,
-        nonce_before + 1,
+        nonce_after, nonce_after_phase_1,
         "only the successful phase-1 tx should advance nonce; failed phase-2 tx must not"
     );
 
