@@ -1322,6 +1322,8 @@ async fn rpc2_013_surfaced_pending_block_hash_stays_stable_across_lifecycle() ->
 async fn rpc2_014_future_numeric_block_selector_returns_null() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
+    // Freeze the head so `latest` and `N + 1` are evaluated against the same chain state.
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let http = Client::new();
     let latest = rpc_call(
