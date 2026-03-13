@@ -1,0 +1,10 @@
+[package]
+name = "sov-aggregated-proof-program"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+sha2.workspace = true
+sp1-zkvm.workspace = true
+sov-aggregated-proof-shared.workspace = true

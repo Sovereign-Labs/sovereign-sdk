@@ -19,7 +19,8 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{
-    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
+    CodeCommitment, StateTransitionPublicData, StateTransitionWitness,
+    StateTransitionWitnessWithAddress, ZkvmHost,
 };
 use sov_sp1_adapter::host::SP1Host;
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier, SP1};
@@ -71,6 +72,7 @@ async fn test_save_proofs() {
         .join("tmp");
 
     std::fs::create_dir_all(&proofs_dir).unwrap();
+    std::fs::write(proofs_dir.join("inner_vk.bin"), host.verifying_key_bytes()).unwrap();
 
     for (i, data) in proof_data.into_iter().enumerate() {
         let proof_public_data = host.verify(data.proof.clone()).await;
@@ -223,6 +225,10 @@ impl TestHost {
         })
         .await
         .unwrap()
+    }
+
+    fn verifying_key_bytes(&self) -> Vec<u8> {
+        self.code_commitment.encode()
     }
 
     #[allow(dead_code)]
