@@ -29,36 +29,7 @@ struct SavedProof {
     proof: Vec<u8>,
 }
 
-fn main() {
-    check_proofs().unwrap();
-}
-
-fn proofs_and_vk() -> (Vec<SP1ProofWithPublicValues>, SP1VerifyingKey) {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_dir = manifest_dir
-        .parent()
-        .expect("script crate must live under the sov-aggregated-proof workspace root");
-
-    let data_dir = workspace_dir.join("data");
-
-    let vk = read_saved_inner_vk(&data_dir.join(inner_vk.bin)).unwrap();
-
-    let mut proofs = Vec::new();
-
-    let paths = [
-        data_dir.join("inner_0_proof.json"),
-        data_dir.join("inner_1_proof.json"),
-        data_dir.join("inner_2_proof.json"),
-    ];
-
-    for path in paths {
-        proofs.push(read_saved_proof(&path).unwrap());
-    }
-
-    (proofs, vk)
-}
-
-fn check_proofs() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let start = Instant::now();
     let (raw_proofs, verification_key) = proofs_and_vk();
     ensure!(
@@ -125,6 +96,31 @@ fn check_proofs() -> anyhow::Result<()> {
     println!("[host] outer proof verified in {:?}", start.elapsed());
 
     Ok(())
+}
+
+fn proofs_and_vk() -> (Vec<SP1ProofWithPublicValues>, SP1VerifyingKey) {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let workspace_dir = manifest_dir
+        .parent()
+        .expect("script crate must live under the sov-aggregated-proof workspace root");
+
+    let data_dir = workspace_dir.join("data");
+
+    let vk = read_saved_inner_vk(&data_dir.join("inner_vk.bin")).unwrap();
+
+    let mut proofs = Vec::new();
+
+    let paths = [
+        data_dir.join("inner_0_proof.json"),
+        data_dir.join("inner_1_proof.json"),
+        data_dir.join("inner_2_proof.json"),
+    ];
+
+    for path in paths {
+        proofs.push(read_saved_proof(&path).unwrap());
+    }
+
+    (proofs, vk)
 }
 
 fn read_saved_inner_vk(file_path: &Path) -> anyhow::Result<SP1VerifyingKey> {
