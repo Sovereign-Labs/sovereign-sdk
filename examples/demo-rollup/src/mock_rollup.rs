@@ -104,6 +104,8 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         &self,
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        sequencer_da_address: <<Self::Spec as Spec>::Da as sov_modules_api::DaSpec>::Address,
+        sequencer_type: sov_modules_api::SequencerType,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -113,6 +115,9 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
+            sequencer_rollup_address: rollup_config.sequencer.rollup_address,
+            sequencer_da_address,
+            sequencer_type,
             shutdown_receiver,
         };
         let axum_router = solana_offchain_router(sequencer.clone());

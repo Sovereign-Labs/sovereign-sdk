@@ -135,10 +135,12 @@ where
         .expect("Failed to initialize StandardSchemaEndpoint");
         let axum_router = axum_router.merge(schema_endpoint.axum_router());
         let axum_router = axum_router.merge(sov_rollup_apis::endpoints::constants::axum_router());
+        let mut jsonrpsee_module = get_rpc_methods::<S>(api_state);
+        let _ = jsonrpsee_module.remove_method("eth_estimateGas");
 
         ::sov_modules_api::NodeEndpoints {
             axum_router,
-            jsonrpsee_module: get_rpc_methods::<S>(api_state),
+            jsonrpsee_module,
             background_handles: Vec::new(),
         }
     }

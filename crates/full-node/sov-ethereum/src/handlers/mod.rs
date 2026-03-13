@@ -1,16 +1,15 @@
 mod get_logs;
 mod subscribe;
-#[cfg(feature = "local")]
 use alloy_eips::BlockId;
 #[cfg(feature = "local")]
 use alloy_eips::Encodable2718;
 #[cfg(feature = "local")]
 use alloy_primitives::TxKind;
+use alloy_primitives::U64;
 use alloy_primitives::{Address, Bytes, B256};
-use alloy_rpc_types::ReceiptEnvelope;
-use alloy_rpc_types::TransactionReceipt;
-#[cfg(feature = "local")]
-use alloy_rpc_types::TransactionRequest;
+use alloy_rpc_types::{
+    state::StateOverride, BlockOverrides, ReceiptEnvelope, TransactionReceipt, TransactionRequest,
+};
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::ErrorObjectOwned;
@@ -75,6 +74,33 @@ where
 
         track_metrics("eth_sendRawTransaction", start, &result);
         result
+    }
+
+    pub async fn eth_estimate_gas(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> RpcResult<U64> {
+        let _sequencer_context = (
+            &ethereum.sequencer_rollup_address,
+            &ethereum.sequencer_da_address,
+            ethereum.sequencer_type,
+        );
+
+        let mut params = parameters.sequence();
+        let request: TransactionRequest = params.next()?;
+        let block_id: Option<BlockId> = params.optional_next()?;
+        let state_overrides: Option<StateOverride> = params.optional_next()?;
+        let block_overrides: Option<Box<BlockOverrides>> = params.optional_next()?;
+
+        let mut state = ethereum.api_state_accessor();
+        Evm::<S>::default().eth_estimate_gas(
+            request,
+            block_id,
+            state_overrides,
+            block_overrides,
+            &mut state,
+        )
     }
 
     pub async fn eth_send_raw_transaction_sync(

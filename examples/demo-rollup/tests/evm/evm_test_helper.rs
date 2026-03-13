@@ -45,6 +45,7 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
 };
 pub(crate) const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
+pub(crate) const PAYER_SOV_BANK_BALANCE: u128 = 5_000_000_000_000_000;
 pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
 pub(crate) const POLL_INTERVAL_MS: u64 = 25;
@@ -387,6 +388,36 @@ pub async fn setup_test_rollup(
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
     start_node(config, finalization_blocks, Some(extension), None).await
+}
+
+pub async fn setup_test_rollup_with_paymaster(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+) -> TestRollup<MockDemoRollup<Native>> {
+    let mut paths = crate::test_helpers::test_genesis_paths(sov_modules_api::OperatingMode::Zk);
+    paths.paymaster_genesis_path = std::path::PathBuf::from(
+        "../test-data/genesis/integration-tests/paymaster_with_payer.json",
+    );
+
+    RollupBuilder::new(
+        sov_test_utils::test_rollup::GenesisSource::Paths(paths),
+        BlockProducingConfig::Periodic {
+            block_time_ms: 1_000,
+        },
+        finalization_blocks,
+    )
+    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .set_config(|c| {
+        c.max_concurrent_blobs = 65536;
+        c.rollup_prover_config = None;
+        c.aggregated_proof_block_jump = 5;
+        c.max_infos_in_db = 30;
+        c.max_channel_size = 20;
+        c.extension = Some(extension);
+    })
+    .start()
+    .await
+    .unwrap()
 }
 
 pub async fn setup_with_simple_storage(

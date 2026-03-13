@@ -36,14 +36,18 @@ use revm::primitives::HashMap as RevmHashMap;
 use revm::state::{Account, AccountStatus, Bytecode, EvmStorageSlot};
 use revm::{Database, DatabaseCommit};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_bank::config_gas_token_id;
 use sov_modules_api::da::Time;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{AccessoryStateReader, Amount, ApiStateAccessor, Spec, TxState};
+use sov_modules_api::{
+    AccessoryStateReader, Amount, ApiStateAccessor, Spec, StateAccessor, StateReader,
+};
 use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{
     invalid_params_rpc_err, EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError,
 };
+use sov_state::User;
 
 // Prune synthetic blocks more than this number of blocks away from the latest block.
 const SYNTHETIC_BLOCKS_CACHE_PRUNE_INTERVAL: u64 = 20;
@@ -289,23 +293,46 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    /// Returns the current gas-token balance in the bank for an arbitrary rollup payer.
+    pub fn gas_token_balance_of_rollup_payer<Accessor: StateAccessor>(
+        &self,
+        payer: &S::Address,
+        state: &mut Accessor,
+    ) -> Result<U256, <Accessor as StateReader<User>>::Error> {
+        let balance = self
+            .bank_module
+            .get_balance_of(payer, config_gas_token_id(), state)?
+            .unwrap_or_default();
+
+        Ok(U256::from(balance.0))
+    }
+
+    /// Ensures a signed transaction can afford Ethereum-style upfront cost using an arbitrary
+    /// rollup payer's bank-backed gas-token balance.
+    pub fn ensure_transaction_rollup_payer_affordability<Accessor: StateAccessor>(
+        &self,
+        tx: &TransactionSigned,
+        payer: &S::Address,
+        state: &mut Accessor,
+    ) -> Result<(), EthApiError> {
+        let balance = self
+            .gas_token_balance_of_rollup_payer(payer, state)
+            .map_err(|err| EthApiError::other(into_rpc_error(err)))?;
+        let total_cost = raw_transaction_upfront_cost(tx)?;
+
+        ensure_balance_covers_upfront_cost(balance, total_cost)
+    }
+
     /// Ensures a signed transaction can afford Ethereum-style upfront cost using the
     /// same bank-backed balance view exposed through the EVM RPC.
-    pub fn ensure_transaction_sender_affordability<Accessor: TxState<S>>(
+    pub fn ensure_transaction_sender_affordability<Accessor: StateAccessor>(
         &self,
         tx: &TransactionSigned,
         signer: Address,
         state: &mut Accessor,
     ) -> Result<(), EthApiError> {
-        let balance = self
-            .db(state)
-            .basic(signer)
-            .map_err(EthApiError::from)?
-            .map(|account| account.balance)
-            .unwrap_or_default();
-        let total_cost = raw_transaction_upfront_cost(tx)?;
-
-        ensure_balance_covers_upfront_cost(balance, total_cost)
+        let payer = crate::to_rollup_address::<S>(signer);
+        self.ensure_transaction_rollup_payer_affordability(tx, &payer, state)
     }
 
     fn get_block_transactions(

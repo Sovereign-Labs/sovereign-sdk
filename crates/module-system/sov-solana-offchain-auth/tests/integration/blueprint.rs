@@ -106,6 +106,8 @@ where
         &self,
         sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _sequencer_da_address: <<Self::Spec as Spec>::Da as sov_modules_api::DaSpec>::Address,
+        _sequencer_type: sov_modules_api::SequencerType,
         _shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where

@@ -46,7 +46,7 @@ impl<S: Spec> Evm<S> {
     /// - `Ok(1)` if the fee check passes (user fee >= rollup base fee)
     /// - `Ok(100)` if the fee check is skipped (before height threshold or disabled)
     /// - `Err(InsufficientMaxFeePerGas)` if the user's fee is below the rollup base fee
-    fn validate_fee_and_calculate_multiplier<Accessor: StateReader<User> + VersionReader>(
+    pub fn auth_gas_limit_multiplier<Accessor: StateReader<User> + VersionReader>(
         &self,
         user_max_fee_per_gas: u128,
         rollup_base_fee: u128,
@@ -119,12 +119,8 @@ fn create_auth_tx_and_hash<
     let rollup_base_fee = gas_price.as_ref()[0].0;
 
     let evm = Evm::<S>::default();
-    let multiplier = evm.validate_fee_and_calculate_multiplier(
-        user_max_fee_per_gas,
-        rollup_base_fee,
-        tx_hash,
-        state,
-    )?;
+    let multiplier =
+        evm.auth_gas_limit_multiplier(user_max_fee_per_gas, rollup_base_fee, tx_hash, state)?;
 
     let gas_limit = tx.gas_limit().saturating_mul(multiplier);
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();

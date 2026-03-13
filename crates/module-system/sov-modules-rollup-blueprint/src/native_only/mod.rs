@@ -13,8 +13,8 @@ use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::{
-    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
-    SyncStatus, VersionReader, ZkVerifier,
+    DaSpec, NodeEndpoints, OperatingMode, ProofSender, SequencerType, Spec, StateCheckpoint,
+    StateUpdateInfo, SyncStatus, VersionReader, ZkVerifier,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
@@ -188,6 +188,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         _sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _sequencer_da_address: <<Self::Spec as Spec>::Da as DaSpec>::Address,
+        _sequencer_type: SequencerType,
         _shutdown_receiver: watch::Receiver<()>,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -225,11 +227,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         shutdown_sender,
                     )
                     .await?;
+                let da_address = da_service.get_signer().await.context(
+                    "Full node with standard sequencer require DaService with signer support",
+                )?;
 
                 let mut endpoints = self
                     .sequencer_additional_apis(
                         sequencer.clone(),
                         rollup_config,
+                        da_address,
+                        SequencerType::NonPreferred,
                         shutdown_receiver.clone(),
                     )
                     .await?;
@@ -243,9 +250,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await.context(
-                        "Full node with standard sequencer require DaService with signer support",
-                    )?,
+                    da_address,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -265,11 +270,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         bind_addr,
                     )
                     .await?;
+                let da_address = da_service.get_signer().await.context(
+                    "Full node with preferred sequencer require DaService with signer support",
+                )?;
 
                 let mut endpoints = self
                     .sequencer_additional_apis(
                         sequencer.clone(),
                         rollup_config,
+                        da_address,
+                        SequencerType::Preferred,
                         shutdown_receiver.clone(),
                     )
                     .await?;
@@ -283,9 +293,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await.context(
-                        "Full node with preferred sequencer require DaService with signer support",
-                    )?,
+                    da_address,
                 })
             }
         }
