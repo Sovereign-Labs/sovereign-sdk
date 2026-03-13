@@ -33,7 +33,7 @@ sov-rollup-interface = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sp1-sdk = { version = "6.0.2", default-features = false, features = ["blocking", "network"] }
+sp1-sdk = { version = "6.0.2", default-features = false, features = ["blocking"] }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
 sp1-zkvm = { version = "6.0.2" }
@@ -51,6 +51,7 @@ sov-zkvm-utils = { workspace = true }
 
 [features]
 default = []
+network = ["sp1-sdk/network"]
 native = [
     "rand",
     "sov-rollup-interface/native",
