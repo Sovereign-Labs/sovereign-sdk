@@ -1090,6 +1090,8 @@ async fn rpc2_012_safe_and_finalized_tags_match_latest_on_instant_finality_chain
 ) -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(5).await;
+    // Freeze the head so all block-tag queries observe the same chain state.
+    rollup.pause_preferred_batches_and_wait().await?;
 
     let http = Client::new();
     let latest = rpc_call(
