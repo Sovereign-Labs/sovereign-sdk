@@ -31,7 +31,6 @@ const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// RPC2-001: Fee-cap admission consistency across simulation and submission.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;

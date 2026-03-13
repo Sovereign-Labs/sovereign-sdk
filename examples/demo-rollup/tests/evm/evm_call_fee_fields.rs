@@ -234,7 +234,7 @@ async fn eth_call_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Resul
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
-    assert_rpc_rejects::<String>(&client, "eth_call", &request, "TEST").await;
+    assert_rpc_rejects::<String>(&client, "eth_call", &request, "max fee per gas less than block base fee").await;
     Ok(())
 }
 
