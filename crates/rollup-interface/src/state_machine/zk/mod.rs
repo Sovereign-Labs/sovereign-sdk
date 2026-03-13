@@ -202,15 +202,15 @@ impl<G: ZkvmGuest + 'static> ZkvmNetwork for NoopZkvmNetwork<G> {
     type ProofHandle = ();
 
     fn add_hint<T: Serialize>(&mut self, _item: &T) {
-        unreachable!()
+        match self._void {}
     }
 
     async fn submit(&mut self) -> anyhow::Result<Self::ProofHandle> {
-        unreachable!()
+        match self._void {}
     }
 
     async fn poll(&self, _handle: &Self::ProofHandle) -> anyhow::Result<Option<Vec<u8>>> {
-        unreachable!()
+        match self._void {}
     }
 }
 
