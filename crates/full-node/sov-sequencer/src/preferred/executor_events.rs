@@ -237,10 +237,10 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             None
         };
 
-        // 2. Flush all batches to the BlobSender
+        // 2. Flush all completed batches and proofs to the BlobSender
         let blobs_to_flush = self
             .cache
-            .all_completed_blobs_greater_than_or_equal_to_unordered(
+            .all_proofs_and_completed_batches_greater_than_or_equal_to(
                 next_sequence_number_according_to_node,
             );
 
@@ -258,14 +258,17 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
-    pub(crate) fn fetch_completed_blobs_by_sequence(
+    /// Fetches all proofs and any closed batches from the database that are greater than or equal to the given sequence number.
+    /// Also includes the in-progress batch if `include_in_progress_batch` is true.
+    /// Note that any proofs with sequence numbers greater than the in-progress batch will be included whether or not `include_in_progress_batch` is true.
+    pub(crate) fn fetch_proofs_and_completed_batches_by_sequence(
         &self,
         after_and_including: SequenceNumber,
         include_in_progress_batch: bool,
     ) -> Vec<PreferredBlobToReplay> {
         let blobs_to_apply = self
             .cache
-            .all_completed_blobs_greater_than_or_equal_to_unordered(after_and_including);
+            .all_proofs_and_completed_batches_greater_than_or_equal_to(after_and_including);
         let first_sequence_number = blobs_to_apply.first().map(|b| b.sequence_number());
 
         tracing::trace!(
@@ -288,7 +291,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             None
         };
 
-        blobs_to_apply
+        let mut blobs_to_replay = blobs_to_apply
             .into_iter()
             .map(|blob| match blob {
                 ReadBlob::Batch(batch) => PreferredBlobToReplay::Batch(PreferredBatchToReplay {
@@ -309,7 +312,10 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
                 }
             })
             .chain(maybe_in_progress_batch.map(PreferredBlobToReplay::Batch))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>();
+
+        blobs_to_replay.sort_by_key(|blob| blob.sequence_number());
+        blobs_to_replay
     }
 
     pub fn clean_all_batches_from_cache(&mut self) {

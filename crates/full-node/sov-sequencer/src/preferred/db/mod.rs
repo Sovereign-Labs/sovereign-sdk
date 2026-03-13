@@ -28,7 +28,7 @@ use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxHash,
     VisibleSlotNumber,
 };
-use std::collections::VecDeque;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::Path;
@@ -224,7 +224,7 @@ pub(crate) enum DbEvent {
 }
 
 pub struct BlobsCache {
-    completed_blobs_out_of_order: VecDeque<ReadBlob>,
+    proofs_and_completed_batches: BTreeMap<SequenceNumber, ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
     shutdown_sender: watch::Sender<()>,
@@ -232,12 +232,12 @@ pub struct BlobsCache {
 
 impl BlobsCache {
     pub fn new(
-        completed_blobs: VecDeque<ReadBlob>,
+        completed_blobs: BTreeMap<SequenceNumber, ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
         shutdown_sender: watch::Sender<()>,
     ) -> Self {
         Self {
-            completed_blobs_out_of_order: completed_blobs,
+            proofs_and_completed_batches: completed_blobs,
             in_progress_batch,
             event_stream: None,
             shutdown_sender,
@@ -248,8 +248,11 @@ impl BlobsCache {
         self.in_progress_batch.as_ref()
     }
 
-    pub fn all_completed_blobs_unordered(&self) -> Vec<ReadBlob> {
-        self.completed_blobs_out_of_order.clone().into()
+    pub fn all_proofs_and_completed_blobs(&self) -> Vec<ReadBlob> {
+        self.proofs_and_completed_batches
+            .values()
+            .cloned()
+            .collect()
     }
 
     // Ensure that the provided batch number is wihin the range of sequence numbers that might plausibly be needed for replay.
@@ -264,27 +267,26 @@ impl BlobsCache {
             .as_ref()
             .map(|b| b.sequence_number)
             .unwrap_or_else(|| {
-                self.completed_blobs_out_of_order
-                    .iter()
-                    .map(|b| b.sequence_number().saturating_add(1))
-                    .max()
+                self.proofs_and_completed_batches
+                    .keys()
+                    .next_back()
+                    .map(|k| k.saturating_add(1))
                     .unwrap_or(u64::MAX)
             });
 
         // The lowest allowed sequence number is either the sequence number of the first completed blob (if one exists) or the sequence number of the in-progress batch (if one exists).
         // If no batch is in progress *and* we don't have any completed blobs in cache, we don't know what the next sequence number should be so we allow any value.
-        let mut lowest_allowed_sequence_number = u64::MAX;
-        if let Some(b) = self.completed_blobs_out_of_order.front() {
-            lowest_allowed_sequence_number =
-                lowest_allowed_sequence_number.min(b.sequence_number());
-        };
-        if lowest_allowed_sequence_number == u64::MAX {
-            lowest_allowed_sequence_number = self
-                .in_progress_batch
-                .as_ref()
-                .map(|b| b.sequence_number)
-                .unwrap_or(0);
-        }
+        let lowest_allowed_sequence_number = self
+            .proofs_and_completed_batches
+            .keys()
+            .cloned()
+            .next()
+            .unwrap_or_else(|| {
+                self.in_progress_batch
+                    .as_ref()
+                    .map(|b| b.sequence_number)
+                    .unwrap_or(0)
+            });
 
         assert!(batch_sequence_number <= highest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is greater than the highest allowed sequence number {highest_allowed_sequence_number}. This is a bug, please report it.");
         assert!(batch_sequence_number >= lowest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is less than the lowest allowed sequence number {lowest_allowed_sequence_number}. This is a bug, please report it.");
@@ -298,13 +300,12 @@ impl BlobsCache {
         self.sanity_check_batch_sequence_number_is_in_range(batch_sequence_number);
 
         let mut output = Vec::new();
-        // We have alternating runs of proofs and batches: [proof1, batch1, batch2, proof2, proof3, batch3, ...]
-        // Given the sequence number of a batch, we want to return all proofs between the previous batch and the requested batch.
-        // Using the above example, if the caller provided batch3, we would need to return [proof2, proof3].
-        for blob in self.completed_blobs_out_of_order.iter() {
+        // Given the sequence number of a batch, we want to return all proofs with sequence numbers between the previous batch and the requested batch.
+        for blob in self.proofs_and_completed_batches.values() {
             match blob {
                 ReadBlob::Batch(batch) => {
-                    // If it's a batch, either we've hit our target or we need to reset our output.
+                    // Since we're looking for all proofs in between two batches, we either need to return (if the batch has the sequence number we're looking for)
+                    // or we need to reset our output (since the proofs we've already seen would have been handled during processing of the batch we just hit).
                     if batch.sequence_number == batch_sequence_number {
                         break;
                     }
@@ -317,8 +318,13 @@ impl BlobsCache {
                     data,
                     ..
                 } => {
-                    // It it's a proof, just push it to our current output.
+                    // We might have some proofs in cache that come *after* the in-progress batch
+                    // If we've passed the requested batch number, we're done.
+                    if *sequence_number > batch_sequence_number {
+                        break;
+                    }
                     assert_ne!(*sequence_number, batch_sequence_number, "A proof sequence number {sequence_number} was provided to proof_for_replay, which must have a batch sequence number. This is a bug, please report it.");
+                    // It it's a proof, just push it to our current output.
                     output.push(PreferredProofToReplay {
                         sequence_number: *sequence_number,
                         data: data.clone(),
@@ -336,12 +342,12 @@ impl BlobsCache {
         output
     }
 
-    pub fn all_completed_blobs_greater_than_or_equal_to_unordered(
+    pub fn all_proofs_and_completed_batches_greater_than_or_equal_to(
         &self,
         sequence_number: SequenceNumber,
     ) -> Vec<ReadBlob> {
-        self.completed_blobs_out_of_order
-            .iter()
+        self.proofs_and_completed_batches
+            .values()
             .filter(|b| {
                 // Pruning invariants say it MAY remove older blobs, but we don't know for sure.
                 b.sequence_number() >= sequence_number
@@ -424,7 +430,7 @@ impl BlobsCache {
     }
 
     pub fn clean_all_batches(&mut self) {
-        self.completed_blobs_out_of_order.clear();
+        self.proofs_and_completed_batches.clear();
         self.in_progress_batch = None;
     }
 
@@ -434,12 +440,14 @@ impl BlobsCache {
         data: PreferredProofDataBytes,
         sequence_number: SequenceNumber,
     ) {
-        self.completed_blobs_out_of_order
-            .push_back(ReadBlob::Proof {
+        self.proofs_and_completed_batches.insert(
+            sequence_number,
+            ReadBlob::Proof {
                 blob_id,
                 sequence_number,
                 data: data.clone(),
-            });
+            },
+        );
 
         self.send_event_if_necessary(DbEvent::ProofBlobAccepted {
             sequence_number,
@@ -464,8 +472,8 @@ impl BlobsCache {
 
         let batch: ReadBatch = batch.into();
 
-        self.completed_blobs_out_of_order
-            .push_back(ReadBlob::Batch(batch.clone()));
+        self.proofs_and_completed_batches
+            .insert(sequence_number, ReadBlob::Batch(batch.clone()));
 
         self.send_event_if_necessary(DbEvent::BatchClosed(sequence_number))
             .await;
@@ -481,8 +489,8 @@ impl BlobsCache {
     }
 
     pub async fn prune(&mut self, prune_up_to_including: SequenceNumber) {
-        self.completed_blobs_out_of_order
-            .retain(|blob| blob.sequence_number() > prune_up_to_including);
+        self.proofs_and_completed_batches
+            .retain(|sequence_number, _| *sequence_number > prune_up_to_including);
     }
 
     pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
@@ -591,14 +599,17 @@ impl PreferredSequencerDb {
                     completed_blobs,
                     in_progress_batch,
                 }) => {
-                    let completed_blobs = VecDeque::from(completed_blobs);
+                    let completed_blobs: BTreeMap<u64, ReadBlob> = completed_blobs
+                        .into_iter()
+                        .map(|blob| (blob.sequence_number(), blob))
+                        .collect();
 
                     let sequence_number_of_next_blob =
-                        match (completed_blobs.back(), &in_progress_batch) {
-                            (Some(blob), None) => blob.sequence_number() + 1,
+                        match (completed_blobs.keys().next_back(), &in_progress_batch) {
+                            (Some(sequence_number), None) => sequence_number + 1,
                             (None, Some(batch)) => batch.sequence_number + 1,
-                            (Some(blob), Some(batch)) => {
-                                std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
+                            (Some(sequence_number), Some(batch)) => {
+                                std::cmp::max(*sequence_number, batch.sequence_number) + 1
                             }
                             (None, None) => 0,
                         };
@@ -630,7 +641,7 @@ impl PreferredSequencerDb {
             Ok((
                 0, // TODO this will be revisited when we enable the replica sync task.
                 BlobsCache::new(
-                    VecDeque::default(),
+                    Default::default(),
                     Option::None,
                     self.shutdown_sender.clone(),
                 ),

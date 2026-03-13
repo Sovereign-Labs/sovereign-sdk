@@ -195,13 +195,13 @@ where
                 self.send_response(resp, ret, "next_sequence_number").await;
             }
 
-            Message::FetchCompletedBatches {
+            Message::FetchProofsAndCompletedBatches {
                 resp,
                 next_sequence_number,
                 reason,
             } => {
                 let ret = self
-                    .process_fetch_completed_batches(next_sequence_number, reason)
+                    .process_fetch_proofs_and_completed_batches(next_sequence_number, reason)
                     .await;
 
                 self.send_response(resp, ret, "fetch_completed_batches")
@@ -412,15 +412,15 @@ where
         inner.next_unassigned_sequence_number
     }
 
-    async fn process_fetch_completed_batches(
+    async fn process_fetch_proofs_and_completed_batches(
         &mut self,
         next_sequence_number: u64,
         reason: &'static str,
-    ) -> FetchBatches {
+    ) -> FetchProofsAndCompletedBatches {
         let mut inner = self.get_inner_with_timing(reason).await;
 
         let (completed_blobs, metrics) =
-            inner.completed_blobs_to_replay(next_sequence_number, false);
+            inner.proofs_and_completed_batches_for_replay(next_sequence_number, false);
         let has_completed_batch = completed_blobs_contain_batch(&completed_blobs);
 
         // Once we've caught up to the in-progress batch, we're done.
@@ -451,7 +451,7 @@ where
             }
 
             drop(inner);
-            return FetchBatches {
+            return FetchProofsAndCompletedBatches {
                 metrics,
                 flow: Flow::Break {
                     pending_completed_proofs,
@@ -463,7 +463,7 @@ where
         }
 
         drop(inner);
-        FetchBatches {
+        FetchProofsAndCompletedBatches {
             metrics,
             flow: Flow::Continue { completed_blobs },
         }
@@ -486,7 +486,10 @@ where
         let next_sequence_number = inner.next_unassigned_sequence_number;
         let ((blobs_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
             (
-                inner.completed_blobs_to_replay(next_sequence_number_according_to_node, true),
+                inner.proofs_and_completed_batches_for_replay(
+                    next_sequence_number_according_to_node,
+                    true,
+                ),
                 !inner.has_finished_startup,
             )
         };
@@ -1037,10 +1040,10 @@ where
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        let assigned_sequence_number = inner.take_sequence_number_for_proof();
+        let next_unassigned_sequence_number = inner.next_unassigned_sequence_number;
         debug!(
             % sequence_number_of_proof,
-            % assigned_sequence_number,
+            % next_unassigned_sequence_number,
             "Entering process_new_proof_replica"
         );
 
@@ -1048,10 +1051,12 @@ where
             inner.has_finished_startup,
             &inner.is_ready,
             DbData::NewProof(sequence_number_of_proof, proof_bytes.clone()),
-            assigned_sequence_number,
+            next_unassigned_sequence_number,
             sequence_number_of_proof,
         )?;
 
+        let assigned_sequence_number = inner.take_sequence_number_for_proof();
+        assert_eq!(assigned_sequence_number, next_unassigned_sequence_number, "The sequence number for the proof should be the next unassigned sequence number. This is a bug, please report it.");
         inner
             .process_proof(new_blob_id(), proof_bytes, assigned_sequence_number)
             .await;
@@ -1114,7 +1119,7 @@ pub(crate) enum Flow {
 }
 
 #[derive(Debug)]
-pub(crate) struct FetchBatches {
+pub(crate) struct FetchProofsAndCompletedBatches {
     pub(crate) metrics: PreferredSequencerFetchBatchesToReplayMetrics,
     pub(crate) flow: Flow,
 }

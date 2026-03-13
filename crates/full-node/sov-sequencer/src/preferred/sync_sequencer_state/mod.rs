@@ -50,8 +50,8 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         resp: oneshot::Sender<SequenceNumber>,
         reason: &'static str,
     },
-    FetchCompletedBatches {
-        resp: oneshot::Sender<FetchBatches>,
+    FetchProofsAndCompletedBatches {
+        resp: oneshot::Sender<FetchProofsAndCompletedBatches>,
         next_sequence_number: u64,
         reason: &'static str,
     },
@@ -261,7 +261,7 @@ pub(crate) struct ProcessFinalCatchupData {
     pub(crate) transactions_count: usize,
     pub(crate) batch_is_in_progress: bool,
     pub(crate) sequence_number_of_open_batch: Option<SequenceNumber>,
-    pub(crate) unprocessed_proofs: Vec<PreferredProofToReplay>,
+    pub(crate) unprocessed_proofs: BTreeMap<SequenceNumber, PreferredProofToReplay>,
 }
 
 #[derive(Debug)]

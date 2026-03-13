@@ -292,7 +292,7 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    pub(crate) fn completed_blobs_to_replay(
+    pub(crate) fn proofs_and_completed_batches_for_replay(
         &self,
         sequence_number: SequenceNumber,
         include_in_progress_batch: bool,
@@ -307,7 +307,10 @@ where
         let start = std::time::Instant::now();
         let result = self
             .executor_events_sender
-            .fetch_completed_blobs_by_sequence(sequence_number, include_in_progress_batch);
+            .fetch_proofs_and_completed_batches_by_sequence(
+                sequence_number,
+                include_in_progress_batch,
+            );
         let duration = start.elapsed();
         let metrics = PreferredSequencerFetchBatchesToReplayMetrics {
             duration,

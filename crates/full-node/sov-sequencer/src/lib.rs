@@ -75,7 +75,7 @@ pub enum SequencerNotReadyDetails {
     ReplicaNotReady,
 }
 
-/// A serialized SerializeProofWithDetails<S>. We convert to bytes to avoid pasing a Spec generic
+/// A serialized SerializeProofWithDetails<S>. We convert to bytes to avoid passing a Spec generic
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SerializedProofWithDetailsBytes(pub Arc<[u8]>);
 

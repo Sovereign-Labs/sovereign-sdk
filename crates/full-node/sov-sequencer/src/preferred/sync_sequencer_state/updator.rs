@@ -8,7 +8,7 @@ use crate::preferred::AcceptTxError;
 use crate::preferred::AcceptedTx;
 use crate::preferred::Confirmation;
 use crate::preferred::DbEvent;
-use crate::preferred::FetchBatches;
+use crate::preferred::FetchProofsAndCompletedBatches;
 use crate::preferred::PreferredSeqOperation;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::PreferredProofDataBytes;
@@ -72,14 +72,14 @@ where
         self.recv(recv).await
     }
 
-    pub(crate) async fn fetch_completed_batches_msg(
+    pub(crate) async fn fetch_proofs_and_completed_batches_msg(
         &self,
         next_sequence_number: u64,
         reason: &'static str,
-    ) -> Result<(FetchBatches, Duration), SequencerStateUpdatorError> {
+    ) -> Result<(FetchProofsAndCompletedBatches, Duration), SequencerStateUpdatorError> {
         let start_time = std::time::Instant::now();
         let (resp, recv) = oneshot::channel();
-        self.send(Message::FetchCompletedBatches {
+        self.send(Message::FetchProofsAndCompletedBatches {
             resp,
             next_sequence_number,
             reason,

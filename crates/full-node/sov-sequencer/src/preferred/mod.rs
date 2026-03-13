@@ -909,6 +909,14 @@ impl PreferredBlobToReplay {
             PreferredBlobToReplay::Proof(_) => 0,
         }
     }
+
+    /// Returns the sequence number of the blob.
+    pub fn sequence_number(&self) -> SequenceNumber {
+        match self {
+            PreferredBlobToReplay::Batch(b) => b.batch.inner.sequence_number,
+            PreferredBlobToReplay::Proof(p) => p.sequence_number,
+        }
+    }
 }
 
 #[async_trait]
