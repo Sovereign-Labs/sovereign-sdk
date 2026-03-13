@@ -4,9 +4,9 @@
 
 use serde::Serialize;
 use sov_rollup_interface::zk::{Proof, ZkvmNetwork};
+use sp1_sdk::network::proto::auction_types::FulfillmentStatus;
 use sp1_sdk::network::{B256, NetworkMode};
-use sp1_sdk::network::proto::base_types::FulfillmentStatus;
-use sp1_sdk::prover::{Prover, ProveRequest};
+use sp1_sdk::prover::{ProveRequest, Prover};
 use sp1_sdk::{NetworkProver, ProverClient, SP1ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
@@ -22,9 +22,12 @@ pub struct SP1Network {
 }
 
 impl SP1Network {
-    /// Create a new `SP1Network` from an existing [`NetworkProver`] and an ELF binary.
+    /// Create a new `SP1Network` for the given ELF binary.
+    ///
+    /// Connects to the Succinct proving network (mainnet) and runs setup.
     pub async fn new(elf: &[u8]) -> anyhow::Result<Self> {
-        let prover = ProverClient::builder().network_for(NetworkMode::Mainnet).build().await?;
+        let prover: NetworkProver =
+            ProverClient::builder().network_for(NetworkMode::Mainnet).build().await;
         let pk = prover
             .setup(elf.into())
             .await
@@ -66,6 +69,11 @@ impl ZkvmNetwork for SP1Network {
             anyhow::bail!("Proof request {} is unfulfillable", handle);
         }
 
-        maybe_proof.map(bincode::serialize)
+        match maybe_proof {
+            Some(proof) => Ok(Some(bincode::serialize(
+                &Proof::<_, sp1_sdk::SP1PublicValues>::Full(proof),
+            )?)),
+            None => Ok(None),
+        }
     }
 }

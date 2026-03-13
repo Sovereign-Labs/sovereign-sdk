@@ -183,6 +183,34 @@ pub trait ZkvmNetwork: Send + Sync + 'static {
     ) -> impl core::future::Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send;
 }
 
+/// A no-op [`ZkvmNetwork`] for ZKVMs that don't support network proving.
+///
+/// This type cannot be constructed because it contains an [`Infallible`](core::convert::Infallible)
+/// field. All trait methods use `match self._void {}` to statically prove they are unreachable.
+#[cfg(feature = "native")]
+pub struct NoopZkvmNetwork<G> {
+    _guest: core::marker::PhantomData<G>,
+    _void: core::convert::Infallible,
+}
+
+#[cfg(feature = "native")]
+impl<G: ZkvmGuest + 'static> ZkvmNetwork for NoopZkvmNetwork<G> {
+    type Guest = G;
+    type ProofHandle = ();
+
+    fn add_hint<T: Serialize>(&mut self, _item: &T) {
+        match self._void {}
+    }
+
+    async fn submit(&mut self) -> anyhow::Result<Self::ProofHandle> {
+        match self._void {}
+    }
+
+    async fn poll(&self, _handle: &Self::ProofHandle) -> anyhow::Result<Option<Vec<u8>>> {
+        match self._void {}
+    }
+}
+
 /// A trait which is accessible from within a zkVM program.
 pub trait ZkvmGuest: Send + Sync {
     /// The verifier type associated with this vm.

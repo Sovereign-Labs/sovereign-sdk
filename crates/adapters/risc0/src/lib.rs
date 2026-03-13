@@ -143,6 +143,9 @@ impl sov_rollup_interface::zk::Zkvm for Risc0 {
 
     #[cfg(feature = "native")]
     type Host = crate::host::Risc0Host<'static>;
+
+    #[cfg(feature = "native")]
+    type Network = sov_rollup_interface::zk::NoopZkvmNetwork<crate::guest::Risc0Guest>;
 }
 
 #[cfg(target_os = "zkvm")]
