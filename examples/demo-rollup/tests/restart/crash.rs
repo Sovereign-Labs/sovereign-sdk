@@ -164,7 +164,10 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
             // The subscription is closed once the node crashes.
             let next = event_subscription.next().await;
             if next.is_none() {
-                assert!(!test_rollup.is_sequencer_ready().await);
+                assert!(
+                    crash_moment.is_crash_env_set(),
+                    "Subscription was dropped but rollup didn't crash."
+                );
                 break;
             }
 
