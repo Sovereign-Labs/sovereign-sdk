@@ -4782,8 +4782,13 @@ dependencies = [
 name = "sov-aggregated-proof-program"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "sha2 0.10.9",
  "sov-aggregated-proof-shared",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+ "sov-sp1-adapter",
  "sp1-zkvm",
 ]
 
@@ -4792,6 +4797,7 @@ name = "sov-aggregated-proof-shared"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "sov-mock-da",
 ]
 
 [[package]]

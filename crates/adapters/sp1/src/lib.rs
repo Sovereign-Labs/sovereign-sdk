@@ -135,8 +135,11 @@ impl ZkVerifier for SP1Verifier {
     }
 }
 
+/// Decodes a serialized SP1 proof.
 #[cfg(not(target_os = "zkvm"))]
-fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
+pub fn decode_sp1_proof(
+    serialized_proof: &[u8],
+) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
     match bincode::deserialize::<
         sov_rollup_interface::zk::Proof<
             sp1_sdk::SP1ProofWithPublicValues,
@@ -149,6 +152,15 @@ fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPubl
             anyhow::bail!("SP1Verifier supports only full proofs")
         }
     }
+}
+
+/// A DA block header bundled with its corresponding serialized proof.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct BlockHeaderWithProof<Da: sov_rollup_interface::da::DaSpec> {
+    /// The DA layer block header associated with this proof.
+    pub da_block_header: Da::BlockHeader,
+    /// The serialized proof bytes.
+    pub proof: Vec<u8>,
 }
 
 #[cfg(test)]
