@@ -15,6 +15,9 @@ use crate::evm::evm_test_helper::{
 
 const GAS_LIMIT: u64 = 21_000;
 const GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR: &str = "gas required exceeds allowance";
+const CONFLICTING_FEE_FIELDS_ERROR: &str =
+    "both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified";
+const TIP_ABOVE_FEE_CAP_ERROR: &str = "max priority fee per gas higher than max fee per gas";
 
 fn unfunded_caller() -> Address {
     Address::from([0x11; 20])
@@ -284,6 +287,48 @@ async fn eth_estimate_gas_rejects_below_base_fee_with_max_fee_per_gas() -> anyho
         ..base_request(caller)
     };
     assert_rpc_rejects::<U64>(&client, "eth_estimateGas", &request, FEE_CAP_TOO_LOW_ERROR).await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_create_access_list_rejects_conflicting_fee_fields() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_client().await;
+    let caller = client.address();
+
+    let request = TransactionRequest {
+        gas_price: Some(MAX_FEE_PER_GAS),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
+        ..base_request(caller)
+    };
+    assert_rpc_rejects::<serde_json::Value>(
+        &client,
+        "eth_createAccessList",
+        &request,
+        CONFLICTING_FEE_FIELDS_ERROR,
+    )
+    .await;
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_create_access_list_rejects_tip_above_fee_cap() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_client().await;
+    let caller = client.address();
+
+    let request = TransactionRequest {
+        max_fee_per_gas: Some(1),
+        max_priority_fee_per_gas: Some(2),
+        ..base_request(caller)
+    };
+    assert_rpc_rejects::<serde_json::Value>(
+        &client,
+        "eth_createAccessList",
+        &request,
+        TIP_ABOVE_FEE_CAP_ERROR,
+    )
+    .await;
 
     Ok(())
 }
