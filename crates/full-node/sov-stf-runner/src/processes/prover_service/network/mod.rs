@@ -29,8 +29,7 @@ where
     InnerVm: Zkvm,
     OuterVm: Zkvm,
 {
-    outer_vm: OuterVm::Host,
-    prover: NetworkProver<Address, StateRoot, Witness, Da, InnerVm>,
+    prover: NetworkProver<Address, StateRoot, Witness, Da, InnerVm, OuterVm>,
     verifier: Arc<Verifier<Da>>,
 }
 
@@ -47,8 +46,8 @@ where
 {
     /// Creates a new network prover service.
     pub fn new(
-        inner_network: InnerVm::Network,
-        outer_vm: OuterVm::Host,
+        inner_vm: InnerVm::Network,
+        outer_vm: OuterVm::Network,
         da_verifier: Da::Verifier,
         code_commitment: CodeCommitment,
         prover_address: Address,
@@ -56,8 +55,7 @@ where
         let verifier = Arc::new(Verifier { da_verifier });
 
         Self {
-            outer_vm,
-            prover: NetworkProver::new(prover_address, inner_network, code_commitment),
+            prover: NetworkProver::new(prover_address, inner_vm, outer_vm, code_commitment),
             verifier,
         }
     }
@@ -103,11 +101,7 @@ where
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         self.prover
-            .create_aggregated_proof(
-                self.outer_vm.clone(),
-                block_header_hashes,
-                genesis_state_root,
-            )
+            .create_aggregated_proof(block_header_hashes, genesis_state_root)
             .await
     }
 }

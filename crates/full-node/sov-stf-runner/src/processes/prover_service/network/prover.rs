@@ -7,12 +7,10 @@ use serde::Serialize;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
-};
+use sov_rollup_interface::zk::aggregated_proof::{AggregatedProofPublicData, CodeCommitment};
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
-    ZkvmHost, ZkvmNetwork,
+    ZkvmNetwork,
 };
 
 use super::Verifier;
@@ -45,16 +43,24 @@ type ProofStatusMap<Address, StateRoot, Da, InnerVm> = HashMap<
     >,
 >;
 
-pub(crate) struct NetworkProver<Address, StateRoot, Witness, Da: DaService, InnerVm: Zkvm> {
+pub(crate) struct NetworkProver<
+    Address,
+    StateRoot,
+    Witness,
+    Da: DaService,
+    InnerVm: Zkvm,
+    OuterVm: Zkvm,
+> {
     prover_address: Address,
-    network: tokio::sync::Mutex<InnerVm::Network>,
+    inner_vm: tokio::sync::Mutex<InnerVm::Network>,
+    _outer_vm: tokio::sync::Mutex<OuterVm::Network>,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
     code_commitment: CodeCommitment,
     phantom: PhantomData<Witness>,
 }
 
-impl<Address, StateRoot, Witness, Da, InnerVm>
-    NetworkProver<Address, StateRoot, Witness, Da, InnerVm>
+impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
+    NetworkProver<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Da: DaService,
     Address:
@@ -62,15 +68,18 @@ where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     InnerVm: Zkvm + 'static,
+    OuterVm: Zkvm + 'static,
 {
     pub(crate) fn new(
         prover_address: Address,
-        network: InnerVm::Network,
+        inner_vm: InnerVm::Network,
+        outer_vm: OuterVm::Network,
         code_commitment: CodeCommitment,
     ) -> Self {
         Self {
             prover_address,
-            network: tokio::sync::Mutex::new(network),
+            inner_vm: tokio::sync::Mutex::new(inner_vm),
+            _outer_vm: tokio::sync::Mutex::new(outer_vm),
             tracker: tokio::sync::RwLock::new(HashMap::new()),
             code_commitment,
             phantom: PhantomData,
@@ -127,7 +136,7 @@ where
             })?;
 
         let handle = {
-            let mut network = self.network.lock().await;
+            let mut network = self.inner_vm.lock().await;
             network.add_hint(&data);
             // TODO: what happens if we crash here? Do we just pay to re-prove?
             network.submit().await.map_err(ProverServiceError::Other)?
@@ -167,9 +176,8 @@ where
         Ok(ProofProcessingStatus::ProvingInProgress)
     }
 
-    pub(crate) async fn create_aggregated_proof<OuterVm: ZkvmHost + 'static>(
+    pub(crate) async fn create_aggregated_proof(
         &self,
-        mut outer_vm: OuterVm,
         block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
         genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
@@ -183,7 +191,7 @@ where
             if let Some(NetworkProverStatus::Submitted { handle, metadata }) =
                 proof_statuses.remove(slot_hash)
             {
-                let network = self.network.lock().await;
+                let network = self.inner_vm.lock().await;
                 match network.poll(&handle).await {
                     Ok(Some(proof_bytes)) => {
                         let block_proof = BlockProof {
@@ -275,12 +283,12 @@ where
 
         tracing::trace!(%public_data, "generating aggregate proof");
 
-        outer_vm.add_hint(public_data);
-        let serialized_aggregated_proof = SerializedAggregatedProof {
-            // TODO: use prover network, not local proving
-            // poll for outcome and then return
-            raw_aggregated_proof: outer_vm.run(false)?,
-        };
+        // outer_vm.add_hint(public_data);
+        // let serialized_aggregated_proof = SerializedAggregatedProof {
+        //     // TODO: use prover network, not local proving
+        //     // poll for outcome and then return
+        //     raw_aggregated_proof: outer_vm.run(false)?,
+        // };
 
         // only do this after successful network proof generation
         for _slot_hash in block_header_hashes {
@@ -288,6 +296,7 @@ where
         }
 
         // return after successful
-        Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
+        // Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
+        todo!()
     }
 }
