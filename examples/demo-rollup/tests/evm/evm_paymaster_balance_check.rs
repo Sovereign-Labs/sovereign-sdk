@@ -1,14 +1,19 @@
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
 use alloy_rpc_types_eth::TransactionRequest;
+use demo_stf::MultiAddressEvmSolana;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::json;
-use sov_demo_rollup::MockDemoRollup;
+use sov_address::EthereumAddress;
+use sov_bank::config_gas_token_id;
+use sov_cli::NodeClient;
+use sov_demo_rollup::{MockDemoRollup, MockRollupSpec};
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::Amount;
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
@@ -97,6 +102,30 @@ async fn get_consistent_response(
     }
 }
 
+async fn assert_zero_balance(client: &NodeClient, addr: &Address) {
+    let balance = client
+        .get_balance::<MockRollupSpec<Native>>(
+            &MultiAddressEvmSolana::Evm(EthereumAddress(*addr)),
+            &config_gas_token_id(),
+            None,
+        )
+        .await
+        .unwrap_or_else(|err| {
+            let err_string = err.to_string();
+            if err_string.contains("404 Not Found") {
+                Amount::ZERO
+            } else {
+                panic!("Error from server: {err_string}");
+            }
+        });
+
+    assert_eq!(
+        Amount::ZERO,
+        balance,
+        "Sender {addr} should have zero balance in those tests, self-check"
+    );
+}
+
 async fn assert_simulation_rejects<T: DeserializeOwned + std::fmt::Debug>(
     client: &SimpleStorageClient,
     request: &TransactionRequest,
@@ -140,7 +169,9 @@ async fn paymaster_simulation_succeeds_without_fee_fields() -> anyhow::Result<()
 // gasPrice set → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_succeeds_with_gas_price() -> anyhow::Result<()> {
-    let (_rollup, client, addr) = setup_paymaster_client().await;
+    let (rollup, client, addr) = setup_paymaster_client().await;
+
+    assert_zero_balance(&rollup.client, &addr).await;
 
     let request = TransactionRequest {
         gas_price: Some(MAX_FEE_PER_GAS),
@@ -154,7 +185,9 @@ async fn paymaster_simulation_succeeds_with_gas_price() -> anyhow::Result<()> {
 // maxFeePerGas set → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_succeeds_with_max_fee_per_gas() -> anyhow::Result<()> {
-    let (_rollup, client, addr) = setup_paymaster_client().await;
+    let (rollup, client, addr) = setup_paymaster_client().await;
+
+    assert_zero_balance(&rollup.client, &addr).await;
 
     let request = TransactionRequest {
         max_fee_per_gas: Some(MAX_FEE_PER_GAS),
@@ -169,7 +202,9 @@ async fn paymaster_simulation_succeeds_with_max_fee_per_gas() -> anyhow::Result<
 // Both gasPrice and maxFeePerGas → conflicting fields error
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_rejects_with_conflicting_fee_fields() -> anyhow::Result<()> {
-    let (_rollup, client, addr) = setup_paymaster_client().await;
+    let (rollup, client, addr) = setup_paymaster_client().await;
+
+    assert_zero_balance(&rollup.client, &addr).await;
 
     let request = TransactionRequest {
         gas_price: Some(MAX_FEE_PER_GAS),
@@ -189,7 +224,9 @@ async fn paymaster_simulation_rejects_with_conflicting_fee_fields() -> anyhow::R
 // gasPrice set, gas omitted → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_succeeds_with_gas_price_gas_omitted() -> anyhow::Result<()> {
-    let (_rollup, client, addr) = setup_paymaster_client().await;
+    let (rollup, client, addr) = setup_paymaster_client().await;
+
+    assert_zero_balance(&rollup.client, &addr).await;
 
     let request = TransactionRequest {
         gas: None,
@@ -204,7 +241,9 @@ async fn paymaster_simulation_succeeds_with_gas_price_gas_omitted() -> anyhow::R
 // maxFeePerGas set, gas omitted → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_succeeds_with_max_fee_per_gas_gas_omitted() -> anyhow::Result<()> {
-    let (_rollup, client, addr) = setup_paymaster_client().await;
+    let (rollup, client, addr) = setup_paymaster_client().await;
+
+    assert_zero_balance(&rollup.client, &addr).await;
 
     let request = TransactionRequest {
         gas: None,
@@ -221,6 +260,8 @@ async fn paymaster_simulation_succeeds_with_max_fee_per_gas_gas_omitted() -> any
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_send_raw_tx_succeeds() -> anyhow::Result<()> {
     let (rollup, client, addr) = setup_paymaster_client().await;
+
+    assert_zero_balance(&rollup.client, &addr).await;
 
     // Simulation should succeed for paymaster-covered sender.
     let request = TransactionRequest {
