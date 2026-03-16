@@ -48,7 +48,7 @@ where
         self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
             &data.relevant_blobs,
-            data.relevant_proofs,
+            &data.relevant_proofs,
         )?;
 
         let result = self.app.apply_slot(

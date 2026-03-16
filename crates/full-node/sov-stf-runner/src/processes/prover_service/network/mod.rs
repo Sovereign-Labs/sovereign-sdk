@@ -1,5 +1,4 @@
 mod prover;
-mod state;
 
 use std::sync::Arc;
 

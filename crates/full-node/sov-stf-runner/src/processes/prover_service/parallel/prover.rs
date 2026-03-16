@@ -138,7 +138,7 @@ where
 
                     verifier
                         .da_verifier
-                        .verify_relevant_tx_list(&da_block_header, &blobs, relevant_proofs)
+                        .verify_relevant_tx_list(&da_block_header, &blobs, &relevant_proofs)
                         .expect("An honest prover provided an invalid list of relevant txs. This is a bug in the prover - please report it.");
 
                     let block_proof = proof.map(|p| BlockProof {

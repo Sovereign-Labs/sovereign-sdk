@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
@@ -12,26 +14,41 @@ use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
     ZkvmHost, ZkvmNetwork,
 };
-use tracing::{error, info, trace};
 
-use super::state::{NetworkProverState, NetworkProverStatus, SubmittedProofMetadata};
 use super::Verifier;
 use crate::processes::prover_service::block_proof::BlockProof;
 use crate::processes::{
     ProofAggregationStatus, ProofProcessingStatus, ProverServiceError, StateTransitionInfo,
 };
 
+struct SubmittedProofMetadata<Address, Da: DaSpec, StateRoot> {
+    pub(crate) slot_number: SlotNumber,
+    pub(crate) st: StateTransitionPublicData<Address, Da, StateRoot>,
+}
+
+enum NetworkProverStatus<Address, StateRoot, Da: DaSpec, Handle> {
+    Submitted {
+        handle: Handle,
+        metadata: SubmittedProofMetadata<Address, Da, StateRoot>,
+    },
+    Proved(BlockProof<Address, Da, StateRoot>),
+    Err(anyhow::Error),
+}
+
+type ProofStatusMap<Address, StateRoot, Da, InnerVm> = HashMap<
+    <Da as DaSpec>::SlotHash,
+    NetworkProverStatus<
+        Address,
+        StateRoot,
+        Da,
+        <<InnerVm as Zkvm>::Network as ZkvmNetwork>::ProofHandle,
+    >,
+>;
+
 pub(crate) struct NetworkProver<Address, StateRoot, Witness, Da: DaService, InnerVm: Zkvm> {
     prover_address: Address,
-    inner_network: tokio::sync::Mutex<InnerVm::Network>,
-    prover_state: tokio::sync::RwLock<
-        NetworkProverState<
-            Address,
-            StateRoot,
-            Da::Spec,
-            <InnerVm::Network as ZkvmNetwork>::ProofHandle,
-        >,
-    >,
+    network: tokio::sync::Mutex<InnerVm::Network>,
+    tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
     code_commitment: CodeCommitment,
     phantom: PhantomData<Witness>,
 }
@@ -40,32 +57,48 @@ impl<Address, StateRoot, Witness, Da, InnerVm>
     NetworkProver<Address, StateRoot, Witness, Da, InnerVm>
 where
     Da: DaService,
-    Address: BorshSerialize
-        + Serialize
-        + DeserializeOwned
-        + AsRef<[u8]>
-        + Clone
-        + Send
-        + Sync
-        + 'static,
+    Address:
+        BorshSerialize + Serialize + DeserializeOwned + AsRef<[u8]> + Clone + Send + Sync + 'static,
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     InnerVm: Zkvm + 'static,
 {
     pub(crate) fn new(
         prover_address: Address,
-        inner_network: InnerVm::Network,
+        network: InnerVm::Network,
         code_commitment: CodeCommitment,
     ) -> Self {
         Self {
             prover_address,
-            inner_network: tokio::sync::Mutex::new(inner_network),
-            prover_state: tokio::sync::RwLock::new(NetworkProverState {
-                prover_status: Default::default(),
-            }),
+            network: tokio::sync::Mutex::new(network),
+            tracker: tokio::sync::RwLock::new(HashMap::new()),
             code_commitment,
             phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn proving_precondition(
+        &self,
+        state_transition_info: &StateTransitionInfo<StateRoot, Witness, Da::Spec>,
+    ) -> anyhow::Result<()> {
+        let block_header_hash = state_transition_info.da_block_header().hash();
+        let tracker = self.tracker.blocking_read();
+
+        if let Some(status) = tracker.get(&block_header_hash) {
+            return match status {
+                NetworkProverStatus::Submitted { .. } => Err(anyhow::anyhow!(
+                    "Proof generation for {} still in progress",
+                    block_header_hash,
+                )),
+                NetworkProverStatus::Proved(_) => Err(anyhow::anyhow!(
+                    "Witness for block_header_hash {}, submitted multiple times.",
+                    block_header_hash,
+                )),
+                NetworkProverStatus::Err(e) => Err(anyhow::format_err!("{}", e)),
+            };
+        }
+
+        Ok(())
     }
 
     pub(crate) async fn start_proving(
@@ -73,58 +106,42 @@ where
         state_transition_info: StateTransitionInfo<StateRoot, Witness, Da::Spec>,
         verifier: &Verifier<Da>,
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
+        self.proving_precondition(&state_transition_info)?;
+
         let block_header_hash = state_transition_info.da_block_header().hash();
-
-        let mut prover_state = self.prover_state.write().await;
-
-        if let Some(status) = prover_state.get_prover_status(&block_header_hash) {
-            return match status {
-                NetworkProverStatus::Submitted { .. } => Err(anyhow::anyhow!(
-                    "Proof generation for {} still in progress",
-                    block_header_hash,
-                )
-                .into()),
-                NetworkProverStatus::Proved(_) => Err(anyhow::anyhow!(
-                    "Witness for block_header_hash {}, submitted multiple times.",
-                    block_header_hash,
-                )
-                .into()),
-                NetworkProverStatus::Err(e) => Err(anyhow::format_err!("{}", e).into()),
-            };
-        }
-
         let slot_number = state_transition_info.slot_number;
-
         let data = StateTransitionWitnessWithAddress {
             stf_witness: state_transition_info.data,
             prover_address: self.prover_address.clone(),
         };
 
-        // Add hint to the network prover (borrows data via serialization).
-        let mut network = self.inner_network.lock().await;
-        network.add_hint(&data);
+        verifier
+            .da_verifier
+            .verify_relevant_tx_list(
+                &data.stf_witness.da_block_header,
+                &data.stf_witness.relevant_blobs,
+                &data.stf_witness.relevant_proofs,
+            )
+            .map_err(|e| {
+                ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
+            })?;
 
-        // Destructure the witness data so we can verify DA inclusion proofs
-        // before submitting to the network, failing fast before spending credits.
+        let handle = {
+            let mut network = self.network.lock().await;
+            network.add_hint(&data);
+            // TODO: what happens if we crash here? Do we just pay to re-prove?
+            network.submit().await.map_err(ProverServiceError::Other)?
+        };
+
         let StateTransitionWitnessWithAddress {
             stf_witness:
                 StateTransitionWitness {
                     initial_state_root,
                     final_state_root,
-                    da_block_header,
-                    relevant_proofs,
-                    relevant_blobs,
                     ..
                 },
             prover_address,
         } = data;
-
-        verifier
-            .da_verifier
-            .verify_relevant_tx_list(&da_block_header, &relevant_blobs, relevant_proofs)
-            .map_err(|e| {
-                ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
-            })?;
 
         let metadata = SubmittedProofMetadata {
             slot_number,
@@ -136,21 +153,16 @@ where
             },
         };
 
-        info!(
+        tracing::trace!(
             "Submitting proof to network for slot hash {}",
             block_header_hash
         );
-        let handle = match network.submit().await {
-            Ok(handle) => handle,
-            Err(e) => {
-                return Err(ProverServiceError::Other(anyhow::anyhow!(
-                    "Failed to submit proof to network: {}",
-                    e
-                )));
-            }
-        };
 
-        prover_state.set_to_submitted(block_header_hash, handle, metadata);
+        let mut tracker = self.tracker.write().await;
+        tracker.insert(
+            block_header_hash,
+            NetworkProverStatus::Submitted { handle, metadata },
+        );
 
         Ok(ProofProcessingStatus::ProvingInProgress)
     }
@@ -161,17 +173,17 @@ where
         block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
         genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
+        //TODO: probably want to use anyhow rather than panic?
         assert!(!block_header_hashes.is_empty());
 
-        let mut prover_state = self.prover_state.write().await;
-
+        let mut proof_statuses = self.tracker.write().await;
         // Phase 1: Poll all submitted entries and transition them to Proved.
         // We remove-then-reinsert to avoid holding immutable references across mutations.
         for slot_hash in block_header_hashes {
             if let Some(NetworkProverStatus::Submitted { handle, metadata }) =
-                prover_state.remove(slot_hash)
+                proof_statuses.remove(slot_hash)
             {
-                let network = self.inner_network.lock().await;
+                let network = self.network.lock().await;
                 match network.poll(&handle).await {
                     Ok(Some(proof_bytes)) => {
                         let block_proof = BlockProof {
@@ -179,22 +191,33 @@ where
                             slot_number: metadata.slot_number,
                             st: metadata.st,
                         };
-                        prover_state.set_to_proved(slot_hash.clone(), block_proof);
+                        proof_statuses
+                            .insert(slot_hash.clone(), NetworkProverStatus::Proved(block_proof));
                     }
                     Ok(None) => {
-                        info!(
+                        tracing::trace!(
                             "Proof for slot hash {} is still pending on the network",
                             slot_hash
                         );
                         // Put back as Submitted since it's not done yet
-                        prover_state.set_to_submitted(slot_hash.clone(), handle, metadata);
+                        proof_statuses.insert(
+                            slot_hash.clone(),
+                            NetworkProverStatus::Submitted { handle, metadata },
+                        );
                         return Ok(ProofAggregationStatus::ProofGenerationInProgress);
                     }
                     Err(e) => {
-                        error!("Network proof for slot hash {} failed: {:?}", slot_hash, e);
-                        prover_state.set_to_err(
+                        tracing::error!(
+                            "Network proof for slot hash {} failed: {:?}",
+                            slot_hash,
+                            e
+                        );
+                        proof_statuses.insert(
                             slot_hash.clone(),
-                            anyhow::anyhow!("Network proving failed: {}", e),
+                            NetworkProverStatus::Err(anyhow::anyhow!(
+                                "Network proving failed: {}",
+                                e
+                            )),
                         );
                         return Err(anyhow::anyhow!(
                             "Network proving failed for {}: {}",
@@ -206,10 +229,11 @@ where
             }
         }
 
+        let proof_statuses = proof_statuses.downgrade();
         // Phase 2: Collect all proved block proofs.
         let mut block_proofs_data = Vec::new();
         for slot_hash in block_header_hashes {
-            match prover_state.get_prover_status(slot_hash) {
+            match proof_statuses.get(slot_hash) {
                 Some(NetworkProverStatus::Proved(block_proof)) => {
                     assert_eq!(slot_hash, &block_proof.st.slot_hash);
                     block_proofs_data.push(block_proof);
@@ -249,16 +273,21 @@ where
             code_commitment: self.code_commitment.clone(),
         };
 
-        trace!(%public_data, "generating aggregate proof");
+        tracing::trace!(%public_data, "generating aggregate proof");
+
         outer_vm.add_hint(public_data);
         let serialized_aggregated_proof = SerializedAggregatedProof {
+            // TODO: use prover network, not local proving
+            // poll for outcome and then return
             raw_aggregated_proof: outer_vm.run(false)?,
         };
 
-        for slot_hash in block_header_hashes {
-            prover_state.remove(slot_hash);
+        // only do this after successful network proof generation
+        for _slot_hash in block_header_hashes {
+            // proof_statuses.remove(slot_hash);
         }
 
+        // return after successful
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
     }
 }
