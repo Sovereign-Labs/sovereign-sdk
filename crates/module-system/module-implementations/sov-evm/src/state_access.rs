@@ -5,12 +5,13 @@ use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
 use sov_modules_api::da::Time;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, Amount, InfallibleStateAccessor,
-    InfallibleStateReaderAndWriter, Spec, StateReader,
+    InfallibleStateReaderAndWriter, Spec, StateReader, VersionReader,
 };
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::RollupHeight;
@@ -125,6 +126,20 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> Result<bool, Accessor::Error> {
         Ok(self.disable_max_fee_check.get(state)?.unwrap_or(false))
+    }
+
+    /// Returns true when the EIP-1559 fee-cap check should be enforced for this state.
+    pub(crate) fn is_max_fee_check_active<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<bool, Accessor::Error> {
+        let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
+        let block_number: u64 = state.rollup_height_to_access().get();
+        if block_number <= apply_max_fee_check_after_height {
+            return Ok(false);
+        }
+
+        Ok(!self.is_max_fee_check_disabled(state)?)
     }
 }
 

@@ -154,8 +154,10 @@ fn call_upfront_cost(
     request: &TransactionRequest,
     block_env: &BlockEnv,
     balance: U256,
+    enforce_max_fee_check: bool,
 ) -> Result<Option<CallUpfrontCost>, EthApiError> {
-    let Some(fee_per_gas) = requested_call_fee_per_gas(request, block_env)? else {
+    let Some(fee_per_gas) = requested_call_fee_per_gas(request, block_env, enforce_max_fee_check)?
+    else {
         return Ok(None);
     };
 
@@ -199,6 +201,7 @@ fn call_upfront_cost(
 fn requested_call_fee_per_gas(
     request: &TransactionRequest,
     block_env: &BlockEnv,
+    enforce_max_fee_check: bool,
 ) -> Result<Option<u128>, EthApiError> {
     if request.gas_price.is_some()
         && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
@@ -215,10 +218,13 @@ fn requested_call_fee_per_gas(
     }
 
     // The simulated call context still executes with zero revm fees, but `eth_call` and
-    // `eth_estimateGas` must reject EIP-1559 requests that real tx admission would reject.
-    if let Some(max_fee_per_gas) = request.max_fee_per_gas {
-        if max_fee_per_gas < u128::from(block_env.basefee) {
-            return Err(RpcInvalidTransactionError::FeeCapTooLow.into());
+    // `eth_estimateGas` must reject EIP-1559 requests that real tx admission would reject once
+    // the shared gate is active for the selected state.
+    if enforce_max_fee_check {
+        if let Some(max_fee_per_gas) = request.max_fee_per_gas {
+            if max_fee_per_gas < u128::from(block_env.basefee) {
+                return Err(RpcInvalidTransactionError::FeeCapTooLow.into());
+            }
         }
     }
 
@@ -234,6 +240,7 @@ fn call_caller(request: &TransactionRequest) -> Address {
 fn enforce_call_upfront_cost<DB: Database>(
     request: &mut TransactionRequest,
     block_env: &BlockEnv,
+    enforce_max_fee_check: bool,
     db: &mut DB,
 ) -> Result<(), EthApiError>
 where
@@ -244,7 +251,7 @@ where
         .map_err(Into::into)?
         .map(|account| account.balance)
         .unwrap_or_default();
-    if let Some(upfront) = call_upfront_cost(request, block_env, balance)? {
+    if let Some(upfront) = call_upfront_cost(request, block_env, balance, enforce_max_fee_check)? {
         if request.gas.is_none() {
             request.gas = Some(upfront.gas_limit);
         }
@@ -556,11 +563,19 @@ where
                 _ => {}
             }
         }
+        let enforce_max_fee_check = self
+            .is_max_fee_check_active(maybe_archival_state.deref_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
 
         if !has_overrides {
             // Fast path for the common case where no call overrides are provided.
             let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            enforce_call_upfront_cost(&mut request, &block_env, &mut evm_db)?;
+            enforce_call_upfront_cost(
+                &mut request,
+                &block_env,
+                enforce_max_fee_check,
+                &mut evm_db,
+            )?;
 
             let tx_env = prepare_call_env(&block_env, request)?;
             let caller = tx_env.caller;
@@ -581,7 +596,12 @@ where
             block_overrides,
         )?;
 
-        enforce_call_upfront_cost(&mut request, &block_env, &mut evm_state)?;
+        enforce_call_upfront_cost(
+            &mut request,
+            &block_env,
+            enforce_max_fee_check,
+            &mut evm_state,
+        )?;
 
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
@@ -1375,7 +1395,7 @@ mod tests {
         };
         let balance = U256::from(1_000_000u64);
 
-        let upfront = call_upfront_cost(&request, &block_env, balance)
+        let upfront = call_upfront_cost(&request, &block_env, balance, false)
             .unwrap()
             .expect("fee fields are set");
 
@@ -1392,7 +1412,7 @@ mod tests {
             ..Default::default()
         };
 
-        let upfront = call_upfront_cost(&request, &block_env, U256::ZERO)
+        let upfront = call_upfront_cost(&request, &block_env, U256::ZERO, false)
             .unwrap()
             .expect("fee fields are set");
 
@@ -1413,7 +1433,7 @@ mod tests {
         };
         let balance = U256::from(310_000u64);
 
-        let upfront = call_upfront_cost(&request, &block_env, balance)
+        let upfront = call_upfront_cost(&request, &block_env, balance, false)
             .unwrap()
             .expect("fee fields are set");
 
@@ -1433,7 +1453,7 @@ mod tests {
         };
         let balance = U256::from(1000u64);
 
-        let err = call_upfront_cost(&request, &block_env, balance).unwrap_err();
+        let err = call_upfront_cost(&request, &block_env, balance, false).unwrap_err();
 
         assert!(matches!(
             err,
@@ -1451,7 +1471,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO, true).unwrap_err();
 
         assert!(matches!(err, EthApiError::ConflictingFeeFieldsInRequest));
     }
@@ -1464,7 +1484,7 @@ mod tests {
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO, true).unwrap_err();
 
         assert!(matches!(
             err,
@@ -1485,12 +1505,33 @@ mod tests {
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &block_env, U256::MAX).unwrap_err();
+        let err = call_upfront_cost(&request, &block_env, U256::MAX, true).unwrap_err();
 
         assert!(matches!(
             err,
             EthApiError::InvalidTransaction(RpcInvalidTransactionError::FeeCapTooLow)
         ));
+    }
+
+    #[test]
+    fn call_upfront_cost_allows_fee_cap_below_base_fee_when_check_inactive() {
+        let request = TransactionRequest {
+            max_fee_per_gas: Some(9),
+            max_priority_fee_per_gas: Some(0),
+            gas: Some(MIN_TRANSACTION_GAS),
+            ..Default::default()
+        };
+        let block_env = BlockEnv {
+            basefee: 10,
+            ..Default::default()
+        };
+
+        let upfront = call_upfront_cost(&request, &block_env, U256::MAX, false)
+            .unwrap()
+            .expect("inactive fee-cap gate should not reject the request");
+
+        assert_eq!(upfront.gas_limit, MIN_TRANSACTION_GAS);
+        assert_eq!(upfront.total_cost, U256::from(MIN_TRANSACTION_GAS * 9));
     }
 
     #[test]
@@ -1505,7 +1546,7 @@ mod tests {
             ..Default::default()
         };
 
-        let upfront = call_upfront_cost(&request, &block_env, U256::MAX)
+        let upfront = call_upfront_cost(&request, &block_env, U256::MAX, true)
             .unwrap()
             .expect("legacy gasPrice still participates in affordability checks");
 
@@ -1519,6 +1560,7 @@ mod tests {
             &TransactionRequest::default(),
             &BlockEnv::default(),
             U256::ZERO,
+            false,
         )
         .unwrap();
 

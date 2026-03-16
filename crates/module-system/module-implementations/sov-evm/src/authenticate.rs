@@ -53,28 +53,18 @@ impl<S: Spec> Evm<S> {
         tx_hash: TxHash,
         state: &mut Accessor,
     ) -> Result<u64, AuthenticationError> {
-        let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
-
-        let block_number: u64 = state.rollup_height_to_access().get();
-
-        if block_number > apply_max_fee_check_after_height {
-            let is_max_fee_check_disabled = self.is_max_fee_check_disabled(state).map_err(|e| {
-                AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
-            })?;
-            if is_max_fee_check_disabled {
-                return Ok(100);
-            }
-            if user_max_fee_per_gas < rollup_base_fee {
-                let err = FatalError::InsufficientMaxFeePerGas {
-                    user_max_fee_per_gas,
-                    rollup_base_fee,
-                };
-                return Err(AuthenticationError::FatalError(err, tx_hash));
-            }
-
-            Ok(1)
-        } else {
+        if !self.is_max_fee_check_active(state).map_err(|e| {
+            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
+        })? {
             Ok(100)
+        } else if user_max_fee_per_gas < rollup_base_fee {
+            let err = FatalError::InsufficientMaxFeePerGas {
+                user_max_fee_per_gas,
+                rollup_base_fee,
+            };
+            Err(AuthenticationError::FatalError(err, tx_hash))
+        } else {
+            Ok(1)
         }
     }
 }

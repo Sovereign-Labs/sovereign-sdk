@@ -1,14 +1,15 @@
-use crate::helpers::{setup, EvmAccount};
+use crate::helpers::{create_transfer_tx, set_max_fee_check_height, setup, EvmAccount};
 use crate::runtime::{RT, S};
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::BlockId;
 use alloy_primitives::{Bytes, TxKind, B256, U256};
 use alloy_rpc_types::TransactionRequest;
-use sov_evm::{EthereumAuthenticator, Evm};
+use sov_evm::{CallMessage, EthereumAuthenticator, Evm, EvmRuntimeConfigUpdate};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
-use sov_test_utils::TransactionType;
+use sov_test_utils::runtime::TestRunner;
+use sov_test_utils::{AsUser, TestUser, TransactionTestCase, TransactionType};
 
 const BASEFEE_CONTRACT_INIT_CODE_HEX: &str = "6a60004860005260206000f3600052600b6015f3";
 
@@ -38,6 +39,34 @@ fn create_deploy_tx_with_init_code(
         tx: TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
         hash: *signed_tx.hash(),
     }
+}
+
+fn estimate_gas_request(
+    from: alloy_primitives::Address,
+    to: alloy_primitives::Address,
+) -> TransactionRequest {
+    TransactionRequest {
+        from: Some(from),
+        to: Some(TxKind::Call(to)),
+        max_fee_per_gas: Some(9),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    }
+}
+
+fn low_base_fee_override() -> Box<alloy_rpc_types::BlockOverrides> {
+    Box::new(alloy_rpc_types::BlockOverrides::default().with_base_fee(U256::from(10u64)))
+}
+
+fn disable_max_fee_check(runner: &mut TestRunner<RT, S>, admin: &TestUser<S>) {
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig(
+            EvmRuntimeConfigUpdate::empty(),
+        )),
+        assert: Box::new(|ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
 }
 
 #[test]
@@ -112,5 +141,71 @@ fn test_eth_call_basefee_opcode_matches_block_header_base_fee() {
             U256::from(expected_base_fee),
             "eth_call BASEFEE opcode output does not match the block header base fee"
         );
+    });
+}
+
+#[test]
+fn test_eth_estimate_gas_skips_fee_cap_check_before_activation_height() {
+    set_max_fee_check_height(100);
+
+    let (runner, account, recipient, _) = setup();
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let estimate = evm
+            .eth_estimate_gas(
+                estimate_gas_request(account.address(), recipient.address()),
+                None,
+                None,
+                Some(low_base_fee_override()),
+                state,
+            )
+            .unwrap();
+
+        assert!(estimate.to::<u64>() >= 21_000);
+    });
+}
+
+#[test]
+fn test_eth_estimate_gas_skips_fee_cap_check_when_runtime_disabled() {
+    set_max_fee_check_height(0);
+
+    let (mut runner, account, recipient, admin) = setup();
+    runner.execute(create_transfer_tx(0, &account, &recipient, 1).tx);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let err = evm
+            .eth_estimate_gas(
+                estimate_gas_request(account.address(), recipient.address()),
+                None,
+                None,
+                Some(low_base_fee_override()),
+                state,
+            )
+            .unwrap_err();
+
+        assert!(
+            err.message()
+                .contains("max fee per gas less than block base fee"),
+            "unexpected error: {err}"
+        );
+    });
+
+    disable_max_fee_check(&mut runner, &admin);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let estimate = evm
+            .eth_estimate_gas(
+                estimate_gas_request(account.address(), recipient.address()),
+                None,
+                None,
+                Some(low_base_fee_override()),
+                state,
+            )
+            .unwrap();
+
+        assert!(estimate.to::<u64>() >= 21_000);
     });
 }
