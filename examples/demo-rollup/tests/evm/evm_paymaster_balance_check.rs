@@ -19,12 +19,9 @@ use crate::evm::evm_test_helper::{
     setup_test_rollup_with_paymaster, tx_count, EVM_EXTENSION, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
-// max_fee = gas_limit * multiplier * sum(gas_price dimensions)
-//         = 21_000 * 1 * (9 + 9) = 378,000 SOV
-//
-// A simple ETH transfer costs ~430,000 SOV in state accesses, exceeding this budget.
-// The working paymaster test in evm_rpc_compliance_validation_2.rs:1150 uses
-// gas_limit = 1_000_000 for exactly this reason.
+// 1_000_000 rather than the minimal 21_000 because state-access charges push the
+// real cost of a simple ETH transfer to ~430k SOV (21_000 * 1 * (9+9) = 378k is
+// already insufficient).
 const GAS_LIMIT: u64 = 1_000_000;
 
 /// Hardhat #4: 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
@@ -66,6 +63,8 @@ async fn setup_paymaster_client() -> (
             None,
         )
         .await
+        // The balance endpoint returns 404 when an account has never been seen.
+        // Treat that as zero; propagate any other error.
         .unwrap_or_else(|err| {
             let err_string = err.to_string();
             if err_string.contains("404 Not Found") {
@@ -75,8 +74,8 @@ async fn setup_paymaster_client() -> (
             }
         });
     assert_eq!(
-        Amount::ZERO,
         rollup_balance,
+        Amount::ZERO,
         "test precondition failed: paymaster signer must start with zero rollup gas-token balance"
     );
 
@@ -93,7 +92,7 @@ fn base_request(from: Address) -> TransactionRequest {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct CombinedErrors {
     estimate_gas_error: String,
     call_error: String,
@@ -248,7 +247,7 @@ async fn paymaster_simulation_succeeds_with_max_fee_per_gas_gas_omitted() -> any
     Ok(())
 }
 
-// Test 7: Simulation succeeds and sendRawTransaction succeeds
+// Simulation + sendRawTransaction both succeed for paymaster-covered sender
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_send_raw_tx_succeeds() -> anyhow::Result<()> {
     let (rollup, client, addr) = setup_paymaster_client().await;
