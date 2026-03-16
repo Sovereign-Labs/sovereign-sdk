@@ -211,6 +211,13 @@ impl<S: Spec> StateRootTask<S> {
         let handle = tokio::spawn(async move {
             loop {
                 let request = tokio::select! {
+                    biased;
+                    _ = block_executors_shutdown_receiver.recv() => {
+                        info!(
+                            "Sequencer state root background task shutdown in response to signal",
+                        );
+                        break;
+                   }
                     maybe_request = request_receiver.recv() => {
                         match maybe_request {
                             Some(request) => request,
@@ -222,12 +229,6 @@ impl<S: Spec> StateRootTask<S> {
                             }
                         }
                     }
-                   _ = block_executors_shutdown_receiver.recv() => {
-                        info!(
-                            "Sequencer state root background task shutdown in response to signal",
-                        );
-                        break;
-                   }
                 };
                 // Wait for a new request, or shutdown.
                 let StateRootComputeRequest::<S> {

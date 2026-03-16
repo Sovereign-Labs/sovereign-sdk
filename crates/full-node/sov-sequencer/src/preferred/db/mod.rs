@@ -13,7 +13,9 @@ pub mod heartbeat_task;
 pub mod postgres;
 pub mod rocksdb;
 use crate::preferred::PostgresBackend;
+use crate::preferred::PreferredProofToReplay;
 use crate::preferred::RocksDbBackend;
+use crate::PreferredProofDataBytes;
 use anyhow::Result;
 use axum::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -26,7 +28,7 @@ use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxHash,
     VisibleSlotNumber,
 };
-use std::collections::VecDeque;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::Path;
@@ -119,7 +121,7 @@ pub trait DbBackend: Send + Sync + 'static {
         &mut self,
         sequence_number: SequenceNumber,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
     ) -> Result<(), DbError>;
 
     /// Instructs the database it MAY delete all data up to the given
@@ -191,7 +193,7 @@ pub enum ReadBlob<Inner = ReadBatch> {
     Proof {
         blob_id: BlobInternalId,
         sequence_number: SequenceNumber,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
     },
 }
 
@@ -215,11 +217,14 @@ pub(crate) enum DbEvent {
         visible_slots_to_advance: NonZero<u8>,
     },
     BatchClosed(SequenceNumber),
-    ProofBlobAccepted(SequenceNumber),
+    ProofBlobAccepted {
+        sequence_number: SequenceNumber,
+        proof_bytes: PreferredProofDataBytes,
+    },
 }
 
 pub struct BlobsCache {
-    completed_blobs: VecDeque<ReadBlob>,
+    proofs_and_completed_batches: BTreeMap<SequenceNumber, ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
     shutdown_sender: watch::Sender<()>,
@@ -227,12 +232,12 @@ pub struct BlobsCache {
 
 impl BlobsCache {
     pub fn new(
-        completed_blobs: VecDeque<ReadBlob>,
+        completed_blobs: BTreeMap<SequenceNumber, ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
         shutdown_sender: watch::Sender<()>,
     ) -> Self {
         Self {
-            completed_blobs,
+            proofs_and_completed_batches: completed_blobs,
             in_progress_batch,
             event_stream: None,
             shutdown_sender,
@@ -243,16 +248,106 @@ impl BlobsCache {
         self.in_progress_batch.as_ref()
     }
 
-    pub fn all_completed_blobs(&self) -> Vec<ReadBlob> {
-        self.completed_blobs.clone().into()
+    pub fn all_proofs_and_completed_blobs(&self) -> Vec<ReadBlob> {
+        self.proofs_and_completed_batches
+            .values()
+            .cloned()
+            .collect()
     }
 
-    pub fn all_completed_blobs_greater_than_or_equal_to(
+    // Ensure that the provided batch number is wihin the range of sequence numbers that might plausibly be needed for replay.
+    fn sanity_check_batch_sequence_number_is_in_range(
+        &self,
+        batch_sequence_number: SequenceNumber,
+    ) {
+        // The highest allowed sequence number is either the in-progress batch sequence number (if one exists) or the next sequence number (if no batch is in progress).
+        // If no batch is in progress *and* we don't have any completed blobs in cache, we don't know what the next sequence number should be so we allow any value.
+        let highest_allowed_sequence_number = self
+            .in_progress_batch
+            .as_ref()
+            .map(|b| b.sequence_number)
+            .unwrap_or_else(|| {
+                self.proofs_and_completed_batches
+                    .keys()
+                    .next_back()
+                    .map(|k| k.saturating_add(1))
+                    .unwrap_or(u64::MAX)
+            });
+
+        // The lowest allowed sequence number is either the sequence number of the first completed blob (if one exists) or the sequence number of the in-progress batch (if one exists).
+        // If no batch is in progress *and* we don't have any completed blobs in cache, we don't know what the next sequence number should be so we allow any value.
+        let lowest_allowed_sequence_number = self
+            .proofs_and_completed_batches
+            .keys()
+            .cloned()
+            .next()
+            .unwrap_or_else(|| {
+                self.in_progress_batch
+                    .as_ref()
+                    .map(|b| b.sequence_number)
+                    .unwrap_or(0)
+            });
+
+        assert!(batch_sequence_number <= highest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is greater than the highest allowed sequence number {highest_allowed_sequence_number}. This is a bug, please report it.");
+        assert!(batch_sequence_number >= lowest_allowed_sequence_number, "The requested batch sequence number {batch_sequence_number} is less than the lowest allowed sequence number {lowest_allowed_sequence_number}. This is a bug, please report it.");
+    }
+
+    /// Fetch all proofs that need to be played at the start of the batch with the given sequence number.
+    pub fn proofs_for_replay(
+        &self,
+        batch_sequence_number: SequenceNumber,
+    ) -> Vec<PreferredProofToReplay> {
+        self.sanity_check_batch_sequence_number_is_in_range(batch_sequence_number);
+
+        let mut output = Vec::new();
+        // Given the sequence number of a batch, we want to return all proofs with sequence numbers between the previous batch and the requested batch.
+        for blob in self.proofs_and_completed_batches.values() {
+            match blob {
+                ReadBlob::Batch(batch) => {
+                    // Since we're looking for all proofs in between two batches, we either need to return (if the batch has the sequence number we're looking for)
+                    // or we need to reset our output (since the proofs we've already seen would have been handled during processing of the batch we just hit).
+                    if batch.sequence_number == batch_sequence_number {
+                        break;
+                    }
+                    output.retain(|p: &PreferredProofToReplay| {
+                        p.sequence_number > batch_sequence_number
+                    });
+                }
+                ReadBlob::Proof {
+                    sequence_number,
+                    data,
+                    ..
+                } => {
+                    // We might have some proofs in cache that come *after* the in-progress batch
+                    // If we've passed the requested batch number, we're done.
+                    if *sequence_number > batch_sequence_number {
+                        break;
+                    }
+                    assert_ne!(*sequence_number, batch_sequence_number, "A proof sequence number {sequence_number} was provided to proof_for_replay, which must have a batch sequence number. This is a bug, please report it.");
+                    // It it's a proof, just push it to our current output.
+                    output.push(PreferredProofToReplay {
+                        sequence_number: *sequence_number,
+                        data: data.clone(),
+                    });
+                }
+            }
+        }
+        assert!(
+            output
+                .last()
+                .map(|p| p.sequence_number == batch_sequence_number.saturating_sub(1))
+                .unwrap_or(true),
+            "The last proof in the list should be the one before the sequence number"
+        );
+        output
+    }
+
+    pub fn all_proofs_and_completed_batches_greater_than_or_equal_to(
         &self,
         sequence_number: SequenceNumber,
     ) -> Vec<ReadBlob> {
-        self.completed_blobs
-            .iter()
+        self.proofs_and_completed_batches
+            .values()
             .filter(|b| {
                 // Pruning invariants say it MAY remove older blobs, but we don't know for sure.
                 b.sequence_number() >= sequence_number
@@ -335,23 +430,30 @@ impl BlobsCache {
     }
 
     pub fn clean_all_batches(&mut self) {
-        self.completed_blobs.clear();
+        self.proofs_and_completed_batches.clear();
         self.in_progress_batch = None;
     }
 
     pub async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
         sequence_number: SequenceNumber,
     ) {
-        self.completed_blobs.push_back(ReadBlob::Proof {
-            blob_id,
+        self.proofs_and_completed_batches.insert(
             sequence_number,
-            data,
-        });
-        self.send_event_if_necessary(DbEvent::ProofBlobAccepted(sequence_number))
-            .await;
+            ReadBlob::Proof {
+                blob_id,
+                sequence_number,
+                data: data.clone(),
+            },
+        );
+
+        self.send_event_if_necessary(DbEvent::ProofBlobAccepted {
+            sequence_number,
+            proof_bytes: data,
+        })
+        .await;
     }
 
     pub async fn terminate_batch(&mut self) -> ReadBatch {
@@ -370,8 +472,8 @@ impl BlobsCache {
 
         let batch: ReadBatch = batch.into();
 
-        self.completed_blobs
-            .push_back(ReadBlob::Batch(batch.clone()));
+        self.proofs_and_completed_batches
+            .insert(sequence_number, ReadBlob::Batch(batch.clone()));
 
         self.send_event_if_necessary(DbEvent::BatchClosed(sequence_number))
             .await;
@@ -387,14 +489,8 @@ impl BlobsCache {
     }
 
     pub async fn prune(&mut self, prune_up_to_including: SequenceNumber) {
-        // We could also do binary search, but this seems fast enough.
-        while let Some(blob) = self.completed_blobs.front() {
-            if blob.sequence_number() > prune_up_to_including {
-                break;
-            }
-
-            self.completed_blobs.pop_front();
-        }
+        self.proofs_and_completed_batches
+            .retain(|sequence_number, _| *sequence_number > prune_up_to_including);
     }
 
     pub fn subscribe_to_events(&mut self, sender: mpsc::Sender<DbEvent>) {
@@ -503,14 +599,17 @@ impl PreferredSequencerDb {
                     completed_blobs,
                     in_progress_batch,
                 }) => {
-                    let completed_blobs = VecDeque::from(completed_blobs);
+                    let completed_blobs: BTreeMap<u64, ReadBlob> = completed_blobs
+                        .into_iter()
+                        .map(|blob| (blob.sequence_number(), blob))
+                        .collect();
 
                     let sequence_number_of_next_blob =
-                        match (completed_blobs.back(), &in_progress_batch) {
-                            (Some(blob), None) => blob.sequence_number() + 1,
+                        match (completed_blobs.keys().next_back(), &in_progress_batch) {
+                            (Some(sequence_number), None) => sequence_number + 1,
                             (None, Some(batch)) => batch.sequence_number + 1,
-                            (Some(blob), Some(batch)) => {
-                                std::cmp::max(blob.sequence_number(), batch.sequence_number) + 1
+                            (Some(sequence_number), Some(batch)) => {
+                                std::cmp::max(*sequence_number, batch.sequence_number) + 1
                             }
                             (None, None) => 0,
                         };
@@ -542,7 +641,7 @@ impl PreferredSequencerDb {
             Ok((
                 0, // TODO this will be revisited when we enable the replica sync task.
                 BlobsCache::new(
-                    VecDeque::default(),
+                    Default::default(),
                     Option::None,
                     self.shutdown_sender.clone(),
                 ),
@@ -630,14 +729,11 @@ impl PreferredSequencerDb {
     pub(crate) async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: PreferredProofDataBytes,
         sequence_number: SequenceNumber,
     ) -> Result<()> {
         if let Some(backend) = &mut self.backend {
-            if let Err(err) = backend
-                .add_proof_blob(sequence_number, blob_id, data.clone())
-                .await
-            {
+            if let Err(err) = backend.add_proof_blob(sequence_number, blob_id, data).await {
                 return Err(self.check_replica_err(err).await);
             };
         }

@@ -216,7 +216,7 @@ where
     /// Can be called again with the same [`BlobInternalId`] to resume publishing.
     pub async fn publish_proof_blob(
         &mut self,
-        data: Arc<[u8]>,
+        data: Arc<[u8]>, // A serialized PreferredProofData
         id: BlobInternalId,
     ) -> anyhow::Result<()> {
         self.publish_blob_inner(
@@ -437,7 +437,10 @@ impl FinalizationManager for LedgerDb {
                     blob.slot_number,
                     BlobSelectorStatus::Discarded(blob.discarded_blob.reason),
                 ),
-                None => return Ok(None),
+                None => match self.get_proof_receipt_by_hash(blob_hash).await? {
+                    Some(proof_receipt) => (proof_receipt.0, BlobSelectorStatus::Accepted),
+                    None => return Ok(None),
+                },
             },
         };
 

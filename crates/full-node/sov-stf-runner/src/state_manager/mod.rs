@@ -18,7 +18,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::DaSyncState;
-use sov_rollup_interface::stf::TxReceiptContents;
+use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
@@ -321,6 +321,8 @@ where
         S: SlotData,
         B: serde::Serialize,
         T: TxReceiptContents,
+        Address: Serialize + DeserializeOwned,
+        StorageProof: Serialize + DeserializeOwned,
     >(
         &mut self,
         stf_changes: Sm::StfChangeSet,
@@ -328,6 +330,7 @@ where
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
         aggregated_proofs: Vec<SerializedAggregatedProof>,
+        proof_receipts: Vec<PartialProofReceipt<Address, Da::Spec, StateRoot, StorageProof>>,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
@@ -346,10 +349,12 @@ where
         }
 
         let aggregated_proofs_count = aggregated_proofs.len();
+        let proof_receipts_count = proof_receipts.len();
         tracing::debug!(
             current_state_root = hex::encode(self.last_processed_finalized_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
+            proof_receipts = proof_receipts_count,
             "Saving changes after applying slot"
         );
 
@@ -433,6 +438,21 @@ where
             ledger_change_set.merge(this_height_data);
             tracing::trace!("Aggregated Proof is materialized into Ledger ChangeSet");
         }
+        let mut proof_receipt_hashes = Vec::with_capacity(proof_receipts.len());
+        for proof_receipt in proof_receipts {
+            proof_receipt_hashes.push(proof_receipt.blob_hash);
+            let this_height_data = self.ledger_db.materialize_proof_receipt(
+                proof_receipt.blob_hash,
+                proof_receipt,
+                slot_number,
+            )?;
+            ledger_change_set.merge(this_height_data);
+            tracing::trace!("Proof Receipt materialized into Ledger ChangeSet");
+        }
+        ledger_change_set.merge(
+            self.ledger_db
+                .materialize_proof_receipt_hashes(proof_receipt_hashes, slot_number)?,
+        );
         let ledger_materialization_time = ledger_materialization_start.elapsed();
         tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
 

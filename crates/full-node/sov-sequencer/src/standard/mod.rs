@@ -9,7 +9,8 @@ use crate::common::{
     WithCachedTxHashes,
 };
 use crate::{
-    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxHash, TxStatus, TxStatusManager,
+    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, SerializedProofWithDetailsBytes,
+    TxHash, TxStatus, TxStatusManager,
 };
 use anyhow::Context;
 use async_trait::async_trait;
@@ -761,13 +762,18 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    async fn produce_and_publish_proof_blob(&self, proof_blob: Arc<[u8]>) -> anyhow::Result<()> {
+    async fn produce_and_publish_proof_blob(
+        &self,
+        proof_blob: SerializedProofWithDetailsBytes,
+    ) -> anyhow::Result<()> {
         let blob_id = new_blob_id();
 
         // TODO: Put SerializedAggregatedProof directly on chain without
         // wrapping in a vec
         // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1065>
-        let blob_bytes = borsh::to_vec(&proof_blob)?.into();
+        // Note: This behavior of double-serializing is leftover from the previous implementation.
+        // TODO: Decide whether this can be safely removed (i.e. does the blob selector expect the payload to have been double-serialized?)
+        let blob_bytes = borsh::to_vec(&proof_blob.0)?.into();
 
         debug!(blob_id, "Dispatching proof blob for publishing");
 

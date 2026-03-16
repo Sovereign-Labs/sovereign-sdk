@@ -123,5 +123,11 @@ pub(crate) fn serialize_proof<T: Serialize>(agg_proof: T) -> Vec<u8> {
         raw_aggregated_proof: proof,
     };
 
-    borsh::to_vec(&serialize_proof_blob_with_metadata::<S>(serialized_proof).unwrap()).unwrap()
+    // Double serialzie because the blob selector deserialize a Vec<u8> and then that in turn gets deserialized by the STF
+    borsh::to_vec(
+        &serialize_proof_blob_with_metadata::<S>(serialized_proof)
+            .unwrap()
+            .0,
+    )
+    .unwrap()
 }

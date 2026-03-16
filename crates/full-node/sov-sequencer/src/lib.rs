@@ -74,10 +74,22 @@ pub enum SequencerNotReadyDetails {
     /// The replica is waiting for the first batch from master.
     ReplicaNotReady,
 }
+
+/// A serialized SerializeProofWithDetails<S>. We convert to bytes to avoid passing a Spec generic
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerializedProofWithDetailsBytes(pub Arc<[u8]>);
+
+/// A serialized [sov_blob_storage::PreferredProofData].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreferredProofDataBytes(pub Arc<[u8]>);
+
 /// An object-safe interface to the sequencer, which can be used to
 /// publish a proof blob to DA.
 #[async_trait]
 pub trait ProofBlobSender: Send + Sync + 'static {
     /// Publishes a proof blob to DA.
-    async fn produce_and_publish_proof_blob(&self, proof_blob: Arc<[u8]>) -> anyhow::Result<()>;
+    async fn produce_and_publish_proof_blob(
+        &self,
+        proof_data: SerializedProofWithDetailsBytes,
+    ) -> anyhow::Result<()>;
 }
