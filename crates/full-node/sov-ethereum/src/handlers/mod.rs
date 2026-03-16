@@ -18,6 +18,7 @@ use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
+use serde::Deserialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
 #[cfg(feature = "local")]
@@ -33,7 +34,7 @@ use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
-use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails, Sequencer};
+use sov_sequencer::{AcceptTxErrorCode, Sequencer};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -282,9 +283,8 @@ fn rpc_fee_cap_too_low() -> ErrorObjectOwned {
 }
 
 fn accept_tx_error_code(err: &RestErrorObject) -> Option<AcceptTxErrorCode> {
-    serde_json::from_value::<AcceptTxErrorDetails>(serde_json::Value::Object(err.details.clone()))
-        .ok()?
-        .code
+    let code_value = err.details.get("code")?;
+    AcceptTxErrorCode::deserialize(code_value).ok()
 }
 
 fn map_accept_tx_error(err: RestErrorObject) -> ErrorObjectOwned {
