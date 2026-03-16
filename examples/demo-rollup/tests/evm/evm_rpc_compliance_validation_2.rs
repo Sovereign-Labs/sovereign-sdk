@@ -46,7 +46,7 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
         "base fee should be non-zero for this test"
     );
 
-    let low_fee = base_fee_u128 - 1;
+    let low_fee = 0;
     let estimate_request = json!({
         "from": signer.address(),
         "to": Address::repeat_byte(0x11),
