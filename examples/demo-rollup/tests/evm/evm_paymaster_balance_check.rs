@@ -13,12 +13,10 @@ use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     create_simple_storage_client, raw_signed_eip1559, rpc_call, rpc_result_hex,
-    setup_test_rollup_with_paymaster, tx_count, EVM_EXTENSION, INSUFFICIENT_FUNDS_ERROR,
-    MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
+    setup_test_rollup_with_paymaster, tx_count, EVM_EXTENSION, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
 const GAS_LIMIT: u64 = 21_000;
-const GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR: &str = "gas required exceeds allowance";
 
 /// Hardhat #4: 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
 /// Not in any genesis → starts with zero EVM balance, but covered by the paymaster.
@@ -64,41 +62,71 @@ fn base_request(from: Address) -> TransactionRequest {
     }
 }
 
+#[derive(Debug, Clone)]
+struct CombinedErrors {
+    estimate_gas_error: String,
+    call_error: String,
+}
+
+async fn get_consistent_response(
+    client: &SimpleStorageClient,
+    request: &TransactionRequest,
+) -> Result<(), CombinedErrors> {
+    let eth_estimate_gas_result: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+
+    let eth_call_result: Result<String, _> = client
+        .ws
+        .request("eth_call", rpc_params![request, "latest"])
+        .await;
+
+    match (eth_estimate_gas_result, eth_call_result) {
+        (Ok(_), Ok(_)) => Ok(()),
+        (Err(estimate_gas_error), Err(call_err)) => Err(CombinedErrors {
+            estimate_gas_error: estimate_gas_error.to_string(),
+            call_error: call_err.to_string(),
+        }),
+        (Ok(_), Err(call_err)) => {
+            panic!("eth_estimateGas succeeded, but eth_call failed with {call_err}")
+        }
+        (Err(estimate_gas_err), Ok(_)) => {
+            panic!("eth_call succeeded, but eth_estimateGas failed with {estimate_gas_err}")
+        }
+    }
+}
+
 async fn assert_simulation_rejects<T: DeserializeOwned + std::fmt::Debug>(
     client: &SimpleStorageClient,
     request: &TransactionRequest,
     expected_error_substring: &str,
 ) {
-    for method in ["eth_call", "eth_estimateGas"] {
-        let result: Result<T, _> = client
-            .ws
-            .request(method, rpc_params![request, "latest"])
-            .await;
-        let err = result.expect_err(&format!("{method} should reject this request"));
-        let err_msg = err.to_string();
-        assert!(
-            err_msg.contains(expected_error_substring),
-            "{method}: expected error containing {expected_error_substring:?}, got: {err_msg}"
-        );
-    }
+    let combined_err = get_consistent_response(client, request)
+        .await
+        .expect_err("Request should be rejected");
+
+    assert!(
+        combined_err.call_error.contains(expected_error_substring),
+        "eth_call: expected error containing {expected_error_substring:?}, got: {}",
+        combined_err.call_error,
+    );
+    assert!(
+        combined_err
+            .estimate_gas_error
+            .contains(expected_error_substring),
+        "eth_estimateGas: expected error containing {expected_error_substring:?}, got: {}",
+        combined_err.estimate_gas_error
+    );
 }
 
 async fn assert_simulation_succeeds(client: &SimpleStorageClient, request: &TransactionRequest) {
-    let _: String = client
-        .ws
-        .request("eth_call", rpc_params![request, "latest"])
+    get_consistent_response(client, request)
         .await
-        .expect("eth_call must succeed");
-
-    let _: U64 = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await
-        .expect("eth_estimateGas must succeed");
+        .expect("Requests should be accepted");
 }
 
-// ── Test 1: No fee fields → balance check skipped ──
-
+// No fee fields → balance check skipped
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_succeeds_without_fee_fields() -> anyhow::Result<()> {
     let (_rollup, client, addr) = setup_paymaster_client().await;
@@ -109,25 +137,23 @@ async fn paymaster_simulation_succeeds_without_fee_fields() -> anyhow::Result<()
     Ok(())
 }
 
-// ── Test 2: gasPrice set → balance check fires, rejects zero-balance sender ──
-
+// gasPrice set → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
-async fn paymaster_simulation_rejects_with_gas_price() -> anyhow::Result<()> {
+async fn paymaster_simulation_succeeds_with_gas_price() -> anyhow::Result<()> {
     let (_rollup, client, addr) = setup_paymaster_client().await;
 
     let request = TransactionRequest {
         gas_price: Some(MAX_FEE_PER_GAS),
         ..base_request(addr)
     };
-    assert_simulation_rejects::<String>(&client, &request, INSUFFICIENT_FUNDS_ERROR).await;
+    assert_simulation_succeeds(&client, &request).await;
 
     Ok(())
 }
 
-// ── Test 3: maxFeePerGas set → balance check fires, rejects zero-balance sender ──
-
+// maxFeePerGas set → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
-async fn paymaster_simulation_rejects_with_max_fee_per_gas() -> anyhow::Result<()> {
+async fn paymaster_simulation_succeeds_with_max_fee_per_gas() -> anyhow::Result<()> {
     let (_rollup, client, addr) = setup_paymaster_client().await;
 
     let request = TransactionRequest {
@@ -135,13 +161,12 @@ async fn paymaster_simulation_rejects_with_max_fee_per_gas() -> anyhow::Result<(
         max_priority_fee_per_gas: Some(0),
         ..base_request(addr)
     };
-    assert_simulation_rejects::<String>(&client, &request, INSUFFICIENT_FUNDS_ERROR).await;
+    assert_simulation_succeeds(&client, &request).await;
 
     Ok(())
 }
 
-// ── Test 4: Both gasPrice and maxFeePerGas → conflicting fields error ──
-
+// Both gasPrice and maxFeePerGas → conflicting fields error
 #[tokio::test(flavor = "multi_thread")]
 async fn paymaster_simulation_rejects_with_conflicting_fee_fields() -> anyhow::Result<()> {
     let (_rollup, client, addr) = setup_paymaster_client().await;
@@ -161,10 +186,9 @@ async fn paymaster_simulation_rejects_with_conflicting_fee_fields() -> anyhow::R
     Ok(())
 }
 
-// ── Test 5: gasPrice set, gas omitted → affordable gas < 21000, exceeds allowance ──
-
+// gasPrice set, gas omitted → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
-async fn paymaster_simulation_rejects_with_gas_price_gas_omitted() -> anyhow::Result<()> {
+async fn paymaster_simulation_succeeds_with_gas_price_gas_omitted() -> anyhow::Result<()> {
     let (_rollup, client, addr) = setup_paymaster_client().await;
 
     let request = TransactionRequest {
@@ -172,15 +196,14 @@ async fn paymaster_simulation_rejects_with_gas_price_gas_omitted() -> anyhow::Re
         gas_price: Some(MAX_FEE_PER_GAS),
         ..base_request(addr)
     };
-    assert_simulation_rejects::<U64>(&client, &request, GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR).await;
+    assert_simulation_succeeds(&client, &request).await;
 
     Ok(())
 }
 
-// ── Test 6: maxFeePerGas set, gas omitted → affordable gas < 21000, exceeds allowance ──
-
+// maxFeePerGas set, gas omitted → paymaster covers sender, simulation succeeds
 #[tokio::test(flavor = "multi_thread")]
-async fn paymaster_simulation_rejects_with_max_fee_per_gas_gas_omitted() -> anyhow::Result<()> {
+async fn paymaster_simulation_succeeds_with_max_fee_per_gas_gas_omitted() -> anyhow::Result<()> {
     let (_rollup, client, addr) = setup_paymaster_client().await;
 
     let request = TransactionRequest {
@@ -189,35 +212,31 @@ async fn paymaster_simulation_rejects_with_max_fee_per_gas_gas_omitted() -> anyh
         max_priority_fee_per_gas: Some(0),
         ..base_request(addr)
     };
-    assert_simulation_rejects::<U64>(&client, &request, GAS_REQUIRED_EXCEEDS_ALLOWANCE_ERROR).await;
+    assert_simulation_succeeds(&client, &request).await;
 
     Ok(())
 }
 
-// ── Test 7: Simulation rejects but sendRawTransaction succeeds (key discrepancy) ──
-
+// Test 7: Simulation succeeds and sendRawTransaction succeeds
 #[tokio::test(flavor = "multi_thread")]
-async fn paymaster_send_raw_tx_succeeds_despite_simulation_rejection() -> anyhow::Result<()> {
+async fn paymaster_send_raw_tx_succeeds() -> anyhow::Result<()> {
     let (rollup, client, addr) = setup_paymaster_client().await;
 
-    // First, confirm simulation rejects with fee fields.
+    // Simulation should succeed for paymaster-covered sender.
     let request = TransactionRequest {
         max_fee_per_gas: Some(MAX_FEE_PER_GAS),
         max_priority_fee_per_gas: Some(0),
         ..base_request(addr)
     };
-    let estimate_result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![&request, "latest"])
-        .await;
-    let err = estimate_result
-        .expect_err("eth_estimateGas should reject zero-balance sender with fee fields");
-    assert!(
-        err.to_string().contains(INSUFFICIENT_FUNDS_ERROR),
-        "expected insufficient funds error, got: {err}"
-    );
+    assert_simulation_succeeds(&client, &request).await;
 
-    // Now send a real signed tx — sendRawTransaction goes through the mempool/STF
+    // Use base_fee * 2 as a reasonable fee the paymaster's SOV bank can afford.
+    let base_fee: U256 = client.ws.request("eth_gasPrice", rpc_params![]).await?;
+    let base_fee_u128: u128 = base_fee.to::<u128>();
+    assert!(base_fee_u128 > 0, "base fee should be non-zero");
+    let reasonable_max_fee = base_fee_u128 * 2;
+
+    // Send a real signed tx — sendRawTransaction goes through the mempool/STF
     // path which IS paymaster-aware.
     let paymaster_signer: PrivateKeySigner = PAYMASTER_SIGNER_PRIV_KEY.parse()?;
     let chain_id: U64 = client.ws.request("eth_chainId", rpc_params![]).await?;
@@ -231,7 +250,7 @@ async fn paymaster_send_raw_tx_succeeds_despite_simulation_rejection() -> anyhow
         TxKind::Call(Address::ZERO),
         U256::ZERO,
         Bytes::new(),
-        MAX_FEE_PER_GAS,
+        reasonable_max_fee,
         0,
     )
     .await?;
