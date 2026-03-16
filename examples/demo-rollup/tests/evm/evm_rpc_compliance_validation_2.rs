@@ -151,8 +151,8 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
     Ok(())
 }
 
-/// RPC2-001b: Mixed stale-nonce + low-fee input is still inconsistent across
-/// simulation and submission.
+/// RPC2-001b: Mixed stale-nonce + low-fee input should reject consistently
+/// across simulation and submission.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_001b_estimate_call_send_mixed_nonce_fee_mismatch() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
@@ -228,17 +228,28 @@ async fn rpc2_001b_estimate_call_send_mixed_nonce_fee_mismatch() -> anyhow::Resu
 
     assert!(
         rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
-            .contains("nonce too low"),
-        "estimate should currently prefer stale nonce in the mixed case: {estimate_response}"
+            .contains(FEE_CAP_TOO_LOW_ERROR),
+        "estimate should prefer fee-cap-too-low in the mixed case: {estimate_response}"
     );
     assert!(
-        rpc_error_message(rpc_error_object(&call_response, "eth_call")).contains("nonce too low"),
-        "eth_call should currently prefer stale nonce in the mixed case: {call_response}"
+        rpc_error_message(rpc_error_object(&call_response, "eth_call"))
+            .contains(FEE_CAP_TOO_LOW_ERROR),
+        "eth_call should prefer fee-cap-too-low in the mixed case: {call_response}"
     );
     assert!(
         rpc_error_message(rpc_error_object(&send_response, "eth_sendRawTransaction"))
             .contains(FEE_CAP_TOO_LOW_ERROR),
         "raw send should reject the same payload for fee-cap-too-low first: {send_response}"
+    );
+    assert_eq!(
+        rpc_error_code_from_response(&estimate_response, "eth_estimateGas"),
+        rpc_error_code_from_response(&call_response, "eth_call"),
+        "estimate and eth_call should use the same JSON-RPC error class"
+    );
+    assert_eq!(
+        rpc_error_code_from_response(&call_response, "eth_call"),
+        rpc_error_code_from_response(&send_response, "eth_sendRawTransaction"),
+        "eth_call and send should use the same JSON-RPC error class"
     );
     assert_eq!(
         tx_count(&ws_client, signer.address(), "latest").await?,

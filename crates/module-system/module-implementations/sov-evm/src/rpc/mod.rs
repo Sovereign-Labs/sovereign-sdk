@@ -190,6 +190,37 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    fn resolve_simulation_nonce(
+        &self,
+        request: &mut TransactionRequest,
+        state: &mut MaybeArchivalState<'_, S>,
+    ) -> Result<(), EthApiError> {
+        // Keep omitted nonce behavior aligned with the caller's current account nonce,
+        // but only after fee-cap validation so mixed low-fee + stale-nonce requests
+        // surface the same error precedence as raw transaction submission.
+        if let Some(from) = request.from {
+            let credential_id = EthereumAddress::from(from).as_credential_id();
+            let account_nonce = self
+                .uniqueness_module
+                .next_nonce(&credential_id, state.deref_mut())
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+
+            match request.nonce {
+                Some(tx_nonce) if tx_nonce < account_nonce => {
+                    return Err(RpcInvalidTransactionError::NonceTooLow {
+                        tx: tx_nonce,
+                        state: account_nonce,
+                    }
+                    .into());
+                }
+                None => request.nonce = Some(account_nonce),
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
     fn get_block_transactions(
         &self,
         block: &SealedBlock,
@@ -459,42 +490,21 @@ where
         let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
         let cfg = self.cfg_infallible(state);
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
-
-        // For simulation parity with real execution, omitted nonce defaults to the
-        // caller's current uniqueness nonce. Reject explicit nonces that lag the
-        // chain with "nonce too low" so estimateGas mirrors real tx submission.
-        if let Some(from) = request.from {
-            let credential_id = EthereumAddress::from(from).as_credential_id();
-            let account_nonce = self
-                .uniqueness_module
-                .next_nonce(&credential_id, maybe_archival_state.deref_mut())
-                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
-            match request.nonce {
-                Some(tx_nonce) if tx_nonce < account_nonce => {
-                    return Err(RpcInvalidTransactionError::NonceTooLow {
-                        tx: tx_nonce,
-                        state: account_nonce,
-                    }
-                    .into());
-                }
-                None => request.nonce = Some(account_nonce),
-                _ => {}
-            }
-        }
         let enforce_max_fee_check = self
             .is_max_fee_check_active(maybe_archival_state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        validate_call_fee_fields(&request)?;
 
         if !has_overrides {
             // Fast path for the common case where no call overrides are provided.
-            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            validate_call_fee_fields(&request)?;
             validate_simulation_max_fee_against_base_fee(
                 &request,
                 &block_env,
                 enforce_max_fee_check,
             )?;
+            self.resolve_simulation_nonce(&mut request, &mut maybe_archival_state)?;
 
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
             let tx_env = prepare_call_env(&block_env, request)?;
             let caller = tx_env.caller;
             let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
@@ -503,6 +513,25 @@ where
                 .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
             return Ok(result);
         }
+
+        let mut validation_block_env = block_env.clone();
+        {
+            let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            let mut validation_state = RevmState::builder().with_database(evm_db).build();
+            apply_call_overrides(
+                &mut validation_state,
+                &mut validation_block_env,
+                state_overrides.clone(),
+                block_overrides.clone(),
+            )?;
+        }
+
+        validate_simulation_max_fee_against_base_fee(
+            &request,
+            &validation_block_env,
+            enforce_max_fee_check,
+        )?;
+        self.resolve_simulation_nonce(&mut request, &mut maybe_archival_state)?;
 
         let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let mut evm_state = RevmState::builder().with_database(evm_db).build();
@@ -513,9 +542,6 @@ where
             state_overrides,
             block_overrides,
         )?;
-
-        validate_call_fee_fields(&request)?;
-        validate_simulation_max_fee_against_base_fee(&request, &block_env, enforce_max_fee_check)?;
 
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
