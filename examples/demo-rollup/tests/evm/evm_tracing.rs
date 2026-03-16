@@ -107,3 +107,35 @@ async fn debug_trace_block_by_number() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "Known discrepancy: will be fixed in the follow up"]
+async fn debug_trace_block_by_number_default_tracer() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let client = alloy_client(rollup.http_addr);
+    let usdc = Erc20::deploy(client.clone(), "Usdc".into(), "USDC".into()).await?;
+    let mint_tx = usdc.mint(Address::ZERO, parse_ether("1")?).send().await?;
+    rollup.wait_for_rollup_height_advance_by(1).await; // Block nr 2 mined with 2 transactions
+
+    let traces = client
+        .debug_trace_block_by_number(2.into(), GethDebugTracingOptions::default())
+        .await?;
+    assert_eq!(traces.len(), 2);
+    assert_eq!(traces[1].tx_hash().unwrap(), *mint_tx.tx_hash());
+
+    if let alloy_rpc_types_trace::geth::TraceResult::Success { result, .. } = &traces[1] {
+        match result {
+            GethTrace::Default(frame) => {
+                assert!(frame.gas > 0);
+                assert!(!frame.struct_logs.is_empty());
+            }
+            _ => panic!("Expected default tracer variant"),
+        }
+    } else {
+        panic!("Expected Success variant");
+    }
+
+    Ok(())
+}

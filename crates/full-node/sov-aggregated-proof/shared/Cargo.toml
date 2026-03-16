@@ -1,0 +1,10 @@
+[package]
+name = "sov-aggregated-proof-shared"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+
+sov-mock-da = { workspace = true }

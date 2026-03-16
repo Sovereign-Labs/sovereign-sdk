@@ -3,8 +3,9 @@
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
+use sp1_sdk::blocking::{CpuProver, SP1PublicValues};
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
-use sp1_sdk::{ProvingKey, SP1Stdin};
+use sp1_sdk::{ProvingKey, SP1ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
@@ -27,6 +28,15 @@ impl<'host> SP1Host<'host> {
     /// Create a new `Sp1Guest` that reads the provided hints
     pub fn simulate_with_hints(&mut self) -> SP1Guest {
         SP1Guest::with_hints(self.stdin.buffer.clone())
+    }
+
+    fn create_prover_and_pk(&self) -> anyhow::Result<(CpuProver, SP1ProvingKey)> {
+        let prover = ProverClient::builder().cpu().build();
+        let pk = prover
+            .setup(self.elf.into())
+            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+
+        Ok((prover, pk))
     }
 }
 
@@ -58,31 +68,29 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let prover = ProverClient::builder().cpu().build();
-        let proof = if with_proof {
-            let pk = prover
-                .setup(self.elf.into())
-                .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
-            let output = prover
-                .prove(&pk, self.stdin.clone())
-                .run()
-                .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
-            Proof::Full(output.proof)
-        } else {
-            let prover = ProverClient::builder().mock().build();
-            let execute_request = prover.execute(self.elf.into(), self.stdin.clone());
-            let (public_values, _report) = execute_request
-                .run()
-                .map_err(|e| anyhow::anyhow!("SP1 execution failed. Error: {:?}", e))?;
-            Proof::PublicData(public_values)
+        let proof: Proof<_, SP1PublicValues> = {
+            if with_proof {
+                let (prover, pk) = self.create_prover_and_pk()?;
+                let output: sp1_sdk::SP1ProofWithPublicValues = prover
+                    .prove(&pk, self.stdin.clone())
+                    .compressed()
+                    .run()
+                    .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
+
+                Proof::Full(output)
+            } else {
+                let prover = ProverClient::builder().mock().build();
+                let output = prover.execute(self.elf.into(), self.stdin.clone()).run()?;
+                Proof::PublicData(output.0)
+            }
         };
+
+        self.stdin = SP1Stdin::new();
         Ok(bincode::serialize(&proof)?)
     }
 
-    fn code_commitment(&self) -> <<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment{
-        let pk = sp1_sdk::blocking::ProverClient::from_env()
-            .setup(self.elf.into())
-            .expect("SP1 setup failed");
-        crate::SP1MethodId(bincode::serialize(pk.verifying_key()).unwrap())
+    fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
+        let (_, pk) = self.create_prover_and_pk()?;
+        Ok(crate::SP1MethodId(bincode::serialize(pk.verifying_key())?))
     }
 }

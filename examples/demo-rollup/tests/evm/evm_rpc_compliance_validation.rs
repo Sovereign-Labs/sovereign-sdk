@@ -1,104 +1,21 @@
-use std::net::SocketAddr;
-
-use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
-use alloy::eips::Encodable2718;
 use alloy::signers::local::PrivateKeySigner;
-use alloy::signers::Signer;
-use alloy_primitives::{hex, Address, TxKind, B256, U256, U64};
+use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
 use alloy_provider::Provider;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
-use serde::Serialize;
 use serde_json::{json, Value};
-use sov_eth_client::SimpleStorageClient;
 use sov_evm_test_utils::SimpleStorage;
 
 use crate::evm::evm_test_helper::{
-    alloy_client, alloy_ws_client, create_simple_storage_client, deploy_contract_check,
-    setup_test_rollup, setup_with_simple_storage, EVM_EXTENSION, SENDER_PRIV_KEY,
+    alloy_client, alloy_ws_client, create_simple_storage_client, deploy_contract_check, hex_u64,
+    hex_word_u64, raw_signed_eip1559, rpc_call, rpc_error_code_from_response, rpc_result_hex,
+    setup_test_rollup, setup_with_simple_storage, tx_count, EVM_EXTENSION, MAX_FEE_PER_GAS,
+    SENDER_PRIV_KEY,
 };
 
-const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 const MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
-
-async fn rpc_call(
-    client: &Client,
-    http_addr: SocketAddr,
-    method: &str,
-    params: Value,
-) -> anyhow::Result<Value> {
-    Ok(client
-        .post(format!("http://{http_addr}/rpc"))
-        .json(&json!({
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params,
-            "id": 1
-        }))
-        .send()
-        .await?
-        .json::<Value>()
-        .await?)
-}
-
-fn hex_u64(value: u64) -> String {
-    format!("0x{value:x}")
-}
-
-fn hex_word_u64(value: u64) -> String {
-    format!("0x{value:064x}")
-}
-
-fn error_code(response: &Value) -> i64 {
-    response["error"]["code"]
-        .as_i64()
-        .expect("error.code should be present")
-}
-
-fn rpc_result_hex(response: &Value) -> String {
-    response["result"]
-        .as_str()
-        .expect("result should be a hex string")
-        .to_string()
-}
-
-async fn tx_count(
-    client: &SimpleStorageClient,
-    address: Address,
-    block: impl Serialize,
-) -> anyhow::Result<u64> {
-    let count: U64 = client
-        .ws
-        .request("eth_getTransactionCount", rpc_params![address, block])
-        .await?;
-    Ok(count.to::<u64>())
-}
-
-async fn raw_signed_transfer(
-    signer: &PrivateKeySigner,
-    chain_id: u64,
-    nonce: u64,
-    gas_limit: u64,
-    to: Address,
-    value: U256,
-) -> anyhow::Result<String> {
-    let tx = TxEip1559 {
-        chain_id,
-        nonce,
-        gas_limit,
-        max_fee_per_gas: MAX_FEE_PER_GAS,
-        max_priority_fee_per_gas: MAX_PRIORITY_FEE_PER_GAS,
-        to: TxKind::Call(to),
-        value,
-        input: Default::default(),
-        access_list: Default::default(),
-    };
-    let sig = signer.sign_hash(&tx.signature_hash()).await?;
-    let envelope = TxEnvelope::Eip1559(tx.into_signed(sig));
-    Ok(format!("0x{}", hex::encode(envelope.encoded_2718())))
-}
 
 // RPC-001
 #[tokio::test(flavor = "multi_thread")]
@@ -254,13 +171,16 @@ async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyh
     let nonce = tx_count(&ws_client, signer.address(), "latest").await?;
     let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
     // Deliberately invalid gas limit to trigger deterministic tx rejection.
-    let raw = raw_signed_transfer(
+    let raw = raw_signed_eip1559(
         &signer,
         chain_id.to::<u64>(),
         nonce,
         21_000,
-        Address::repeat_byte(0x33),
+        TxKind::Call(Address::repeat_byte(0x33)),
         U256::from(1),
+        Bytes::new(),
+        MAX_FEE_PER_GAS,
+        MAX_PRIORITY_FEE_PER_GAS,
     )
     .await?;
 
@@ -277,7 +197,10 @@ async fn rpc_005_tx_rejection_should_use_standard_json_rpc_error_class() -> anyh
         "expected rejected transaction error: {response}"
     );
     // Ethereum clients commonly classify malformed tx params as -32602.
-    assert_eq!(error_code(&response), -32602);
+    assert_eq!(
+        rpc_error_code_from_response(&response, "eth_sendRawTransaction"),
+        -32602
+    );
 
     Ok(())
 }
@@ -424,13 +347,16 @@ async fn rpc_010_send_raw_transaction_sync_returns_receipt_under_preferred_seque
     let nonce = tx_count(&client, signer.address(), "latest").await?;
     let chain_id: U64 = client.ws.request("eth_chainId", rpc_params![]).await?;
 
-    let raw = raw_signed_transfer(
+    let raw = raw_signed_eip1559(
         &signer,
         chain_id.to::<u64>(),
         nonce,
         300_000,
-        Address::repeat_byte(0x22),
+        TxKind::Call(Address::repeat_byte(0x22)),
         U256::from(1),
+        Bytes::new(),
+        MAX_FEE_PER_GAS,
+        MAX_PRIORITY_FEE_PER_GAS,
     )
     .await?;
 
@@ -495,7 +421,7 @@ async fn rpc_011_pruned_log_range_should_not_use_custom_4444_code() -> anyhow::R
 
     if response.get("error").is_some() {
         assert_eq!(
-            error_code(&response),
+            rpc_error_code_from_response(&response, "eth_getLogs"),
             -32001,
             "pruned log range should use resource-not-found JSON-RPC class"
         );
@@ -539,7 +465,7 @@ async fn rpc_011_debug_trace_pruned_tx_should_not_use_custom_4444_code() -> anyh
         if response.get("error").is_some() {
             saw_pruned_error = true;
             assert_eq!(
-                error_code(&response),
+                rpc_error_code_from_response(&response, "debug_traceTransaction"),
                 -32001,
                 "pruned trace should use resource-not-found JSON-RPC class"
             );
@@ -732,7 +658,7 @@ async fn rpc_017_debug_raw_methods_report_not_supported() -> anyhow::Result<()> 
             "{method} should return a JSON-RPC error: {response}",
         );
         assert_eq!(
-            error_code(&response),
+            rpc_error_code_from_response(&response, method),
             -32004,
             "{method} should return method-not-supported (-32004): {response}",
         );

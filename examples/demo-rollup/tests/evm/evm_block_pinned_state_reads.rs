@@ -6,7 +6,7 @@
 //! pre-pending values, while `latest`/`pending` queries reflect pending state.
 
 use crate::evm::evm_test_helper::{
-    deploy_contract_check, finalized_block_number_and_hash, hash_selector, number_selector,
+    deploy_contract_check, finalized_block_number_and_hash, hash_selector, hex_u64,
     set_value_check, setup_with_simple_storage, EVM_EXTENSION,
 };
 use alloy_primitives::{Address, Bytes, TxHash, B256, U256, U64};
@@ -100,7 +100,7 @@ async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, Simpl
 async fn sealed_head_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
     let head_number = client.block_number().await;
     let head_hash = client
-        .eth_get_block_by_number(Some(number_selector(head_number)))
+        .eth_get_block_by_number(Some(hex_u64(head_number)))
         .await
         .header
         .hash;
@@ -151,7 +151,7 @@ async fn block_pinned_nonce_excludes_pending() {
     wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
 
     assert_eq!(
-        nonce_at(&client, address, number_selector(head_number)).await,
+        nonce_at(&client, address, hex_u64(head_number)).await,
         sealed_nonce,
         "Nonce at block number N must not include pending tx"
     );
@@ -198,7 +198,7 @@ async fn block_pinned_balance_excludes_pending() {
     wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
 
     assert_eq!(
-        balance_at(&client, receiver, number_selector(head_number)).await,
+        balance_at(&client, receiver, hex_u64(head_number)).await,
         sealed_balance,
         "Balance at block number N must not include pending transfer"
     );
@@ -238,7 +238,7 @@ async fn block_pinned_code_excludes_pending() {
     let contract_address = receipt.contract_address.unwrap();
 
     assert!(
-        code_at(&client, contract_address, number_selector(head_number))
+        code_at(&client, contract_address, hex_u64(head_number))
             .await
             .is_empty(),
         "Code at block number N must be empty for pending deployment"
@@ -288,13 +288,7 @@ async fn block_pinned_storage_excludes_pending() {
     wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
 
     assert_eq!(
-        storage_at(
-            &client,
-            contract_addr,
-            U256::ZERO,
-            number_selector(head_number)
-        )
-        .await,
+        storage_at(&client, contract_addr, U256::ZERO, hex_u64(head_number)).await,
         U256::from(initial_value),
         "Storage at block number N must not include pending change"
     );
@@ -342,7 +336,7 @@ async fn block_pinned_eth_call_excludes_pending() {
     wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
 
     assert_eq!(
-        U256::from_be_slice(&eth_call_at(&client, &get_tx, number_selector(head_number)).await),
+        U256::from_be_slice(&eth_call_at(&client, &get_tx, hex_u64(head_number)).await),
         U256::from(initial_value),
         "eth_call at block number N must not reflect pending change"
     );
@@ -378,7 +372,7 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     // Baseline at sealed state (slot is still zero): set(non-zero) pays higher SSTORE cost.
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
 
-    let baseline_number = estimate_gas_at(&client, &set_tx, number_selector(head_number)).await;
+    let baseline_number = estimate_gas_at(&client, &set_tx, hex_u64(head_number)).await;
     let baseline_hash = estimate_gas_at(&client, &set_tx, hash_selector(head_hash)).await;
     assert!(
         baseline_number > U256::ZERO,
@@ -398,7 +392,7 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
 
     assert_eq!(
-        estimate_gas_at(&client, &set_tx, number_selector(head_number)).await,
+        estimate_gas_at(&client, &set_tx, hex_u64(head_number)).await,
         baseline_number,
         "Gas estimate at block number N must match sealed baseline"
     );

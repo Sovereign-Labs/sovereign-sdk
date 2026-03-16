@@ -156,13 +156,14 @@ async fn send_tx_expect_success(client: &DynProvider, fee: u128, msg: &str) {
     assert!(receipt.status(), "{msg}");
 }
 
-/// Sends a transaction and asserts it fails with "Insufficient max_fee_per_gas"
+/// Sends a transaction and asserts it fails for the expected low fee-cap reason.
 async fn send_tx_expect_failure(client: &DynProvider, fee: u128, msg: &str) {
     let tx_request = create_tx_request(client, fee).await.unwrap();
     let err = client.send_transaction(tx_request).await.unwrap_err();
     let err_msg = err.to_string();
     assert!(
-        err_msg.contains("Insufficient max_fee_per_gas"),
+        err_msg.contains("max fee per gas less than block base fee")
+            || err_msg.contains("Insufficient max_fee_per_gas"),
         "{msg}: got {err_msg}"
     );
 }

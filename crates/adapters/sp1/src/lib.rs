@@ -12,8 +12,6 @@ use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
-#[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::SP1ProofWithPublicValues;
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -22,6 +20,8 @@ pub mod crypto;
 pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
+#[cfg(feature = "native")]
+pub mod network;
 
 #[cfg(all(feature = "native", feature = "bench"))]
 pub mod metrics;
@@ -93,12 +93,11 @@ impl ZkVerifier for SP1Verifier {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
-
-        let prover = sp1_sdk::blocking::ProverClient::from_env();
+        let proof = decode_sp1_proof(serialized_proof)?;
+        let prover = sp1_sdk::blocking::ProverClient::builder().cpu().build();
         let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
-        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
 
+        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
@@ -113,6 +112,9 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
 
     #[cfg(feature = "native")]
     type Host = crate::host::SP1Host<'static>;
+
+    #[cfg(feature = "native")]
+    type Network = crate::network::SP1Network;
 }
 
 #[cfg(target_os = "zkvm")]
@@ -136,6 +138,34 @@ impl ZkVerifier for SP1Verifier {
         // In the future, SP1 will support an interface for passing all 3 in directly.
         todo!("Implement this.")
     }
+}
+
+/// Decodes a serialized SP1 proof.
+#[cfg(not(target_os = "zkvm"))]
+pub fn decode_sp1_proof(
+    serialized_proof: &[u8],
+) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
+    match bincode::deserialize::<
+        sov_rollup_interface::zk::Proof<
+            sp1_sdk::SP1ProofWithPublicValues,
+            sp1_sdk::SP1PublicValues,
+        >,
+    >(serialized_proof)?
+    {
+        sov_rollup_interface::zk::Proof::Full(proof) => Ok(proof),
+        sov_rollup_interface::zk::Proof::PublicData(_) => {
+            anyhow::bail!("SP1Verifier supports only full proofs")
+        }
+    }
+}
+
+/// A DA block header bundled with its corresponding serialized proof.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct BlockHeaderWithProof<Da: sov_rollup_interface::da::DaSpec> {
+    /// The DA layer block header associated with this proof.
+    pub da_block_header: Da::BlockHeader,
+    /// The serialized proof bytes.
+    pub proof: Vec<u8>,
 }
 
 #[cfg(test)]

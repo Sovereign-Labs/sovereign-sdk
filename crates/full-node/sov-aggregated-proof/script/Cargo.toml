@@ -1,0 +1,27 @@
+[package]
+name = "sov-aggregated-proof"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+bincode = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+slop-algebra = "6.0.2"
+sp1-core-executor = { workspace = true }
+sp1-recursion-executor = "6.0.2"
+sp1-sdk = { workspace = true }
+
+sov-aggregated-proof-shared = { workspace = true }
+sov-mock-da = { workspace = true }
+sov-mock-zkvm = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-sp1-adapter = { workspace = true }
+sov-state = { workspace = true }
+
+[build-dependencies]
+sp1-build = { workspace = true }
+sov-zkvm-utils = { workspace = true }

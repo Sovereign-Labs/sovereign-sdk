@@ -1,5 +1,5 @@
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, finalized_block_number_and_hash, number_selector, poll_until,
+    create_simple_storage_client, finalized_block_number_and_hash, hex_u64, poll_until,
     setup_with_simple_storage, EVM_EXTENSION, SECONDARY_SENDER_PRIV_KEY,
 };
 use alloy_primitives::{Address, B256, U256, U64};
@@ -29,7 +29,7 @@ async fn nonce_at_tag(client: &SimpleStorageClient, address: Address, tag: &str)
 }
 
 async fn nonce_at_number(client: &SimpleStorageClient, address: Address, number: u64) -> u64 {
-    try_get_tx_count(client, address, number_selector(number))
+    try_get_tx_count(client, address, hex_u64(number))
         .await
         .unwrap()
 }

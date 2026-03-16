@@ -4,14 +4,20 @@ use std::time::Duration;
 
 use crate::test_helpers::test_genesis_source;
 
+use alloy::consensus::{SignableTransaction, TxEip1559, TxEnvelope};
+use alloy::eips::Encodable2718;
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, B256, U256};
+use alloy::signers::Signer;
+use alloy_primitives::{hex, Address, Bytes, TxKind, B256, U256, U64};
 use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::WsConnect;
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::rpc_params;
 use reqwest::Client;
 use reqwest::Url;
+use serde::Serialize;
 use serde_json::{json, Value};
 use sov_demo_rollup::MockRollupSpec;
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -38,11 +44,15 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     max_log_limit: 20000,
     response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
 };
+pub(crate) const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 pub(crate) const HIGH_MAX_FEE_PER_GAS: u128 = 1_000_000_000_000;
+pub(crate) const PAYER_SOV_BANK_BALANCE: u128 = 5_000_000_000_000_000;
 pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
 pub(crate) const POLL_INTERVAL_MS: u64 = 25;
 pub(crate) const INVALID_PARAMS_CODE: i64 = -32602;
+pub(crate) const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
+pub(crate) const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 
 /// Starts test rollup node.  
 pub(crate) async fn start_node(
@@ -128,6 +138,85 @@ pub(crate) async fn rpc_call(
         .await?)
 }
 
+pub(crate) fn hex_u64(value: u64) -> String {
+    format!("0x{value:x}")
+}
+
+pub(crate) fn hex_word_u64(value: u64) -> String {
+    format!("0x{value:064x}")
+}
+
+pub(crate) fn hex_u128(value: u128) -> String {
+    format!("0x{value:x}")
+}
+
+pub(crate) fn parse_hex_u64(value: &str) -> u64 {
+    let hex = value.strip_prefix("0x").unwrap_or(value);
+    if hex.is_empty() {
+        return 0;
+    }
+    u64::from_str_radix(hex, 16).expect("valid u64 hex quantity")
+}
+
+pub(crate) fn parse_hex_u128(value: &str) -> u128 {
+    let hex = value.strip_prefix("0x").unwrap_or(value);
+    if hex.is_empty() {
+        return 0;
+    }
+    u128::from_str_radix(hex, 16).expect("valid u128 hex quantity")
+}
+
+pub(crate) fn rpc_result_hex(response: &Value) -> String {
+    response
+        .get("result")
+        .and_then(Value::as_str)
+        .expect("result should be a hex string")
+        .to_string()
+}
+
+pub(crate) fn rpc_error_code_from_response(response: &Value, method: &str) -> i64 {
+    rpc_error_code(rpc_error_object(response, method))
+}
+
+pub(crate) async fn tx_count(
+    client: &SimpleStorageClient,
+    address: Address,
+    block: impl Serialize,
+) -> anyhow::Result<u64> {
+    let count: U64 = client
+        .ws
+        .request("eth_getTransactionCount", rpc_params![address, block])
+        .await?;
+    Ok(count.to::<u64>())
+}
+
+pub(crate) async fn raw_signed_eip1559(
+    signer: &PrivateKeySigner,
+    chain_id: u64,
+    nonce: u64,
+    gas_limit: u64,
+    to: TxKind,
+    value: U256,
+    input: Bytes,
+    max_fee_per_gas: u128,
+    max_priority_fee_per_gas: u128,
+) -> anyhow::Result<String> {
+    let tx = TxEip1559 {
+        chain_id,
+        nonce,
+        gas_limit,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+        to,
+        value,
+        input,
+        access_list: Default::default(),
+    };
+    let sig = signer.sign_hash(&tx.signature_hash()).await?;
+    let envelope = TxEnvelope::Eip1559(tx.into_signed(sig));
+    Ok(format!("0x{}", hex::encode(envelope.encoded_2718())))
+}
+
 pub(crate) fn eth_call_params(from: &str, to: &str, input: &str, block_tag: &str) -> Value {
     json!([{
         "from": from,
@@ -166,10 +255,6 @@ pub(crate) fn rpc_error_message(error: &Value) -> &str {
 
 pub(crate) fn rpc_error_data_str(error: &Value) -> Option<&str> {
     error.get("data").and_then(Value::as_str)
-}
-
-pub(crate) fn number_selector(n: u64) -> String {
-    format!("0x{n:x}")
 }
 
 pub(crate) fn hash_selector(hash: B256) -> Value {
@@ -306,6 +391,36 @@ pub async fn setup_test_rollup(
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
     start_node(config, finalization_blocks, Some(extension), None).await
+}
+
+pub async fn setup_test_rollup_with_paymaster(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+) -> TestRollup<MockDemoRollup<Native>> {
+    let mut paths = crate::test_helpers::test_genesis_paths(sov_modules_api::OperatingMode::Zk);
+    paths.paymaster_genesis_path = std::path::PathBuf::from(
+        "../test-data/genesis/integration-tests/paymaster_with_payer.json",
+    );
+
+    RollupBuilder::new(
+        sov_test_utils::test_rollup::GenesisSource::Paths(paths),
+        BlockProducingConfig::Periodic {
+            block_time_ms: 1_000,
+        },
+        finalization_blocks,
+    )
+    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .set_config(|c| {
+        c.max_concurrent_blobs = 65536;
+        c.rollup_prover_config = None;
+        c.aggregated_proof_block_jump = 5;
+        c.max_infos_in_db = 30;
+        c.max_channel_size = 20;
+        c.extension = Some(extension);
+    })
+    .start()
+    .await
+    .unwrap()
 }
 
 pub async fn setup_with_simple_storage(
