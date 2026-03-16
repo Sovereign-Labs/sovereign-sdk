@@ -151,6 +151,104 @@ async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Resul
     Ok(())
 }
 
+/// RPC2-001b: Mixed stale-nonce + low-fee input is still inconsistent across
+/// simulation and submission.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_001b_estimate_call_send_mixed_nonce_fee_mismatch() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+
+    // Consume nonce 0 so an explicit nonce=0 becomes stale for all subsequent requests.
+    let first_tx = ws_client
+        .send_eth(Address::repeat_byte(0x11), U256::from(1u64))
+        .await;
+    ws_client.wait_for_receipt(first_tx).await;
+
+    let next_nonce = tx_count(&ws_client, signer.address(), "latest").await?;
+    assert!(next_nonce > 0, "nonce should advance after the first tx");
+
+    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let base_fee: U256 = ws_client.ws.request("eth_gasPrice", rpc_params![]).await?;
+    let base_fee_u128 = base_fee.to::<u128>();
+    assert!(
+        base_fee_u128 > 0,
+        "base fee should be non-zero for this test"
+    );
+
+    let low_fee = base_fee_u128 - 1;
+    let request = json!({
+        "from": signer.address(),
+        "to": Address::repeat_byte(0x22),
+        "value": "0x0",
+        "gas": "0x5208",
+        "nonce": "0x0",
+        "maxFeePerGas": hex_u128(low_fee),
+        "maxPriorityFeePerGas": "0x0"
+    });
+
+    let http = Client::new();
+    let estimate_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_estimateGas",
+        json!([request.clone(), "latest"]),
+    )
+    .await?;
+    let call_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_call",
+        json!([request, "latest"]),
+    )
+    .await?;
+
+    let raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        0,
+        21_000,
+        TxKind::Call(Address::repeat_byte(0x22)),
+        U256::ZERO,
+        Bytes::new(),
+        low_fee,
+        0,
+    )
+    .await?;
+
+    let send_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([raw_tx]),
+    )
+    .await?;
+
+    assert!(
+        rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
+            .contains("nonce too low"),
+        "estimate should currently prefer stale nonce in the mixed case: {estimate_response}"
+    );
+    assert!(
+        rpc_error_message(rpc_error_object(&call_response, "eth_call")).contains("nonce too low"),
+        "eth_call should currently prefer stale nonce in the mixed case: {call_response}"
+    );
+    assert!(
+        rpc_error_message(rpc_error_object(&send_response, "eth_sendRawTransaction"))
+            .contains(FEE_CAP_TOO_LOW_ERROR),
+        "raw send should reject the same payload for fee-cap-too-low first: {send_response}"
+    );
+    assert_eq!(
+        tx_count(&ws_client, signer.address(), "latest").await?,
+        next_nonce,
+        "failed raw send must not advance sender nonce"
+    );
+
+    Ok(())
+}
+
 /// RPC2-002: Affordability check consistency between estimation and send path.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Known discrepancy: will be fixed in the follow up"]
