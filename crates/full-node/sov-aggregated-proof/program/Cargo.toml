@@ -5,6 +5,13 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-sha2.workspace = true
-sp1-zkvm.workspace = true
-sov-aggregated-proof-shared.workspace = true
+bincode = { workspace = true }
+demo-stf = { path = "../../../../examples/demo-rollup/stf", default-features = false }
+sha2 = { workspace = true }
+sp1-zkvm = { workspace = true }
+
+sov-aggregated-proof-shared = { workspace = true }
+sov-mock-da = { workspace = true }
+sov-mock-zkvm = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-sp1-adapter = { workspace = true }

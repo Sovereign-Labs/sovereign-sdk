@@ -2,17 +2,14 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
-use borsh::BorshDeserialize;
-use borsh::BorshSerialize;
 use demo_stf::genesis_config::create_genesis_config;
 use demo_stf::runtime::Runtime;
-use serde::{Deserialize, Serialize};
 use sov_db::schema::SchemaBatch;
 use sov_db::storage_manager::NativeStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
-use sov_modules_api::{DaSpec, OperatingMode, SlotData, Spec, ZkVerifier};
+use sov_modules_api::{OperatingMode, SlotData, Spec, ZkVerifier};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
@@ -23,6 +20,7 @@ use sov_rollup_interface::zk::{
     StateTransitionWitnessWithAddress, ZkvmHost,
 };
 use sov_sp1_adapter::host::SP1Host;
+use sov_sp1_adapter::BlockHeaderWithProof;
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier, SP1};
 use sov_state::ProverStorage;
 use sov_test_utils::generators::BlobBuildingCtx;
@@ -54,12 +52,6 @@ type ProofInput = StateTransitionWitnessWithAddress<
     ProofWitness,
     MockDaSpec,
 >;
-
-#[derive(Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-struct BlockHeaderWithProof<Da: DaSpec> {
-    da_block_header: Da::BlockHeader,
-    proof: Vec<u8>,
-}
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
