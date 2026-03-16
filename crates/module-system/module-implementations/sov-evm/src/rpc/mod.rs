@@ -134,14 +134,6 @@ pub enum PendingOrBlock {
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
-const MIN_TRANSACTION_GAS: u64 = 21_000;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct CallUpfrontCost {
-    total_cost: U256,
-    gas_limit: u64,
-}
-
 /// gas * 1.5 + 100_000
 pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
@@ -150,11 +142,13 @@ pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError>
         .ok_or(RpcInvalidTransactionError::GasUintOverflow)
 }
 
-fn call_upfront_cost(
-    request: &TransactionRequest,
-    block_env: &BlockEnv,
-    balance: U256,
-) -> Result<Option<CallUpfrontCost>, EthApiError> {
+/// Validates fee-field consistency in an `eth_call` / `eth_estimateGas` request.
+///
+/// These are request-format checks independent of the caller's balance.
+/// Balance-based upfront cost validation was removed because the RPC layer
+/// cannot determine whether a paymaster will cover the caller's gas.
+/// TODO: re-add a paymaster-aware balance check when sov-ethereum supports it.
+fn validate_call_fee_fields(request: &TransactionRequest) -> Result<(), EthApiError> {
     if request.gas_price.is_some()
         && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
     {
@@ -166,80 +160,6 @@ fn call_upfront_cost(
     {
         if max_priority_fee_per_gas > max_fee_per_gas {
             return Err(RpcInvalidTransactionError::TipAboveFeeCap.into());
-        }
-    }
-
-    let Some(fee_per_gas) = request.gas_price.or(request.max_fee_per_gas) else {
-        return Ok(None);
-    };
-
-    let value = request.value.unwrap_or_default();
-    let gas_limit = match request.gas {
-        Some(gas_limit) => gas_limit,
-        None => {
-            if fee_per_gas == 0 {
-                block_env.gas_limit
-            } else {
-                // When gas is omitted, cap by what the caller can actually afford instead of
-                // requiring balance for the full block gas limit. Still require enough
-                // allowance for intrinsic tx gas, otherwise the request is unaffordable.
-                let allowance = balance.checked_sub(value).unwrap_or_default();
-                let max_affordable_gas = allowance / U256::from(fee_per_gas);
-                let gas_limit = max_affordable_gas
-                    .min(U256::from(block_env.gas_limit))
-                    .to::<u64>();
-                if gas_limit < MIN_TRANSACTION_GAS {
-                    return Err(RpcInvalidTransactionError::GasRequiredExceedsAllowance {
-                        gas_limit,
-                    }
-                    .into());
-                }
-                gas_limit
-            }
-        }
-    };
-    let gas_cost = U256::from(gas_limit)
-        .checked_mul(U256::from(fee_per_gas))
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
-    let total_cost = gas_cost
-        .checked_add(value)
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
-    Ok(Some(CallUpfrontCost {
-        total_cost,
-        gas_limit,
-    }))
-}
-
-fn call_caller(request: &TransactionRequest) -> Address {
-    // Keep `eth_call` parity with Ethereum clients: when `from` is omitted,
-    // execution uses the zero address as the caller.
-    request.from.unwrap_or_default()
-}
-
-fn enforce_call_upfront_cost<DB: Database>(
-    request: &mut TransactionRequest,
-    block_env: &BlockEnv,
-    db: &mut DB,
-) -> Result<(), EthApiError>
-where
-    DB::Error: Into<EthApiError>,
-{
-    let balance = db
-        .basic(call_caller(request))
-        .map_err(Into::into)?
-        .map(|account| account.balance)
-        .unwrap_or_default();
-    if let Some(upfront) = call_upfront_cost(request, block_env, balance)? {
-        if request.gas.is_none() {
-            request.gas = Some(upfront.gas_limit);
-        }
-
-        if balance < upfront.total_cost {
-            return Err(RpcInvalidTransactionError::InsufficientFunds {
-                cost: upfront.total_cost,
-                balance,
-            }
-            .into());
         }
     }
 
@@ -545,7 +465,7 @@ where
         if !has_overrides {
             // Fast path for the common case where no call overrides are provided.
             let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            enforce_call_upfront_cost(&mut request, &block_env, &mut evm_db)?;
+            validate_call_fee_fields(&request)?;
 
             let tx_env = prepare_call_env(&block_env, request)?;
             let caller = tx_env.caller;
@@ -566,7 +486,7 @@ where
             block_overrides,
         )?;
 
-        enforce_call_upfront_cost(&mut request, &block_env, &mut evm_state)?;
+        validate_call_fee_fields(&request)?;
 
         let tx_env = prepare_call_env(&block_env, request)?;
         let caller = tx_env.caller;
@@ -1349,123 +1269,31 @@ mod tests {
     }
 
     #[test]
-    fn call_upfront_cost_caps_omitted_gas_by_caller_balance() {
-        let block_env = BlockEnv {
-            gas_limit: 1_000_000,
-            ..Default::default()
-        };
-        let request = TransactionRequest {
-            gas_price: Some(10),
-            ..Default::default()
-        };
-        let balance = U256::from(1_000_000u64);
-
-        let upfront = call_upfront_cost(&request, &block_env, balance)
-            .unwrap()
-            .expect("fee fields are set");
-
-        assert_eq!(upfront.total_cost, balance);
-        assert_eq!(upfront.gas_limit, 100_000);
-    }
-
-    #[test]
-    fn call_upfront_cost_keeps_explicit_gas_requirements() {
-        let block_env = BlockEnv::default();
-        let request = TransactionRequest {
-            gas_price: Some(10),
-            gas: Some(1_000),
-            ..Default::default()
-        };
-
-        let upfront = call_upfront_cost(&request, &block_env, U256::ZERO)
-            .unwrap()
-            .expect("fee fields are set");
-
-        assert_eq!(upfront.total_cost, U256::from(10_000u64));
-        assert_eq!(upfront.gas_limit, 1_000);
-    }
-
-    #[test]
-    fn call_upfront_cost_reserves_value_before_affordable_gas() {
-        let block_env = BlockEnv {
-            gas_limit: 1_000_000,
-            ..Default::default()
-        };
-        let request = TransactionRequest {
-            gas_price: Some(10),
-            value: Some(U256::from(100_000u64)),
-            ..Default::default()
-        };
-        let balance = U256::from(310_000u64);
-
-        let upfront = call_upfront_cost(&request, &block_env, balance)
-            .unwrap()
-            .expect("fee fields are set");
-
-        assert_eq!(upfront.total_cost, balance);
-        assert_eq!(upfront.gas_limit, MIN_TRANSACTION_GAS);
-    }
-
-    #[test]
-    fn call_upfront_cost_rejects_omitted_gas_when_allowance_below_intrinsic_cost() {
-        let block_env = BlockEnv {
-            gas_limit: 1_000_000,
-            ..Default::default()
-        };
-        let request = TransactionRequest {
-            gas_price: Some(10),
-            ..Default::default()
-        };
-        let balance = U256::from(1000u64);
-
-        let err = call_upfront_cost(&request, &block_env, balance).unwrap_err();
-
-        assert!(matches!(
-            err,
-            EthApiError::InvalidTransaction(
-                RpcInvalidTransactionError::GasRequiredExceedsAllowance { gas_limit: 100 }
-            )
-        ));
-    }
-
-    #[test]
-    fn call_upfront_cost_rejects_conflicting_fee_fields() {
+    fn validate_call_fee_fields_rejects_conflicting_fields() {
         let request = TransactionRequest {
             gas_price: Some(1),
             max_fee_per_gas: Some(1),
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+        let err = validate_call_fee_fields(&request).unwrap_err();
 
         assert!(matches!(err, EthApiError::ConflictingFeeFieldsInRequest));
     }
 
     #[test]
-    fn call_upfront_cost_rejects_tip_above_fee_cap() {
+    fn validate_call_fee_fields_rejects_tip_above_fee_cap() {
         let request = TransactionRequest {
             max_fee_per_gas: Some(1),
             max_priority_fee_per_gas: Some(2),
             ..Default::default()
         };
 
-        let err = call_upfront_cost(&request, &BlockEnv::default(), U256::ZERO).unwrap_err();
+        let err = validate_call_fee_fields(&request).unwrap_err();
 
         assert!(matches!(
             err,
             EthApiError::InvalidTransaction(RpcInvalidTransactionError::TipAboveFeeCap)
         ));
-    }
-
-    #[test]
-    fn call_upfront_cost_returns_none_without_fee_fields() {
-        let upfront = call_upfront_cost(
-            &TransactionRequest::default(),
-            &BlockEnv::default(),
-            U256::ZERO,
-        )
-        .unwrap();
-
-        assert_eq!(upfront, None);
     }
 }
