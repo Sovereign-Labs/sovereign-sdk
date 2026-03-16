@@ -1,3 +1,4 @@
+mod network;
 mod parallel;
 
 mod block_proof;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
+pub use network::NetworkProverService;
 pub use parallel::ParallelProverService;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -18,6 +20,13 @@ use strum::{Display, EnumString};
 use thiserror::Error;
 
 pub use crate::processes::StateTransitionInfo;
+
+pub(crate) struct Verifier<Da>
+where
+    Da: DaService,
+{
+    pub(crate) da_verifier: Da::Verifier,
+}
 
 /// The possible configurations of the prover
 // We use arcs for cheap cloning
