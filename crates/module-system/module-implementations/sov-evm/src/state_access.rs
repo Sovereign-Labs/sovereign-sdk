@@ -5,7 +5,6 @@ use alloy_primitives::B256;
 use alloy_primitives::U256;
 use revm::context::BlockEnv;
 use sov_modules_api::da::Time;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
@@ -133,9 +132,8 @@ impl<S: Spec> Evm<S> {
         &self,
         state: &mut Accessor,
     ) -> Result<bool, Accessor::Error> {
-        let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
         let block_number: u64 = state.rollup_height_to_access().get();
-        if block_number <= apply_max_fee_check_after_height {
+        if !crate::sov_fee_and_gas_utils::is_max_fee_check_height_active(block_number) {
             return Ok(false);
         }
 

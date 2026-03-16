@@ -102,6 +102,14 @@ pub(crate) fn is_actual_fee_projection_height_active(block_number: u64) -> bool 
     block_number > apply_actual_fee_after_height
 }
 
+/// Returns true once the EIP-1559 max-fee-per-gas check is enabled for `block_number`.
+/// Keep non-height guards (e.g. the admin kill-switch) in callers; only the
+/// activation-height boundary is shared here.
+pub(crate) fn is_max_fee_check_height_active(block_number: u64) -> bool {
+    let threshold: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
+    block_number > threshold
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
