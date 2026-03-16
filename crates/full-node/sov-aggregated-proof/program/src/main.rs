@@ -7,14 +7,16 @@ use sov_aggregated_proof_shared::DeferredProofInput;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::da::BlockHeaderTrait;
-use sov_modules_api::default_spec::DefaultSpec;
+use sov_modules_api::default_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Zk;
 use sov_modules_api::Spec;
 use sov_modules_api::StateTransitionPublicData;
 use sov_modules_api::Storage;
 use sov_sp1_adapter::SP1;
 
-type S = DefaultSpec<MockDaSpec, SP1, MockZkvm, Zk>;
+type S = ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Zk>
+
+
 
 pub fn main() {
     let proof_inputs = sp1_zkvm::io::read::<Vec<DeferredProofInput>>();

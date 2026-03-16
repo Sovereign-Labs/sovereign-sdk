@@ -2,7 +2,6 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
-use borsh::BorshSerialize;
 use demo_stf::genesis_config::create_genesis_config;
 use demo_stf::runtime::Runtime;
 use sov_db::schema::SchemaBatch;
