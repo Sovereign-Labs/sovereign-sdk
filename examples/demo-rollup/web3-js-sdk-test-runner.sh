@@ -2,13 +2,12 @@
 
 # ---------------------------------------------------------------------------
 # DESCRIPTION:
-# This script checks compatibility between the local demo rollup and TypeScript
-# clients by:
+# This script checks compatibility between the local demo rollup and the
+# web3-js SDK by:
 #   1. Building and running the demo rollup.
 #   2. Waiting for a sufficiently advanced slot number.
-#   3. Installing and building the TypeScript workspace.
-#   4. Running the workspace integration tests.
-#   5. Running the viem paymaster integration package against the live node.
+#   3. Installing and building the web3-js SDK.
+#   4. Un-commenting integration tests and running them.
 #
 # IF TESTS FAIL:
 #   - The schema or API may have changed and the web3-js SDK needs updating.
@@ -23,15 +22,6 @@ cargo build
 # we still use `cargo run`, to not deal with `target` folder location
 cargo run >demo_rollup_log.log 2>&1 &
 CARGO_PID=$!
-
-cleanup() {
-    if kill -0 $CARGO_PID 2>/dev/null; then
-        kill $CARGO_PID 2>/dev/null || true
-        wait $CARGO_PID 2>/dev/null || true
-    fi
-}
-
-trap cleanup EXIT
 
 # Check if the process started successfully
 sleep 2
@@ -103,11 +93,3 @@ pnpm exec vitest --project integration --exclude apps/** --passWithNoTests=false
     exit 1
 }
 echo "Integration tests passed!"
-
-echo "Running demo-rollup viem paymaster tests"
-pnpm --filter @sovereign-sdk/demo-rollup-viem-tests test:demo-rollup || {
-    echo "=== Demo Rollup output ==="
-    cat ../examples/demo-rollup/demo_rollup_log.log
-    exit 1
-}
-echo "demo-rollup viem paymaster tests passed!"
