@@ -54,6 +54,9 @@ impl Zkvm for MockZkvm {
 
     #[cfg(feature = "native")]
     type Host = crate::host::MockZkvmHost;
+
+    #[cfg(feature = "native")]
+    type Network = sov_rollup_interface::zk::NoopZkvmNetwork<MockZkGuest>;
 }
 /// A mock commitment to a particular zkVM program.
 #[derive(

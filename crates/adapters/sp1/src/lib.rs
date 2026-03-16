@@ -20,6 +20,8 @@ pub mod crypto;
 pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
+#[cfg(feature = "native")]
+pub mod network;
 
 #[cfg(all(feature = "native", feature = "bench"))]
 pub mod metrics;
@@ -110,6 +112,9 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
 
     #[cfg(feature = "native")]
     type Host = crate::host::SP1Host<'static>;
+
+    #[cfg(feature = "native")]
+    type Network = crate::network::SP1Network;
 }
 
 #[cfg(target_os = "zkvm")]
@@ -135,8 +140,11 @@ impl ZkVerifier for SP1Verifier {
     }
 }
 
+/// Decodes a serialized SP1 proof.
 #[cfg(not(target_os = "zkvm"))]
-fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
+pub fn decode_sp1_proof(
+    serialized_proof: &[u8],
+) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
     match bincode::deserialize::<
         sov_rollup_interface::zk::Proof<
             sp1_sdk::SP1ProofWithPublicValues,
@@ -149,6 +157,15 @@ fn decode_sp1_proof(serialized_proof: &[u8]) -> Result<sp1_sdk::SP1ProofWithPubl
             anyhow::bail!("SP1Verifier supports only full proofs")
         }
     }
+}
+
+/// A DA block header bundled with its corresponding serialized proof.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct BlockHeaderWithProof<Da: sov_rollup_interface::da::DaSpec> {
+    /// The DA layer block header associated with this proof.
+    pub da_block_header: Da::BlockHeader,
+    /// The serialized proof bytes.
+    pub proof: Vec<u8>,
 }
 
 #[cfg(test)]

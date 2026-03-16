@@ -4,30 +4,16 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{bail, ensure, Context};
-use serde::Deserialize;
 use slop_algebra::PrimeField32;
 use sov_aggregated_proof_shared::DeferredProofInput;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::MockZkvm;
-use sov_modules_api::default_spec::DefaultSpec;
-use sov_modules_api::Spec;
-use sov_rollup_interface::execution_mode::Zk;
-use sov_rollup_interface::zk::{Proof, StateTransitionPublicData};
-use sov_sp1_adapter::SP1;
-use sov_state::Storage;
+use sov_sp1_adapter::BlockHeaderWithProof;
 use sp1_recursion_executor::RecursionPublicValues;
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
 use sp1_sdk::prelude::{include_elf, Elf, HashableKey, SP1Stdin};
-use sp1_sdk::{ProvingKey, SP1Proof, SP1ProofWithPublicValues, SP1PublicValues, SP1VerifyingKey};
-
-type S = DefaultSpec<MockDaSpec, SP1, MockZkvm, Zk>;
+use sp1_sdk::{ProvingKey, SP1Proof, SP1VerifyingKey};
 
 const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
-
-#[derive(Deserialize)]
-struct SavedProof {
-    proof: Vec<u8>,
-}
 
 fn main() -> anyhow::Result<()> {
     let start = Instant::now();
@@ -53,7 +39,9 @@ fn main() -> anyhow::Result<()> {
     let mut stdin = SP1Stdin::new();
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
-    for (index, proof) in raw_proofs.into_iter().enumerate() {
+    for (index, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
+        let proof = sov_sp1_adapter::decode_sp1_proof(&block_header_with_proof.proof)?;
+
         let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
             bail!("Expected a compressed SP1 proof");
         };
@@ -74,6 +62,7 @@ fn main() -> anyhow::Result<()> {
         let deferred_proof_input = DeferredProofInput {
             public_values: proof.public_values.to_vec(),
             vkey_hash: inner_vk_hash,
+            da_block_header: block_header_with_proof.da_block_header,
         };
 
         proof_inputs.push(deferred_proof_input);
@@ -98,7 +87,7 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn proofs_and_vk() -> (Vec<SP1ProofWithPublicValues>, SP1VerifyingKey) {
+fn proofs_and_vk() -> (Vec<BlockHeaderWithProof<MockDaSpec>>, SP1VerifyingKey) {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let workspace_dir = manifest_dir
         .parent()
@@ -108,7 +97,7 @@ fn proofs_and_vk() -> (Vec<SP1ProofWithPublicValues>, SP1VerifyingKey) {
 
     let vk = read_saved_inner_vk(&data_dir.join("inner_vk.bin")).unwrap();
 
-    let mut proofs = Vec::new();
+    let mut block_headers_with_proofs = Vec::new();
 
     let paths = [
         data_dir.join("inner_0_proof.json"),
@@ -117,10 +106,10 @@ fn proofs_and_vk() -> (Vec<SP1ProofWithPublicValues>, SP1VerifyingKey) {
     ];
 
     for path in paths {
-        proofs.push(read_saved_proof(&path).unwrap());
+        block_headers_with_proofs.push(read_saved_proof(&path).unwrap());
     }
 
-    (proofs, vk)
+    (block_headers_with_proofs, vk)
 }
 
 fn read_saved_inner_vk(file_path: &Path) -> anyhow::Result<SP1VerifyingKey> {
@@ -139,48 +128,21 @@ fn read_saved_inner_vk(file_path: &Path) -> anyhow::Result<SP1VerifyingKey> {
     })
 }
 
-fn read_saved_proof(file_path: &Path) -> anyhow::Result<SP1ProofWithPublicValues> {
+fn read_saved_proof(file_path: &Path) -> anyhow::Result<BlockHeaderWithProof<MockDaSpec>> {
     let file_contents = fs::read(file_path).with_context(|| {
         format!(
             "Failed to read saved proof fixture at {}",
             file_path.display()
         )
     })?;
-    let saved_proof: SavedProof = serde_json::from_slice(&file_contents).with_context(|| {
-        format!(
-            "Failed to deserialize saved proof JSON at {}",
-            file_path.display()
-        )
-    })?;
 
-    let proof: Proof<SP1ProofWithPublicValues, SP1PublicValues> =
-        bincode::deserialize(&saved_proof.proof).with_context(|| {
+    let block_header_with_proof: BlockHeaderWithProof<MockDaSpec> =
+        serde_json::from_slice(&file_contents).with_context(|| {
             format!(
-                "Failed to deserialize saved SP1 proof bytes from {}",
+                "Failed to deserialize saved proof JSON at {}",
                 file_path.display()
             )
         })?;
 
-    match proof {
-        Proof::Full(full_proof) => {
-            let _: StateTransitionPublicData<
-                <S as Spec>::Address,
-                MockDaSpec,
-                <<S as Spec>::Storage as Storage>::Root,
-            > = bincode::deserialize(full_proof.public_values.as_slice()).with_context(|| {
-                format!(
-                    "Failed to deserialize StateTransitionPublicData from the public values in {}",
-                    file_path.display()
-                )
-            })?;
-
-            Ok(full_proof)
-        }
-        Proof::PublicData(_) => {
-            bail!(
-                "Saved proof fixture {} does not contain a full proof",
-                file_path.display()
-            )
-        }
-    }
+    Ok(block_header_with_proof)
 }
