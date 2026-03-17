@@ -495,60 +495,49 @@ where
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         validate_call_fee_fields(&request)?;
 
-        if !has_overrides {
-            // Fast path for the common case where no call overrides are provided.
+        // Fee validation: with overrides, validate against the overridden block_env;
+        // without overrides, validate against the original block_env.
+        if has_overrides {
+            let mut validation_block_env = block_env.clone();
+            {
+                let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+                let mut validation_state =
+                    RevmState::builder().with_database(evm_db).build();
+                apply_call_overrides(
+                    &mut validation_state,
+                    &mut validation_block_env,
+                    state_overrides.clone(),
+                    block_overrides.clone(),
+                )?;
+            }
+            validate_simulation_max_fee_against_base_fee(
+                &request,
+                &validation_block_env,
+                enforce_max_fee_check,
+            )?;
+        } else {
             validate_simulation_max_fee_against_base_fee(
                 &request,
                 &block_env,
                 enforce_max_fee_check,
             )?;
-            self.resolve_simulation_nonce(&mut request, &mut maybe_archival_state)?;
-
-            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            let tx_env = prepare_call_env(&block_env, request)?;
-            let caller = tx_env.caller;
-            let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
-            let result = executor::transact(&mut evm_db, &block_env, tx_env, cfg_env)?;
-            verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_db)
-                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
-            return Ok(result);
         }
-
-        let mut validation_block_env = block_env.clone();
-        {
-            let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            let mut validation_state = RevmState::builder().with_database(evm_db).build();
-            apply_call_overrides(
-                &mut validation_state,
-                &mut validation_block_env,
-                state_overrides.clone(),
-                block_overrides.clone(),
-            )?;
-        }
-
-        validate_simulation_max_fee_against_base_fee(
-            &request,
-            &validation_block_env,
-            enforce_max_fee_check,
-        )?;
         self.resolve_simulation_nonce(&mut request, &mut maybe_archival_state)?;
+
+        if !has_overrides {
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            return simulate_call(&mut evm_db, &block_env, &cfg, request);
+        }
 
         let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let mut evm_state = RevmState::builder().with_database(evm_db).build();
-        let cfg_env = get_cfg_env(&block_env, &cfg, Some(get_cfg_env_template()));
         apply_call_overrides(
             &mut evm_state,
             &mut block_env,
             state_overrides,
             block_overrides,
         )?;
-
-        let tx_env = prepare_call_env(&block_env, request)?;
-        let caller = tx_env.caller;
-        let result = executor::transact(&mut evm_state, &block_env, tx_env, cfg_env)?;
-        verify_contract_creation_allowlist(&result.state, &caller, &cfg, &mut evm_state)
-            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
-        Ok(result)
+        simulate_call(&mut evm_state, &block_env, &cfg, request)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.
@@ -974,6 +963,26 @@ where
 
 fn invalid_override_params(message: impl Into<String>) -> EthApiError {
     EthApiError::other(invalid_params_rpc_err(message.into()))
+}
+
+/// Executes the shared tail of a simulation call: builds the EVM config, prepares
+/// the transaction environment, runs the transaction, and verifies the allowlist.
+fn simulate_call<DB: Database>(
+    db: &mut DB,
+    block_env: &BlockEnv,
+    cfg: &crate::config::EvmRuntimeConfig,
+    request: TransactionRequest,
+) -> Result<ResultAndState, EthApiError>
+where
+    DB::Error: Into<EthApiError> + revm_database_interface::DBErrorMarker + std::fmt::Display,
+{
+    let cfg_env = get_cfg_env(block_env, cfg, Some(get_cfg_env_template()));
+    let tx_env = prepare_call_env(block_env, request)?;
+    let caller = tx_env.caller;
+    let result = executor::transact(&mut *db, block_env, tx_env, cfg_env)?;
+    verify_contract_creation_allowlist(&result.state, &caller, cfg, db)
+        .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+    Ok(result)
 }
 
 fn apply_call_overrides<DB: Database>(
