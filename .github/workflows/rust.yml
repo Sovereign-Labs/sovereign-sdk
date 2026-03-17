@@ -253,13 +253,15 @@ jobs:
 
   nextest_all_features:
     name: nextest_all_features
-    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT.
+    # Uses separate profile from regular `nextest` to prevent cache volume overflow, because different set of features is compiled
+    runs-on: namespace-profile-ns-profile-sov-ubuntu-24-04-amd64-16x32-test-all-f-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
       SP1_PROVER: "mock"
       RUST_BACKTRACE: 1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
@@ -269,8 +271,6 @@ jobs:
       - run: cargo switcheroo disable
         shell: bash
       - run: make test-all
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   doctests:
     name: doctests
