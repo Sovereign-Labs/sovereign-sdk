@@ -6,5 +6,4 @@ publish = false
 
 [dependencies]
 serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
-
-sov-mock-da = { workspace = true }
+sov-modules-api = { workspace = true }
