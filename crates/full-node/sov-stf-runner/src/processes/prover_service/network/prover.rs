@@ -194,7 +194,7 @@ where
                 match network.poll(&handle).await {
                     Ok(Some(proof_bytes)) => {
                         let block_proof = BlockProof {
-                            _proof: proof_bytes,
+                            proof: proof_bytes,
                             slot_number: metadata.slot_number,
                             st: metadata.st,
                         };

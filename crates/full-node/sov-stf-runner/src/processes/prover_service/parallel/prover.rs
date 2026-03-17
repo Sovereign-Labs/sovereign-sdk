@@ -142,7 +142,7 @@ where
                         .expect("An honest prover provided an invalid list of relevant txs. This is a bug in the prover - please report it.");
 
                     let block_proof = proof.map(|p| BlockProof {
-                        _proof: p,
+                        proof: p,
                         st: StateTransitionPublicData::<Address, Da::Spec, StateRoot> {
                             initial_state_root,
                             final_state_root,
