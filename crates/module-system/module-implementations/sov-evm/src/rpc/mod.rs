@@ -478,6 +478,26 @@ where
         Ok(Some(receipts))
     }
 
+    fn resolve_simulation_context_for_block_id<'a>(
+        &self,
+        block_id: Option<BlockId>,
+        state: &'a mut ApiStateAccessor<S>,
+    ) -> Result<
+        (
+            BlockEnv,
+            MaybeArchivalState<'a, S>,
+            crate::config::EvmRuntimeConfig,
+        ),
+        EthApiError,
+    > {
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        // Omitted-gas simulations must read the tx gas cap from the selected state so
+        // archival queries remain stable after later runtime-config updates.
+        let cfg = self.cfg_infallible(maybe_archival_state.deref_mut());
+        Ok((block_env, maybe_archival_state, cfg))
+    }
+
     fn call(
         &self,
         mut request: TransactionRequest,
@@ -487,9 +507,8 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
         let has_overrides = state_overrides.is_some() || block_overrides.is_some();
-        let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let cfg = self.cfg_infallible(state);
-        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        let (mut block_env, mut maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
         let enforce_max_fee_check = self
             .is_max_fee_check_active(maybe_archival_state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
