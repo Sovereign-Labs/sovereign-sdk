@@ -6,17 +6,16 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use tokio::io::AsyncBufReadExt;
 
-/// Retry delays for any pull error (2 retries → 3 attempts total).
-const BASE_RETRY_DELAYS: [Duration; 2] = [Duration::from_secs(2), Duration::from_secs(5)];
-/// Retry delays for known transient pull errors (4 retries → 5 attempts total).
-const TRANSIENT_RETRY_DELAYS: [Duration; 4] = [
+/// Retry delays for image pull failures. Base (non-transient) errors use only
+/// the first [`BASE_RETRY_COUNT`] entries; known transient errors use all of them.
+const RETRY_DELAYS: [Duration; 4] = [
     Duration::from_secs(2),
     Duration::from_secs(5),
     Duration::from_secs(10),
     Duration::from_secs(20),
 ];
-const BASE_MAX_ATTEMPTS: usize = BASE_RETRY_DELAYS.len() + 1;
-const TRANSIENT_MAX_ATTEMPTS: usize = TRANSIENT_RETRY_DELAYS.len() + 1;
+/// How many retries a non-transient pull error gets (→ 3 attempts total).
+const BASE_RETRY_COUNT: usize = 2;
 
 /// Printing logs from container
 pub async fn print_logs_from_container<T>(name: &str, container: &ContainerAsync<T>)
@@ -47,7 +46,7 @@ where
     let image_name = image.name().to_owned();
     let image_tag = image.tag().to_owned();
 
-    for attempt in 1..=TRANSIENT_MAX_ATTEMPTS {
+    for attempt in 1..=RETRY_DELAYS.len() + 1 {
         match image.clone().pull_image().await {
             Ok(_) => {
                 if attempt > 1 {
@@ -62,17 +61,17 @@ where
             }
             Err(err) => {
                 let err_text = err.to_string();
-                let (delays, max_attempts): (&[Duration], usize) =
+                let delays: &[Duration] =
                     if is_retryable_pull_error_message(&err_text) {
-                        (&TRANSIENT_RETRY_DELAYS, TRANSIENT_MAX_ATTEMPTS)
+                        &RETRY_DELAYS
                     } else {
-                        (&BASE_RETRY_DELAYS, BASE_MAX_ATTEMPTS)
+                        &RETRY_DELAYS[..BASE_RETRY_COUNT]
                     };
 
                 if let Some(&delay) = delays.get(attempt.saturating_sub(1)) {
                     tracing::warn!(
                         attempt,
-                        max_attempts,
+                        max_attempts = delays.len() + 1,
                         image = image_name,
                         tag = image_tag,
                         %err,
@@ -91,9 +90,7 @@ where
         }
     }
 
-    Err(anyhow!(
-        "failed to pull image {image_name}:{image_tag} after {TRANSIENT_MAX_ATTEMPTS} attempt(s)"
-    ))
+    unreachable!("loop always returns on Ok or final Err")
 }
 
 fn is_retryable_pull_error_message(message: &str) -> bool {
@@ -157,20 +154,12 @@ mod tests {
     }
 
     #[test]
-    fn base_retry_policy_allows_3_attempts() {
-        assert_eq!(BASE_MAX_ATTEMPTS, 3);
-        assert_eq!(BASE_RETRY_DELAYS.len(), 2);
-        assert_eq!(BASE_RETRY_DELAYS[0], Duration::from_secs(2));
-        assert_eq!(BASE_RETRY_DELAYS[1], Duration::from_secs(5));
-    }
-
-    #[test]
-    fn transient_retry_policy_allows_5_attempts() {
-        assert_eq!(TRANSIENT_MAX_ATTEMPTS, 5);
-        assert_eq!(TRANSIENT_RETRY_DELAYS.len(), 4);
-        assert_eq!(TRANSIENT_RETRY_DELAYS[0], Duration::from_secs(2));
-        assert_eq!(TRANSIENT_RETRY_DELAYS[1], Duration::from_secs(5));
-        assert_eq!(TRANSIENT_RETRY_DELAYS[2], Duration::from_secs(10));
-        assert_eq!(TRANSIENT_RETRY_DELAYS[3], Duration::from_secs(20));
+    fn retry_delays_and_base_limit() {
+        assert_eq!(RETRY_DELAYS.len(), 4, "transient errors get 4 retries → 5 attempts");
+        assert_eq!(BASE_RETRY_COUNT, 2, "base errors get 2 retries → 3 attempts");
+        assert_eq!(RETRY_DELAYS[0], Duration::from_secs(2));
+        assert_eq!(RETRY_DELAYS[1], Duration::from_secs(5));
+        assert_eq!(RETRY_DELAYS[2], Duration::from_secs(10));
+        assert_eq!(RETRY_DELAYS[3], Duration::from_secs(20));
     }
 }
