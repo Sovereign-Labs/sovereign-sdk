@@ -532,7 +532,7 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
 }
 
 #[test]
-fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
+fn test_eth_call_block_number_override_changes_hardfork_spec() {
     let (runner, account) = setup_with_hardforks(vec![(0, SpecId::LONDON), (100, SpecId::CANCUN)]);
     let push0_contract_addr = Address::with_last_byte(0x56);
     let number_contract_addr = Address::with_last_byte(0x57);
@@ -555,6 +555,7 @@ fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
             )
             .is_err());
 
+        // Overriding block number to 100 activates CANCUN, so PUSH0 should now succeed.
         let block_overrides = BlockOverrides::default().with_number(U256::from(100u64));
         assert!(evm
             .eth_call(
@@ -564,7 +565,7 @@ fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
                 Some(Box::new(block_overrides.clone())),
                 state,
             )
-            .is_err());
+            .is_ok());
 
         let mut number_overrides = StateOverride::default();
         number_overrides.insert(

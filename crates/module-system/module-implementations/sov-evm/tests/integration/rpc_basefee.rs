@@ -209,3 +209,68 @@ fn test_eth_estimate_gas_skips_fee_cap_check_when_runtime_disabled() {
         assert!(estimate.to::<u64>() >= 21_000);
     });
 }
+
+#[test]
+fn test_eth_estimate_gas_historical_block_below_fee_check_height_keeps_same_estimate() {
+    const EVM_MAX_FEE_CHECK_HEIGHT: u64 = 3;
+    const HISTORICAL_BLOCK: u64 = 1;
+
+    set_max_fee_check_height(EVM_MAX_FEE_CHECK_HEIGHT);
+
+    let (mut runner, account, recipient, _) = setup();
+    runner.execute(create_transfer_tx(0, &account, &recipient, 1).tx);
+
+    let request = TransactionRequest {
+        from: Some(account.address()),
+        to: Some(TxKind::Call(recipient.address())),
+        // Keep the request admissible in both regimes so only the multiplier source matters.
+        max_fee_per_gas: Some((MIN_PROTOCOL_BASE_FEE as u128) * 10),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    };
+
+    let estimate_before_threshold = runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let live_block_number = evm.block_number(state).unwrap().to::<u64>();
+        assert!(
+            live_block_number <= EVM_MAX_FEE_CHECK_HEIGHT,
+            "test precondition failed: live height {live_block_number} must still be at or below EVM_MAX_FEE_CHECK_HEIGHT={EVM_MAX_FEE_CHECK_HEIGHT}"
+        );
+
+        evm.eth_estimate_gas(
+            request.clone(),
+            Some(BlockId::number(HISTORICAL_BLOCK)),
+            None,
+            None,
+            state,
+        )
+        .unwrap()
+        .to::<u64>()
+    });
+
+    runner.advance_slots((EVM_MAX_FEE_CHECK_HEIGHT + 1) as usize);
+
+    let estimate_after_threshold = runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let live_block_number = evm.block_number(state).unwrap().to::<u64>();
+        assert!(
+            live_block_number > EVM_MAX_FEE_CHECK_HEIGHT,
+            "test precondition failed: live height {live_block_number} must be above EVM_MAX_FEE_CHECK_HEIGHT={EVM_MAX_FEE_CHECK_HEIGHT}"
+        );
+
+        evm.eth_estimate_gas(
+            request.clone(),
+            Some(BlockId::number(HISTORICAL_BLOCK)),
+            None,
+            None,
+            state,
+        )
+        .unwrap()
+        .to::<u64>()
+    });
+
+    assert_eq!(
+        estimate_before_threshold, estimate_after_threshold,
+        "historical eth_estimateGas for block {HISTORICAL_BLOCK}, which is below EVM_MAX_FEE_CHECK_HEIGHT={EVM_MAX_FEE_CHECK_HEIGHT}, should not change after the live chain crosses the activation height"
+    );
+}
