@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::marker::PhantomData;
 use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -13,6 +11,8 @@ use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
     ZkvmNetwork,
 };
+use std::collections::HashMap;
+use std::marker::PhantomData;
 
 use super::Verifier;
 use crate::processes::prover_service::block_proof::BlockProof;
@@ -21,8 +21,8 @@ use crate::processes::{
 };
 
 struct SubmittedProofMetadata<Address, Da: DaSpec, StateRoot> {
-    pub(crate) slot_number: SlotNumber,
-    pub(crate) st: StateTransitionPublicData<Address, Da, StateRoot>,
+    slot_number: SlotNumber,
+    st: StateTransitionPublicData<Address, Da, StateRoot>,
 }
 
 enum NetworkProverStatus<Address, StateRoot, Da: DaSpec, Handle> {
@@ -139,7 +139,6 @@ where
         let handle = {
             let mut network = self.inner_vm.lock().await;
             network.add_hint(&data);
-            // TODO: what happens if we crash here? Do we just pay to re-prove?
             network.submit().await.map_err(ProverServiceError::Other)?
         };
 
@@ -264,10 +263,10 @@ where
         let initial_block_proof = block_proofs_data.first().unwrap();
         let final_block_proof = block_proofs_data.last().unwrap();
 
-        let mut rewarded_addresses = Vec::new();
-        for bp in block_proofs_data.iter() {
-            rewarded_addresses.push(bp.st.prover_address.clone());
-        }
+        let rewarded_addresses = block_proofs_data
+            .iter()
+            .map(|bp| bp.st.prover_address.clone())
+            .collect();
 
         let public_data = AggregatedProofPublicData::<Address, Da::Spec, StateRoot> {
             rewarded_addresses,
@@ -302,7 +301,7 @@ where
                 }
                 Ok(None) => {
                     drop(outer);
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
                 Err(e) => {
                     return Err(anyhow::anyhow!("Outer network proving failed: {}", e));
