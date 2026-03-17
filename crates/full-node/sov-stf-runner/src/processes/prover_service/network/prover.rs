@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
@@ -7,7 +8,9 @@ use serde::Serialize;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::{AggregatedProofPublicData, CodeCommitment};
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
+};
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
     ZkvmNetwork,
@@ -53,9 +56,10 @@ pub(crate) struct NetworkProver<
 > {
     prover_address: Address,
     inner_vm: tokio::sync::Mutex<InnerVm::Network>,
-    _outer_vm: tokio::sync::Mutex<OuterVm::Network>,
+    outer_vm: Arc<tokio::sync::Mutex<OuterVm::Network>>,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
     code_commitment: CodeCommitment,
+    aggregation_task: tokio::sync::Mutex<Option<tokio::task::AbortHandle>>,
     phantom: PhantomData<Witness>,
 }
 
@@ -79,9 +83,10 @@ where
         Self {
             prover_address,
             inner_vm: tokio::sync::Mutex::new(inner_vm),
-            _outer_vm: tokio::sync::Mutex::new(outer_vm),
+            outer_vm: Arc::new(tokio::sync::Mutex::new(outer_vm)),
             tracker: tokio::sync::RwLock::new(HashMap::new()),
             code_commitment,
+            aggregation_task: tokio::sync::Mutex::new(None),
             phantom: PhantomData,
         }
     }
@@ -181,7 +186,6 @@ where
         block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
         genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
-        //TODO: probably want to use anyhow rather than panic?
         assert!(!block_header_hashes.is_empty());
 
         let mut proof_statuses = self.tracker.write().await;
@@ -283,20 +287,65 @@ where
 
         tracing::trace!(%public_data, "generating aggregate proof");
 
-        // outer_vm.add_hint(public_data);
-        // let serialized_aggregated_proof = SerializedAggregatedProof {
-        //     // TODO: use prover network, not local proving
-        //     // poll for outcome and then return
-        //     raw_aggregated_proof: outer_vm.run(false)?,
-        // };
+        // Drop the read lock before submitting to the outer network.
+        drop(proof_statuses);
 
-        // only do this after successful network proof generation
-        for _slot_hash in block_header_hashes {
-            // proof_statuses.remove(slot_hash);
+        let handle = {
+            let mut outer = self.outer_vm.lock().await;
+            outer.add_hint(&public_data);
+            outer.submit().await?
+        };
+
+        let outer_vm = Arc::clone(&self.outer_vm);
+        let task = tokio::spawn(async move {
+            loop {
+                let outer = outer_vm.lock().await;
+                match outer.poll(&handle).await {
+                    Ok(Some(proof_bytes)) => {
+                        return Ok(SerializedAggregatedProof {
+                            raw_aggregated_proof: proof_bytes,
+                        });
+                    }
+                    Ok(None) => {
+                        drop(outer);
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                    }
+                    Err(e) => {
+                        return Err(anyhow::anyhow!("Outer network proving failed: {}", e));
+                    }
+                }
+            }
+        });
+
+        *self.aggregation_task.lock().await = Some(task.abort_handle());
+
+        let result = task
+            .await
+            .map_err(|e| anyhow::anyhow!("Aggregation task panicked: {}", e))?;
+
+        *self.aggregation_task.lock().await = None;
+
+        let serialized_aggregated_proof = result?;
+
+        let mut tracker = self.tracker.write().await;
+        for slot_hash in block_header_hashes {
+            tracker.remove(slot_hash);
         }
 
-        // return after successful
-        // Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
-        todo!()
+        Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
+    }
+}
+
+impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm> Drop
+    for NetworkProver<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
+where
+    Da: DaService,
+    InnerVm: Zkvm,
+    OuterVm: Zkvm,
+{
+    fn drop(&mut self) {
+        if let Some(task) = self.aggregation_task.get_mut().take() {
+            task.abort();
+        }
     }
 }
