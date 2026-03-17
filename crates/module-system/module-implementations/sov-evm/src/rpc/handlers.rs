@@ -416,6 +416,12 @@ where
             .unwrap_or(0)
             .saturating_add(1000);
 
+        let multiplier = {
+            let mut multiplier_state = self.resolve_state_for_block_id(block_id, state)?;
+            self.fee_multiplier(multiplier_state.deref_mut())
+                .map_err(into_rpc_error)?
+        };
+
         let ResultAndState {
             result,
             state: changes,
@@ -477,7 +483,6 @@ where
 
         // The real tx path multiplies gas_limit by 100 when fee check is inactive.
         // Divide the estimate so the returned value is the gas_limit the user should set.
-        let multiplier = self.fee_multiplier(state).map_err(into_rpc_error)?;
         let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
 
         Ok(U64::from(super::apply_margins(adjusted)?))
