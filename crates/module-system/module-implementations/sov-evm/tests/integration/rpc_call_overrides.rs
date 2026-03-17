@@ -463,6 +463,46 @@ fn test_eth_call_and_estimate_gas_prefer_fee_cap_over_stale_nonce_after_block_ov
 }
 
 #[test]
+fn test_omitted_gas_respects_lower_block_gas_limit_override() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x56);
+    let expected = U256::from(0x1234u64);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = call_request(account.address(), target);
+        let mut state_overrides = StateOverride::default();
+        state_overrides.insert(
+            target,
+            AccountOverride::default().with_code(runtime_returning_constant(expected)),
+        );
+        let block_overrides = BlockOverrides::default().with_gas_limit(500_000);
+
+        let output = evm
+            .eth_call(
+                request.clone(),
+                None,
+                Some(state_overrides.clone()),
+                Some(Box::new(block_overrides.clone())),
+                state,
+            )
+            .unwrap();
+        assert_eq!(decode_u256(output), expected);
+
+        let estimate = evm
+            .eth_estimate_gas(
+                request,
+                None,
+                Some(state_overrides),
+                Some(Box::new(block_overrides)),
+                state,
+            )
+            .unwrap();
+        assert!(estimate.to::<u64>() > 0);
+    });
+}
+
+#[test]
 fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
     let (mut runner, account, _, _) = setup();
     let basefee_contract_addr = account.address().create(0);

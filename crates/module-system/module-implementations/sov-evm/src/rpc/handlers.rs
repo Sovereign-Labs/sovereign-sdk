@@ -349,12 +349,12 @@ where
         // requests admissible during access-list generation:
         // https://github.com/ethereum/go-ethereum/blob/16783c167c4be5e6675fd8de0d1b762c88d6232f/internal/ethapi/api.go#L1359-L1372
         super::validate_call_fee_fields(&request)?;
-        let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
-        let cfg = self.cfg_infallible(state);
+        let (block_env, mut maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
+        let tx_env =
+            crate::helpers::prepare_call_env(&block_env, request, cfg.chain_spec.tx_gas_limit)?;
         let cfg_env =
             crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
-        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
         let evm_db = self.db(maybe_archival_state.deref_mut());
 
         let mut inspector = AccessListInspector::new(initial_access_list);
@@ -416,16 +416,23 @@ where
             .unwrap_or(0)
             .saturating_add(1000);
 
-        let multiplier = {
-            let mut multiplier_state = self.resolve_state_for_block_id(block_id, state)?;
-            self.fee_multiplier(multiplier_state.deref_mut())
-                .map_err(into_rpc_error)?
-        };
+        let (block_env, mut maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
+        let multiplier = self
+            .fee_multiplier(maybe_archival_state.deref_mut())
+            .map_err(into_rpc_error)?;
 
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
+        } = self.call_with_context(
+            request,
+            block_env,
+            maybe_archival_state,
+            &cfg,
+            state_overrides,
+            block_overrides,
+        )?;
 
         let (gas_used, logs) = match result {
             ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
