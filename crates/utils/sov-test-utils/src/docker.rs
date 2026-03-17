@@ -38,7 +38,8 @@ where
     }
 }
 
-/// Pulls a docker image with retries for transient pull failures.
+/// Pulls a docker image with retries for pull failures. All errors are retried,
+/// with known transient errors receiving more retry attempts.
 pub async fn pull_image_with_retries<I>(image: I) -> anyhow::Result<()>
 where
     I: testcontainers::Image + Clone,
