@@ -41,12 +41,14 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 ## Error Code Policy
 
 Use shared helpers in `src/lib.rs`; do not introduce ad-hoc codes in handlers.
+Ethereum-standard typed error conversions from `sov-rpc-eth-types` are also allowed when they preserve canonical client-facing semantics.
 
 | Meaning | Code |
 | --- | --- |
 | Method not supported | `-32004` |
 | Limit exceeded | `-32005` |
 | Tx rejected (non-input sequencer failures) | `-32003` |
+| Invalid input (standard Ethereum typed validation errors, e.g. `FeeCapTooLow`) | `-32000` |
 | Resource not found | `-32001` |
 | Invalid params (including `accept_tx` 400/403/413 rejections) | `-32602` |
 | Sync timeout (`eth_sendRawTransactionSync`) | `4` |

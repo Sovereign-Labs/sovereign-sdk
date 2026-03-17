@@ -53,28 +53,21 @@ impl<S: Spec> Evm<S> {
         tx_hash: TxHash,
         state: &mut Accessor,
     ) -> Result<u64, AuthenticationError> {
-        let apply_max_fee_check_after_height: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
+        use crate::sov_fee_and_gas_utils::GasMultiplier;
 
-        let block_number: u64 = state.rollup_height_to_access().get();
+        let multiplier = self.fee_multiplier(state).map_err(|e| {
+            AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
+        })?;
 
-        if block_number > apply_max_fee_check_after_height {
-            let is_max_fee_check_disabled = self.is_max_fee_check_disabled(state).map_err(|e| {
-                AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
-            })?;
-            if is_max_fee_check_disabled {
-                return Ok(100);
-            }
-            if user_max_fee_per_gas < rollup_base_fee {
+        match multiplier {
+            GasMultiplier::FeeCheckActive if user_max_fee_per_gas < rollup_base_fee => {
                 let err = FatalError::InsufficientMaxFeePerGas {
                     user_max_fee_per_gas,
                     rollup_base_fee,
                 };
-                return Err(AuthenticationError::FatalError(err, tx_hash));
+                Err(AuthenticationError::FatalError(err, tx_hash))
             }
-
-            Ok(1)
-        } else {
-            Ok(100)
+            _ => Ok(multiplier.as_u64()),
         }
     }
 }
@@ -248,7 +241,7 @@ pub fn decode_evm_tx(raw_tx: &[u8]) -> Result<(RlpEvmTransaction, TransactionSig
     let type_tag = TransactionSigned::extract_type_byte(&mut &tx_data.rlp[..]).unwrap_or(0); // Reject as a legacy transaction by default
     if type_tag != EIP1559_TX_TYPE_ID {
         return Err(FatalError::DeserializationFailed(
-            "Invalid transaction type: Only EIP1559 is currently supported. If you need to use EIP7702, please reach out to the SDK developers for support.".to_string(),
+            "Invalid transaction type: Only EIP-1559 is currently supported. If you need to use EIP-7702, please reach out to the SDK developers for support.".to_string(),
         ));
     }
     let tx = TransactionSigned::decode_2718_exact(&tx_data.rlp)

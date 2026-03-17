@@ -343,6 +343,11 @@ where
             "EVM module JSON-RPC request"
         );
         let initial_access_list = request.access_list.clone().unwrap_or_default();
+        // Intentionally do not apply the shared simulation max-fee-vs-base-fee
+        // rejection here. Geth's access-list path executes with `NoBaseFee: true`
+        // and lowers the EVM base fee to `0` when needed, keeping low-fee
+        // requests admissible during access-list generation:
+        // https://github.com/ethereum/go-ethereum/blob/16783c167c4be5e6675fd8de0d1b762c88d6232f/internal/ethapi/api.go#L1359-L1372
         super::validate_call_fee_fields(&request)?;
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
         let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
@@ -411,6 +416,12 @@ where
             .unwrap_or(0)
             .saturating_add(1000);
 
+        let multiplier = {
+            let mut multiplier_state = self.resolve_state_for_block_id(block_id, state)?;
+            self.fee_multiplier(multiplier_state.deref_mut())
+                .map_err(into_rpc_error)?
+        };
+
         let ResultAndState {
             result,
             state: changes,
@@ -470,7 +481,11 @@ where
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
 
-        Ok(U64::from(super::apply_margins(total_gas_used)?))
+        // The real tx path multiplies gas_limit by 100 when fee check is inactive.
+        // Divide the estimate so the returned value is the gas_limit the user should set.
+        let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
+
+        Ok(U64::from(super::apply_margins(adjusted)?))
     }
 
     /// Handler for `debug_traceBlockByNumber`

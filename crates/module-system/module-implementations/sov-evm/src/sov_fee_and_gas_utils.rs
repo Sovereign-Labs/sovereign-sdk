@@ -2,8 +2,26 @@ use crate::Receipt;
 use anyhow::{bail, ensure, Context};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Gas, GasInfo, Spec};
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 
+/// The gas multiplier applied to EVM `gas_limit` based on whether the fee check is active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GasMultiplier {
+    /// Fee check is active — `gas_limit` maps 1:1 to sovereign gas.
+    FeeCheckActive,
+    /// Fee check is inactive — sovereign gas budget = `gas_limit * 100`.
+    FeeCheckInactive,
+}
+
+impl GasMultiplier {
+    pub(crate) fn as_u64(self) -> u64 {
+        match self {
+            Self::FeeCheckActive => 1,
+            Self::FeeCheckInactive => 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProjectedReceiptGas {
     pub(crate) gas_used: u64,
     pub(crate) cumulative_gas_used: u64,
@@ -100,6 +118,14 @@ fn derive_receipt_gas_used_from_actual_fee<GU: Gas>(gas_info: &GasInfo<GU>) -> a
 pub(crate) fn is_actual_fee_projection_height_active(block_number: u64) -> bool {
     let apply_actual_fee_after_height: u64 = config_value!("EVM_RECEIPT_ACTUAL_FEE_HEIGHT");
     block_number > apply_actual_fee_after_height
+}
+
+/// Returns true once the EIP-1559 max-fee-per-gas check is enabled for `block_number`.
+/// Keep non-height guards (e.g. the admin kill-switch) in callers; only the
+/// activation-height boundary is shared here.
+pub(crate) fn is_max_fee_check_height_active(block_number: u64) -> bool {
+    let threshold: u64 = config_value!("EVM_MAX_FEE_CHECK_HEIGHT");
+    block_number > threshold
 }
 
 #[cfg(test)]

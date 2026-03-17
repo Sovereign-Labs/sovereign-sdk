@@ -232,20 +232,24 @@ async fn eth_estimate_gas_rejects_unfunded_caller_with_max_fee_per_gas() -> anyh
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn eth_call_accepts_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()> {
+async fn eth_call_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()> {
     let (_rollup, client) = setup_client().await;
     let caller = client.address();
     let base_fee = current_base_fee(&client).await?;
     assert!(base_fee > 0, "base fee should be non-zero for this test");
 
     let request = TransactionRequest {
-        max_fee_per_gas: Some(base_fee - 1),
+        max_fee_per_gas: Some(0),
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
-    let result: String = assert_rpc_succeeds(&client, "eth_call", &request).await;
-    assert_eq!(result, "0x");
-
+    assert_rpc_rejects::<String>(
+        &client,
+        "eth_call",
+        &request,
+        "max fee per gas less than block base fee",
+    )
+    .await;
     Ok(())
 }
 
@@ -258,7 +262,7 @@ async fn eth_create_access_list_accepts_below_base_fee_with_max_fee_per_gas() ->
     assert!(base_fee > 0, "base fee should be non-zero for this test");
 
     let request = TransactionRequest {
-        max_fee_per_gas: Some(base_fee - 1),
+        max_fee_per_gas: Some(0),
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
@@ -274,7 +278,6 @@ async fn eth_create_access_list_accepts_below_base_fee_with_max_fee_per_gas() ->
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn eth_estimate_gas_rejects_below_base_fee_with_max_fee_per_gas() -> anyhow::Result<()> {
     let (_rollup, client) = setup_client().await;
     let caller = client.address();
@@ -282,7 +285,7 @@ async fn eth_estimate_gas_rejects_below_base_fee_with_max_fee_per_gas() -> anyho
     assert!(base_fee > 0, "base fee should be non-zero for this test");
 
     let request = TransactionRequest {
-        max_fee_per_gas: Some(base_fee - 1),
+        max_fee_per_gas: Some(0),
         max_priority_fee_per_gas: Some(0),
         ..base_request(caller)
     };
