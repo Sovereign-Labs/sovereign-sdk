@@ -43,11 +43,11 @@ fn verify<S: Spec, Da: DaSpec>(proof_inputs: Vec<DeferredProofInput<Da>>, vkey_h
         let stf_public_data =
             deserialize_pub_data::<S, Da>(proof_input.public_values.as_slice(), index);
 
+        // Check that DA blocks form a chain.
         {
             let da_block_header = &proof_input.da_block_header;
             let current_block_hash = da_block_header.hash();
 
-            // Check that DA blocks form a chain.
             if let Some(expected_prev_hash) = &expected_prev_hash {
                 assert_eq!(
                     expected_prev_hash,
