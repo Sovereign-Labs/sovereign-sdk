@@ -160,17 +160,18 @@ where
         request: &TransactionRequest,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
-        let from = match request.from {
-            Some(from) => from,
-            None => return Ok(()),
+        let Some(from) = request.from else {
+            return Ok(());
         };
-        let gas = match request.gas {
-            Some(gas) => gas,
-            None => return Ok(()),
+        let Some(gas) = request.gas else {
+            return Ok(());
         };
-        let max_fee_per_gas = match request.max_fee_per_gas.or(request.gas_price) {
-            Some(fee) if fee > 0 => fee,
-            _ => return Ok(()),
+        let Some(max_fee_per_gas) = request
+            .max_fee_per_gas
+            .or(request.gas_price)
+            .filter(|&fee| fee > 0)
+        else {
+            return Ok(());
         };
 
         let evm = Evm::<S>::default();
@@ -203,6 +204,18 @@ where
             .unwrap_or(U256::ZERO);
 
         // Resolve paymaster payer (if any).
+        //
+        // If `sequencer_to_payer` returns `None`, no paymaster is configured for
+        // this sequencer — we fall through to the sender-only balance check.
+        //
+        // When a payer IS found we only check its balance, not per-sender policy
+        // limits (max_fee, gas_limit, authorized_sequencers, etc.).  At execution
+        // time, `try_reserve_gas()` evaluates the full policy and falls back to
+        // charging the sender when the policy denies the transaction.  Replicating
+        // the full policy here would require converting EVM gas types to rollup gas
+        // types and duplicating non-trivial logic.  The balance-only check is
+        // conservatively permissive: it may allow a tx that execution later rejects
+        // (policy deny + sender insufficient), but never rejects a valid one.
         let paymaster = sov_paymaster::Paymaster::<S>::default();
         let payer_balance = paymaster
             .sequencer_to_payer
