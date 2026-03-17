@@ -14,6 +14,7 @@ use crate::evm::primitive_types::TransactionSigned;
 pub(crate) fn prepare_call_env(
     block_env: &BlockEnv,
     request: TransactionRequest,
+    tx_gas_limit: Option<u64>,
 ) -> EthResult<TxEnv> {
     let TransactionRequest {
         from,
@@ -27,7 +28,7 @@ pub(crate) fn prepare_call_env(
         ..
     } = request;
 
-    let gas_limit = gas.unwrap_or(block_env.gas_limit);
+    let gas_limit = gas.unwrap_or_else(|| tx_gas_limit.unwrap_or(block_env.gas_limit));
 
     let env = TxEnv {
         tx_type: TransactionType::Eip1559.into(),
@@ -97,7 +98,7 @@ mod tests {
 
         let block_env = BlockEnv::default();
 
-        let tx_env = prepare_call_env(&block_env, request).unwrap();
+        let tx_env = prepare_call_env(&block_env, request, None).unwrap();
         let expected = TxEnv {
             tx_type: TransactionType::Eip1559.into(),
             caller: from,
@@ -120,6 +121,30 @@ mod tests {
         assert_eq!(tx_env.chain_id, expected.chain_id);
         assert_eq!(tx_env.nonce, expected.nonce);
         assert_eq!(tx_env.access_list, expected.access_list);
+    }
+
+    #[test]
+    fn prepare_call_env_omitted_gas_uses_tx_gas_limit() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000_000,
+            ..Default::default()
+        };
+
+        let request = TransactionRequest::default();
+
+        // When tx_gas_limit is provided, omitted gas falls back to it
+        let tx_env = prepare_call_env(&block_env, request.clone(), Some(30_000_000)).unwrap();
+        assert_eq!(
+            tx_env.gas_limit, 30_000_000,
+            "should use tx_gas_limit when gas is omitted"
+        );
+
+        // When tx_gas_limit is None, omitted gas falls back to block_env.gas_limit
+        let tx_env = prepare_call_env(&block_env, request, None).unwrap();
+        assert_eq!(
+            tx_env.gas_limit, 1_000_000_000,
+            "should fall back to block gas limit when tx_gas_limit is None"
+        );
     }
 
     #[test]

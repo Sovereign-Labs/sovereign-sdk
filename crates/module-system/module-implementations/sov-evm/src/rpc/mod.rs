@@ -976,7 +976,7 @@ where
     DB::Error: Into<EthApiError> + revm_database_interface::DBErrorMarker + std::fmt::Display,
 {
     let cfg_env = get_cfg_env(block_env, cfg, Some(get_cfg_env_template()));
-    let tx_env = prepare_call_env(block_env, request)?;
+    let tx_env = prepare_call_env(block_env, request, cfg.chain_spec.tx_gas_limit)?;
     let caller = tx_env.caller;
     let result = executor::transact(&mut *db, block_env, tx_env, cfg_env)?;
     verify_contract_creation_allowlist(&result.state, &caller, cfg, db)

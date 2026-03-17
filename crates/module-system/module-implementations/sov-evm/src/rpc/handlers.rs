@@ -350,8 +350,9 @@ where
         // https://github.com/ethereum/go-ethereum/blob/16783c167c4be5e6675fd8de0d1b762c88d6232f/internal/ethapi/api.go#L1359-L1372
         super::validate_call_fee_fields(&request)?;
         let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
         let cfg = self.cfg_infallible(state);
+        let tx_env =
+            crate::helpers::prepare_call_env(&block_env, request, cfg.chain_spec.tx_gas_limit)?;
         let cfg_env =
             crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
         let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
