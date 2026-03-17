@@ -1,18 +1,14 @@
 mod handlers;
 
-use alloy_primitives::B256;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
 pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::{convert_to_tx_signed, RlpEvmTransaction};
 use sov_modules_api::capabilities::HasKernel;
-use sov_modules_api::{ApiStateAccessor, Spec};
-use sov_rpc_eth_types::{
-    internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code, EthApiError,
-};
+use sov_modules_api::{ApiStateAccessor, DaSpec, SequencerType, Spec};
+use sov_rpc_eth_types::{internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
 
@@ -21,10 +17,13 @@ pub use handlers::Cursor;
 use crate::handlers::Handlers;
 
 #[derive(Clone)]
-pub struct EthRpcConfig {
+pub struct EthRpcConfig<S: Spec> {
     #[cfg(feature = "local")]
     pub eth_signer: Signers,
     pub extension: SeqConfigExtension,
+    pub sequencer_rollup_address: S::Address,
+    pub sequencer_da_address: <S::Da as DaSpec>::Address,
+    pub sequencer_type: SequencerType,
     /// Shutdown signal receiver for graceful termination
     pub shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
@@ -34,7 +33,7 @@ const METHOD_NOT_SUPPORTED_CODE: i32 = -32004;
 const RESOURCE_NOT_FOUND_CODE: i32 = -32001;
 const TX_REJECTED_CODE: i32 = -32003;
 
-pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig, sequencer: Seq) -> RpcModule<()>
+pub fn get_ethereum_rpc<S, Seq>(eth_rpc_config: EthRpcConfig<S>, sequencer: Seq) -> RpcModule<()>
 where
     S: Spec,
     Seq: Sequencer<Spec = S>,
@@ -46,6 +45,9 @@ where
         #[cfg(feature = "local")]
         eth_signer,
         extension,
+        sequencer_rollup_address,
+        sequencer_da_address,
+        sequencer_type,
         shutdown_receiver,
     } = eth_rpc_config;
 
@@ -54,6 +56,9 @@ where
         #[cfg(feature = "local")]
         eth_signer,
         extension,
+        sequencer_rollup_address,
+        sequencer_da_address,
+        sequencer_type,
         shutdown_receiver,
     });
 
@@ -156,6 +161,9 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     #[cfg(feature = "local")]
     eth_signer: Signers,
     extension: SeqConfigExtension,
+    sequencer_rollup_address: S::Address,
+    sequencer_da_address: <S::Da as DaSpec>::Address,
+    sequencer_type: SequencerType,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
 
@@ -166,16 +174,6 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    fn make_raw_tx(&self, raw_tx: RlpEvmTransaction) -> Result<(B256, Vec<u8>), ErrorObjectOwned> {
-        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
-        let signed_transaction = convert_to_tx_signed(raw_tx)
-            .map_err(|err| ErrorObjectOwned::from(EthApiError::from(err)))?;
-
-        let tx_hash = signed_transaction.hash();
-
-        Ok((*tx_hash, message))
-    }
-
     fn api_state_accessor(&self) -> ApiStateAccessor<S> {
         self.sequencer
             .api_state()

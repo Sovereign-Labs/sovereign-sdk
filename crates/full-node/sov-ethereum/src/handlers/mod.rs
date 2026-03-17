@@ -21,14 +21,22 @@ use jsonrpsee::Extensions;
 use serde::Deserialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
-use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
+use sov_evm::{build_request_preflight_auth, Evm, TransactionSigned};
 use sov_metrics::RpcMetrics;
-use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::capabilities::{AuthenticationError, FatalError, HasKernel};
+use sov_modules_api::capabilities::{
+    AuthenticationError, AuthorizationData, FatalError, GasEnforcer, HasCapabilities, HasKernel,
+    TransactionAuthenticator, TransactionAuthorizer,
+};
 #[cfg(feature = "local")]
 use sov_modules_api::macros::config_value;
+use sov_modules_api::transaction::{
+    AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData,
+};
+use sov_modules_api::ApiStateAccessor;
+use sov_modules_api::ExecutionContext;
 use sov_modules_api::FullyBakedTx;
+use sov_modules_api::GetGasPrice;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
@@ -52,6 +60,12 @@ type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
 const IP_ADDRESS_ERROR: &str = "Unable to retrieve the peer IP address";
+
+enum AffordabilityPreflight {
+    Affordable,
+    Rejected(ErrorObjectOwned),
+    Skip,
+}
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
 
@@ -144,132 +158,302 @@ where
         let state_overrides: Option<StateOverride> = params.optional_next()?;
         let block_overrides: Option<Box<BlockOverrides>> = params.optional_next()?;
 
-        Self::check_affordability(&request, &ethereum)?;
-
-        let evm = Evm::<S>::default();
-        let state = &mut ethereum.api_state_accessor();
-        evm.eth_estimate_gas(request, block_id, state_overrides, block_overrides, state)
+        Self::estimate_gas_request(
+            request,
+            block_id,
+            state_overrides,
+            block_overrides,
+            &ethereum,
+        )
     }
 
-    /// Paymaster-aware affordability check.
-    ///
-    /// Verifies that the sender (or the paymaster's payer, if configured) can
-    /// cover `gas_limit * max_fee_per_gas + value`.  Skipped when any of the
-    /// required fields are absent or when the fee-cap check is inactive.
-    fn check_affordability(
-        request: &TransactionRequest,
+    fn estimate_gas_request(
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
         ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> RpcResult<()> {
-        let Some(from) = request.from else {
-            return Ok(());
-        };
-        let Some(gas) = request.gas else {
-            return Ok(());
-        };
-        let Some(max_fee_per_gas) = request
-            .max_fee_per_gas
-            .or(request.gas_price)
-            .filter(|&fee| fee > 0)
-        else {
-            return Ok(());
-        };
-
+    ) -> RpcResult<U64> {
         let evm = Evm::<S>::default();
-        let state = &mut ethereum.api_state_accessor();
+        // Pin one checkpoint snapshot for the full request so validation,
+        // affordability preflight, and estimation cannot observe different heads.
+        let snapshot_state = ethereum.api_state_accessor();
 
+        {
+            let mut validation_state = snapshot_state.clone_without_local_writes();
+            evm.validate_estimate_gas_request(
+                &request,
+                block_id,
+                state_overrides.clone(),
+                block_overrides.clone(),
+                &mut validation_state,
+            )?;
+        }
+
+        if Self::supports_request_affordability_preflight(
+            &request,
+            state_overrides.as_ref(),
+            block_overrides.as_deref(),
+        ) {
+            let mut api_state = snapshot_state.clone_without_local_writes();
+            let mut preflight_state = evm
+                .preflight_state_for_block_id(block_id, &mut api_state)
+                .map_err(ErrorObjectOwned::from)?;
+
+            match Self::request_affordability_preflight(&request, &mut preflight_state, ethereum)? {
+                AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => {}
+                AffordabilityPreflight::Rejected(err) => return Err(err),
+            }
+        }
+
+        let mut state = snapshot_state.clone_without_local_writes();
+        evm.eth_estimate_gas(
+            request,
+            block_id,
+            state_overrides,
+            block_overrides,
+            &mut state,
+        )
+    }
+
+    /// Returns whether a real-state affordability preflight is meaningful for this request.
+    ///
+    /// When state or block overrides are present, account balances and gas pricing can be
+    /// arbitrarily changed by the caller, so a preflight against real state would be
+    /// meaningless. The EVM execution itself enforces affordability under the overridden state.
+    fn supports_request_affordability_preflight(
+        request: &TransactionRequest,
+        state_overrides: Option<&StateOverride>,
+        block_overrides: Option<&BlockOverrides>,
+    ) -> bool {
+        request.from.is_some()
+            && request.gas.is_some()
+            && request.max_fee_per_gas.or(request.gas_price).is_some()
+            && state_overrides.is_none()
+            && block_overrides.is_none()
+    }
+
+    fn request_affordability_preflight(
+        request: &TransactionRequest,
+        state: &mut ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<AffordabilityPreflight> {
+        let Some(from) = request.from else {
+            return Ok(AffordabilityPreflight::Skip);
+        };
+        let Some(gas_limit) = request.gas else {
+            return Ok(AffordabilityPreflight::Skip);
+        };
+        let Some(max_fee_per_gas) = request.max_fee_per_gas.or(request.gas_price) else {
+            return Ok(AffordabilityPreflight::Skip);
+        };
+
+        let mut auth_state = state.clone_without_local_writes().to_provable_reader();
+        let (authenticated_tx, auth_data) =
+            match build_request_preflight_auth::<_, S>(request, &mut auth_state) {
+                Ok(data) => data,
+                Err(err) => {
+                    tracing::warn!(
+                        error = %err,
+                        "skipping request affordability preflight: unable to build auth data"
+                    );
+                    return Ok(AffordabilityPreflight::Skip);
+                }
+            };
+
+        Self::run_affordability_preflight(
+            &authenticated_tx,
+            &auth_data,
+            S::Address::from_vm_address(EthereumAddress::from(from)),
+            gas_limit,
+            max_fee_per_gas,
+            request.value.unwrap_or_default(),
+            state,
+            ethereum,
+        )
+    }
+
+    fn run_affordability_preflight(
+        authenticated_tx: &AuthenticatedTransactionData<S>,
+        auth_data: &AuthorizationData<S>,
+        sender_rollup_addr: S::Address,
+        requested_gas_limit: u64,
+        requested_fee_per_gas: u128,
+        requested_value: U256,
+        state: &mut ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<AffordabilityPreflight> {
+        let evm = Evm::<S>::default();
         let fee_check_active = evm
             .is_max_fee_check_active(state)
             .map_err(|e| rpc_internal_error(format!("state read error: {e}")))?;
         if !fee_check_active {
-            return Ok(());
+            return Ok(AffordabilityPreflight::Skip);
         }
 
-        let cost = U256::from(gas)
-            .checked_mul(U256::from(max_fee_per_gas))
-            .and_then(|gas_cost| gas_cost.checked_add(request.value.unwrap_or_default()))
+        let requested_gas_cost = U256::from(requested_gas_limit)
+            .checked_mul(U256::from(requested_fee_per_gas))
             .ok_or_else(|| {
                 ErrorObjectOwned::from(EthApiError::InvalidTransaction(
                     RpcInvalidTransactionError::GasUintOverflow,
                 ))
             })?;
+        let requested_total_cost =
+            requested_gas_cost
+                .checked_add(requested_value)
+                .ok_or_else(|| {
+                    ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                        RpcInvalidTransactionError::GasUintOverflow,
+                    ))
+                })?;
 
-        let sender_rollup_addr = S::Address::from_vm_address(EthereumAddress::from(from));
-        let gas_token = sov_bank::config_gas_token_id();
-        let bank = sov_bank::Bank::<S>::default();
+        let sender_balance = Self::read_balance(&sender_rollup_addr, state)?;
+        if requested_total_cost.is_zero() {
+            return Ok(AffordabilityPreflight::Affordable);
+        }
 
-        let sender_balance = bank
-            .get_balance_of(&sender_rollup_addr, gas_token, state)
-            .map_err(|e| rpc_internal_error(format!("balance read error: {e}")))?
-            .map(|a| U256::from(a.0))
-            .unwrap_or(U256::ZERO);
-
-        // Resolve paymaster payer (if any).
-        //
-        // If `sequencer_to_payer` returns `None`, no paymaster is configured for
-        // this sequencer — we fall through to the sender-only balance check.
-        //
-        // When a payer IS found we only check its balance, not per-sender policy
-        // limits (max_fee, gas_limit, authorized_sequencers, etc.).  At execution
-        // time, `try_reserve_gas()` evaluates the full policy and falls back to
-        // charging the sender when the policy denies the transaction.  Replicating
-        // the full policy here would require converting EVM gas types to rollup gas
-        // types and duplicating non-trivial logic.  The balance-only check is
-        // conservatively permissive: it may allow a tx that execution later rejects
-        // (policy deny + sender insufficient), but never rejects a valid one.
-        let paymaster = sov_paymaster::Paymaster::<S>::default();
-        let payer_balance = paymaster
-            .sequencer_to_payer
-            .get(ethereum.sequencer.da_address(), state)
-            .map_err(|e| rpc_internal_error(format!("paymaster read error: {e}")))?
-            .map(|payer_addr| {
-                bank.get_balance_of(&payer_addr, gas_token, state)
-                    .map_err(|e| rpc_internal_error(format!("payer balance read error: {e}")))
-                    .map(|opt| opt.map(|a| U256::from(a.0)).unwrap_or(U256::ZERO))
-            })
-            .transpose()?;
-
-        let affordable = match payer_balance {
-            Some(payer_bal) => payer_bal >= cost || sender_balance >= cost,
-            None => sender_balance >= cost,
+        let mut runtime = Seq::Rt::default();
+        let gas_price = state.gas_price();
+        let mut context = match runtime.transaction_authorizer().resolve_context(
+            auth_data,
+            &ethereum.sequencer_da_address,
+            ethereum.sequencer_rollup_address,
+            state,
+            None,
+            ExecutionContext::Sequencer,
+            ethereum.sequencer_type,
+        ) {
+            Ok(context) => context,
+            Err(err) => {
+                tracing::warn!(
+                    error = %err,
+                    "skipping affordability preflight: unable to resolve runtime context"
+                );
+                return Ok(AffordabilityPreflight::Skip);
+            }
         };
 
-        if !affordable {
-            return Err(ErrorObjectOwned::from(EthApiError::InvalidTransaction(
-                RpcInvalidTransactionError::InsufficientFunds {
-                    cost,
-                    balance: sender_balance,
-                },
+        if let Err(err) =
+            runtime
+                .gas_enforcer()
+                .try_reserve_gas(authenticated_tx, gas_price, &mut context, state)
+        {
+            tracing::warn!(
+                error = %err,
+                sender = %sender_rollup_addr,
+                "affordability preflight rejected while reserving gas"
+            );
+            return Ok(AffordabilityPreflight::Rejected(
+                Self::insufficient_funds_error(requested_total_cost, sender_balance),
+            ));
+        }
+
+        let actual_payer = *context.gas_refund_recipient();
+        let payer_balance_before = if actual_payer == sender_rollup_addr {
+            sender_balance
+        } else {
+            let payer_balance_after = Self::read_balance(&actual_payer, state)?;
+            payer_balance_after
+                .checked_add(U256::from(authenticated_tx.0.max_fee.0))
+                .ok_or_else(|| {
+                    ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                        RpcInvalidTransactionError::GasUintOverflow,
+                    ))
+                })?
+        };
+
+        if actual_payer == sender_rollup_addr {
+            if sender_balance < requested_total_cost {
+                return Ok(AffordabilityPreflight::Rejected(
+                    Self::insufficient_funds_error(requested_total_cost, sender_balance),
+                ));
+            }
+            return Ok(AffordabilityPreflight::Affordable);
+        }
+
+        if payer_balance_before < requested_gas_cost {
+            return Ok(AffordabilityPreflight::Rejected(
+                Self::insufficient_funds_error(requested_gas_cost, payer_balance_before),
+            ));
+        }
+
+        if sender_balance < requested_value {
+            return Ok(AffordabilityPreflight::Rejected(ErrorObjectOwned::from(
+                EthApiError::InvalidTransaction(
+                    RpcInvalidTransactionError::InsufficientFundsForTransfer,
+                ),
             )));
         }
 
-        Ok(())
+        Ok(AffordabilityPreflight::Affordable)
     }
 
-    /// Affordability check for signed raw transactions (eth_sendRawTransaction).
-    ///
-    /// Extracts sender, gas fields, and value from the RLP-decoded transaction
-    /// and delegates to the same paymaster-aware check used by eth_estimateGas.
-    fn check_raw_tx_affordability(data: &Bytes, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
-        use alloy_consensus::transaction::SignerRecoverable;
-        use alloy_consensus::Transaction;
+    fn read_balance(account: &S::Address, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+        let bank = sov_bank::Bank::<S>::default();
+        bank.get_balance_of(account, sov_bank::config_gas_token_id(), state)
+            .map_err(|e| rpc_internal_error(format!("balance read error: {e}")))
+            .map(|maybe_amount| {
+                maybe_amount
+                    .map(|amount| U256::from(amount.0))
+                    .unwrap_or_default()
+            })
+    }
 
+    fn insufficient_funds_error(cost: U256, balance: U256) -> ErrorObjectOwned {
+        ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+            RpcInvalidTransactionError::InsufficientFunds { cost, balance },
+        ))
+    }
+
+    fn decode_raw_transaction(data: &Bytes) -> RpcResult<(B256, Vec<u8>, TransactionSigned)> {
         let raw_tx = RlpEvmTransaction { rlp: data.to_vec() };
+        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
         let signed_tx = sov_evm::convert_to_tx_signed(raw_tx)
             .map_err(|err| ErrorObjectOwned::from(EthApiError::from(err)))?;
+        let tx_hash = *signed_tx.hash();
+
+        Ok((tx_hash, message, signed_tx))
+    }
+
+    fn raw_transaction_affordability_preflight(
+        signed_tx: &TransactionSigned,
+        authenticated_tx: &AuthenticatedTransactionAndRawHash<S>,
+        auth_data: &AuthorizationData<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<()> {
+        use alloy_consensus::transaction::SignerRecoverable;
+        use alloy_consensus::Transaction;
 
         let sender = signed_tx
             .recover_signer()
             .map_err(|_| rpc_invalid_params("failed to recover signer"))?;
+        let sender_rollup_addr = S::Address::from_vm_address(EthereumAddress::from(sender));
+        let mut state = ethereum.api_state_accessor();
 
-        let request = TransactionRequest {
-            from: Some(sender),
-            gas: Some(signed_tx.gas_limit()),
-            max_fee_per_gas: Some(signed_tx.max_fee_per_gas()),
-            value: Some(signed_tx.value()),
-            ..Default::default()
-        };
+        match Self::run_affordability_preflight(
+            &authenticated_tx.authenticated_tx,
+            auth_data,
+            sender_rollup_addr,
+            signed_tx.gas_limit(),
+            signed_tx.max_fee_per_gas(),
+            signed_tx.value(),
+            &mut state,
+            ethereum,
+        )? {
+            AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
+            AffordabilityPreflight::Rejected(err) => Err(err),
+        }
+    }
 
-        Self::check_affordability(&request, ethereum)
+    fn authenticate_tx(
+        tx: &FullyBakedTx,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<(AuthenticatedTransactionAndRawHash<S>, AuthorizationData<S>)> {
+        let mut state = ethereum.api_state_accessor().to_provable_reader();
+        let (authenticated_tx, auth_data, _) =
+            <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
+                .map_err(map_authentication_error)?;
+        Ok((authenticated_tx, auth_data))
     }
 
     async fn process_raw_transaction<T, F>(
@@ -281,12 +465,17 @@ where
     where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
     {
-        Self::check_raw_tx_affordability(&data, &ethereum)?;
-
-        let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
-        let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
+        let (tx_hash, raw_message, signed_tx) = Self::decode_raw_transaction(&data)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_tx(&tx, &ethereum)?;
+        {
+            let (authenticated_tx, auth_data) = Self::authenticate_tx(&tx, &ethereum)?;
+            Self::raw_transaction_affordability_preflight(
+                &signed_tx,
+                &authenticated_tx,
+                &auth_data,
+                &ethereum,
+            )?;
+        }
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
@@ -295,20 +484,6 @@ where
 
         on_success(tx_hash, ethereum)
     }
-
-    // Authenticate the transaction.
-    // This was used earlier to get the credential and nonce, for retries. This has now been
-    // implemented in the sequencer and is therefore no longer needed. However, calling
-    // `authenticate()` here pre-calculates and caches the signature check in the async API
-    // handler, which is important for performance.
-    // This will also be moved into the sequencer, but for now is kept here.
-    fn authenticate_tx(tx: &FullyBakedTx, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
-        let mut state = ethereum.api_state_accessor().to_provable_reader();
-        let _ = <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
-            .map_err(map_authentication_error)?;
-        Ok(())
-    }
-
     #[cfg(feature = "local")]
     pub async fn eth_accounts(
         _: JRpcParams<'static>,
@@ -339,7 +514,7 @@ where
             return Err(rpc_invalid_params("From address not in signers"));
         }
 
-        let raw_evm_tx = {
+        {
             let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
 
             // set nonce if none
@@ -355,46 +530,56 @@ where
                 .map(|id| id.to())
                 .unwrap_or(config_value!("CHAIN_ID"));
             transaction_request.chain_id = Some(chain_id);
+        }
 
-            if transaction_request.gas.is_none() {
-                let estimated_gas = evm.eth_estimate_gas(
-                    transaction_request.clone(),
-                    Some(BlockId::pending()),
-                    None,
-                    None,
-                    &mut state,
-                )?;
-                transaction_request.gas = Some(estimated_gas.to::<u64>());
-            }
+        if transaction_request.gas.is_none() {
+            let estimated_gas = Self::estimate_gas_request(
+                transaction_request.clone(),
+                Some(BlockId::pending()),
+                None,
+                None,
+                &ethereum,
+            )?;
+            transaction_request.gas = Some(estimated_gas.to::<u64>());
+        }
 
-            // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
-            // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,
-            // but alloy's `build_typed_tx()` requires `Some(TxKind::Create)`
-            if transaction_request.to.is_none() {
-                transaction_request.to = Some(TxKind::Create);
-            }
+        // For contract deployments, convert `to: None` to `to: Some(TxKind::Create)`
+        // The JSON-RPC spec uses `null` or omitted `to` field for contract deployments,
+        // but alloy's `build_typed_tx()` requires `Some(TxKind::Create)`
+        if transaction_request.to.is_none() {
+            transaction_request.to = Some(TxKind::Create);
+        }
 
-            let transaction = transaction_request
-                .build_typed_tx()
-                .map_err(|_| EthApiError::TransactionConversionError)?;
+        let transaction = transaction_request
+            .build_typed_tx()
+            .map_err(|_| EthApiError::TransactionConversionError)?;
 
-            // sign transaction
-            let signed_tx = ethereum
-                .eth_signer
-                .sign_transaction(transaction, &from)
-                .map_err(rpc_internal_error)?;
+        let signed_tx = ethereum
+            .eth_signer
+            .sign_transaction(transaction, &from)
+            .map_err(rpc_internal_error)?;
 
-            RlpEvmTransaction {
-                rlp: signed_tx.encoded_2718(),
-            }
+        // Inline the submit path instead of going through `process_raw_transaction`,
+        // which would redundantly RLP-decode and re-recover the signer we just signed with.
+        let tx_hash = *signed_tx.hash();
+        let raw_tx = RlpEvmTransaction {
+            rlp: signed_tx.encoded_2718(),
         };
-        let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
+        let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
+        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(message));
 
-        let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
+        {
+            let (authenticated_tx, auth_data) = Self::authenticate_tx(&tx, &ethereum)?;
+            Self::raw_transaction_affordability_preflight(
+                &signed_tx,
+                &authenticated_tx,
+                &auth_data,
+                &ethereum,
+            )?;
+        }
 
-        ethereum
-            .sequencer
-            .accept_tx(tx, ip_addr)
+        let seq = ethereum.sequencer.clone();
+        seq.accept_tx(tx, ip_addr)
             .await
             .map_err(map_accept_tx_error)?;
 

@@ -520,6 +520,72 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    /// Validates request-shape and base-fee rules for `eth_estimateGas` before any
+    /// transport-specific affordability checks run.
+    pub fn validate_estimate_gas_request(
+        &self,
+        request: &TransactionRequest,
+        block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<()> {
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        let enforce_max_fee_check = self
+            .is_max_fee_check_active(maybe_archival_state.deref_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        super::validate_call_fee_fields(request)?;
+
+        if has_overrides {
+            let mut validation_block_env = block_env.clone();
+            {
+                let evm_db = self.db(maybe_archival_state.deref_mut());
+                let mut validation_state = revm::database::State::builder()
+                    .with_database(evm_db)
+                    .build();
+                super::apply_call_overrides(
+                    &mut validation_state,
+                    &mut validation_block_env,
+                    state_overrides,
+                    block_overrides,
+                )?;
+            }
+            super::validate_simulation_max_fee_against_base_fee(
+                request,
+                &validation_block_env,
+                enforce_max_fee_check,
+            )?;
+        } else {
+            super::validate_simulation_max_fee_against_base_fee(
+                request,
+                &block_env,
+                enforce_max_fee_check,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Returns a cloned accessor pinned to the requested block context so callers
+    /// can run transport-side preflight logic without mutating shared API state.
+    pub fn preflight_state_for_block_id(
+        &self,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<ApiStateAccessor<S>, EthApiError> {
+        let state = match self.resolve_state_for_block_id(block_id, state)? {
+            super::maybe_archival_state::MaybeArchivalState::Current(current) => {
+                current.clone_without_local_writes()
+            }
+            super::maybe_archival_state::MaybeArchivalState::Archival(state)
+            | super::maybe_archival_state::MaybeArchivalState::Synthetic(state) => *state,
+        };
+
+        Ok(state)
+    }
+
     /// Runs gas estimation logic for `eth_estimateGas`.
     ///
     /// This is a library method called by `sov-ethereum`'s RPC handler, which

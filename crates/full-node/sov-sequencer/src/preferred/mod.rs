@@ -123,7 +123,6 @@ where
     nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
-    da_address: <S::Da as DaSpec>::Address,
     shutdown_sender: watch::Sender<()>,
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
@@ -881,10 +880,6 @@ where
             .sequencer_role_msg("get_sequencer_role")
             .await
             .unwrap_or(SequencerRole::BatchProducer)
-    }
-
-    fn da_address(&self) -> &<<Self::Spec as Spec>::Da as DaSpec>::Address {
-        &self.da_address
     }
 }
 

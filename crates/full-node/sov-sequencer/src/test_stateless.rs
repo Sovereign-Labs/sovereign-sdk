@@ -255,8 +255,4 @@ where
     async fn sequencer_role(&self) -> crate::SequencerRole {
         crate::SequencerRole::BatchProducer
     }
-
-    fn da_address(&self) -> &<<Self::Spec as Spec>::Da as DaSpec>::Address {
-        &self.da_address
-    }
 }

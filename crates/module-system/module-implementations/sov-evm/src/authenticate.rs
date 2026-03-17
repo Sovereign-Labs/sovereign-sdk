@@ -7,6 +7,8 @@ use crate::{call, CallMessage, RlpEvmTransaction};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
+#[cfg(feature = "native")]
+use alloy_rpc_types::TransactionRequest;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::{
@@ -17,7 +19,8 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, Credentials, PriorityFeeBips, TxDetails,
+    AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData, Credentials, PriorityFeeBips,
+    TxDetails,
 };
 use sov_modules_api::StateReader;
 use sov_modules_api::VersionReader;
@@ -185,6 +188,76 @@ where
         credentials,
         default_address: S::Address::from_vm_address(ethereum_address),
     }
+}
+
+/// Builds authenticated transaction data and authorization data for an RPC
+/// request that already has an explicit sender, gas limit, and fee field.
+#[cfg(feature = "native")]
+pub fn build_request_preflight_auth<
+    Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
+    S: Spec,
+>(
+    request: &TransactionRequest,
+    state: &mut Accessor,
+) -> Result<(AuthenticatedTransactionData<S>, AuthorizationData<S>), AuthenticationError>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    // Sentinel hash for error reporting only — no real signed transaction exists
+    // in the RPC preflight path.
+    let tx_hash = TxHash::new([0; 32]);
+    let from = request.from.ok_or(AuthenticationError::FatalError(
+        FatalError::Other("Missing from address".into()),
+        tx_hash,
+    ))?;
+    let gas_limit = request.gas.ok_or(AuthenticationError::FatalError(
+        FatalError::Other("Missing gas limit".into()),
+        tx_hash,
+    ))?;
+    let user_max_fee_per_gas =
+        request
+            .max_fee_per_gas
+            .or(request.gas_price)
+            .ok_or(AuthenticationError::FatalError(
+                FatalError::Other("Missing gas price".into()),
+                tx_hash,
+            ))?;
+    let tx_chain_id = match request.chain_id {
+        Some(chain_id) => validate_chain_id(Some(chain_id), tx_hash)?,
+        None => config_value!("CHAIN_ID"),
+    };
+
+    let gas_price = state.gas_price();
+    let rollup_base_fee = gas_price.as_ref()[0].0;
+
+    let evm = Evm::<S>::default();
+    let multiplier = evm.validate_fee_and_calculate_multiplier(
+        user_max_fee_per_gas,
+        rollup_base_fee,
+        tx_hash,
+        state,
+    )?;
+
+    let gas_limit = gas_limit.saturating_mul(multiplier);
+    let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
+    let max_fee = gas_limit
+        .checked_value(gas_price)
+        .ok_or(AuthenticationError::FatalError(
+            FatalError::Other("Amount overflow".into()),
+            tx_hash,
+        ))?;
+
+    let tx_details = TxDetails {
+        chain_id: tx_chain_id,
+        max_priority_fee_bips: PriorityFeeBips::ZERO,
+        max_fee,
+        gas_limit: Some(gas_limit),
+    };
+
+    let auth_data =
+        extract_evm_authorization_data::<S>(from, tx_hash, request.nonce.unwrap_or_default());
+
+    Ok((tx_details.into(), auth_data))
 }
 
 /// Authenticates a raw evm transaction.
