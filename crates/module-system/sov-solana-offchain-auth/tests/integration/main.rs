@@ -161,12 +161,8 @@ async fn create_test_rollup() -> anyhow::Result<(
     .start()
     .await?;
 
-    // Set up the rollup the usual way.
-    let mut slot_subscription = rollup.api_client().subscribe_slots().await.unwrap();
-    rollup.da_service.produce_n_blocks_now(5).await.unwrap();
-    for _ in 0..5 {
-        let _ = slot_subscription.next().await.unwrap().unwrap();
-    }
+    rollup.produce_enough_finalized_slots().await;
+    rollup.wait_for_sequencer_ready().await?;
 
     Ok((rollup, admin))
 }
