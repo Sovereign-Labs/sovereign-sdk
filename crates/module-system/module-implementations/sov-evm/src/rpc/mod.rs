@@ -500,15 +500,34 @@ where
 
     fn call(
         &self,
-        mut request: TransactionRequest,
+        request: TransactionRequest,
         block_id: Option<BlockId>,
         state_overrides: Option<StateOverride>,
         block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
-        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
-        let (mut block_env, mut maybe_archival_state, cfg) =
+        let (block_env, maybe_archival_state, cfg) =
             self.resolve_simulation_context_for_block_id(block_id, state)?;
+        self.call_with_context(
+            request,
+            block_env,
+            maybe_archival_state,
+            &cfg,
+            state_overrides,
+            block_overrides,
+        )
+    }
+
+    fn call_with_context(
+        &self,
+        mut request: TransactionRequest,
+        mut block_env: BlockEnv,
+        mut maybe_archival_state: MaybeArchivalState<'_, S>,
+        cfg: &crate::config::EvmRuntimeConfig,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+    ) -> Result<ResultAndState, EthApiError> {
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
         let enforce_max_fee_check = self
             .is_max_fee_check_active(maybe_archival_state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
@@ -544,7 +563,7 @@ where
 
         if !has_overrides {
             let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            return simulate_call(&mut evm_db, &block_env, &cfg, request);
+            return simulate_call(&mut evm_db, &block_env, cfg, request);
         }
 
         let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
@@ -555,7 +574,7 @@ where
             state_overrides,
             block_overrides,
         )?;
-        simulate_call(&mut evm_state, &block_env, &cfg, request)
+        simulate_call(&mut evm_state, &block_env, cfg, request)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.

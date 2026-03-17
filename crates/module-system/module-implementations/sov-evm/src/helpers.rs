@@ -51,7 +51,6 @@ pub(crate) fn prepare_call_env(
     Ok(env)
 }
 
-#[inline]
 fn simulation_gas_limit(block_gas_limit: u64, tx_gas_limit: Option<u64>) -> u64 {
     block_gas_limit.min(tx_gas_limit.unwrap_or(block_gas_limit))
 }

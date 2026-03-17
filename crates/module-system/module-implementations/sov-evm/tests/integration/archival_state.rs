@@ -1,5 +1,5 @@
 use alloy_eips::BlockId;
-use alloy_primitives::{Address, TxKind};
+use alloy_primitives::{Address, Bytes, TxKind, U64};
 use alloy_rpc_types::TransactionRequest;
 use sov_evm::{CallMessage, ChainSpecUpdate, Evm, EvmRuntimeConfigUpdate};
 use sov_evm_test_utils::LegacySimpleStorage;
@@ -160,6 +160,34 @@ fn setup_archival_burn_gas_regression_case(
     (runner, caller, admin, contract_addr, iterations)
 }
 
+fn query_historical_call_and_estimate(
+    runner: &mut TestRunner<RT, S>,
+    request: &TransactionRequest,
+) -> (Bytes, U64) {
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let output = evm
+            .eth_call(
+                request.clone(),
+                Some(BlockId::number(HISTORICAL_BLOCK)),
+                None,
+                None,
+                state,
+            )
+            .unwrap();
+        let estimate = evm
+            .eth_estimate_gas(
+                request.clone(),
+                Some(BlockId::number(HISTORICAL_BLOCK)),
+                None,
+                None,
+                state,
+            )
+            .unwrap();
+        (output, estimate)
+    })
+}
+
 #[test]
 fn test_state_at_different_depth_is_accessible() {
     let (mut runner, from, to, _) = setup();
@@ -193,53 +221,12 @@ fn test_historical_eth_call_and_estimate_gas_keep_archival_tx_gas_limit_for_omit
         setup_archival_burn_gas_regression_case();
     let request = burn_gas_request(caller, contract_addr, iterations, None);
 
-    let (before_output, before_estimate) = runner.query_visible_state(|state| {
-        let evm = Evm::<S>::default();
-        let output = evm
-            .eth_call(
-                request.clone(),
-                Some(BlockId::number(HISTORICAL_BLOCK)),
-                None,
-                None,
-                state,
-            )
-            .unwrap();
-        let estimate = evm
-            .eth_estimate_gas(
-                request.clone(),
-                Some(BlockId::number(HISTORICAL_BLOCK)),
-                None,
-                None,
-                state,
-            )
-            .unwrap();
-        (output, estimate)
-    });
+    let (before_output, before_estimate) =
+        query_historical_call_and_estimate(&mut runner, &request);
 
     update_tx_gas_limit(&mut runner, &admin, UPDATED_TX_GAS_LIMIT);
 
-    let (after_output, after_estimate) = runner.query_visible_state(|state| {
-        let evm = Evm::<S>::default();
-        let output = evm
-            .eth_call(
-                request.clone(),
-                Some(BlockId::number(HISTORICAL_BLOCK)),
-                None,
-                None,
-                state,
-            )
-            .unwrap();
-        let estimate = evm
-            .eth_estimate_gas(
-                request.clone(),
-                Some(BlockId::number(HISTORICAL_BLOCK)),
-                None,
-                None,
-                state,
-            )
-            .unwrap();
-        (output, estimate)
-    });
+    let (after_output, after_estimate) = query_historical_call_and_estimate(&mut runner, &request);
 
     assert_eq!(before_output, after_output);
     assert_eq!(before_estimate, after_estimate);
