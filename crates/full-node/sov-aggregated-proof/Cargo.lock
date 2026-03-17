@@ -6266,7 +6266,7 @@ name = "sov-aggregated-proof-shared"
 version = "0.1.0"
 dependencies = [
  "serde",
- "sov-mock-da",
+ "sov-modules-api",
 ]
 
 [[package]]

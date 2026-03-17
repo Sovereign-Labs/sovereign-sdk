@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use anyhow::{bail, ensure, Context};
 use slop_algebra::PrimeField32;
+use sov_aggregated_proof_shared::AggregatedProofWitness;
 use sov_aggregated_proof_shared::DeferredProofInput;
 use sov_mock_da::MockDaSpec;
 use sov_sp1_adapter::BlockHeaderWithProof;
@@ -59,9 +60,8 @@ fn main() -> anyhow::Result<()> {
             index
         );
 
-        let deferred_proof_input = DeferredProofInput {
+        let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
             public_values: proof.public_values.to_vec(),
-            vkey_hash: inner_vk_hash,
             da_block_header: block_header_with_proof.da_block_header,
         };
 
@@ -69,7 +69,12 @@ fn main() -> anyhow::Result<()> {
         stdin.write_proof(*recursion_proof.clone(), verification_key.vk.clone());
     }
 
-    stdin.write(&proof_inputs);
+    let witness = AggregatedProofWitness {
+        proof_inputs,
+        vkey_hash: inner_vk_hash,
+    };
+
+    stdin.write(&witness);
 
     println!("[host] starting outer compressed proof");
     let outer_proof = prover
