@@ -139,6 +139,18 @@ impl<S: Spec> Evm<S> {
 
         Ok(!self.is_max_fee_check_disabled(state)?)
     }
+
+    /// Returns the gas multiplier for the current state.
+    pub(crate) fn fee_multiplier<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<crate::sov_fee_and_gas_utils::GasMultiplier, Accessor::Error> {
+        if self.is_max_fee_check_active(state)? {
+            Ok(crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckActive)
+        } else {
+            Ok(crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive)
+        }
+    }
 }
 
 /// Accessory state reads

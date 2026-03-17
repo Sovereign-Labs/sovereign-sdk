@@ -53,18 +53,21 @@ impl<S: Spec> Evm<S> {
         tx_hash: TxHash,
         state: &mut Accessor,
     ) -> Result<u64, AuthenticationError> {
-        if !self.is_max_fee_check_active(state).map_err(|e| {
+        use crate::sov_fee_and_gas_utils::GasMultiplier;
+
+        let multiplier = self.fee_multiplier(state).map_err(|e| {
             AuthenticationError::OutOfGas(format!("validate_fee_and_calculate_multiplier: {e}"))
-        })? {
-            Ok(100)
-        } else if user_max_fee_per_gas < rollup_base_fee {
-            let err = FatalError::InsufficientMaxFeePerGas {
-                user_max_fee_per_gas,
-                rollup_base_fee,
-            };
-            Err(AuthenticationError::FatalError(err, tx_hash))
-        } else {
-            Ok(1)
+        })?;
+
+        match multiplier {
+            GasMultiplier::FeeCheckActive if user_max_fee_per_gas < rollup_base_fee => {
+                let err = FatalError::InsufficientMaxFeePerGas {
+                    user_max_fee_per_gas,
+                    rollup_base_fee,
+                };
+                Err(AuthenticationError::FatalError(err, tx_hash))
+            }
+            _ => Ok(multiplier.as_u64()),
         }
     }
 }

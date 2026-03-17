@@ -475,7 +475,12 @@ where
         let total_gas_used =
             gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
 
-        Ok(U64::from(super::apply_margins(total_gas_used)?))
+        // The real tx path multiplies gas_limit by 100 when fee check is inactive.
+        // Divide the estimate so the returned value is the gas_limit the user should set.
+        let multiplier = self.fee_multiplier(state).map_err(into_rpc_error)?;
+        let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
+
+        Ok(U64::from(super::apply_margins(adjusted)?))
     }
 
     /// Handler for `debug_traceBlockByNumber`

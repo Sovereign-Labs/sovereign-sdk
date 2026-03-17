@@ -2,8 +2,26 @@ use crate::Receipt;
 use anyhow::{bail, ensure, Context};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Gas, GasInfo, Spec};
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 
+/// The gas multiplier applied to EVM `gas_limit` based on whether the fee check is active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GasMultiplier {
+    /// Fee check is active — `gas_limit` maps 1:1 to sovereign gas.
+    FeeCheckActive,
+    /// Fee check is inactive — sovereign gas budget = `gas_limit * 100`.
+    FeeCheckInactive,
+}
+
+impl GasMultiplier {
+    pub(crate) fn as_u64(self) -> u64 {
+        match self {
+            Self::FeeCheckActive => 1,
+            Self::FeeCheckInactive => 100,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProjectedReceiptGas {
     pub(crate) gas_used: u64,
     pub(crate) cumulative_gas_used: u64,
