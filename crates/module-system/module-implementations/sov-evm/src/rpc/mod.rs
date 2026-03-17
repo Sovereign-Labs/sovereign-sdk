@@ -501,8 +501,7 @@ where
             let mut validation_block_env = block_env.clone();
             {
                 let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-                let mut validation_state =
-                    RevmState::builder().with_database(evm_db).build();
+                let mut validation_state = RevmState::builder().with_database(evm_db).build();
                 apply_call_overrides(
                     &mut validation_state,
                     &mut validation_block_env,
