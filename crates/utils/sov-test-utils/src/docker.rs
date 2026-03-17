@@ -61,12 +61,11 @@ where
             }
             Err(err) => {
                 let err_text = err.to_string();
-                let delays: &[Duration] =
-                    if is_retryable_pull_error_message(&err_text) {
-                        &RETRY_DELAYS
-                    } else {
-                        &RETRY_DELAYS[..BASE_RETRY_COUNT]
-                    };
+                let delays: &[Duration] = if is_retryable_pull_error_message(&err_text) {
+                    &RETRY_DELAYS
+                } else {
+                    &RETRY_DELAYS[..BASE_RETRY_COUNT]
+                };
 
                 if let Some(&delay) = delays.get(attempt.saturating_sub(1)) {
                     tracing::warn!(
@@ -155,8 +154,15 @@ mod tests {
 
     #[test]
     fn retry_delays_and_base_limit() {
-        assert_eq!(RETRY_DELAYS.len(), 4, "transient errors get 4 retries → 5 attempts");
-        assert_eq!(BASE_RETRY_COUNT, 2, "base errors get 2 retries → 3 attempts");
+        assert_eq!(
+            RETRY_DELAYS.len(),
+            4,
+            "transient errors get 4 retries → 5 attempts"
+        );
+        assert_eq!(
+            BASE_RETRY_COUNT, 2,
+            "base errors get 2 retries → 3 attempts"
+        );
         assert_eq!(RETRY_DELAYS[0], Duration::from_secs(2));
         assert_eq!(RETRY_DELAYS[1], Duration::from_secs(5));
         assert_eq!(RETRY_DELAYS[2], Duration::from_secs(10));
