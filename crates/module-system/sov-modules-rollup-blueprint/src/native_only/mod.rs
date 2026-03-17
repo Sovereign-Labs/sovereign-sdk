@@ -31,7 +31,7 @@ use sov_state::Storage;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
-    RollupProverConfigDiscriminants,
+    RollupProverConfigDiscriminants, ZkProofManagerStatus,
 };
 use sov_stf_runner::{
     initialize_state, query_state_update_info, CorsConfiguration, RollupConfig,
@@ -146,6 +146,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         sequencer: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender>;
+
+    /// Returns an optional shared status handle for the zk proof manager.
+    fn zk_proof_manager_status(&self) -> Option<Arc<ZkProofManagerStatus>> {
+        None
+    }
 
     /// Creates an instance of a LedgerDb.
     fn create_ledger_db(
@@ -558,6 +563,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         genesis_state_root,
                         stf_info_receiver,
                         secondary_shutdown_receiver,
+                        self.zk_proof_manager_status(),
                     )
                     .await?
                 }

@@ -11,6 +11,7 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
+use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::HasRestApi;
 use sov_modules_api::transaction::TransactionCallable;
 use sov_modules_api::transaction::{Transaction, TxDetails};
@@ -34,12 +35,13 @@ use sov_test_utils::runtime::{
 };
 use sov_test_utils::sequencer::TestSequencerSetup;
 use sov_test_utils::test_rollup::StoragePath;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{FullNodeBlueprint, GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
-    MessageGenerator, RtAgnosticBlueprint, TestPrivateKey, TestSpec, TransactionType,
-    TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    ManualProofPostingControl, ManualProofPostingRtAgnosticBlueprint,
+    ManualProofPostingRtAgnosticProverService, MessageGenerator, RtAgnosticBlueprint,
+    TestPrivateKey, TestSpec, TransactionType, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE,
+    TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_MAX_CONCURRENT_BLOBS,
 };
 use sov_value_setter::ValueSetter;
 
@@ -48,6 +50,53 @@ pub const MAX_BATCH_EXECUTION_TIME_MILLIS: u64 = 1_000 * 60 * 5; // Allow batche
 pub type MySequencer = StdSequencer<TestSpec, RT, MockDaService>;
 pub type RT = TestOptimisticRuntime<TestSpec>;
 pub type RTCall = TestOptimisticRuntimeCall<TestSpec>;
+pub type ManualProofPostingTestProverService = ManualProofPostingRtAgnosticProverService<TestSpec>;
+
+#[allow(clippy::too_many_arguments)]
+fn configured_test_rollup_builder<B, RT>(
+    builder: RollupBuilder<B>,
+    dir: Arc<tempfile::TempDir>,
+    seq_da_address: MockAddress,
+    minimum_profit_per_tx: u128,
+    automatic_batch_production: bool,
+    max_batch_size_bytes: usize,
+    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    blob_processing_timeout_secs: u64,
+    max_batch_execution_time_millis: u64,
+    stop_at_rollup_height: Option<RollupHeight>,
+) -> RollupBuilder<B>
+where
+    B: FullNodeBlueprint<Native, Spec = TestSpec, Runtime = RT, DaService = StorableMockDaService>
+        + Default
+        + 'static,
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+{
+    builder
+        .set_config(|c| {
+            c.rollup_prover_config = rollup_prover_config;
+            c.automatic_batch_production = automatic_batch_production;
+            c.storage = StoragePath::Tmp(dir);
+            c.max_batch_size_bytes = max_batch_size_bytes;
+            c.blob_processing_timeout_secs = blob_processing_timeout_secs;
+            c.stop_at_rollup_height = stop_at_rollup_height;
+            if let SequencerKindConfig::Preferred(preferred_sequencer_config) =
+                &mut c.sequencer_config
+            {
+                preferred_sequencer_config.batch_execution_time_limit_millis =
+                    max_batch_execution_time_millis;
+                // Proof generation and sequencer state-root consistency checks are currently
+                // incompatible in these integration tests.
+                if c.rollup_prover_config.is_some() {
+                    preferred_sequencer_config.disable_state_root_consistency_checks = true;
+                }
+            }
+            c.max_concurrent_blobs = TEST_MAX_CONCURRENT_BLOBS;
+        })
+        .set_da_config(|c| c.sender_address = seq_da_address)
+        .set_persistent_da()
+        .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
+        .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave)
+}
 
 pub async fn new_sequencer() -> TestSequencerSetup<RT> {
     let dir = tempfile::tempdir().unwrap();
@@ -305,36 +354,79 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
 ) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
-    let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
-        GenesisSource::CustomParams(genesis_params),
-        block_producing_config,
-        finalization_blocks,
-    )
-    .set_config(|c| {
-        c.rollup_prover_config = rollup_prover_config;
-        c.automatic_batch_production = automatic_batch_production;
-        c.storage = StoragePath::Tmp(dir);
-        c.max_batch_size_bytes = max_batch_size_bytes;
-        c.blob_processing_timeout_secs = blob_processing_timeout_secs;
-        c.stop_at_rollup_height = stop_at_rollup_height;
-        if let SequencerKindConfig::Preferred(preferred_sequencer_config) = &mut c.sequencer_config
-        {
-            preferred_sequencer_config.batch_execution_time_limit_millis =
-                max_batch_execution_time_millis;
-            // Proof generation and sequencer state-root consistency checks are currently
-            // incompatible in these integration tests.
-            if c.rollup_prover_config.is_some() {
-                preferred_sequencer_config.disable_state_root_consistency_checks = true;
-            }
-        }
-        c.max_concurrent_blobs = TEST_MAX_CONCURRENT_BLOBS;
-    })
-    .set_da_config(|c| c.sender_address = seq_da_address)
-    .set_persistent_da()
-    .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
-    .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave);
+    let builder = configured_test_rollup_builder(
+        RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
+            GenesisSource::CustomParams(genesis_params),
+            block_producing_config,
+            finalization_blocks,
+        ),
+        dir,
+        seq_da_address,
+        minimum_profit_per_tx,
+        automatic_batch_production,
+        max_batch_size_bytes,
+        rollup_prover_config,
+        blob_processing_timeout_secs,
+        max_batch_execution_time_millis,
+        stop_at_rollup_height,
+    );
 
     builder.start().await.unwrap()
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn new_test_rollup_with_manual_proof_posting<
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+>(
+    dir: Arc<tempfile::TempDir>,
+    seq_da_address: MockAddress,
+    genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
+    minimum_profit_per_tx: u128,
+    automatic_batch_production: bool,
+    max_batch_size_bytes: usize,
+    block_producing_config: BlockProducingConfig,
+    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    blob_processing_timeout_secs: u64,
+    max_batch_execution_time_millis: u64,
+    stop_at_rollup_height: Option<RollupHeight>,
+    finalization_blocks: u32,
+) -> (
+    TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
+    ManualProofPostingControl,
+    ManualProofPostingTestProverService,
+) {
+    assert!(
+        rollup_prover_config.is_some(),
+        "manual proof posting requires a prover-enabled rollup"
+    );
+
+    let (blueprint, control) =
+        ManualProofPostingRtAgnosticBlueprint::<TestSpec, RT>::new_with_control();
+
+    let builder = configured_test_rollup_builder(
+        RollupBuilder::<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>::new(
+            GenesisSource::CustomParams(genesis_params),
+            block_producing_config,
+            finalization_blocks,
+        )
+        .with_blueprint(blueprint.clone()),
+        dir,
+        seq_da_address,
+        minimum_profit_per_tx,
+        automatic_batch_production,
+        max_batch_size_bytes,
+        rollup_prover_config,
+        blob_processing_timeout_secs,
+        max_batch_execution_time_millis,
+        stop_at_rollup_height,
+    );
+
+    let test_rollup = builder.start().await.unwrap();
+    let prover_service = blueprint.prover_service().expect(
+        "manual proof posting prover service should be initialized before the test rollup starts",
+    );
+
+    (test_rollup, control, prover_service)
 }
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(

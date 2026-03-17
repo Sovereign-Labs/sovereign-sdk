@@ -123,6 +123,7 @@ pub struct RollupBuilderConfig<S: Spec> {
 /// background to test node APIs.
 #[derive(Clone)]
 pub struct RollupBuilder<R: FullNodeBlueprint<Native>> {
+    blueprint: Arc<R>,
     genesis: GenesisSource<R::Spec, R::Runtime>,
     da_config: <<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService as DaService>::Config,
     config: RollupBuilderConfig<R::Spec>,
@@ -227,6 +228,12 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self
     }
 
+    /// Replaces the blueprint instance used when the rollup is started.
+    pub fn with_blueprint(mut self, blueprint: R) -> Self {
+        self.blueprint = Arc::new(blueprint);
+        self
+    }
+
     /// Sets the sequencer "kind" to [`SequencerKindConfig::Standard`].
     pub fn with_standard_sequencer(self) -> Self {
         self.set_config(|c| {
@@ -247,7 +254,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     pub async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
-        let blueprint: R = Default::default();
+        let blueprint = self.blueprint.clone();
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
                 && !sequencer_conf.disable_state_root_consistency_checks
@@ -468,6 +475,7 @@ where
         });
 
         Self {
+            blueprint: Arc::new(R::default()),
             genesis,
             da_config,
             config: Self::default_config(0, storage_path, post_config),
@@ -548,6 +556,7 @@ where
         };
 
         Self {
+            blueprint: Arc::new(R::default()),
             genesis,
             da_config,
             postgres_container_opt: None,
@@ -561,6 +570,7 @@ where
     /// task. See [`TestRollup`] for usage information.
     pub async fn start(self) -> anyhow::Result<TestRollup<R>> {
         let with_secondary_sequencer = self.with_secondary_sequencer;
+        let blueprint = self.blueprint.clone();
         let storage_config = &self.config.storage.clone();
         let mut test_rollup = self.start_test_rollup().await?;
 
@@ -579,6 +589,7 @@ where
                     rollup_config.storage.path = second_sequencer_dir.path().to_path_buf();
 
                     let (client, sender) = Self::start_secondary_sequencer(
+                        blueprint,
                         da_service.another_on_the_same_layer(addr).await,
                         rollup_config.clone(),
                         shutdown_sender.clone(),
@@ -596,6 +607,7 @@ where
     }
 
     async fn start_secondary_sequencer(
+        blueprint: Arc<R>,
         secondary_da_service: StorableMockDaService,
         rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
@@ -604,7 +616,6 @@ where
         watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>,
     )> {
         let mut shutdown_receiver = shutdown_sender.subscribe();
-        let blueprint: R = Default::default();
 
         let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;
         let finalized_header = secondary_da_service

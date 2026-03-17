@@ -296,6 +296,7 @@ pub async fn initialize_runner(
             genesis_state_root,
             stf_info_receiver,
             shutdown_receiver.clone(),
+            None,
         )
         .await
         .unwrap();

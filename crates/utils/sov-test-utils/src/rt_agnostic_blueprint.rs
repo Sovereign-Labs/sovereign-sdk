@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
+use crate::manual_proof_posting::{ManualProofPostingControl, ManualProofPostingSharedState};
+use crate::ManualProofPostingProverService;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
@@ -24,8 +26,24 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::ProofBlobSender;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{
+    ParallelProverService, ProverService, RollupProverConfig, ZkProofManagerStatus,
+};
 use sov_stf_runner::RollupConfig;
+
+/// The default prover service used by [`RtAgnosticBlueprint`].
+pub type RtAgnosticProverService<S> = ParallelProverService<
+    <S as Spec>::Address,
+    <<S as Spec>::Storage as Storage>::Root,
+    <<S as Spec>::Storage as Storage>::Witness,
+    StorableMockDaService,
+    <S as Spec>::InnerZkvm,
+    <S as Spec>::OuterZkvm,
+>;
+
+/// The manual proof-posting prover service used by [`ManualProofPostingRtAgnosticBlueprint`].
+pub type ManualProofPostingRtAgnosticProverService<S> =
+    ManualProofPostingProverService<RtAgnosticProverService<S>>;
 
 /// A basic, "vanilla" [`FullNodeBlueprint`] to be used for testing.
 pub struct RtAgnosticBlueprint<
@@ -49,6 +67,36 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager> Default for RtAgnosticBlueprint<S, R,
             phantom: PhantomData,
         }
     }
+}
+
+impl<S: Spec, R: RuntimeTrait<S>, Manager> Clone for RtAgnosticBlueprint<S, R, Manager> {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+fn build_parallel_prover_service<S>(
+    prover_config: RollupProverConfig<<S as Spec>::InnerZkvm>,
+    rollup_config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
+) -> RtAgnosticProverService<S>
+where
+    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>,
+{
+    let (host_args, prover_config_disc) = prover_config.split();
+
+    let inner_vm = <S::InnerZkvm as Zkvm>::Host::from_args(&host_args);
+    let outer_vm = MockZkvmHost::new_non_blocking();
+
+    let da_verifier = Default::default();
+
+    ParallelProverService::new_with_default_workers(
+        inner_vm,
+        outer_vm,
+        da_verifier,
+        prover_config_disc,
+        CodeCommitment::default(),
+        rollup_config.proof_manager.prover_address,
+    )
 }
 
 impl<S, R, Manager> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager>
@@ -82,14 +130,7 @@ where
 
     type StorageManager = Manager;
 
-    type ProverService = ParallelProverService<
-        <Self::Spec as Spec>::Address,
-        <<Self::Spec as Spec>::Storage as Storage>::Root,
-        <<Self::Spec as Spec>::Storage as Storage>::Witness,
-        Self::DaService,
-        <Self::Spec as Spec>::InnerZkvm,
-        <Self::Spec as Spec>::OuterZkvm,
-    >;
+    type ProverService = RtAgnosticProverService<Self::Spec>;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
 
@@ -136,21 +177,7 @@ where
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (host_args, prover_config_disc) = prover_config.split();
-
-        let inner_vm = <S::InnerZkvm as Zkvm>::Host::from_args(&host_args);
-        let outer_vm = MockZkvmHost::new_non_blocking();
-
-        let da_verifier = Default::default();
-
-        ParallelProverService::new_with_default_workers(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            prover_config_disc,
-            CodeCommitment::default(),
-            rollup_config.proof_manager.prover_address,
-        )
+        build_parallel_prover_service::<S>(prover_config, rollup_config)
     }
 
     fn create_storage_manager(
@@ -167,6 +194,186 @@ where
         proof_blob_sender: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(proof_blob_sender))
+    }
+}
+
+/// A [`RtAgnosticBlueprint`] variant which lets tests manually release aggregate proofs to DA.
+pub struct ManualProofPostingRtAgnosticBlueprint<
+    S: Spec,
+    R: RuntimeTrait<S>,
+    Manager = NomtStorageManager<
+        MockDaSpec,
+        <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+        NomtProverStorage<
+            DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
+        >,
+    >,
+> {
+    phantom: PhantomData<(S, R, Manager)>,
+    shared_state: Arc<ManualProofPostingSharedState>,
+    prover_service: Arc<Mutex<Option<ManualProofPostingRtAgnosticProverService<S>>>>,
+    proof_manager_status: Arc<ZkProofManagerStatus>,
+}
+
+impl<S: Spec, R: RuntimeTrait<S>, Manager> Default
+    for ManualProofPostingRtAgnosticBlueprint<S, R, Manager>
+{
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+            shared_state: Arc::new(ManualProofPostingSharedState::new()),
+            prover_service: Arc::new(Mutex::new(None)),
+            proof_manager_status: Arc::new(ZkProofManagerStatus::default()),
+        }
+    }
+}
+
+impl<S: Spec, R: RuntimeTrait<S>, Manager> Clone
+    for ManualProofPostingRtAgnosticBlueprint<S, R, Manager>
+{
+    fn clone(&self) -> Self {
+        Self {
+            phantom: PhantomData,
+            shared_state: self.shared_state.clone(),
+            prover_service: self.prover_service.clone(),
+            proof_manager_status: self.proof_manager_status.clone(),
+        }
+    }
+}
+
+impl<S: Spec, R: RuntimeTrait<S>, Manager> ManualProofPostingRtAgnosticBlueprint<S, R, Manager> {
+    /// Creates a new manual proof-posting blueprint together with its control handle.
+    pub fn new_with_control() -> (Self, ManualProofPostingControl) {
+        let blueprint = Self::default();
+        let control = ManualProofPostingControl::new(
+            blueprint.shared_state.clone(),
+            blueprint.proof_manager_status.clone(),
+        );
+
+        (blueprint, control)
+    }
+
+    /// Returns the controlled prover service created during startup, if the rollup has reached that stage.
+    pub fn prover_service(&self) -> Option<ManualProofPostingRtAgnosticProverService<S>> {
+        self.prover_service
+            .lock()
+            .expect("manual proof posting prover service lock poisoned")
+            .clone()
+    }
+}
+
+impl<S, R, Manager> RollupBlueprint<Native> for ManualProofPostingRtAgnosticBlueprint<S, R, Manager>
+where
+    S: Spec + PluggableSpec,
+    R: RuntimeTrait<S> + HasKernel<S> + HasCapabilities<S> + HasKernel<S>,
+    Manager: Send + Sync + 'static,
+{
+    type Spec = S;
+    type Runtime = R;
+}
+
+#[async_trait]
+impl<S, R, Manager> FullNodeBlueprint<Native>
+    for ManualProofPostingRtAgnosticBlueprint<S, R, Manager>
+where
+    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
+    R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
+    Manager: Send
+        + Sync
+        + 'static
+        + HierarchicalStorageManager<
+            MockDaSpec,
+            StfState = <S as Spec>::Storage,
+            LedgerChangeSet = SchemaBatch,
+            LedgerState = DeltaReader,
+            StfChangeSet = <S::Storage as Storage>::ChangeSet,
+        >
+        + StorageManagerInitializer<S, StorableMockDaService>,
+{
+    type DaService = StorableMockDaService;
+
+    type StorageManager = Manager;
+
+    type ProverService = ManualProofPostingRtAgnosticProverService<Self::Spec>;
+
+    type ProofSender = SovApiProofSender<Self::Spec>;
+
+    fn create_outer_code_commitment(
+        &self,
+    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
+        MockCodeCommitment::default()
+    }
+
+    async fn create_endpoints(
+        &self,
+        state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
+        sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        ledger_db: &LedgerDb,
+        sequencer: &SequencerCreationReceipt<Self::Spec>,
+        _da_service: &Self::DaService,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+    ) -> anyhow::Result<NodeEndpoints> {
+        Ok(
+            sov_modules_rollup_blueprint::register_endpoints::<Self, Native>(
+                state_update_receiver,
+                sync_status_receiver,
+                shutdown_receiver,
+                ledger_db,
+                sequencer,
+                rollup_config,
+            )
+            .await?,
+        )
+    }
+
+    async fn create_da_service(
+        &self,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    ) -> Self::DaService {
+        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
+    }
+
+    async fn create_prover_service(
+        &self,
+        prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _da_service: &Self::DaService,
+    ) -> Self::ProverService {
+        let prover_service = ManualProofPostingProverService::new(
+            build_parallel_prover_service::<S>(prover_config, rollup_config),
+            self.shared_state.clone(),
+        );
+
+        *self
+            .prover_service
+            .lock()
+            .expect("manual proof posting prover service lock poisoned") =
+            Some(prover_service.clone());
+
+        prover_service
+    }
+
+    fn create_storage_manager(
+        &self,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        witness_generation: bool,
+    ) -> anyhow::Result<Self::StorageManager> {
+        Manager::from_config(rollup_config, witness_generation)
+    }
+
+    fn create_proof_sender(
+        &self,
+        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        proof_blob_sender: Arc<dyn ProofBlobSender>,
+    ) -> anyhow::Result<Self::ProofSender> {
+        Ok(Self::ProofSender::new(proof_blob_sender))
+    }
+
+    fn zk_proof_manager_status(&self) -> Option<Arc<ZkProofManagerStatus>> {
+        Some(self.proof_manager_status.clone())
     }
 }
 
