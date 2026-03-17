@@ -28,7 +28,7 @@ pub(crate) fn prepare_call_env(
         ..
     } = request;
 
-    let gas_limit = gas.unwrap_or_else(|| tx_gas_limit.unwrap_or(block_env.gas_limit));
+    let gas_limit = gas.unwrap_or_else(|| simulation_gas_limit(block_env.gas_limit, tx_gas_limit));
 
     let env = TxEnv {
         tx_type: TransactionType::Eip1559.into(),
@@ -49,6 +49,11 @@ pub(crate) fn prepare_call_env(
     };
 
     Ok(env)
+}
+
+#[inline]
+fn simulation_gas_limit(block_gas_limit: u64, tx_gas_limit: Option<u64>) -> u64 {
+    block_gas_limit.min(tx_gas_limit.unwrap_or(block_gas_limit))
 }
 
 /// Builds an RPC transaction from a recovered signed transaction with block context.
@@ -139,11 +144,43 @@ mod tests {
             "should use tx_gas_limit when gas is omitted"
         );
 
+        let lower_block_limit = BlockEnv {
+            gas_limit: 500_000,
+            ..Default::default()
+        };
+        let tx_env =
+            prepare_call_env(&lower_block_limit, request.clone(), Some(30_000_000)).unwrap();
+        assert_eq!(
+            tx_env.gas_limit, 500_000,
+            "should respect a lower block gas limit when gas is omitted"
+        );
+
         // When tx_gas_limit is None, omitted gas falls back to block_env.gas_limit
         let tx_env = prepare_call_env(&block_env, request, None).unwrap();
         assert_eq!(
             tx_env.gas_limit, 1_000_000_000,
             "should fall back to block gas limit when tx_gas_limit is None"
+        );
+    }
+
+    #[test]
+    fn prepare_call_env_explicit_gas_bypasses_simulation_limit() {
+        let block_env = BlockEnv {
+            gas_limit: 1_000_000_000,
+            ..Default::default()
+        };
+
+        let explicit_gas = 50_000;
+        let request = TransactionRequest {
+            gas: Some(explicit_gas),
+            ..Default::default()
+        };
+
+        // Explicit gas should be used as-is, ignoring both tx_gas_limit and block_gas_limit
+        let tx_env = prepare_call_env(&block_env, request, Some(30_000_000)).unwrap();
+        assert_eq!(
+            tx_env.gas_limit, explicit_gas,
+            "explicit gas in request should bypass simulation_gas_limit"
         );
     }
 
