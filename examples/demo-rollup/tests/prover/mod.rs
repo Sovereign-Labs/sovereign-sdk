@@ -27,7 +27,7 @@ use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::TestStorageSpec;
 use tempfile::TempDir;
 
-use crate::prover::datagen::get_blocks_from_da;
+use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
 use crate::test_helpers::test_genesis_paths;
 
 type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
@@ -126,7 +126,7 @@ async fn generate_proofs(
 
     let mut proofs = Vec::new();
 
-    for filtered_block in &mut blocks[..3] {
+    for filtered_block in &mut blocks[..(DEFAULT_BLOCKS as usize)] {
         let height = filtered_block.header().height();
         tracing::info!(
             "Requesting data for height {} and prev_state_root 0x{}",

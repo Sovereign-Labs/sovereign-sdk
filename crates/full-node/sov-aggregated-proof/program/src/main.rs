@@ -4,7 +4,9 @@ sp1_zkvm::entrypoint!(main);
 
 use demo_stf::MultiAddressEvmSolana;
 use sha2::{Digest, Sha256};
-use sov_aggregated_proof_shared::{AggregatedProofWitness, DeferredProofInput};
+use sov_aggregated_proof_shared::{
+    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
+};
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
@@ -25,8 +27,13 @@ pub fn main() {
     let witness = sp1_zkvm::io::read::<AggregatedProofWitness<MockDaSpec>>();
     let proof_inputs = witness.proof_inputs;
     let vkey_hash = witness.vkey_hash;
+    let prev_outer_proof = witness.prev_outer_proof;
 
     verify::<S, MockDaSpec>(proof_inputs, vkey_hash);
+
+    if let Some(prev_outer_proof) = prev_outer_proof {
+        verify_sp1_proof(&prev_outer_proof.public_values, prev_outer_proof.vkey_hash);
+    }
 }
 
 fn verify<S: Spec, Da: DaSpec>(proof_inputs: Vec<DeferredProofInput<Da>>, vkey_hash: [u32; 8]) {
@@ -73,15 +80,20 @@ fn verify<S: Spec, Da: DaSpec>(proof_inputs: Vec<DeferredProofInput<Da>>, vkey_h
                 );
             }
 
-            verify_sp1_proof(proof_input, vkey_hash);
+            println!("Veryfing {index}");
+            verify_inner_sp1_proof(proof_input, vkey_hash);
             expected_state_root = Some(stf_public_data.final_state_root.clone());
         }
     }
 }
 
-fn verify_sp1_proof<Da: DaSpec>(proof_input: &DeferredProofInput<Da>, vkey_hash: [u32; 8]) {
-    let public_values_digest: [u8; 32] = Sha256::digest(&proof_input.public_values).into();
+fn verify_sp1_proof(public_values: &[u8], vkey_hash: [u32; 8]) {
+    let public_values_digest: [u8; 32] = Sha256::digest(public_values).into();
     sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash, &public_values_digest);
+}
+
+fn verify_inner_sp1_proof<Da: DaSpec>(proof_input: &DeferredProofInput<Da>, vkey_hash: [u32; 8]) {
+    verify_sp1_proof(&proof_input.public_values, vkey_hash);
 }
 
 fn deserialize_pub_data<S: Spec, Da: DaSpec>(data: &[u8], index: usize) -> StPubData<S, Da> {
