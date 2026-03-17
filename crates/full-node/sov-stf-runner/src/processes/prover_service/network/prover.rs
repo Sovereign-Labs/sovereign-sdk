@@ -91,12 +91,12 @@ where
         }
     }
 
-    pub(crate) fn proving_precondition(
+    pub(crate) async fn proving_precondition(
         &self,
         state_transition_info: &StateTransitionInfo<StateRoot, Witness, Da::Spec>,
     ) -> anyhow::Result<()> {
         let block_header_hash = state_transition_info.da_block_header().hash();
-        let tracker = self.tracker.blocking_read();
+        let tracker = self.tracker.read().await;
 
         if let Some(status) = tracker.get(&block_header_hash) {
             return match status {
@@ -120,7 +120,7 @@ where
         state_transition_info: StateTransitionInfo<StateRoot, Witness, Da::Spec>,
         verifier: &Verifier<Da>,
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
-        self.proving_precondition(&state_transition_info)?;
+        self.proving_precondition(&state_transition_info).await?;
 
         let block_header_hash = state_transition_info.da_block_header().hash();
         let slot_number = state_transition_info.slot_number;
@@ -308,7 +308,7 @@ where
                     }
                     Ok(None) => {
                         drop(outer);
-                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     }
                     Err(e) => {
                         return Err(anyhow::anyhow!("Outer network proving failed: {}", e));
