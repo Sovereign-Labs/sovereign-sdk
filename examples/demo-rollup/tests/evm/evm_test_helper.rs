@@ -13,6 +13,7 @@ use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::WsConnect;
+use alloy_rpc_types_eth::{AccessListResult, TransactionRequest};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
@@ -421,6 +422,84 @@ pub async fn setup_test_rollup_with_paymaster(
     .start()
     .await
     .unwrap()
+}
+
+#[derive(Debug)]
+pub(crate) struct EndpointResults {
+    pub estimate_gas: Result<U64, jsonrpsee::core::client::Error>,
+    pub call: Result<String, jsonrpsee::core::client::Error>,
+    pub create_access_list: Result<AccessListResult, String>,
+    pub send_raw_tx: Result<B256, jsonrpsee::core::client::Error>,
+}
+
+/// Calls all 4 simulation/submission endpoints with the same request.
+/// Returns individual results without any consistency assertions.
+pub(crate) async fn call_all_endpoints(
+    client: &SimpleStorageClient,
+    request: &TransactionRequest,
+    signer: &PrivateKeySigner,
+) -> EndpointResults {
+    // Step 1: 3 simulation calls
+    let estimate_gas: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+
+    let call: Result<String, _> = client
+        .ws
+        .request("eth_call", rpc_params![request, "latest"])
+        .await;
+
+    let access_list_result: Result<AccessListResult, _> = client
+        .ws
+        .request("eth_createAccessList", rpc_params![request, "latest"])
+        .await;
+
+    // Normalize eth_createAccessList: the RPC call itself may succeed but return
+    // an error in the `error` field of the response.
+    let create_access_list: Result<AccessListResult, String> = match access_list_result {
+        Ok(alr) if alr.error.is_some() => Err(alr.error.unwrap()),
+        Ok(alr) => Ok(alr),
+        Err(e) => Err(e.to_string()),
+    };
+
+    // Step 2: Build and send raw tx
+    let chain_id: U64 = client
+        .ws
+        .request("eth_chainId", rpc_params![])
+        .await
+        .unwrap();
+
+    let nonce = match request.nonce {
+        Some(n) => n,
+        None => tx_count(client, signer.address(), "latest").await.unwrap(),
+    };
+
+    let raw_tx = raw_signed_eip1559(
+        signer,
+        chain_id.to::<u64>(),
+        nonce,
+        request.gas.unwrap_or(1_000_000),
+        request.to.unwrap_or(TxKind::Create),
+        request.value.unwrap_or(U256::ZERO),
+        request.input.input.clone().unwrap_or_default(),
+        request.gas_price.or(request.max_fee_per_gas).unwrap_or(0),
+        request.max_priority_fee_per_gas.unwrap_or(0),
+    )
+    .await
+    .unwrap();
+
+    let send_raw_tx: Result<B256, _> = client
+        .ws
+        .request("eth_sendRawTransaction", rpc_params![&raw_tx])
+        .await;
+
+    EndpointResults {
+        estimate_gas,
+        call,
+        create_access_list,
+        send_raw_tx,
+    }
 }
 
 pub async fn setup_with_simple_storage(
