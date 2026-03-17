@@ -395,6 +395,46 @@ pub async fn new_test_rollup_with_manual_proof_posting<
     ManualProofPostingControl,
     ManualProofPostingTestProverService,
 ) {
+    new_test_rollup_with_manual_proof_posting_and_proof_jump(
+        dir,
+        seq_da_address,
+        genesis_params,
+        minimum_profit_per_tx,
+        automatic_batch_production,
+        max_batch_size_bytes,
+        block_producing_config,
+        rollup_prover_config,
+        blob_processing_timeout_secs,
+        max_batch_execution_time_millis,
+        stop_at_rollup_height,
+        1,
+        finalization_blocks,
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+pub async fn new_test_rollup_with_manual_proof_posting_and_proof_jump<
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+>(
+    dir: Arc<tempfile::TempDir>,
+    seq_da_address: MockAddress,
+    genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
+    minimum_profit_per_tx: u128,
+    automatic_batch_production: bool,
+    max_batch_size_bytes: usize,
+    block_producing_config: BlockProducingConfig,
+    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    blob_processing_timeout_secs: u64,
+    max_batch_execution_time_millis: u64,
+    stop_at_rollup_height: Option<RollupHeight>,
+    aggregated_proof_block_jump: usize,
+    finalization_blocks: u32,
+) -> (
+    TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
+    ManualProofPostingControl,
+    ManualProofPostingTestProverService,
+) {
     assert!(
         rollup_prover_config.is_some(),
         "manual proof posting requires a prover-enabled rollup"
@@ -419,7 +459,11 @@ pub async fn new_test_rollup_with_manual_proof_posting<
         blob_processing_timeout_secs,
         max_batch_execution_time_millis,
         stop_at_rollup_height,
-    );
+    )
+    .set_config(|c| {
+        c.aggregated_proof_block_jump = aggregated_proof_block_jump;
+        c.max_concurrent_blobs = 256;
+    });
 
     let test_rollup = builder.start().await.unwrap();
     let prover_service = blueprint.prover_service().expect(
