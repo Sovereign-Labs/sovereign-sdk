@@ -25,7 +25,6 @@ fn main() -> anyhow::Result<()> {
         !raw_proofs.is_empty(),
         "At least one proof file is required"
     );
-    ensure!(JUMP > 0, "jump must be greater than zero");
     ensure!(
         raw_proofs.len() % JUMP == 0,
         "Expected the number of inner proofs ({}) to be divisible by jump ({JUMP})",
@@ -36,6 +35,14 @@ fn main() -> anyhow::Result<()> {
         "[host] starting aggregated proof check for {} proof file(s)",
         raw_proofs.len()
     );
+
+    let verification_key = saved_inner_vk()?;
+    let inner_vk_hash = verification_key.hash_u32();
+    let prover = ProverClient::builder().cpu().build();
+
+    let aggregation_pk = prover.setup(AGGREGATION_ELF).map_err(|error| {
+        anyhow::anyhow!("Failed to set up the outer SP1 aggregation program: {error}")
+    })?;
 
     let proof_batches = raw_proofs
         .chunks(JUMP)
@@ -53,7 +60,14 @@ fn main() -> anyhow::Result<()> {
             proof_batch.len()
         );
 
-        previous_outer_proof = Some(create_agg_proof(proof_batch, previous_outer_proof)?);
+        previous_outer_proof = Some(create_agg_proof(
+            &prover,
+            &aggregation_pk,
+            &verification_key,
+            inner_vk_hash,
+            proof_batch,
+            previous_outer_proof,
+        )?);
     }
 
     println!("[host] verified outer proof(s) in {:?}", start.elapsed());
@@ -61,7 +75,11 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn create_agg_proof(
+fn create_agg_proof<P: Prover>(
+    prover: &P,
+    aggregation_pk: &P::ProvingKey,
+    verification_key: &SP1VerifyingKey,
+    inner_vk_hash: [u32; 8],
     raw_proofs: Vec<BlockHeaderWithProof<MockDaSpec>>,
     previous_outer_proof: Option<SP1ProofWithPublicValues>,
 ) -> anyhow::Result<SP1ProofWithPublicValues> {
@@ -70,12 +88,6 @@ fn create_agg_proof(
         "At least one proof file is required"
     );
 
-    let verification_key = saved_inner_vk()?;
-    let inner_vk_hash = verification_key.hash_u32();
-    let prover = ProverClient::builder().cpu().build();
-    let aggregation_pk = prover
-        .setup(AGGREGATION_ELF)
-        .context("Failed to set up the outer SP1 aggregation program")?;
     let aggregation_vk_hash = aggregation_pk.verifying_key().hash_u32();
 
     let mut stdin = SP1Stdin::new();
@@ -110,7 +122,7 @@ fn create_agg_proof(
         stdin.write_proof(*recursion_proof.clone(), verification_key.vk.clone());
     }
 
-    let prev_outer_proof = if let Some(previous_outer_proof) = previous_outer_proof {
+    let prev_outer_proof_witness = if let Some(previous_outer_proof) = previous_outer_proof {
         let SP1Proof::Compressed(recursion_proof) = &previous_outer_proof.proof else {
             bail!("Expected the previous outer proof to be a compressed SP1 proof");
         };
@@ -131,7 +143,7 @@ fn create_agg_proof(
     let witness = AggregatedProofWitness {
         proof_inputs,
         vkey_hash: inner_vk_hash,
-        prev_outer_proof,
+        prev_outer_proof_witness,
     };
 
     stdin.write(&witness);

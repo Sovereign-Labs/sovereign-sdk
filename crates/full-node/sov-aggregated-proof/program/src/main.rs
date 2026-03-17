@@ -27,12 +27,15 @@ pub fn main() {
     let witness = sp1_zkvm::io::read::<AggregatedProofWitness<MockDaSpec>>();
     let proof_inputs = witness.proof_inputs;
     let vkey_hash = witness.vkey_hash;
-    let prev_outer_proof = witness.prev_outer_proof;
+    let prev_outer_proof_witness = witness.prev_outer_proof_witness;
 
     verify::<S, MockDaSpec>(proof_inputs, vkey_hash);
 
-    if let Some(prev_outer_proof) = prev_outer_proof {
-        verify_sp1_proof(&prev_outer_proof.public_values, prev_outer_proof.vkey_hash);
+    if let Some(prev_outer_proof_witness) = prev_outer_proof_witness {
+        verify_sp1_proof(
+            &prev_outer_proof_witness.public_values,
+            prev_outer_proof_witness.vkey_hash,
+        );
     }
 }
 
@@ -80,8 +83,9 @@ fn verify<S: Spec, Da: DaSpec>(proof_inputs: Vec<DeferredProofInput<Da>>, vkey_h
                 );
             }
 
-            println!("Veryfing {index}");
-            verify_inner_sp1_proof(proof_input, vkey_hash);
+            println!("Verifying {index}");
+            verify_sp1_proof(&proof_input.public_values, vkey_hash);
+
             expected_state_root = Some(stf_public_data.final_state_root.clone());
         }
     }
@@ -90,10 +94,6 @@ fn verify<S: Spec, Da: DaSpec>(proof_inputs: Vec<DeferredProofInput<Da>>, vkey_h
 fn verify_sp1_proof(public_values: &[u8], vkey_hash: [u32; 8]) {
     let public_values_digest: [u8; 32] = Sha256::digest(public_values).into();
     sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash, &public_values_digest);
-}
-
-fn verify_inner_sp1_proof<Da: DaSpec>(proof_input: &DeferredProofInput<Da>, vkey_hash: [u32; 8]) {
-    verify_sp1_proof(&proof_input.public_values, vkey_hash);
 }
 
 fn deserialize_pub_data<S: Spec, Da: DaSpec>(data: &[u8], index: usize) -> StPubData<S, Da> {
