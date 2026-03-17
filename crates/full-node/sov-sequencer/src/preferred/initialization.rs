@@ -126,6 +126,7 @@ where
         let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
 
         let (forced_tx_batch_notifier, _) = broadcast::channel(1);
+        let seq_da_address = da_address.clone();
         let rollup_exec_config = RollupBlockExecutorConfig {
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
@@ -218,6 +219,7 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             nonce_buffer_input,
+            da_address: seq_da_address,
             shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,

@@ -1,6 +1,5 @@
 mod get_logs;
 mod subscribe;
-#[cfg(feature = "local")]
 use alloy_eips::BlockId;
 #[cfg(feature = "local")]
 use alloy_eips::Encodable2718;
@@ -8,10 +7,11 @@ use alloy_eips::Encodable2718;
 use alloy_primitives::Address;
 #[cfg(feature = "local")]
 use alloy_primitives::TxKind;
-use alloy_primitives::{Bytes, B256};
+use alloy_primitives::{Bytes, B256, U256, U64};
+use alloy_rpc_types::state::StateOverride;
+use alloy_rpc_types::BlockOverrides;
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
-#[cfg(feature = "local")]
 use alloy_rpc_types::TransactionRequest;
 pub use get_logs::{Cursor, LogHandlers};
 use jsonrpsee::core::RpcResult;
@@ -21,7 +21,6 @@ use jsonrpsee::Extensions;
 use serde::Deserialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
-#[cfg(feature = "local")]
 use sov_evm::Evm;
 use sov_evm::RlpEvmTransaction;
 use sov_metrics::RpcMetrics;
@@ -134,6 +133,132 @@ where
         evm.get_transaction_receipt(tx_hash, state)
     }
 
+    pub async fn eth_estimate_gas(
+        parameters: JRpcParams<'static>,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        _: Extensions,
+    ) -> RpcResult<U64> {
+        let mut params = parameters.sequence();
+        let request: TransactionRequest = params.next()?;
+        let block_id: Option<BlockId> = params.optional_next()?;
+        let state_overrides: Option<StateOverride> = params.optional_next()?;
+        let block_overrides: Option<Box<BlockOverrides>> = params.optional_next()?;
+
+        Self::check_affordability(&request, &ethereum)?;
+
+        let evm = Evm::<S>::default();
+        let state = &mut ethereum.api_state_accessor();
+        evm.eth_estimate_gas(request, block_id, state_overrides, block_overrides, state)
+    }
+
+    /// Paymaster-aware affordability check.
+    ///
+    /// Verifies that the sender (or the paymaster's payer, if configured) can
+    /// cover `gas_limit * max_fee_per_gas + value`.  Skipped when any of the
+    /// required fields are absent or when the fee-cap check is inactive.
+    fn check_affordability(
+        request: &TransactionRequest,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<()> {
+        let from = match request.from {
+            Some(from) => from,
+            None => return Ok(()),
+        };
+        let gas = match request.gas {
+            Some(gas) => gas,
+            None => return Ok(()),
+        };
+        let max_fee_per_gas = match request.max_fee_per_gas.or(request.gas_price) {
+            Some(fee) if fee > 0 => fee,
+            _ => return Ok(()),
+        };
+
+        let evm = Evm::<S>::default();
+        let state = &mut ethereum.api_state_accessor();
+
+        let fee_check_active = evm
+            .is_max_fee_check_active(state)
+            .map_err(|e| rpc_internal_error(format!("state read error: {e}")))?;
+        if !fee_check_active {
+            return Ok(());
+        }
+
+        let cost = U256::from(gas)
+            .checked_mul(U256::from(max_fee_per_gas))
+            .and_then(|gas_cost| gas_cost.checked_add(request.value.unwrap_or_default()))
+            .ok_or_else(|| {
+                ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                    RpcInvalidTransactionError::GasUintOverflow,
+                ))
+            })?;
+
+        let sender_rollup_addr = S::Address::from_vm_address(EthereumAddress::from(from));
+        let gas_token = sov_bank::config_gas_token_id();
+        let bank = sov_bank::Bank::<S>::default();
+
+        let sender_balance = bank
+            .get_balance_of(&sender_rollup_addr, gas_token, state)
+            .map_err(|e| rpc_internal_error(format!("balance read error: {e}")))?
+            .map(|a| U256::from(a.0))
+            .unwrap_or(U256::ZERO);
+
+        // Resolve paymaster payer (if any).
+        let paymaster = sov_paymaster::Paymaster::<S>::default();
+        let payer_balance = paymaster
+            .sequencer_to_payer
+            .get(ethereum.sequencer.da_address(), state)
+            .map_err(|e| rpc_internal_error(format!("paymaster read error: {e}")))?
+            .map(|payer_addr| {
+                bank.get_balance_of(&payer_addr, gas_token, state)
+                    .map_err(|e| rpc_internal_error(format!("payer balance read error: {e}")))
+                    .map(|opt| opt.map(|a| U256::from(a.0)).unwrap_or(U256::ZERO))
+            })
+            .transpose()?;
+
+        let affordable = match payer_balance {
+            Some(payer_bal) => payer_bal >= cost || sender_balance >= cost,
+            None => sender_balance >= cost,
+        };
+
+        if !affordable {
+            return Err(ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::InsufficientFunds {
+                    cost,
+                    balance: sender_balance,
+                },
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Affordability check for signed raw transactions (eth_sendRawTransaction).
+    ///
+    /// Extracts sender, gas fields, and value from the RLP-decoded transaction
+    /// and delegates to the same paymaster-aware check used by eth_estimateGas.
+    fn check_raw_tx_affordability(data: &Bytes, ethereum: &Arc<Ethereum<S, Seq>>) -> RpcResult<()> {
+        use alloy_consensus::transaction::SignerRecoverable;
+        use alloy_consensus::Transaction;
+
+        let raw_tx = RlpEvmTransaction { rlp: data.to_vec() };
+        let signed_tx = sov_evm::convert_to_tx_signed(raw_tx)
+            .map_err(|err| ErrorObjectOwned::from(EthApiError::from(err)))?;
+
+        let sender = signed_tx
+            .recover_signer()
+            .map_err(|_| rpc_invalid_params("failed to recover signer"))?;
+
+        let request = TransactionRequest {
+            from: Some(sender),
+            gas: Some(signed_tx.gas_limit()),
+            max_fee_per_gas: Some(signed_tx.max_fee_per_gas()),
+            value: Some(signed_tx.value()),
+            ..Default::default()
+        };
+
+        Self::check_affordability(&request, ethereum)
+    }
+
     async fn process_raw_transaction<T, F>(
         data: Bytes,
         ethereum: Arc<Ethereum<S, Seq>>,
@@ -143,6 +268,8 @@ where
     where
         F: Fn(B256, Arc<Ethereum<S, Seq>>) -> RpcResult<T>,
     {
+        Self::check_raw_tx_affordability(&data, &ethereum)?;
+
         let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
         let (tx_hash, raw_message) = ethereum.make_raw_tx(raw_evm_tx)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));

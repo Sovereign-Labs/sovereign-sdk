@@ -146,9 +146,8 @@ pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError>
 /// `eth_createAccessList` request.
 ///
 /// These are request-format checks independent of the caller's balance.
-/// Balance-based upfront cost validation was removed because the RPC layer
-/// cannot determine whether a paymaster will cover the caller's gas.
-/// TODO: re-add a paymaster-aware balance check when sov-ethereum supports it.
+/// Balance-based upfront cost validation lives in `sov-ethereum`'s RPC
+/// handler where full paymaster context is available.
 fn validate_call_fee_fields(request: &TransactionRequest) -> Result<(), EthApiError> {
     if request.gas_price.is_some()
         && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())

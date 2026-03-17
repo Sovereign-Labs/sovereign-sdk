@@ -247,6 +247,9 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
 
     /// Returns the current sequencer role.
     async fn sequencer_role(&self) -> crate::SequencerRole;
+
+    /// Returns the DA address of this sequencer.
+    fn da_address(&self) -> &<<Self::Spec as Spec>::Da as DaSpec>::Address;
 }
 
 /// A transaction that has been accepted by the batch builder.

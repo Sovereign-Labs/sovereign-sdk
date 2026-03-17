@@ -169,7 +169,6 @@ async fn rpc2_001b_estimate_call_send_mixed_nonce_fee_mismatch() -> anyhow::Resu
 
 /// RPC2-002: Affordability check consistency between estimation and send path.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
@@ -1153,7 +1152,6 @@ const PAYMASTER_SIGNER_PRIV_KEY: &str =
 
 /// RPC2-015: Paymaster-aware affordability checks in simulation and send paths.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Paymaster-aware RPC affordability checks not yet implemented"]
 async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow::Result<()> {
     let rollup = setup_test_rollup_with_paymaster(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;

@@ -128,6 +128,8 @@ where
         Handlers::realtime_send_raw_transaction,
     )?;
 
+    rpc.register_async_method("eth_estimateGas", Handlers::eth_estimate_gas)?;
+
     rpc.register_async_method("eth_getLogs", handlers::LogHandlers::<S, Seq>::eth_get_logs)?;
     rpc.register_async_method(
         "eth_getLogsWithCursor",

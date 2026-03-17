@@ -390,104 +390,6 @@ where
         ))
     }
 
-    /// Handler for: `eth_estimateGas`
-    // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/api/call.rs#L172
-    #[rpc_method(name = "eth_estimateGas")]
-    pub fn eth_estimate_gas(
-        &self,
-        request: TransactionRequest,
-        block_id: Option<BlockId>,
-        state_overrides: Option<StateOverride>,
-        block_overrides: Option<Box<BlockOverrides>>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U64> {
-        trace!(
-            ?block_id,
-            method = "eth_estimateGas",
-            "EVM module JSON-RPC request"
-        );
-
-        // Add 1,000 bytes to account for all Transaction fields besides calldata.
-        let tx_size = request
-            .input
-            .input()
-            .as_ref()
-            .map(|input| input.len())
-            .unwrap_or(0)
-            .saturating_add(1000);
-
-        let multiplier = {
-            let mut multiplier_state = self.resolve_state_for_block_id(block_id, state)?;
-            self.fee_multiplier(multiplier_state.deref_mut())
-                .map_err(into_rpc_error)?
-        };
-
-        let ResultAndState {
-            result,
-            state: changes,
-        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
-
-        let (gas_used, logs) = match result {
-            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
-            ExecutionResult::Revert { output, .. } => {
-                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
-            }
-            ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
-            }
-        };
-
-        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
-        // This intentionally includes override-based hypothetical state, because estimateGas
-        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
-        self.db(state)
-            .try_commit(changes)
-            .expect("Gas meter is initialized with INF");
-
-        // Charge for logs storage in the receipt.
-        // Other receipt fields are small and covered by the constant margin.
-        let logs_size = self
-            .receipts
-            .codec()
-            .value_codec()
-            .encode_to_vec(&logs)
-            .len();
-        let logs_size =
-            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        charge_write(
-            state,
-            Accessory::NAMESPACE,
-            &self.receipts.slot_key(&u64::MAX),
-            logs_size,
-        )
-        .map_err(into_rpc_error)?;
-
-        let gas_meter = state
-            .try_as_basic_gas_meter()
-            .expect("ApiState has BasicGasMeter");
-
-        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        let gas_used =
-            u32::try_from(gas_used).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        gas_meter
-            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
-            .expect("Gas meter is initialized with INF");
-
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-
-        // The real tx path multiplies gas_limit by 100 when fee check is inactive.
-        // Divide the estimate so the returned value is the gas_limit the user should set.
-        let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
-
-        Ok(U64::from(super::apply_margins(adjusted)?))
-    }
-
     /// Handler for `debug_traceBlockByNumber`
     #[rpc_method(name = "debug_traceBlockByNumber")]
     pub fn debug_trace_block_by_number(
@@ -608,6 +510,113 @@ where
                     .saturating_sub(block.transactions_start()),
             )
         }))
+    }
+}
+
+/// Methods that are NOT auto-registered via `#[rpc_gen]`.
+/// `eth_estimate_gas` is registered by `sov-ethereum` which wraps it with
+/// paymaster-aware affordability checks.
+impl<S: Spec> Evm<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    /// Runs gas estimation logic for `eth_estimateGas`.
+    ///
+    /// This is a library method called by `sov-ethereum`'s RPC handler, which
+    /// wraps it with paymaster-aware affordability checks.
+    pub fn eth_estimate_gas(
+        &self,
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<U64> {
+        trace!(
+            ?block_id,
+            method = "eth_estimateGas",
+            "EVM module JSON-RPC request"
+        );
+
+        // Add 1,000 bytes to account for all Transaction fields besides calldata.
+        let tx_size = request
+            .input
+            .input()
+            .as_ref()
+            .map(|input| input.len())
+            .unwrap_or(0)
+            .saturating_add(1000);
+
+        let multiplier = {
+            let mut multiplier_state = self.resolve_state_for_block_id(block_id, state)?;
+            self.fee_multiplier(multiplier_state.deref_mut())
+                .map_err(into_rpc_error)?
+        };
+
+        let ResultAndState {
+            result,
+            state: changes,
+        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
+
+        let (gas_used, logs) = match result {
+            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
+            ExecutionResult::Revert { output, .. } => {
+                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
+            }
+            ExecutionResult::Halt { reason, gas_used } => {
+                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
+            }
+        };
+
+        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
+        // This intentionally includes override-based hypothetical state, because estimateGas
+        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
+        self.db(state)
+            .try_commit(changes)
+            .expect("Gas meter is initialized with INF");
+
+        // Charge for logs storage in the receipt.
+        // Other receipt fields are small and covered by the constant margin.
+        let logs_size = self
+            .receipts
+            .codec()
+            .value_codec()
+            .encode_to_vec(&logs)
+            .len();
+        let logs_size =
+            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
+        charge_write(
+            state,
+            Accessory::NAMESPACE,
+            &self.receipts.slot_key(&u64::MAX),
+            logs_size,
+        )
+        .map_err(into_rpc_error)?;
+
+        let gas_meter = state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter");
+
+        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
+        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
+            .expect("Gas meter is initialized with INF");
+
+        let gas_used =
+            u32::try_from(gas_used).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
+        gas_meter
+            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
+            .expect("Gas meter is initialized with INF");
+
+        let total_gas_used =
+            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+
+        // The real tx path multiplies gas_limit by 100 when fee check is inactive.
+        // Divide the estimate so the returned value is the gas_limit the user should set.
+        let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
+
+        Ok(U64::from(super::apply_margins(adjusted)?))
     }
 }
 
