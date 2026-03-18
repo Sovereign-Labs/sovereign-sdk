@@ -45,6 +45,17 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
 name = "ahash"
+version = "0.7.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "891477e0c6a8957309ee5c45a6368af3ae14bb510732d2684ffa19af310920f9"
+dependencies = [
+ "getrandom 0.2.16",
+ "once_cell",
+ "version_check",
+]
+
+[[package]]
+name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
@@ -969,7 +980,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0c292754729c8a190e50414fd1a37093c786c709899f29c9f7daccecfa855e"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "ark-crypto-primitives-macros",
  "ark-ec",
  "ark-ff 0.5.0",
@@ -1002,7 +1013,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43d68f2d516162846c1238e755a7c4d131b892b70cc70c471a8e3ca3ed818fce"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "ark-ff 0.5.0",
  "ark-poly",
  "ark-serialize 0.5.0",
@@ -1164,7 +1175,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "579305839da207f02b89cd1679e50e67b4331e2f9294a57693e5051b7703fe27"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
@@ -2406,6 +2417,169 @@ dependencies = [
 ]
 
 [[package]]
+name = "bullet-bs58"
+version = "0.1.0"
+source = "git+https://github.com/bulletxyz/bullet-bs58.git#a5f90364fa0f413566011ffdefcf3bd495ab0203"
+
+[[package]]
+name = "bullet-exchange-interface"
+version = "0.1.0"
+source = "git+https://github.com/bulletxyz/bullet-exchange-interface.git?rev=04f12bd76e85be3c52679db5204aa0ce2cb14880#04f12bd76e85be3c52679db5204aa0ce2cb14880"
+dependencies = [
+ "borsh",
+ "bullet-bs58",
+ "hex",
+ "rust_decimal",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-rollup-interface",
+ "sov-universal-wallet",
+ "strum 0.26.3",
+ "thiserror 2.0.17",
+]
+
+[[package]]
+name = "bullet-exchange-module"
+version = "0.0.1"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "axum 0.7.9",
+ "borsh",
+ "bullet-exchange-interface",
+ "itertools 0.14.0",
+ "lazy_static",
+ "metrics",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-chain-state",
+ "sov-hyperlane-integration",
+ "sov-modules-api",
+ "sov-rest-utils",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-universal-wallet",
+ "strum 0.26.3",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
+name = "bullet-rollup"
+version = "0.0.1"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+dependencies = [
+ "anyhow",
+ "arbitrary",
+ "async-trait",
+ "axum 0.7.9",
+ "borsh",
+ "bullet-exchange-interface",
+ "bullet-exchange-module",
+ "bullet-stf",
+ "clap",
+ "color-eyre",
+ "hex",
+ "metrics-exporter-prometheus",
+ "proptest",
+ "proptest-derive 0.5.1",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-cli",
+ "sov-db",
+ "sov-hyperlane-integration",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+ "sov-modules-rollup-blueprint",
+ "sov-rest-utils",
+ "sov-rollup-interface",
+ "sov-sequencer",
+ "sov-solana-offchain-auth",
+ "sov-state",
+ "sov-stf-runner",
+ "sov-universal-wallet",
+ "tokio",
+ "tracing",
+ "tracing-error",
+ "tracing-panic",
+ "tracing-subscriber 0.3.20",
+]
+
+[[package]]
+name = "bullet-stf"
+version = "0.0.1"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+dependencies = [
+ "anyhow",
+ "bullet-exchange-interface",
+ "bullet-stf-declaration",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-build",
+ "sov-capabilities",
+ "sov-celestia-adapter 0.3.0 (git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=1738234483223689f3d253ba9359ff390b3bd9c2)",
+ "sov-hyperlane-integration",
+ "sov-kernels",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+ "sov-modules-stf-blueprint",
+ "sov-paymaster",
+ "sov-rollup-apis",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-solana-offchain-auth",
+ "sov-state",
+ "sov-test-state-consistency 0.3.0 (git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=1738234483223689f3d253ba9359ff390b3bd9c2)",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "bullet-stf-declaration"
+version = "0.0.1"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "bullet-exchange-module",
+ "clap",
+ "jsonrpsee",
+ "serde",
+ "sov-accounts",
+ "sov-attester-incentives",
+ "sov-bank",
+ "sov-blob-storage",
+ "sov-capabilities",
+ "sov-chain-state",
+ "sov-hyperlane-integration",
+ "sov-kernels",
+ "sov-modules-api",
+ "sov-modules-stf-blueprint",
+ "sov-operator-incentives",
+ "sov-paymaster",
+ "sov-prover-incentives",
+ "sov-revenue-share",
+ "sov-rollup-apis",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-test-state-consistency 0.3.0 (git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=1738234483223689f3d253ba9359ff390b3bd9c2)",
+ "sov-uniqueness",
+ "strum 0.26.3",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2416,6 +2590,28 @@ name = "byte-slice-cast"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7575182f7272186991736b70173b0ea045398f984bf5ebbb3804736ce1330c9d"
+
+[[package]]
+name = "bytecheck"
+version = "0.6.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23cdc57ce23ac53c931e88a43d06d070a6fd142f2617be5855eb75efc9beb1c2"
+dependencies = [
+ "bytecheck_derive",
+ "ptr_meta",
+ "simdutf8",
+]
+
+[[package]]
+name = "bytecheck_derive"
+version = "0.6.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3db406d29fbcd95542e92559bed4d8ad92636d1ca8b3b72ede10b4bcc010e659"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
 
 [[package]]
 name = "bytecount"
@@ -2890,6 +3086,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1"
 dependencies = [
  "thiserror 2.0.17",
+]
+
+[[package]]
+name = "color-eyre"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5920befb47832a6d61ee3a3a846565cfa39b331331e68a3b1d1116630f2f26d"
+dependencies = [
+ "backtrace",
+ "color-spantrace",
+ "eyre",
+ "indenter",
+ "once_cell",
+ "owo-colors",
+ "tracing-error",
+]
+
+[[package]]
+name = "color-spantrace"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b88ea9df13354b55bc7234ebcce36e6ef896aca2e42a15de9e10edce01b427"
+dependencies = [
+ "once_cell",
+ "owo-colors",
+ "tracing-core",
+ "tracing-error",
 ]
 
 [[package]]
@@ -3532,7 +3755,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -4994,6 +5217,9 @@ name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+dependencies = [
+ "ahash 0.7.8",
+]
 
 [[package]]
 name = "hashbrown"
@@ -5001,7 +5227,7 @@ version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
 ]
 
 [[package]]
@@ -5010,7 +5236,7 @@ version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "allocator-api2",
  "serde",
 ]
@@ -5578,7 +5804,7 @@ dependencies = [
  "bitmaps",
  "imbl-sized-chunks",
  "rand_core 0.6.4",
- "rand_xoshiro",
+ "rand_xoshiro 0.6.0",
  "version_check",
 ]
 
@@ -6100,7 +6326,7 @@ version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26a960f0c34d5423581d858ce94815cc11f0171b09939409097969ed269ede1b"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "base64 0.22.1",
  "bytecount",
  "email_address",
@@ -6625,6 +6851,53 @@ dependencies = [
 ]
 
 [[package]]
+name = "metrics"
+version = "0.24.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d5312e9ba3771cfa961b585728215e3d972c950a3eed9252aa093d6301277e8"
+dependencies = [
+ "ahash 0.8.12",
+ "portable-atomic",
+]
+
+[[package]]
+name = "metrics-exporter-prometheus"
+version = "0.17.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b166dea96003ee2531cf14833efedced545751d800f03535801d833313f8c15"
+dependencies = [
+ "base64 0.22.1",
+ "http-body-util",
+ "hyper 1.7.0",
+ "hyper-rustls 0.27.7",
+ "hyper-util",
+ "indexmap 2.11.1",
+ "ipnet",
+ "metrics",
+ "metrics-util",
+ "quanta",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "metrics-util"
+version = "0.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdfb1365fea27e6dd9dc1dbc19f570198bc86914533ad639dae939635f096be4"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+ "hashbrown 0.16.0",
+ "metrics",
+ "quanta",
+ "rand 0.9.2",
+ "rand_xoshiro 0.7.0",
+ "sketches-ddsketch",
+]
+
+[[package]]
 name = "miette"
 version = "7.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6867,7 +7140,7 @@ version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cebfa5217b0c23f8088cdd2e9b8033db6ba49a968cfbf0a35433043b76b8f93"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "anyhow",
  "bitvec",
  "borsh",
@@ -7385,6 +7658,12 @@ name = "outref"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
+
+[[package]]
+name = "owo-colors"
+version = "4.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
 
 [[package]]
 name = "p256"
@@ -8428,6 +8707,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ptr_meta"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0738ccf7ea06b608c10564b31debd4f5bc5e197fc8bfe088f68ae5ce81e7a4f1"
+dependencies = [
+ "ptr_meta_derive",
+]
+
+[[package]]
+name = "ptr_meta_derive"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16b845dbfca988fa33db069c0e230574d15a3088f147a87b64c7589eb662c9ac"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "puffin"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8534,6 +8833,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "quanta"
+version = "0.12.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3ab5a9d756f0d97bdc89019bd2e4ea098cf9cde50ee7564dde6b81ccc8f06c7"
+dependencies = [
+ "crossbeam-utils",
+ "libc",
+ "once_cell",
+ "raw-cpuid",
+ "wasi 0.11.1+wasi-snapshot-preview1",
+ "web-sys",
+ "winapi",
+]
+
+[[package]]
 name = "quick-error"
 version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8545,7 +8859,7 @@ version = "0.6.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ad6644cb07b7f3488b9f3d2fde3b4c0a7fa367cafefb39dff93a659f76eb786"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "equivalent",
  "hashbrown 0.15.5",
  "parking_lot",
@@ -8708,6 +9022,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand_xoshiro"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f703f4665700daf5512dcca5f43afa6af89f09db47fb56be587f80636bda2d41"
+dependencies = [
+ "rand_core 0.9.3",
+]
+
+[[package]]
 name = "range-set-blaze"
 version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8717,6 +9040,15 @@ dependencies = [
  "itertools 0.12.1",
  "num-integer",
  "num-traits",
+]
+
+[[package]]
+name = "raw-cpuid"
+version = "11.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "498cd0dc59d73224351ee52a95fee0f1a617a2eae0e7d9d720cc622c73a54186"
+dependencies = [
+ "bitflags 2.9.4",
 ]
 
 [[package]]
@@ -8820,7 +9152,7 @@ version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb8e15af8558cb157432dd3d88c1d1e982d0a5755cf80ce593b6499260aebc49"
 dependencies = [
- "ahash",
+ "ahash 0.8.12",
  "fluent-uri",
  "once_cell",
  "percent-encoding",
@@ -8888,6 +9220,15 @@ source = "git+https://github.com/sovereign-labs/reltester.git?rev=d6209abff72929
 dependencies = [
  "rand 0.8.5",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "rend"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71fe3824f5629716b1589be05dacd749f6aa084c87e00e016714a8cdfccc997c"
+dependencies = [
+ "bytecheck",
 ]
 
 [[package]]
@@ -9775,6 +10116,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "rkyv"
+version = "0.7.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2297bf9c81a3f0dc96bc9521370b88f054168c29826a75e89c55ff196e7ed6a1"
+dependencies = [
+ "bitvec",
+ "bytecheck",
+ "bytes",
+ "hashbrown 0.12.3",
+ "ptr_meta",
+ "rend",
+ "rkyv_derive",
+ "seahash",
+ "tinyvec",
+ "uuid",
+]
+
+[[package]]
+name = "rkyv_derive"
+version = "0.7.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84d7b42d4b8d06048d3ac8db0eb31bcb942cbeb709f0b5f2b2ebde398d3038f5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "rlp"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9954,13 +10324,28 @@ dependencies = [
 
 [[package]]
 name = "rust_decimal"
-version = "1.37.2"
+version = "1.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b203a6425500a03e0919c42d3c47caca51e79f1132046626d2c8871c5092035d"
+checksum = "61f703d19852dbf87cbc513643fa81428361eb6940f1ac14fd58155d295a3eb0"
 dependencies = [
  "arrayvec",
+ "borsh",
+ "bytes",
  "num-traits",
+ "rand 0.8.5",
+ "rkyv",
  "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rust_decimal_macros"
+version = "1.40.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74a5a6f027e892c7a035c6fddb50435a1fbf5a734ffc0c2a9fed4d0221440519"
+dependencies = [
+ "quote",
+ "syn 2.0.106",
 ]
 
 [[package]]
@@ -10272,6 +10657,7 @@ checksum = "3fbf2ae1b8bc8e02df939598064d22402220cd5bbcca1c76f7d6a310974d5615"
 dependencies = [
  "chrono",
  "dyn-clone",
+ "rust_decimal",
  "schemars_derive",
  "serde",
  "serde_json",
@@ -10413,6 +10799,12 @@ dependencies = [
  "sea-query",
  "sqlx",
 ]
+
+[[package]]
+name = "seahash"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c107b6f4780854c8b126e228ea8869f4d7b71260f962fefb57b996b8959ba6b"
 
 [[package]]
 name = "sec1"
@@ -10882,6 +11274,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 
 [[package]]
+name = "simdutf8"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
 name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10907,6 +11305,12 @@ dependencies = [
  "tempfile",
  "walkdir",
 ]
+
+[[package]]
+name = "sketches-ddsketch"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c6f73aeb92d671e0cc4dca167e59b2deb6387c375391bc99ee743f326994a2b"
 
 [[package]]
 name = "slab"
@@ -11674,7 +12078,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "sov-celestia-adapter",
+ "sov-celestia-adapter 0.3.0",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
@@ -11688,6 +12092,38 @@ dependencies = [
  "tower 0.5.2",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "sov-celestia-adapter"
+version = "0.3.0"
+source = "git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=1738234483223689f3d253ba9359ff390b3bd9c2#1738234483223689f3d253ba9359ff390b3bd9c2"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "backon",
+ "bech32",
+ "borsh",
+ "celestia-client",
+ "celestia-types",
+ "derive_more 1.0.0",
+ "futures",
+ "hex",
+ "nmt-rs",
+ "prost 0.13.5",
+ "rand 0.8.5",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-metrics",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror 1.0.69",
+ "tokio",
+ "tower 0.5.2",
+ "tracing",
 ]
 
 [[package]]
@@ -11818,6 +12254,8 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "borsh",
+ "bullet-rollup",
+ "bullet-stf",
  "clap",
  "demo-stf",
  "demo-stf-json-client",
@@ -11843,7 +12281,7 @@ dependencies = [
  "sov-bank",
  "sov-blob-storage",
  "sov-build",
- "sov-celestia-adapter",
+ "sov-celestia-adapter 0.3.0",
  "sov-chain-state",
  "sov-cli",
  "sov-db",
@@ -12891,7 +13329,7 @@ dependencies = [
  "sov-address",
  "sov-api-spec",
  "sov-bank",
- "sov-celestia-adapter",
+ "sov-celestia-adapter 0.3.0",
  "sov-evm-test-utils",
  "sov-kernels",
  "sov-metrics",
@@ -12927,7 +13365,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-synthetic-load",
- "sov-test-state-consistency",
+ "sov-test-state-consistency 0.3.0",
  "sov-test-utils",
  "sov-transaction-generator",
  "sov-value-setter",
@@ -13138,6 +13576,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-test-state-consistency"
+version = "0.3.0"
+source = "git+https://github.com/Sovereign-Labs/sovereign-sdk.git?rev=1738234483223689f3d253ba9359ff390b3bd9c2#1738234483223689f3d253ba9359ff390b3bd9c2"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "schemars 0.8.22",
+ "serde",
+ "sov-modules-api",
+ "sov-state",
+ "strum 0.26.3",
+]
+
+[[package]]
 name = "sov-test-utils"
 version = "0.3.0"
 dependencies = [
@@ -13228,7 +13681,7 @@ dependencies = [
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
- "sov-test-state-consistency",
+ "sov-test-state-consistency 0.3.0",
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
@@ -15316,6 +15769,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-error"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b1581020d7a273442f5b45074a6a57d5757ad0a47dac0e9f0bd57b81936f3db"
+dependencies = [
+ "tracing",
+ "tracing-subscriber 0.3.20",
+]
+
+[[package]]
 name = "tracing-forest"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15368,6 +15831,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-serde"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
+dependencies = [
+ "serde",
+ "tracing-core",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15386,12 +15859,15 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
+ "tracing-serde",
 ]
 
 [[package]]
