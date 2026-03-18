@@ -29,21 +29,10 @@ pub struct MockZkvmNetwork {
 impl MockZkvmNetwork {
     /// Creates a new `MockZkvmNetwork` where proofs remain pending until
     /// [`Self::complete_proof`] is called.
-    pub fn new() -> Self {
+    pub fn new(auto_complete: bool) -> Self {
         Self {
             committed_data: VecDeque::new(),
-            auto_complete: false,
-            proofs: Arc::new(Mutex::new(HashMap::new())),
-            next_handle: Arc::new(AtomicU64::new(0)),
-        }
-    }
-
-    /// Creates a new `MockZkvmNetwork` where proofs are immediately ready
-    /// upon submission.
-    pub fn new_auto_complete() -> Self {
-        Self {
-            committed_data: VecDeque::new(),
-            auto_complete: true,
+            auto_complete,
             proofs: Arc::new(Mutex::new(HashMap::new())),
             next_handle: Arc::new(AtomicU64::new(0)),
         }
@@ -66,7 +55,7 @@ impl MockZkvmNetwork {
 
 impl Default for MockZkvmNetwork {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 

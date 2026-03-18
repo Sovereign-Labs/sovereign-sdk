@@ -200,7 +200,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network() -> anyhow::Result<()> {
-        let mut network = MockZkvmNetwork::new();
+        let mut network = MockZkvmNetwork::new(false);
         let pub_data = TestPublicData {
             hint: "NetworkTest".to_owned(),
         };
@@ -227,7 +227,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_auto_complete() -> anyhow::Result<()> {
-        let mut network = MockZkvmNetwork::new_auto_complete();
+        let mut network = MockZkvmNetwork::new(true);
         let pub_data = TestPublicData {
             hint: "AutoComplete".to_owned(),
         };
