@@ -239,8 +239,7 @@ where
         &self,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::TriggerBatchProduction { reason })
-            .await
+        self.send(Message::TriggerBatchProduction { reason }).await
     }
 
     pub(crate) async fn send_simple_state_update_msg(

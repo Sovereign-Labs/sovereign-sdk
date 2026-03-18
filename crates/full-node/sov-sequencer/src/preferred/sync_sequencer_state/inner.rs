@@ -396,13 +396,13 @@ where
             return;
         }
 
-       self.trigger_batch_production().await;
+        self.trigger_batch_production().await;
     }
 
     pub(crate) async fn trigger_batch_production(&mut self) {
         if let Err(e) = self
-        .try_to_create_and_start_batch_if_none_in_progress(true)
-        .await
+            .try_to_create_and_start_batch_if_none_in_progress(true)
+            .await
         {
             tracing::debug!(
                 error = %e,
@@ -418,12 +418,10 @@ where
 
         // If the node is shutting down, we may not be able to terminate the batch. In that case, just return early.
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
-            info!(
-                "The sequencer is shutting down. Exiting trigger_batch_production."
-            );
+            info!("The sequencer is shutting down. Exiting trigger_batch_production.");
             return;
         }
-        
+
         self.close_current_batch().await;
     }
 
