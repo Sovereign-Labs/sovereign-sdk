@@ -60,6 +60,10 @@ type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
 const IP_ADDRESS_ERROR: &str = "Unable to retrieve the peer IP address";
+#[cfg(all(feature = "test-utils", debug_assertions))]
+const PAUSE_AFTER_AUTH_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_TX_HASH";
+#[cfg(all(feature = "test-utils", debug_assertions))]
+const PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_REACHED_TX_HASH";
 
 enum AffordabilityPreflight {
     Affordable,
@@ -238,15 +242,17 @@ where
         state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<AffordabilityPreflight> {
+        // These guards are defensive: the caller `supports_request_affordability_preflight`
+        // already validates that `from`, `gas`, and a fee field are present.
         let Some(from) = request.from else {
             return Ok(AffordabilityPreflight::Skip);
         };
-        let Some(gas_limit) = request.gas else {
+        if request.gas.is_none() {
             return Ok(AffordabilityPreflight::Skip);
-        };
-        let Some(max_fee_per_gas) = request.max_fee_per_gas.or(request.gas_price) else {
+        }
+        if request.max_fee_per_gas.or(request.gas_price).is_none() {
             return Ok(AffordabilityPreflight::Skip);
-        };
+        }
 
         let mut auth_state = state.clone_without_local_writes().to_provable_reader();
         let (authenticated_tx, auth_data) =
@@ -265,8 +271,6 @@ where
             &authenticated_tx,
             &auth_data,
             S::Address::from_vm_address(EthereumAddress::from(from)),
-            gas_limit,
-            max_fee_per_gas,
             request.value.unwrap_or_default(),
             state,
             ethereum,
@@ -277,8 +281,6 @@ where
         authenticated_tx: &AuthenticatedTransactionData<S>,
         auth_data: &AuthorizationData<S>,
         sender_rollup_addr: S::Address,
-        requested_gas_limit: u64,
-        requested_fee_per_gas: u128,
         requested_value: U256,
         state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
@@ -291,26 +293,12 @@ where
             return Ok(AffordabilityPreflight::Skip);
         }
 
-        let requested_gas_cost = U256::from(requested_gas_limit)
-            .checked_mul(U256::from(requested_fee_per_gas))
-            .ok_or_else(|| {
-                ErrorObjectOwned::from(EthApiError::InvalidTransaction(
-                    RpcInvalidTransactionError::GasUintOverflow,
-                ))
-            })?;
-        let requested_total_cost =
-            requested_gas_cost
-                .checked_add(requested_value)
-                .ok_or_else(|| {
-                    ErrorObjectOwned::from(EthApiError::InvalidTransaction(
-                        RpcInvalidTransactionError::GasUintOverflow,
-                    ))
-                })?;
-
-        let sender_balance = Self::read_balance(&sender_rollup_addr, state)?;
-        if requested_total_cost.is_zero() {
+        let gas_cost = U256::from(authenticated_tx.0.max_fee.0);
+        if gas_cost.is_zero() && requested_value.is_zero() {
             return Ok(AffordabilityPreflight::Affordable);
         }
+
+        let sender_balance = Self::read_balance(&sender_rollup_addr, state)?;
 
         let mut runtime = Seq::Rt::default();
         let gas_price = state.gas_price();
@@ -333,6 +321,12 @@ where
             }
         };
 
+        let overflow_error = || {
+            ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::GasUintOverflow,
+            ))
+        };
+
         if let Err(err) =
             runtime
                 .gas_enforcer()
@@ -343,45 +337,35 @@ where
                 sender = %sender_rollup_addr,
                 "affordability preflight rejected while reserving gas"
             );
+            let total_cost = gas_cost
+                .checked_add(requested_value)
+                .ok_or_else(overflow_error)?;
             return Ok(AffordabilityPreflight::Rejected(
-                Self::insufficient_funds_error(requested_total_cost, sender_balance),
+                Self::insufficient_funds_error(total_cost, sender_balance),
             ));
         }
 
         let actual_payer = *context.gas_refund_recipient();
 
         if actual_payer == sender_rollup_addr {
-            // Sender pays everything: gas + value.
-            if sender_balance < requested_total_cost {
+            // Sender pays gas + value.
+            let total_cost = gas_cost
+                .checked_add(requested_value)
+                .ok_or_else(overflow_error)?;
+            if sender_balance < total_cost {
                 return Ok(AffordabilityPreflight::Rejected(
-                    Self::insufficient_funds_error(requested_total_cost, sender_balance),
+                    Self::insufficient_funds_error(total_cost, sender_balance),
                 ));
             }
-            return Ok(AffordabilityPreflight::Affordable);
-        }
-
-        // Paymaster path: paymaster covers gas, sender covers value.
-        let payer_balance_after = Self::read_balance(&actual_payer, state)?;
-        let payer_balance_before = payer_balance_after
-            .checked_add(U256::from(authenticated_tx.0.max_fee.0))
-            .ok_or_else(|| {
-                ErrorObjectOwned::from(EthApiError::InvalidTransaction(
-                    RpcInvalidTransactionError::GasUintOverflow,
-                ))
-            })?;
-
-        if payer_balance_before < requested_gas_cost {
-            return Ok(AffordabilityPreflight::Rejected(
-                Self::insufficient_funds_error(requested_gas_cost, payer_balance_before),
-            ));
-        }
-
-        if sender_balance < requested_value {
-            return Ok(AffordabilityPreflight::Rejected(ErrorObjectOwned::from(
-                EthApiError::InvalidTransaction(
-                    RpcInvalidTransactionError::InsufficientFundsForTransfer,
-                ),
-            )));
+        } else {
+            // Paymaster covers gas (validated by try_reserve_gas). Sender covers value only.
+            if sender_balance < requested_value {
+                return Ok(AffordabilityPreflight::Rejected(ErrorObjectOwned::from(
+                    EthApiError::InvalidTransaction(
+                        RpcInvalidTransactionError::InsufficientFundsForTransfer,
+                    ),
+                )));
+            }
         }
 
         Ok(AffordabilityPreflight::Affordable)
@@ -418,6 +402,7 @@ where
         signed_tx: &TransactionSigned,
         authenticated_tx: &AuthenticatedTransactionAndRawHash<S>,
         auth_data: &AuthorizationData<S>,
+        state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
         use alloy_consensus::transaction::SignerRecoverable;
@@ -427,16 +412,13 @@ where
             .recover_signer()
             .map_err(|_| rpc_invalid_params("failed to recover signer"))?;
         let sender_rollup_addr = S::Address::from_vm_address(EthereumAddress::from(sender));
-        let mut state = ethereum.api_state_accessor();
 
         match Self::run_affordability_preflight(
             &authenticated_tx.authenticated_tx,
             auth_data,
             sender_rollup_addr,
-            signed_tx.gas_limit(),
-            signed_tx.max_fee_per_gas(),
             signed_tx.value(),
-            &mut state,
+            state,
             ethereum,
         )? {
             AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
@@ -446,14 +428,62 @@ where
 
     fn authenticate_tx(
         tx: &FullyBakedTx,
-        ethereum: &Arc<Ethereum<S, Seq>>,
+        snapshot_state: &ApiStateAccessor<S>,
     ) -> RpcResult<(AuthenticatedTransactionAndRawHash<S>, AuthorizationData<S>)> {
-        let mut state = ethereum.api_state_accessor().to_provable_reader();
+        let mut state = snapshot_state
+            .clone_without_local_writes()
+            .to_provable_reader();
         let (authenticated_tx, auth_data, _) =
             <Seq::Rt as Runtime<S>>::Auth::authenticate(tx, &mut state)
                 .map_err(map_authentication_error)?;
         Ok((authenticated_tx, auth_data))
     }
+
+    fn authenticate_and_preflight_send(
+        tx_hash: B256,
+        tx: &FullyBakedTx,
+        signed_tx: &TransactionSigned,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<()> {
+        let snapshot_state = ethereum.api_state_accessor();
+        let (authenticated_tx, auth_data) = Self::authenticate_tx(tx, &snapshot_state)?;
+        Self::maybe_pause_after_auth(tx_hash, ethereum);
+
+        let mut preflight_state = snapshot_state.clone_without_local_writes();
+        Self::raw_transaction_affordability_preflight(
+            signed_tx,
+            &authenticated_tx,
+            &auth_data,
+            &mut preflight_state,
+            ethereum,
+        )
+    }
+
+    #[cfg(all(feature = "test-utils", debug_assertions))]
+    fn maybe_pause_after_auth(tx_hash: B256, ethereum: &Arc<Ethereum<S, Seq>>) {
+        let tx_hash_hex = format!("{tx_hash:#x}");
+        if std::env::var(PAUSE_AFTER_AUTH_TX_HASH_ENV).ok().as_deref() != Some(tx_hash_hex.as_str())
+        {
+            return;
+        }
+
+        std::env::set_var(PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV, &tx_hash_hex);
+        let shutdown_receiver = ethereum.shutdown_receiver.clone();
+        tokio::task::block_in_place(|| {
+            while std::env::var(PAUSE_AFTER_AUTH_TX_HASH_ENV).ok().as_deref()
+                == Some(tx_hash_hex.as_str())
+            {
+                if shutdown_receiver.has_changed().unwrap_or(false) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+        std::env::remove_var(PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV);
+    }
+
+    #[cfg(not(all(feature = "test-utils", debug_assertions)))]
+    fn maybe_pause_after_auth(_tx_hash: B256, _ethereum: &Arc<Ethereum<S, Seq>>) {}
 
     async fn process_raw_transaction<T, F>(
         data: Bytes,
@@ -466,15 +496,7 @@ where
     {
         let (tx_hash, raw_message, signed_tx) = Self::decode_raw_transaction(&data)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        {
-            let (authenticated_tx, auth_data) = Self::authenticate_tx(&tx, &ethereum)?;
-            Self::raw_transaction_affordability_preflight(
-                &signed_tx,
-                &authenticated_tx,
-                &auth_data,
-                &ethereum,
-            )?;
-        }
+        Self::authenticate_and_preflight_send(tx_hash, &tx, &signed_tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
@@ -567,15 +589,7 @@ where
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(message));
 
-        {
-            let (authenticated_tx, auth_data) = Self::authenticate_tx(&tx, &ethereum)?;
-            Self::raw_transaction_affordability_preflight(
-                &signed_tx,
-                &authenticated_tx,
-                &auth_data,
-                &ethereum,
-            )?;
-        }
+        Self::authenticate_and_preflight_send(tx_hash, &tx, &signed_tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)

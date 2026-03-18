@@ -202,6 +202,32 @@ pub(crate) async fn raw_signed_eip1559(
     max_fee_per_gas: u128,
     max_priority_fee_per_gas: u128,
 ) -> anyhow::Result<String> {
+    Ok(raw_signed_eip1559_with_hash(
+        signer,
+        chain_id,
+        nonce,
+        gas_limit,
+        to,
+        value,
+        input,
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+    )
+    .await?
+    .0)
+}
+
+pub(crate) async fn raw_signed_eip1559_with_hash(
+    signer: &PrivateKeySigner,
+    chain_id: u64,
+    nonce: u64,
+    gas_limit: u64,
+    to: TxKind,
+    value: U256,
+    input: Bytes,
+    max_fee_per_gas: u128,
+    max_priority_fee_per_gas: u128,
+) -> anyhow::Result<(String, B256)> {
     let tx = TxEip1559 {
         chain_id,
         nonce,
@@ -215,7 +241,10 @@ pub(crate) async fn raw_signed_eip1559(
     };
     let sig = signer.sign_hash(&tx.signature_hash()).await?;
     let envelope = TxEnvelope::Eip1559(tx.into_signed(sig));
-    Ok(format!("0x{}", hex::encode(envelope.encoded_2718())))
+    Ok((
+        format!("0x{}", hex::encode(envelope.encoded_2718())),
+        *envelope.tx_hash(),
+    ))
 }
 
 pub(crate) fn eth_call_params(from: &str, to: &str, input: &str, block_tag: &str) -> Value {
