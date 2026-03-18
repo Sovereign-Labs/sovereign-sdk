@@ -189,7 +189,7 @@ sov-universal-wallet-macros = { path = "crates/universal-wallet/macros", version
 sov-universal-wallet-macro-helpers = { path = "crates/universal-wallet/macro-helpers", version = "0.3" }
 sov-zkvm-utils = { path = "crates/utils/sov-zkvm-utils" }
 sov-build = { path = "crates/utils/sov-build" }
-sovereign-web3 = { path = "crates/web3" }
+sovereign-web3 = { path = "crates/web3", default-features = false }
 workspace-hack = { path = "crates/utils/workspace-hack" }
 nearly-linear = { path = "crates/utils/nearly-linear", version = "0.3" }
 sov-proxy-utils = { path = "crates/utils/sov-proxy-utils", version = "0.3" }
