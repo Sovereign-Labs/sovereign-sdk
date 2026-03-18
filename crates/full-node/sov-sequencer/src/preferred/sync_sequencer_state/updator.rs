@@ -235,11 +235,11 @@ where
         .await
     }
 
-    pub(crate) async fn trigger_batch_production_if_convenient_msg(
+    pub(crate) async fn trigger_batch_production_msg(
         &self,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::TriggerBatchProductionIfConvenient { reason })
+        self.send(Message::TriggerBatchProduction { reason })
             .await
     }
 

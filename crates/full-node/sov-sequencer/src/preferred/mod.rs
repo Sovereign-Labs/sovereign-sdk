@@ -247,7 +247,7 @@ where
                 }
 
                 self.synchronized_state_updator
-                    .trigger_batch_production_if_convenient_msg(
+                    .trigger_batch_production_msg(
                         "recover_and_catch_up:dump_catchup_batches",
                     )
                     .await

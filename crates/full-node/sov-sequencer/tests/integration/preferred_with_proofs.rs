@@ -1,9 +1,7 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use futures::stream::BoxStream;
 use serde::Deserialize;
-use sov_api_spec::types;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::{RawTx, Runtime};
@@ -17,11 +15,12 @@ use sov_test_utils::{
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio::time::{sleep, timeout};
-use tokio_stream::StreamExt;
 
 use crate::utils::{
-    new_test_rollup_with_manual_proof_posting_and_proof_jump, tempdir_inside_codebase_dir,
-    tx_set_value_with_gas, ManualProofPostingTestProverService,
+    new_test_rollup_with_manual_proof_posting_and_proof_jump, pause_preferred_batches_and_confirm,
+    produce_block_and_wait_for_sync, tempdir_inside_codebase_dir, tx_set_value_with_gas,
+    wait_for_next_proof_ready_to_post, wait_until_visible_proof_count,
+    ManualProofPostingTestProverService,
 };
 
 generate_zk_runtime_with_kernel!(
@@ -32,11 +31,17 @@ generate_zk_runtime_with_kernel!(
 type TestBlueprint = ManualProofPostingRtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
 
 const SEQUENCER_RECOVERY_ERROR: &str = "The preferred sequencer is recovering from downtime and cannot provide soft-confirmations at this time";
+const SEQUENCER_SYNCING_ERROR: &str = "The node fell out of sync with the DA head, the sequencer is waiting to catch up. There may also be a small delay after the node has finished syncing.";
+const SEQUENCER_WAITING_ON_BLOB_SENDER_ERROR: &str =
+    "The sequencer is waiting for the blob sender to be ready";
+const SEQUENCER_WAITING_ON_DA_ERROR: &str =
+    "The sequencer is waiting for the DA to finalize more blocks";
 const AGGREGATED_PROOF_BLOCK_JUMP: usize = 10;
 const RECOVERY_DEFERRED_SLOTS_COUNT_OVERRIDE: &str = "20";
 const RECOVERY_DRIFT_BLOCKS: usize = 10;
+const RESYNC_DEFERRED_SLOTS_COUNT_OVERRIDE: &str = "150000";
+const RESYNC_TRIGGER_BLOCK_BURST: usize = 12;
 const RETRYABLE_TX_SUBMIT_DELAY: Duration = Duration::from_millis(100);
-const PROOF_VISIBILITY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug, Deserialize)]
 struct ValueResponse {
@@ -135,93 +140,6 @@ async fn submit_value_tx(
     unreachable!("the retry loop should always return before exhausting all branches");
 }
 
-async fn produce_block_and_wait_for_sync(
-    test_rollup: &TestRollup<TestBlueprint>,
-) -> anyhow::Result<()> {
-    test_rollup.da_service.produce_block_now().await?;
-    test_rollup.wait_for_node_synced().await?;
-    Ok(())
-}
-
-async fn pause_preferred_batches_and_confirm(
-    test_rollup: &TestRollup<TestBlueprint>,
-) -> anyhow::Result<()> {
-    let mut updates = test_rollup.subscribe_state_updates().await.unwrap();
-    test_rollup.pause_preferred_batches().await;
-    produce_block_and_wait_for_sync(test_rollup).await?;
-
-    timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
-        loop {
-            let Some(next) = updates.next().await else {
-                anyhow::bail!(
-                    "state update subscription closed while waiting for pause acknowledgment"
-                );
-            };
-            let notification = next?;
-            if notification.update_skipped_due_to_pause {
-                return Ok::<(), anyhow::Error>(());
-            }
-        }
-    })
-    .await
-    .context("Timed out waiting for preferred batch pause acknowledgment")??;
-
-    Ok(())
-}
-
-async fn wait_for_next_proof_ready_to_post(
-    test_rollup: &TestRollup<TestBlueprint>,
-    control: &ManualProofPostingControl,
-    prover_service: &ManualProofPostingTestProverService,
-    phase: &str,
-) -> anyhow::Result<()> {
-    timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
-        loop {
-            if control.blocks_until_next_aggregate_proof() == 0 {
-                prover_service.wait_for_proof_ready_to_post().await;
-                return Ok::<(), anyhow::Error>(());
-            }
-
-            produce_block_and_wait_for_sync(test_rollup).await?;
-        }
-    })
-    .await
-    .with_context(|| {
-        format!("Timed out waiting for an aggregate proof to become ready to post during {phase}")
-    })??;
-
-    Ok(())
-}
-
-async fn wait_until_visible_proof_count(
-    test_rollup: &TestRollup<TestBlueprint>,
-    aggregated_proofs: &mut BoxStream<'static, anyhow::Result<types::AggregatedProof>>,
-    visible_proofs: &mut usize,
-    target_visible_proofs: usize,
-    phase: &str,
-) -> anyhow::Result<()> {
-    timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
-        while *visible_proofs < target_visible_proofs {
-            match timeout(PROOF_VISIBILITY_POLL_INTERVAL, aggregated_proofs.next()).await {
-                Ok(Some(Ok(_proof))) => *visible_proofs += 1,
-                Ok(Some(Err(error))) => return Err::<(), anyhow::Error>(error),
-                Ok(None) => anyhow::bail!("aggregated proof subscription closed unexpectedly"),
-                Err(_) => produce_block_and_wait_for_sync(test_rollup).await?,
-            }
-        }
-
-        Ok::<(), anyhow::Error>(())
-    })
-    .await
-    .with_context(|| {
-        format!(
-            "Timed out waiting for {target_visible_proofs} aggregate proofs to become visible on the node during {phase}"
-        )
-    })??;
-
-    Ok(())
-}
-
 async fn drive_until_sequencer_ready_state(
     test_rollup: &TestRollup<TestBlueprint>,
     wait_for_ready: bool,
@@ -241,6 +159,115 @@ async fn drive_until_sequencer_ready_state(
     .await
     .with_context(|| {
         format!("Timed out waiting for the sequencer to become {target_state} during {phase}")
+    })??;
+
+    Ok(())
+}
+
+async fn queue_interleaved_batch_with_proof(
+    test_rollup: &TestRollup<TestBlueprint>,
+    client: &sov_api_spec::client::Client,
+    key: &Ed25519PrivateKey,
+    control: &ManualProofPostingControl,
+    prover_service: &ManualProofPostingTestProverService,
+    first_generation: u64,
+    first_value: u64,
+    second_generation: u64,
+    second_value: u64,
+    phase: &str,
+) -> anyhow::Result<()> {
+    wait_for_next_proof_ready_to_post(test_rollup, control, prover_service, phase).await?;
+    submit_value_tx(client, key, first_generation, first_value).await?;
+    control.release_next_proof();
+    submit_value_tx(client, key, second_generation, second_value).await?;
+    test_rollup
+        .force_close_batch()
+        .await
+        .with_context(|| format!("failed to force close the batch during {phase}"))?;
+    Ok(())
+}
+
+async fn queue_batch_without_proof(
+    test_rollup: &TestRollup<TestBlueprint>,
+    client: &sov_api_spec::client::Client,
+    key: &Ed25519PrivateKey,
+    first_generation: u64,
+    first_value: u64,
+    second_generation: u64,
+    second_value: u64,
+    phase: &str,
+) -> anyhow::Result<()> {
+    submit_value_tx(client, key, first_generation, first_value).await?;
+    submit_value_tx(client, key, second_generation, second_value).await?;
+    test_rollup
+        .force_close_batch()
+        .await
+        .with_context(|| format!("failed to force close the batch during {phase}"))?;
+    Ok(())
+}
+
+async fn drive_until_sequencer_enters_resync(
+    test_rollup: &TestRollup<TestBlueprint>,
+    phase: &str,
+) -> anyhow::Result<()> {
+    timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
+        loop {
+            if !test_rollup.is_sequencer_ready().await {
+                return Ok::<(), anyhow::Error>(());
+            }
+
+            test_rollup
+                .da_service
+                .produce_n_blocks_now(RESYNC_TRIGGER_BLOCK_BURST)
+                .await?;
+            sleep(Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .with_context(|| {
+        format!("Timed out waiting for the sequencer to enter resync during {phase}")
+    })??;
+
+    Ok(())
+}
+
+async fn wait_for_sequencer_ready_after_resync(
+    test_rollup: &TestRollup<TestBlueprint>,
+    phase: &str,
+) -> anyhow::Result<()> {
+    timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
+        loop {
+            match test_rollup.client.client.is_ready().await {
+                Ok(_) => return Ok::<(), anyhow::Error>(()),
+                Err(error) => {
+                    let err_string = error.to_string();
+
+                    if err_string.contains(SEQUENCER_SYNCING_ERROR) {
+                        sleep(Duration::from_millis(50)).await;
+                        continue;
+                    }
+
+                    if err_string.contains(SEQUENCER_WAITING_ON_BLOB_SENDER_ERROR) {
+                        test_rollup.da_service.produce_block_now().await?;
+                        sleep(Duration::from_millis(20)).await;
+                        continue;
+                    }
+
+                    if err_string.contains(SEQUENCER_WAITING_ON_DA_ERROR) {
+                        produce_block_and_wait_for_sync(test_rollup).await?;
+                        continue;
+                    }
+
+                    return Err(anyhow::anyhow!(
+                        "Unexpected sequencer state while waiting for resync catch-up: {err_string}"
+                    ));
+                }
+            }
+        }
+    })
+    .await
+    .with_context(|| {
+        format!("Timed out waiting for the sequencer to become ready during {phase}")
     })??;
 
     Ok(())
@@ -365,6 +392,127 @@ async fn test_manual_proof_posting_recovery_replays_batch_and_proofs() -> anyhow
 
     // These txs all use sequential generations from the same account, so reaching the final value
     // proves the paused in-progress batch replayed intact across recovery.
+    wait_for_value(&test_rollup, 40).await?;
+
+    control.open();
+    std::env::remove_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT");
+    timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
+        .await
+        .context("Timed out shutting down test rollup")??;
+
+    Ok(())
+}
+
+/// Verifies that delayed aggregate proofs and multiple paused preferred batches replay correctly
+/// through the lighter sequencer resync path when proof posting is manually controlled.
+///
+/// The test pauses blob submission to DA to build a local backlog, then twice waits for a proof to
+/// become ready before opening a batch, releases that proof into the middle of the still-open
+/// batch, appends another tx, and force-closes the batch. A third paused batch is queued behind
+/// them to deepen the backlog. Once blob submission resumes, we force the node 10+ blocks behind
+/// the DA head, assert the sequencer enters the `Syncing` not-ready state, then wait for the
+/// queued proofs and batches to replay and for normal tx acceptance to resume.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_manual_proof_posting_resync_replays_interleaved_batches_and_proofs(
+) -> anyhow::Result<()> {
+    let (test_rollup, control, prover_service, admin) =
+        create_test_rollup_with_manual_proof_posting().await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup
+        .wait_for_sequencer_ready()
+        .await
+        .context("sequencer did not become ready during startup")?;
+
+    let client = test_rollup.api_client().clone();
+    let mut aggregated_proofs = client.subscribe_aggregated_proof().await.unwrap();
+    let mut visible_proofs = 0usize;
+
+    test_rollup.da_service.set_blob_submission_pause().await;
+    pause_preferred_batches_and_confirm(&test_rollup).await?;
+
+    queue_interleaved_batch_with_proof(
+        &test_rollup,
+        &client,
+        &admin.private_key,
+        &control,
+        &prover_service,
+        0,
+        10,
+        1,
+        11,
+        "interleaved batch 1",
+    )
+    .await?;
+
+    queue_interleaved_batch_with_proof(
+        &test_rollup,
+        &client,
+        &admin.private_key,
+        &control,
+        &prover_service,
+        2,
+        20,
+        3,
+        21,
+        "interleaved batch 2",
+    )
+    .await?;
+
+    control.open();
+
+    queue_batch_without_proof(
+        &test_rollup,
+        &client,
+        &admin.private_key,
+        4,
+        30,
+        5,
+        31,
+        "queued batch 3",
+    )
+    .await?;
+
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT",
+        RESYNC_DEFERRED_SLOTS_COUNT_OVERRIDE,
+    );
+    test_rollup.da_service.resume_blob_submission().await;
+    test_rollup.resume_preferred_batches().await;
+
+    drive_until_sequencer_enters_resync(&test_rollup, "backlog drain").await?;
+    test_rollup.wait_for_sequencer_not_ready().await?;
+
+    let resync_tx = tx_set_value(&admin.private_key, 6, 40);
+    let err = client
+        .send_raw_tx_to_sequencer(&resync_tx)
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains(SEQUENCER_SYNCING_ERROR),
+        "Expected syncing error, got: {err}",
+    );
+
+    wait_for_sequencer_ready_after_resync(&test_rollup, "resync catch-up")
+        .await
+        .context("sequencer did not recover from resync")?;
+
+    wait_until_visible_proof_count(
+        &test_rollup,
+        &mut aggregated_proofs,
+        &mut visible_proofs,
+        2,
+        "proof replay after resync",
+    )
+    .await?;
+    assert!(
+        visible_proofs >= 2,
+        "Expected at least 2 visible proofs after resync, saw {visible_proofs}",
+    );
+
+    wait_for_value(&test_rollup, 31).await?;
+
+    submit_value_tx(&client, &admin.private_key, 6, 40).await?;
     wait_for_value(&test_rollup, 40).await?;
 
     control.open();

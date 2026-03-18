@@ -1,9 +1,12 @@
+use anyhow::Context as AnyhowContext;
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use futures::stream::BoxStream;
 use proptest::bits::u64;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use sov_api_spec::types;
 use sov_chain_state::ChainState;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
@@ -44,6 +47,8 @@ use sov_test_utils::{
     TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_MAX_CONCURRENT_BLOBS,
 };
 use sov_value_setter::ValueSetter;
+use tokio::time::{timeout, Duration};
+use tokio_stream::StreamExt;
 
 pub const MAX_BATCH_EXECUTION_TIME_MILLIS: u64 = 1_000 * 60 * 5; // Allow batches to take up to 5 minutes by default.
 
@@ -51,6 +56,7 @@ pub type MySequencer = StdSequencer<TestSpec, RT, MockDaService>;
 pub type RT = TestOptimisticRuntime<TestSpec>;
 pub type RTCall = TestOptimisticRuntimeCall<TestSpec>;
 pub type ManualProofPostingTestProverService = ManualProofPostingRtAgnosticProverService<TestSpec>;
+const PROOF_VISIBILITY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[allow(clippy::too_many_arguments)]
 fn configured_test_rollup_builder<B, RT>(
@@ -471,6 +477,119 @@ pub async fn new_test_rollup_with_manual_proof_posting_and_proof_jump<
     );
 
     (test_rollup, control, prover_service)
+}
+
+pub async fn produce_block_and_wait_for_sync<RT>(
+    test_rollup: &TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
+) -> anyhow::Result<()>
+where
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+{
+    test_rollup.da_service.produce_block_now().await?;
+    test_rollup.wait_for_node_synced().await?;
+    Ok(())
+}
+
+pub async fn pause_preferred_batches_and_confirm<RT>(
+    test_rollup: &TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
+) -> anyhow::Result<()>
+where
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+{
+    let mut updates = test_rollup.subscribe_state_updates().await.unwrap();
+    test_rollup.pause_preferred_batches().await;
+    produce_block_and_wait_for_sync(test_rollup).await?;
+
+    timeout(
+        TestRollup::<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>::POLLING_TIMEOUT,
+        async {
+            loop {
+                let Some(next) = updates.next().await else {
+                    anyhow::bail!(
+                        "state update subscription closed while waiting for pause acknowledgment"
+                    );
+                };
+                let notification = next?;
+                if notification.update_skipped_due_to_pause {
+                    return Ok::<(), anyhow::Error>(());
+                }
+            }
+        },
+    )
+    .await
+    .context("Timed out waiting for preferred batch pause acknowledgment")??;
+
+    Ok(())
+}
+
+pub async fn wait_for_next_proof_ready_to_post<RT>(
+    test_rollup: &TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
+    control: &ManualProofPostingControl,
+    prover_service: &ManualProofPostingTestProverService,
+    phase: &str,
+) -> anyhow::Result<()>
+where
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+{
+    timeout(
+        TestRollup::<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>::POLLING_TIMEOUT,
+        async {
+            loop {
+                if control.blocks_until_next_aggregate_proof() == 0 {
+                    prover_service.wait_for_proof_ready_to_post().await;
+                    return Ok::<(), anyhow::Error>(());
+                }
+
+                produce_block_and_wait_for_sync(test_rollup).await?;
+            }
+        },
+    )
+    .await
+    .with_context(|| {
+        format!("Timed out waiting for an aggregate proof to become ready to post during {phase}")
+    })??;
+
+    Ok(())
+}
+
+pub async fn wait_until_visible_proof_count<RT>(
+    test_rollup: &TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
+    aggregated_proofs: &mut BoxStream<'static, anyhow::Result<types::AggregatedProof>>,
+    visible_proofs: &mut usize,
+    target_visible_proofs: usize,
+    phase: &str,
+) -> anyhow::Result<()>
+where
+    RT: Runtime<TestSpec> + HasRestApi<TestSpec>,
+{
+    timeout(
+        TestRollup::<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>::POLLING_TIMEOUT,
+        async {
+            while *visible_proofs < target_visible_proofs {
+                match timeout(PROOF_VISIBILITY_POLL_INTERVAL, aggregated_proofs.next()).await {
+                    Ok(Some(Ok(_proof))) => {
+                        *visible_proofs += 1;
+                        eprintln!(
+                            "[proof-visibility] phase={phase} visible_proofs={visible_proofs}"
+                        );
+                    }
+                    Ok(Some(Err(error))) => return Err::<(), anyhow::Error>(error),
+                    Ok(None) => anyhow::bail!("aggregated proof subscription closed unexpectedly"),
+                    Err(_) => produce_block_and_wait_for_sync(test_rollup).await?,
+                }
+            }
+
+            Ok::<(), anyhow::Error>(())
+        },
+    )
+    .await
+    .with_context(|| {
+        format!(
+            "Timed out waiting for {target_visible_proofs} aggregate proofs to become visible on the node during {phase}; observed {visible_proofs}"
+        )
+    })??;
+
+    Ok(())
 }
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
