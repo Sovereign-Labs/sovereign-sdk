@@ -422,7 +422,7 @@ async fn test_manual_proof_posting_recovery_replays_batch_and_proofs() -> anyhow
 
     // These txs all use sequential generations from the same account, so reaching the final value
     // proves the paused in-progress batch replayed intact across recovery.
-    wait_for_value(&test_rollup, 40).await?;
+    wait_for_value(&test_rollup, 50).await?;
     wait_until_ready_proof_count(&test_rollup, &control, 5, "proof 5 after recovery").await?;
     control.open();
 
@@ -465,6 +465,7 @@ async fn test_manual_proof_posting_recovery_replays_batch_and_proofs() -> anyhow
 #[tokio::test(flavor = "multi_thread")]
 async fn test_manual_proof_posting_resync_replays_interleaved_batches_and_proofs(
 ) -> anyhow::Result<()> {
+    let _otel_guard = sov_test_utils::initialize_logging();
     let (test_rollup, control, admin) =
         create_test_rollup_with_manual_proof_posting(RESYNC_AGGREGATED_PROOF_BLOCK_JUMP).await;
 
