@@ -13,6 +13,7 @@ use sov_stf_runner::processes::{
 struct ManualProofPostingGateState {
     blocked_proofs: usize,
     available_releases: usize,
+    ready_proof_count: usize,
     is_open: bool,
 }
 
@@ -27,22 +28,24 @@ impl ManualProofPostingSharedState {
             gate: Mutex::new(ManualProofPostingGateState {
                 blocked_proofs: 0,
                 available_releases: 0,
+                ready_proof_count: 0,
                 is_open: false,
             }),
             notify: Notify::new(),
         }
     }
 
-    async fn wait_for_proof_ready_to_post(&self) {
+    fn ready_proof_count(&self) -> usize {
+        self.gate
+            .lock()
+            .expect("manual proof posting gate lock poisoned")
+            .ready_proof_count
+    }
+
+    async fn wait_for_ready_proof_count(&self, target: usize) {
         loop {
             let notified = self.notify.notified();
-            if self
-                .gate
-                .lock()
-                .expect("manual proof posting gate lock poisoned")
-                .blocked_proofs
-                > 0
-            {
+            if self.ready_proof_count() >= target {
                 return;
             }
             notified.await;
@@ -50,38 +53,48 @@ impl ManualProofPostingSharedState {
     }
 
     async fn wait_until_release_is_allowed(&self) {
-        {
+        let should_block = {
             let mut gate = self
                 .gate
                 .lock()
                 .expect("manual proof posting gate lock poisoned");
+            gate.ready_proof_count = gate.ready_proof_count.saturating_add(1);
+
             if gate.is_open {
-                return;
+                false
+            } else {
+                gate.blocked_proofs = gate.blocked_proofs.saturating_add(1);
+                true
             }
-            gate.blocked_proofs += 1;
-        }
+        };
         self.notify.notify_waiters();
 
-        loop {
-            let notified = self.notify.notified();
-            {
-                let mut gate = self
-                    .gate
-                    .lock()
-                    .expect("manual proof posting gate lock poisoned");
+        if !should_block {
+            return;
+        }
 
-                if gate.is_open {
-                    gate.blocked_proofs = gate.blocked_proofs.saturating_sub(1);
-                    return;
-                }
+        {
+            loop {
+                let notified = self.notify.notified();
+                {
+                    let mut gate = self
+                        .gate
+                        .lock()
+                        .expect("manual proof posting gate lock poisoned");
 
-                if gate.available_releases > 0 {
-                    gate.available_releases -= 1;
-                    gate.blocked_proofs = gate.blocked_proofs.saturating_sub(1);
-                    return;
+                    if gate.is_open {
+                        gate.blocked_proofs = gate.blocked_proofs.saturating_sub(1);
+                        return;
+                    }
+
+                    if gate.available_releases > 0 {
+                        gate.available_releases -= 1;
+                        gate.blocked_proofs = gate.blocked_proofs.saturating_sub(1);
+                        return;
+                    }
                 }
+                notified.await;
             }
-            notified.await;
         }
     }
 
@@ -128,6 +141,16 @@ impl ManualProofPostingControl {
         self.shared_state.release_next_proof();
     }
 
+    /// Returns how many aggregate proofs have reached the posting gate.
+    pub fn ready_proof_count(&self) -> usize {
+        self.shared_state.ready_proof_count()
+    }
+
+    /// Waits until at least `target` aggregate proofs have reached the posting gate.
+    pub async fn wait_for_ready_proof_count(&self, target: usize) {
+        self.shared_state.wait_for_ready_proof_count(target).await;
+    }
+
     /// Permanently opens the gate so all current and future proofs flow through.
     pub fn open(&self) {
         self.shared_state.open();
@@ -170,11 +193,6 @@ impl<Ps: ProverService> ManualProofPostingProverService<Ps> {
             inner: Arc::new(inner),
             shared_state,
         }
-    }
-
-    /// Waits until an aggregate proof is ready and blocked at the posting gate.
-    pub async fn wait_for_proof_ready_to_post(&self) {
-        self.shared_state.wait_for_proof_ready_to_post().await;
     }
 }
 

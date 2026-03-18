@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::manual_proof_posting::{ManualProofPostingControl, ManualProofPostingSharedState};
 use crate::ManualProofPostingProverService;
@@ -212,7 +212,6 @@ pub struct ManualProofPostingRtAgnosticBlueprint<
 > {
     phantom: PhantomData<(S, R, Manager)>,
     shared_state: Arc<ManualProofPostingSharedState>,
-    prover_service: Arc<Mutex<Option<ManualProofPostingRtAgnosticProverService<S>>>>,
     proof_manager_status: Arc<ZkProofManagerStatus>,
 }
 
@@ -223,7 +222,6 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager> Default
         Self {
             phantom: PhantomData,
             shared_state: Arc::new(ManualProofPostingSharedState::new()),
-            prover_service: Arc::new(Mutex::new(None)),
             proof_manager_status: Arc::new(ZkProofManagerStatus::default()),
         }
     }
@@ -236,7 +234,6 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager> Clone
         Self {
             phantom: PhantomData,
             shared_state: self.shared_state.clone(),
-            prover_service: self.prover_service.clone(),
             proof_manager_status: self.proof_manager_status.clone(),
         }
     }
@@ -252,14 +249,6 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager> ManualProofPostingRtAgnosticBlueprint
         );
 
         (blueprint, control)
-    }
-
-    /// Returns the controlled prover service created during startup, if the rollup has reached that stage.
-    pub fn prover_service(&self) -> Option<ManualProofPostingRtAgnosticProverService<S>> {
-        self.prover_service
-            .lock()
-            .expect("manual proof posting prover service lock poisoned")
-            .clone()
     }
 }
 
@@ -342,18 +331,10 @@ where
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let prover_service = ManualProofPostingProverService::new(
+        ManualProofPostingProverService::new(
             build_parallel_prover_service::<S>(prover_config, rollup_config),
             self.shared_state.clone(),
-        );
-
-        *self
-            .prover_service
-            .lock()
-            .expect("manual proof posting prover service lock poisoned") =
-            Some(prover_service.clone());
-
-        prover_service
+        )
     }
 
     fn create_storage_manager(

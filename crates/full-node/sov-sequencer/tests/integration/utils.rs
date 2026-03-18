@@ -1,12 +1,11 @@
 use anyhow::Context as AnyhowContext;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use futures::stream::BoxStream;
 use proptest::bits::u64;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use sov_api_spec::types;
 use sov_chain_state::ChainState;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
@@ -41,13 +40,12 @@ use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{FullNodeBlueprint, GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
-    ManualProofPostingControl, ManualProofPostingRtAgnosticBlueprint,
-    ManualProofPostingRtAgnosticProverService, MessageGenerator, RtAgnosticBlueprint,
-    TestPrivateKey, TestSpec, TransactionType, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE,
-    TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_MAX_CONCURRENT_BLOBS,
+    ManualProofPostingControl, ManualProofPostingRtAgnosticBlueprint, MessageGenerator,
+    RtAgnosticBlueprint, TestPrivateKey, TestSpec, TransactionType, TEST_DEFAULT_GAS_LIMIT,
+    TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_MAX_CONCURRENT_BLOBS,
 };
 use sov_value_setter::ValueSetter;
-use tokio::time::{timeout, Duration};
+use tokio::time::timeout;
 use tokio_stream::StreamExt;
 
 pub const MAX_BATCH_EXECUTION_TIME_MILLIS: u64 = 1_000 * 60 * 5; // Allow batches to take up to 5 minutes by default.
@@ -55,8 +53,6 @@ pub const MAX_BATCH_EXECUTION_TIME_MILLIS: u64 = 1_000 * 60 * 5; // Allow batche
 pub type MySequencer = StdSequencer<TestSpec, RT, MockDaService>;
 pub type RT = TestOptimisticRuntime<TestSpec>;
 pub type RTCall = TestOptimisticRuntimeCall<TestSpec>;
-pub type ManualProofPostingTestProverService = ManualProofPostingRtAgnosticProverService<TestSpec>;
-const PROOF_VISIBILITY_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[allow(clippy::too_many_arguments)]
 fn configured_test_rollup_builder<B, RT>(
@@ -399,7 +395,6 @@ pub async fn new_test_rollup_with_manual_proof_posting<
 ) -> (
     TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
     ManualProofPostingControl,
-    ManualProofPostingTestProverService,
 ) {
     new_test_rollup_with_manual_proof_posting_and_proof_jump(
         dir,
@@ -439,7 +434,6 @@ pub async fn new_test_rollup_with_manual_proof_posting_and_proof_jump<
 ) -> (
     TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
     ManualProofPostingControl,
-    ManualProofPostingTestProverService,
 ) {
     assert!(
         rollup_prover_config.is_some(),
@@ -472,11 +466,8 @@ pub async fn new_test_rollup_with_manual_proof_posting_and_proof_jump<
     });
 
     let test_rollup = builder.start().await.unwrap();
-    let prover_service = blueprint.prover_service().expect(
-        "manual proof posting prover service should be initialized before the test rollup starts",
-    );
 
-    (test_rollup, control, prover_service)
+    (test_rollup, control)
 }
 
 pub async fn produce_block_and_wait_for_sync<RT>(
@@ -522,10 +513,10 @@ where
     Ok(())
 }
 
-pub async fn wait_for_next_proof_ready_to_post<RT>(
+pub async fn wait_until_ready_proof_count<RT>(
     test_rollup: &TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
     control: &ManualProofPostingControl,
-    prover_service: &ManualProofPostingTestProverService,
+    target_ready_proof_count: usize,
     phase: &str,
 ) -> anyhow::Result<()>
 where
@@ -535,9 +526,17 @@ where
         TestRollup::<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>::POLLING_TIMEOUT,
         async {
             loop {
-                if control.blocks_until_next_aggregate_proof() == 0 {
-                    prover_service.wait_for_proof_ready_to_post().await;
+                if control.ready_proof_count() >= target_ready_proof_count {
                     return Ok::<(), anyhow::Error>(());
+                }
+
+                if control.blocks_until_next_aggregate_proof() == 0 {
+                    let next_ready_proof_count =
+                        control.ready_proof_count().saturating_add(1).min(target_ready_proof_count);
+                    control
+                        .wait_for_ready_proof_count(next_ready_proof_count)
+                        .await;
+                    continue;
                 }
 
                 produce_block_and_wait_for_sync(test_rollup).await?;
@@ -546,16 +545,39 @@ where
     )
     .await
     .with_context(|| {
-        format!("Timed out waiting for an aggregate proof to become ready to post during {phase}")
+        format!(
+            "Timed out waiting for {target_ready_proof_count} aggregate proofs to become ready to post during {phase}"
+        )
     })??;
 
     Ok(())
 }
 
+pub async fn spawn_aggregated_proof_counter(
+    client: &sov_api_spec::client::Client,
+) -> anyhow::Result<(
+    Arc<AtomicUsize>,
+    tokio::task::JoinHandle<anyhow::Result<()>>,
+)> {
+    let mut aggregated_proofs = client.subscribe_aggregated_proof().await?;
+    let visible_proofs = Arc::new(AtomicUsize::new(0));
+    let visible_proofs_counter = visible_proofs.clone();
+
+    let task = tokio::spawn(async move {
+        while let Some(next) = aggregated_proofs.next().await {
+            next?;
+            visible_proofs_counter.fetch_add(1, Ordering::SeqCst);
+        }
+
+        anyhow::bail!("aggregated proof subscription closed unexpectedly");
+    });
+
+    Ok((visible_proofs, task))
+}
+
 pub async fn wait_until_visible_proof_count<RT>(
     test_rollup: &TestRollup<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>,
-    aggregated_proofs: &mut BoxStream<'static, anyhow::Result<types::AggregatedProof>>,
-    visible_proofs: &mut usize,
+    visible_proofs: &AtomicUsize,
     target_visible_proofs: usize,
     phase: &str,
 ) -> anyhow::Result<()>
@@ -565,18 +587,13 @@ where
     timeout(
         TestRollup::<ManualProofPostingRtAgnosticBlueprint<TestSpec, RT>>::POLLING_TIMEOUT,
         async {
-            while *visible_proofs < target_visible_proofs {
-                match timeout(PROOF_VISIBILITY_POLL_INTERVAL, aggregated_proofs.next()).await {
-                    Ok(Some(Ok(_proof))) => {
-                        *visible_proofs += 1;
-                        eprintln!(
-                            "[proof-visibility] phase={phase} visible_proofs={visible_proofs}"
-                        );
-                    }
-                    Ok(Some(Err(error))) => return Err::<(), anyhow::Error>(error),
-                    Ok(None) => anyhow::bail!("aggregated proof subscription closed unexpectedly"),
-                    Err(_) => produce_block_and_wait_for_sync(test_rollup).await?,
+            loop {
+                let current_visible_proofs = visible_proofs.load(Ordering::SeqCst);
+                if current_visible_proofs >= target_visible_proofs {
+                    break;
                 }
+
+                produce_block_and_wait_for_sync(test_rollup).await?;
             }
 
             Ok::<(), anyhow::Error>(())
@@ -585,7 +602,8 @@ where
     .await
     .with_context(|| {
         format!(
-            "Timed out waiting for {target_visible_proofs} aggregate proofs to become visible on the node during {phase}; observed {visible_proofs}"
+            "Timed out waiting for {target_visible_proofs} aggregate proofs to become visible on the node during {phase}; observed {}",
+            visible_proofs.load(Ordering::SeqCst)
         )
     })??;
 
