@@ -439,6 +439,11 @@ where
         Ok((authenticated_tx, auth_data))
     }
 
+    /// Authenticates and runs affordability preflight for a raw/local send.
+    ///
+    /// A single state snapshot is taken up-front so that authentication and the
+    /// subsequent affordability check observe the same head — even if new blocks
+    /// land between the two steps.
     fn authenticate_and_preflight_send(
         tx_hash: B256,
         tx: &FullyBakedTx,

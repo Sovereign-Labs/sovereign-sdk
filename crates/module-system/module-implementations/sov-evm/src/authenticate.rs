@@ -7,8 +7,6 @@ use crate::{call, CallMessage, RlpEvmTransaction};
 use alloy_consensus::{transaction::SignerRecoverable, Transaction};
 use alloy_eips::eip2718::{Decodable2718, EIP1559_TX_TYPE_ID};
 use alloy_primitives::Address;
-#[cfg(feature = "native")]
-use alloy_rpc_types::TransactionRequest;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::{
@@ -197,7 +195,7 @@ pub fn build_request_preflight_auth<
     Accessor: ProvableStateReader<User, Spec = S> + GetGasPrice<Spec = S> + VersionReader,
     S: Spec,
 >(
-    request: &TransactionRequest,
+    request: &alloy_rpc_types::TransactionRequest,
     state: &mut Accessor,
 ) -> Result<(AuthenticatedTransactionData<S>, AuthorizationData<S>), AuthenticationError>
 where
