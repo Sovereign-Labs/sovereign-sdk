@@ -1,6 +1,7 @@
 ARG NAMESPACE_BASE_IMAGE_REF=""
 # Your image must build FROM NAMESPACE_BASE_IMAGE_REF
 FROM ${NAMESPACE_BASE_IMAGE_REF} AS base
+ARG MOLD_VERSION=2.40.4
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -24,14 +25,19 @@ RUN sudo apt-get update && sudo apt-get install -y \
     && sudo rm -rf /var/lib/apt/lists/*
 
 # Build and install mold linker from source
-RUN git clone https://github.com/rui314/mold.git /tmp/mold \
-    && cd /tmp/mold \
-    && git checkout $(git describe --tags --abbrev=0) \
-    && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
-    && cmake --build build -j$(nproc) \
-    && sudo cmake --build build --target install \
-    && cd / \
-    && rm -rf /tmp/mold
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+         amd64) MOLD_ARCH=x86_64 ;; \
+         arm64) MOLD_ARCH=aarch64 ;; \
+         *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+       esac \
+    && curl -L -o /tmp/mold.tar.gz \
+         "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-${MOLD_ARCH}-linux.tar.gz" \
+    && tar -C /tmp -xzf /tmp/mold.tar.gz \
+    && sudo cp "/tmp/mold-${MOLD_VERSION}-${MOLD_ARCH}-linux/bin/mold" /usr/local/bin/mold \
+    && sudo mkdir -p /usr/local/libexec/mold \
+    && sudo cp "/tmp/mold-${MOLD_VERSION}-${MOLD_ARCH}-linux/libexec/mold/ld" /usr/local/libexec/mold/ld \
+    && rm -rf /tmp/mold*
 
 # Install Rust as user
 # The base image runs as runner user with home at /home/runner
@@ -48,6 +54,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 # Configure cargo to use mold linker
 RUN mkdir -p /home/runner/.cargo \
     && echo '[target.x86_64-unknown-linux-gnu]' >> /home/runner/.cargo/config.toml \
+    && echo 'linker = "clang"' >> /home/runner/.cargo/config.toml \
     && echo 'rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]' >> /home/runner/.cargo/config.toml
 
 # Install Node.js 20.x
