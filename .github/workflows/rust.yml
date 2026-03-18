@@ -566,7 +566,7 @@ jobs:
         run: make lint
 
   check-demo-rollup-phantom-dapp-e2e:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-250gb-1-88
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
     timeout-minutes: 60
