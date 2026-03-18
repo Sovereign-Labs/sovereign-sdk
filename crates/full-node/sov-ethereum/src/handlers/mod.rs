@@ -349,20 +349,9 @@ where
         }
 
         let actual_payer = *context.gas_refund_recipient();
-        let payer_balance_before = if actual_payer == sender_rollup_addr {
-            sender_balance
-        } else {
-            let payer_balance_after = Self::read_balance(&actual_payer, state)?;
-            payer_balance_after
-                .checked_add(U256::from(authenticated_tx.0.max_fee.0))
-                .ok_or_else(|| {
-                    ErrorObjectOwned::from(EthApiError::InvalidTransaction(
-                        RpcInvalidTransactionError::GasUintOverflow,
-                    ))
-                })?
-        };
 
         if actual_payer == sender_rollup_addr {
+            // Sender pays everything: gas + value.
             if sender_balance < requested_total_cost {
                 return Ok(AffordabilityPreflight::Rejected(
                     Self::insufficient_funds_error(requested_total_cost, sender_balance),
@@ -370,6 +359,16 @@ where
             }
             return Ok(AffordabilityPreflight::Affordable);
         }
+
+        // Paymaster path: paymaster covers gas, sender covers value.
+        let payer_balance_after = Self::read_balance(&actual_payer, state)?;
+        let payer_balance_before = payer_balance_after
+            .checked_add(U256::from(authenticated_tx.0.max_fee.0))
+            .ok_or_else(|| {
+                ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                    RpcInvalidTransactionError::GasUintOverflow,
+                ))
+            })?;
 
         if payer_balance_before < requested_gas_cost {
             return Ok(AffordabilityPreflight::Rejected(
