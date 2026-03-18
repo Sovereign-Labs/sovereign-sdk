@@ -186,3 +186,90 @@ async fn test_network_duplicate_proof_rejected() {
         format!("Proof generation for {} still in progress", header_hash)
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_network_prove_rejected_after_proved() {
+    let TestNetworkProver {
+        prover_service,
+        inner_vm,
+    } = make_network_prover(false, true);
+
+    let genesis = genesis_state_root();
+    let hash_a = MockHash::from([5; 32]);
+    let hash_b = MockHash::from([6; 32]);
+
+    // Submit two blocks.
+    prover_service
+        .prove(make_transition_info(hash_a, 1))
+        .await
+        .unwrap();
+    prover_service
+        .prove(make_transition_info(hash_b, 2))
+        .await
+        .unwrap();
+
+    // Complete only block A's inner proof (handle 0).
+    inner_vm.complete_proof(0);
+
+    // Aggregate [A, B]: A transitions to Proved, B is still pending → InProgress.
+    let status = prover_service
+        .create_aggregated_proof(&[hash_a, hash_b], &genesis.0)
+        .await
+        .unwrap();
+    assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
+
+    // Proving A again should fail because it is already Proved.
+    let err = prover_service
+        .prove(make_transition_info(hash_a, 1))
+        .await
+        .expect_err("Re-proving a Proved block should be rejected");
+    assert_eq!(
+        err.to_string(),
+        format!(
+            "Witness for block_header_hash {}, submitted multiple times.",
+            hash_a
+        )
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_network_prove_rejected_after_error() {
+    let TestNetworkProver {
+        prover_service,
+        inner_vm,
+    } = make_network_prover(false, true);
+
+    let genesis = genesis_state_root();
+    let hash_a = MockHash::from([7; 32]);
+
+    // Submit block A.
+    prover_service
+        .prove(make_transition_info(hash_a, 1))
+        .await
+        .unwrap();
+
+    // Remove the proof so poll returns an error.
+    inner_vm.fail_proof(0);
+
+    // Aggregation triggers the Err branch in Phase 1.
+    let err = prover_service
+        .create_aggregated_proof(&[hash_a], &genesis.0)
+        .await
+        .expect_err("Aggregation should fail when proof is missing");
+    assert!(
+        err.to_string().contains("unknown proof handle: 0"),
+        "Expected 'unknown proof handle' error, got: {}",
+        err
+    );
+
+    // Proving A again should propagate the stored error.
+    let err = prover_service
+        .prove(make_transition_info(hash_a, 1))
+        .await
+        .expect_err("Re-proving after error should propagate the stored error");
+    assert!(
+        err.to_string().contains("unknown proof handle: 0"),
+        "Expected stored error to contain 'unknown proof handle', got: {}",
+        err
+    );
+}

@@ -51,6 +51,20 @@ impl MockZkvmNetwork {
             .expect("complete_proof called with unknown handle");
         proof.ready = true;
     }
+
+    /// Removes a proof from the internal map so that subsequent
+    /// [`ZkvmNetwork::poll`] calls for this handle return an error.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `handle` does not correspond to a submitted proof.
+    pub fn fail_proof(&self, handle: u64) {
+        let mut proofs = self.proofs.lock().unwrap();
+        assert!(
+            proofs.remove(&handle).is_some(),
+            "fail_proof called with unknown handle"
+        );
+    }
 }
 
 impl Default for MockZkvmNetwork {
