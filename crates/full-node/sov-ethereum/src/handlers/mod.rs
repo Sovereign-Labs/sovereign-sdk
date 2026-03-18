@@ -64,11 +64,32 @@ const IP_ADDRESS_ERROR: &str = "Unable to retrieve the peer IP address";
 const PAUSE_AFTER_AUTH_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_TX_HASH";
 #[cfg(all(feature = "test-utils", debug_assertions))]
 const PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_REACHED_TX_HASH";
+#[cfg(all(feature = "local", feature = "test-utils", debug_assertions))]
+const PAUSE_AFTER_LOCAL_FILL_FROM_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_LOCAL_FILL_FROM";
+#[cfg(all(feature = "local", feature = "test-utils", debug_assertions))]
+const PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV: &str =
+    "SOV_ETH_TEST_PAUSE_AFTER_LOCAL_FILL_REACHED_FROM";
 
 enum AffordabilityPreflight {
     Affordable,
     Rejected(ErrorObjectOwned),
     Skip,
+}
+
+/// Returns whether a real-state affordability preflight is meaningful for this request.
+///
+/// When state or block overrides are present, account balances and gas pricing can be
+/// arbitrarily changed by the caller, so a preflight against real state would be
+/// meaningless. The EVM execution itself enforces affordability under the overridden state.
+fn supports_request_affordability_preflight(
+    request: &TransactionRequest,
+    state_overrides: Option<&StateOverride>,
+    block_overrides: Option<&BlockOverrides>,
+) -> bool {
+    request.from.is_some()
+        && request.max_fee_per_gas.or(request.gas_price).is_some()
+        && state_overrides.is_none()
+        && block_overrides.is_none()
 }
 
 pub struct Handlers<S, Seq>(PhantomData<(S, Seq)>);
@@ -178,10 +199,28 @@ where
         block_overrides: Option<Box<BlockOverrides>>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<U64> {
-        let evm = Evm::<S>::default();
         // Pin one checkpoint snapshot for the full request so validation,
         // affordability preflight, and estimation cannot observe different heads.
         let snapshot_state = ethereum.api_state_accessor();
+        Self::estimate_gas_request_with_snapshot(
+            request,
+            block_id,
+            state_overrides,
+            block_overrides,
+            &snapshot_state,
+            ethereum,
+        )
+    }
+
+    fn estimate_gas_request_with_snapshot(
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+        snapshot_state: &ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<U64> {
+        let evm = Evm::<S>::default();
 
         {
             let mut validation_state = snapshot_state.clone_without_local_writes();
@@ -194,20 +233,43 @@ where
             )?;
         }
 
-        if Self::supports_request_affordability_preflight(
+        let should_run_affordability_preflight = supports_request_affordability_preflight(
             &request,
             state_overrides.as_ref(),
             block_overrides.as_deref(),
-        ) {
-            let mut api_state = snapshot_state.clone_without_local_writes();
-            let mut preflight_state = evm
-                .preflight_state_for_block_id(block_id, &mut api_state)
-                .map_err(ErrorObjectOwned::from)?;
+        );
 
-            match Self::request_affordability_preflight(&request, &mut preflight_state, ethereum)? {
-                AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => {}
-                AffordabilityPreflight::Rejected(err) => return Err(err),
+        if request.gas.is_none() {
+            let mut state = snapshot_state.clone_without_local_writes();
+            let estimated_gas = evm.eth_estimate_gas(
+                request.clone(),
+                block_id,
+                state_overrides.clone(),
+                block_overrides.clone(),
+                &mut state,
+            )?;
+
+            if should_run_affordability_preflight {
+                let mut request_with_estimated_gas = request;
+                request_with_estimated_gas.gas = Some(estimated_gas.to::<u64>());
+                Self::run_request_affordability_preflight(
+                    &request_with_estimated_gas,
+                    block_id,
+                    snapshot_state,
+                    ethereum,
+                )?;
             }
+
+            return Ok(estimated_gas);
+        }
+
+        if should_run_affordability_preflight {
+            Self::run_request_affordability_preflight(
+                &request,
+                block_id,
+                snapshot_state,
+                ethereum,
+            )?;
         }
 
         let mut state = snapshot_state.clone_without_local_writes();
@@ -220,21 +282,22 @@ where
         )
     }
 
-    /// Returns whether a real-state affordability preflight is meaningful for this request.
-    ///
-    /// When state or block overrides are present, account balances and gas pricing can be
-    /// arbitrarily changed by the caller, so a preflight against real state would be
-    /// meaningless. The EVM execution itself enforces affordability under the overridden state.
-    fn supports_request_affordability_preflight(
+    fn run_request_affordability_preflight(
         request: &TransactionRequest,
-        state_overrides: Option<&StateOverride>,
-        block_overrides: Option<&BlockOverrides>,
-    ) -> bool {
-        request.from.is_some()
-            && request.gas.is_some()
-            && request.max_fee_per_gas.or(request.gas_price).is_some()
-            && state_overrides.is_none()
-            && block_overrides.is_none()
+        block_id: Option<BlockId>,
+        snapshot_state: &ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<()> {
+        let evm = Evm::<S>::default();
+        let mut api_state = snapshot_state.clone_without_local_writes();
+        let mut preflight_state = evm
+            .preflight_state_for_block_id(block_id, &mut api_state)
+            .map_err(ErrorObjectOwned::from)?;
+
+        match Self::request_affordability_preflight(request, &mut preflight_state, ethereum)? {
+            AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
+            AffordabilityPreflight::Rejected(err) => Err(err),
+        }
     }
 
     fn request_affordability_preflight(
@@ -242,8 +305,8 @@ where
         state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<AffordabilityPreflight> {
-        // These guards are defensive: the caller `supports_request_affordability_preflight`
-        // already validates that `from`, `gas`, and a fee field are present.
+        // These guards are defensive: omitted-gas callers synthesize `gas` from a pinned estimate
+        // before calling this helper, and the caller already validates `from` and a fee field.
         let Some(from) = request.from else {
             return Ok(AffordabilityPreflight::Skip);
         };
@@ -451,7 +514,23 @@ where
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
         let snapshot_state = ethereum.api_state_accessor();
-        let (authenticated_tx, auth_data) = Self::authenticate_tx(tx, &snapshot_state)?;
+        Self::authenticate_and_preflight_send_with_snapshot(
+            tx_hash,
+            tx,
+            signed_tx,
+            &snapshot_state,
+            ethereum,
+        )
+    }
+
+    fn authenticate_and_preflight_send_with_snapshot(
+        tx_hash: B256,
+        tx: &FullyBakedTx,
+        signed_tx: &TransactionSigned,
+        snapshot_state: &ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> RpcResult<()> {
+        let (authenticated_tx, auth_data) = Self::authenticate_tx(tx, snapshot_state)?;
         Self::maybe_pause_after_auth(tx_hash, ethereum);
 
         let mut preflight_state = snapshot_state.clone_without_local_writes();
@@ -489,6 +568,46 @@ where
 
     #[cfg(not(all(feature = "test-utils", debug_assertions)))]
     fn maybe_pause_after_auth(_tx_hash: B256, _ethereum: &Arc<Ethereum<S, Seq>>) {}
+
+    #[cfg(feature = "local")]
+    #[cfg(all(feature = "test-utils", debug_assertions))]
+    fn maybe_pause_after_local_fill(
+        from: alloy_primitives::Address,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) {
+        let from_hex = format!("{from:#x}");
+        if std::env::var(PAUSE_AFTER_LOCAL_FILL_FROM_ENV)
+            .ok()
+            .as_deref()
+            != Some(from_hex.as_str())
+        {
+            return;
+        }
+
+        std::env::set_var(PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV, &from_hex);
+        let shutdown_receiver = ethereum.shutdown_receiver.clone();
+        tokio::task::block_in_place(|| {
+            while std::env::var(PAUSE_AFTER_LOCAL_FILL_FROM_ENV)
+                .ok()
+                .as_deref()
+                == Some(from_hex.as_str())
+            {
+                if shutdown_receiver.has_changed().unwrap_or(false) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        });
+        std::env::remove_var(PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV);
+    }
+
+    #[cfg(feature = "local")]
+    #[cfg(not(all(feature = "test-utils", debug_assertions)))]
+    fn maybe_pause_after_local_fill(
+        _from: alloy_primitives::Address,
+        _ethereum: &Arc<Ethereum<S, Seq>>,
+    ) {
+    }
 
     async fn process_raw_transaction<T, F>(
         data: Bytes,
@@ -540,8 +659,9 @@ where
             return Err(rpc_invalid_params("From address not in signers"));
         }
 
+        let snapshot_state = ethereum.api_state_accessor();
         {
-            let mut state = ethereum.sequencer.api_state().default_api_state_accessor();
+            let mut state = snapshot_state.clone_without_local_writes();
 
             // set nonce if none
             transaction_request.nonce.get_or_insert_with(|| {
@@ -559,11 +679,14 @@ where
         }
 
         if transaction_request.gas.is_none() {
-            let estimated_gas = Self::estimate_gas_request(
+            Self::maybe_pause_after_local_fill(from, &ethereum);
+
+            let estimated_gas = Self::estimate_gas_request_with_snapshot(
                 transaction_request.clone(),
                 Some(BlockId::pending()),
                 None,
                 None,
+                &snapshot_state,
                 &ethereum,
             )?;
             transaction_request.gas = Some(estimated_gas.to::<u64>());
@@ -594,7 +717,13 @@ where
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(message));
 
-        Self::authenticate_and_preflight_send(tx_hash, &tx, &signed_tx, &ethereum)?;
+        Self::authenticate_and_preflight_send_with_snapshot(
+            tx_hash,
+            &tx,
+            &signed_tx,
+            &snapshot_state,
+            &ethereum,
+        )?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
@@ -678,7 +807,9 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
 
 #[cfg(test)]
 mod tests {
+    use alloy_primitives::{Address, TxKind};
     use alloy_rpc_types::error::EthRpcErrorCode;
+    use alloy_rpc_types::TransactionRequest;
     use jsonrpsee::types::error::INVALID_PARAMS_CODE;
     use sov_modules_api::capabilities::{AuthenticationError, FatalError};
     use sov_modules_api::TxHash;
@@ -686,6 +817,15 @@ mod tests {
 
     use super::{map_accept_tx_error, map_authentication_error, RestErrorObject};
     use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails};
+
+    fn sample_affordability_request() -> TransactionRequest {
+        TransactionRequest {
+            from: Some(Address::repeat_byte(0x11)),
+            to: Some(TxKind::Call(Address::repeat_byte(0x22))),
+            max_fee_per_gas: Some(1),
+            ..Default::default()
+        }
+    }
 
     fn sample_accept_tx_error(status: u16) -> RestErrorObject {
         let status = status.try_into().expect("status code should be valid");
@@ -758,5 +898,26 @@ mod tests {
 
         assert_eq!(err.code(), EthRpcErrorCode::InvalidInput.code());
         assert_eq!(err.message(), "max fee per gas less than block base fee");
+    }
+
+    #[test]
+    fn omitted_gas_requests_still_support_affordability_preflight() {
+        let request = sample_affordability_request();
+
+        assert!(super::supports_request_affordability_preflight(
+            &request, None, None,
+        ));
+    }
+
+    #[test]
+    fn overrides_disable_affordability_preflight() {
+        let request = sample_affordability_request();
+        let state_overrides = alloy_rpc_types::state::StateOverride::default();
+
+        assert!(!super::supports_request_affordability_preflight(
+            &request,
+            Some(&state_overrides),
+            None,
+        ));
     }
 }
