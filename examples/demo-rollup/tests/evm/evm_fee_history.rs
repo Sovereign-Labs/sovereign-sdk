@@ -5,7 +5,7 @@
 //! - TC11 (percentile < 0): Skipped - alloy client validates percentiles client-side,
 //!   negative values would require raw JSON-RPC to test server-side validation.
 
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{DynProvider, Provider};
 use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactions, TransactionReceipt};
 use serde::Deserialize;
@@ -20,8 +20,7 @@ use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
-    setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
-    SENDER_PRIV_KEY,
+    setup_test_rollup, EVM_EXTENSION, HIGH_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
 #[derive(Debug, Deserialize)]
@@ -200,8 +199,19 @@ async fn send_high_fee_set_value(
 ) -> anyhow::Result<TransactionReceipt> {
     let mut tx = client.make_tx(Some(contract_address), Some(client.contract.set(value)));
     tx = tx
-        .max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
+        .max_fee_per_gas(MAX_FEE_PER_GAS)
         .max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
+    tx.gas = None;
+    let estimated_gas_limit = client.eth_estimate_gas(tx.clone()).await;
+    let sender_balance = client.eth_get_balance(client.address()).await;
+    let advertised_ceiling = U256::from(estimated_gas_limit)
+        .checked_mul(U256::from(MAX_FEE_PER_GAS))
+        .ok_or_else(|| anyhow::anyhow!("high-fee gas ceiling overflow"))?;
+    assert!(
+        advertised_ceiling < sender_balance,
+        "test precondition failed: advertised gas ceiling {advertised_ceiling} must be below sender balance {sender_balance}"
+    );
+    tx = tx.gas_limit(estimated_gas_limit);
     client
         .send_tx_and_wait_finalized(tx)
         .await

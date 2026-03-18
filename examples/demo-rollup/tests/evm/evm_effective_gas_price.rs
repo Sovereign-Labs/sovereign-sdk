@@ -4,8 +4,8 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
-    HIGH_PRIORITY_FEE_PER_GAS, SENDER_PRIV_KEY,
+    create_simple_storage_client, setup_test_rollup, EVM_EXTENSION, HIGH_PRIORITY_FEE_PER_GAS,
+    MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
 #[tokio::test(flavor = "multi_thread")]
@@ -20,8 +20,19 @@ async fn eip1559_tx_and_receipt_have_valid_effective_gas_price() -> anyhow::Resu
     let mut tx = client.make_tx(Some(sender), None);
     tx = tx
         .value(U256::from(1u64))
-        .max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
+        .max_fee_per_gas(MAX_FEE_PER_GAS)
         .max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
+    tx.gas = None;
+    let estimated_gas_limit = client.eth_estimate_gas(tx.clone()).await;
+    let advertised_ceiling = U256::from(estimated_gas_limit)
+        .checked_mul(U256::from(MAX_FEE_PER_GAS))
+        .and_then(|gas_cost| gas_cost.checked_add(U256::from(1u64)))
+        .ok_or_else(|| anyhow::anyhow!("self-transfer affordability ceiling overflow"))?;
+    assert!(
+        advertised_ceiling < balance_before,
+        "test precondition failed: self-transfer ceiling {advertised_ceiling} must be below sender balance {balance_before}"
+    );
+    tx = tx.gas_limit(estimated_gas_limit);
 
     let receipt = client
         .send_tx_and_wait_finalized(tx)
