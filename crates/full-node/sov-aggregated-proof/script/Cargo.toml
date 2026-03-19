@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+demo-stf = { path = "../../../../examples/demo-rollup/stf", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }
 slop-algebra = "6.0.2"

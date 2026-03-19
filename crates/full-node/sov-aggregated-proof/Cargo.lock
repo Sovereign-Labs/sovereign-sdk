@@ -6229,6 +6229,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "demo-stf",
  "serde",
  "serde_json",
  "slop-algebra",
@@ -6252,12 +6253,15 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "demo-stf",
+ "serde",
  "sha2 0.10.9",
  "sov-aggregated-proof-shared",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-sp1-adapter",
+ "sp1-sdk",
  "sp1-zkvm",
 ]
 

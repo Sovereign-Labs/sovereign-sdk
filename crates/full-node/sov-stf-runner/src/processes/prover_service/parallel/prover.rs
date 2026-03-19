@@ -7,7 +7,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
+    AggregatedProofPublicData, OuterCodeCommitmentHash, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -37,7 +37,7 @@ pub(crate) struct Prover<Address, StateRoot, Witness, Da: DaService> {
     // and automatically terminate.
     // """
     pool: rayon::ThreadPool,
-    code_commitment: CodeCommitment,
+    outer_vk_hash: OuterCodeCommitmentHash,
     phantom: std::marker::PhantomData<(StateRoot, Witness, Da)>,
 }
 
@@ -52,10 +52,10 @@ where
     pub(crate) fn new(
         prover_address: Address,
         num_threads: usize,
-        code_commitment: CodeCommitment,
+        outer_vk_hash: OuterCodeCommitmentHash,
     ) -> Self {
         Self {
-            code_commitment,
+            outer_vk_hash,
             num_threads,
             pool: rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
@@ -208,7 +208,7 @@ where
             final_state_root: final_block_proof.st.final_state_root.clone(),
             initial_slot_hash: initial_block_proof.st.slot_hash.clone(),
             final_slot_hash: final_block_proof.st.slot_hash.clone(),
-            code_commitment: self.code_commitment.clone(),
+            outer_vk_hash: self.outer_vk_hash.clone(),
         };
 
         trace!(%public_data, "generating aggregate proof");

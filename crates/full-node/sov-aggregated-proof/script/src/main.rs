@@ -4,12 +4,18 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::{bail, ensure, Context};
+use demo_stf::MultiAddressEvmSolana;
 use slop_algebra::PrimeField32;
 use sov_aggregated_proof_shared::{
-    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
+    AggPubData, AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness, StfPubData,
 };
 use sov_mock_da::MockDaSpec;
+use sov_mock_zkvm::MockZkvm;
+use sov_modules_api::configurable_spec::ConfigurableSpec;
+use sov_modules_api::execution_mode::Zk;
+use sov_modules_api::{Spec, Storage};
 use sov_sp1_adapter::BlockHeaderWithProof;
+use sov_sp1_adapter::SP1;
 use sp1_recursion_executor::RecursionPublicValues;
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
 use sp1_sdk::prelude::{include_elf, Elf, HashableKey, SP1Stdin};
@@ -17,6 +23,8 @@ use sp1_sdk::{ProvingKey, SP1Proof, SP1ProofWithPublicValues, SP1VerifyingKey};
 
 const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 const JUMP: usize = 3;
+
+type S = ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Zk>;
 
 fn main() -> anyhow::Result<()> {
     let start = Instant::now();
@@ -37,7 +45,6 @@ fn main() -> anyhow::Result<()> {
     );
 
     let verification_key = saved_inner_vk()?;
-    let inner_vk_hash = verification_key.hash_u32();
     let prover = ProverClient::builder().cpu().build();
 
     let aggregation_pk = prover.setup(AGGREGATION_ELF).map_err(|error| {
@@ -50,7 +57,7 @@ fn main() -> anyhow::Result<()> {
         .collect::<Vec<_>>();
     let num_outer_proofs = proof_batches.len();
 
-    let mut previous_outer_proof = None;
+    let mut previous_outer_proof: Option<SP1ProofWithPublicValues> = None;
 
     for (batch_index, proof_batch) in proof_batches.into_iter().enumerate() {
         println!(
@@ -60,14 +67,55 @@ fn main() -> anyhow::Result<()> {
             proof_batch.len()
         );
 
-        previous_outer_proof = Some(create_agg_proof(
+        let previous_outer_public_data = previous_outer_proof
+            .as_ref()
+            .map(|proof| {
+                deserialize_pub_data::<AggPubData<S, MockDaSpec>>(proof.public_values.as_slice())
+            })
+            .transpose()
+            .context("Failed to deserialize previous outer proof public data")?;
+
+        let (expected_initial_state_root, expected_final_state_root) =
+            batch_state_roots(&proof_batch)
+                .context("Failed to derive expected state roots from the current proof batch")?;
+
+        let outer_proof = create_agg_proof(
             &prover,
             &aggregation_pk,
             &verification_key,
-            inner_vk_hash,
             proof_batch,
-            previous_outer_proof,
-        )?);
+            previous_outer_proof.take(),
+        )?;
+
+        let public_data: AggPubData<S, MockDaSpec> =
+            deserialize_pub_data(outer_proof.public_values.as_slice())
+                .context("Failed to deserialize outer proof public data")?;
+
+        ensure!(
+            public_data.initial_state_root == expected_initial_state_root,
+            "Outer proof {} initial_state_root does not match the first inner proof initial_state_root",
+            batch_index + 1
+        );
+        ensure!(
+            public_data.final_state_root == expected_final_state_root,
+            "Outer proof {} final_state_root does not match the last inner proof final_state_root",
+            batch_index + 1
+        );
+
+        if let Some(previous_outer_public_data) = previous_outer_public_data.as_ref() {
+            ensure!(
+                public_data.genesis_state_root == previous_outer_public_data.genesis_state_root,
+                "Outer proof {} genesis_state_root changed across recursive aggregation",
+                batch_index + 1
+            );
+            ensure!(
+                public_data.initial_state_root == previous_outer_public_data.final_state_root,
+                "Outer proof {} initial_state_root does not continue the previous outer proof final_state_root",
+                batch_index + 1
+            );
+        }
+
+        previous_outer_proof = Some(outer_proof);
     }
 
     println!("[host] verified outer proof(s) in {:?}", start.elapsed());
@@ -79,7 +127,6 @@ fn create_agg_proof<P: Prover>(
     prover: &P,
     aggregation_pk: &P::ProvingKey,
     verification_key: &SP1VerifyingKey,
-    inner_vk_hash: [u32; 8],
     raw_proofs: Vec<BlockHeaderWithProof<MockDaSpec>>,
     previous_outer_proof: Option<SP1ProofWithPublicValues>,
 ) -> anyhow::Result<SP1ProofWithPublicValues> {
@@ -89,8 +136,26 @@ fn create_agg_proof<P: Prover>(
     );
 
     let aggregation_vk_hash = aggregation_pk.verifying_key().hash_u32();
-
+    let inner_vk_hash = verification_key.hash_u32();
     let mut stdin = SP1Stdin::new();
+
+    let prev_outer_proof_witness = if let Some(previous_outer_proof) = previous_outer_proof {
+        let SP1Proof::Compressed(recursion_proof) = &previous_outer_proof.proof else {
+            bail!("Expected the previous outer proof to be a compressed SP1 proof");
+        };
+
+        stdin.write_proof(
+            *recursion_proof.clone(),
+            aggregation_pk.verifying_key().vk.clone(),
+        );
+
+        Some(PreviousOuterProofWitness {
+            public_values: previous_outer_proof.public_values.to_vec(),
+        })
+    } else {
+        None
+    };
+
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
     for (index, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
@@ -122,27 +187,9 @@ fn create_agg_proof<P: Prover>(
         stdin.write_proof(*recursion_proof.clone(), verification_key.vk.clone());
     }
 
-    let prev_outer_proof_witness = if let Some(previous_outer_proof) = previous_outer_proof {
-        let SP1Proof::Compressed(recursion_proof) = &previous_outer_proof.proof else {
-            bail!("Expected the previous outer proof to be a compressed SP1 proof");
-        };
-
-        stdin.write_proof(
-            *recursion_proof.clone(),
-            aggregation_pk.verifying_key().vk.clone(),
-        );
-
-        Some(PreviousOuterProofWitness {
-            public_values: previous_outer_proof.public_values.to_vec(),
-            vkey_hash: aggregation_vk_hash,
-        })
-    } else {
-        None
-    };
-
     let witness = AggregatedProofWitness {
         proof_inputs,
-        vkey_hash: inner_vk_hash,
+        outer_vkey_hash: aggregation_vk_hash,
         prev_outer_proof_witness,
     };
 
@@ -159,6 +206,18 @@ fn create_agg_proof<P: Prover>(
     prover
         .verify(&outer_proof, aggregation_pk.verifying_key(), None)
         .context("Failed to verify the outer SP1 aggregation proof")?;
+
+    let public_data: AggPubData<S, MockDaSpec> =
+        deserialize_pub_data(outer_proof.public_values.as_slice())
+            .context("Failed to deserialize outer proof public data")?;
+
+    println!(
+        "[host] outer proof emits slots {}..={} with hashes {} -> {}",
+        public_data.initial_slot_number,
+        public_data.final_slot_number,
+        public_data.initial_slot_hash,
+        public_data.final_slot_hash
+    );
 
     Ok(outer_proof)
 }
@@ -221,4 +280,38 @@ fn read_saved_proof(file_path: &Path) -> anyhow::Result<BlockHeaderWithProof<Moc
         })?;
 
     Ok(block_header_with_proof)
+}
+
+fn deserialize_pub_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> anyhow::Result<T> {
+    bincode::deserialize(data).context("Failed to deserialize public data")
+}
+
+fn batch_state_roots(
+    proof_batch: &[BlockHeaderWithProof<MockDaSpec>],
+) -> anyhow::Result<(
+    <<S as Spec>::Storage as Storage>::Root,
+    <<S as Spec>::Storage as Storage>::Root,
+)> {
+    let first_proof = proof_batch
+        .first()
+        .expect("proof batches are guaranteed to be non-empty");
+    let last_proof = proof_batch
+        .last()
+        .expect("proof batches are guaranteed to be non-empty");
+
+    let first_public_data: StfPubData<S, MockDaSpec> = deserialize_pub_data(
+        sov_sp1_adapter::decode_sp1_proof(&first_proof.proof)?
+            .public_values
+            .as_slice(),
+    )?;
+    let last_public_data: StfPubData<S, MockDaSpec> = deserialize_pub_data(
+        sov_sp1_adapter::decode_sp1_proof(&last_proof.proof)?
+            .public_values
+            .as_slice(),
+    )?;
+
+    Ok((
+        first_public_data.initial_state_root,
+        last_public_data.final_state_root,
+    ))
 }
