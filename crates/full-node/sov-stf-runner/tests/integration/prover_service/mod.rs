@@ -5,9 +5,7 @@ use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{DaProof, RelevantBlobs, RelevantProofs, Time};
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_stf_runner::processes::{
-    ProofAggregationStatus, ProverService, StateTransitionInfo,
-};
+use sov_stf_runner::processes::{ProofAggregationStatus, ProverService, StateTransitionInfo};
 use tokio::time;
 
 use crate::helpers::RawGenesisStateRoot;
@@ -49,7 +47,9 @@ fn make_transition_info(
     )
 }
 
-async fn wait_for_aggregated_proof<P: ProverService<StateRoot = Vec<u8>, DaService = sov_mock_da::MockDaService>>(
+async fn wait_for_aggregated_proof<
+    P: ProverService<StateRoot = Vec<u8>, DaService = sov_mock_da::MockDaService>,
+>(
     header_hashes: &[MockHash],
     genesis_state_root: &RawGenesisStateRoot,
     prover_service: &P,

@@ -119,7 +119,9 @@ async fn test_network_aggregated_proof_multiple_blocks() {
 
     let block_count = 5;
     let genesis = genesis_state_root();
-    let hashes: Vec<_> = (0..block_count).map(|i| MockHash::from([i + 10; 32])).collect();
+    let hashes: Vec<_> = (0..block_count)
+        .map(|i| MockHash::from([i + 10; 32]))
+        .collect();
 
     // Submit all blocks.
     for (i, hash) in hashes.iter().enumerate() {
