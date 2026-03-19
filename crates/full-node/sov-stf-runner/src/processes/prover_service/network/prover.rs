@@ -176,54 +176,56 @@ where
         assert!(!block_header_hashes.is_empty());
 
         let mut proof_statuses = self.tracker.write().await;
-        // Phase 1: Poll all submitted entries and transition them to Proved.
-        // We remove-then-reinsert to avoid holding immutable references across mutations.
+        // Phase 1: Poll all Submitted entries and transition them to Proved.
+        // We only remove entries confirmed to be Submitted, so Proved/Err entries are untouched.
         for slot_hash in block_header_hashes {
-            if let Some(NetworkProverStatus::Submitted { handle, metadata }) =
+            // We want to only remove if we know the entry exists
+            if !matches!(
+                proof_statuses.get(slot_hash),
+                Some(NetworkProverStatus::Submitted { .. })
+            ) {
+                continue;
+            }
+
+            let Some(NetworkProverStatus::Submitted { handle, metadata }) =
                 proof_statuses.remove(slot_hash)
-            {
-                let network = self.inner_vm.lock().await;
-                match network.poll(&handle).await {
-                    Ok(Some(proof_bytes)) => {
-                        let block_proof = BlockProof {
-                            proof: proof_bytes,
-                            slot_number: metadata.slot_number,
-                            st: metadata.st,
-                        };
-                        proof_statuses
-                            .insert(slot_hash.clone(), NetworkProverStatus::Proved(block_proof));
-                    }
-                    Ok(None) => {
-                        tracing::trace!(
-                            "Proof for slot hash {} is still pending on the network",
-                            slot_hash
-                        );
-                        // Put back as Submitted since it's not done yet
-                        proof_statuses.insert(
-                            slot_hash.clone(),
-                            NetworkProverStatus::Submitted { handle, metadata },
-                        );
-                        return Ok(ProofAggregationStatus::ProofGenerationInProgress);
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "Network proof for slot hash {} failed: {:?}",
-                            slot_hash,
-                            e
-                        );
-                        proof_statuses.insert(
-                            slot_hash.clone(),
-                            NetworkProverStatus::Err(anyhow::anyhow!(
-                                "Network proving failed: {}",
-                                e
-                            )),
-                        );
-                        return Err(anyhow::anyhow!(
-                            "Network proving failed for {}: {}",
-                            slot_hash,
-                            e
-                        ));
-                    }
+            else {
+                unreachable!()
+            };
+
+            let network = self.inner_vm.lock().await;
+            match network.poll(&handle).await {
+                Ok(Some(proof_bytes)) => {
+                    let block_proof = BlockProof {
+                        proof: proof_bytes,
+                        slot_number: metadata.slot_number,
+                        st: metadata.st,
+                    };
+                    proof_statuses
+                        .insert(slot_hash.clone(), NetworkProverStatus::Proved(block_proof));
+                }
+                Ok(None) => {
+                    tracing::trace!(
+                        "Proof for slot hash {} is still pending on the network",
+                        slot_hash
+                    );
+                    proof_statuses.insert(
+                        slot_hash.clone(),
+                        NetworkProverStatus::Submitted { handle, metadata },
+                    );
+                    return Ok(ProofAggregationStatus::ProofGenerationInProgress);
+                }
+                Err(e) => {
+                    tracing::error!("Network proof for slot hash {} failed: {:?}", slot_hash, e);
+                    proof_statuses.insert(
+                        slot_hash.clone(),
+                        NetworkProverStatus::Err(anyhow::anyhow!("Network proving failed: {}", e)),
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Network proving failed for {}: {}",
+                        slot_hash,
+                        e
+                    ));
                 }
             }
         }

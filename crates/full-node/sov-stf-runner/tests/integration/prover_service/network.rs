@@ -275,3 +275,65 @@ async fn test_network_prove_rejected_after_error() {
         err
     );
 }
+
+/// Regression test: when `create_aggregated_proof` is called with multiple blocks
+/// and only some are ready, it returns early after transitioning the ready ones to
+/// `Proved`. A second call must still find those `Proved` entries intact. Previously,
+/// a `remove` + `if let Submitted` pattern silently dropped non-`Submitted` entries.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_network_aggregation_preserves_proved_entries_across_calls() {
+    let TestNetworkProver {
+        prover_service,
+        inner_vm,
+    } = make_network_prover(false, true);
+
+    let genesis = genesis_state_root();
+    let hash_a = MockHash::from([8; 32]);
+    let hash_b = MockHash::from([9; 32]);
+
+    // Submit two blocks.
+    prover_service
+        .prove(make_transition_info(hash_a, 1))
+        .await
+        .unwrap();
+    prover_service
+        .prove(make_transition_info(hash_b, 2))
+        .await
+        .unwrap();
+
+    // Complete only A (handle 0).
+    inner_vm.complete_proof(0);
+
+    // First aggregation: A transitions to Proved, B is still pending → InProgress.
+    let status = prover_service
+        .create_aggregated_proof(&[hash_a, hash_b], &genesis.0)
+        .await
+        .unwrap();
+    assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
+
+    // Complete B (handle 1).
+    inner_vm.complete_proof(1);
+
+    // Second aggregation: A should still be Proved (not dropped), B transitions to Proved.
+    let status = prover_service
+        .create_aggregated_proof(&[hash_a, hash_b], &genesis.0)
+        .await
+        .unwrap();
+
+    match status {
+        ProofAggregationStatus::Success(proof) => {
+            let public_data = <MockZkVerifier as ZkVerifier>::verify::<
+                AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
+            >(
+                proof.raw_aggregated_proof.as_ref(),
+                &MockCodeCommitment::default(),
+            )
+            .unwrap();
+            assert_eq!(public_data.initial_slot_number.get(), 1);
+            assert_eq!(public_data.final_slot_number.get(), 2);
+        }
+        ProofAggregationStatus::ProofGenerationInProgress => {
+            panic!("Expected Success after completing both inner proofs")
+        }
+    }
+}
