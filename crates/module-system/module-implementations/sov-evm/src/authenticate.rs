@@ -221,6 +221,7 @@ fn resolve_request_preflight_nonce<
 >(
     request: &alloy_rpc_types::TransactionRequest,
     from: Address,
+    tx_hash: TxHash,
     state: &mut Accessor,
 ) -> Result<u64, AuthenticationError> {
     if let Some(nonce) = request.nonce {
@@ -230,7 +231,12 @@ fn resolve_request_preflight_nonce<
     let credential_id = EthereumAddress::from(from).as_credential_id();
     sov_uniqueness::Uniqueness::<S>::default()
         .next_nonce(&credential_id, state)
-        .map_err(|e| AuthenticationError::OutOfGas(format!("resolve_request_preflight_nonce: {e}")))
+        .map_err(|e| {
+            AuthenticationError::FatalError(
+                FatalError::Other(format!("resolve_request_preflight_nonce: {e}")),
+                tx_hash,
+            )
+        })
 }
 
 /// Builds authenticated transaction data and authorization data for an RPC
@@ -248,14 +254,14 @@ where
 {
     // Sentinel hash for error reporting only — no real signed transaction exists
     // in the RPC preflight path.
-    let tx_hash = TxHash::new([0; 32]);
+    let sentinel_tx_hash = TxHash::new([0; 32]);
     let from = request.from.ok_or(AuthenticationError::FatalError(
         FatalError::Other("Missing from address".into()),
-        tx_hash,
+        sentinel_tx_hash,
     ))?;
     let gas_limit = request.gas.ok_or(AuthenticationError::FatalError(
         FatalError::Other("Missing gas limit".into()),
-        tx_hash,
+        sentinel_tx_hash,
     ))?;
     let user_max_fee_per_gas =
         request
@@ -263,21 +269,21 @@ where
             .or(request.gas_price)
             .ok_or(AuthenticationError::FatalError(
                 FatalError::Other("Missing gas price".into()),
-                tx_hash,
+                sentinel_tx_hash,
             ))?;
     let tx_chain_id = match request.chain_id {
-        Some(chain_id) => validate_chain_id(Some(chain_id), tx_hash)?,
+        Some(chain_id) => validate_chain_id(Some(chain_id), sentinel_tx_hash)?,
         None => config_value!("CHAIN_ID"),
     };
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
-        tx_hash,
+        sentinel_tx_hash,
         tx_chain_id,
         gas_limit,
         user_max_fee_per_gas,
         state,
     )?;
-    let nonce = resolve_request_preflight_nonce::<_, S>(request, from, state)?;
-    let auth_data = extract_evm_authorization_data::<S>(from, tx_hash, nonce);
+    let nonce = resolve_request_preflight_nonce::<_, S>(request, from, sentinel_tx_hash, state)?;
+    let auth_data = extract_evm_authorization_data::<S>(from, sentinel_tx_hash, nonce);
 
     Ok((authenticated_tx, auth_data))
 }

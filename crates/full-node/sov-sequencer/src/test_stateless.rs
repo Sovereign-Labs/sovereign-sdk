@@ -45,7 +45,6 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     #[allow(clippy::type_complexity)]
     blob_sender: Arc<Mutex<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>>,
     tx_status_manager: TxStatusManager<S::Da>,
-    da_address: <S::Da as DaSpec>::Address,
     _r: PhantomData<R>,
     state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     api_ledger_db: LedgerDb,
@@ -80,11 +79,6 @@ where
             )));
         let tx_status_manager = TxStatusManager::default();
 
-        let da_address = da
-            .get_signer()
-            .await
-            .expect("TestStatelessSequencer requires DA signer");
-
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let seq = Self {
             inner: inner.into(),
@@ -104,7 +98,6 @@ where
                 .0,
             )),
             tx_status_manager,
-            da_address,
             _r: Default::default(),
             state_sender,
             api_ledger_db: ledger_db.clone(),
