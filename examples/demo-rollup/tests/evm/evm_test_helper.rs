@@ -296,6 +296,29 @@ pub(crate) fn assert_invalid_params(response: &Value) {
     );
 }
 
+/// Estimates gas for `tx`, asserts the sender can afford it, and sets the gas limit.
+/// The affordability check includes `tx.value` in the ceiling.
+pub(crate) async fn estimate_gas_and_check_affordability(
+    client: &SimpleStorageClient,
+    tx: &mut TransactionRequest,
+    max_fee_per_gas: u128,
+    sender_balance: U256,
+) -> anyhow::Result<()> {
+    tx.gas = None;
+    let estimated_gas_limit = client.eth_estimate_gas(tx.clone()).await;
+    let tx_value = tx.value.unwrap_or(U256::ZERO);
+    let ceiling = U256::from(estimated_gas_limit)
+        .checked_mul(U256::from(max_fee_per_gas))
+        .and_then(|cost| cost.checked_add(tx_value))
+        .ok_or_else(|| anyhow::anyhow!("gas affordability ceiling overflow"))?;
+    assert!(
+        ceiling < sender_balance,
+        "test precondition failed: gas ceiling {ceiling} must be below sender balance {sender_balance}"
+    );
+    tx.gas = Some(estimated_gas_limit);
+    Ok(())
+}
+
 pub(crate) async fn finalized_block_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
     let finalized_block = client
         .eth_get_block_by_number(Some("finalized".to_string()))
