@@ -10,7 +10,9 @@
       "Bash(cargo tree:*)",
       "Bash(cargo check:*)",
       "Bash(cargo fmt:*)",
+      "Bash(cargo +nightly fmt:*)",
       "Bash(gh pr view:*)",
+      "Bash(gh run view:*)",
       "Bash(gh pr diff:*)",
       "Bash(gh issue view:*)"
     ]
