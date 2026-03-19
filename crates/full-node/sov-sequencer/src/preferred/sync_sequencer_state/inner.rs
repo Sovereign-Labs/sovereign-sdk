@@ -325,10 +325,11 @@ where
         &mut self,
         remaining_slot_gas: <S as GasSpec>::Gas,
     ) {
+        let rollup_height = self.executor.checkpoint.rollup_height_to_access();
         // Check if we're close to the gas limit and close the batch if we are.
         // We want to close when gas used is at least 95% of the initial gas limit.
-        let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
-        let comfortable_gas_limit = comfortable_gas_limit::<S>();
+        let initial_gas_limit = <S as GasSpec>::gas_limit_for_height(rollup_height);
+        let comfortable_gas_limit = comfortable_gas_limit_for_height::<S>(rollup_height);
 
         let gas_used = initial_gas_limit
             .checked_sub(remaining_slot_gas)

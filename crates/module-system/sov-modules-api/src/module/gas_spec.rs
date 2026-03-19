@@ -2,9 +2,11 @@ use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_macros::config_value_private;
+use sov_rollup_interface::common::RollupHeight;
 
 use super::Spec;
 use crate::gas::GAS_DIMENSIONS;
+use crate::provable_height_tracker::InfiniteHeight;
 use crate::{Amount, Gas};
 
 #[macro_export]
@@ -101,6 +103,18 @@ pub trait GasSpec:
     // --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
     /// The initial gas limit of the rollup.
     fn initial_gas_limit() -> Self::Gas;
+    /// The updated gas limit of the rollup.
+    fn updated_gas_limit() -> Self::Gas;
+    /// The height at which the gas limit is updated. The change should take effect *after* this rollup block (i.e. starting at height + 1)
+    fn change_gas_limit_after_height() -> RollupHeight;
+
+    fn gas_limit_for_height(height: RollupHeight) -> Self::Gas {
+        if height > Self::change_gas_limit_after_height() {
+            Self::updated_gas_limit()
+        } else {
+            Self::initial_gas_limit()
+        }
+    }
     /// The initial "base fee" that every transaction emits when executed.
     fn initial_base_fee_per_gas() -> <Self::Gas as Gas>::Price;
 
@@ -252,6 +266,14 @@ impl<S: Spec> GasSpec for S {
 
     fn initial_gas_limit() -> Self::Gas {
         Self::Gas::from(config_value_private!("INITIAL_GAS_LIMIT"))
+    }
+
+    fn change_gas_limit_after_height() -> RollupHeight {
+        RollupHeight::from(config_value_private!("CHANGE_GAS_LIMIT_AFTER_HEIGHT"))
+    }
+
+    fn updated_gas_limit() -> Self::Gas {
+        Self::Gas::from(config_value_private!("UPDATED_GAS_LIMIT"))
     }
 
     fn max_tx_check_costs() -> Self::Gas {

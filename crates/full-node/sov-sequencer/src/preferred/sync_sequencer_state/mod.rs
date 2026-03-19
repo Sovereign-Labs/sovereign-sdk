@@ -296,9 +296,11 @@ impl InitialStatus {
 const COMFORTABLE_GAS_LIMIT_MULTIPLIER: u64 = 19;
 const COMFORTABLE_GAS_LIMIT_DIVISOR: u64 = 20;
 
-pub(crate) fn comfortable_gas_limit<S: Spec>() -> <S as GasSpec>::Gas {
-    let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
-    initial_gas_limit
+pub(crate) fn comfortable_gas_limit_for_height<S: Spec>(
+    height: RollupHeight,
+) -> <S as GasSpec>::Gas {
+    let gas_limit = <S as GasSpec>::gas_limit_for_height(height);
+    gas_limit
             .scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR)
             .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER).unwrap_or_else(|| {
                 panic!(

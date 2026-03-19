@@ -169,7 +169,7 @@ where
         }
 
         // Finally, eth_feeHistory always returns info for one block after the last one requested, so we need to compute the base fee for the next block.
-        let gas_limit: u64 = S::initial_gas_limit().as_ref()[0];
+        let gas_limit: u64 = S::gas_limit_for_height(RollupHeight::new(end_block + 1)).as_ref()[0];
         let actual_parent_gas_usage = gas_used
             .last()
             .expect("At least one gas used must have been collected");
