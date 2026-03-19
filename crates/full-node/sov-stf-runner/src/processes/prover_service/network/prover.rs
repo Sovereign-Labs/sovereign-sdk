@@ -97,12 +97,12 @@ where
 
         if let Some(status) = tracker.get(&block_header_hash) {
             return match status {
-                NetworkProverStatus::Submitted { .. } => Err(ProverServiceError::Other(
-                    anyhow::anyhow!(
+                NetworkProverStatus::Submitted { .. } => {
+                    Err(ProverServiceError::Other(anyhow::anyhow!(
                         "Proof generation for {} still in progress",
                         block_header_hash,
-                    ),
-                )),
+                    )))
+                }
                 NetworkProverStatus::Proved(_) => Err(ProverServiceError::Other(anyhow::anyhow!(
                     "Witness for block_header_hash {}, submitted multiple times.",
                     block_header_hash,
