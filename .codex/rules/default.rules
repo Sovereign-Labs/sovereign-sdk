@@ -1,0 +1,3 @@
+prefix_rule(pattern=["cargo", "nextest", "run"], decision="allow")
+prefix_rule(pattern=["env", "SKIP_GUEST_BUILD=1", "cargo", "nextest", "run"], decision="allow")
+prefix_rule(pattern=["/bin/zsh", "-lc", "SKIP_GUEST_BUILD=1 cargo nextest run"], decision="allow")
