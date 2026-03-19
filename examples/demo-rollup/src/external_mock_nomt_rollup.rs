@@ -22,7 +22,7 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_risc0_adapter::Risc0;
 use sov_risc0_adapter::Risc0CryptoSpec;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
+use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
@@ -167,7 +167,7 @@ impl FullNodeBlueprint<Native> for ExternalMockNomtDemoRollup<Native> {
             outer_vm,
             da_verifier,
             prover_config_discriminant,
-            CodeCommitment::default(),
+            OuterCodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
         )
     }
