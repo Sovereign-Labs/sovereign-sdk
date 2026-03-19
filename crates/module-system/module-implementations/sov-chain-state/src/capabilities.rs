@@ -296,7 +296,7 @@ impl<S: Spec> ChainState<S> {
             // TODO(@theochap): the gas limit should be updated dynamically `<https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/271`
             // This TODO is for performance enhancement, not a security concern. Updating the gas limit dynamically would allow
             // the work of the prover to follow high level industry trends of the costs to compute zk-proofs.
-            S::gas_limit_for_height(leftover_rollup_height),
+            S::gas_limit_for_height(leftover_rollup_height.saturating_add(1)),
             base_fee_per_gas,
         );
 
@@ -430,6 +430,7 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// Returns the slot gas limit at the specified slot height for this state accessor.
+    /// Note that any empty slots in between height n-1 and height n are defined to have the same gas limit as height n.
     pub fn block_gas_limit_at<
         Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
         E,
@@ -485,8 +486,14 @@ impl<S: Spec> ChainState<S> {
     >(
         &self,
         state: &mut Reader,
+        is_stale_height: bool,
     ) -> Result<Option<S::Gas>, <Reader as StateReader<Kernel>>::Error> {
-        self.block_gas_limit_at(state.rollup_height_to_access(), state)
+        let height = if is_stale_height {
+            height = state.rollup_height_to_access() + 1;
+        } else {
+            state.rollup_height_to_access()
+        };
+        self.block_gas_limit_at(height, state)
     }
 
     /// This method is used for testing only. It sets the rollup height to zero.

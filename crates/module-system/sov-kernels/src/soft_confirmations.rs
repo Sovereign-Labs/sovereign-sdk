@@ -147,8 +147,9 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
     >(
         &self,
         state: &mut Reader,
+        is_stale_height: bool,
     ) -> Option<<Self::Spec as Spec>::Gas> {
-        self.chain_state.block_gas_limit(state).unwrap_infallible()
+        self.chain_state.block_gas_limit(state, is_stale_height).unwrap_infallible()
     }
 
     fn visible_hash_for(
