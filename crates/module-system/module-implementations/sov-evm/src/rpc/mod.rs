@@ -477,18 +477,56 @@ where
         Ok(Some(receipts))
     }
 
+    fn resolve_simulation_context_for_block_id<'a>(
+        &self,
+        block_id: Option<BlockId>,
+        state: &'a mut ApiStateAccessor<S>,
+    ) -> Result<
+        (
+            BlockEnv,
+            MaybeArchivalState<'a, S>,
+            crate::config::EvmRuntimeConfig,
+        ),
+        EthApiError,
+    > {
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        // Omitted-gas simulations must read the tx gas cap from the selected state so
+        // archival queries remain stable after later runtime-config updates.
+        let cfg = self.cfg_infallible(maybe_archival_state.deref_mut());
+        Ok((block_env, maybe_archival_state, cfg))
+    }
+
     fn call(
         &self,
-        mut request: TransactionRequest,
+        request: TransactionRequest,
         block_id: Option<BlockId>,
         state_overrides: Option<StateOverride>,
         block_overrides: Option<Box<BlockOverrides>>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ResultAndState, EthApiError> {
+        let (block_env, maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
+        self.call_with_context(
+            request,
+            block_env,
+            maybe_archival_state,
+            &cfg,
+            state_overrides,
+            block_overrides,
+        )
+    }
+
+    fn call_with_context(
+        &self,
+        mut request: TransactionRequest,
+        mut block_env: BlockEnv,
+        mut maybe_archival_state: MaybeArchivalState<'_, S>,
+        cfg: &crate::config::EvmRuntimeConfig,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+    ) -> Result<ResultAndState, EthApiError> {
         let has_overrides = state_overrides.is_some() || block_overrides.is_some();
-        let mut block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let cfg = self.cfg_infallible(state);
-        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
         let enforce_max_fee_check = self
             .is_max_fee_check_active(maybe_archival_state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
@@ -524,7 +562,7 @@ where
 
         if !has_overrides {
             let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            return simulate_call(&mut evm_db, &block_env, &cfg, request);
+            return simulate_call(&mut evm_db, &block_env, cfg, request);
         }
 
         let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
@@ -535,7 +573,7 @@ where
             state_overrides,
             block_overrides,
         )?;
-        simulate_call(&mut evm_state, &block_env, &cfg, request)
+        simulate_call(&mut evm_state, &block_env, cfg, request)
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.
@@ -975,7 +1013,7 @@ where
     DB::Error: Into<EthApiError> + revm_database_interface::DBErrorMarker + std::fmt::Display,
 {
     let cfg_env = get_cfg_env(block_env, cfg, Some(get_cfg_env_template()));
-    let tx_env = prepare_call_env(block_env, request)?;
+    let tx_env = prepare_call_env(block_env, request, cfg.chain_spec.tx_gas_limit)?;
     let caller = tx_env.caller;
     let result = executor::transact(&mut *db, block_env, tx_env, cfg_env)?;
     verify_contract_creation_allowlist(&result.state, &caller, cfg, db)

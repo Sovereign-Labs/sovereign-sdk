@@ -6,12 +6,16 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::ContainerAsync;
 use tokio::io::AsyncBufReadExt;
 
-const PULL_RETRY_DELAYS: [Duration; 3] = [
+/// Retry delays for image pull failures. Base (non-transient) errors use only
+/// the first [`BASE_RETRY_COUNT`] entries; known transient errors use all of them.
+const RETRY_DELAYS: [Duration; 4] = [
     Duration::from_secs(2),
     Duration::from_secs(5),
     Duration::from_secs(10),
+    Duration::from_secs(20),
 ];
-const PULL_MAX_ATTEMPTS: usize = PULL_RETRY_DELAYS.len() + 1;
+/// How many retries a non-transient pull error gets (→ 3 attempts total).
+const BASE_RETRY_COUNT: usize = 2;
 
 /// Printing logs from container
 pub async fn print_logs_from_container<T>(name: &str, container: &ContainerAsync<T>)
@@ -34,7 +38,8 @@ where
     }
 }
 
-/// Pulls a docker image with retries for transient pull failures.
+/// Pulls a docker image with retries for pull failures. All errors are retried,
+/// with known transient errors receiving more retry attempts.
 pub async fn pull_image_with_retries<I>(image: I) -> anyhow::Result<()>
 where
     I: testcontainers::Image + Clone,
@@ -42,7 +47,7 @@ where
     let image_name = image.name().to_owned();
     let image_tag = image.tag().to_owned();
 
-    for attempt in 1..=PULL_MAX_ATTEMPTS {
+    for attempt in 1..=RETRY_DELAYS.len() + 1 {
         match image.clone().pull_image().await {
             Ok(_) => {
                 if attempt > 1 {
@@ -57,20 +62,24 @@ where
             }
             Err(err) => {
                 let err_text = err.to_string();
-                if is_retryable_pull_error_message(&err_text) {
-                    if let Some(delay) = pull_retry_delay(attempt) {
-                        tracing::warn!(
-                            attempt,
-                            max_attempts = PULL_MAX_ATTEMPTS,
-                            image = image_name,
-                            tag = image_tag,
-                            %err,
-                            ?delay,
-                            "Transient image pull failure, retrying"
-                        );
-                        tokio::time::sleep(delay).await;
-                        continue;
-                    }
+                let delays: &[Duration] = if is_retryable_pull_error_message(&err_text) {
+                    &RETRY_DELAYS
+                } else {
+                    &RETRY_DELAYS[..BASE_RETRY_COUNT]
+                };
+
+                if let Some(&delay) = delays.get(attempt.saturating_sub(1)) {
+                    tracing::warn!(
+                        attempt,
+                        max_attempts = delays.len() + 1,
+                        image = image_name,
+                        tag = image_tag,
+                        %err,
+                        ?delay,
+                        "Image pull failure, retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
                 }
 
                 return Err(anyhow!(
@@ -81,18 +90,14 @@ where
         }
     }
 
-    Err(anyhow!(
-        "failed to pull image {image_name}:{image_tag} after {PULL_MAX_ATTEMPTS} attempt(s)"
-    ))
-}
-
-fn pull_retry_delay(attempt: usize) -> Option<Duration> {
-    PULL_RETRY_DELAYS.get(attempt.saturating_sub(1)).copied()
+    unreachable!("loop always returns on Ok or final Err")
 }
 
 fn is_retryable_pull_error_message(message: &str) -> bool {
     let message = message.to_ascii_lowercase();
-    let is_pull_error = message.contains("pullimage") || message.contains("pull image");
+    let is_pull_error = message.contains("pullimage")
+        || message.contains("pull image")
+        || message.contains("pull the image");
     if !is_pull_error {
         return false;
     }
@@ -141,10 +146,27 @@ mod tests {
     }
 
     #[test]
-    fn pull_retry_delays_match_policy() {
-        assert_eq!(pull_retry_delay(1), Some(Duration::from_secs(2)));
-        assert_eq!(pull_retry_delay(2), Some(Duration::from_secs(5)));
-        assert_eq!(pull_retry_delay(3), Some(Duration::from_secs(10)));
-        assert_eq!(pull_retry_delay(4), None);
+    fn pull_the_image_timeout_errors_are_retryable() {
+        let err = "failed to pull the image \
+                   'ghcr.io/ross-weir/hyperlane-agent:integration-lander-1', \
+                   error: Timeout error";
+        assert!(is_retryable_pull_error_message(err));
+    }
+
+    #[test]
+    fn retry_delays_and_base_limit() {
+        assert_eq!(
+            RETRY_DELAYS.len(),
+            4,
+            "transient errors get 4 retries → 5 attempts"
+        );
+        assert_eq!(
+            BASE_RETRY_COUNT, 2,
+            "base errors get 2 retries → 3 attempts"
+        );
+        assert_eq!(RETRY_DELAYS[0], Duration::from_secs(2));
+        assert_eq!(RETRY_DELAYS[1], Duration::from_secs(5));
+        assert_eq!(RETRY_DELAYS[2], Duration::from_secs(10));
+        assert_eq!(RETRY_DELAYS[3], Duration::from_secs(20));
     }
 }

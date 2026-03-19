@@ -622,7 +622,6 @@ async fn rpc2_002b_stale_nonce_precedes_affordability_rejection() -> anyhow::Res
 
 /// RPC2-003 (gasleft probe): Omitted-gas `eth_call` should default to the tx gas cap.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
@@ -741,7 +740,6 @@ async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
 
 /// RPC2-003 (end-to-end burnGas): Omitted-gas simulation agrees with real tx cap on workload classification.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;

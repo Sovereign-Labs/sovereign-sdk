@@ -11,6 +11,10 @@ pub use guest::MockZkGuest;
 mod host;
 #[cfg(feature = "native")]
 pub use host::MockZkvmHost;
+#[cfg(feature = "native")]
+mod network;
+#[cfg(feature = "native")]
+pub use network::MockZkvmNetwork;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
@@ -56,7 +60,7 @@ impl Zkvm for MockZkvm {
     type Host = crate::host::MockZkvmHost;
 
     #[cfg(feature = "native")]
-    type Network = sov_rollup_interface::zk::NoopZkvmNetwork<MockZkGuest>;
+    type Network = crate::network::MockZkvmNetwork;
 }
 /// A mock commitment to a particular zkVM program.
 #[derive(
@@ -140,7 +144,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 #[cfg(test)]
 mod tests {
     use sov_rollup_interface::crypto::PublicKey;
-    use sov_rollup_interface::zk::{CodeCommitment, ZkVerifier, ZkvmHost};
+    use sov_rollup_interface::zk::{CodeCommitment, ZkVerifier, ZkvmHost, ZkvmNetwork};
 
     use super::*;
 
@@ -191,6 +195,54 @@ mod tests {
 
         assert!(verified_pub_data.is_err());
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_mock_network() -> anyhow::Result<()> {
+        let mut network = MockZkvmNetwork::new(false);
+        let pub_data = TestPublicData {
+            hint: "NetworkTest".to_owned(),
+        };
+
+        network.add_hint(&pub_data);
+        let handle = network.submit().await?;
+
+        // Proof should be pending
+        assert_eq!(network.poll(&handle).await?, None);
+
+        // Complete the proof
+        network.complete_proof(handle);
+
+        // Now poll should return the proof bytes
+        let proof_bytes = network
+            .poll(&handle)
+            .await?
+            .expect("proof should be ready after complete_proof");
+
+        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
+        assert_eq!(verified, pub_data);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_mock_network_auto_complete() -> anyhow::Result<()> {
+        let mut network = MockZkvmNetwork::new(true);
+        let pub_data = TestPublicData {
+            hint: "AutoComplete".to_owned(),
+        };
+
+        network.add_hint(&pub_data);
+        let handle = network.submit().await?;
+
+        // Proof should be immediately ready
+        let proof_bytes = network
+            .poll(&handle)
+            .await?
+            .expect("auto-complete proof should be immediately ready");
+
+        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
+        assert_eq!(verified, pub_data);
         Ok(())
     }
 
