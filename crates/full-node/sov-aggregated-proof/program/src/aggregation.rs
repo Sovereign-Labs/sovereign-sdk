@@ -95,6 +95,10 @@ fn verify_proof_chain<S: Spec, Da: DaSpec>(
     let mut expected_prev_state_root =
         previous_agg_proof_public_data.map(|public_data| public_data.final_state_root.clone());
 
+    // We intentionally scope the output to the current set of inner proofs only.
+    // The predecessor proof is verified for chain continuity, but its slot range
+    // and rewards are not carried forward — each aggregation covers only the
+    // proofs it directly verifies.
     let mut initial_boundary = None;
     let mut final_boundary = None;
 
