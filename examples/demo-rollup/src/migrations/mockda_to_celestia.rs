@@ -214,9 +214,9 @@ struct ModuleDiscriminants {
 impl ModuleDiscriminants {
     fn from_runtime(runtime: &Runtime<OldSpec>) -> Self {
         Self {
-            chain_state: runtime.chain_state().discriminant(),
-            blob_storage: runtime.blob_storage.discriminant(),
-            sequencer_registry: runtime.sequencer_registry.discriminant(),
+            chain_state: runtime.0.chain_state.discriminant(),
+            blob_storage: runtime.0.blob_storage.discriminant(),
+            sequencer_registry: runtime.0.sequencer_registry.discriminant(),
         }
     }
 }
@@ -331,8 +331,8 @@ fn run() -> anyhow::Result<()> {
 
     let paymaster_inspection = inspect_paymaster_state(
         &storage,
-        *runtime.paymaster.sequencer_to_payer.prefix(),
-        *runtime.paymaster.payers.prefix(),
+        *runtime.0.paymaster.sequencer_to_payer.prefix(),
+        *runtime.0.paymaster.payers.prefix(),
         args.force_non_all_paymaster_policies,
     )?;
     let chain_state_slots_inspection =

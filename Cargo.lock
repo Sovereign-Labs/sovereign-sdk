@@ -2442,7 +2442,7 @@ dependencies = [
 [[package]]
 name = "bullet-exchange-module"
 version = "0.0.1"
-source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=c322aa5312badbbe616aec4252c73a289fe5967d#c322aa5312badbbe616aec4252c73a289fe5967d"
 dependencies = [
  "anyhow",
  "axum 0.7.9",
@@ -2472,7 +2472,7 @@ dependencies = [
 [[package]]
 name = "bullet-rollup"
 version = "0.0.1"
-source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=c322aa5312badbbe616aec4252c73a289fe5967d#c322aa5312badbbe616aec4252c73a289fe5967d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2513,7 +2513,7 @@ dependencies = [
 [[package]]
 name = "bullet-stf"
 version = "0.0.1"
-source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=c322aa5312badbbe616aec4252c73a289fe5967d#c322aa5312badbbe616aec4252c73a289fe5967d"
 dependencies = [
  "anyhow",
  "bullet-exchange-interface",
@@ -2543,7 +2543,7 @@ dependencies = [
 [[package]]
 name = "bullet-stf-declaration"
 version = "0.0.1"
-source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
+source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=c322aa5312badbbe616aec4252c73a289fe5967d#c322aa5312badbbe616aec4252c73a289fe5967d"
 dependencies = [
  "anyhow",
  "borsh",
