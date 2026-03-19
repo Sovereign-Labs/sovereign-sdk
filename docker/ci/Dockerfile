@@ -2,95 +2,102 @@ ARG NAMESPACE_BASE_IMAGE_REF=""
 # Your image must build FROM NAMESPACE_BASE_IMAGE_REF
 FROM ${NAMESPACE_BASE_IMAGE_REF} AS base
 
-# Prevent interactive prompts during package installation
+ARG RUST_STABLE_VERSION=1.93.0
+ARG RUST_NIGHTLY_VERSION=nightly-2026-03-10
+ARG NODE_VERSION=20.19.0
+ARG MOLD_VERSION=2.40.4
+ARG PROTOC_VERSION=23.2
+
 ENV DEBIAN_FRONTEND=noninteractive
-
-# Install system dependencies
-RUN sudo apt-get update && sudo apt-get install -y \
-    build-essential \
-    pkg-config \
-    libssl-dev \
-    git \
-    curl \
-    wget \
-    jq \
-    protobuf-compiler \
-    clang \
-    cmake \
-    libclang-dev \
-    lld \
-    zstd \
-    unzip \
-    && sudo rm -rf /var/lib/apt/lists/*
-
-# Build and install mold linker from source
-RUN git clone https://github.com/rui314/mold.git /tmp/mold \
-    && cd /tmp/mold \
-    && git checkout $(git describe --tags --abbrev=0) \
-    && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++ \
-    && cmake --build build -j$(nproc) \
-    && sudo cmake --build build --target install \
-    && cd / \
-    && rm -rf /tmp/mold
-
-# Install Rust as user
-# The base image runs as runner user with home at /home/runner
 ENV RUSTUP_HOME=/home/runner/.rustup \
     CARGO_HOME=/home/runner/.cargo \
     PATH=/home/runner/.cargo/bin:$PATH
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0 --profile minimal \
+# This image is amd64-only.
+RUN test "$(dpkg --print-architecture)" = "amd64"
+
+# Install system dependencies
+RUN sudo rm -f /etc/apt/sources.list.d/*git-lfs*.list /etc/apt/sources.list.d/*git-lfs*.sources || true \
+    && sudo apt-get update \
+    && sudo apt-get install -y \
+        build-essential \
+        pkg-config \
+        libssl-dev \
+        git \
+        curl \
+        wget \
+        jq \
+        clang \
+        cmake \
+        libclang-dev \
+        lld \
+        zstd \
+        unzip \
+        xz-utils \
+    && sudo rm -rf /var/lib/apt/lists/*
+
+# Install mold linker from pinned release
+RUN curl -fsSL -o /tmp/mold.tar.gz \
+         "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-x86_64-linux.tar.gz" \
+    && tar -C /tmp -xzf /tmp/mold.tar.gz \
+    && sudo cp "/tmp/mold-${MOLD_VERSION}-x86_64-linux/bin/mold" /usr/local/bin/mold \
+    && sudo mkdir -p /usr/local/libexec/mold \
+    && sudo cp "/tmp/mold-${MOLD_VERSION}-x86_64-linux/libexec/mold/ld" /usr/local/libexec/mold/ld \
+    && rm -rf /tmp/mold*
+
+# Install Rust toolchains
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_STABLE_VERSION} --profile minimal \
     && . /home/runner/.cargo/env \
-    && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.93.0 \
-    && rustup toolchain install nightly --component rustfmt --component rust-src --profile minimal \
-    && rustup target add wasm32-unknown-unknown
+    && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain ${RUST_STABLE_VERSION} \
+    && rustup toolchain install ${RUST_NIGHTLY_VERSION} --component rustfmt --component rust-src --profile minimal \
+    && rustup target add --toolchain ${RUST_STABLE_VERSION} wasm32-unknown-unknown \
+    && rustup target add --toolchain ${RUST_NIGHTLY_VERSION} wasm32-unknown-unknown
 
 # Configure cargo to use mold linker
 RUN mkdir -p /home/runner/.cargo \
-    && echo '[target.x86_64-unknown-linux-gnu]' >> /home/runner/.cargo/config.toml \
-    && echo 'rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]' >> /home/runner/.cargo/config.toml
+    && cat > /home/runner/.cargo/config.toml <<'EOF'
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]
+EOF
 
-# Install Node.js 20.x
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - \
-    && sudo apt-get install -y nodejs \
-    && sudo rm -rf /var/lib/apt/lists/*
+# Install Node.js from pinned tarball
+RUN curl -fsSL -o /tmp/node.tar.xz \
+         "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" \
+    && sudo tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
+    && rm -f /tmp/node.tar.xz
 
 # Install pnpm and Node.js tools
 RUN sudo npm install -g pnpm@9 doctoc
 
-# Install yq for YAML processing
-RUN sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq \
-    && sudo chmod +x /usr/bin/yq
+# Install yq (intentionally unpinned)
+RUN sudo wget -qO /usr/local/bin/yq \
+         "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64" \
+    && sudo chmod +x /usr/local/bin/yq
 
-# Install protoc v23.2
-RUN PROTOC_VERSION="23.2" \
-    && PROTOC_ZIP="protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
-    && curl -OL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/${PROTOC_ZIP}" \
-    && sudo unzip -o "${PROTOC_ZIP}" -d /usr/local bin/protoc \
-    && sudo unzip -o "${PROTOC_ZIP}" -d /usr/local 'include/*' \
-    && rm -f "${PROTOC_ZIP}"
+# Install protoc from pinned release
+RUN curl -fsSLO \
+         "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
+    && sudo unzip -o "protoc-${PROTOC_VERSION}-linux-x86_64.zip" -d /usr/local bin/protoc 'include/*' \
+    && rm -f "protoc-${PROTOC_VERSION}-linux-x86_64.zip"
 
-# Install RISC0 toolchain (AMD64 only - RISC0 doesn't support ARM64)
+# Install RISC0 toolchain
 SHELL ["/bin/bash", "-c"]
 RUN . /home/runner/.cargo/env \
-        && curl -L https://risczero.com/install | bash \
-        && export PATH="/home/runner/.risc0/bin:$PATH" \
-        && /home/runner/.risc0/bin/rzup install cargo-risczero 2.0.2 \
-        && /home/runner/.risc0/bin/rzup install rust 1.88.0 \
-        && /home/runner/.risc0/bin/rzup install cpp 2024.1.5 \
-        && rm -rf /home/runner/.cargo/registry \
-        && rm -rf /home/runner/.cargo/git;
-SHELL ["/bin/sh", "-c"]
+    && curl -L https://risczero.com/install | bash \
+    && export PATH="/home/runner/.risc0/bin:$PATH" \
+    && /home/runner/.risc0/bin/rzup install cargo-risczero 2.0.2 \
+    && /home/runner/.risc0/bin/rzup install rust 1.88.0 \
+    && /home/runner/.risc0/bin/rzup install cpp 2024.1.5 \
+    && rm -rf /home/runner/.cargo/registry /home/runner/.cargo/git
 
-# Install SP1 toolchain (AMD64 only - SP1 doesn't support ARM64)
+# Install SP1 toolchain
 RUN . /home/runner/.cargo/env \
-        && curl -L https://sp1up.succinct.xyz | bash \
-        && /home/runner/.sp1/bin/sp1up --version 6.0.2 \
-        && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
-        && rm -rf /home/runner/.cargo/registry \
-        && rm -rf /home/runner/.cargo/git
-
-## Move it to bottom for now for faster iteration
+    && curl -L https://sp1up.succinct.xyz | bash \
+    && /home/runner/.sp1/bin/sp1up --version 6.0.2 \
+    && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
+    && rm -rf /home/runner/.cargo/registry /home/runner/.cargo/git
+SHELL ["/bin/sh", "-c"]
 
 # Install core Rust development tools
 RUN . /home/runner/.cargo/env \
@@ -101,9 +108,7 @@ RUN . /home/runner/.cargo/env \
     && cargo install cargo-insta@1.43.1 --locked \
     && cargo install zepter@1.78.2 --locked \
     && cargo install bashtestmd@0.5.0 --locked \
-    && rm -rf /home/runner/.cargo/registry \
-    && rm -rf /home/runner/.cargo/git \
-    && rm -rf /tmp/cargo-*
+    && rm -rf /home/runner/.cargo/registry /home/runner/.cargo/git /tmp/cargo-*
 
 # Important step to make cache mountable
 RUN rm -rf /home/runner/.cargo/.global-cache
