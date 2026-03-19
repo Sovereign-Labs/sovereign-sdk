@@ -45,10 +45,11 @@ where
         let prover_address = data.prover_address;
         let mut data = data.stf_witness;
 
+        let relevant_proofs = data.relevant_proofs;
         self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
             &data.relevant_blobs,
-            &data.relevant_proofs,
+            relevant_proofs,
         )?;
 
         let result = self.app.apply_slot(

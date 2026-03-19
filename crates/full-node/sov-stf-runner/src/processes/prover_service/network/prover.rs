@@ -125,17 +125,6 @@ where
             prover_address: self.prover_address.clone(),
         };
 
-        verifier
-            .da_verifier
-            .verify_relevant_tx_list(
-                &data.stf_witness.da_block_header,
-                &data.stf_witness.relevant_blobs,
-                &data.stf_witness.relevant_proofs,
-            )
-            .map_err(|e| {
-                ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
-            })?;
-
         let handle = {
             let mut network = self.inner_vm.lock().await;
             network.add_hint(&data);
@@ -147,10 +136,20 @@ where
                 StateTransitionWitness {
                     initial_state_root,
                     final_state_root,
+                    da_block_header,
+                    relevant_blobs,
+                    relevant_proofs,
                     ..
                 },
             prover_address,
         } = data;
+
+        verifier
+            .da_verifier
+            .verify_relevant_tx_list(&da_block_header, &relevant_blobs, relevant_proofs)
+            .map_err(|e| {
+                ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
+            })?;
 
         let metadata = SubmittedProofMetadata {
             slot_number,
