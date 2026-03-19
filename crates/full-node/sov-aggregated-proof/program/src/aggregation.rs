@@ -195,7 +195,8 @@ fn deserialize_and_verify_pub_data<T: serde::de::DeserializeOwned>(
 fn outer_vk_hash_from_vkey_hash(vkey_hash: [u32; 8]) -> OuterCodeCommitmentHash {
     let mut bytes = Vec::with_capacity(32);
     for word in vkey_hash {
-        bytes.extend_from_slice(&word.to_le_bytes());
+        // Match SP1's HashableKey::hash_bytes representation for hash_u32().
+        bytes.extend_from_slice(&word.to_be_bytes());
     }
     OuterCodeCommitmentHash(bytes)
 }
