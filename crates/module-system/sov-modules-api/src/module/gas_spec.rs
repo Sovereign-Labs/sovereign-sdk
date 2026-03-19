@@ -6,7 +6,6 @@ use sov_rollup_interface::common::RollupHeight;
 
 use super::Spec;
 use crate::gas::GAS_DIMENSIONS;
-use crate::provable_height_tracker::InfiniteHeight;
 use crate::{Amount, Gas};
 
 #[macro_export]
@@ -108,6 +107,7 @@ pub trait GasSpec:
     /// The height at which the gas limit is updated. The change should take effect *after* this rollup block (i.e. starting at height + 1)
     fn change_gas_limit_after_height() -> RollupHeight;
 
+    /// Returns the gas limit for a given rollup height.
     fn gas_limit_for_height(height: RollupHeight) -> Self::Gas {
         if height > Self::change_gas_limit_after_height() {
             Self::updated_gas_limit()
@@ -269,7 +269,7 @@ impl<S: Spec> GasSpec for S {
     }
 
     fn change_gas_limit_after_height() -> RollupHeight {
-        RollupHeight::from(config_value_private!("CHANGE_GAS_LIMIT_AFTER_HEIGHT"))
+        RollupHeight::new(config_value_private!("CHANGE_GAS_LIMIT_AFTER_HEIGHT"))
     }
 
     fn updated_gas_limit() -> Self::Gas {

@@ -14,7 +14,7 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
-use crate::preferred::{comfortable_gas_limit, PreferredBlobToReplay};
+use crate::preferred::{comfortable_gas_limit_for_height, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,

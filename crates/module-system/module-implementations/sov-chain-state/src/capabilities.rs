@@ -289,7 +289,7 @@ impl<S: Spec> ChainState<S> {
 
         // We compute the base fee per gas from the previous slot if it exists
         let base_fee_per_gas = maybe_previous_slot
-            .map(|previous_slot| Self::compute_base_fee_per_gas(previous_slot.gas_info, 1))
+            .map(|previous_slot| Self::compute_base_fee_per_gas(previous_slot.gas_info, leftover_rollup_height, 1))
             .unwrap_or_else(|| S::initial_base_fee_per_gas());
 
         let gas_info = BlockGasInfo::new(

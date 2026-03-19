@@ -3,6 +3,7 @@ use std::cmp::max;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, Gas, GasArray, GasSpec, Spec};
+use sov_rollup_interface::common::RollupHeight;
 use thiserror::Error;
 
 use crate::{BlockGasInfo, ChainState};
