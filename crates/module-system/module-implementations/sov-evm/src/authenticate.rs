@@ -119,7 +119,12 @@ fn build_authenticated_tx_data<
         state,
     )?;
 
-    let gas_limit = gas_limit.saturating_mul(multiplier);
+    let gas_limit = gas_limit
+        .checked_mul(multiplier)
+        .ok_or(AuthenticationError::FatalError(
+            FatalError::Other("Gas limit overflow".into()),
+            tx_hash,
+        ))?;
     let gas_limit: <S as Spec>::Gas = [gas_limit, gas_limit].into();
 
     let max_fee = gas_limit
