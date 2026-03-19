@@ -82,7 +82,7 @@ alloy-rlp = { workspace = true }
 
 
 [dev-dependencies]
-sov-ethereum = { workspace = true, features = ["test-utils"] }
+sov-ethereum = { workspace = true }
 sov-eth-client = { workspace = true }
 jsonrpsee = { workspace = true }
 sov-address = { workspace = true, features = ["native", "arbitrary"] }

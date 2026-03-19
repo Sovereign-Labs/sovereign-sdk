@@ -62,15 +62,6 @@ type Receipt = TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>;
 const MAX_TIMEOUT: u64 = 2_000; // 2 seconds
 
 const IP_ADDRESS_ERROR: &str = "Unable to retrieve the peer IP address";
-#[cfg(all(feature = "test-utils", debug_assertions))]
-const PAUSE_AFTER_AUTH_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_TX_HASH";
-#[cfg(all(feature = "test-utils", debug_assertions))]
-const PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_REACHED_TX_HASH";
-#[cfg(all(feature = "local", feature = "test-utils", debug_assertions))]
-const PAUSE_AFTER_LOCAL_FILL_FROM_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_LOCAL_FILL_FROM";
-#[cfg(all(feature = "local", feature = "test-utils", debug_assertions))]
-const PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV: &str =
-    "SOV_ETH_TEST_PAUSE_AFTER_LOCAL_FILL_REACHED_FROM";
 
 enum AffordabilityPreflight {
     Affordable,
@@ -548,14 +539,12 @@ where
     /// subsequent affordability check observe the same head — even if new blocks
     /// land between the two steps.
     fn authenticate_and_preflight_send(
-        tx_hash: B256,
         tx: &FullyBakedTx,
         signed_tx: &TransactionSigned,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
         let snapshot_state = ethereum.api_state_accessor();
         Self::authenticate_and_preflight_send_with_snapshot(
-            tx_hash,
             tx,
             signed_tx,
             &snapshot_state,
@@ -564,14 +553,12 @@ where
     }
 
     fn authenticate_and_preflight_send_with_snapshot(
-        tx_hash: B256,
         tx: &FullyBakedTx,
         signed_tx: &TransactionSigned,
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
         let (authenticated_tx, auth_data) = Self::authenticate_tx(tx, snapshot_state)?;
-        Self::maybe_pause_after_auth(tx_hash, ethereum);
 
         Self::validate_send_uniqueness_preflight(&auth_data, snapshot_state)?;
 
@@ -597,7 +584,7 @@ where
         let mut state = snapshot_state.clone_without_local_writes();
         let expected_nonce = Self::read_next_nonce(&auth_data.credential_id, &mut state)?;
 
-        if tx_nonce != expected_nonce {
+        if tx_nonce < expected_nonce {
             return Err(Self::invalid_send_precheck_error(format!(
                 "Tx bad nonce for credential id: {}, expected: {expected_nonce}, but found: {tx_nonce}",
                 auth_data.credential_id,
@@ -628,72 +615,6 @@ where
         })
     }
 
-    #[cfg(all(feature = "test-utils", debug_assertions))]
-    fn maybe_pause_after_auth(tx_hash: B256, ethereum: &Arc<Ethereum<S, Seq>>) {
-        let tx_hash_hex = format!("{tx_hash:#x}");
-        if std::env::var(PAUSE_AFTER_AUTH_TX_HASH_ENV).ok().as_deref() != Some(tx_hash_hex.as_str())
-        {
-            return;
-        }
-
-        std::env::set_var(PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV, &tx_hash_hex);
-        let shutdown_receiver = ethereum.shutdown_receiver.clone();
-        tokio::task::block_in_place(|| {
-            while std::env::var(PAUSE_AFTER_AUTH_TX_HASH_ENV).ok().as_deref()
-                == Some(tx_hash_hex.as_str())
-            {
-                if shutdown_receiver.has_changed().unwrap_or(false) {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-        });
-        std::env::remove_var(PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV);
-    }
-
-    #[cfg(not(all(feature = "test-utils", debug_assertions)))]
-    fn maybe_pause_after_auth(_tx_hash: B256, _ethereum: &Arc<Ethereum<S, Seq>>) {}
-
-    #[cfg(feature = "local")]
-    #[cfg(all(feature = "test-utils", debug_assertions))]
-    fn maybe_pause_after_local_fill(
-        from: alloy_primitives::Address,
-        ethereum: &Arc<Ethereum<S, Seq>>,
-    ) {
-        let from_hex = format!("{from:#x}");
-        if std::env::var(PAUSE_AFTER_LOCAL_FILL_FROM_ENV)
-            .ok()
-            .as_deref()
-            != Some(from_hex.as_str())
-        {
-            return;
-        }
-
-        std::env::set_var(PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV, &from_hex);
-        let shutdown_receiver = ethereum.shutdown_receiver.clone();
-        tokio::task::block_in_place(|| {
-            while std::env::var(PAUSE_AFTER_LOCAL_FILL_FROM_ENV)
-                .ok()
-                .as_deref()
-                == Some(from_hex.as_str())
-            {
-                if shutdown_receiver.has_changed().unwrap_or(false) {
-                    break;
-                }
-                std::thread::sleep(Duration::from_millis(10));
-            }
-        });
-        std::env::remove_var(PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV);
-    }
-
-    #[cfg(feature = "local")]
-    #[cfg(not(all(feature = "test-utils", debug_assertions)))]
-    fn maybe_pause_after_local_fill(
-        _from: alloy_primitives::Address,
-        _ethereum: &Arc<Ethereum<S, Seq>>,
-    ) {
-    }
-
     async fn process_raw_transaction<T, F>(
         data: Bytes,
         ethereum: Arc<Ethereum<S, Seq>>,
@@ -705,7 +626,7 @@ where
     {
         let (tx_hash, raw_message, signed_tx) = Self::decode_raw_transaction(&data)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_and_preflight_send(tx_hash, &tx, &signed_tx, &ethereum)?;
+        Self::authenticate_and_preflight_send(&tx, &signed_tx, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
@@ -764,8 +685,6 @@ where
         }
 
         if transaction_request.gas.is_none() {
-            Self::maybe_pause_after_local_fill(from, &ethereum);
-
             let estimated_gas = Self::estimate_gas_request_with_snapshot(
                 transaction_request.clone(),
                 Some(BlockId::pending()),
@@ -803,7 +722,6 @@ where
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(message));
 
         Self::authenticate_and_preflight_send_with_snapshot(
-            tx_hash,
             &tx,
             &signed_tx,
             &snapshot_state,

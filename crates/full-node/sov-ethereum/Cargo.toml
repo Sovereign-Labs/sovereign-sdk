@@ -62,4 +62,3 @@ sov-test-utils = { workspace = true }
 [features]
 default = []
 local = []
-test-utils = []

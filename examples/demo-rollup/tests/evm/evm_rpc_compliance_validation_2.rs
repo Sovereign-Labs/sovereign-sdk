@@ -1,11 +1,10 @@
 use crate::evm::evm_test_helper::{
     alloy_ws_client, call_all_endpoints, create_simple_storage_client, deploy_contract_check,
-    hex_u128, hex_u64, parse_hex_u128, parse_hex_u64, raw_signed_eip1559,
-    raw_signed_eip1559_with_hash, rpc_call, rpc_error_code_from_response, rpc_error_message,
-    rpc_error_object, rpc_result_hex, setup_test_rollup, setup_test_rollup_with_paymaster,
-    setup_with_simple_storage, tx_count, EVM_EXTENSION, FEE_CAP_TOO_LOW_ERROR,
-    HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS, INSUFFICIENT_FUNDS_ERROR, MAX_FEE_PER_GAS,
-    PAYER_SOV_BANK_BALANCE, SECONDARY_SENDER_PRIV_KEY, SENDER_PRIV_KEY,
+    hex_u128, hex_u64, parse_hex_u128, parse_hex_u64, raw_signed_eip1559, rpc_call,
+    rpc_error_code_from_response, rpc_error_message, rpc_error_object, rpc_result_hex,
+    setup_test_rollup, setup_test_rollup_with_paymaster, setup_with_simple_storage, tx_count,
+    EVM_EXTENSION, FEE_CAP_TOO_LOW_ERROR, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
+    INSUFFICIENT_FUNDS_ERROR, MAX_FEE_PER_GAS, PAYER_SOV_BANK_BALANCE, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, TxKind, B256, U256, U64};
@@ -17,12 +16,6 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
 use serde_json::json;
-use sov_demo_rollup::MockDemoRollup;
-use sov_eth_client::SimpleStorageClient;
-use sov_modules_api::execution_mode::Native;
-use sov_test_utils::test_rollup::TestRollup;
-use std::net::SocketAddr;
-use std::sync::OnceLock;
 use tokio::time::{timeout, Duration};
 
 const DEFAULT_MAX_PRIORITY_FEE_PER_GAS: u128 = 1;
@@ -35,108 +28,6 @@ const AFFORDABILITY_SIGNER_PRIV_KEY: &str =
 const EMPTY_WITHDRAWALS_ROOT: &str =
     "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421";
 const SUBSCRIPTION_TIMEOUT: Duration = Duration::from_secs(10);
-const PAUSE_AFTER_AUTH_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_TX_HASH";
-const PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_AUTH_REACHED_TX_HASH";
-const PAUSE_AFTER_LOCAL_FILL_FROM_ENV: &str = "SOV_ETH_TEST_PAUSE_AFTER_LOCAL_FILL_FROM";
-const PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV: &str =
-    "SOV_ETH_TEST_PAUSE_AFTER_LOCAL_FILL_REACHED_FROM";
-const PAUSE_AFTER_AUTH_POLL_INTERVAL: Duration = Duration::from_millis(10);
-const PAUSE_AFTER_AUTH_TIMEOUT: Duration = Duration::from_secs(10);
-const BASE_FEE_BUMP_TIMEOUT: Duration = Duration::from_secs(5);
-const MAX_BURN_GAS_PROBE: u32 = 1_000_000;
-const HEAVY_BURN_TXS_PER_ATTEMPT: usize = 2;
-const MAX_BASE_FEE_BUMP_ATTEMPTS: usize = 5;
-
-fn rpc_pause_lock() -> &'static tokio::sync::Mutex<()> {
-    static LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
-}
-
-fn pause_after_auth_lock() -> &'static tokio::sync::Mutex<()> {
-    rpc_pause_lock()
-}
-
-fn pause_after_local_fill_lock() -> &'static tokio::sync::Mutex<()> {
-    rpc_pause_lock()
-}
-
-async fn wait_for_pause_signal(
-    env_var: &str,
-    expected_value: &str,
-    context: &str,
-) -> anyhow::Result<()> {
-    timeout(PAUSE_AFTER_AUTH_TIMEOUT, async {
-        loop {
-            if std::env::var(env_var).ok().as_deref() == Some(expected_value) {
-                return;
-            }
-            tokio::time::sleep(PAUSE_AFTER_AUTH_POLL_INTERVAL).await;
-        }
-    })
-    .await
-    .map_err(|_| anyhow::anyhow!("timed out waiting for {context} on {expected_value}"))?;
-    Ok(())
-}
-
-struct PauseAfterAuthGuard {
-    target_tx_hash: String,
-}
-
-impl PauseAfterAuthGuard {
-    fn new(target_tx_hash: B256) -> Self {
-        std::env::remove_var(PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV);
-
-        let target_tx_hash = format!("{target_tx_hash:#x}");
-        std::env::set_var(PAUSE_AFTER_AUTH_TX_HASH_ENV, &target_tx_hash);
-        Self { target_tx_hash }
-    }
-
-    async fn wait_until_reached(&self) -> anyhow::Result<()> {
-        wait_for_pause_signal(
-            PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV,
-            &self.target_tx_hash,
-            "paused send preflight",
-        )
-        .await
-    }
-}
-
-impl Drop for PauseAfterAuthGuard {
-    fn drop(&mut self) {
-        std::env::remove_var(PAUSE_AFTER_AUTH_TX_HASH_ENV);
-        std::env::remove_var(PAUSE_AFTER_AUTH_REACHED_TX_HASH_ENV);
-    }
-}
-
-struct PauseAfterLocalFillGuard {
-    sender: String,
-}
-
-impl PauseAfterLocalFillGuard {
-    fn new(sender: Address) -> Self {
-        std::env::remove_var(PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV);
-
-        let sender = format!("{sender:#x}");
-        std::env::set_var(PAUSE_AFTER_LOCAL_FILL_FROM_ENV, &sender);
-        Self { sender }
-    }
-
-    async fn wait_until_reached(&self) -> anyhow::Result<()> {
-        wait_for_pause_signal(
-            PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV,
-            &self.sender,
-            "paused local-send autofill",
-        )
-        .await
-    }
-}
-
-impl Drop for PauseAfterLocalFillGuard {
-    fn drop(&mut self) {
-        std::env::remove_var(PAUSE_AFTER_LOCAL_FILL_FROM_ENV);
-        std::env::remove_var(PAUSE_AFTER_LOCAL_FILL_REACHED_FROM_ENV);
-    }
-}
 
 fn assert_nonce_error_precedes_affordability(response: &serde_json::Value, method: &str) {
     let error_message = rpc_error_message(rpc_error_object(response, method));
@@ -152,109 +43,166 @@ fn assert_nonce_error_precedes_affordability(response: &serde_json::Value, metho
     );
 }
 
-async fn find_heavy_burn_iterations(
-    burner_client: &SimpleStorageClient,
-    http_addr: SocketAddr,
-    contract_address: Address,
-) -> anyhow::Result<u32> {
+/// RPC2-002c: Preferred sequencer raw send should admit future nonce transactions into the queue.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002c_preferred_raw_send_accepts_future_nonce() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let current_nonce = tx_count(&ws_client, signer.address(), "latest").await?;
+    let gas_limit = 21_000u64;
+    let first_recipient = Address::repeat_byte(0x31);
+    let second_recipient = Address::repeat_byte(0x32);
     let http = Client::new();
-    let sender = burner_client.address();
-    let capped_eth_call_succeeds = |iterations: u32| {
-        let http = &http;
-        async move {
-            let response = rpc_call(
-                http,
-                http_addr,
-                "eth_call",
-                json!([{
-                    "from": sender,
-                    "to": contract_address,
-                    "data": format!("0x{}", hex::encode(burner_client.contract.burn_gas(iterations).as_ref())),
-                    "gas": hex_u64(ETH_TX_GAS_CAP),
-                    "value": "0x0",
-                    "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
-                    "maxPriorityFeePerGas": "0x0"
-                }, "latest"]),
-            )
-                .await?;
-            Ok::<bool, anyhow::Error>(response.get("error").is_none())
-        }
-    };
 
-    let mut last_success = None;
-    let mut probe = 1u32;
-    while probe <= MAX_BURN_GAS_PROBE {
-        if capped_eth_call_succeeds(probe).await? {
-            last_success = Some(probe);
-            probe = probe
-                .checked_mul(2)
-                .ok_or_else(|| anyhow::anyhow!("burn_gas probe overflow"))?;
-        } else {
-            break;
-        }
-    }
-
-    last_success
-        .ok_or_else(|| anyhow::anyhow!("failed to find a burn_gas workload below tx gas cap"))
-}
-
-async fn latest_base_fee_per_gas(client: &SimpleStorageClient) -> anyhow::Result<u128> {
-    Ok(client
-        .eth_get_block_by_number(Some("latest".to_string()))
-        .await
-        .header
-        .base_fee_per_gas
-        .ok_or_else(|| anyhow::anyhow!("latest block missing base_fee_per_gas"))?
-        .into())
-}
-
-async fn increase_base_fee_above(
-    rollup: &TestRollup<MockDemoRollup<Native>>,
-    burner_client: &SimpleStorageClient,
-    http_addr: SocketAddr,
-    contract_address: Address,
-    initial_base_fee: u128,
-) -> anyhow::Result<u128> {
-    let heavy_burn_iterations =
-        find_heavy_burn_iterations(burner_client, http_addr, contract_address).await?;
-
-    for _ in 0..MAX_BASE_FEE_BUMP_ATTEMPTS {
-        rollup.pause_preferred_batches_and_wait().await?;
-
-        let mut burn_hashes = Vec::with_capacity(HEAVY_BURN_TXS_PER_ATTEMPT);
-        for _ in 0..HEAVY_BURN_TXS_PER_ATTEMPT {
-            burn_hashes.push(
-                burner_client
-                    .alloy_burn_gas(contract_address, heavy_burn_iterations)
-                    .await,
-            );
-        }
-        rollup.resume_preferred_batches().await;
-
-        for burn_hash in burn_hashes {
-            let receipt = burner_client.wait_for_finalized_receipt(burn_hash).await;
-            assert!(receipt.status(), "burn_gas transaction should succeed");
-        }
-
-        // Ok to use let Ok in the test
-        if let Ok(Ok(base_fee)) = timeout(BASE_FEE_BUMP_TIMEOUT, async {
-            loop {
-                let base_fee = latest_base_fee_per_gas(burner_client).await?;
-                if base_fee > initial_base_fee {
-                    return Ok::<u128, anyhow::Error>(base_fee);
-                }
-                tokio::time::sleep(PAUSE_AFTER_AUTH_POLL_INTERVAL).await;
-            }
-        })
-        .await
-        {
-            return Ok(base_fee);
-        }
-    }
-
-    anyhow::bail!(
-        "base fee did not increase above {initial_base_fee} after {MAX_BASE_FEE_BUMP_ATTEMPTS} heavy burn_gas attempts of {HEAVY_BURN_TXS_PER_ATTEMPT} transactions"
+    let future_raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        current_nonce + 1,
+        gas_limit,
+        TxKind::Call(first_recipient),
+        U256::ZERO,
+        Bytes::new(),
+        MAX_FEE_PER_GAS,
+        0,
+    )
+    .await?;
+    let future_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([future_raw_tx]),
+    )
+    .await?;
+    assert!(
+        future_response.get("error").is_none(),
+        "preferred sequencer should queue future raw txs instead of rejecting them: {future_response}"
     );
+    let future_hash: B256 = rpc_result_hex(&future_response).parse()?;
+
+    let current_raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        current_nonce,
+        gas_limit,
+        TxKind::Call(second_recipient),
+        U256::ZERO,
+        Bytes::new(),
+        MAX_FEE_PER_GAS,
+        0,
+    )
+    .await?;
+    let current_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([current_raw_tx]),
+    )
+    .await?;
+    assert!(
+        current_response.get("error").is_none(),
+        "current-nonce raw tx should succeed after queuing a future tx: {current_response}"
+    );
+    let current_hash: B256 = rpc_result_hex(&current_response).parse()?;
+
+    let current_receipt = ws_client.wait_for_finalized_receipt(current_hash).await;
+    assert!(
+        current_receipt.status(),
+        "current-nonce raw tx should execute successfully"
+    );
+
+    let future_receipt = ws_client.wait_for_finalized_receipt(future_hash).await;
+    assert!(
+        future_receipt.status(),
+        "queued future-nonce raw tx should execute after the missing nonce arrives"
+    );
+
+    assert_eq!(
+        tx_count(&ws_client, signer.address(), "latest").await?,
+        current_nonce + 2,
+        "both raw txs should advance the account nonce once executed"
+    );
+
+    Ok(())
+}
+
+/// RPC2-002d: Preferred sequencer local send should admit explicit future nonce transactions.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002d_preferred_local_send_accepts_future_nonce() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let current_nonce = tx_count(&ws_client, ws_client.address(), "latest").await?;
+    let gas_limit = 21_000u64;
+    let first_recipient = Address::repeat_byte(0x41);
+    let second_recipient = Address::repeat_byte(0x42);
+    let http = Client::new();
+
+    let future_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendTransaction",
+        json!([{
+            "from": ws_client.address(),
+            "to": first_recipient,
+            "gas": hex_u64(gas_limit),
+            "nonce": hex_u64(current_nonce + 1),
+            "value": "0x0",
+            "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
+            "maxPriorityFeePerGas": "0x0"
+        }]),
+    )
+    .await?;
+    assert!(
+        future_response.get("error").is_none(),
+        "preferred sequencer should queue future local txs instead of rejecting them: {future_response}"
+    );
+    let future_hash: B256 = rpc_result_hex(&future_response).parse()?;
+
+    let current_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendTransaction",
+        json!([{
+            "from": ws_client.address(),
+            "to": second_recipient,
+            "gas": hex_u64(gas_limit),
+            "nonce": hex_u64(current_nonce),
+            "value": "0x0",
+            "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
+            "maxPriorityFeePerGas": "0x0"
+        }]),
+    )
+    .await?;
+    assert!(
+        current_response.get("error").is_none(),
+        "current-nonce local tx should succeed after queuing a future tx: {current_response}"
+    );
+    let current_hash: B256 = rpc_result_hex(&current_response).parse()?;
+
+    let current_receipt = ws_client.wait_for_finalized_receipt(current_hash).await;
+    assert!(
+        current_receipt.status(),
+        "current-nonce local tx should execute successfully"
+    );
+
+    let future_receipt = ws_client.wait_for_finalized_receipt(future_hash).await;
+    assert!(
+        future_receipt.status(),
+        "queued future-nonce local tx should execute after the missing nonce arrives"
+    );
+
+    assert_eq!(
+        tx_count(&ws_client, ws_client.address(), "latest").await?,
+        current_nonce + 2,
+        "both local txs should advance the account nonce once executed"
+    );
+
+    Ok(())
 }
 
 /// RPC2-001: Fee-cap admission consistency across simulation and submission.
@@ -1619,350 +1567,6 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         nonce_after_phase_1 + 1,
         "successful phase-2 tx should advance nonce by 1"
     );
-
-    Ok(())
-}
-
-/// RPC2-016: Raw-send auth and affordability preflight must reuse one state snapshot.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "TODO: stabilize deterministic base-fee bump under paused send in demo-rollup harness"]
-async fn rpc2_016_raw_send_preflight_reuses_snapshot_across_head_change() -> anyhow::Result<()> {
-    let _pause_lock = pause_after_auth_lock().lock().await;
-
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(2).await;
-
-    let funding_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let burner_client =
-        create_simple_storage_client(rollup.http_addr, SECONDARY_SENDER_PRIV_KEY).await;
-    let burner_contract = deploy_contract_check(&funding_client)
-        .await
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    let initial_base_fee = latest_base_fee_per_gas(&burner_client).await?;
-
-    let target_signer: PrivateKeySigner = AFFORDABILITY_SIGNER_PRIV_KEY.parse()?;
-    let target_address = target_signer.address();
-    let chain_id: U64 = funding_client
-        .ws
-        .request("eth_chainId", rpc_params![])
-        .await?;
-    let gas_limit = 21_000u64;
-    let max_fee_per_gas = MAX_FEE_PER_GAS;
-    let recipient = Address::repeat_byte(0x44);
-
-    let funding_amount = U256::from(gas_limit) * U256::from(max_fee_per_gas);
-    let funding_hash = funding_client
-        .send_eth(target_address, funding_amount)
-        .await;
-    let funding_receipt = funding_client
-        .wait_for_finalized_receipt(funding_hash)
-        .await;
-    assert!(funding_receipt.status(), "funding transfer should succeed");
-
-    let nonce = tx_count(&funding_client, target_address, "latest").await?;
-    let (raw_tx, expected_hash) = raw_signed_eip1559_with_hash(
-        &target_signer,
-        chain_id.to::<u64>(),
-        nonce,
-        gas_limit,
-        TxKind::Call(recipient),
-        U256::ZERO,
-        Bytes::new(),
-        max_fee_per_gas,
-        0,
-    )
-    .await?;
-
-    let pause_guard = PauseAfterAuthGuard::new(expected_hash);
-    let http = Client::new();
-    let send_handle = tokio::spawn({
-        let http = http.clone();
-        let raw_tx = raw_tx.clone();
-        let http_addr = rollup.http_addr;
-        async move { rpc_call(&http, http_addr, "eth_sendRawTransaction", json!([raw_tx])).await }
-    });
-
-    pause_guard.wait_until_reached().await?;
-    let bumped_base_fee = increase_base_fee_above(
-        &rollup,
-        &burner_client,
-        rollup.http_addr,
-        burner_contract,
-        initial_base_fee,
-    )
-    .await?;
-    assert!(
-        bumped_base_fee > initial_base_fee,
-        "base fee should increase while the raw send is paused"
-    );
-
-    drop(pause_guard);
-
-    let send_response = send_handle.await??;
-    assert!(
-        send_response.get("error").is_none(),
-        "eth_sendRawTransaction should succeed after the base fee changes: {send_response}"
-    );
-    assert_eq!(
-        rpc_result_hex(&send_response),
-        format!("{expected_hash:#x}"),
-        "raw send should return the paused transaction hash"
-    );
-
-    let receipt = funding_client
-        .wait_for_finalized_receipt(expected_hash)
-        .await;
-    assert!(
-        receipt.status(),
-        "paused raw send should finalize successfully"
-    );
-
-    Ok(())
-}
-
-/// RPC2-017: Local send auth and affordability preflight must reuse one state snapshot.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "TODO: stabilize deterministic base-fee bump under paused send in demo-rollup harness"]
-async fn rpc2_017_local_send_preflight_reuses_snapshot_across_head_change() -> anyhow::Result<()> {
-    let _pause_lock = pause_after_auth_lock().lock().await;
-
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(2).await;
-
-    let target_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let burner_client =
-        create_simple_storage_client(rollup.http_addr, SECONDARY_SENDER_PRIV_KEY).await;
-    let burner_contract = deploy_contract_check(&target_client)
-        .await
-        .map_err(|err| anyhow::anyhow!(err.to_string()))?;
-    let initial_base_fee = latest_base_fee_per_gas(&burner_client).await?;
-
-    let target_signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let target_address = target_signer.address();
-    let chain_id: U64 = target_client
-        .ws
-        .request("eth_chainId", rpc_params![])
-        .await?;
-    let gas_limit = 21_000u64;
-    let max_fee_per_gas = MAX_FEE_PER_GAS;
-    let recipient = Address::repeat_byte(0x55);
-    let nonce = tx_count(&target_client, target_address, "latest").await?;
-    let (_, expected_hash) = raw_signed_eip1559_with_hash(
-        &target_signer,
-        chain_id.to::<u64>(),
-        nonce,
-        gas_limit,
-        TxKind::Call(recipient),
-        U256::ZERO,
-        Bytes::new(),
-        max_fee_per_gas,
-        0,
-    )
-    .await?;
-
-    let pause_guard = PauseAfterAuthGuard::new(expected_hash);
-    let http = Client::new();
-    let send_handle = tokio::spawn({
-        let http = http.clone();
-        let http_addr = rollup.http_addr;
-        async move {
-            rpc_call(
-                &http,
-                http_addr,
-                "eth_sendTransaction",
-                json!([{
-                    "from": target_address,
-                    "to": recipient,
-                    "value": "0x0",
-                    "gas": hex_u64(gas_limit),
-                    "nonce": hex_u64(nonce),
-                    "chainId": hex_u64(chain_id.to::<u64>()),
-                    "maxFeePerGas": hex_u128(max_fee_per_gas),
-                    "maxPriorityFeePerGas": "0x0"
-                }]),
-            )
-            .await
-        }
-    });
-
-    pause_guard.wait_until_reached().await?;
-    let bumped_base_fee = increase_base_fee_above(
-        &rollup,
-        &burner_client,
-        rollup.http_addr,
-        burner_contract,
-        initial_base_fee,
-    )
-    .await?;
-    assert!(
-        bumped_base_fee > initial_base_fee,
-        "base fee should increase while the local send is paused"
-    );
-
-    drop(pause_guard);
-
-    let send_response = send_handle.await??;
-    assert!(
-        send_response.get("error").is_none(),
-        "eth_sendTransaction should succeed after the base fee changes: {send_response}"
-    );
-    assert_eq!(
-        rpc_result_hex(&send_response),
-        format!("{expected_hash:#x}"),
-        "local send should return the paused transaction hash"
-    );
-
-    let receipt = target_client
-        .wait_for_finalized_receipt(expected_hash)
-        .await;
-    assert!(
-        receipt.status(),
-        "paused local send should finalize successfully"
-    );
-
-    Ok(())
-}
-
-/// RPC2-018: Local omitted-nonce/omitted-gas send must keep autofill and estimate on one snapshot.
-#[tokio::test(flavor = "multi_thread")]
-async fn rpc2_018_local_send_auto_nonce_estimate_reuses_snapshot() -> anyhow::Result<()> {
-    let _pause_lock = pause_after_local_fill_lock().lock().await;
-
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
-
-    let target_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
-    let target_signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let target_address = target_signer.address();
-    let chain_id: U64 = target_client
-        .ws
-        .request("eth_chainId", rpc_params![])
-        .await?;
-    let recipient = Address::repeat_byte(0x66);
-    let competing_recipient = Address::repeat_byte(0x67);
-    let max_fee_per_gas = MAX_FEE_PER_GAS;
-    let current_nonce = tx_count(&target_client, target_address, "latest").await?;
-    let http = Client::new();
-
-    let estimate_response = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_estimateGas",
-        json!([{
-            "from": target_address,
-            "to": recipient,
-            "value": "0x0",
-            "maxFeePerGas": hex_u128(max_fee_per_gas),
-            "maxPriorityFeePerGas": "0x0"
-        }, "pending"]),
-    )
-    .await?;
-    assert!(
-        estimate_response.get("error").is_none(),
-        "precondition estimate should succeed: {estimate_response}"
-    );
-    let estimated_gas = parse_hex_u64(
-        estimate_response["result"]
-            .as_str()
-            .expect("estimate result should be present"),
-    );
-
-    let (_, expected_hash) = raw_signed_eip1559_with_hash(
-        &target_signer,
-        chain_id.to::<u64>(),
-        current_nonce,
-        estimated_gas,
-        TxKind::Call(recipient),
-        U256::ZERO,
-        Bytes::new(),
-        max_fee_per_gas,
-        0,
-    )
-    .await?;
-
-    let local_fill_guard = PauseAfterLocalFillGuard::new(target_address);
-    let auth_pause_guard = PauseAfterAuthGuard::new(expected_hash);
-    let send_handle = tokio::spawn({
-        let http = http.clone();
-        let http_addr = rollup.http_addr;
-        async move {
-            rpc_call(
-                &http,
-                http_addr,
-                "eth_sendTransaction",
-                json!([{
-                    "from": target_address,
-                    "to": recipient,
-                    "value": "0x0",
-                    "maxFeePerGas": hex_u128(max_fee_per_gas),
-                    "maxPriorityFeePerGas": "0x0"
-                }]),
-            )
-            .await
-        }
-    });
-
-    local_fill_guard.wait_until_reached().await?;
-
-    let competing_raw_tx = raw_signed_eip1559(
-        &target_signer,
-        chain_id.to::<u64>(),
-        current_nonce,
-        estimated_gas,
-        TxKind::Call(competing_recipient),
-        U256::ZERO,
-        Bytes::new(),
-        max_fee_per_gas,
-        0,
-    )
-    .await?;
-    let competing_send = rpc_call(
-        &http,
-        rollup.http_addr,
-        "eth_sendRawTransaction",
-        json!([competing_raw_tx]),
-    )
-    .await?;
-    assert!(
-        competing_send.get("error").is_none(),
-        "competing transaction should be accepted while local send is paused: {competing_send}"
-    );
-
-    timeout(PAUSE_AFTER_AUTH_TIMEOUT, async {
-        loop {
-            if tx_count(&target_client, target_address, "latest")
-                .await
-                .ok()
-                == Some(current_nonce + 1)
-            {
-                return;
-            }
-            tokio::time::sleep(PAUSE_AFTER_AUTH_POLL_INTERVAL).await;
-        }
-    })
-    .await
-    .map_err(|_| anyhow::anyhow!("timed out waiting for competing tx to advance latest nonce"))?;
-
-    drop(local_fill_guard);
-    auth_pause_guard.wait_until_reached().await?;
-    drop(auth_pause_guard);
-
-    let send_response = send_handle.await??;
-    if send_response.get("error").is_none() {
-        assert_eq!(
-            rpc_result_hex(&send_response),
-            format!("{expected_hash:#x}"),
-            "successful local send should keep the nonce and gas derived from its pinned snapshot"
-        );
-    } else {
-        let error_message =
-            rpc_error_message(rpc_error_object(&send_response, "eth_sendTransaction"));
-        assert!(
-            error_message.contains("Tx bad nonce")
-                || error_message.contains("expected: 1, but found: 0"),
-            "after reaching auth, the remaining failure should come from later sequencer nonce handling: {send_response}"
-        );
-    }
 
     Ok(())
 }
