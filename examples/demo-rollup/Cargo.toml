@@ -46,7 +46,7 @@ sov-eth-dev-signer = { workspace = true }
 
 demo-stf = { workspace = true, features = ["native"] }
 
-bullet-rollup = { git = "ssh://git@github.com/zetamarkets/bullet.git", rev = "5bb8a98a178d2245547bdcb18437f9f50af1144f", default-features = false, features = ["mock_da", "mock_zkvm", "arbitrary"], optional = true }
+bullet-rollup = { git = "ssh://git@github.com/zetamarkets/bullet.git", rev = "5bb8a98a178d2245547bdcb18437f9f50af1144f", default-features = false, features = ["mock_da", "mock_zkvm"], optional = true }
 bullet-stf = { git = "ssh://git@github.com/zetamarkets/bullet.git", rev = "5bb8a98a178d2245547bdcb18437f9f50af1144f", default-features = false, features = ["native"], optional = true }
 
 risc0 = { path = "./provers/risc0" }
@@ -106,7 +106,7 @@ sov-sequencer-registry = { workspace = true, features = [
 sov-accounts = { workspace = true, features = ["native", "arbitrary"] }
 sov-api-spec = { workspace = true }
 sov-evm = { workspace = true, features = ["native", "arbitrary"] }
-sov-modules-macros = { workspace = true, features = ["arbitrary"] }
+sov-modules-macros = { workspace = true }
 sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
@@ -146,9 +146,9 @@ serde_json = { workspace = true, features = ["alloc"] }
 borsh = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["serde"] }
 sov-modules-api = { workspace = true }
-sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
-demo-stf = { workspace = true, features = ["native", "arbitrary"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+demo-stf = { workspace = true, features = ["native"] }
 sov-address = { workspace = true, features = ["evm"] }
 sov-state = { workspace = true, features = ["native"] }
 sov-modules-macros = { workspace = true, features = ["arbitrary"] }

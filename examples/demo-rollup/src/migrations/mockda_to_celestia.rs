@@ -214,7 +214,7 @@ struct ModuleDiscriminants {
 impl ModuleDiscriminants {
     fn from_runtime(runtime: &Runtime<OldSpec>) -> Self {
         Self {
-            chain_state: runtime.chain_state.discriminant(),
+            chain_state: runtime.chain_state().discriminant(),
             blob_storage: runtime.blob_storage.discriminant(),
             sequencer_registry: runtime.sequencer_registry.discriminant(),
         }

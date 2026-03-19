@@ -2445,7 +2445,6 @@ version = "0.0.1"
 source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
 dependencies = [
  "anyhow",
- "arbitrary",
  "axum 0.7.9",
  "borsh",
  "bullet-exchange-interface",
@@ -2476,7 +2475,6 @@ version = "0.0.1"
 source = "git+ssh://git@github.com/zetamarkets/bullet.git?rev=5bb8a98a178d2245547bdcb18437f9f50af1144f#5bb8a98a178d2245547bdcb18437f9f50af1144f"
 dependencies = [
  "anyhow",
- "arbitrary",
  "async-trait",
  "axum 0.7.9",
  "borsh",
@@ -2487,12 +2485,9 @@ dependencies = [
  "color-eyre",
  "hex",
  "metrics-exporter-prometheus",
- "proptest",
- "proptest-derive 0.5.1",
  "schemars 0.8.22",
  "serde",
  "serde_json",
- "sov-accounts",
  "sov-bank",
  "sov-cli",
  "sov-db",
