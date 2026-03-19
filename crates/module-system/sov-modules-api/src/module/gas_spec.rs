@@ -104,11 +104,11 @@ pub trait GasSpec:
     fn initial_gas_limit() -> Self::Gas;
     /// The updated gas limit of the rollup.
     fn updated_gas_limit() -> Self::Gas;
-    /// The height at which the gas limit is updated. The change should take effect immediately *after* this rollup block. 
+    /// The height at which the gas limit is updated. The change should take effect immediately *after* this rollup block.
     /// I.e. any rollup block (and any empty slot) after this rollup height will have the updated gas limit.
-    /// 
+    ///
     /// Note: We define things in this way because the gas limit is needed inside `synchronize_chain`, but at that point we don't yet know whether a rollup block will be created.
-    /// however, we do know if the previous slot created a rollup block or not. 
+    /// however, we do know if the previous slot created a rollup block or not.
     fn change_gas_limit_after_height() -> RollupHeight;
 
     /// Returns the gas limit for a given rollup height.

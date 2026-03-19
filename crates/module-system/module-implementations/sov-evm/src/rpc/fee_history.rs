@@ -120,7 +120,6 @@ where
             "End block must be greater than or equal to start block"
         );
 
-        
         let block_count = (end_block - start_block + 1)
             .try_into()
             .expect("Block count should fit in a usize");
@@ -234,10 +233,15 @@ where
         base_fees.push(next_gas_price);
 
         // Float arithmetic is safe here. This method is RPC only, not consensus-critical; and it's required by the spec
-        assert_eq!(gas_used.len(), gas_limits.len(), "Gas used and gas limits must have the same length - this is a bug in eth_feeHistory");
+        assert_eq!(
+            gas_used.len(),
+            gas_limits.len(),
+            "Gas used and gas limits must have the same length - this is a bug in eth_feeHistory"
+        );
         #[allow(clippy::float_arithmetic)]
         let gas_used_ratios = gas_used
-            .into_iter().zip(gas_limits.into_iter())
+            .into_iter()
+            .zip(gas_limits.into_iter())
             .map(|(gas, limit)| gas as f64 / limit as f64)
             .collect();
         Ok(FeesAndUsage {

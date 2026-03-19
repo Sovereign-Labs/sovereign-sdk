@@ -289,7 +289,9 @@ impl<S: Spec> ChainState<S> {
 
         // We compute the base fee per gas from the previous slot if it exists
         let base_fee_per_gas = maybe_previous_slot
-            .map(|previous_slot| Self::compute_base_fee_per_gas(previous_slot.gas_info, leftover_rollup_height, 1))
+            .map(|previous_slot| {
+                Self::compute_base_fee_per_gas(previous_slot.gas_info, leftover_rollup_height, 1)
+            })
             .unwrap_or_else(|| S::initial_base_fee_per_gas());
 
         let gas_info = BlockGasInfo::new(
@@ -431,33 +433,8 @@ impl<S: Spec> ChainState<S> {
 
     /// Returns the slot gas limit at the specified slot height for this state accessor.
     /// Note that any empty slots in between height n-1 and height n are defined to have the same gas limit as height n.
-    pub fn block_gas_limit_at<
-        Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
-        E,
-    >(
-        &self,
-        height: RollupHeight,
-        state: &mut Reader,
-    ) -> Result<Option<S::Gas>, <Reader as StateReader<Kernel>>::Error> {
-        if height == RollupHeight::GENESIS {
-            return Ok(Some(S::gas_limit_for_height(height)));
-        }
-
-        let (current_rollup_height, _current_visible_slot_number) = self
-            .current_heights
-            .get(state)?
-            .expect("Current heights must be set at genesis");
-
-        if height == current_rollup_height {
-            // TODO(@theochap): the gas limit should be updated dynamically `<https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/271`
-            // This TODO is for performance enhancement, not a security concern. Updating the gas limit dynamically would allow
-            // the work of the prover to follow high level industry trends of the costs to compute zk-proofs.
-            return Ok(Some(S::gas_limit_for_height(height)));
-        }
-
-        Ok(self
-            .historical_gas_info_at(height, state)?
-            .map(|gas_info| *gas_info.gas_limit()))
+    pub fn block_gas_limit_at(&self, height: RollupHeight) -> S::Gas {
+        S::gas_limit_for_height(height)
     }
 
     /// Returns the base fee per gas accessible at the current slot accessible from the version reader.
@@ -480,20 +457,17 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// Returns the slot gas limit at the current slot accessible from the version reader.
-    pub fn block_gas_limit<
-        Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
-        E,
-    >(
+    pub fn block_gas_limit(
         &self,
-        state: &mut Reader,
+        current_rollup_height: RollupHeight,
         is_stale_height: bool,
-    ) -> Result<Option<S::Gas>, <Reader as StateReader<Kernel>>::Error> {
+    ) -> S::Gas {
         let height = if is_stale_height {
-            height = state.rollup_height_to_access() + 1;
+            current_rollup_height.saturating_add(1)
         } else {
-            state.rollup_height_to_access()
+            current_rollup_height
         };
-        self.block_gas_limit_at(height, state)
+        self.block_gas_limit_at(height)
     }
 
     /// This method is used for testing only. It sets the rollup height to zero.

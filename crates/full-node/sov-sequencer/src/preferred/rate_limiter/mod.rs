@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::{net::IpAddr, time::Instant};
 
-use crate::preferred::sync_sequencer_state::{comfortable_gas_limit_for_height};
+use crate::preferred::sync_sequencer_state::comfortable_gas_limit_for_height;
 
 #[derive(Debug)]
 pub(crate) struct LimiterToken<S: Spec> {
@@ -295,8 +295,13 @@ mod tests {
         };
 
         let max_batch_exec_time = 6000;
-        let rate_limiter_config =
-            calculate_limits::<TestSpec>(limits, 10000, max_batch_exec_time, 6000000, RollupHeight::GENESIS);
+        let rate_limiter_config = calculate_limits::<TestSpec>(
+            limits,
+            10000,
+            max_batch_exec_time,
+            6000000,
+            RollupHeight::GENESIS,
+        );
 
         let max_allowed_resources_per_key = rate_limiter_config.max_allowed_resources;
 
