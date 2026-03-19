@@ -12010,7 +12010,6 @@ dependencies = [
  "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
- "sov-paymaster",
  "sov-rest-utils",
  "sov-rpc-eth-types",
  "sov-sequencer",

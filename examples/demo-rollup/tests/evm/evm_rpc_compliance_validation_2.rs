@@ -43,6 +43,229 @@ fn assert_nonce_error_precedes_affordability(response: &serde_json::Value, metho
     );
 }
 
+/// RPC2-002c: Preferred sequencer raw send should accept a future nonce when the gap is filled before timeout.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002c_preferred_raw_send_accepts_future_nonce() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&ws_client)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let current_nonce = tx_count(&ws_client, signer.address(), "latest").await?;
+    let mut estimate_request =
+        ws_client.make_tx(Some(contract_address), Some(ws_client.contract.set(1)));
+    estimate_request.gas = None;
+    let gas_limit: U64 = ws_client
+        .ws
+        .request("eth_estimateGas", rpc_params![&estimate_request, "latest"])
+        .await?;
+    let gas_limit = gas_limit.to::<u64>();
+    let max_fee_per_gas = 100u128;
+    let max_priority_fee_per_gas = DEFAULT_MAX_PRIORITY_FEE_PER_GAS;
+    let future_value = 22u32;
+    let current_value = 11u32;
+    let http = Client::new();
+
+    let future_raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        current_nonce + 1,
+        gas_limit,
+        TxKind::Call(contract_address),
+        U256::ZERO,
+        ws_client.contract.set(future_value),
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+    )
+    .await?;
+    let future_http = http.clone();
+    let future_addr = rollup.http_addr;
+    let future_handle = tokio::spawn(async move {
+        rpc_call(
+            &future_http,
+            future_addr,
+            "eth_sendRawTransaction",
+            json!([future_raw_tx]),
+        )
+        .await
+    });
+
+    // Preferred-sequencer sends are synchronous in this harness, so the future-nonce
+    // request must already be waiting in the reorder queue before we submit the gap-filling tx.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let current_raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        current_nonce,
+        gas_limit,
+        TxKind::Call(contract_address),
+        U256::ZERO,
+        ws_client.contract.set(current_value),
+        max_fee_per_gas,
+        max_priority_fee_per_gas,
+    )
+    .await?;
+    let current_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([current_raw_tx]),
+    )
+    .await?;
+    assert!(
+        current_response.get("error").is_none(),
+        "current-nonce raw tx should succeed while draining the future-nonce queue: {current_response}"
+    );
+    let current_hash: B256 = rpc_result_hex(&current_response).parse()?;
+
+    let future_response = future_handle.await??;
+    assert!(
+        future_response.get("error").is_none(),
+        "preferred sequencer should complete the queued future raw tx once the missing nonce arrives: {future_response}"
+    );
+    let future_hash: B256 = rpc_result_hex(&future_response).parse()?;
+
+    let current_receipt = ws_client.wait_for_finalized_receipt(current_hash).await;
+    assert!(
+        current_receipt.status(),
+        "current-nonce raw tx should execute successfully"
+    );
+
+    let future_receipt = ws_client.wait_for_finalized_receipt(future_hash).await;
+    assert!(
+        future_receipt.status(),
+        "queued future-nonce raw tx should execute after the missing nonce arrives"
+    );
+
+    assert_eq!(
+        tx_count(&ws_client, signer.address(), "latest").await?,
+        current_nonce + 2,
+        "both raw txs should advance the account nonce once executed"
+    );
+    assert_eq!(
+        ws_client.eth_get_storage_at(contract_address, U256::ZERO).await,
+        U256::from(future_value),
+        "future-nonce raw tx should execute after the current nonce and leave the last written value"
+    );
+
+    Ok(())
+}
+
+/// RPC2-002d: Preferred sequencer local send should accept a future nonce when the gap is filled before timeout.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002d_preferred_local_send_accepts_future_nonce() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let contract_address = deploy_contract_check(&ws_client)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let current_nonce = tx_count(&ws_client, ws_client.address(), "latest").await?;
+    let mut estimate_request =
+        ws_client.make_tx(Some(contract_address), Some(ws_client.contract.set(1)));
+    estimate_request.gas = None;
+    let gas_limit: U64 = ws_client
+        .ws
+        .request("eth_estimateGas", rpc_params![&estimate_request, "latest"])
+        .await?;
+    let gas_limit = gas_limit.to::<u64>();
+    let max_fee_per_gas = 100u128;
+    let max_priority_fee_per_gas = DEFAULT_MAX_PRIORITY_FEE_PER_GAS;
+    let future_value = 44u32;
+    let current_value = 33u32;
+    let http = Client::new();
+
+    let future_http = http.clone();
+    let future_addr = rollup.http_addr;
+    let sender = ws_client.address();
+    let future_data = format!(
+        "0x{}",
+        hex::encode(ws_client.contract.set(future_value).as_ref())
+    );
+    let future_handle = tokio::spawn(async move {
+        rpc_call(
+            &future_http,
+            future_addr,
+            "eth_sendTransaction",
+            json!([{
+                "from": sender,
+                "to": contract_address,
+                "data": future_data,
+                "gas": hex_u64(gas_limit),
+                "nonce": hex_u64(current_nonce + 1),
+                "value": "0x0",
+                "maxFeePerGas": hex_u128(max_fee_per_gas),
+                "maxPriorityFeePerGas": hex_u128(max_priority_fee_per_gas)
+            }]),
+        )
+        .await
+    });
+
+    // The future-nonce request must be inflight before the predecessor is sent,
+    // otherwise the synchronous RPC path can complete nonce 0 first and skip queue coverage.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    let current_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendTransaction",
+        json!([{
+            "from": ws_client.address(),
+            "to": contract_address,
+            "data": format!("0x{}", hex::encode(ws_client.contract.set(current_value).as_ref())),
+            "gas": hex_u64(gas_limit),
+            "nonce": hex_u64(current_nonce),
+            "value": "0x0",
+            "maxFeePerGas": hex_u128(max_fee_per_gas),
+            "maxPriorityFeePerGas": hex_u128(max_priority_fee_per_gas)
+        }]),
+    )
+    .await?;
+    assert!(
+        current_response.get("error").is_none(),
+        "current-nonce local tx should succeed while draining the future-nonce queue: {current_response}"
+    );
+    let current_hash: B256 = rpc_result_hex(&current_response).parse()?;
+
+    let future_response = future_handle.await??;
+    assert!(
+        future_response.get("error").is_none(),
+        "preferred sequencer should complete the queued future local tx once the missing nonce arrives: {future_response}"
+    );
+    let future_hash: B256 = rpc_result_hex(&future_response).parse()?;
+
+    let current_receipt = ws_client.wait_for_finalized_receipt(current_hash).await;
+    assert!(
+        current_receipt.status(),
+        "current-nonce local tx should execute successfully"
+    );
+
+    let future_receipt = ws_client.wait_for_finalized_receipt(future_hash).await;
+    assert!(
+        future_receipt.status(),
+        "queued future-nonce local tx should execute after the missing nonce arrives"
+    );
+
+    assert_eq!(
+        tx_count(&ws_client, ws_client.address(), "latest").await?,
+        current_nonce + 2,
+        "both local txs should advance the account nonce once executed"
+    );
+    assert_eq!(
+        ws_client.eth_get_storage_at(contract_address, U256::ZERO).await,
+        U256::from(future_value),
+        "future-nonce local tx should execute after the current nonce and leave the last written value"
+    );
+
+    Ok(())
+}
+
 /// RPC2-001: Fee-cap admission consistency across simulation and submission.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_001_estimate_send_max_fee_admission_consistency() -> anyhow::Result<()> {
@@ -198,10 +421,9 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     let gas_limit = 1_000_000u64;
     let recipient = Address::repeat_byte(0x22);
     let initial_rollup_gas_price = ws_client.eth_gas_price().await;
-    let initial_send_floor = U256::from(gas_limit) * U256::from(initial_rollup_gas_price);
-    // 100x the send floor to land inside the affordability window
-    let affordability_balance = initial_send_floor * U256::from(100u64);
-    let estimate_ceiling = U256::from(gas_limit) * U256::from(HIGH_MAX_FEE_PER_GAS);
+    let gas_cost_floor = U256::from(gas_limit) * U256::from(initial_rollup_gas_price);
+    // Fund with a tiny amount: less than the actual gas cost at rollup base fee.
+    let affordability_balance = U256::from(1000u64);
 
     assert!(
         initial_rollup_gas_price > 0,
@@ -213,12 +435,8 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         "fresh affordability signer must start unfunded"
     );
     assert!(
-        initial_send_floor < affordability_balance,
-        "funding balance must exceed raw-send affordability floor"
-    );
-    assert!(
-        affordability_balance < estimate_ceiling,
-        "funding balance must remain below estimateGas affordability ceiling"
+        affordability_balance < gas_cost_floor,
+        "funding balance ({affordability_balance}) must be below gas cost floor ({gas_cost_floor})"
     );
 
     let funding_hash = ws_client
@@ -229,14 +447,7 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
     assert_eq!(
         ws_client.eth_get_balance(affordability_address).await,
         affordability_balance,
-        "recipient balance should exactly match the funded affordability window"
-    );
-
-    let current_rollup_gas_price = ws_client.eth_gas_price().await;
-    let current_send_floor = U256::from(gas_limit) * U256::from(current_rollup_gas_price);
-    assert!(
-        current_send_floor < affordability_balance,
-        "fresh signer must remain able to pay raw-send affordability floor after funding"
+        "recipient balance should exactly match the funded amount"
     );
 
     let nonce = tx_count(&ws_client, affordability_address, "latest").await?;
@@ -245,8 +456,7 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         "from": affordability_address,
         "to": recipient,
         "value": "0x0",
-        "gas": hex_u64(gas_limit),
-        "maxFeePerGas": hex_u128(HIGH_MAX_FEE_PER_GAS),
+        "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
         "maxPriorityFeePerGas": "0x0"
     });
 
@@ -267,7 +477,7 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         TxKind::Call(recipient),
         U256::ZERO,
         Bytes::new(),
-        HIGH_MAX_FEE_PER_GAS,
+        MAX_FEE_PER_GAS,
         0,
     )
     .await?;
@@ -1312,7 +1522,6 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         "from": paymaster_address,
         "to": recipient,
         "value": "0x0",
-        "gas": hex_u64(gas_limit),
         "maxFeePerGas": hex_u128(reasonable_max_fee),
         "maxPriorityFeePerGas": "0x0"
     });
@@ -1363,20 +1572,10 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         "transaction should succeed when paymaster covers gas"
     );
 
-    // ── Phase 2: affordability window against paymaster balance ──
-    // gas_limit * HIGH_MAX_FEE_PER_GAS = 1e6 * 1e12 = 1e18 > PAYER_SOV_BANK_BALANCE (5e15)
-    // gas_limit * base_fee ≈ 1e7 < PAYER_SOV_BANK_BALANCE
-    let estimate_ceiling = (gas_limit as u128) * HIGH_MAX_FEE_PER_GAS;
-    assert!(
-        estimate_ceiling > PAYER_SOV_BANK_BALANCE,
-        "estimate ceiling ({estimate_ceiling}) must exceed payer SOV balance ({PAYER_SOV_BANK_BALANCE})"
-    );
-    let send_floor = (gas_limit as u128) * base_fee_u128;
-    assert!(
-        send_floor < PAYER_SOV_BANK_BALANCE,
-        "send floor ({send_floor}) must be below payer SOV balance ({PAYER_SOV_BANK_BALANCE})"
-    );
-
+    // ── Phase 2: high declared fee does NOT cause false rejection ──
+    // gas_limit * HIGH_MAX_FEE_PER_GAS = 1e6 * 1e12 = 1e18 > PAYER_SOV_BANK_BALANCE (5e15),
+    // but the actual gas cost is gas_limit * rollup_gas_price ≈ 1e7 << PAYER_SOV_BANK_BALANCE.
+    // After the cost-metric fix, both estimate and send use the actual gas cost, so they succeed.
     let nonce_after_phase_1 = tx_count(&ws_client, paymaster_address, "latest").await?;
     let high_fee_estimate_request = json!({
         "from": paymaster_address,
@@ -1393,15 +1592,9 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         json!([high_fee_estimate_request, "latest"]),
     )
     .await?;
-    assert_eq!(
-        rpc_error_code_from_response(&high_fee_estimate, "eth_estimateGas"),
-        -32003,
-        "estimate should reject with transaction-rejected error when paymaster can't afford gas: {high_fee_estimate}"
-    );
     assert!(
-        rpc_error_message(rpc_error_object(&high_fee_estimate, "eth_estimateGas"))
-            .contains(INSUFFICIENT_FUNDS_ERROR),
-        "estimate should report insufficient-funds against paymaster balance: {high_fee_estimate}"
+        high_fee_estimate.get("error").is_none(),
+        "estimate should succeed with high declared fee when paymaster can afford actual gas cost: {high_fee_estimate}"
     );
 
     let high_fee_nonce = tx_count(&ws_client, paymaster_address, "latest").await?;
@@ -1424,21 +1617,16 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
         json!([high_fee_raw_tx]),
     )
     .await?;
-    assert_eq!(
-        rpc_error_code_from_response(&high_fee_send, "eth_sendRawTransaction"),
-        rpc_error_code_from_response(&high_fee_estimate, "eth_estimateGas"),
-        "estimate and send should reject with the same JSON-RPC error class"
-    );
     assert!(
-        rpc_error_message(rpc_error_object(&high_fee_send, "eth_sendRawTransaction"))
-            .contains(INSUFFICIENT_FUNDS_ERROR),
-        "send should report insufficient-funds against paymaster balance: {high_fee_send}"
+        high_fee_send.get("error").is_none(),
+        "send should succeed with high declared fee when paymaster can afford actual gas cost: {high_fee_send}"
     );
 
     let nonce_after = tx_count(&ws_client, paymaster_address, "latest").await?;
     assert_eq!(
-        nonce_after, nonce_after_phase_1,
-        "only the successful phase-1 tx should advance nonce; failed phase-2 tx must not"
+        nonce_after,
+        nonce_after_phase_1 + 1,
+        "successful phase-2 tx should advance nonce by 1"
     );
 
     Ok(())
