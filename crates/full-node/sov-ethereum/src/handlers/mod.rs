@@ -34,14 +34,16 @@ use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData,
 };
 use sov_modules_api::ApiStateAccessor;
+use sov_modules_api::CredentialId;
 use sov_modules_api::ExecutionContext;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::GetGasPrice;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
-use sov_rest_utils::{ErrorObject as RestErrorObject, GetIPResult};
+use sov_rest_utils::{to_json_object, ErrorObject as RestErrorObject, GetIPResult};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp, RpcInvalidTransactionError};
-use sov_sequencer::{AcceptTxErrorCode, Sequencer};
+use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails, Sequencer};
+use sov_uniqueness::Uniqueness;
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::sync::Arc;
@@ -263,6 +265,8 @@ where
             return Ok(estimated_gas);
         }
 
+        Self::validate_request_stale_nonce_preflight(&request, block_id, snapshot_state)?;
+
         if should_run_affordability_preflight {
             Self::run_request_affordability_preflight(
                 &request,
@@ -280,6 +284,38 @@ where
             block_overrides,
             &mut state,
         )
+    }
+
+    fn validate_request_stale_nonce_preflight(
+        request: &TransactionRequest,
+        block_id: Option<BlockId>,
+        snapshot_state: &ApiStateAccessor<S>,
+    ) -> RpcResult<()> {
+        let Some(from) = request.from else {
+            return Ok(());
+        };
+        let Some(tx_nonce) = request.nonce else {
+            return Ok(());
+        };
+
+        let evm = Evm::<S>::default();
+        let mut api_state = snapshot_state.clone_without_local_writes();
+        let mut preflight_state = evm
+            .preflight_state_for_block_id(block_id, &mut api_state)
+            .map_err(ErrorObjectOwned::from)?;
+        let credential_id = EthereumAddress::from(from).as_credential_id();
+        let account_nonce = Self::read_next_nonce(&credential_id, &mut preflight_state)?;
+
+        if tx_nonce < account_nonce {
+            return Err(ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::NonceTooLow {
+                    tx: tx_nonce,
+                    state: account_nonce,
+                },
+            )));
+        }
+
+        Ok(())
     }
 
     fn run_request_affordability_preflight(
@@ -326,6 +362,8 @@ where
                         error = %err,
                         "skipping request affordability preflight: unable to build auth data"
                     );
+                    // Wrapper preflight is best-effort only. Sequencer admission still authenticates
+                    // and reserves gas before accepting the transaction.
                     return Ok(AffordabilityPreflight::Skip);
                 }
             };
@@ -380,6 +418,8 @@ where
                     error = %err,
                     "skipping affordability preflight: unable to resolve runtime context"
                 );
+                // Wrapper preflight is best-effort only. Sequencer admission still authenticates
+                // and reserves gas before accepting the transaction.
                 return Ok(AffordabilityPreflight::Skip);
             }
         };
@@ -533,6 +573,8 @@ where
         let (authenticated_tx, auth_data) = Self::authenticate_tx(tx, snapshot_state)?;
         Self::maybe_pause_after_auth(tx_hash, ethereum);
 
+        Self::validate_send_uniqueness_preflight(&auth_data, snapshot_state)?;
+
         let mut preflight_state = snapshot_state.clone_without_local_writes();
         Self::raw_transaction_affordability_preflight(
             signed_tx,
@@ -541,6 +583,49 @@ where
             &mut preflight_state,
             ethereum,
         )
+    }
+
+    fn validate_send_uniqueness_preflight(
+        auth_data: &AuthorizationData<S>,
+        snapshot_state: &ApiStateAccessor<S>,
+    ) -> RpcResult<()> {
+        let tx_nonce = match auth_data.uniqueness {
+            sov_modules_api::capabilities::UniquenessData::Nonce(tx_nonce) => tx_nonce,
+            sov_modules_api::capabilities::UniquenessData::Generation(_) => return Ok(()),
+        };
+
+        let mut state = snapshot_state.clone_without_local_writes();
+        let expected_nonce = Self::read_next_nonce(&auth_data.credential_id, &mut state)?;
+
+        if tx_nonce != expected_nonce {
+            return Err(Self::invalid_send_precheck_error(format!(
+                "Tx bad nonce for credential id: {}, expected: {expected_nonce}, but found: {tx_nonce}",
+                auth_data.credential_id,
+            )));
+        }
+
+        Ok(())
+    }
+
+    fn read_next_nonce(
+        credential_id: &CredentialId,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<u64> {
+        Uniqueness::<S>::default()
+            .next_nonce(credential_id, state)
+            .map_err(|e| rpc_internal_error(format!("nonce read error: {e}")))
+    }
+
+    fn invalid_send_precheck_error(error: String) -> ErrorObjectOwned {
+        let status = 400u16.try_into().expect("status code should be valid");
+        map_accept_tx_error(RestErrorObject {
+            status,
+            message: "The transaction is invalid".to_string(),
+            details: to_json_object(AcceptTxErrorDetails {
+                code: None,
+                error: Some(error),
+            }),
+        })
     }
 
     #[cfg(all(feature = "test-utils", debug_assertions))]

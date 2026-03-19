@@ -138,6 +138,20 @@ impl Drop for PauseAfterLocalFillGuard {
     }
 }
 
+fn assert_nonce_error_precedes_affordability(response: &serde_json::Value, method: &str) {
+    let error_message = rpc_error_message(rpc_error_object(response, method));
+    assert!(
+        error_message.contains("nonce too low")
+            || error_message.contains("Tx bad nonce")
+            || error_message.contains("nonce"),
+        "{method} should surface a nonce failure before affordability: {response}"
+    );
+    assert!(
+        !error_message.contains(INSUFFICIENT_FUNDS_ERROR),
+        "{method} should not surface insufficient funds when the nonce is already invalid: {response}"
+    );
+}
+
 async fn find_heavy_burn_iterations(
     burner_client: &SimpleStorageClient,
     http_addr: SocketAddr,
@@ -162,7 +176,7 @@ async fn find_heavy_burn_iterations(
                     "maxPriorityFeePerGas": "0x0"
                 }, "latest"]),
             )
-            .await?;
+                .await?;
             Ok::<bool, anyhow::Error>(response.get("error").is_none())
         }
     };
@@ -222,6 +236,7 @@ async fn increase_base_fee_above(
             assert!(receipt.status(), "burn_gas transaction should succeed");
         }
 
+        // Ok to use let Ok in the test
         if let Ok(Ok(base_fee)) = timeout(BASE_FEE_BUMP_TIMEOUT, async {
             loop {
                 let base_fee = latest_base_fee_per_gas(burner_client).await?;
@@ -485,6 +500,112 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         rpc_error_message(rpc_error_object(&send_response, "eth_sendRawTransaction"))
             .contains(INSUFFICIENT_FUNDS_ERROR),
         "raw send should report insufficient-funds affordability failure: {send_response}"
+    );
+
+    Ok(())
+}
+
+/// RPC2-002b: Stale nonce must win over affordability preflights on estimate and send paths.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002b_stale_nonce_precedes_affordability_rejection() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let sender = signer.address();
+    let chain_id: U64 = ws_client.ws.request("eth_chainId", rpc_params![]).await?;
+    let recipient = Address::repeat_byte(0x24);
+    let gas_limit = 21_000u64;
+
+    let first_tx = ws_client.send_eth(recipient, U256::from(1u64)).await;
+    let first_receipt = ws_client.wait_for_receipt(first_tx).await;
+    assert!(
+        first_receipt.status(),
+        "first tx should advance the sender nonce"
+    );
+
+    let next_nonce = tx_count(&ws_client, sender, "latest").await?;
+    assert!(
+        next_nonce > 0,
+        "sender nonce should advance after the first tx"
+    );
+    let stale_nonce = next_nonce - 1;
+    let sender_balance = ws_client.eth_get_balance(sender).await;
+    let underfunded_value = sender_balance
+        .checked_add(U256::from(1u64))
+        .expect("test balance should allow adding one wei");
+
+    let http = Client::new();
+    let estimate_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_estimateGas",
+        json!([{
+            "from": sender,
+            "to": recipient,
+            "gas": hex_u64(gas_limit),
+            "nonce": hex_u64(stale_nonce),
+            "value": format!("{underfunded_value:#x}"),
+            "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
+            "maxPriorityFeePerGas": "0x0"
+        }, "latest"]),
+    )
+    .await?;
+    assert_nonce_error_precedes_affordability(&estimate_response, "eth_estimateGas");
+
+    let raw_tx = raw_signed_eip1559(
+        &signer,
+        chain_id.to::<u64>(),
+        stale_nonce,
+        gas_limit,
+        TxKind::Call(recipient),
+        underfunded_value,
+        Bytes::new(),
+        MAX_FEE_PER_GAS,
+        0,
+    )
+    .await?;
+    let raw_send_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendRawTransaction",
+        json!([raw_tx]),
+    )
+    .await?;
+    assert_eq!(
+        rpc_error_code_from_response(&raw_send_response, "eth_sendRawTransaction"),
+        -32602,
+        "raw send should keep the invalid-params class for nonce failures"
+    );
+    assert_nonce_error_precedes_affordability(&raw_send_response, "eth_sendRawTransaction");
+
+    let local_send_response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_sendTransaction",
+        json!([{
+            "from": sender,
+            "to": recipient,
+            "gas": hex_u64(gas_limit),
+            "nonce": hex_u64(stale_nonce),
+            "value": format!("{underfunded_value:#x}"),
+            "maxFeePerGas": hex_u128(MAX_FEE_PER_GAS),
+            "maxPriorityFeePerGas": "0x0"
+        }]),
+    )
+    .await?;
+    assert_eq!(
+        rpc_error_code_from_response(&local_send_response, "eth_sendTransaction"),
+        -32602,
+        "local send should keep the invalid-params class for nonce failures"
+    );
+    assert_nonce_error_precedes_affordability(&local_send_response, "eth_sendTransaction");
+
+    assert_eq!(
+        tx_count(&ws_client, sender, "latest").await?,
+        next_nonce,
+        "failed stale sends must not advance the sender nonce"
     );
 
     Ok(())
