@@ -613,16 +613,23 @@ where
             .unwrap_or(0)
             .saturating_add(1000);
 
-        let multiplier = {
-            let mut multiplier_state = self.resolve_state_for_block_id(block_id, state)?;
-            self.fee_multiplier(multiplier_state.deref_mut())
-                .map_err(into_rpc_error)?
-        };
+        let (block_env, mut maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
+        let multiplier = self
+            .fee_multiplier(maybe_archival_state.deref_mut())
+            .map_err(into_rpc_error)?;
 
         let ResultAndState {
             result,
             state: changes,
-        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
+        } = self.call_with_context(
+            request,
+            block_env,
+            maybe_archival_state,
+            &cfg,
+            state_overrides,
+            block_overrides,
+        )?;
 
         let (gas_used, logs) = match result {
             ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
