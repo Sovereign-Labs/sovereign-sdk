@@ -187,6 +187,7 @@ type Rollup = ExternalMockDemoRollup<Native>;
 /// Test setup for DbElected tests with two nodes (leader and replica).
 struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
+    da_service: StorableMockDaService,
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
     cluster_info_service: ClusterInfoService,
@@ -212,7 +213,7 @@ impl NodeDiscoveryTestSetup {
             }
         };
 
-        let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
+        let (da_service, da_shutdown, da_addr) = create_da_service_periodic().await;
 
         let cluster_info_service =
             ClusterInfoService::spawn(postgres.connection_string(), max_age, None)
@@ -221,6 +222,7 @@ impl NodeDiscoveryTestSetup {
 
         Some(Self {
             postgres,
+            da_service,
             da_shutdown,
             da_addr,
             cluster_info_service,

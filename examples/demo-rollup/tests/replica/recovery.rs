@@ -7,32 +7,18 @@ use super::*;
 async fn test_db_elected_leader_recovery_replica_keeps_running() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
 
-    let postgres = match PostgresData::create_postgres().await {
-        Ok(pg) => pg,
-        Err(CreatePostgresError::DockerNotSupported) => return,
-        Err(CreatePostgresError::DockerError(e)) => {
-            panic!("Failed to create Postgres container: {e}");
-        }
+    let Some(setup) = NodeDiscoveryTestSetup::new().await else {
+        return;
     };
-
-    let (da_service, da_shutdown, da_addr) = create_da_service_periodic().await;
-
-    let cluster_info_service =
-        ClusterInfoService::spawn(postgres.connection_string(), MAX_AGE, None)
-            .await
-            .expect("Failed to create ClusterInfoService");
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
 
-    // Start two DbElected nodes
-    let node_1 = {
-        let node = Some((postgres.clone(), "node_1".into(), ConfiguredNodeRole::DbElected));
-        start_rollup(da_addr, node).await
-    };
-    let node_2 = {
-        let node = Some((postgres.clone(), "node_2".into(), ConfiguredNodeRole::DbElected));
-        start_rollup(da_addr, node).await
-    };
+    let node_1 = setup
+        .start_node("node_1", ConfiguredNodeRole::DbElected)
+        .await;
+    let node_2 = setup
+        .start_node("node_2", ConfiguredNodeRole::DbElected)
+        .await;
 
     node_1.wait_for_sequencer_ready().await.unwrap();
     node_2.wait_for_sequencer_ready().await.unwrap();
@@ -66,7 +52,7 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
     // Produce DA blocks while sequencer is paused to exceed the deferred slots threshold.
     // With DEFERRED_SLOTS_COUNT=40, the 90% threshold triggers at ~26 blocks of lag.
     for _ in 0..30 {
-        da_service.produce_block_now().await.unwrap();
+        setup.da_service.produce_block_now().await.unwrap();
     }
 
     // Wait for the nodes to sync the DA blocks
@@ -74,7 +60,7 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
 
     // Resume batch production; on the next state update the leader should enter recovery
     leader.resume_preferred_batches().await;
-    da_service.produce_block_now().await.unwrap();
+    setup.da_service.produce_block_now().await.unwrap();
 
     // Wait until the leader is no longer ready (entered recovery)
     let start = std::time::Instant::now();
@@ -82,13 +68,13 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
         if start.elapsed() > Duration::from_secs(10) {
             panic!("Timeout waiting for leader to enter recovery");
         }
-        da_service.produce_block_now().await.unwrap();
+        setup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
     }
 
     // Produce DA blocks to let the leader recover (it needs to send catchup batches)
     while !leader.is_sequencer_ready().await {
-        da_service.produce_block_now().await.unwrap();
+        setup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     leader.wait_for_sequencer_ready().await.unwrap();
@@ -112,6 +98,5 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
 
     replica.shutdown().await.unwrap();
     leader.shutdown().await.unwrap();
-    cluster_info_service.shutdown();
-    let _ = da_shutdown.send(());
+    setup.shutdown().await;
 }
