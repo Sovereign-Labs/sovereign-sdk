@@ -663,12 +663,24 @@ struct AuthAndProcessOutput<S: Spec, I: StateProvider<S>> {
 }
 
 fn penalize_sequencer<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
+    sequencer_bond: &SequencerBondForTx,
     runtime: &mut RT,
     auth_cost: Amount,
     sequencer_address: &S::Address,
     operating_mode: OperatingMode,
     tx_scratchpad: &mut TxScratchpad<S, I>,
 ) {
+    // After the gas limit change height, the preferred sequencer doesn't bond for pre execution checks.
+    // In this case, we no longer attempt to penalize the sequencer. This feature should only be active for rollups.
+    // that don't use zk proving, since this would be a griefing vector against the prover.
+    if let SequencerBondForTx::Preferred(bond_amount) = sequencer_bond {
+        if bond_amount == &Amount::ZERO
+            && tx_scratchpad.rollup_height_to_access()
+                > <S as GasSpec>::change_gas_limit_after_height()
+        {
+            return;
+        }
+    }
     runtime
         .gas_enforcer()
         .reward_prover_from_sequencer_balance(
@@ -724,16 +736,20 @@ where
     };
 
     if sequencer_bond.amount() < max_tx_check_value {
-        return AuthAndProcessOutput {
-            outcome: AuthAndProcessOutcome::IllegalSequencer {
-                reason: OutOfFundsReason::SequencerBondTooLow {
-                    sequencer_bond: sequencer_bond.amount(),
-                    max_tx_check_value,
+        if !(scratchpad.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
+            && matches!(sequencer_bond, SequencerBondForTx::Preferred(Amount::ZERO)))
+        {
+            return AuthAndProcessOutput {
+                outcome: AuthAndProcessOutcome::IllegalSequencer {
+                    reason: OutOfFundsReason::SequencerBondTooLow {
+                        sequencer_bond: sequencer_bond.amount(),
+                        max_tx_check_value,
+                    },
                 },
-            },
-            scratchpad,
-            gas_used: <S as Spec>::Gas::zero(),
-        };
+                scratchpad,
+                gas_used: <S as Spec>::Gas::zero(),
+            };
+        }
     }
 
     // 3. The slot gas is higher than the gas needed to validate the transaction.
@@ -798,6 +814,7 @@ where
             return match pre_exec_error {
                 AuthenticationError::FatalError(err, tx_hash) => {
                     penalize_sequencer(
+                        &sequencer_bond,
                         runtime,
                         funds_used_for_authentication,
                         &sequencer_rollup_address,
@@ -817,6 +834,7 @@ where
                 }
                 AuthenticationError::OutOfGas(e) => {
                     penalize_sequencer(
+                        &sequencer_bond,
                         runtime,
                         funds_used_for_authentication,
                         &sequencer_rollup_address,
@@ -873,6 +891,7 @@ where
     match tx_result {
         Err((error, raw_tx)) => {
             penalize_sequencer(
+                &sequencer_bond,
                 runtime,
                 pre_exec_gas_meter.gas_info().gas_value,
                 &sequencer_rollup_address,

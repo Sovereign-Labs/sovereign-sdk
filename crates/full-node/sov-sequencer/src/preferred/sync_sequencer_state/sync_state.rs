@@ -825,6 +825,9 @@ where
     #[cfg(feature = "test-utils")]
     async fn process_force_close_current_batch(&mut self, reason: &'static str) {
         let mut inner = self.get_inner_with_timing(reason).await;
+        if !inner.executor.has_in_progress_batch() {
+            return;
+        }
         inner.close_current_batch().await;
     }
 
