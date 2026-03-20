@@ -18,7 +18,6 @@ pub type ProofHandle = B256;
 pub struct SP1Network {
     prover: NetworkProver,
     pk: SP1ProvingKey,
-    stdin: SP1Stdin,
 }
 
 impl SP1Network {
@@ -35,11 +34,7 @@ impl SP1Network {
             .await
             .map_err(|e| anyhow::anyhow!("SP1 network setup failed: {e}"))?;
 
-        Ok(Self {
-            prover,
-            pk,
-            stdin: SP1Stdin::new(),
-        })
+        Ok(Self { prover, pk })
     }
 }
 
@@ -47,20 +42,21 @@ impl ZkvmNetwork for SP1Network {
     type Guest = SP1Guest;
     type ProofHandle = ProofHandle;
 
-    fn add_hint<T: Serialize>(&mut self, item: &T) {
-        self.stdin.write(item);
-    }
+    async fn add_hint_and_submit<T: Serialize + Send + Sync>(
+        &self,
+        item: &T,
+    ) -> anyhow::Result<Self::ProofHandle> {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(item);
 
-    async fn submit(&mut self) -> anyhow::Result<Self::ProofHandle> {
         let request_id = self
             .prover
-            .prove(&self.pk, self.stdin.clone())
+            .prove(&self.pk, stdin)
             .compressed()
             .skip_simulation(true)
             .request()
             .await?;
 
-        self.stdin = SP1Stdin::new();
         Ok(request_id)
     }
 

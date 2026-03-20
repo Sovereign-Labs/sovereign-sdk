@@ -200,13 +200,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network() -> anyhow::Result<()> {
-        let mut network = MockZkvmNetwork::new(false);
+        let network = MockZkvmNetwork::new(false);
         let pub_data = TestPublicData {
             hint: "NetworkTest".to_owned(),
         };
 
-        network.add_hint(&pub_data);
-        let handle = network.submit().await?;
+        let handle = network.add_hint_and_submit(&pub_data).await?;
 
         // Proof should be pending
         assert_eq!(network.poll(&handle).await?, None);
@@ -227,13 +226,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_network_auto_complete() -> anyhow::Result<()> {
-        let mut network = MockZkvmNetwork::new(true);
+        let network = MockZkvmNetwork::new(true);
         let pub_data = TestPublicData {
             hint: "AutoComplete".to_owned(),
         };
 
-        network.add_hint(&pub_data);
-        let handle = network.submit().await?;
+        let handle = network.add_hint_and_submit(&pub_data).await?;
 
         // Proof should be immediately ready
         let proof_bytes = network

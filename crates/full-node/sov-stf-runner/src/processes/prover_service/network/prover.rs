@@ -53,8 +53,8 @@ pub(crate) struct NetworkProver<
     OuterVm: Zkvm,
 > {
     prover_address: Address,
-    inner_vm: tokio::sync::Mutex<InnerVm::Network>,
-    outer_vm: tokio::sync::Mutex<OuterVm::Network>,
+    inner_vm: InnerVm::Network,
+    outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
     code_commitment: CodeCommitment,
     phantom: PhantomData<Witness>,
@@ -79,8 +79,8 @@ where
     ) -> Self {
         Self {
             prover_address,
-            inner_vm: tokio::sync::Mutex::new(inner_vm),
-            outer_vm: tokio::sync::Mutex::new(outer_vm),
+            inner_vm,
+            outer_vm,
             tracker: tokio::sync::RwLock::new(HashMap::new()),
             code_commitment,
             phantom: PhantomData,
@@ -119,11 +119,11 @@ where
             prover_address: self.prover_address.clone(),
         };
 
-        let handle = {
-            let mut network = self.inner_vm.lock().await;
-            network.add_hint(&data);
-            network.submit().await.map_err(ProverServiceError::Other)?
-        };
+        let handle = self
+            .inner_vm
+            .add_hint_and_submit(&data)
+            .await
+            .map_err(ProverServiceError::Other)?;
 
         let StateTransitionWitnessWithAddress {
             stf_witness:
@@ -193,8 +193,7 @@ where
                 unreachable!()
             };
 
-            let network = self.inner_vm.lock().await;
-            match network.poll(&handle).await {
+            match self.inner_vm.poll(&handle).await {
                 Ok(Some(proof_bytes)) => {
                     let block_proof = BlockProof {
                         proof: proof_bytes,
@@ -279,22 +278,16 @@ where
         // Drop the read lock before submitting to the outer network.
         drop(proof_statuses);
 
-        let outer_handle = {
-            let mut outer = self.outer_vm.lock().await;
-            outer.add_hint(&public_data);
-            outer.submit().await?
-        };
+        let outer_handle = self.outer_vm.add_hint_and_submit(&public_data).await?;
 
         let serialized_aggregated_proof = loop {
-            let outer = self.outer_vm.lock().await;
-            match outer.poll(&outer_handle).await {
+            match self.outer_vm.poll(&outer_handle).await {
                 Ok(Some(proof_bytes)) => {
                     break SerializedAggregatedProof {
                         raw_aggregated_proof: proof_bytes,
                     };
                 }
                 Ok(None) => {
-                    drop(outer);
                     tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 }
                 Err(e) => {

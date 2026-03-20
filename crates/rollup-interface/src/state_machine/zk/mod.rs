@@ -165,15 +165,13 @@ pub trait ZkvmNetwork: Send + Sync + 'static {
     /// An opaque handle returned by [`ZkvmNetwork::submit`] that identifies a pending proof.
     type ProofHandle: Send + Sync + Clone + core::fmt::Debug + 'static;
 
-    /// Give the guest a piece of advice non-deterministically.
-    fn add_hint<T: Serialize>(&mut self, item: &T);
-
-    /// Submit the current program and hints for remote proving.
+    /// Add a hint and submit the proof request in one atomic operation.
     ///
     /// Network proving always generates a real proof.
     /// Returns a [`Self::ProofHandle`] that can be passed to [`ZkvmNetwork::poll`] to check for the result.
-    fn submit(
-        &mut self,
+    fn add_hint_and_submit<T: Serialize + Send + Sync>(
+        &self,
+        item: &T,
     ) -> impl core::future::Future<Output = anyhow::Result<Self::ProofHandle>> + Send;
 
     /// Check whether a previously submitted proof is ready.
@@ -201,11 +199,10 @@ impl<G: ZkvmGuest + 'static> ZkvmNetwork for NoopZkvmNetwork<G> {
     type Guest = G;
     type ProofHandle = ();
 
-    fn add_hint<T: Serialize>(&mut self, _item: &T) {
-        match self._void {}
-    }
-
-    async fn submit(&mut self) -> anyhow::Result<Self::ProofHandle> {
+    async fn add_hint_and_submit<T: Serialize + Send + Sync>(
+        &self,
+        _item: &T,
+    ) -> anyhow::Result<Self::ProofHandle> {
         match self._void {}
     }
 
