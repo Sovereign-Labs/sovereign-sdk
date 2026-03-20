@@ -67,31 +67,7 @@ where
 
         // Early check: verify that this node's DA signer matches the preferred
         // sequencer registered in the runtime.
-        {
-            let mut runtime: Rt = Default::default();
-            let mut checkpoint =
-                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
-            let registry_preferred = runtime
-                .sequencer_remuneration()
-                .preferred_sequencer(&mut checkpoint);
-            match registry_preferred {
-                Some(ref expected) if *expected == da_address => {}
-                Some(expected) => {
-                    anyhow::bail!(
-                        "DA address mismatch: this node's DaService signer address is {da_address}, \
-                         but the preferred sequencer DA address in the sequencer registry is {expected}. \
-                         Check your DA service configuration."
-                    );
-                }
-                None => {
-                    anyhow::bail!(
-                        "No preferred sequencer is registered in the sequencer registry, \
-                         but this node is configured as a preferred sequencer. \
-                         Check the sequencer registry genesis configuration."
-                    );
-                }
-            }
-        }
+        Self::check_runtime_address_match(&latest_state_update, da_address)?;
 
         debug!(
             ?latest_state_update,
@@ -304,6 +280,35 @@ where
         }));
 
         Ok((seq, handles))
+    }
+
+    fn check_runtime_address_match(
+        latest_state_update: &StateUpdateInfo<<S as Spec>::Storage>,
+        da_address: <<S as Spec>::Da as DaSpec>::Address,
+    ) -> anyhow::Result<()> {
+        let mut runtime: Rt = Default::default();
+        let mut checkpoint =
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+        let registry_preferred = runtime
+            .sequencer_remuneration()
+            .preferred_sequencer(&mut checkpoint);
+        match registry_preferred {
+            Some(ref expected) if *expected == da_address => Ok(()),
+            Some(expected) => {
+                anyhow::bail!(
+                        "DA address mismatch: this node's DaService signer address is {da_address}, \
+                         but the preferred sequencer DA address in the sequencer registry is {expected}. \
+                         Check your DA service configuration."
+                    );
+            }
+            None => {
+                anyhow::bail!(
+                    "No preferred sequencer is registered in the sequencer registry, \
+                         but this node is configured as a preferred sequencer. \
+                         Check the sequencer registry genesis configuration."
+                );
+            }
+        }
     }
 
     fn api_state(
