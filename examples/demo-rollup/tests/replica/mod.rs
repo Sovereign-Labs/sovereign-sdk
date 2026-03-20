@@ -1,4 +1,5 @@
 mod db_elected;
+mod recovery;
 mod replica_gets_txs_from_master;
 mod replica_partitioned_db;
 mod replica_registers_in_db;
