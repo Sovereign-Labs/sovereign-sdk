@@ -5,9 +5,13 @@
 //! - TC11 (percentile < 0): Skipped - alloy client validates percentiles client-side,
 //!   negative values would require raw JSON-RPC to test server-side validation.
 
+use alloy::network::TransactionBuilder;
+use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, B256};
 use alloy_provider::{DynProvider, Provider};
-use alloy_rpc_types_eth::{BlockNumberOrTag, BlockTransactions, TransactionReceipt};
+use alloy_rpc_types_eth::{
+    BlockNumberOrTag, BlockTransactions, TransactionReceipt, TransactionRequest,
+};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -206,6 +210,48 @@ async fn send_high_fee_set_value(
         .send_tx_and_wait_finalized(tx)
         .await
         .map_err(|err| anyhow::anyhow!(err.to_string()))
+}
+
+fn override_rollup_gas_limit_transition(
+    initial_gas_limit: u64,
+    updated_gas_limit: u64,
+    change_after_height: u64,
+) {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        format!("[{initial_gas_limit},{initial_gas_limit}]"),
+    );
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_UPDATED_GAS_LIMIT",
+        format!("[{updated_gas_limit},{updated_gas_limit}]"),
+    );
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_CHANGE_GAS_LIMIT_AFTER_HEIGHT",
+        change_after_height.to_string(),
+    );
+}
+
+async fn send_high_fee_transfer(
+    client: &DynProvider,
+    nonce: u64,
+) -> anyhow::Result<TransactionReceipt> {
+    send_high_fee_transfer_with_gas_limit(client, nonce, 1_000_000).await
+}
+
+async fn send_high_fee_transfer_with_gas_limit(
+    client: &DynProvider,
+    nonce: u64,
+    gas_limit: u64,
+) -> anyhow::Result<TransactionReceipt> {
+    let tx = TransactionRequest::default()
+        .with_to(Address::ZERO)
+        .with_nonce(nonce)
+        .with_value(alloy_primitives::U256::ZERO)
+        .with_gas_limit(gas_limit)
+        .with_max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
+        .with_max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
+    let pending = client.send_transaction(tx).await?;
+    Ok(pending.get_receipt().await?)
 }
 
 // ==================== Test Setup Helpers ====================
@@ -1289,6 +1335,134 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
         .expect("tx block should exist");
     let header_ratio = block.header.gas_used as f64 / block.header.gas_limit as f64;
     assert_float_eq(header_ratio, expected_ratio, "block header gas_used_ratio");
+
+    Ok(())
+}
+
+/// Regression: each gas_used_ratio entry must use that block's gas limit across a gas-limit transition.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fee_history_gas_used_ratio_uses_per_block_limit_across_transition(
+) -> anyhow::Result<()> {
+    const INITIAL_GAS_LIMIT: u64 = 100_000_000_000;
+    const UPDATED_GAS_LIMIT: u64 = 50_000_000_000;
+    const CHANGE_GAS_LIMIT_AFTER_HEIGHT: u64 = 10;
+
+    override_rollup_gas_limit_transition(
+        INITIAL_GAS_LIMIT,
+        UPDATED_GAS_LIMIT,
+        CHANGE_GAS_LIMIT_AFTER_HEIGHT,
+    );
+
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let client = alloy_client(rollup.http_addr);
+
+    let target_pre_boundary_height = CHANGE_GAS_LIMIT_AFTER_HEIGHT.saturating_sub(2);
+    let current_height = rollup.height().await.get();
+    assert!(
+        current_height <= target_pre_boundary_height,
+        "test precondition failed: startup height {current_height} already exceeded target pre-boundary height {target_pre_boundary_height}"
+    );
+    rollup.wait_for_height(target_pre_boundary_height).await;
+
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let mut nonce = client.get_transaction_count(signer.address()).await?;
+    let mut tx_blocks = Vec::new();
+
+    // Send transactions in blocks on both sides of the fee boundary (so that eth_feeHistory will have nonzero ratios)
+    for _ in 0..6 {
+        let receipt = send_high_fee_transfer(&client, nonce).await?;
+        rollup.wait_for_rollup_height_advance_by(1).await;
+        nonce = nonce.saturating_add(1);
+        tx_blocks.push(
+            receipt
+                .block_number
+                .expect("transfer receipt should include block number"),
+        );
+
+        let has_pre_change = tx_blocks
+            .iter()
+            .any(|&block| block <= CHANGE_GAS_LIMIT_AFTER_HEIGHT);
+        let has_post_change = tx_blocks
+            .iter()
+            .any(|&block| block > CHANGE_GAS_LIMIT_AFTER_HEIGHT);
+        if has_pre_change && has_post_change {
+            break;
+        }
+    }
+
+    let pre_change_block = tx_blocks
+        .iter()
+        .copied()
+        .filter(|&block| block <= CHANGE_GAS_LIMIT_AFTER_HEIGHT)
+        .max()
+        .expect("expected at least one tx-bearing block at or before the change height");
+    let post_change_block = tx_blocks
+        .iter()
+        .copied()
+        .find(|&block| block > CHANGE_GAS_LIMIT_AFTER_HEIGHT)
+        .expect("expected at least one tx-bearing block after the change height");
+
+    let block_count = post_change_block
+        .saturating_sub(pre_change_block)
+        .saturating_add(1);
+    let fee_history = client
+        .get_fee_history(
+            block_count,
+            BlockNumberOrTag::Number(post_change_block),
+            &[],
+        )
+        .await?;
+
+    assert_eq!(
+        fee_history.oldest_block, pre_change_block,
+        "feeHistory range should start at the last tx-bearing block before the gas-limit change"
+    );
+
+    let pre_change_idx = 0usize;
+    let post_change_idx: usize = post_change_block
+        .saturating_sub(pre_change_block)
+        .try_into()
+        .expect("block distance should fit in usize");
+
+    let pre_change_gas_used = total_gas_used_from_receipts(&client, pre_change_block).await?;
+    let post_change_gas_used = total_gas_used_from_receipts(&client, post_change_block).await?;
+    assert!(
+        pre_change_gas_used > 0,
+        "pre-change block should contain a transaction"
+    );
+    assert!(
+        post_change_gas_used > 0,
+        "post-change block should contain a transaction"
+    );
+
+    let observed_pre_change_ratio: f64 = fee_history.gas_used_ratio[pre_change_idx];
+    let observed_post_change_ratio: f64 = fee_history.gas_used_ratio[post_change_idx];
+    assert!(
+        observed_post_change_ratio > observed_pre_change_ratio,
+        "post-change gas_used_ratio should increase when the gas limit is reduced"
+    );
+
+    let observed_ratio_change = observed_pre_change_ratio / observed_post_change_ratio;
+    let expected_ratio_change = (pre_change_gas_used as f64 / post_change_gas_used as f64)
+        * (UPDATED_GAS_LIMIT as f64 / INITIAL_GAS_LIMIT as f64);
+    assert_float_eq(
+        observed_ratio_change,
+        expected_ratio_change,
+        "gas_used_ratio change across gas-limit transition",
+    );
+    assert!(
+        observed_ratio_change < 0.6,
+        "gas_used_ratio before/after should reflect the gas-limit drop, got {observed_ratio_change}"
+    );
+
+    // `wrong_shared_denominator_ratio_change` is the ratio of gas_used across the two blocks. If the gas limit hadn't changed,
+    // the rateio of `fee_ratio_before / fee_ratio_after` would be equal to this value. We want to assert that it *has* changed
+    let wrong_shared_denominator_ratio_change =
+        pre_change_gas_used as f64 / post_change_gas_used as f64;
+    assert!(
+        (observed_ratio_change - wrong_shared_denominator_ratio_change).abs() > 1e-12, // Float not equals check
+        "gas_used_ratio change should include the gas-limit transition, not just the gas-used change"
+    );
 
     Ok(())
 }

@@ -302,3 +302,38 @@ impl<S: Spec> GasSpec for S {
         new_constant!("PROCESS_TX_PRE_EXEC_GAS_PER_TX_BYTE", Self::Gas)
     }
 }
+
+#[test]
+fn test_gas_limit_for_height() {
+    use crate::default_spec::DefaultSpec;
+    use sov_mock_da::MockDaSpec;
+    use sov_mock_zkvm::MockZkvm;
+    use sov_rollup_interface::execution_mode::Native;
+    type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    const UPDATED_GAS_LIMIT: [u64; 2] = [1, 1];
+    const CHANGE_GAS_LIMIT_AFTER_HEIGHT: u64 = 1;
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_UPDATED_GAS_LIMIT",
+        format!("{:?}", UPDATED_GAS_LIMIT),
+    );
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_CHANGE_GAS_LIMIT_AFTER_HEIGHT",
+        CHANGE_GAS_LIMIT_AFTER_HEIGHT.to_string(),
+    );
+
+    assert_ne!(<S as GasSpec>::initial_gas_limit(), <S as GasSpec>::updated_gas_limit(), "Updated gas limit must be different from initial gas limit - this test needs an update. This is not a bug in the SDK");
+    assert_eq!(
+        <S as GasSpec>::gas_limit_for_height(RollupHeight::new(0)),
+        <S as GasSpec>::initial_gas_limit()
+    );
+    assert_eq!(
+        <S as GasSpec>::gas_limit_for_height(RollupHeight::new(1)),
+        <S as GasSpec>::initial_gas_limit()
+    );
+
+    // First height *AFTER* the change gas limit height should be the updated gas limit
+    assert_eq!(
+        <S as GasSpec>::gas_limit_for_height(RollupHeight::new(2)),
+        <S as GasSpec>::updated_gas_limit()
+    );
+}
