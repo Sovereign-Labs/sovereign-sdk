@@ -11,6 +11,7 @@ use super::*;
 /// both nodes recover to normal operation.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_recovery_replica_keeps_running() {
+    sov_test_utils::initialize_logging();
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
 
     println!("X1");

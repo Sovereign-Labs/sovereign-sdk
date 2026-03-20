@@ -794,10 +794,18 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
         let mut rt = Rt::default();
-        inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-            target_da_height: info.sync_status.target_da_height(),
-            synced_da_height: info.sync_status.synced_da_height(),
-        });
+        let keep_recovery_state = matches!(
+            inner.is_ready,
+            Err(SequencerNotReadyDetails::PreferredSequencerRecovering)
+        );
+        inner.is_ready = if keep_recovery_state {
+            Err(SequencerNotReadyDetails::PreferredSequencerRecovering)
+        } else {
+            Err(SequencerNotReadyDetails::Syncing {
+                target_da_height: info.sync_status.target_da_height(),
+                synced_da_height: info.sync_status.synced_da_height(),
+            })
+        };
 
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);
         let our_sequence_number = inner.next_unassigned_sequence_number;

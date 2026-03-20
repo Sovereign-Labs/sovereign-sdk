@@ -121,10 +121,16 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             This indicates that replicas are receiving data through DA faster than through Postgres notifications. 
             node_next_sequence_number: {node_next_sequence_number}, next_internal_sequence_number: {next_internal_sequence_number}");
 
-            inner.is_ready = Err(SequencerNotReadyDetails::Syncing {
-                target_da_height: sync_status.target_da_height(),
-                synced_da_height: sync_status.synced_da_height(),
-            });
+            inner.is_ready = if table.too_close_to_deferred_slots_count_for_comfort
+                || initial_status.is_recover
+            {
+                Err(SequencerNotReadyDetails::PreferredSequencerRecovering)
+            } else {
+                Err(SequencerNotReadyDetails::Syncing {
+                    target_da_height: sync_status.target_da_height(),
+                    synced_da_height: sync_status.synced_da_height(),
+                })
+            };
 
             inner
                 .executor_events_sender
@@ -135,6 +141,11 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
         (true, _, false, false, _) => {
+            if initial_status.is_recover {
+                inner.is_ready = Err(SequencerNotReadyDetails::PreferredSequencerRecovering);
+                return PreferredSeqOperation::WaitForNodeResyncToTip;
+            }
+
             // The replica is near the chain tip and observes new batches on the DA.
             // This indicates that the master continues producing batches while the replica is still syncing.
             // We wait until the replica is no more than one block behind the tip and override the replica’s sequencer with the node’s state.
@@ -188,6 +199,8 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                     %current_visible_slot_number,
                     deferred_slots = %config_value!("DEFERRED_SLOTS_COUNT"),
                     "Sequencer has detected that it is past, or very close to, having the visible_slot_number lag behind the deferred_slots_count threshold. Replica will keep syncing.");
+
+            inner.is_ready = Err(SequencerNotReadyDetails::PreferredSequencerRecovering);
 
             PreferredSeqOperation::WaitForNodeResyncToTip
         }
