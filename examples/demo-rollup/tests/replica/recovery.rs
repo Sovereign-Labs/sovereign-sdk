@@ -3,12 +3,17 @@ use super::*;
 // 1. Checking recovery
 //"The preferred sequencer is recovering from downtime and cannot provide soft-confirmations at this time; No new transactions can be accepted, try again later"
 
+// [sequencer.preferred]
+// recovery_strategy = "TryToSave"
+
 /// Test that when the leader enters recovery state (due to falling behind
 /// the deferred slots threshold), the replica continues to function and
 /// both nodes recover to normal operation.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_recovery_replica_keeps_running() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+
+    println!("X1");
 
     let Some(setup) = NodeDiscoveryTestSetup::new().await else {
         return;
@@ -39,15 +44,19 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
         AMOUNT,
         0,
     );
-    leader.send_tx_to_sequencer(&tx).await.unwrap();
 
-    let mut event_subscription = replica
-        .api_client()
-        .subscribe_to_events_with_filter("Bank/*")
-        .await
-        .unwrap();
-    wait_for_all_events_with_timeout(Duration::from_millis(500), 1, &mut event_subscription).await;
-    drop(event_subscription);
+    {
+        let mut event_subscription = replica
+            .api_client()
+            .subscribe_to_events_with_filter("Bank/*")
+            .await
+            .unwrap();
+
+        leader.send_tx_to_sequencer(&tx).await.unwrap();
+        wait_for_all_events_with_timeout(Duration::from_millis(5000), 1, &mut event_subscription)
+            .await;
+        drop(event_subscription);
+    }
 
     // Pause the sequencer update_state loop to prevent batch production
     leader.pause_preferred_batches().await;
@@ -58,15 +67,18 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
         setup.da_service.produce_block_now().await.unwrap();
     }
 
+    leader.print_is_ready().await;
     // Wait for the nodes to sync the DA blocks
     leader.wait_for_node_synced().await.unwrap();
 
     // Resume batch production; on the next state update the leader should enter recovery
     leader.resume_preferred_batches().await;
     setup.da_service.produce_block_now().await.unwrap();
+    leader.print_is_ready().await;
 
     // Wait until the leader is no longer ready (entered recovery)
     let start = std::time::Instant::now();
+
     while leader.is_sequencer_ready().await {
         if start.elapsed() > Duration::from_secs(10) {
             panic!("Timeout waiting for leader to enter recovery");
@@ -77,9 +89,13 @@ async fn test_db_elected_leader_recovery_replica_keeps_running() {
 
     // Produce DA blocks to let the leader recover (it needs to send catchup batches)
     while !leader.is_sequencer_ready().await {
+        leader.print_is_ready().await;
         setup.da_service.produce_block_now().await.unwrap();
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+
+    leader.print_is_ready().await;
+
     leader.wait_for_sequencer_ready().await.unwrap();
 
     /*

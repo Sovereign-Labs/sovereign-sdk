@@ -32,6 +32,7 @@ use sov_proxy_utils::ClusterInfoService;
 use sov_proxy_utils::RootHashCheck;
 use sov_proxy_utils::RootHashConsistency;
 use sov_sequencer::preferred::ConfiguredNodeRole;
+use sov_sequencer::preferred::RecoveryStrategy;
 use sov_sequencer::SequencerRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
@@ -102,6 +103,7 @@ async fn start_rollup_with_connection_string(
             }
             SequencerKindConfig::Preferred(p) => {
                 p.num_cache_warmup_workers = 0;
+                p.recovery_strategy = RecoveryStrategy::TryToSave;
                 if let Some(connection_string) = postgres_connection_override.as_ref() {
                     p.postgres_config
                         .as_mut()

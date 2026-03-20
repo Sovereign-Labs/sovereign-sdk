@@ -895,6 +895,12 @@ where
         }
     }
 
+    /// TODO
+    pub async fn print_is_ready(&self) {
+        let is_ready = self.client.client.is_ready().await;
+        println!("IS READY {is_ready:?}")
+    }
+
     /// Returns the current sequencer role.
     pub async fn sequencer_role(&self) -> anyhow::Result<SequencerRole> {
         self.client.query_rest_endpoint("/sequencer/role").await
