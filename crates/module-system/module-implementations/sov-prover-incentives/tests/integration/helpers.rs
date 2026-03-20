@@ -7,8 +7,8 @@ use sov_mock_zkvm::MockCodeCommitment;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
-    AggregatedProofPublicData, Amount, ApiStateAccessor, CodeCommitment, SerializedAggregatedProof,
-    Spec, Storage,
+    AggregatedProofPublicData, Amount, ApiStateAccessor, OuterCodeCommitmentHash,
+    SerializedAggregatedProof, Spec, Storage,
 };
 use sov_modules_rollup_blueprint::proof_sender::serialize_proof_blob_with_metadata;
 use sov_prover_incentives::ProverIncentives;
@@ -101,7 +101,7 @@ pub(crate) fn build_proof(
         final_state_root: *end_transition.post_state_root(),
         initial_slot_hash: *initial_transition.slot_hash(),
         final_slot_hash: *end_transition.slot().slot_hash(),
-        code_commitment: CodeCommitment(MOCK_CODE_COMMITMENT.0.to_vec()),
+        outer_vk_hash: OuterCodeCommitmentHash(MOCK_CODE_COMMITMENT.0.to_vec()),
         rewarded_addresses: vec![prover_address],
     })
 }
