@@ -7,7 +7,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, OuterCodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, OuterCodeCommitmentHash, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -17,7 +17,6 @@ use tracing::{error, info, trace};
 
 use super::state::{ProverState, ProverStatus};
 use super::{ProverServiceError, Verifier};
-use crate::processes::prover_service::block_proof::BlockProof;
 use crate::processes::{
     ProofAggregationStatus, ProofProcessingStatus, RollupProverConfigDiscriminants,
     StateTransitionInfo,
@@ -190,26 +189,11 @@ where
             }
         }
 
-        // It is ok to unwrap here as we asserted that block_proofs_data.len() >= 1.
-        let initial_block_proof = block_proofs_data.first().unwrap();
-        let final_block_proof = block_proofs_data.last().unwrap();
-
-        let mut rewarded_addresses = Vec::default();
-        for bp in block_proofs_data.iter() {
-            rewarded_addresses.push(bp.st.prover_address.clone());
-        }
-
-        let public_data = AggregatedProofPublicData::<Address, Da::Spec, StateRoot> {
-            rewarded_addresses,
-            initial_slot_number: initial_block_proof.slot_number,
-            final_slot_number: final_block_proof.slot_number,
-            genesis_state_root: genesis_state_root.clone(),
-            initial_state_root: initial_block_proof.st.initial_state_root.clone(),
-            final_state_root: final_block_proof.st.final_state_root.clone(),
-            initial_slot_hash: initial_block_proof.st.slot_hash.clone(),
-            final_slot_hash: final_block_proof.st.slot_hash.clone(),
-            outer_vk_hash: self.outer_vk_hash.clone(),
-        };
+        let public_data = AggregatedProofPublicData::from_block_proofs(
+            &block_proofs_data,
+            genesis_state_root.clone(),
+            self.outer_vk_hash.clone(),
+        );
 
         trace!(%public_data, "generating aggregate proof");
         // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/316

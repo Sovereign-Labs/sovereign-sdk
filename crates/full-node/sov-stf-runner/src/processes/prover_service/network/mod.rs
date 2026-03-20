@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
+use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use super::{ProverService, ProverServiceError, Verifier};
@@ -49,7 +49,7 @@ where
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
         da_verifier: Da::Verifier,
-        code_commitment: CodeCommitment,
+        code_commitment: OuterCodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });

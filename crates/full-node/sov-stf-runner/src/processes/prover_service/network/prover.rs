@@ -5,7 +5,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, OuterCodeCommitmentHash, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -15,7 +15,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 
 use super::Verifier;
-use crate::processes::prover_service::block_proof::BlockProof;
 use crate::processes::{
     ProofAggregationStatus, ProofProcessingStatus, ProverServiceError, StateTransitionInfo,
 };
@@ -56,7 +55,7 @@ pub(crate) struct NetworkProver<
     inner_vm: InnerVm::Network,
     outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
-    code_commitment: CodeCommitment,
+    code_commitment: OuterCodeCommitmentHash,
     phantom: PhantomData<Witness>,
 }
 
@@ -75,7 +74,7 @@ where
         prover_address: Address,
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
-        code_commitment: CodeCommitment,
+        code_commitment: OuterCodeCommitmentHash,
     ) -> Self {
         Self {
             prover_address,
@@ -253,25 +252,11 @@ where
             }
         }
 
-        let initial_block_proof = block_proofs_data.first().unwrap();
-        let final_block_proof = block_proofs_data.last().unwrap();
-
-        let rewarded_addresses = block_proofs_data
-            .iter()
-            .map(|bp| bp.st.prover_address.clone())
-            .collect();
-
-        let public_data = AggregatedProofPublicData::<Address, Da::Spec, StateRoot> {
-            rewarded_addresses,
-            initial_slot_number: initial_block_proof.slot_number,
-            final_slot_number: final_block_proof.slot_number,
-            genesis_state_root: genesis_state_root.clone(),
-            initial_state_root: initial_block_proof.st.initial_state_root.clone(),
-            final_state_root: final_block_proof.st.final_state_root.clone(),
-            initial_slot_hash: initial_block_proof.st.slot_hash.clone(),
-            final_slot_hash: final_block_proof.st.slot_hash.clone(),
-            code_commitment: self.code_commitment.clone(),
-        };
+        let public_data = AggregatedProofPublicData::from_block_proofs(
+            &block_proofs_data,
+            genesis_state_root.clone(),
+            self.code_commitment.clone(),
+        );
 
         tracing::trace!(%public_data, "generating aggregate proof");
 

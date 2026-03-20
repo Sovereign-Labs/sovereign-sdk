@@ -1,8 +1,6 @@
 mod network;
 mod parallel;
 
-mod block_proof;
-
 use std::fmt::Debug;
 use std::sync::Arc;
 
