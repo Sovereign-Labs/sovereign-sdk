@@ -619,7 +619,8 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .await
             .map_err(|e| {
                 tracing::error!(error = %e, "Error force closing batch");
-                errors::internal_server_error_response_500("Unable to force close batch").into_response()
+                errors::internal_server_error_response_500("Unable to force close batch")
+                    .into_response()
             })?;
         Ok(result.into())
     }

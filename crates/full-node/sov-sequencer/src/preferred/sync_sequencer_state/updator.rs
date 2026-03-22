@@ -219,7 +219,11 @@ where
         reason: &'static str,
     ) -> Result<bool, SequencerStateUpdatorError> {
         let (resp, recv) = oneshot::channel();
-        self.send(Message::ForceCloseCurrentBatch { reason, result_sender: resp }).await?;
+        self.send(Message::ForceCloseCurrentBatch {
+            reason,
+            result_sender: resp,
+        })
+        .await?;
         match recv.await {
             Ok(result) => Ok(result),
             Err(_) => {
