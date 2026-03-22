@@ -101,6 +101,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     #[cfg(feature = "test-utils")]
     ForceCloseCurrentBatch {
         reason: &'static str,
+        result_sender: oneshot::Sender<bool>,
     },
     ProofBlob {
         blob_id: BlobInternalId,
