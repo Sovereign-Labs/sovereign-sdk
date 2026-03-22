@@ -819,30 +819,10 @@ components:
             - reverted
             - skipped
         data:
-          $ref: "#/components/schemas/TxReceiptData"
+          description: Receipt data associated with the transaction result. Contents are generic and vary by rollup implementation.
       required:
         - result
         - data
-    TxReceiptData:
-      type: object
-      description: Receipt data whose fields vary by result type
-      properties:
-        gas_used:
-          type: array
-          items:
-            type: integer
-            format: uint64
-          description: Gas consumed by the transaction, one entry per gas dimension
-        reason:
-          type: object
-          additionalProperties: true
-          description: Reason for revert (present when result is "reverted")
-        error:
-          type: object
-          additionalProperties: true
-          description: Error details (present when result is "skipped")
-      required:
-        - gas_used
     LedgerTx:
       type: object
       properties:

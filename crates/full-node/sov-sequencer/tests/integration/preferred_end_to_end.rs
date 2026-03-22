@@ -2343,7 +2343,7 @@ async fn test_gas_limit_update() {
                 .next()
                 .unwrap()
                 .parse::<u64>()
-                .unwrap();
+                .unwrap_or_else(|_| panic!("Failed to parse base fee per gas: {base_fee_per_gas}"));
             if current_base_fee > max_base_fee_per_gas_observed_after_update {
                 max_base_fee_per_gas_observed_after_update = current_base_fee;
             }
