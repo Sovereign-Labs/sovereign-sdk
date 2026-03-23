@@ -12826,6 +12826,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-sdk-specs"
+version = "0.3.0"
+
+[[package]]
 name = "sov-sequencer"
 version = "0.3.0"
 dependencies = [
