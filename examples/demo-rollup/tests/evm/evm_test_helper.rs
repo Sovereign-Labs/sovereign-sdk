@@ -544,6 +544,19 @@ pub(crate) async fn call_all_endpoints(
         None => tx_count(client, signer.address(), "latest").await.unwrap(),
     };
 
+    let max_fee = match request.gas_price.or(request.max_fee_per_gas) {
+        Some(fee) => fee,
+        None => {
+            // Mirror simulation endpoints: when no fee is specified, use the current base fee.
+            let gas_price: U256 = client
+                .ws
+                .request("eth_gasPrice", rpc_params![])
+                .await
+                .unwrap();
+            gas_price.to::<u128>()
+        }
+    };
+
     let raw_tx = raw_signed_eip1559(
         signer,
         chain_id.to::<u64>(),
@@ -552,7 +565,7 @@ pub(crate) async fn call_all_endpoints(
         request.to.unwrap_or(TxKind::Create),
         request.value.unwrap_or(U256::ZERO),
         request.input.input.clone().unwrap_or_default(),
-        request.gas_price.or(request.max_fee_per_gas).unwrap_or(0),
+        max_fee,
         request.max_priority_fee_per_gas.unwrap_or(0),
     )
     .await
