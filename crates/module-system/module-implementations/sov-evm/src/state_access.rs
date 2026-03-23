@@ -128,7 +128,7 @@ impl<S: Spec> Evm<S> {
     }
 
     /// Returns true when the EIP-1559 fee-cap check should be enforced for this state.
-    pub(crate) fn is_max_fee_check_active<Accessor: StateReader<User> + VersionReader>(
+    pub fn is_max_fee_check_active<Accessor: StateReader<User> + VersionReader>(
         &self,
         state: &mut Accessor,
     ) -> Result<bool, Accessor::Error> {

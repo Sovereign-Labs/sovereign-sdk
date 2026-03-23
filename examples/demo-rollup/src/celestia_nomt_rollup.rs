@@ -137,6 +137,7 @@ impl FullNodeBlueprint<Native> for CelestiaNomtDemoRollup<Native> {
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        sequencer_da_address: <CelestiaSpec as sov_modules_api::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -145,6 +146,9 @@ impl FullNodeBlueprint<Native> for CelestiaNomtDemoRollup<Native> {
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
+            sequencer_rollup_address: rollup_config.sequencer.rollup_address,
+            sequencer_da_address,
+            sequencer_type: crate::sequencer_type(&rollup_config.sequencer),
             shutdown_receiver,
         };
         let axum_router = solana_offchain_router(sequencer.clone());

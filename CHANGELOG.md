@@ -1,6 +1,7 @@
 # 2025-03-16
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints
+- #2599 Make EVM RPC affordances checks paymaster-aware
 
 # 2025-03-13
 - #2587 EVM: RPC only: Fixes Fee-cap admission consistency across simulation and submission.

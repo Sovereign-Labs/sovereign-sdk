@@ -153,7 +153,7 @@ fn test_eth_estimate_gas_skips_fee_cap_check_before_activation_height() {
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
         let estimate = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 estimate_gas_request(account.address(), recipient.address()),
                 None,
                 None,
@@ -176,7 +176,7 @@ fn test_eth_estimate_gas_skips_fee_cap_check_when_runtime_disabled() {
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
         let err = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 estimate_gas_request(account.address(), recipient.address()),
                 None,
                 None,
@@ -197,7 +197,7 @@ fn test_eth_estimate_gas_skips_fee_cap_check_when_runtime_disabled() {
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
         let estimate = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 estimate_gas_request(account.address(), recipient.address()),
                 None,
                 None,
@@ -237,7 +237,7 @@ fn test_eth_estimate_gas_historical_block_below_fee_check_height_keeps_same_esti
             "test precondition failed: live height {live_block_number} must still be at or below EVM_MAX_FEE_CHECK_HEIGHT={EVM_MAX_FEE_CHECK_HEIGHT}"
         );
 
-        evm.eth_estimate_gas(
+        evm.eth_estimate_gas_helper(
             request.clone(),
             Some(BlockId::number(HISTORICAL_BLOCK)),
             None,
@@ -258,7 +258,7 @@ fn test_eth_estimate_gas_historical_block_below_fee_check_height_keeps_same_esti
             "test precondition failed: live height {live_block_number} must be above EVM_MAX_FEE_CHECK_HEIGHT={EVM_MAX_FEE_CHECK_HEIGHT}"
         );
 
-        evm.eth_estimate_gas(
+        evm.eth_estimate_gas_helper(
             request.clone(),
             Some(BlockId::number(HISTORICAL_BLOCK)),
             None,

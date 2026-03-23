@@ -8,8 +8,8 @@
 
 ## Ownership Boundary
 
-- Own here: `eth_sendRawTransaction*`, `realtime_sendRawTransaction`, `eth_getLogs`, `eth_getLogsWithCursor`, `eth_subscribe`/`eth_unsubscribe`, method stubs, wrapper error mapping.
-- Do not own here: canonical EVM state query logic (`eth_getBalance`, `eth_call`, `eth_estimateGas`, receipts, block assembly). Those belong in `crates/module-system/module-implementations/sov-evm`.
+- Own here: `eth_sendRawTransaction*`, `realtime_sendRawTransaction`, `eth_estimateGas` RPC handler (affordability/paymaster wrapper around `sov-evm` estimation helpers), `eth_getLogs`, `eth_getLogsWithCursor`, `eth_subscribe`/`eth_unsubscribe`, method stubs, wrapper error mapping.
+- Do not own here: canonical EVM state query logic (`eth_getBalance`, `eth_call`, `eth_estimateGas` core estimation logic, receipts, block assembly). Those belong in `crates/module-system/module-implementations/sov-evm`.
 
 ## Shared RPC Semantics (Intentional)
 
@@ -33,6 +33,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 | --- | --- |
 | `src/lib.rs` | RPC registration, unsupported method stubs, wrapper error-code helpers |
 | `src/handlers/mod.rs` | Raw tx submission, sync timeout behavior, local signing/send flow |
+| `src/handlers/estimate_gas.rs` | `eth_estimateGas` RPC handler, affordability/paymaster preflight |
 | `src/handlers/get_logs.rs` | Standard logs endpoint and response-size gate |
 | `src/handlers/get_logs/service.rs` | Filter execution, block range/hash routing, cursor behavior |
 | `src/handlers/get_logs/cursor.rs` | Cursor encoding/decoding and paging correctness |
@@ -63,6 +64,7 @@ Ethereum-standard typed error conversions from `sov-rpc-eth-types` are also allo
 | Logs pagination inconsistency | `#2387` | `eth_getLogs` and cursor variant diverge in range/size behavior | Large responses return limit error plus cursor path; cursor pagination remains stable |
 | Nonce/receipt flow surprises | `#2395`, `#2458` | Submission paths do not align with pending semantics | Wallet lifecycle (`send -> lookup tx -> receipt`) is coherent in pending and sealed states |
 | Estimation/submission mismatch | `#2459` | Local `eth_sendTransaction` mutates request fields inconsistently | Nonce/chain-id/gas defaults are explicit; estimation errors propagate cleanly |
+| Non-preferred future-nonce mismatch | policy | `eth_estimateGas` only simulates and rejects stale nonce, while non-preferred `accept_tx` still rejects future nonce during sequencer-side uniqueness checks | Keep small wrapper fixes focused on preferred-sequencer wallet flow unless a concrete non-preferred client workflow requires future-nonce parity |
 | Fee-context confusion at wrapper boundary | `#2462`, `#2463` | Wrapper assumes fee values independent of module context | Wrapper does not override module-computed fee/receipt semantics |
 
 ## Wiring Rules
@@ -103,6 +105,7 @@ Prioritize static checks that map to real client breakage:
 1. Wallet flow integrity: send, estimate, poll tx, poll receipt.
 2. SDK compatibility: ethers/viem/web3 parsing and retry behavior under wrapper errors.
 3. Logs/indexer safety: bounded responses, stable cursor continuation, predictable not-found behavior.
+4. Preferred-sequencer submission regressions are higher priority than exact future-nonce parity on non-preferred sequencers; track the latter separately instead of expanding unrelated wrapper fixes.
 
 ## Fast Commands
 
