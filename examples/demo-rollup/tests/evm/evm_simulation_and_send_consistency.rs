@@ -194,7 +194,7 @@ async fn apply_nonce(
 // Consistency check
 // ---------------------------------------------------------------------------
 
-fn check_consistency(results: &EndpointResults, strict_check: bool) {
+fn check_consistency(results: &EndpointResults, strict_check: bool, context: &str) {
     let EndpointResults {
         estimate_gas,
         call,
@@ -225,6 +225,7 @@ fn check_consistency(results: &EndpointResults, strict_check: bool) {
         _ => {
             panic!(
                 "Responses disagree: \n\
+                 {context}\n\
                  estimateGas={estimate_gas:?}\n\
                  call={call:?}\n\
                  createAccessList={create_access_list:?}\n\
@@ -261,8 +262,12 @@ async fn test_regular_rollup_simulation_and_send_consistency(
     )
     .await?;
 
+    let context = format!(
+        "account={account:?} nonce={nonce_option:?} to={:?} gas={:?} max_fee={:?} max_priority_fee={:?} value={:?} nonce_field={:?}",
+        request.to, request.gas, request.max_fee_per_gas, request.max_priority_fee_per_gas, request.value, request.nonce
+    );
     let results = call_all_endpoints(&ws_client, &request, &signer).await;
-    check_consistency(&results, strict_check);
+    check_consistency(&results, strict_check, &context);
 
     Ok(())
 }
@@ -290,8 +295,12 @@ async fn test_paymaster_rollup_simulation_and_send_consistency(
     )
     .await?;
 
+    let context = format!(
+        "account={account:?} nonce={nonce_option:?} to={:?} gas={:?} max_fee={:?} max_priority_fee={:?} value={:?} nonce_field={:?}",
+        request.to, request.gas, request.max_fee_per_gas, request.max_priority_fee_per_gas, request.value, request.nonce
+    );
     let results = call_all_endpoints(&ws_client, &request, &signer).await;
-    check_consistency(&results, strict_check);
+    check_consistency(&results, strict_check, &context);
 
     Ok(())
 }

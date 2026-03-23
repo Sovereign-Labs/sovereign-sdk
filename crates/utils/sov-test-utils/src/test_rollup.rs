@@ -403,6 +403,8 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             automatic_batch_production: true,
             sequencer_config: SequencerKindConfig::Preferred(PreferredSequencerConfig {
                 postgres_config,
+                // 3 is better for tests than default 10.
+                ideal_lag_behind_finalized_slot: 3,
                 ..PreferredSequencerConfig::default()
             }),
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
@@ -1130,7 +1132,7 @@ where
         self.wait_for_node_synced().await.unwrap();
         // Extra
         let ideal_lag = match &self.rollup_config.sequencer.sequencer_kind_config {
-            SequencerKindConfig::Standard(_) => 5,
+            SequencerKindConfig::Standard(_) => 3,
             SequencerKindConfig::Preferred(c) => c.ideal_lag_behind_finalized_slot,
         }
         .saturating_add(2);

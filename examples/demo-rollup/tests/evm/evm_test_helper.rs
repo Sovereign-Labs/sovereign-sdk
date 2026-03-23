@@ -74,7 +74,7 @@ pub(crate) async fn start_node(
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
         BlockProducingConfig::Periodic {
-            block_time_ms: 1_000,
+            block_time_ms: sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
         },
         finalization_blocks,
     )
@@ -440,7 +440,7 @@ pub async fn setup_test_rollup_with_paymaster(
     RollupBuilder::new(
         sov_test_utils::test_rollup::GenesisSource::Paths(paths),
         BlockProducingConfig::Periodic {
-            block_time_ms: 1_000,
+            block_time_ms: sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
         },
         finalization_blocks,
     )
@@ -453,7 +453,7 @@ pub async fn setup_test_rollup_with_paymaster(
         c.max_channel_size = 20;
         c.extension = Some(extension);
         if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 0;
+            seq.ideal_lag_behind_finalized_slot = 1;
         }
     })
     .start()
@@ -472,7 +472,7 @@ pub async fn setup_test_rollup_with_selective_paymaster(
     RollupBuilder::new(
         sov_test_utils::test_rollup::GenesisSource::Paths(paths),
         BlockProducingConfig::Periodic {
-            block_time_ms: 1_000,
+            block_time_ms: sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
         },
         finalization_blocks,
     )
@@ -485,7 +485,7 @@ pub async fn setup_test_rollup_with_selective_paymaster(
         c.max_channel_size = 20;
         c.extension = Some(extension);
         if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 0;
+            seq.ideal_lag_behind_finalized_slot = 1;
         }
     })
     .start()
