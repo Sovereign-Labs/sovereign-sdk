@@ -550,7 +550,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
 
             let relevant_proofs = service.get_extraction_proof(&block, &relevant_blobs).await;
             verifiers[namespace_idx]
-                .verify_relevant_tx_list(block.header(), &relevant_blobs, &relevant_proofs)
+                .verify_relevant_tx_list(block.header(), &relevant_blobs, relevant_proofs)
                 .with_context(|| {
                     format!(
                         "Verification failed for namespace idx {namespace_idx} at height {height}",
@@ -733,7 +733,7 @@ where
         let verifier = CelestiaVerifier::new(rollup_params);
 
         verifier
-            .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
             .unwrap();
     }
 }
@@ -867,7 +867,7 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
         );
 
         verifier
-            .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
             .unwrap_or_else(|err| {
                 panic!("Mixed multi-v1 verification failed in mode={read_mode}: {err}")
             });
@@ -925,7 +925,7 @@ async fn verification_error(
     let verifier = CelestiaVerifier::new(rollup_params);
 
     let error = verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap_err();
     assert!(
         error.to_string().contains(expected_err_pattern),
@@ -950,7 +950,7 @@ async fn verification_fails_if_tx_missing() {
     };
     // give to verifier an empty transactions list
     let error = verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap_err();
 
     assert!(
@@ -997,7 +997,7 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
     let verifier = CelestiaVerifier::new(rollup_params);
 
     let error = verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap_err();
 
     assert!(
@@ -1027,7 +1027,7 @@ async fn verification_for_padded_namespace() {
     let verifier = CelestiaVerifier::new(rollup_params);
 
     verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap();
 }
 
@@ -1048,7 +1048,7 @@ async fn verification_fails_if_there_is_less_blobs_than_proofs() {
     let verifier = CelestiaVerifier::new(rollup_params);
 
     let error = verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap_err();
 
     assert!(
@@ -1071,7 +1071,7 @@ async fn verification_fails_for_incorrect_namespace() {
     });
 
     let error = verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, &relevant_proofs)
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap_err();
     assert!(
         error

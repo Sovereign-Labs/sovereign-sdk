@@ -80,7 +80,7 @@ impl da::DaVerifier for CelestiaVerifier {
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         relevant_blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
-        relevant_proofs: &RelevantProofs<
+        relevant_proofs: RelevantProofs<
             <Self::Spec as DaSpec>::InclusionMultiProof,
             <Self::Spec as DaSpec>::CompletenessProof,
         >,

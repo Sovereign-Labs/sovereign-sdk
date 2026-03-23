@@ -124,7 +124,7 @@ where
             .verify_relevant_tx_list(
                 &data.stf_witness.da_block_header,
                 &data.stf_witness.relevant_blobs,
-                &data.stf_witness.relevant_proofs,
+                data.stf_witness.relevant_proofs.clone(),
             )
             .map_err(|e| {
                 ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
