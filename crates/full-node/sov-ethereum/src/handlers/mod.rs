@@ -239,25 +239,6 @@ where
         Ok((authenticated_tx, auth_data))
     }
 
-    /// Authenticates and runs affordability preflight for a raw/local send.
-    ///
-    /// A single state snapshot is taken up-front so that authentication and the
-    /// subsequent affordability check observe the same head — even if new blocks
-    /// land between the two steps.
-    fn authenticate_and_preflight_send(
-        tx: &FullyBakedTx,
-        signed_tx: &TransactionSigned,
-        ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> RpcResult<()> {
-        let snapshot_state = ethereum.api_state_accessor();
-        Self::authenticate_and_preflight_send_with_snapshot(
-            tx,
-            signed_tx,
-            &snapshot_state,
-            ethereum,
-        )
-    }
-
     fn authenticate_and_preflight_send_with_snapshot(
         tx: &FullyBakedTx,
         signed_tx: &TransactionSigned,
@@ -332,7 +313,13 @@ where
     {
         let (tx_hash, raw_message, signed_tx) = Self::decode_raw_transaction(&data)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
-        Self::authenticate_and_preflight_send(&tx, &signed_tx, &ethereum)?;
+        let snapshot_state = ethereum.api_state_accessor();
+        Self::authenticate_and_preflight_send_with_snapshot(
+            &tx,
+            &signed_tx,
+            &snapshot_state,
+            &ethereum,
+        )?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
