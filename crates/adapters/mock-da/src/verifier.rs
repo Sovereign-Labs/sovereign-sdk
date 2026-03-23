@@ -72,7 +72,7 @@ impl DaVerifier for MockDaVerifier {
         &self,
         _block_header: &<Self::Spec as DaSpec>::BlockHeader,
         _relevant_blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
-        _relevant_proofs: RelevantProofs<
+        _relevant_proofs: &RelevantProofs<
             <Self::Spec as DaSpec>::InclusionMultiProof,
             <Self::Spec as DaSpec>::CompletenessProof,
         >,

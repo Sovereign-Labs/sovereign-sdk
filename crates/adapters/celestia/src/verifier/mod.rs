@@ -80,7 +80,7 @@ impl da::DaVerifier for CelestiaVerifier {
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         relevant_blobs: &RelevantBlobs<<Self::Spec as DaSpec>::BlobTransaction>,
-        relevant_proofs: RelevantProofs<
+        relevant_proofs: &RelevantProofs<
             <Self::Spec as DaSpec>::InclusionMultiProof,
             <Self::Spec as DaSpec>::CompletenessProof,
         >,
@@ -92,8 +92,8 @@ impl da::DaVerifier for CelestiaVerifier {
             block_header,
             &relevant_blobs.batch_blobs,
             self.rollup_batch_namespace,
-            relevant_proofs.batch.inclusion_proof,
-            relevant_proofs.batch.completeness_proof,
+            relevant_proofs.batch.inclusion_proof.clone(),
+            relevant_proofs.batch.completeness_proof.clone(),
         )
         .map_err(|error| ValidationError::NamespaceValidationError {
             namespace: NamespaceType::Batch,
@@ -105,8 +105,8 @@ impl da::DaVerifier for CelestiaVerifier {
             block_header,
             &relevant_blobs.proof_blobs,
             self.rollup_proof_namespace,
-            relevant_proofs.proof.inclusion_proof,
-            relevant_proofs.proof.completeness_proof,
+            relevant_proofs.proof.inclusion_proof.clone(),
+            relevant_proofs.proof.completeness_proof.clone(),
         )
         .map_err(|error| ValidationError::NamespaceValidationError {
             namespace: NamespaceType::Proof,
