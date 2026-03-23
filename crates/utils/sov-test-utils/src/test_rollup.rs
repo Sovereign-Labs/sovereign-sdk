@@ -895,6 +895,18 @@ where
         }
     }
 
+    /// Check if the sequencer is recovering.
+    pub async fn is_sequencer_recovering(&self) -> bool {
+        let is_ready = self.client.client.is_ready().await;
+
+        if let Err(err) = is_ready {
+            err.to_string()
+                .contains("The preferred sequencer is recovering from downtime")
+        } else {
+            false
+        }
+    }
+
     /// Returns the current sequencer role.
     pub async fn sequencer_role(&self) -> anyhow::Result<SequencerRole> {
         self.client.query_rest_endpoint("/sequencer/role").await
@@ -914,6 +926,17 @@ where
     /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_sequencer_ready(&self) -> anyhow::Result<()> {
         self.wait_for_sequencer_state(true).await
+    }
+
+    /// Polls the sequencer until it enters recovery mode.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
+    pub async fn wait_for_sequencer_recovering(&self) -> anyhow::Result<()> {
+        self.wait_for_condition(
+            || async { Ok(self.is_sequencer_recovering().await) },
+            "sequencer to enter recovery",
+        )
+        .await
     }
 
     /// Generic helper for waiting on a condition with timeout and polling.

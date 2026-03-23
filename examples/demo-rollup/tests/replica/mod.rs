@@ -1,4 +1,5 @@
 mod db_elected;
+mod recovery;
 mod replica_gets_txs_from_master;
 mod replica_partitioned_db;
 mod replica_registers_in_db;
@@ -31,6 +32,7 @@ use sov_proxy_utils::ClusterInfoService;
 use sov_proxy_utils::RootHashCheck;
 use sov_proxy_utils::RootHashConsistency;
 use sov_sequencer::preferred::ConfiguredNodeRole;
+use sov_sequencer::preferred::RecoveryStrategy;
 use sov_sequencer::SequencerRole;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
@@ -101,6 +103,7 @@ async fn start_rollup_with_connection_string(
             }
             SequencerKindConfig::Preferred(p) => {
                 p.num_cache_warmup_workers = 0;
+                p.recovery_strategy = RecoveryStrategy::TryToSave;
                 if let Some(connection_string) = postgres_connection_override.as_ref() {
                     p.postgres_config
                         .as_mut()
@@ -186,6 +189,7 @@ type Rollup = ExternalMockDemoRollup<Native>;
 /// Test setup for DbElected tests with two nodes (leader and replica).
 struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
+    da_service: StorableMockDaService,
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
     cluster_info_service: ClusterInfoService,
@@ -211,7 +215,7 @@ impl NodeDiscoveryTestSetup {
             }
         };
 
-        let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
+        let (da_service, da_shutdown, da_addr) = create_da_service_periodic().await;
 
         let cluster_info_service =
             ClusterInfoService::spawn(postgres.connection_string(), max_age, None)
@@ -220,6 +224,7 @@ impl NodeDiscoveryTestSetup {
 
         Some(Self {
             postgres,
+            da_service,
             da_shutdown,
             da_addr,
             cluster_info_service,

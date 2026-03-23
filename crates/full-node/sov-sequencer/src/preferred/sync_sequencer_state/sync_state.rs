@@ -948,6 +948,9 @@ where
             seq_nr_from_master,
         )?;
 
+        let batch_from_master =
+            Self::ensure_replica_batch_start_visible_slot_matches(&mut inner, batch_from_master)?;
+
         inner
             .do_batch_start(
                 batch_from_master.visible_slot_number_after_increase,
@@ -997,6 +1000,7 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
+
         let db_data = DbData::BatchEnd(batch_from_master);
         let seq_nr_from_master = db_data.sequence_number();
 
@@ -1062,6 +1066,37 @@ where
         );
 
         Ok(())
+    }
+
+    fn ensure_replica_batch_start_visible_slot_matches(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<BatchToStore, ReplicaError<S>> {
+        let mut replica_vsn = inner.executor.checkpoint.current_visible_slot_number();
+        let replica_expected =
+            replica_vsn.advance(batch_from_master.visible_slots_to_advance.get().into());
+
+        if replica_expected == batch_from_master.visible_slot_number_after_increase {
+            return Ok(batch_from_master);
+        }
+
+        tracing::warn!(
+            %replica_expected,
+            master_expected = %batch_from_master.visible_slot_number_after_increase,
+            "Replica VSN diverged from master. Entering sync mode and retrying."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
     }
 }
 
