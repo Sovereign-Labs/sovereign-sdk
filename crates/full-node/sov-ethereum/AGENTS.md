@@ -8,8 +8,8 @@
 
 ## Ownership Boundary
 
-- Own here: `eth_sendRawTransaction*`, `realtime_sendRawTransaction`, `eth_getLogs`, `eth_getLogsWithCursor`, `eth_subscribe`/`eth_unsubscribe`, method stubs, wrapper error mapping.
-- Do not own here: canonical EVM state query logic (`eth_getBalance`, `eth_call`, `eth_estimateGas`, receipts, block assembly). Those belong in `crates/module-system/module-implementations/sov-evm`.
+- Own here: `eth_sendRawTransaction*`, `realtime_sendRawTransaction`, `eth_estimateGas` RPC handler (affordability/paymaster wrapper around `sov-evm` estimation helpers), `eth_getLogs`, `eth_getLogsWithCursor`, `eth_subscribe`/`eth_unsubscribe`, method stubs, wrapper error mapping.
+- Do not own here: canonical EVM state query logic (`eth_getBalance`, `eth_call`, `eth_estimateGas` core estimation logic, receipts, block assembly). Those belong in `crates/module-system/module-implementations/sov-evm`.
 
 ## Shared RPC Semantics (Intentional)
 
@@ -33,6 +33,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 | --- | --- |
 | `src/lib.rs` | RPC registration, unsupported method stubs, wrapper error-code helpers |
 | `src/handlers/mod.rs` | Raw tx submission, sync timeout behavior, local signing/send flow |
+| `src/handlers/estimate_gas.rs` | `eth_estimateGas` RPC handler, affordability/paymaster preflight |
 | `src/handlers/get_logs.rs` | Standard logs endpoint and response-size gate |
 | `src/handlers/get_logs/service.rs` | Filter execution, block range/hash routing, cursor behavior |
 | `src/handlers/get_logs/cursor.rs` | Cursor encoding/decoding and paging correctness |

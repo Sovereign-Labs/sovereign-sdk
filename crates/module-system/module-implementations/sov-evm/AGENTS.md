@@ -8,7 +8,7 @@
 
 ## Ownership Boundary
 
-- Own here: EVM state, block/tx/receipt/log assembly, `eth_call`, `eth_estimateGas`, `eth_feeHistory`, tracing.
+- Own here: EVM state, block/tx/receipt/log assembly, `eth_call`, `eth_estimateGas` core logic (validation + gas estimation helpers), `eth_feeHistory`, tracing.
 - Do not own here: transport concerns, RPC method stubs, WebSocket plumbing, sequencer submission UX wrappers. Those belong to `crates/full-node/sov-ethereum`.
 
 ## Shared RPC Semantics (Intentional)
