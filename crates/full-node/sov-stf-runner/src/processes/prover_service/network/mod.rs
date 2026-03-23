@@ -1,10 +1,10 @@
 mod prover;
-mod state;
+
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
-use prover::Prover;
+use prover::NetworkProver;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
@@ -12,11 +12,15 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
-use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants, Verifier};
+use super::{ProverService, ProverServiceError, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
 
-/// Prover service that generates proofs in parallel.
-pub struct ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
+/// Prover service that submits proofs to a remote proving network.
+///
+/// Instead of generating proofs locally (like [`super::ParallelProverService`]),
+/// this service uses the [`ZkvmNetwork`] trait to submit proof requests to a
+/// remote proving service and polls for completion.
+pub struct NetworkProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address: Serialize + DeserializeOwned,
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
@@ -25,76 +29,41 @@ where
     InnerVm: Zkvm,
     OuterVm: Zkvm,
 {
-    inner_vm: InnerVm::Host,
-    outer_vm: OuterVm::Host,
-    prover_config: RollupProverConfigDiscriminants,
-
-    prover_state: Prover<Address, StateRoot, Witness, Da>,
-
+    prover: NetworkProver<Address, StateRoot, Witness, Da, InnerVm, OuterVm>,
     verifier: Arc<Verifier<Da>>,
 }
 
 impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
-    ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
+    NetworkProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
-    InnerVm: Zkvm,
+    InnerVm: Zkvm + 'static,
     OuterVm: Zkvm,
 {
-    /// Creates a new prover.
-    #[allow(clippy::too_many_arguments)]
+    /// Creates a new network prover service.
     pub fn new(
-        inner_vm: InnerVm::Host,
-        outer_vm: OuterVm::Host,
+        inner_vm: InnerVm::Network,
+        outer_vm: OuterVm::Network,
         da_verifier: Da::Verifier,
-        config: RollupProverConfigDiscriminants,
-        num_threads: usize,
-        outer_vk_hash: OuterCodeCommitmentHash,
+        code_commitment: OuterCodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });
 
         Self {
-            inner_vm,
-            outer_vm,
-            prover_config: config,
-            prover_state: Prover::new(prover_address, num_threads, outer_vk_hash),
+            prover: NetworkProver::new(prover_address, inner_vm, outer_vm, code_commitment),
             verifier,
         }
-    }
-
-    /// Creates a new prover.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_with_default_workers(
-        inner_vm: InnerVm::Host,
-        outer_vm: OuterVm::Host,
-        da_verifier: Da::Verifier,
-        config: RollupProverConfigDiscriminants,
-        outer_vk_hash: OuterCodeCommitmentHash,
-        prover_address: Address,
-    ) -> Self {
-        let num_cpus = num_cpus::get();
-        assert!(num_cpus > 1, "Unable to create parallel prover service");
-
-        Self::new(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            config,
-            num_cpus - 1,
-            outer_vk_hash,
-            prover_address,
-        )
     }
 }
 
 #[async_trait]
 impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm> ProverService
-    for ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
+    for NetworkProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
@@ -106,11 +75,8 @@ where
     OuterVm: Zkvm + 'static,
 {
     type StateRoot = StateRoot;
-
     type Witness = Witness;
-
     type DaService = Da;
-
     type Verifier = <OuterVm::Guest as ZkvmGuest>::Verifier;
 
     async fn prove(
@@ -124,14 +90,9 @@ where
         ProofProcessingStatus<Self::StateRoot, Self::Witness, <Self::DaService as DaService>::Spec>,
         ProverServiceError,
     > {
-        let inner_vm = self.inner_vm.clone();
-
-        self.prover_state.start_proving::<InnerVm>(
-            state_transition_info,
-            self.prover_config,
-            inner_vm,
-            self.verifier.clone(),
-        )
+        self.prover
+            .start_proving(state_transition_info, &self.verifier)
+            .await
     }
 
     async fn create_aggregated_proof(
@@ -139,10 +100,8 @@ where
         block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
-        self.prover_state.create_aggregated_proof(
-            self.outer_vm.clone(),
-            block_header_hashes,
-            genesis_state_root,
-        )
+        self.prover
+            .create_aggregated_proof(block_header_hashes, genesis_state_root)
+            .await
     }
 }

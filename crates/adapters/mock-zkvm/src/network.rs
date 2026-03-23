@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -20,7 +20,6 @@ struct MockNetworkProof {
 ///   immediately ready when submitted.
 #[derive(Clone)]
 pub struct MockZkvmNetwork {
-    committed_data: VecDeque<Vec<u8>>,
     auto_complete: bool,
     proofs: Arc<Mutex<HashMap<u64, MockNetworkProof>>>,
     next_handle: Arc<AtomicU64>,
@@ -31,7 +30,6 @@ impl MockZkvmNetwork {
     /// [`Self::complete_proof`] is called.
     pub fn new(auto_complete: bool) -> Self {
         Self {
-            committed_data: VecDeque::new(),
             auto_complete,
             proofs: Arc::new(Mutex::new(HashMap::new())),
             next_handle: Arc::new(AtomicU64::new(0)),
@@ -51,6 +49,20 @@ impl MockZkvmNetwork {
             .expect("complete_proof called with unknown handle");
         proof.ready = true;
     }
+
+    /// Removes a proof from the internal map so that subsequent
+    /// [`ZkvmNetwork::poll`] calls for this handle return an error.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `handle` does not correspond to a submitted proof.
+    pub fn fail_proof(&self, handle: u64) {
+        let mut proofs = self.proofs.lock().unwrap();
+        assert!(
+            proofs.remove(&handle).is_some(),
+            "fail_proof called with unknown handle"
+        );
+    }
 }
 
 impl Default for MockZkvmNetwork {
@@ -63,13 +75,11 @@ impl sov_rollup_interface::zk::ZkvmNetwork for MockZkvmNetwork {
     type Guest = MockZkGuest;
     type ProofHandle = u64;
 
-    fn add_hint<T: Serialize>(&mut self, item: &T) {
+    async fn add_hint_and_submit<T: Serialize + Send + Sync>(
+        &self,
+        item: &T,
+    ) -> anyhow::Result<Self::ProofHandle> {
         let data = bincode::serialize(item).unwrap();
-        self.committed_data.push_back(data);
-    }
-
-    async fn submit(&mut self) -> anyhow::Result<Self::ProofHandle> {
-        let data = self.committed_data.pop_front().unwrap_or_default();
         let proof_bytes = bincode::serialize(&Proof::<Empty, Inner>::PublicData(Inner {
             is_valid: true,
             pub_data: data,
