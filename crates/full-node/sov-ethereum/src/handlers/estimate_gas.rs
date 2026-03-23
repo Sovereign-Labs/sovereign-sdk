@@ -143,7 +143,7 @@ where
     ) -> RpcResult<()> {
         let evm = Evm::<S>::default();
         let mut api_state = snapshot_state.clone_without_local_writes();
-        let mut preflight_state = evm
+        let preflight_state = evm
             .preflight_state_for_block_id(block_id, &mut api_state)
             .map_err(ErrorObjectOwned::from)?;
 
