@@ -51,11 +51,18 @@ where
         da_verifier: Da::Verifier,
         code_commitment: OuterCodeCommitmentHash,
         prover_address: Address,
+        outer_proof_timeout: std::time::Duration,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });
 
         Self {
-            prover: NetworkProver::new(prover_address, inner_vm, outer_vm, code_commitment),
+            prover: NetworkProver::new(
+                prover_address,
+                inner_vm,
+                outer_vm,
+                code_commitment,
+                outer_proof_timeout,
+            ),
             verifier,
         }
     }

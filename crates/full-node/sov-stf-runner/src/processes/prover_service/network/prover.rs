@@ -56,6 +56,7 @@ pub(crate) struct NetworkProver<
     outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
     code_commitment: OuterCodeCommitmentHash,
+    outer_proof_timeout: std::time::Duration,
     phantom: PhantomData<Witness>,
 }
 
@@ -75,6 +76,7 @@ where
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
         code_commitment: OuterCodeCommitmentHash,
+        outer_proof_timeout: std::time::Duration,
     ) -> Self {
         Self {
             prover_address,
@@ -82,6 +84,7 @@ where
             outer_vm,
             tracker: tokio::sync::RwLock::new(HashMap::new()),
             code_commitment,
+            outer_proof_timeout,
             phantom: PhantomData,
         }
     }
@@ -265,21 +268,34 @@ where
 
         let outer_handle = self.outer_vm.add_hint_and_submit(&public_data).await?;
 
-        let serialized_aggregated_proof = loop {
-            match self.outer_vm.poll(&outer_handle).await {
-                Ok(Some(proof_bytes)) => {
-                    break SerializedAggregatedProof {
-                        raw_aggregated_proof: proof_bytes,
-                    };
+        let outer_proof_timeout = self.outer_proof_timeout;
+        let serialized_aggregated_proof = tokio::time::timeout(
+            outer_proof_timeout,
+            async {
+                loop {
+                    match self.outer_vm.poll(&outer_handle).await {
+                        Ok(Some(proof_bytes)) => {
+                            break Ok(SerializedAggregatedProof {
+                                raw_aggregated_proof: proof_bytes,
+                            });
+                        }
+                        Ok(None) => {
+                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        }
+                        Err(e) => {
+                            break Err(anyhow::anyhow!("Outer network proving failed: {}", e));
+                        }
+                    }
                 }
-                Ok(None) => {
-                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                }
-                Err(e) => {
-                    return Err(anyhow::anyhow!("Outer network proving failed: {}", e));
-                }
-            }
-        };
+            },
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!(
+                "Outer network proving timed out after {:?}",
+                outer_proof_timeout
+            )
+        })??;
 
         let mut tracker = self.tracker.write().await;
         for slot_hash in block_header_hashes {

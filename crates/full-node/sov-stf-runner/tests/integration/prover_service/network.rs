@@ -27,6 +27,7 @@ fn make_network_prover(inner_auto_complete: bool, outer_auto_complete: bool) -> 
             da_verifier,
             Default::default(),
             vec![],
+            std::time::Duration::from_secs(60),
         ),
         inner_vm,
     }
