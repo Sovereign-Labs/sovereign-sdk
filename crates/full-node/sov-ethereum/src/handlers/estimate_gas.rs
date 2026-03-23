@@ -175,16 +175,17 @@ where
                     return Ok(());
                 }
             };
-        Self::request_affordability_preflight(
+        match Self::request_affordability_preflight(
             &authenticated_tx,
             &auth_data,
             S::Address::from_vm_address(EthereumAddress::from(from)),
             request.value.unwrap_or_default(),
             &mut api_state,
             ethereum,
-        )?;
-
-        Ok(())
+        )? {
+            AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
+            AffordabilityPreflight::Rejected(err) => Err(err),
+        }
     }
 
     pub(crate) fn request_affordability_preflight(
