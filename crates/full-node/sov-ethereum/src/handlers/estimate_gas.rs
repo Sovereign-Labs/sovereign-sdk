@@ -147,30 +147,21 @@ where
             .preflight_state_for_block_id(block_id, &mut api_state)
             .map_err(ErrorObjectOwned::from)?;
 
-        match Self::request_affordability_preflight(request, &mut preflight_state, ethereum)? {
-            AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
-            AffordabilityPreflight::Rejected(err) => Err(err),
-        }
-    }
-
-    fn request_affordability_preflight(
-        request: &TransactionRequest,
-        state: &mut ApiStateAccessor<S>,
-        ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> RpcResult<AffordabilityPreflight> {
         // These guards are defensive: omitted-gas callers synthesize `gas` from a pinned estimate
         // before calling this helper, and the caller already validates `from` and a fee field.
         let Some(from) = request.from else {
-            return Ok(AffordabilityPreflight::Skip);
+            return Ok(());
         };
         if request.gas.is_none() {
-            return Ok(AffordabilityPreflight::Skip);
+            return Ok(());
         }
         if request.max_fee_per_gas.or(request.gas_price).is_none() {
-            return Ok(AffordabilityPreflight::Skip);
+            return Ok(());
         }
 
-        let mut auth_state = state.clone_without_local_writes().to_provable_reader();
+        let mut auth_state = preflight_state
+            .clone_without_local_writes()
+            .to_provable_reader();
         let (authenticated_tx, auth_data) =
             match build_request_preflight_auth::<_, S>(request, &mut auth_state) {
                 Ok(data) => data,
@@ -181,18 +172,19 @@ where
                     );
                     // Wrapper preflight is best-effort only. Sequencer admission still authenticates
                     // and reserves gas before accepting the transaction.
-                    return Ok(AffordabilityPreflight::Skip);
+                    return Ok(());
                 }
             };
-
         Self::run_affordability_preflight(
             &authenticated_tx,
             &auth_data,
             S::Address::from_vm_address(EthereumAddress::from(from)),
             request.value.unwrap_or_default(),
-            state,
+            &mut api_state,
             ethereum,
-        )
+        )?;
+
+        Ok(())
     }
 
     pub(crate) fn run_affordability_preflight(
