@@ -620,6 +620,64 @@ async fn rpc2_002b_stale_nonce_precedes_affordability_rejection() -> anyhow::Res
     Ok(())
 }
 
+/// RPC2-002d: Explicit-gas estimate must preserve affordability precedence over
+/// simulation gas failures so it matches the send path.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002d_explicit_gas_affordability_precedes_simulation_failure() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = AFFORDABILITY_SIGNER_PRIV_KEY.parse()?;
+    let sender = signer.address();
+
+    assert_eq!(
+        ws_client.eth_get_balance(sender).await,
+        U256::ZERO,
+        "fresh affordability signer must start unfunded"
+    );
+    assert!(
+        ws_client.eth_gas_price().await > 0,
+        "rollup gas price should be non-zero for this test"
+    );
+
+    let request = TransactionRequest {
+        from: Some(sender),
+        to: Some(TxKind::Call(Address::repeat_byte(0x25))),
+        gas: Some(20_000),
+        value: Some(U256::ZERO),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    };
+
+    let results = call_all_endpoints(&ws_client, &request, &signer).await;
+
+    let estimate_err = results
+        .estimate_gas
+        .expect_err("estimate should reject the unfunded explicit-gas request")
+        .to_string();
+    let send_err = results
+        .send_raw_tx
+        .expect_err("raw send should reject the unfunded explicit-gas request")
+        .to_string();
+
+    assert!(
+        estimate_err.contains(INSUFFICIENT_FUNDS_ERROR),
+        "estimate should keep affordability precedence for explicit-gas requests: {estimate_err}"
+    );
+    assert!(
+        send_err.contains(INSUFFICIENT_FUNDS_ERROR),
+        "raw send should reject on affordability before execution: {send_err}"
+    );
+    assert!(
+        !estimate_err.contains("out of gas") && !estimate_err.contains("intrinsic gas"),
+        "estimate should not fall through to simulation gas failure first: {estimate_err}"
+    );
+
+    Ok(())
+}
+
 /// RPC2-003 (gasleft probe): Omitted-gas `eth_call` should default to the tx gas cap.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {

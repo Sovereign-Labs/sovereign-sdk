@@ -100,33 +100,10 @@ where
             block_overrides.as_deref(),
         );
 
-        if request.gas.is_none() {
-            let mut state = snapshot_state.clone_without_local_writes();
-            let estimated_gas = evm.eth_estimate_gas_helper(
-                request.clone(),
-                block_id,
-                state_overrides.clone(),
-                block_overrides.clone(),
-                &mut state,
-            )?;
-
-            if should_run_affordability_preflight {
-                let mut request_with_estimated_gas = request;
-                request_with_estimated_gas.gas = Some(estimated_gas.to::<u64>());
-                Self::run_request_affordability_preflight(
-                    &request_with_estimated_gas,
-                    block_id,
-                    snapshot_state,
-                    ethereum,
-                )?;
-            }
-
-            return Ok(estimated_gas);
-        }
-
         Self::validate_request_stale_nonce_preflight(&request, block_id, snapshot_state)?;
 
-        if should_run_affordability_preflight {
+        let has_explicit_gas = request.gas.is_some();
+        if has_explicit_gas && should_run_affordability_preflight {
             Self::run_request_affordability_preflight(
                 &request,
                 block_id,
@@ -136,13 +113,26 @@ where
         }
 
         let mut state = snapshot_state.clone_without_local_writes();
-        evm.eth_estimate_gas_helper(
-            request,
+        let estimated_gas = evm.eth_estimate_gas_helper(
+            request.clone(),
             block_id,
             state_overrides,
             block_overrides,
             &mut state,
-        )
+        )?;
+
+        if !has_explicit_gas && should_run_affordability_preflight {
+            let mut request_with_estimated_gas = request;
+            request_with_estimated_gas.gas = Some(estimated_gas.to::<u64>());
+            Self::run_request_affordability_preflight(
+                &request_with_estimated_gas,
+                block_id,
+                snapshot_state,
+                ethereum,
+            )?;
+        }
+
+        Ok(estimated_gas)
     }
 
     pub(crate) fn run_request_affordability_preflight(
