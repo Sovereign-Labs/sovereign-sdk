@@ -26,22 +26,6 @@ pub(crate) enum AffordabilityPreflight {
     Skip,
 }
 
-/// Returns whether a real-state affordability preflight is meaningful for this request.
-///
-/// When state or block overrides are present, account balances and gas pricing can be
-/// arbitrarily changed by the caller, so a preflight against real state would be
-/// meaningless. The EVM execution itself enforces affordability under the overridden state.
-fn supports_request_affordability_preflight(
-    request: &TransactionRequest,
-    state_overrides: Option<&StateOverride>,
-    block_overrides: Option<&BlockOverrides>,
-) -> bool {
-    request.from.is_some()
-        && request.max_fee_per_gas.or(request.gas_price).is_some()
-        && state_overrides.is_none()
-        && block_overrides.is_none()
-}
-
 impl<S, Seq> Handlers<S, Seq>
 where
     S: Spec,
@@ -82,7 +66,11 @@ where
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<U64> {
         let evm = Evm::<S>::default();
-
+        // When state or block overrides are present, account balances and gas pricing can be
+        // arbitrarily changed by the caller, so a preflight against real state would be
+        // meaningless.
+        // The EVM execution itself enforces affordability under the overridden state.
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
         {
             let mut validation_state = snapshot_state.clone_without_local_writes();
             evm.validate_estimate_gas_request(
@@ -94,16 +82,10 @@ where
             )?;
         }
 
-        let should_run_affordability_preflight = supports_request_affordability_preflight(
-            &request,
-            state_overrides.as_ref(),
-            block_overrides.as_deref(),
-        );
-
         Self::validate_request_stale_nonce_preflight(&request, block_id, snapshot_state)?;
 
         let has_explicit_gas = request.gas.is_some();
-        if has_explicit_gas && should_run_affordability_preflight {
+        if has_explicit_gas && !has_overrides {
             Self::run_request_affordability_preflight(
                 &request,
                 block_id,
@@ -121,7 +103,7 @@ where
             &mut state,
         )?;
 
-        if !has_explicit_gas && should_run_affordability_preflight {
+        if !has_explicit_gas && !has_overrides {
             let mut request_with_estimated_gas = request;
             request_with_estimated_gas.gas = Some(estimated_gas.to::<u64>());
             Self::run_request_affordability_preflight(
@@ -141,13 +123,6 @@ where
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
-        let evm = Evm::<S>::default();
-        let mut api_state = snapshot_state.clone_without_local_writes();
-        let preflight_state = evm
-            .preflight_state_for_block_id(block_id, &mut api_state)
-            .map_err(ErrorObjectOwned::from)?;
-        let mut affordability_state = preflight_state.clone_without_local_writes();
-
         // These guards are defensive: omitted-gas callers synthesize `gas` from a pinned estimate
         // before calling this helper, and the caller already validates `from` and a fee field.
         let Some(from) = request.from else {
@@ -159,6 +134,13 @@ where
         if request.max_fee_per_gas.or(request.gas_price).is_none() {
             return Ok(());
         }
+
+        let evm = Evm::<S>::default();
+        let mut api_state = snapshot_state.clone_without_local_writes();
+        let preflight_state = evm
+            .preflight_state_for_block_id(block_id, &mut api_state)
+            .map_err(ErrorObjectOwned::from)?;
+        let mut affordability_state = preflight_state.clone_without_local_writes();
 
         let mut auth_state = preflight_state
             .clone_without_local_writes()
@@ -283,41 +265,5 @@ where
         }
 
         Ok(AffordabilityPreflight::Affordable)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::TransactionRequest;
-    use alloy_primitives::{Address, TxKind};
-
-    fn sample_affordability_request() -> TransactionRequest {
-        TransactionRequest {
-            from: Some(Address::repeat_byte(0x11)),
-            to: Some(TxKind::Call(Address::repeat_byte(0x22))),
-            max_fee_per_gas: Some(1),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn omitted_gas_requests_still_support_affordability_preflight() {
-        let request = sample_affordability_request();
-
-        assert!(super::supports_request_affordability_preflight(
-            &request, None, None,
-        ));
-    }
-
-    #[test]
-    fn overrides_disable_affordability_preflight() {
-        let request = sample_affordability_request();
-        let state_overrides = alloy_rpc_types::state::StateOverride::default();
-
-        assert!(!super::supports_request_affordability_preflight(
-            &request,
-            Some(&state_overrides),
-            None,
-        ));
     }
 }
