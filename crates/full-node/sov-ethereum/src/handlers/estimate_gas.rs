@@ -146,6 +146,7 @@ where
         let preflight_state = evm
             .preflight_state_for_block_id(block_id, &mut api_state)
             .map_err(ErrorObjectOwned::from)?;
+        let mut affordability_state = preflight_state.clone_without_local_writes();
 
         // These guards are defensive: omitted-gas callers synthesize `gas` from a pinned estimate
         // before calling this helper, and the caller already validates `from` and a fee field.
@@ -180,7 +181,7 @@ where
             &auth_data,
             S::Address::from_vm_address(EthereumAddress::from(from)),
             request.value.unwrap_or_default(),
-            &mut api_state,
+            &mut affordability_state,
             ethereum,
         )? {
             AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
