@@ -123,11 +123,11 @@ where
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
-        // These guards are defensive: omitted-gas callers synthesize `gas` from a pinned estimate
-        // before calling this helper, and the caller already validates `from` and a fee field.
         let Some(from) = request.from else {
             return Ok(());
         };
+        // This guard is defensive: omitted-gas callers synthesize `gas` from a pinned estimate
+        // before calling this helper.
         if request.gas.is_none() {
             return Ok(());
         }
