@@ -9,9 +9,7 @@ use alloy_eips::Encodable2718;
 use alloy_primitives::Address;
 #[cfg(feature = "local")]
 use alloy_primitives::TxKind;
-use alloy_primitives::{Bytes, B256, U256, U64};
-use alloy_rpc_types::state::StateOverride;
-use alloy_rpc_types::BlockOverrides;
+use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::ReceiptEnvelope;
 use alloy_rpc_types::TransactionReceipt;
 use alloy_rpc_types::TransactionRequest;
@@ -24,22 +22,17 @@ use serde::Deserialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::RlpEvmTransaction;
-use sov_evm::{build_request_preflight_auth, Evm, TransactionSigned};
+use sov_evm::{Evm, TransactionSigned};
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::{
-    AuthenticationError, AuthorizationData, FatalError, GasEnforcer, HasCapabilities, HasKernel,
-    TransactionAuthenticator, TransactionAuthorizer,
+    AuthenticationError, AuthorizationData, FatalError, HasKernel, TransactionAuthenticator,
 };
 #[cfg(feature = "local")]
 use sov_modules_api::macros::config_value;
-use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData,
-};
+use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::CredentialId;
-use sov_modules_api::ExecutionContext;
 use sov_modules_api::FullyBakedTx;
-use sov_modules_api::GetGasPrice;
 use sov_modules_api::Runtime;
 use sov_modules_api::{RawTx, Spec};
 use sov_rest_utils::{to_json_object, ErrorObject as RestErrorObject, GetIPResult};
@@ -523,9 +516,7 @@ fn get_peer_ip_addr(extensions: Extensions) -> Result<IpAddr, ErrorObjectOwned> 
 
 #[cfg(test)]
 mod tests {
-    use alloy_primitives::{Address, TxKind};
     use alloy_rpc_types::error::EthRpcErrorCode;
-    use alloy_rpc_types::TransactionRequest;
     use jsonrpsee::types::error::INVALID_PARAMS_CODE;
     use sov_modules_api::capabilities::{AuthenticationError, FatalError};
     use sov_modules_api::TxHash;
@@ -533,15 +524,6 @@ mod tests {
 
     use super::{map_accept_tx_error, map_authentication_error, RestErrorObject};
     use sov_sequencer::{AcceptTxErrorCode, AcceptTxErrorDetails};
-
-    fn sample_affordability_request() -> TransactionRequest {
-        TransactionRequest {
-            from: Some(Address::repeat_byte(0x11)),
-            to: Some(TxKind::Call(Address::repeat_byte(0x22))),
-            max_fee_per_gas: Some(1),
-            ..Default::default()
-        }
-    }
 
     fn sample_accept_tx_error(status: u16) -> RestErrorObject {
         let status = status.try_into().expect("status code should be valid");
@@ -614,26 +596,5 @@ mod tests {
 
         assert_eq!(err.code(), EthRpcErrorCode::InvalidInput.code());
         assert_eq!(err.message(), "max fee per gas less than block base fee");
-    }
-
-    #[test]
-    fn omitted_gas_requests_still_support_affordability_preflight() {
-        let request = sample_affordability_request();
-
-        assert!(super::supports_request_affordability_preflight(
-            &request, None, None,
-        ));
-    }
-
-    #[test]
-    fn overrides_disable_affordability_preflight() {
-        let request = sample_affordability_request();
-        let state_overrides = alloy_rpc_types::state::StateOverride::default();
-
-        assert!(!super::supports_request_affordability_preflight(
-            &request,
-            Some(&state_overrides),
-            None,
-        ));
     }
 }

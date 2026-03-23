@@ -359,7 +359,7 @@ fn test_eth_estimate_gas_state_override_code_is_applied() {
         };
 
         assert!(evm
-            .eth_estimate_gas(request.clone(), None, None, None, state)
+            .eth_estimate_gas_helper(request.clone(), None, None, None, state)
             .is_err());
 
         let mut state_overrides = StateOverride::default();
@@ -368,7 +368,7 @@ fn test_eth_estimate_gas_state_override_code_is_applied() {
             AccountOverride::default().with_code(Bytes::from(vec![0x00])),
         );
         let estimate = evm
-            .eth_estimate_gas(request, None, Some(state_overrides), None, state)
+            .eth_estimate_gas_helper(request, None, Some(state_overrides), None, state)
             .unwrap();
         assert!(estimate.to::<u64>() > 0);
     });
@@ -390,7 +390,7 @@ fn test_eth_estimate_gas_block_override_number_is_applied() {
         );
 
         assert!(evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 request.clone(),
                 None,
                 Some(state_overrides.clone()),
@@ -400,7 +400,7 @@ fn test_eth_estimate_gas_block_override_number_is_applied() {
             .is_err());
 
         let estimate = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 request,
                 None,
                 Some(state_overrides),
@@ -451,7 +451,7 @@ fn test_eth_call_and_estimate_gas_prefer_fee_cap_over_stale_nonce_after_block_ov
         );
 
         let estimate_err = evm
-            .eth_estimate_gas(request, None, None, Some(Box::new(block_overrides)), state)
+            .eth_estimate_gas_helper(request, None, None, Some(Box::new(block_overrides)), state)
             .unwrap_err();
         assert!(
             estimate_err
@@ -490,7 +490,7 @@ fn test_omitted_gas_respects_lower_block_gas_limit_override() {
         assert_eq!(decode_u256(output), expected);
 
         let estimate = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 request,
                 None,
                 Some(state_overrides),

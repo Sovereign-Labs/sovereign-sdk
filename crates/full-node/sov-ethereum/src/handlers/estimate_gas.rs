@@ -7,9 +7,11 @@ use alloy_rpc_types::{BlockOverrides, TransactionRequest};
 use jsonrpsee::core::RpcResult;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
+use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_api_spec::tokio_tungstenite::tungstenite::http::Extensions;
 use sov_evm::{build_request_preflight_auth, EthereumAuthenticator, Evm};
+use sov_modules_api::capabilities::GasEnforcer;
+use sov_modules_api::capabilities::TransactionAuthorizer;
 use sov_modules_api::capabilities::{AuthorizationData, HasCapabilities, HasKernel};
 use sov_modules_api::{
     ApiStateAccessor, AuthenticatedTransactionData, ExecutionContext, GetGasPrice, Spec,
@@ -57,37 +59,21 @@ where
         let block_id: Option<BlockId> = params.optional_next()?;
         let state_overrides: Option<StateOverride> = params.optional_next()?;
         let block_overrides: Option<Box<BlockOverrides>> = params.optional_next()?;
-
-        Self::estimate_gas_request(
-            request,
-            block_id,
-            state_overrides,
-            block_overrides,
-            &ethereum,
-        )
-    }
-
-    fn estimate_gas_request(
-        request: TransactionRequest,
-        block_id: Option<BlockId>,
-        state_overrides: Option<StateOverride>,
-        block_overrides: Option<Box<BlockOverrides>>,
-        ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> RpcResult<U64> {
         // Pin one checkpoint snapshot for the full request so validation,
         // affordability preflight, and estimation cannot observe different heads.
         let snapshot_state = ethereum.api_state_accessor();
+
         Self::estimate_gas_request_with_snapshot(
             request,
             block_id,
             state_overrides,
             block_overrides,
             &snapshot_state,
-            ethereum,
+            &ethereum,
         )
     }
 
-    fn estimate_gas_request_with_snapshot(
+    pub(crate) fn estimate_gas_request_with_snapshot(
         request: TransactionRequest,
         block_id: Option<BlockId>,
         state_overrides: Option<StateOverride>,
@@ -116,7 +102,7 @@ where
 
         if request.gas.is_none() {
             let mut state = snapshot_state.clone_without_local_writes();
-            let estimated_gas = evm.eth_estimate_gas(
+            let estimated_gas = evm.eth_estimate_gas_helper(
                 request.clone(),
                 block_id,
                 state_overrides.clone(),
@@ -150,7 +136,7 @@ where
         }
 
         let mut state = snapshot_state.clone_without_local_writes();
-        evm.eth_estimate_gas(
+        evm.eth_estimate_gas_helper(
             request,
             block_id,
             state_overrides,
@@ -313,5 +299,41 @@ where
         }
 
         Ok(AffordabilityPreflight::Affordable)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy_primitives::{Address, TxKind};
+
+    fn sample_affordability_request() -> TransactionRequest {
+        TransactionRequest {
+            from: Some(Address::repeat_byte(0x11)),
+            to: Some(TxKind::Call(Address::repeat_byte(0x22))),
+            max_fee_per_gas: Some(1),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn omitted_gas_requests_still_support_affordability_preflight() {
+        let request = sample_affordability_request();
+
+        assert!(super::supports_request_affordability_preflight(
+            &request, None, None,
+        ));
+    }
+
+    #[test]
+    fn overrides_disable_affordability_preflight() {
+        let request = sample_affordability_request();
+        let state_overrides = alloy_rpc_types::state::StateOverride::default();
+
+        assert!(!super::supports_request_affordability_preflight(
+            &request,
+            Some(&state_overrides),
+            None,
+        ));
     }
 }

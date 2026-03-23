@@ -590,7 +590,7 @@ where
     ///
     /// This is a library method called by `sov-ethereum`'s RPC handler, which
     /// wraps it with paymaster-aware affordability checks.
-    pub fn eth_estimate_gas(
+    pub fn eth_estimate_gas_helper(
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
