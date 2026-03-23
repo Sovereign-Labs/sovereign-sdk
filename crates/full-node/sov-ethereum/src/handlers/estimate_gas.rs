@@ -63,7 +63,7 @@ where
         // affordability preflight, and estimation cannot observe different heads.
         let snapshot_state = ethereum.api_state_accessor();
 
-        Self::estimate_gas_request_with_snapshot(
+        Self::estimate_gas_request(
             request,
             block_id,
             state_overrides,
@@ -73,7 +73,7 @@ where
         )
     }
 
-    pub(crate) fn estimate_gas_request_with_snapshot(
+    pub(crate) fn estimate_gas_request(
         request: TransactionRequest,
         block_id: Option<BlockId>,
         state_overrides: Option<StateOverride>,

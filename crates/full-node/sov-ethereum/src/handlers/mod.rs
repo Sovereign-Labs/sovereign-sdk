@@ -239,7 +239,7 @@ where
         Ok((authenticated_tx, auth_data))
     }
 
-    fn authenticate_and_preflight_send_with_snapshot(
+    fn authenticate_and_preflight_send(
         tx: &FullyBakedTx,
         signed_tx: &TransactionSigned,
         snapshot_state: &ApiStateAccessor<S>,
@@ -314,12 +314,7 @@ where
         let (tx_hash, raw_message, signed_tx) = Self::decode_raw_transaction(&data)?;
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(raw_message));
         let snapshot_state = ethereum.api_state_accessor();
-        Self::authenticate_and_preflight_send_with_snapshot(
-            &tx,
-            &signed_tx,
-            &snapshot_state,
-            &ethereum,
-        )?;
+        Self::authenticate_and_preflight_send(&tx, &signed_tx, &snapshot_state, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
@@ -378,7 +373,7 @@ where
         }
 
         if transaction_request.gas.is_none() {
-            let estimated_gas = Self::estimate_gas_request_with_snapshot(
+            let estimated_gas = Self::estimate_gas_request(
                 transaction_request.clone(),
                 Some(BlockId::pending()),
                 None,
@@ -414,12 +409,7 @@ where
         let message = borsh::to_vec(&raw_tx).expect("Failed to serialize raw tx");
         let tx = Seq::Rt::encode_with_ethereum_auth(RawTx::new(message));
 
-        Self::authenticate_and_preflight_send_with_snapshot(
-            &tx,
-            &signed_tx,
-            &snapshot_state,
-            &ethereum,
-        )?;
+        Self::authenticate_and_preflight_send(&tx, &signed_tx, &snapshot_state, &ethereum)?;
 
         let seq = ethereum.sequencer.clone();
         seq.accept_tx(tx, ip_addr)
