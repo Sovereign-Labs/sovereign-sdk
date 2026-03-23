@@ -268,32 +268,28 @@ where
 
         let outer_handle = self.outer_vm.add_hint_and_submit(&public_data).await?;
 
-        let outer_proof_timeout = self.outer_proof_timeout;
-        let serialized_aggregated_proof = tokio::time::timeout(
-            outer_proof_timeout,
-            async {
-                loop {
-                    match self.outer_vm.poll(&outer_handle).await {
-                        Ok(Some(proof_bytes)) => {
-                            break Ok(SerializedAggregatedProof {
-                                raw_aggregated_proof: proof_bytes,
-                            });
-                        }
-                        Ok(None) => {
-                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                        }
-                        Err(e) => {
-                            break Err(anyhow::anyhow!("Outer network proving failed: {}", e));
-                        }
+        let serialized_aggregated_proof = tokio::time::timeout(self.outer_proof_timeout, async {
+            loop {
+                match self.outer_vm.poll(&outer_handle).await {
+                    Ok(Some(proof_bytes)) => {
+                        break Ok(SerializedAggregatedProof {
+                            raw_aggregated_proof: proof_bytes,
+                        });
+                    }
+                    Ok(None) => {
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    }
+                    Err(e) => {
+                        break Err(anyhow::anyhow!("Outer network proving failed: {}", e));
                     }
                 }
-            },
-        )
+            }
+        })
         .await
         .map_err(|_| {
             anyhow::anyhow!(
                 "Outer network proving timed out after {:?}",
-                outer_proof_timeout
+                self.outer_proof_timeout
             )
         })??;
 
