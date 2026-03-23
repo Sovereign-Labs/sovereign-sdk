@@ -1,20 +1,26 @@
 use crate::evm::evm_test_helper::{
-    call_all_endpoints, create_simple_storage_client, setup_test_rollup, EndpointResults,
-    EVM_EXTENSION, SENDER_PRIV_KEY,
+    call_all_endpoints, create_simple_storage_client, setup_test_rollup,
+    setup_test_rollup_with_selective_paymaster, tx_count, EndpointResults,
+    AFFORDABILITY_SIGNER_PRIV_KEY, EVM_EXTENSION, PAYMASTER_SIGNER_PRIV_KEY, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, TxKind, U256};
 use alloy_rpc_types_eth::TransactionRequest;
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
 use proptest::prelude::*;
+use sov_eth_client::SimpleStorageClient;
+
+// ---------------------------------------------------------------------------
+// Test input types
+// ---------------------------------------------------------------------------
 
 pub struct TestTransactionRequest {
     pub max_fee_per_gas: Option<u128>,
     pub max_priority_fee_per_gas: Option<u128>,
     pub gas: Option<u64>,
     pub value: Option<U256>,
-    // TODO: Add to with 2 options: send to some address and create
+    pub to: Option<Address>,
 }
 
 impl TestTransactionRequest {
@@ -24,9 +30,11 @@ impl TestTransactionRequest {
             max_priority_fee_per_gas,
             gas,
             value,
+            to,
         } = self;
         TransactionRequest {
             from: Some(sender),
+            to: to.map(TxKind::Call),
             max_fee_per_gas,
             max_priority_fee_per_gas,
             gas,
@@ -36,7 +44,7 @@ impl TestTransactionRequest {
     }
 }
 
-impl<'a> arbitrary::Arbitrary<'a> for TestTransactionRequest {
+impl<'a> Arbitrary<'a> for TestTransactionRequest {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
         // Rollup thresholds:
         //   base_fee        = 10 wei
@@ -65,31 +73,128 @@ impl<'a> arbitrary::Arbitrary<'a> for TestTransactionRequest {
         ];
         let value = u.choose(&values)?;
 
+        let to_options = [None, Some(Address::repeat_byte(0x22))];
+        let to = u.choose(&to_options)?;
+
         Ok(TestTransactionRequest {
             max_fee_per_gas: *max_fee_per_gas,
             max_priority_fee_per_gas: *max_priority_fee_per_gas,
             gas: *gas,
             value: *value,
+            to: *to,
         })
     }
 }
 
-async fn test_regular_rollup_simulation_and_send_consistency(
-    request: TestTransactionRequest,
-    sender_priv_key: &str,
-    strict_check: bool,
-    // TODO: Nonce params: Below, Valid, Future,
+#[derive(Debug, Clone, Copy)]
+enum NonceOption {
+    Below,
+    Match,
+    Future,
+}
+
+impl<'a> Arbitrary<'a> for NonceOption {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        u.choose(&[NonceOption::Below, NonceOption::Match, NonceOption::Future])
+            .copied()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RegularTestAccount {
+    Funded,
+    UnfundedUncovered,
+}
+
+impl RegularTestAccount {
+    fn priv_key(self) -> &'static str {
+        match self {
+            Self::Funded => SENDER_PRIV_KEY,
+            Self::UnfundedUncovered => AFFORDABILITY_SIGNER_PRIV_KEY,
+        }
+    }
+
+    fn is_funded(self) -> bool {
+        matches!(self, Self::Funded)
+    }
+}
+
+impl<'a> Arbitrary<'a> for RegularTestAccount {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        u.choose(&[
+            RegularTestAccount::Funded,
+            RegularTestAccount::UnfundedUncovered,
+        ])
+        .copied()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum PaymasterTestAccount {
+    FundedCovered,
+    UnfundedCovered,
+    UnfundedUncovered,
+}
+
+impl PaymasterTestAccount {
+    fn priv_key(self) -> &'static str {
+        match self {
+            Self::FundedCovered => SENDER_PRIV_KEY,
+            Self::UnfundedCovered => PAYMASTER_SIGNER_PRIV_KEY,
+            Self::UnfundedUncovered => AFFORDABILITY_SIGNER_PRIV_KEY,
+        }
+    }
+
+    fn is_funded(self) -> bool {
+        matches!(self, Self::FundedCovered)
+    }
+}
+
+impl<'a> Arbitrary<'a> for PaymasterTestAccount {
+    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
+        u.choose(&[
+            PaymasterTestAccount::FundedCovered,
+            PaymasterTestAccount::UnfundedCovered,
+            PaymasterTestAccount::UnfundedUncovered,
+        ])
+        .copied()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Nonce setup helper
+// ---------------------------------------------------------------------------
+
+/// Applies the nonce option to the request. For `Below`, bumps the account nonce
+/// by sending a self-transfer (only for funded accounts; unfunded falls back to `Match`).
+async fn apply_nonce(
+    nonce_option: NonceOption,
+    is_funded: bool,
+    ws_client: &SimpleStorageClient,
+    signer: &PrivateKeySigner,
+    request: &mut TransactionRequest,
 ) -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
+    match nonce_option {
+        NonceOption::Below if is_funded => {
+            let hash = ws_client.send_eth(signer.address(), U256::ZERO).await;
+            ws_client.wait_for_receipt(hash).await;
+            request.nonce = Some(0);
+        }
+        NonceOption::Future => {
+            let nonce = tx_count(ws_client, signer.address(), "latest").await?;
+            request.nonce = Some(nonce + 1);
+        }
+        // Match, or Below for unfunded accounts (nonce is already 0, nothing below it)
+        _ => {}
+    }
+    Ok(())
+}
 
-    let ws_client = create_simple_storage_client(rollup.http_addr, sender_priv_key).await;
-    let signer: PrivateKeySigner = sender_priv_key.parse()?;
+// ---------------------------------------------------------------------------
+// Consistency check
+// ---------------------------------------------------------------------------
 
-    let request = request.build_tx_request(signer.address());
-
-    let results = call_all_endpoints(&ws_client, &request, &signer).await;
-
+fn check_consistency(results: &EndpointResults, strict_check: bool) {
     let EndpointResults {
         estimate_gas,
         call,
@@ -97,39 +202,115 @@ async fn test_regular_rollup_simulation_and_send_consistency(
         send_raw_tx,
     } = results;
 
-    match (&estimate_gas, &call, &create_access_list, &send_raw_tx) {
-        (Ok(_e), Ok(_c), Ok(_cal), Ok(_send)) => {
+    match (estimate_gas, call, create_access_list, send_raw_tx) {
+        (Ok(_), Ok(_), Ok(_), Ok(_)) => {
             println!("Consistent Ok");
-            // TODO: Add estimated gas check, and other important stuff
         }
-        (Ok(_e), Ok(_c), call_result, Ok(_send)) => {
+        (Ok(_), Ok(_), _cal, Ok(_)) => {
             if strict_check {
-                assert!(call_result.is_ok());
+                assert!(
+                    _cal.is_ok(),
+                    "createAccessList should also succeed: {_cal:?}"
+                );
             }
         }
-        (Err(_e), Err(_c), Err(_cal), Err(_send)) => {
+        (Err(_), Err(_), Err(_), Err(_)) => {
             println!("Consistent Err");
-            // TODO: Add error check match
         }
-        (Err(_e), Err(_c), cal_result, Err(_send)) => {
+        (Err(_), Err(_), cal, Err(_)) => {
             if strict_check {
-                assert!(cal_result.is_err())
+                assert!(cal.is_err(), "createAccessList should also fail: {cal:?}");
             }
         }
         _ => {
             panic!(
                 "Responses disagree: \n\
-            estimateGas={estimate_gas:?}\n\
-            call={call:?}\n\
-            createAccessList={create_access_list:?}\n\
-            sendRawTransaction={send_raw_tx:?}
-            "
+                 estimateGas={estimate_gas:?}\n\
+                 call={call:?}\n\
+                 createAccessList={create_access_list:?}\n\
+                 sendRawTransaction={send_raw_tx:?}"
             )
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Inner test functions
+// ---------------------------------------------------------------------------
+
+async fn test_regular_rollup_simulation_and_send_consistency(
+    request: TestTransactionRequest,
+    account: RegularTestAccount,
+    nonce_option: NonceOption,
+    strict_check: bool,
+) -> anyhow::Result<()> {
+    let t0 = std::time::Instant::now();
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    eprintln!("[timing] setup_test_rollup: {:?}", t0.elapsed());
+
+    let t1 = std::time::Instant::now();
+    rollup.wait_for_rollup_height_advance_by(1).await;
+    eprintln!("[timing] wait_for_rollup_height_advance_by(1): {:?}", t1.elapsed());
+
+    let t2 = std::time::Instant::now();
+    let priv_key = account.priv_key();
+    let ws_client = create_simple_storage_client(rollup.http_addr, priv_key).await;
+    eprintln!("[timing] create_simple_storage_client: {:?}", t2.elapsed());
+    let signer: PrivateKeySigner = priv_key.parse()?;
+
+    let mut request = request.build_tx_request(signer.address());
+    let t3 = std::time::Instant::now();
+    apply_nonce(
+        nonce_option,
+        account.is_funded(),
+        &ws_client,
+        &signer,
+        &mut request,
+    )
+    .await?;
+    eprintln!("[timing] apply_nonce: {:?}", t3.elapsed());
+
+    let t4 = std::time::Instant::now();
+    let results = call_all_endpoints(&ws_client, &request, &signer).await;
+    eprintln!("[timing] call_all_endpoints: {:?}", t4.elapsed());
+    eprintln!("[timing] TOTAL: {:?}", t0.elapsed());
+    check_consistency(&results, strict_check);
 
     Ok(())
 }
+
+async fn test_paymaster_rollup_simulation_and_send_consistency(
+    request: TestTransactionRequest,
+    account: PaymasterTestAccount,
+    nonce_option: NonceOption,
+    strict_check: bool,
+) -> anyhow::Result<()> {
+    let rollup = setup_test_rollup_with_selective_paymaster(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let priv_key = account.priv_key();
+    let ws_client = create_simple_storage_client(rollup.http_addr, priv_key).await;
+    let signer: PrivateKeySigner = priv_key.parse()?;
+
+    let mut request = request.build_tx_request(signer.address());
+    apply_nonce(
+        nonce_option,
+        account.is_funded(),
+        &ws_client,
+        &signer,
+        &mut request,
+    )
+    .await?;
+
+    let results = call_all_endpoints(&ws_client, &request, &signer).await;
+    check_consistency(&results, strict_check);
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Smoke test
+// ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
 async fn check_inner() -> anyhow::Result<()> {
@@ -138,11 +319,21 @@ async fn check_inner() -> anyhow::Result<()> {
         max_priority_fee_per_gas: Some(0),
         gas: Some(21_000),
         value: Some(U256::from(1u64)),
+        to: Some(Address::repeat_byte(0x22)),
     };
 
-    test_regular_rollup_simulation_and_send_consistency(test_tx_request, SENDER_PRIV_KEY, false)
-        .await
+    test_regular_rollup_simulation_and_send_consistency(
+        test_tx_request,
+        RegularTestAccount::Funded,
+        NonceOption::Match,
+        false,
+    )
+    .await
 }
+
+// ---------------------------------------------------------------------------
+// Property tests
+// ---------------------------------------------------------------------------
 
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(5))]
@@ -153,12 +344,45 @@ proptest! {
         let Ok(request) = TestTransactionRequest::arbitrary(&mut u) else {
             return Ok(());
         };
+        let Ok(account) = RegularTestAccount::arbitrary(&mut u) else {
+            return Ok(());
+        };
+        let Ok(nonce) = NonceOption::arbitrary(&mut u) else {
+            return Ok(());
+        };
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async {
                 test_regular_rollup_simulation_and_send_consistency(
                     request,
-                    SENDER_PRIV_KEY,
+                    account,
+                    nonce,
+                    false,
+                )
+                .await
+                .unwrap();
+            });
+    }
+
+    #[test]
+    fn proptest_paymaster_simulation_send_consistency(bytes in prop::collection::vec(any::<u8>(), 64..256)) {
+        let mut u = Unstructured::new(&bytes);
+        let Ok(request) = TestTransactionRequest::arbitrary(&mut u) else {
+            return Ok(());
+        };
+        let Ok(account) = PaymasterTestAccount::arbitrary(&mut u) else {
+            return Ok(());
+        };
+        let Ok(nonce) = NonceOption::arbitrary(&mut u) else {
+            return Ok(());
+        };
+        tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(async {
+                test_paymaster_rollup_simulation_and_send_consistency(
+                    request,
+                    account,
+                    nonce,
                     false,
                 )
                 .await
