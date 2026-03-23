@@ -24,6 +24,7 @@ use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
 use async_trait::async_trait;
+use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
@@ -54,6 +55,7 @@ use sov_modules_api::{
 use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
+use sov_rest_utils::json_obj;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
@@ -863,6 +865,16 @@ where
         baked_tx: FullyBakedTx,
         ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        if baked_tx.data.len() > config_value!("MAX_TX_SIZE") {
+            return Err(ErrorObject {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Transaction is too big".to_string(),
+                details: json_obj!({
+                    "max_allowed_size": config_value!("MAX_TX_SIZE"),
+                    "submitted_size": baked_tx.len(),
+                }),
+            });
+        }
         let sequencer = self.clone();
         tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, ip_addr).await })
             .await

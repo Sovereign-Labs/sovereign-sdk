@@ -20,6 +20,7 @@ use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::StdSequencerConfig;
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
+use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::transaction::SequencerReward;
@@ -720,6 +721,17 @@ where
         baked_tx: FullyBakedTx,
         _ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        if baked_tx.data.len() > config_value!("MAX_TX_SIZE") {
+            return Err(ErrorObject {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Transaction is too big".to_string(),
+                details: json_obj!({
+                    "max_allowed_size": config_value!("MAX_TX_SIZE"),
+                    "submitted_size": baked_tx.len(),
+                }),
+            });
+        }
+
         let sequencer = self.clone();
         tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx).await })
             .await
