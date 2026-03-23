@@ -213,7 +213,7 @@ where
             .map_err(|_| rpc_invalid_params("failed to recover signer"))?;
         let sender_rollup_addr = S::Address::from_vm_address(EthereumAddress::from(sender));
 
-        match Self::run_affordability_preflight(
+        match Self::request_affordability_preflight(
             &authenticated_tx.authenticated_tx,
             auth_data,
             sender_rollup_addr,

@@ -175,7 +175,7 @@ where
                     return Ok(());
                 }
             };
-        Self::run_affordability_preflight(
+        Self::request_affordability_preflight(
             &authenticated_tx,
             &auth_data,
             S::Address::from_vm_address(EthereumAddress::from(from)),
@@ -187,7 +187,7 @@ where
         Ok(())
     }
 
-    pub(crate) fn run_affordability_preflight(
+    pub(crate) fn request_affordability_preflight(
         authenticated_tx: &AuthenticatedTransactionData<S>,
         auth_data: &AuthorizationData<S>,
         sender_rollup_addr: S::Address,
