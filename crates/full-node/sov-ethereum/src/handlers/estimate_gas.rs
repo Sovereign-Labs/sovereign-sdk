@@ -304,7 +304,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::TransactionRequest;
     use alloy_primitives::{Address, TxKind};
 
     fn sample_affordability_request() -> TransactionRequest {

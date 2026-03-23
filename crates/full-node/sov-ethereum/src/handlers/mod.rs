@@ -134,7 +134,7 @@ where
     }
 
     fn get_receipt(tx_hash: B256, ethereum: Arc<Ethereum<S, Seq>>) -> RpcResult<Option<Receipt>> {
-        let evm = sov_evm::Evm::<S>::default();
+        let evm = Evm::<S>::default();
         let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
         evm.get_transaction_receipt(tx_hash, state)
     }
