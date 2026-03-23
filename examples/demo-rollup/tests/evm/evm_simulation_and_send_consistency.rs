@@ -244,22 +244,14 @@ async fn test_regular_rollup_simulation_and_send_consistency(
     nonce_option: NonceOption,
     strict_check: bool,
 ) -> anyhow::Result<()> {
-    let t0 = std::time::Instant::now();
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    eprintln!("[timing] setup_test_rollup: {:?}", t0.elapsed());
-
-    let t1 = std::time::Instant::now();
     rollup.wait_for_rollup_height_advance_by(1).await;
-    eprintln!("[timing] wait_for_rollup_height_advance_by(1): {:?}", t1.elapsed());
 
-    let t2 = std::time::Instant::now();
     let priv_key = account.priv_key();
     let ws_client = create_simple_storage_client(rollup.http_addr, priv_key).await;
-    eprintln!("[timing] create_simple_storage_client: {:?}", t2.elapsed());
     let signer: PrivateKeySigner = priv_key.parse()?;
 
     let mut request = request.build_tx_request(signer.address());
-    let t3 = std::time::Instant::now();
     apply_nonce(
         nonce_option,
         account.is_funded(),
@@ -268,12 +260,8 @@ async fn test_regular_rollup_simulation_and_send_consistency(
         &mut request,
     )
     .await?;
-    eprintln!("[timing] apply_nonce: {:?}", t3.elapsed());
 
-    let t4 = std::time::Instant::now();
     let results = call_all_endpoints(&ws_client, &request, &signer).await;
-    eprintln!("[timing] call_all_endpoints: {:?}", t4.elapsed());
-    eprintln!("[timing] TOTAL: {:?}", t0.elapsed());
     check_consistency(&results, strict_check);
 
     Ok(())
@@ -313,11 +301,11 @@ async fn test_paymaster_rollup_simulation_and_send_consistency(
 // ---------------------------------------------------------------------------
 
 #[tokio::test(flavor = "multi_thread")]
-async fn check_inner() -> anyhow::Result<()> {
+async fn smoke_test_evm_endpoint_consistency() -> anyhow::Result<()> {
     let test_tx_request = TestTransactionRequest {
         max_fee_per_gas: Some(10),
         max_priority_fee_per_gas: Some(0),
-        gas: Some(21_000),
+        gas: None,
         value: Some(U256::from(1u64)),
         to: Some(Address::repeat_byte(0x22)),
     };
@@ -365,7 +353,7 @@ proptest! {
     }
 
     #[test]
-    fn proptest_paymaster_simulation_send_consistency(bytes in prop::collection::vec(any::<u8>(), 64..256)) {
+    fn proptest_paymaster_simulation_send_consistency(bytes in prop::collection::vec(any::<u8>(), 64..1024)) {
         let mut u = Unstructured::new(&bytes);
         let Ok(request) = TestTransactionRequest::arbitrary(&mut u) else {
             return Ok(());
