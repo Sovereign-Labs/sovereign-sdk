@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use sov_mock_da::{MockDaService, MockDaSpec, MockDaVerifier, MockHash};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier, MockZkvm, MockZkvmNetwork};
 use sov_modules_api::ZkVerifier;
@@ -13,9 +16,14 @@ struct TestNetworkProver {
     prover_service:
         NetworkProverService<Address, StateRoot, Vec<u8>, MockDaService, MockZkvm, MockZkvm>,
     inner_vm: MockZkvmNetwork,
+    outer_vm: MockZkvmNetwork,
 }
 
-fn make_network_prover(inner_auto_complete: bool, outer_auto_complete: bool) -> TestNetworkProver {
+fn make_network_prover(
+    inner_auto_complete: bool,
+    outer_auto_complete: bool,
+    outer_proof_timeout: Duration,
+) -> TestNetworkProver {
     let inner_vm = MockZkvmNetwork::new(inner_auto_complete);
     let outer_vm = MockZkvmNetwork::new(outer_auto_complete);
 
@@ -23,12 +31,14 @@ fn make_network_prover(inner_auto_complete: bool, outer_auto_complete: bool) -> 
     TestNetworkProver {
         prover_service: NetworkProverService::new(
             inner_vm.clone(),
-            outer_vm,
+            outer_vm.clone(),
             da_verifier,
             Default::default(),
             vec![],
+            outer_proof_timeout,
         ),
         inner_vm,
+        outer_vm,
     }
 }
 
@@ -38,7 +48,8 @@ async fn test_network_prove_and_aggregate() {
     let TestNetworkProver {
         prover_service,
         inner_vm,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let header_hash = MockHash::from([1; 32]);
     let genesis = genesis_state_root();
@@ -92,7 +103,8 @@ async fn test_network_prove_returns_in_progress() {
     let TestNetworkProver {
         prover_service,
         inner_vm: _,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let header_hash = MockHash::from([2; 32]);
     let genesis = genesis_state_root();
@@ -115,7 +127,8 @@ async fn test_network_aggregated_proof_multiple_blocks() {
     let TestNetworkProver {
         prover_service,
         inner_vm,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let block_count = 5;
     let genesis = genesis_state_root();
@@ -164,7 +177,8 @@ async fn test_network_duplicate_proof_rejected() {
     let TestNetworkProver {
         prover_service,
         inner_vm: _,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let header_hash = MockHash::from([4; 32]);
 
@@ -194,7 +208,8 @@ async fn test_network_prove_rejected_after_proved() {
     let TestNetworkProver {
         prover_service,
         inner_vm,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
     let hash_a = MockHash::from([5; 32]);
@@ -239,7 +254,8 @@ async fn test_network_prove_rejected_after_error() {
     let TestNetworkProver {
         prover_service,
         inner_vm,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
     let hash_a = MockHash::from([7; 32]);
@@ -285,7 +301,8 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
     let TestNetworkProver {
         prover_service,
         inner_vm,
-    } = make_network_prover(false, true);
+        ..
+    } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
     let hash_a = MockHash::from([8; 32]);
@@ -336,4 +353,93 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
             panic!("Expected Success after completing both inner proofs")
         }
     }
+}
+
+/// Regression test: the error message from an outer proof timeout must contain
+/// "Outer network proving timed out". This substring is matched in
+/// `create_aggregate_proof_with_retries` to treat outer proof failures as fatal
+/// (non-retryable). If the message changes, the fatal check will silently stop
+/// matching, and retries will re-submit to the outer network — abandoning the
+/// original proof handle and wasting proving resources.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_network_outer_proof_timeout_error_message() {
+    // Inner auto-completes; outer never completes (manual); short timeout.
+    let TestNetworkProver {
+        prover_service,
+        inner_vm: _,
+        outer_vm: _,
+    } = make_network_prover(true, false, Duration::from_millis(100));
+
+    let header_hash = MockHash::from([20; 32]);
+    let genesis = genesis_state_root();
+
+    prover_service
+        .prove(make_transition_info(header_hash, 1))
+        .await
+        .unwrap();
+
+    let err = prover_service
+        .create_aggregated_proof(&[header_hash], &genesis.0)
+        .await
+        .expect_err("Should fail with outer proof timeout");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Outer network proving timed out"),
+        "Expected error to contain 'Outer network proving timed out', got: {msg}",
+    );
+}
+
+/// Regression test: the error message from an outer proof poll failure must
+/// contain "Outer network proving failed". This substring is matched in
+/// `create_aggregate_proof_with_retries` to treat outer proof failures as fatal
+/// (non-retryable). If the message changes, the fatal check will silently stop
+/// matching, and retries will re-submit to the outer network — abandoning the
+/// original proof handle and wasting proving resources.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_network_outer_proof_poll_failure_error_message() {
+    // Inner auto-completes; outer is manual so we can fail it.
+    let TestNetworkProver {
+        prover_service,
+        inner_vm: _,
+        outer_vm,
+    } = make_network_prover(true, false, Duration::from_secs(60));
+
+    let header_hash = MockHash::from([21; 32]);
+    let genesis = genesis_state_root();
+
+    let prover_service = Arc::new(prover_service);
+
+    prover_service
+        .prove(make_transition_info(header_hash, 1))
+        .await
+        .unwrap();
+
+    // Spawn aggregation in background — it will submit to the outer VM then poll.
+    let agg_handle = tokio::spawn({
+        let prover_service = Arc::clone(&prover_service);
+        let genesis = genesis.clone();
+        async move {
+            prover_service
+                .create_aggregated_proof(&[header_hash], &genesis.0)
+                .await
+        }
+    });
+
+    // Give the aggregation task time to submit the outer proof (handle 0).
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    // Fail the outer proof so the next poll returns an error.
+    outer_vm.fail_proof(0);
+
+    let err = agg_handle
+        .await
+        .expect("Task should not panic")
+        .expect_err("Should fail with outer proof poll error");
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("Outer network proving failed"),
+        "Expected error to contain 'Outer network proving failed', got: {msg}",
+    );
 }

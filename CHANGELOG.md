@@ -2,18 +2,22 @@
 - #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
 
 # 2025-03-16
+# 2026-03-24
+- #2621 EVM: Fix feeHistory endpoint for zero blocks
+
+# 2026-03-16
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints
 - #2599 Make EVM RPC affordances checks paymaster-aware
 
-# 2025-03-13
+# 2026-03-13
 - #2587 EVM: RPC only: Fixes Fee-cap admission consistency across simulation and submission.
 
-# 2025-03-10
+# 2026-03-10
 - #2569 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
 - #2554 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
 
-# 2025-03-05
+# 2026-03-05
 - #2554 More stabilization in demo-rollup EVM tests
 - #2556 **Breaking change**: only for runtimes with AccessPattern module.
 - #2548 Updates sp1 to v6.

@@ -488,6 +488,9 @@ impl<S: Spec> Bank<S> {
 impl<S: Spec> Bank<S> {
     /// Transfers the set of `coins` from the address `from` to the address `to`.
     ///
+    /// This method does **not** emit any events. Use [`Self::transfer_from_with_memo`]
+    /// if you need a [`Event::TokenTransferred`] event to be emitted.
+    ///
     /// Returns an error if the token ID doesn't exist.
     pub fn transfer_from(
         &mut self,
