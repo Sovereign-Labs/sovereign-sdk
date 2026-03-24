@@ -31,10 +31,11 @@ use crate::{
 };
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
+use sov_modules_api::capabilities::{ChainState, RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
 use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
+    FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
+    VersionReader,
 };
 use sov_state::Storage;
 use std::collections::BTreeMap;
@@ -1019,6 +1020,7 @@ where
             "Entering process_close_current_batch_replica"
         );
 
+        Self::ensure_replica_can_finalize_current_batch(&mut inner, batch_from_master)?;
         inner.close_current_batch().await;
 
         debug!(
@@ -1096,6 +1098,44 @@ where
         Err(ReplicaError::NotReady(
             sync_details,
             Box::new(DbData::BatchStart(batch_from_master)),
+        ))
+    }
+
+    fn ensure_replica_can_finalize_current_batch(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<(), ReplicaError<S>> {
+        let rollup_height = inner.executor.checkpoint.rollup_height_to_access();
+        let next_rollup_height = rollup_height.saturating_add(1);
+        let mut runtime = Rt::default();
+        let kernel = runtime.kernel();
+        let mut kernel_state =
+            KernelStateAccessor::from_checkpoint(&kernel, &mut inner.executor.checkpoint);
+
+        if kernel
+            .visible_hash_for(next_rollup_height, &mut kernel_state)
+            .is_some()
+        {
+            return Ok(());
+        }
+
+        tracing::warn!(
+            %rollup_height,
+            %next_rollup_height,
+            "Replica cannot finalize the current batch because the next visible hash is unavailable. Entering sync mode and retrying."
+        );
+        inner.executor.abort_in_progress_batch();
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchEnd(batch_from_master)),
         ))
     }
 }

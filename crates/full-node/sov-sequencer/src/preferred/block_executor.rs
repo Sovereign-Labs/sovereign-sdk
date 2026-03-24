@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
@@ -267,6 +268,12 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.rollup_block_task_state.is_some()
     }
 
+    pub(crate) fn abort_in_progress_batch(&mut self) {
+        if let Some(task_state) = self.rollup_block_task_state.take() {
+            task_state.discard();
+        }
+    }
+
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn replace_state(&mut self, other: Self) {
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
@@ -277,7 +284,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         tracing::debug!(old = %self.id, new = %other.id, "Replacing state for block executor");
 
         if let Some(task_state) = self.rollup_block_task_state.take() {
-            task_state.shutdown().abort();
+            task_state.discard();
         }
 
         self.checkpoint = other.checkpoint;
@@ -595,6 +602,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let (setup_sender, setup_receiver) = oneshot::channel();
         let (tx_sender, tx_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
         let (result_sender, result_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
+        let discard_batch = Arc::new(AtomicBool::new(false));
 
         let handle = tokio::runtime::Handle::current().spawn_blocking({
             let ctx = RollupBlockTaskContext {
@@ -616,6 +624,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 executor_context,
                 is_responsible_for_gating_admins,
                 proofs_to_replay,
+                discard_batch: discard_batch.clone(),
             };
 
             move || rollup_block_task_body::<S, Rt>(ctx)
@@ -638,6 +647,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             handle,
             tx_sender,
             result_receiver,
+            discard_batch,
         });
     }
 
@@ -846,9 +856,15 @@ struct BackgroundTaskState<S: Spec> {
     handle: JoinHandle<BlockExecutionOutput<S>>,
     tx_sender: mpsc::Sender<FullyBakedTxWithMaybeChangeSet>,
     result_receiver: mpsc::Receiver<AsyncBatchResult<S>>,
+    discard_batch: Arc<AtomicBool>,
 }
 
 impl<S: Spec> BackgroundTaskState<S> {
+    fn discard(self) {
+        self.discard_batch.store(true, Ordering::Relaxed);
+        drop(self.tx_sender);
+    }
+
     fn shutdown(self) -> JoinHandle<BlockExecutionOutput<S>> {
         // Must be dropped before the result receiver, or a deadlock happens.
         drop(self.tx_sender);
@@ -879,6 +895,7 @@ struct RollupBlockTaskContext<S: Spec> {
     /// This is not true for replicas or when replaying txs that have already been accepted
     is_responsible_for_gating_admins: bool,
     proofs_to_replay: Vec<PreferredProofToReplay>,
+    discard_batch: Arc<AtomicBool>,
 }
 
 fn rollup_block_task_body<S, Rt>(ctx: RollupBlockTaskContext<S>) -> BlockExecutionOutput<S>
@@ -903,6 +920,7 @@ where
         executor_context,
         is_responsible_for_gating_admins,
         proofs_to_replay,
+        discard_batch,
     } = ctx;
 
     let _span = match executor_context {
@@ -1010,6 +1028,11 @@ where
         executor_context,
         next_root,
     );
+
+    if discard_batch.load(Ordering::Relaxed) {
+        drop(shutdown_notifier);
+        return (Vec::new(), checkpoint);
+    }
 
     stf.materialize_accessory_state(&mut Default::default(), &mut checkpoint);
 
