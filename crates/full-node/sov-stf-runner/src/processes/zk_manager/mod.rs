@@ -89,6 +89,11 @@ where
                         anyhow::bail!(error)
                     };
 
+                    if error_message.contains("Outer network proving") {
+                        tracing::error!("Fatal error: {error_message}");
+                        anyhow::bail!(error)
+                    };
+
                     tracing::error!(error_message);
                     match maybe_backoff_duration {
                         None => {
