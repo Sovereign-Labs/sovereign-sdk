@@ -34,7 +34,7 @@ BATCH_NAMESPACE = { byte_string = "sov-test-b" }
 PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
 
 # The number of bytes a transaction can have.
-MAX_TX_SIZE=8000
+MAX_TX_SIZE=128_000
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
