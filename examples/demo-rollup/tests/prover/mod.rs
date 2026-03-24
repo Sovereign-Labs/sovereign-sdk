@@ -39,6 +39,7 @@ type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
 >;
 
 mod datagen;
+mod network;
 
 type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
 type ProofStateRoot = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
