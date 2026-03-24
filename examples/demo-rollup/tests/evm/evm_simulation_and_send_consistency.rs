@@ -1,13 +1,15 @@
 use crate::evm::evm_test_helper::{
     call_all_endpoints, create_simple_storage_client, setup_test_rollup,
     setup_test_rollup_with_selective_paymaster, tx_count, EndpointResults,
-    AFFORDABILITY_SIGNER_PRIV_KEY, EVM_EXTENSION, PAYMASTER_SIGNER_PRIV_KEY, SENDER_PRIV_KEY,
+    AFFORDABILITY_SIGNER_PRIV_KEY, EVM_EXTENSION, INSUFFICIENT_FUNDS_ERROR,
+    PAYMASTER_SIGNER_PRIV_KEY, SENDER_PRIV_KEY,
 };
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, TxKind, U256};
-use alloy_rpc_types_eth::TransactionRequest;
+use alloy_primitives::{Address, TxKind, U256, U64};
+use alloy_rpc_types_eth::{AccessListResult, TransactionRequest};
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
+use jsonrpsee::types::ErrorObjectOwned;
 use proptest::prelude::*;
 use sov_eth_client::SimpleStorageClient;
 
@@ -61,7 +63,11 @@ impl<'a> Arbitrary<'a> for TestTransactionRequest {
             Some(10_000_000_000_000),
         ])?;
 
-        let max_priority_fee_per_gas = u.choose(&[None, Some(0), Some(11)])?;
+        let max_priority_fee_per_gas = if max_fee_per_gas.is_none() {
+            u.choose(&[None, Some(0)])?
+        } else {
+            u.choose(&[None, Some(0), Some(11)])?
+        };
 
         let gas = u.choose(&[None, Some(0), Some(20_999), Some(21_000), Some(30_000_001)])?;
 
@@ -259,7 +265,10 @@ fn check_consistency(
         // estimateGas=Ok but sendRawTransaction=Err when fee fields were omitted:
         // estimateGas skips affordability preflight when no fee fields are present,
         // but the raw tx gets the base fee filled in and the sequencer checks affordability
-        (Ok(_), _, _, Err(_)) if explicit_max_fee.is_none() => {
+        (Ok(_), _, _, Err(send_err))
+            if explicit_max_fee.is_none()
+                && send_err.to_string().contains(INSUFFICIENT_FUNDS_ERROR) =>
+        {
             println!(
                 "estimate=Ok but send=Err with max_fee=None (affordability preflight skipped without fee fields)"
             );
@@ -383,6 +392,36 @@ async fn smoke_test_evm_endpoint_consistency() -> anyhow::Result<()> {
         false,
     )
     .await
+}
+
+#[test]
+#[should_panic(expected = "Responses disagree")]
+fn omitted_max_fee_non_affordability_send_error_is_not_whitelisted() {
+    let results = EndpointResults {
+        estimate_gas: Ok(U64::from(21_000)),
+        call: Ok("0x".to_string()),
+        create_access_list: Ok(AccessListResult {
+            access_list: Default::default(),
+            gas_used: U256::from(21_000),
+            error: None,
+        }),
+        send_raw_tx: Err(jsonrpsee::core::client::Error::Call(
+            ErrorObjectOwned::owned(
+                -32003,
+                "max priority fee per gas higher than max fee per gas",
+                None::<()>,
+            ),
+        )),
+    };
+
+    check_consistency(
+        &results,
+        None,
+        None,
+        NonceOption::Match,
+        false,
+        "synthetic omitted max_fee + non-affordability send error",
+    );
 }
 
 // ---------------------------------------------------------------------------
