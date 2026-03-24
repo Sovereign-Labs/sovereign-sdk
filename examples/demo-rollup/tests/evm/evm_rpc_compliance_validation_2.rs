@@ -981,6 +981,87 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// RPC2-004b: `eth_estimateGas` tracks receipt `gasUsed` for a plain ETH transfer.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_004b_estimate_gas_tracks_receipt_for_eth_transfer() -> anyhow::Result<()> {
+    let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+
+    let recipient = Address::repeat_byte(0x77);
+    let value = U256::from(1_000_000u64);
+
+    let tx_request = client.make_tx(Some(recipient), None).value(value);
+    let estimate: U64 = client
+        .ws
+        .request("eth_estimateGas", rpc_params![&tx_request, "latest"])
+        .await?;
+
+    let tx_hash = client.send_eth(recipient, value).await;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+
+    let estimate_value = estimate.to::<u64>();
+    assert!(
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
+        "ETH transfer: estimate should be near actual gasUsed (estimate={estimate_value}, gasUsed={})",
+        receipt.gas_used
+    );
+
+    Ok(())
+}
+
+/// RPC2-004c: `eth_estimateGas` tracks receipt `gasUsed` for a contract deployment.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_004c_estimate_gas_tracks_receipt_for_contract_deploy() -> anyhow::Result<()> {
+    let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+
+    let tx_request = client.make_tx(None, Some(client.contract.byte_code()));
+    let estimate: U64 = client
+        .ws
+        .request("eth_estimateGas", rpc_params![&tx_request, "latest"])
+        .await?;
+
+    let tx_hash = client
+        .deploy_contract()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+
+    let estimate_value = estimate.to::<u64>();
+    assert!(
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
+        "contract deploy: estimate should be near actual gasUsed (estimate={estimate_value}, gasUsed={})",
+        receipt.gas_used
+    );
+
+    Ok(())
+}
+
+/// RPC2-004d: `eth_estimateGas` tracks receipt `gasUsed` for a log-emitting call.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_004d_estimate_gas_tracks_receipt_for_log_emission() -> anyhow::Result<()> {
+    let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let contract = deploy_contract_check(&client)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    let tx_request = client.make_tx(Some(contract), Some(client.contract.emit_logs(0x42, 3)));
+    let estimate: U64 = client
+        .ws
+        .request("eth_estimateGas", rpc_params![&tx_request, "latest"])
+        .await?;
+
+    let tx_hash = client.alloy_emit_logs(contract, 0x42, 3).await;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+
+    let estimate_value = estimate.to::<u64>();
+    assert!(
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
+        "log emission: estimate should be near actual gasUsed (estimate={estimate_value}, gasUsed={})",
+        receipt.gas_used
+    );
+
+    Ok(())
+}
+
 /// RPC2-005: Receipt fee fields reconcile exactly with sender balance delta.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> anyhow::Result<()> {
