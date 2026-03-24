@@ -22,7 +22,6 @@ use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
-use sov_cli::workflows::node;
 use sov_cli::NodeClient;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
