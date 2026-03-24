@@ -248,6 +248,14 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 
     pub async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
         let blueprint: R = Default::default();
+        let node_id = match &self.config.sequencer_config {
+            SequencerKindConfig::Preferred(config) => config
+                .postgres_config
+                .as_ref()
+                .map(|postgres_config| postgres_config.node_id.clone()),
+            SequencerKindConfig::Standard(_) => None,
+        };
+
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
                 && !sequencer_conf.disable_state_root_consistency_checks
@@ -330,6 +338,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             rollup_task,
             http_addr: rest_addr,
             rollup_config,
+            node_id,
             client,
             da_service,
             shutdown_sender,
@@ -689,6 +698,8 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     pub http_addr: SocketAddr,
     /// The rollup config used to run the rollup.
     pub rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
+    /// Configured postgres node id for preferred-sequencer tests, if present.
+    pub node_id: Option<String>,
     /// A copy of the [`DaService`]
     /// that the node uses.
     ///
@@ -1010,10 +1021,14 @@ where
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
     }
 
-    /// Like [`TestRollup::pause_preferred_batches`], but only pauses the node
-    /// whose `node_id` matches the given value. Other nodes sharing the same
-    /// process (e.g. a replica) will continue producing batches.
-    pub async fn pause_preferred_batches_for_node(&self, node_id: &str) {
+    /// Like [`TestRollup::pause_preferred_batches`], but only pauses this
+    /// rollup's configured postgres node. Other nodes sharing the same process
+    /// (e.g. a replica) will continue producing batches.
+    pub async fn pause_preferred_batches_for_node(&self) {
+        let node_id = self
+            .node_id
+            .as_deref()
+            .expect("pause_preferred_batches_for_node requires TestRollup.node_id to be set");
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", node_id);
     }
 
@@ -1069,7 +1084,12 @@ where
     /// Resumes batch production after [`TestRollup::pause_preferred_batches_for_node`].
     ///
     /// Note: calling this method MAY NOT immediately produce a batch.
-    pub async fn resume_preferred_batches_for_node(&self, node_id: &str) {
+    pub async fn resume_preferred_batches_for_node(&self) {
+        let node_id = self
+            .node_id
+            .as_deref()
+            .expect("resume_preferred_batches_for_node requires TestRollup.node_id to be set");
+
         assert_eq!(
             std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
             node_id,

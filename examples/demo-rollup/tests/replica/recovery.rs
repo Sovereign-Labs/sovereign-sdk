@@ -97,18 +97,7 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
     node_1.wait_for_sequencer_ready().await.unwrap();
     node_2.wait_for_sequencer_ready().await.unwrap();
 
-    let role_1 = node_1.sequencer_role().await.unwrap();
-    let role_2 = node_2.sequencer_role().await.unwrap();
-
-    let (leader, leader_node_id, replica) = match (role_1, role_2) {
-        (SequencerRole::BatchProducer, SequencerRole::PgSyncReplica) => (node_1, "node_1", node_2),
-        (SequencerRole::PgSyncReplica, SequencerRole::BatchProducer) => (node_2, "node_2", node_1),
-        _ => {
-            panic!(
-                "Expected one BatchProducer and one PgSyncReplica, got {role_1:?} and {role_2:?}"
-            )
-        }
-    };
+    let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
 
     // Send a transaction to confirm the cluster works before recovery.
     let token_id = config_gas_token_id();
@@ -125,9 +114,7 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
     .await;
 
     // Pause only the elected leader's sequencer update_state loop.
-    leader
-        .pause_preferred_batches_for_node(leader_node_id)
-        .await;
+    leader.pause_preferred_batches_for_node().await;
 
     for _ in 0..30 {
         setup.da_service.produce_block_now().await.unwrap();
@@ -137,9 +124,7 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
     leader.wait_for_node_synced().await.unwrap();
 
     // Resume batch production only for the leader; on the next state update it should enter recovery.
-    leader
-        .resume_preferred_batches_for_node(leader_node_id)
-        .await;
+    leader.resume_preferred_batches_for_node().await;
 
     setup.da_service.produce_block_now().await.unwrap();
 
