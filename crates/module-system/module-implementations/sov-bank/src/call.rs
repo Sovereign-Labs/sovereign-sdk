@@ -220,7 +220,7 @@ impl<S: Spec> Bank<S> {
         let to = to.as_token_holder();
         let sender = context.sender();
 
-        self.transfer_from_with_memo(sender, to, coins.clone(), memo, state)?;
+        self.transfer_from_with_memo(sender, to, coins, memo, state)?;
 
         Ok(())
     }
