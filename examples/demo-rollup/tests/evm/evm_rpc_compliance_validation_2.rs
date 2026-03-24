@@ -678,6 +678,62 @@ async fn rpc2_002d_explicit_gas_affordability_precedes_simulation_failure() -> a
     Ok(())
 }
 
+/// RPC2-002e: A runtime-proven explicit gas limit should not be rejected just
+/// because the estimate path returns a padded recommendation above it.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002e_explicit_gas_cap_below_padded_estimate_still_matches_send_success(
+) -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let recipient = Address::repeat_byte(0x26);
+
+    let baseline_hash = ws_client.send_eth(recipient, U256::ZERO).await;
+    let baseline_receipt = ws_client.wait_for_receipt(baseline_hash).await;
+    assert!(
+        baseline_receipt.status(),
+        "baseline transfer should succeed so the test can derive a known-good gas limit"
+    );
+    let known_good_gas_limit = baseline_receipt
+        .gas_used
+        .checked_add(1_000)
+        .expect("baseline gas_used should allow a small safety margin");
+
+    let request = TransactionRequest {
+        from: Some(signer.address()),
+        to: Some(TxKind::Call(recipient)),
+        gas: Some(known_good_gas_limit),
+        value: Some(U256::ZERO),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    };
+
+    let results = call_all_endpoints(&ws_client, &request, &signer).await;
+
+    let estimated_gas = results
+        .estimate_gas
+        .expect("estimate should succeed for a runtime-proven explicit gas limit despite padding")
+        .to::<u64>();
+    assert!(
+        estimated_gas >= known_good_gas_limit,
+        "estimate should stay padded above the runtime-proven gas limit: estimate={estimated_gas} known_good={known_good_gas_limit}"
+    );
+
+    let tx_hash = results
+        .send_raw_tx
+        .expect("raw send should succeed for the same runtime-proven explicit gas limit");
+    let receipt = ws_client.wait_for_receipt(tx_hash).await;
+    assert!(
+        receipt.status(),
+        "raw transaction should execute successfully with the runtime-proven explicit gas limit"
+    );
+
+    Ok(())
+}
+
 /// RPC2-003 (gasleft probe): Omitted-gas `eth_call` should default to the tx gas cap.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {
