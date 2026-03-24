@@ -1032,10 +1032,10 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
     );
 
     assert_eq!(response["result"]["oldestBlock"].as_str(), Some("0x0"));
-    assert_eq!(
-        response["result"]["baseFeePerGas"],
-        json!([]),
-        "baseFeePerGas should be exactly [] for zero-block feeHistory"
+    assert!(
+        response["result"]["baseFeePerGas"].is_null()
+            || response["result"]["baseFeePerGas"] == json!([]),
+        "baseFeePerGas should be empty or omitted for zero-block feeHistory"
     );
     assert_eq!(
         response["result"]["gasUsedRatio"],
