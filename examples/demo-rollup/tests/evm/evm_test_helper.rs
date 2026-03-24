@@ -557,11 +557,20 @@ pub(crate) async fn call_all_endpoints(
         }
     };
 
+    // When gas is omitted, mirror what a real user would do: use the estimateGas result.
+    let gas_limit = match request.gas {
+        Some(g) => g,
+        None => match &estimate_gas {
+            Ok(estimated) => estimated.to::<u64>(),
+            Err(_) => 1_000_000,
+        },
+    };
+
     let raw_tx = raw_signed_eip1559(
         signer,
         chain_id.to::<u64>(),
         nonce,
-        request.gas.unwrap_or(1_000_000),
+        gas_limit,
         request.to.unwrap_or(TxKind::Create),
         request.value.unwrap_or(U256::ZERO),
         request.input.input.clone().unwrap_or_default(),

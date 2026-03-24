@@ -14,7 +14,7 @@ use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
     call_all_endpoints, create_simple_storage_client, setup_test_rollup_with_paymaster,
-    EVM_EXTENSION, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
+    setup_test_rollup_with_selective_paymaster, EVM_EXTENSION, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
 // 1_000_000 rather than the minimal 21_000 because state-access charges push the
@@ -348,6 +348,39 @@ async fn paymaster_send_raw_tx_succeeds() -> anyhow::Result<()> {
     get_consistent_response(&client, &request, &signer)
         .await
         .expect("Simulation + sendRawTransaction should both succeed for paymaster-covered sender");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn paymaster_selective_under_gas_rejects_consistently_with_send() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup_with_selective_paymaster(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+    let client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = PAYMASTER_SIGNER_PRIV_KEY.parse()?;
+
+    let request = TransactionRequest {
+        from: Some(paymaster_address()),
+        to: None,
+        gas: Some(20_999),
+        max_fee_per_gas: Some(11),
+        value: Some(U256::ZERO),
+        ..Default::default()
+    };
+
+    let results = call_all_endpoints(&client, &request, &signer).await;
+
+    assert!(
+        results.estimate_gas.is_err()
+            && results.call.is_err()
+            && results.create_access_list.is_err()
+            && results.send_raw_tx.is_err(),
+        "expected all endpoints to reject selective-paymaster under-gas request\nrequest={request:?}\neth_estimateGas={:?}\neth_call={:?}\neth_createAccessList={:?}\neth_sendRawTransaction={:?}",
+        results.estimate_gas,
+        results.call,
+        results.create_access_list,
+        results.send_raw_tx,
+    );
 
     Ok(())
 }

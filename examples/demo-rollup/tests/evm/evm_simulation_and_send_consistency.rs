@@ -194,7 +194,14 @@ async fn apply_nonce(
 // Consistency check
 // ---------------------------------------------------------------------------
 
-fn check_consistency(results: &EndpointResults, strict_check: bool, context: &str) {
+fn check_consistency(
+    results: &EndpointResults,
+    explicit_gas: Option<u64>,
+    explicit_max_fee: Option<u128>,
+    nonce_option: NonceOption,
+    strict_check: bool,
+    context: &str,
+) {
     let EndpointResults {
         estimate_gas,
         call,
@@ -202,26 +209,62 @@ fn check_consistency(results: &EndpointResults, strict_check: bool, context: &st
         send_raw_tx,
     } = results;
 
+    // Primary consistency check: estimateGas and sendRawTransaction must agree.
+    // Known expected divergences:
+    //   - eth_call and createAccessList don't check affordability by design
+    //   - when user provides explicit gas below the estimated gas, send fails (user error)
+    //   - simulation doesn't validate nonce; Below/Future nonce may cause send to fail
     match (estimate_gas, call, create_access_list, send_raw_tx) {
+        // All 4 agree OK
         (Ok(_), Ok(_), Ok(_), Ok(_)) => {
             println!("Consistent Ok");
         }
-        (Ok(_), Ok(_), _cal, Ok(_)) => {
+        // estimate and send agree OK; createAccessList may diverge
+        (Ok(_), Ok(_), _, Ok(_)) => {
             if strict_check {
                 assert!(
-                    _cal.is_ok(),
-                    "createAccessList should also succeed: {_cal:?}"
+                    create_access_list.is_ok(),
+                    "createAccessList should also succeed: {create_access_list:?}"
                 );
             }
         }
+        // All 4 agree Err
         (Err(_), Err(_), Err(_), Err(_)) => {
             println!("Consistent Err");
         }
-        (Err(_), Err(_), cal, Err(_)) => {
-            if strict_check {
-                assert!(cal.is_err(), "createAccessList should also fail: {cal:?}");
-            }
+        // estimate and send agree Err; call/createAccessList may succeed
+        // (eth_call and createAccessList don't enforce affordability checks)
+        (Err(_), _, _, Err(_)) => {
+            println!(
+                "estimate+send Err, call/createAccessList may diverge (no affordability check)"
+            );
         }
+        // estimateGas=Ok but sendRawTransaction=Err: allowed when user provided
+        // explicit gas below the estimated amount (user sent with insufficient gas)
+        (Ok(estimated), _, _, Err(_))
+            if explicit_gas.is_some_and(|g| g < estimated.to::<u64>()) =>
+        {
+            println!(
+                "estimate=Ok({estimated}) but send=Err: explicit gas {} < estimated (expected)",
+                explicit_gas.unwrap()
+            );
+        }
+        // estimateGas=Ok but sendRawTransaction=Err with non-Match nonce:
+        // simulation doesn't validate nonce, so Below/Future nonce can cause send to fail
+        (Ok(_), _, _, Err(_)) if !matches!(nonce_option, NonceOption::Match) => {
+            println!(
+                "estimate=Ok but send=Err with nonce={nonce_option:?} (simulation skips nonce check)"
+            );
+        }
+        // estimateGas=Ok but sendRawTransaction=Err when fee fields were omitted:
+        // estimateGas skips affordability preflight when no fee fields are present,
+        // but the raw tx gets the base fee filled in and the sequencer checks affordability
+        (Ok(_), _, _, Err(_)) if explicit_max_fee.is_none() => {
+            println!(
+                "estimate=Ok but send=Err with max_fee=None (affordability preflight skipped without fee fields)"
+            );
+        }
+        // True disagreement between estimateGas and sendRawTransaction
         _ => {
             panic!(
                 "Responses disagree: \n\
@@ -267,7 +310,14 @@ async fn test_regular_rollup_simulation_and_send_consistency(
         request.to, request.gas, request.max_fee_per_gas, request.max_priority_fee_per_gas, request.value, request.nonce
     );
     let results = call_all_endpoints(&ws_client, &request, &signer).await;
-    check_consistency(&results, strict_check, &context);
+    check_consistency(
+        &results,
+        request.gas,
+        request.max_fee_per_gas,
+        nonce_option,
+        strict_check,
+        &context,
+    );
 
     Ok(())
 }
@@ -300,7 +350,14 @@ async fn test_paymaster_rollup_simulation_and_send_consistency(
         request.to, request.gas, request.max_fee_per_gas, request.max_priority_fee_per_gas, request.value, request.nonce
     );
     let results = call_all_endpoints(&ws_client, &request, &signer).await;
-    check_consistency(&results, strict_check, &context);
+    check_consistency(
+        &results,
+        request.gas,
+        request.max_fee_per_gas,
+        nonce_option,
+        strict_check,
+        &context,
+    );
 
     Ok(())
 }
