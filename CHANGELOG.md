@@ -1,3 +1,6 @@
+# 2026-03-24
+- #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
+
 # 2025-03-16
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints

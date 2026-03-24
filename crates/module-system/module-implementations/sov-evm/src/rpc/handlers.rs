@@ -33,41 +33,32 @@ use crate::Evm;
 ///
 /// The simulation charges for EVM execution, state commits, signature verification,
 /// transaction deserialization, log storage, and the EVM-to-sovereign gas conversion.
-/// The real execution path incurs additional metered costs listed below. All of these
-/// are charged to the sovereign gas meter and included in the receipt's fee-projected
-/// `gasUsed`, but are absent from the simulation's gas meter.
+/// The real execution path incurs additional metered costs that are included in the
+/// receipt's fee-projected `gasUsed` but absent from the simulation's gas meter.
 ///
-/// ## Pre-execution pipeline (`registered.rs`)
+/// ## Pre-execution pipeline
 ///
-/// Charged to `pre_exec_working_set`, then transferred to the execution gas meter
-/// via `working_set.charge_gas(pre_exec_gas_meter.gas_info().gas_used)` (line 291):
+/// Charged to the pre-exec gas meter, then transferred to the execution gas meter
+/// via `working_set.charge_gas(pre_exec_gas_meter.gas_info().gas_used)`:
 ///
-/// - `charge_gas(process_tx_pre_exec_checks_gas())` (line 763) — fixed per-tx cost
-/// - `R::Auth::authenticate()` (line 768) — real auth path performs state reads the
-///   simulation's explicit `charge_gas_for_sig`/`charge_tx_deserialization` do not
-/// - `resolve_context()` (line 186) — state reads for authentication context
-/// - `check_uniqueness()` (line 227) — state reads for nonce/duplicate check
-/// - `mark_tx_attempted()` (line 247) — state write for nonce update
-/// - `try_reserve_gas()` (line 270) — state reads + writes for balance deduction
+/// - `process_tx_pre_exec_checks_gas` — fixed per-tx cost
+/// - `Auth::authenticate` — the real auth path performs state reads that the
+///   simulation's explicit `charge_gas_for_sig` / `charge_tx_deserialization` do not
+/// - `resolve_context` — state reads for authentication context
+/// - `check_uniqueness` — state reads for nonce/duplicate check
+/// - `mark_tx_attempted` — state write for nonce update
+/// - `try_reserve_gas` — state reads + writes for balance deduction
 ///
-/// ## Post-execution bookkeeping (`call.rs`)
+/// ## Post-execution bookkeeping in [`Evm::execute_call`]
 ///
-/// - `fetch_state()` (line 248) — reads `block_env`, `pending_transactions.len`,
-///   `get_account_nonce`, `cfg`, `gas_limit`; simulation does similar but not
+/// - [`Evm::fetch_state`] — reads block env, [`Evm::pending_transactions`] len,
+///   account nonce, runtime config, gas limit; the simulation does similar but not
 ///   identical reads in `resolve_simulation_context_for_block_id`
-/// - `create_receipt()` (line 290) — `pending_transactions.last(state)` state read
-/// - `chain_state_module.get_oracle_time(state)` (line 297) — state read
-/// - `pending_transactions.push(&pending_tx, state)` (line 300) — state write of full
-///   `PendingTransaction` (signed tx + receipt + time); expensive due to hash-update
-///   charges (`GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`)
-/// - `head.get(state)` (line 309) — state read
-///
-/// ## Accessory state writes (`call.rs`, `set_accessory_state`, line 343)
-///
-/// - `transactions.set()` — writes full signed transaction
-/// - `receipts.set()` — writes full receipt (including logs)
-/// - `receipt_fees.set()` — writes fee amount
-/// - `transaction_hashes.set()` — writes tx-hash-to-index mapping
+/// - [`Evm::create_receipt`] — reads [`Evm::pending_transactions`] last entry
+/// - `chain_state_module.get_oracle_time` — state read
+/// - [`Evm::pending_transactions`]`.push` — state write of full [`PendingTransaction`]
+///   (signed tx + receipt + time); expensive due to `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`
+/// - [`Evm::head`]`.get` — state read
 ///
 /// ## Derivation
 ///
@@ -697,7 +688,6 @@ where
             .expect("Gas meter is initialized with INF");
 
         // Charge for logs storage in the receipt.
-        // Other receipt fields are small and covered by the constant margin.
         let logs_size = self
             .receipts
             .codec()
@@ -747,13 +737,7 @@ where
             }
         };
 
-        // The simulation captures EVM execution, state commits, and explicit overhead
-        // (sig verification, tx deserialization, log storage, EVM gas charge).
-        // The actual execution path also charges for the module-system transaction
-        // processing pipeline (authentication, gas reservation, dispatch, nonce checks)
-        // and post-execution bookkeeping (receipt storage, pending-tx push, block head
-        // reads, oracle time). These operations are roughly fixed per transaction
-        // regardless of EVM execution complexity.
+        // See [`EXECUTION_PIPELINE_OVERHEAD`] for what this covers.
         let estimated_gas = estimated_gas.saturating_add(EXECUTION_PIPELINE_OVERHEAD);
 
         Ok(U64::from(estimated_gas))
