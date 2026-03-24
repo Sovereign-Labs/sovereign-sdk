@@ -726,7 +726,10 @@ where
                 // This computes ceil(total_fee / gas_price[0]), accounting for all gas dimensions.
                 let gas_info = gas_meter.gas_info();
                 crate::sov_fee_and_gas_utils::derive_receipt_gas_used_from_actual_fee(&gas_info)
-                    .map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?
+                    .map_err(|e| {
+                        tracing::warn!("estimate_gas: fee-to-gas projection failed: {e}");
+                        RpcInvalidTransactionError::GasUintOverflow
+                    })?
             }
             crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive => {
                 // When fee check is inactive the real tx path multiplies gas_limit by 100.
@@ -738,7 +741,9 @@ where
         };
 
         // See [`EXECUTION_PIPELINE_OVERHEAD`] for what this covers.
-        let estimated_gas = estimated_gas.saturating_add(EXECUTION_PIPELINE_OVERHEAD);
+        let estimated_gas = estimated_gas
+            .checked_add(EXECUTION_PIPELINE_OVERHEAD)
+            .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
 
         Ok(U64::from(estimated_gas))
     }
