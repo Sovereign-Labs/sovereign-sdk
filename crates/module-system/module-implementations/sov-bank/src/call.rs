@@ -222,22 +222,6 @@ impl<S: Spec> Bank<S> {
 
         self.transfer_from(sender, to, coins.clone(), state)?;
 
-        tracing::trace!(
-            from = %sender,
-            %to,
-            %coins,
-            "Token transfer successful"
-        );
-
-        self.emit_event(
-            state,
-            Event::TokenTransferred {
-                from: sender.as_token_holder().into(),
-                to: to.into(),
-                coins,
-                memo,
-            },
-        );
         Ok(())
     }
 
@@ -496,10 +480,7 @@ impl<S: Spec> Bank<S> {
         coins: Coins,
         state: &mut impl StateAccessor,
     ) -> Result<(), TransferTokenError> {
-        let from = from.as_token_holder();
-        let to = to.as_token_holder();
-
-        self.do_transfer(from, to, &coins.token_id, coins.amount, state)
+        self.transfer_from_with_memo(from, to, coins, None, state)
     }
 
     /// Transfers the set of `coins` from the address `from` to the address `to` with an optional memo.
@@ -518,10 +499,17 @@ impl<S: Spec> Bank<S> {
 
         self.do_transfer(from, to, &coins.token_id, coins.amount, state)?;
 
+        tracing::trace!(
+            from = %sender,
+            %to,
+            %coins,
+            "Token transfer successful"
+        );
+
         self.emit_event(
             state,
             Event::TokenTransferred {
-                from: from.into(),
+                from: sender.as_token_holder().into(),
                 to: to.into(),
                 coins,
                 memo,
