@@ -76,7 +76,7 @@ impl<S: Spec> Bank<S> {
         // Only do this after all checks have passed because the paymaster does not revert on error, so
         // any state changes may persist!
         let id = self.id;
-        if let Err(err) = self.transfer_from(
+        if let Err(err) = self.do_transfer_from(
             payer,
             id.to_payable(),
             Coins {

@@ -279,14 +279,14 @@ impl<S: Spec> SequencerRegistry<S> {
             );
         };
 
-        self.bank.transfer_from(
+        self.bank.do_transfer_from(
             holder.to_payable(),
             recipient,
             gas_coins(amount_to_refund),
             state,
         )?;
         self.bank
-            .transfer_from(
+            .do_transfer_from(
                 holder.to_payable(),
                 self.bank.id().clone().to_payable(),
                 gas_coins(tokens_needed_for_pre_exec_checks),
@@ -312,7 +312,7 @@ impl<S: Spec> SequencerRegistry<S> {
             return;
         };
         self.bank
-            .transfer_from(
+            .do_transfer_from(
                 holder.to_payable(),
                 recipient,
                 gas_coins(reserved_balance),

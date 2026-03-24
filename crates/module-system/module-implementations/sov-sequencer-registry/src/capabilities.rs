@@ -56,8 +56,12 @@ impl<S: Spec> SequencerRegistry<S> {
                 token_id: config_gas_token_id(),
             };
 
-            self.bank
-                .transfer_from(self.id.clone().to_payable(), beneficiary, coins, state)?;
+            self.bank.do_transfer_from(
+                self.id.clone().to_payable(),
+                beneficiary,
+                coins,
+                state,
+            )?;
 
             self.known_sequencers
                 .set(
@@ -114,7 +118,7 @@ impl<S: Spec> SequencerRegistry<S> {
                 token_id: config_gas_token_id(),
             };
             self.bank
-                .transfer_from(sender, self.id.to_payable(), coins, state)?;
+                .do_transfer_from(sender, self.id.to_payable(), coins, state)?;
 
             self.known_sequencers
                 .set(

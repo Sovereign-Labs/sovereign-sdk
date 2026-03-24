@@ -147,7 +147,7 @@ where
         let rewarded_module = self.get_prover_token_holder(oprating_mode, state);
 
         self.bank
-            .transfer_from(
+            .do_transfer_from(
                 self.bank.id.clone().to_payable(),
                 rewarded_module.to_owned().as_token_holder(),
                 Coins {
@@ -169,7 +169,7 @@ where
         // We refund the payer. We need to give back the remaining funds on the gas meter, plus the unspent tip.
         // This is also the maximum fee minus everything that was spent for the tip and base fee (ie the total reward).
         self.bank
-            .transfer_from(
+            .do_transfer_from(
                 self.bank.id.clone().to_payable(),
                 recipient,
                 gas_coins(remaining_funds.0),
@@ -188,7 +188,7 @@ where
     ) -> anyhow::Result<()> {
         let rewarded_prover_module = self.get_prover_token_holder(oprating_mode, state);
         // Transfer the penalty from the sequencer bank to the sequencer
-        Ok(self.bank.transfer_from(
+        Ok(self.bank.do_transfer_from(
             self.bank.id.clone().to_payable(),
             rewarded_prover_module.to_owned(),
             gas_coins(amount),
@@ -446,7 +446,7 @@ impl<S: Spec, T> SequencerRemuneration<S> for StandardProvenRollupCapabilities<'
         // In this case, we will refund the rewards to the user.
         if stake_increased.is_err() {
             self.bank
-                .transfer_from(
+                .do_transfer_from(
                     self.bank.id.clone().to_payable(),
                     sequencer_rollup_address.as_token_holder(),
                     gas_coins(reward.0),

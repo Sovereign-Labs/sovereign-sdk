@@ -115,8 +115,12 @@ where
         amount: Amount,
         state: &mut ST,
     ) -> anyhow::Result<()> {
-        self.bank
-            .transfer_from(address, self.id.to_payable(), gas_coins(amount), state)?;
+        self.bank.do_transfer_from(
+            address,
+            self.id.to_payable(),
+            gas_coins(amount),
+            state,
+        )?;
         Ok(())
     }
 
@@ -126,8 +130,12 @@ where
         amount: Amount,
         state: &mut ST,
     ) -> anyhow::Result<()> {
-        self.bank
-            .transfer_from(self.id.to_payable(), address, gas_coins(amount), state)?;
+        self.bank.do_transfer_from(
+            self.id.to_payable(),
+            address,
+            gas_coins(amount),
+            state,
+        )?;
         Ok(())
     }
 

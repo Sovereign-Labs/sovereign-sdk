@@ -220,24 +220,8 @@ impl<S: Spec> Bank<S> {
         let to = to.as_token_holder();
         let sender = context.sender();
 
-        self.transfer_from(sender, to, coins.clone(), state)?;
+        self.transfer_from_with_memo(sender, to, coins.clone(), memo, state)?;
 
-        tracing::trace!(
-            from = %sender,
-            %to,
-            %coins,
-            "Token transfer successful"
-        );
-
-        self.emit_event(
-            state,
-            Event::TokenTransferred {
-                from: sender.as_token_holder().into(),
-                to: to.into(),
-                coins,
-                memo,
-            },
-        );
         Ok(())
     }
 
@@ -494,12 +478,9 @@ impl<S: Spec> Bank<S> {
         from: impl Payable<S>,
         to: impl Payable<S>,
         coins: Coins,
-        state: &mut impl StateAccessor,
+        state: &mut (impl StateAccessor + EventContainer),
     ) -> Result<(), TransferTokenError> {
-        let from = from.as_token_holder();
-        let to = to.as_token_holder();
-
-        self.do_transfer(from, to, &coins.token_id, coins.amount, state)
+        self.transfer_from_with_memo(from, to, coins, None, state)
     }
 
     /// Transfers the set of `coins` from the address `from` to the address `to` with an optional memo.
@@ -515,8 +496,14 @@ impl<S: Spec> Bank<S> {
     ) -> Result<(), TransferTokenError> {
         let from = from.as_token_holder();
         let to = to.as_token_holder();
-
         self.do_transfer(from, to, &coins.token_id, coins.amount, state)?;
+
+        tracing::trace!(
+            from = %from,
+            %to,
+            %coins,
+            "Token transfer successful"
+        );
 
         self.emit_event(
             state,
@@ -529,6 +516,22 @@ impl<S: Spec> Bank<S> {
         );
 
         Ok(())
+    }
+
+    /// Transfers the set of `coins` from the address `from` to the address `to` without emitting any events.
+    ///
+    /// Returns an error if the token ID doesn't exist.
+    pub fn do_transfer_from(
+        &mut self,
+        from: impl Payable<S>,
+        to: impl Payable<S>,
+        coins: Coins,
+        state: &mut impl StateAccessor,
+    ) -> Result<(), TransferTokenError> {
+        let from = from.as_token_holder();
+        let to = to.as_token_holder();
+
+        self.do_transfer(from, to, &coins.token_id, coins.amount, state)
     }
 
     /// Transfer the amount `amount` of tokens from the address `from` to the address `to`.

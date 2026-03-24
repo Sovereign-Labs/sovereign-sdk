@@ -54,7 +54,7 @@ impl<S: Spec> StakeRegistration for ProverIncentives<S> {
         amount: Amount,
         state: &mut ST,
     ) -> anyhow::Result<()> {
-        self.bank.transfer_from(
+        self.bank.do_transfer_from(
             address,
             self.id().clone().to_payable(),
             gas_coins(amount),
@@ -69,7 +69,7 @@ impl<S: Spec> StakeRegistration for ProverIncentives<S> {
         amount: Amount,
         state: &mut ST,
     ) -> anyhow::Result<()> {
-        self.bank.transfer_from(
+        self.bank.do_transfer_from(
             self.id().clone().to_payable(),
             address,
             gas_coins(amount),

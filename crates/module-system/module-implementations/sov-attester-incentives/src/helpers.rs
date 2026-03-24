@@ -124,7 +124,7 @@ where
 
         // The reward tokens are unlocked from the module's id.
         self.bank
-            .transfer_from(self.id.to_payable(), sender, coins, state)?;
+            .do_transfer_from(self.id.to_payable(), sender, coins, state)?;
 
         Ok(())
     }
