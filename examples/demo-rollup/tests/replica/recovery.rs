@@ -4,7 +4,7 @@ use super::*;
 /// the replica continues to function correctly once recovery completes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_recovery_with_replica() {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "20");
 
     let Some(setup) = NodeDiscoveryTestSetup::new().await else {
         return;
@@ -41,8 +41,6 @@ async fn test_db_elected_leader_recovery_with_replica() {
     // Pause the sequencer update_state loop to prevent batch production.
     leader.pause_preferred_batches().await;
 
-    // Produce DA blocks while sequencer is paused to exceed the deferred slots threshold.
-    // With DEFERRED_SLOTS_COUNT=40, the 90% threshold triggers at ~26 blocks of lag.
     for _ in 0..30 {
         setup.da_service.produce_block_now().await.unwrap();
     }
