@@ -103,6 +103,20 @@ where
             &mut state,
         )?;
 
+        // When the caller provides an explicit gas cap, reject if the estimate
+        // exceeds it — the operation cannot complete within that budget.
+        // This mirrors standard Ethereum behaviour (geth returns
+        // "gas required exceeds allowance" in the same situation).
+        if let Some(explicit_gas) = request.gas {
+            if estimated_gas.to::<u64>() > explicit_gas {
+                return Err(ErrorObjectOwned::from(EthApiError::InvalidTransaction(
+                    RpcInvalidTransactionError::GasRequiredExceedsAllowance {
+                        gas_limit: explicit_gas,
+                    },
+                )));
+            }
+        }
+
         if !has_explicit_gas && !has_overrides {
             let mut request_with_estimated_gas = request;
             request_with_estimated_gas.gas = Some(estimated_gas.to::<u64>());

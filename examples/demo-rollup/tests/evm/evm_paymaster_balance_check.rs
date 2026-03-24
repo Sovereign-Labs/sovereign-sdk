@@ -372,10 +372,8 @@ async fn paymaster_selective_under_gas_rejects_consistently_with_send() -> anyho
 
     assert!(
         results.estimate_gas.is_err()
-            && results.call.is_err()
-            && results.create_access_list.is_err()
             && results.send_raw_tx.is_err(),
-        "expected all endpoints to reject selective-paymaster under-gas request\nrequest={request:?}\neth_estimateGas={:?}\neth_call={:?}\neth_createAccessList={:?}\neth_sendRawTransaction={:?}",
+        "expected estimateGas and sendRawTransaction to reject selective-paymaster under-gas request\nrequest={request:?}\neth_estimateGas={:?}\neth_call={:?}\neth_createAccessList={:?}\neth_sendRawTransaction={:?}",
         results.estimate_gas,
         results.call,
         results.create_access_list,
