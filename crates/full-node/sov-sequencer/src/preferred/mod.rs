@@ -627,6 +627,17 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     ),
 }
 
+/// Returns `true` when the test pause flag is set and applies to this node.
+///
+/// * `"1"` pauses all nodes (backward-compatible).
+/// * A specific `node_id` pauses only the node whose postgres config matches.
+fn should_skip_update_state(postgres_config: Option<&PostgresConfig>) -> bool {
+    let Ok(flag_value) = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE") else {
+        return false;
+    };
+    flag_value == "1" || postgres_config.is_some_and(|c| c.node_id == flag_value)
+}
+
 #[tracing::instrument(skip_all, level = "debug")]
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
@@ -640,33 +651,22 @@ where
 {
     let info =
         poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
-    if cfg!(debug_assertions) {
-        let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
-        if let Ok(flag_value) = skip_flag {
-            // "1" pauses all nodes (backward-compatible).
-            // A specific node_id pauses only the matching node.
-            let dominated_node_id = seq
-                .config
-                .sequencer_kind_config
-                .postgres_config
-                .as_ref()
-                .map(|c| c.node_id.as_str());
-            let should_skip = flag_value == "1" || dominated_node_id == Some(flag_value.as_str());
-            if should_skip {
-                tracing::warn!("skipping state update due to env var flag");
-                #[cfg(feature = "test-utils")]
-                {
-                    let _ = seq.test_only_state_update_notification_sender.send(
-                        StateUpdateNotification {
-                            slot_number: info.slot_number,
-                            finalized_slot_number: info.latest_finalized_slot_number,
-                            update_skipped_due_to_pause: true,
-                        },
-                    );
-                }
-                return Ok(());
-            }
+
+    if cfg!(debug_assertions)
+        && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
+    {
+        tracing::warn!("skipping state update due to env var flag");
+        #[cfg(feature = "test-utils")]
+        {
+            let _ = seq
+                .test_only_state_update_notification_sender
+                .send(StateUpdateNotification {
+                    slot_number: info.slot_number,
+                    finalized_slot_number: info.latest_finalized_slot_number,
+                    update_skipped_due_to_pause: true,
+                });
         }
+        return Ok(());
     }
 
     let mut rt = Rt::default();
