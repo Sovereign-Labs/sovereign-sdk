@@ -4,7 +4,7 @@ use super::*;
 /// the replica continues to function correctly once recovery completes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_recovery_with_replica() {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "20");
 
     let Some(setup) = NodeDiscoveryTestSetup::new().await else {
         return;
@@ -76,7 +76,7 @@ async fn test_db_elected_leader_recovery_with_replica() {
 /// once recovery completes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused() {
-    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "20");
 
     let Some(setup) = NodeDiscoveryTestSetup::new().await else {
         return;
