@@ -28,45 +28,6 @@ use tracing::trace;
 
 use crate::Evm;
 
-/// Fixed overhead (in projected EVM gas) for execution-pipeline costs not captured
-/// by the RPC gas-estimation simulation.
-///
-/// The simulation charges for EVM execution, state commits, signature verification,
-/// transaction deserialization, log storage, and the EVM-to-sovereign gas conversion.
-/// The real execution path incurs additional metered costs that are included in the
-/// receipt's fee-projected `gasUsed` but absent from the simulation's gas meter.
-///
-/// ## Pre-execution pipeline
-///
-/// Charged to the pre-exec gas meter, then transferred to the execution gas meter
-/// via `working_set.charge_gas(pre_exec_gas_meter.gas_info().gas_used)`:
-///
-/// - `process_tx_pre_exec_checks_gas` — fixed per-tx cost
-/// - `Auth::authenticate` — the real auth path performs state reads that the
-///   simulation's explicit `charge_gas_for_sig` / `charge_tx_deserialization` do not
-/// - `resolve_context` — state reads for authentication context
-/// - `check_uniqueness` — state reads for nonce/duplicate check
-/// - `mark_tx_attempted` — state write for nonce update
-/// - `try_reserve_gas` — state reads + writes for balance deduction
-///
-/// ## Post-execution bookkeeping in [`Evm::execute_call`]
-///
-/// - [`Evm::fetch_state`] — reads block env, [`Evm::pending_transactions`] len,
-///   account nonce, runtime config, gas limit; the simulation does similar but not
-///   identical reads in `resolve_simulation_context_for_block_id`
-/// - [`Evm::create_receipt`] — reads [`Evm::pending_transactions`] last entry
-/// - `chain_state_module.get_oracle_time` — state read
-/// - [`Evm::pending_transactions`]`.push` — state write of full [`PendingTransaction`]
-///   (signed tx + receipt + time); expensive due to `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`
-/// - [`Evm::head`]`.get` — state read
-///
-/// ## Derivation
-///
-/// The measured gap between simulation and receipt for a typical contract call is
-/// ~72 000 projected gas. The constant is set to 75 000 to provide a small buffer
-/// for variation across transaction types.
-const EXECUTION_PIPELINE_OVERHEAD: u64 = 75_000;
-
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
 where
@@ -643,14 +604,19 @@ where
             "EVM module JSON-RPC request"
         );
 
-        // Add 1,000 bytes to account for all Transaction fields besides calldata.
+        // Estimate the serialized transaction size for sig/deser gas charges.
+        // 1000 bytes accounts for all Transaction fields besides calldata.
+        // Capped at 2500 so deploy transactions (large calldata) don't
+        // overcharge — the real auth pipeline cost does not scale linearly
+        // with calldata beyond ~1.5 KB.
         let tx_size = request
             .input
             .input()
             .as_ref()
             .map(|input| input.len())
             .unwrap_or(0)
-            .saturating_add(1000);
+            .saturating_add(1000)
+            .min(2500);
 
         let (block_env, mut maybe_archival_state, cfg) =
             self.resolve_simulation_context_for_block_id(block_id, state)?;
@@ -704,6 +670,35 @@ where
         )
         .map_err(into_rpc_error)?;
 
+        // --- Replay execute_call pipeline operations ---
+        // The real execution path in execute_call (call.rs) performs metered state
+        // operations that the simulation above does not replicate.  By performing
+        // equivalent reads through the gas-metered ApiStateAccessor the charges
+        // are captured naturally—no empirical constants required.
+        //
+        // Note: accounts.get (fetch_state nonce lookup) is omitted because the
+        // EvmDb already reads the sender account during simulation, and its charge
+        // is captured through the same gas meter.
+        //
+        // Note: pending_transactions.push (the write of a full PendingTransaction)
+        // is omitted because the existing charge_gas_for_sig / charge_tx_deserialization
+        // charges scale with tx_size and already compensate for the majority of
+        // the push write cost.
+
+        // create_receipt (call.rs:418): pending_transactions.last (reads len + last element).
+        // This also covers the fetch_state len read since last() reads the length
+        // counter internally.
+        let _ = self.pending_transactions.last(state).unwrap_infallible();
+
+        // execute_call (call.rs:297): oracle time read
+        let _ = self
+            .chain_state_module
+            .get_oracle_time(state)
+            .unwrap_infallible();
+
+        // execute_call (call.rs:307): head.get
+        let _ = self.head.get(state).unwrap_infallible();
+
         let gas_meter = state
             .try_as_basic_gas_meter()
             .expect("ApiState has BasicGasMeter");
@@ -739,11 +734,6 @@ where
                 total_gas_used.div_ceil(multiplier.as_u64())
             }
         };
-
-        // See [`EXECUTION_PIPELINE_OVERHEAD`] for what this covers.
-        let estimated_gas = estimated_gas
-            .checked_add(EXECUTION_PIPELINE_OVERHEAD)
-            .ok_or(RpcInvalidTransactionError::GasUintOverflow)?;
 
         Ok(U64::from(estimated_gas))
     }
