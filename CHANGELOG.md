@@ -1,3 +1,6 @@
+# 2026-03-23
+- #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
+
 # 2025-03-16
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints

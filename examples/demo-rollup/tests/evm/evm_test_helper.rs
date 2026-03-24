@@ -74,7 +74,9 @@ pub(crate) async fn start_node(
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
         BlockProducingConfig::Periodic {
-            block_time_ms: sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+            // The lowest possible time is 1 second,
+            // as subscription tests require new block to have increased timestamp in seconds.
+            block_time_ms: 1_000,
         },
         finalization_blocks,
     )
