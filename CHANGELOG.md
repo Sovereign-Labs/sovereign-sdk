@@ -1,3 +1,6 @@
+# 2026-03-24
+- #2625 Bank: Add `do_transfer_from` for internal transfers without event emission. `transfer_from` now always emits a `TokenTransferred` event. Infrastructure callers (capabilities, incentives, registries) migrated to `do_transfer_from`.
+
 # 2025-03-16
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints
