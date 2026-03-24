@@ -28,6 +28,18 @@ use tracing::trace;
 
 use crate::Evm;
 
+/// Fixed overhead for execution-pipeline costs not captured by the RPC simulation.
+///
+/// The `eth_estimateGas` simulation charges for EVM execution, state commits,
+/// signature verification, transaction deserialization, log storage, and the
+/// EVM-to-sovereign gas conversion. However, the real execution path incurs
+/// additional costs from the module-system transaction processing pipeline
+/// (authentication, gas reservation, dispatch, nonce checks) and post-execution
+/// bookkeeping (receipt storage, pending-transaction push, block-head reads,
+/// oracle-time reads). These costs are roughly fixed per transaction and
+/// independent of EVM execution complexity.
+const EXECUTION_PIPELINE_OVERHEAD: u64 = 75_000;
+
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
 where
@@ -682,14 +694,33 @@ where
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
             .expect("Gas meter is initialized with INF");
 
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+        let estimated_gas = match multiplier {
+            crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckActive => {
+                // Use fee projection to match the receipt's `project_receipt_gas_from_actual_fee`.
+                // This computes ceil(total_fee / gas_price[0]), accounting for all gas dimensions.
+                let gas_info = gas_meter.gas_info();
+                crate::sov_fee_and_gas_utils::derive_receipt_gas_used_from_actual_fee(&gas_info)
+                    .map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?
+            }
+            crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive => {
+                // When fee check is inactive the real tx path multiplies gas_limit by 100.
+                // Receipt does not use fee projection (no fee charged), so use dimension-0 only.
+                let total_gas_used =
+                    gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
+                total_gas_used.div_ceil(multiplier.as_u64())
+            }
+        };
 
-        // The real tx path multiplies gas_limit by 100 when fee check is inactive.
-        // Divide the estimate so the returned value is the gas_limit the user should set.
-        let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
+        // The simulation captures EVM execution, state commits, and explicit overhead
+        // (sig verification, tx deserialization, log storage, EVM gas charge).
+        // The actual execution path also charges for the module-system transaction
+        // processing pipeline (authentication, gas reservation, dispatch, nonce checks)
+        // and post-execution bookkeeping (receipt storage, pending-tx push, block head
+        // reads, oracle time). These operations are roughly fixed per transaction
+        // regardless of EVM execution complexity.
+        let estimated_gas = estimated_gas.saturating_add(EXECUTION_PIPELINE_OVERHEAD);
 
-        Ok(U64::from(super::apply_margins(adjusted)?))
+        Ok(U64::from(estimated_gas))
     }
 }
 

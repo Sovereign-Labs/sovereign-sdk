@@ -956,7 +956,6 @@ async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result
 
 /// RPC2-004: `eth_estimateGas` units track receipt `gasUsed` (internal consistency).
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract = deploy_contract_check(&client)
