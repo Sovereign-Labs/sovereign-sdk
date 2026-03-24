@@ -52,7 +52,6 @@ async fn test_db_elected_leader_recovery_with_replica() {
 
     // Resume batch production; on the next state update the leader should enter recovery
     leader.resume_preferred_batches().await;
-    setup.da_service.produce_block_now().await.unwrap();
 
     // Wait until the leader enters recovery.
     leader.wait_for_sequencer_recovering().await.unwrap();
@@ -118,15 +117,12 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
 
     for _ in 0..30 {
         setup.da_service.produce_block_now().await.unwrap();
-        replica.wait_for_node_synced().await.unwrap();
     }
 
     leader.wait_for_node_synced().await.unwrap();
 
     // Resume batch production only for the leader; on the next state update it should enter recovery.
     leader.resume_preferred_batches_for_node().await;
-
-    setup.da_service.produce_block_now().await.unwrap();
 
     // Wait until the leader enters recovery.
     leader.wait_for_sequencer_recovering().await.unwrap();
@@ -165,6 +161,5 @@ async fn verify_replica_processes_tx(
         .unwrap();
 
     leader.send_tx_to_sequencer(&tx).await.unwrap();
-
     wait_for_all_events_with_timeout(Duration::from_millis(500), 1, &mut event_subscription).await;
 }

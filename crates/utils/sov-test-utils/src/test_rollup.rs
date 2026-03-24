@@ -22,6 +22,7 @@ use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
+use sov_cli::workflows::node;
 use sov_cli::NodeClient;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
@@ -248,21 +249,21 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 
     pub async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
         let blueprint: R = Default::default();
-        let node_id = match &self.config.sequencer_config {
-            SequencerKindConfig::Preferred(config) => config
-                .postgres_config
-                .as_ref()
-                .map(|postgres_config| postgres_config.node_id.clone()),
-            SequencerKindConfig::Standard(_) => None,
-        };
 
+        let mut node_id = None;
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
                 && !sequencer_conf.disable_state_root_consistency_checks
             {
                 tracing::warn!("Prover process is enabled, but state root consistency checks are not disabled. This will cause crashes in the sequencer since proofs are created but not yet handled by the sequencer. Consider disabling one of the two options.");
             }
+
+            node_id = sequencer_conf
+                .postgres_config
+                .as_ref()
+                .map(|postgres_config| postgres_config.node_id.clone());
         }
+
         std::fs::create_dir_all(self.config.storage.path()).with_context(|| {
             format!(
                 "Failed to create storage directory: {}",
