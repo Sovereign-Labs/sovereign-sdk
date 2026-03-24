@@ -28,16 +28,52 @@ use tracing::trace;
 
 use crate::Evm;
 
-/// Fixed overhead for execution-pipeline costs not captured by the RPC simulation.
+/// Fixed overhead (in projected EVM gas) for execution-pipeline costs not captured
+/// by the RPC gas-estimation simulation.
 ///
-/// The `eth_estimateGas` simulation charges for EVM execution, state commits,
-/// signature verification, transaction deserialization, log storage, and the
-/// EVM-to-sovereign gas conversion. However, the real execution path incurs
-/// additional costs from the module-system transaction processing pipeline
-/// (authentication, gas reservation, dispatch, nonce checks) and post-execution
-/// bookkeeping (receipt storage, pending-transaction push, block-head reads,
-/// oracle-time reads). These costs are roughly fixed per transaction and
-/// independent of EVM execution complexity.
+/// The simulation charges for EVM execution, state commits, signature verification,
+/// transaction deserialization, log storage, and the EVM-to-sovereign gas conversion.
+/// The real execution path incurs additional metered costs listed below. All of these
+/// are charged to the sovereign gas meter and included in the receipt's fee-projected
+/// `gasUsed`, but are absent from the simulation's gas meter.
+///
+/// ## Pre-execution pipeline (`registered.rs`)
+///
+/// Charged to `pre_exec_working_set`, then transferred to the execution gas meter
+/// via `working_set.charge_gas(pre_exec_gas_meter.gas_info().gas_used)` (line 291):
+///
+/// - `charge_gas(process_tx_pre_exec_checks_gas())` (line 763) — fixed per-tx cost
+/// - `R::Auth::authenticate()` (line 768) — real auth path performs state reads the
+///   simulation's explicit `charge_gas_for_sig`/`charge_tx_deserialization` do not
+/// - `resolve_context()` (line 186) — state reads for authentication context
+/// - `check_uniqueness()` (line 227) — state reads for nonce/duplicate check
+/// - `mark_tx_attempted()` (line 247) — state write for nonce update
+/// - `try_reserve_gas()` (line 270) — state reads + writes for balance deduction
+///
+/// ## Post-execution bookkeeping (`call.rs`)
+///
+/// - `fetch_state()` (line 248) — reads `block_env`, `pending_transactions.len`,
+///   `get_account_nonce`, `cfg`, `gas_limit`; simulation does similar but not
+///   identical reads in `resolve_simulation_context_for_block_id`
+/// - `create_receipt()` (line 290) — `pending_transactions.last(state)` state read
+/// - `chain_state_module.get_oracle_time(state)` (line 297) — state read
+/// - `pending_transactions.push(&pending_tx, state)` (line 300) — state write of full
+///   `PendingTransaction` (signed tx + receipt + time); expensive due to hash-update
+///   charges (`GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`)
+/// - `head.get(state)` (line 309) — state read
+///
+/// ## Accessory state writes (`call.rs`, `set_accessory_state`, line 343)
+///
+/// - `transactions.set()` — writes full signed transaction
+/// - `receipts.set()` — writes full receipt (including logs)
+/// - `receipt_fees.set()` — writes fee amount
+/// - `transaction_hashes.set()` — writes tx-hash-to-index mapping
+///
+/// ## Derivation
+///
+/// The measured gap between simulation and receipt for a typical contract call is
+/// ~72 000 projected gas. The constant is set to 75 000 to provide a small buffer
+/// for variation across transaction types.
 const EXECUTION_PIPELINE_OVERHEAD: u64 = 75_000;
 
 #[rpc_gen(client, server)]
