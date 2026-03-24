@@ -29,7 +29,7 @@ use tempfile::TempDir;
 use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
 use crate::test_helpers::test_genesis_paths;
 
-type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
+pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
     sov_sp1_adapter::SP1,
     sov_mock_zkvm::MockZkvm,
@@ -41,10 +41,12 @@ type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
 mod datagen;
 mod network;
 
-type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
-type ProofStateRoot = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
-type ProofWitness = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness;
-type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
+pub(super) type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
+pub(super) type ProofStateRoot =
+    <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
+pub(super) type ProofWitness =
+    <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness;
+pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
 
 type ProofInput = StateTransitionWitnessWithAddress<
     <DefaultSpec as Spec>::Address,
@@ -82,10 +84,13 @@ async fn test_proof_generation() {
     let _ = generate_proofs(false, &host).await;
 }
 
-async fn generate_proofs(
-    with_proof: bool,
-    host: &TestHost,
-) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
+/// Executes the STF against mock DA blocks and produces per-block witnesses.
+///
+/// This is the shared data generation logic used by both the local (host) prover
+/// tests and the network prover tests.
+///
+/// Returns `(genesis_state_root, witnesses)`.
+pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     tracing::info!("Creating temp dir at {}", temp_dir.path().display());
     let da_service = MockDaService::new(MockAddress::default());
@@ -117,14 +122,14 @@ async fn generate_proofs(
     // Write it to the database immediately!
     storage_manager.finalize(&genesis_block.header).unwrap();
 
+    let genesis_state_root = prev_state_root;
+
     // TODO: Fix this with genesis logic.
     let mut blocks = get_blocks_from_da(sequencer_mode)
         .await
         .expect("Failed to get DA blocks");
 
-    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
-
-    let mut proofs = Vec::new();
+    let mut witnesses = Vec::new();
 
     for filtered_block in &mut blocks[..(DEFAULT_BLOCKS as usize)] {
         let height = filtered_block.header().height();
@@ -150,24 +155,13 @@ async fn generate_proofs(
             ExecutionContext::Node,
         );
 
-        let data = StfWitness {
+        witnesses.push(StfWitness {
             initial_state_root: prev_state_root,
             da_block_header: filtered_block.header().clone(),
             relevant_proofs,
             witness: result.witness,
             relevant_blobs,
             final_state_root: result.state_root,
-        };
-
-        let data: ProofInput = StateTransitionWitnessWithAddress {
-            stf_witness: data,
-            prover_address,
-        };
-
-        let proof = host.run(data, with_proof).await;
-        proofs.push(BlockHeaderWithProof {
-            da_block_header: filtered_block.header().clone(),
-            proof,
         });
 
         prev_state_root = result.state_root;
@@ -178,6 +172,33 @@ async fn generate_proofs(
                 SchemaBatch::new(),
             )
             .unwrap();
+    }
+
+    (genesis_state_root, witnesses)
+}
+
+async fn generate_proofs(
+    with_proof: bool,
+    host: &TestHost,
+) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
+    let (_genesis_state_root, witnesses) = generate_witnesses().await;
+
+    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
+    let mut proofs = Vec::new();
+
+    for witness in witnesses {
+        let da_block_header = witness.da_block_header.clone();
+
+        let data: ProofInput = StateTransitionWitnessWithAddress {
+            stf_witness: witness,
+            prover_address,
+        };
+
+        let proof = host.run(data, with_proof).await;
+        proofs.push(BlockHeaderWithProof {
+            da_block_header,
+            proof,
+        });
     }
 
     proofs
