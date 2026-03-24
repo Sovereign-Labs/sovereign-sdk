@@ -642,19 +642,30 @@ where
         poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
     if cfg!(debug_assertions) {
         let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
-        if skip_flag == Ok("1".to_string()) {
-            tracing::warn!("skipping state update due to env var flag");
-            #[cfg(feature = "test-utils")]
-            {
-                let _ =
-                    seq.test_only_state_update_notification_sender
-                        .send(StateUpdateNotification {
+        if let Ok(flag_value) = skip_flag {
+            // "1" pauses all nodes (backward-compatible).
+            // A specific node_id pauses only the matching node.
+            let dominated_node_id = seq
+                .config
+                .sequencer_kind_config
+                .postgres_config
+                .as_ref()
+                .map(|c| c.node_id.as_str());
+            let should_skip = flag_value == "1" || dominated_node_id == Some(flag_value.as_str());
+            if should_skip {
+                tracing::warn!("skipping state update due to env var flag");
+                #[cfg(feature = "test-utils")]
+                {
+                    let _ = seq.test_only_state_update_notification_sender.send(
+                        StateUpdateNotification {
                             slot_number: info.slot_number,
                             finalized_slot_number: info.latest_finalized_slot_number,
                             update_skipped_due_to_pause: true,
-                        });
+                        },
+                    );
+                }
+                return Ok(());
             }
-            return Ok(());
         }
     }
 

@@ -1010,6 +1010,13 @@ where
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
     }
 
+    /// Like [`TestRollup::pause_preferred_batches`], but only pauses the node
+    /// whose `node_id` matches the given value. Other nodes sharing the same
+    /// process (e.g. a replica) will continue producing batches.
+    pub async fn pause_preferred_batches_for_node(&self, node_id: &str) {
+        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", node_id);
+    }
+
     /// Pauses preferred batch production and waits until the sequencer confirms
     /// that at least one state update was skipped because of the pause flag.
     ///
@@ -1054,6 +1061,19 @@ where
             std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
             "1",
             "Resuming but it was never paused in the first place",
+        );
+
+        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
+    }
+
+    /// Resumes batch production after [`TestRollup::pause_preferred_batches_for_node`].
+    ///
+    /// Note: calling this method MAY NOT immediately produce a batch.
+    pub async fn resume_preferred_batches_for_node(&self, node_id: &str) {
+        assert_eq!(
+            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
+            node_id,
+            "Resuming but it was never paused for this node in the first place",
         );
 
         std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
