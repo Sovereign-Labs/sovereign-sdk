@@ -32,8 +32,8 @@ Two helper scripts are bundled in `scripts/`. Run them from the workspace root.
 |--------|---------|
 | `bash scripts/audit.sh` | Full audit: workspace structure, dep count, timed build, proc-macros, llvm-lines. Prints a structured report for Claude to read. |
 | `python3 scripts/parse_timings.py` | Parse `target/cargo-timings/cargo-timing-*.json` (or `.html`) and print a sorted table of per-crate compile durations. Run after any `cargo build --timings`. |
-| `bash scripts/binary_sizes.sh` | Report test binary sizes and optional CGU breakdown (`--cgu` flag) for `sov-demo-rollup`. |
-| `bash scripts/measure_incremental.sh` | Measure incremental rebuild time. Supports `--file` and `--test` flags to target specific files/tests. |
+| `bash scripts/binary_sizes.sh` | Report test binary sizes and optional CGU breakdown (`--cgu` flag). |
+| `bash scripts/measure_incremental.sh -p <crate> --file <path>` | Measure incremental rebuild time for a crate. Requires `-p <crate>` and `--file <path-to-touch>`. Optional `--test <target>`. |
 
 **When helping a user, ask them to run `bash scripts/audit.sh` first.** The output
 gives you everything needed to diagnose the bottleneck in one pass.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reports test binary sizes and codegen unit breakdown for sov-demo-rollup.
+# Reports test binary sizes and codegen unit breakdown.
 #
 # Usage:
 #   ./binary_sizes.sh              # show all test binaries
@@ -12,7 +12,7 @@ cd "$(git rev-parse --show-toplevel)"
 SHOW_CGU=false
 [[ "${1:-}" == "--cgu" ]] && SHOW_CGU=true
 
-echo "=== Test binary sizes (sov-demo-rollup) ==="
+echo "=== Test binary sizes ==="
 echo ""
 
 # Find test binaries (executables, not .d/.o/.rmeta files)
