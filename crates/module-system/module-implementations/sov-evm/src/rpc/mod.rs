@@ -936,22 +936,23 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                // Numeric selectors prefer archival state for the exact block number.
-                // Fall back to `Current` only when that number is the live synthetic
-                // pending height and no archival snapshot exists yet. Block-pinned
-                // `eth_estimateGas` uses `preflight_state_for_block_id` instead of
-                // relying on this generic fallback.
-                match state.get_archival_state(RollupHeight::new(number)) {
-                    Ok(archival_state) => Ok(MaybeArchivalState::Archival(archival_state.into())),
-                    Err(err) => {
-                        let block_env = self.block_env(state).unwrap_infallible();
-                        if block_env.number == number {
-                            Ok(MaybeArchivalState::Current(state))
-                        } else {
-                            Err(err.into())
-                        }
-                    }
+                // The live pending block is addressable by explicit number before it
+                // is sealed. `get_archival_state` may still succeed for the current
+                // rollup height via uncommitted changes, so archival lookup success
+                // is not a valid test for "this EVM block is sealed". Match `dev`:
+                // explicit current pending block numbers must resolve to `Current`.
+                if self
+                    .blocks
+                    .get(&number, state)
+                    .unwrap_infallible()
+                    .is_none()
+                    && self.has_pending_block(state)
+                    && self.block_env(state).unwrap_infallible().number == number
+                {
+                    return Ok(MaybeArchivalState::Current(state));
                 }
+                let archival_state = state.get_archival_state(RollupHeight::new(number))?;
+                Ok(MaybeArchivalState::Archival(archival_state.into()))
             }
             PendingOrBlock::PastSynthetic {
                 block_number,

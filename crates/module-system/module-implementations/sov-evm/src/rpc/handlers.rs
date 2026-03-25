@@ -25,7 +25,6 @@ use sov_modules_api::{
     ApiStateAccessor, DispatchCall, GasMeter, GasSpec, GetGasPrice, InfallibleStateReaderAndWriter,
     RawTx, Runtime, SequencerType, Spec, StateAccessor, StateProvider as _,
 };
-use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::TxHash;
 use sov_rpc_eth_types::{
     EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
@@ -587,17 +586,6 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ApiStateAccessor<S>, EthApiError> {
-        if let Some(BlockId::Number(
-            tag @ BlockNumberOrTag::Earliest
-            | tag @ BlockNumberOrTag::Finalized
-            | tag @ BlockNumberOrTag::Safe
-            | tag @ BlockNumberOrTag::Number(_),
-        )) = block_id
-        {
-            let rollup_height = RollupHeight::new(self.resolve_block_number(tag, state));
-            return Ok(state.get_archival_state(rollup_height)?);
-        }
-
         let state = match self.resolve_state_for_block_id(block_id, state)? {
             super::maybe_archival_state::MaybeArchivalState::Current(current) => {
                 current.clone_without_local_writes()
@@ -626,15 +614,9 @@ where
             method = "eth_estimateGas",
             "EVM module JSON-RPC request"
         );
-        let mut metered_state = {
-            let mut preflight_root = state.clone_without_local_writes();
-            self.preflight_state_for_block_id(block_id, &mut preflight_root)
-                .map_err(into_rpc_error)?
-        };
-        let block_env = self
-            .resolve_block_env_for_call(block_id, state)
-            .map_err(into_rpc_error)?;
-        let cfg = self.cfg_infallible(&mut metered_state);
+        let mut metered_state = state.clone_without_local_writes();
+        let (block_env, maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
         let mut normalized_request = request.clone();
         Self::normalize_runtime_parity_request(
             &mut normalized_request,
@@ -666,7 +648,7 @@ where
         } = self.call_with_context(
             request,
             block_env.clone(),
-            super::maybe_archival_state::MaybeArchivalState::Current(&mut metered_state),
+            maybe_archival_state,
             &cfg,
             state_overrides,
             block_overrides,
