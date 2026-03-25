@@ -19,18 +19,22 @@ pub struct BlockProof<Address, Da: DaSpec, Root> {
     pub st: StateTransitionPublicData<Address, Da, Root>,
 }
 
-/// Aggregated proof outer code commitment hash.
+/// A code commitment hash used to identify ZK circuits (both inner and outer).
 #[derive(
     Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Default,
 )]
-pub struct OuterCodeCommitmentHash(pub Vec<u8>);
+pub struct CodeCommitmentHash(pub [u32; 8]);
 
-impl core::fmt::Display for OuterCodeCommitmentHash {
+use crate::zk::CodeCommitment;
+impl CodeCommitment for CodeCommitmentHash {}
+
+impl core::fmt::Display for CodeCommitmentHash {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        if self.0.is_empty() {
-            return write!(f, "OuterCodeCommitmentHash([])");
+        write!(f, "CodeCommitmentHash(0x")?;
+        for word in self.0 {
+            write!(f, "{word:08x}")?;
         }
-        write!(f, "OuterCodeCommitmentHash(0x{})", hex::encode(&self.0))
+        write!(f, ")")
     }
 }
 
@@ -52,7 +56,7 @@ pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     /// The final slot hash of the aggregated proof.
     pub final_slot_hash: Da::SlotHash,
     /// Outer verifying key hash of the aggregated proof circuit.
-    pub outer_vk_hash: OuterCodeCommitmentHash,
+    pub outer_vk_hash: CodeCommitmentHash,
     /// These are the addresses of the provers who proved individual blocks.
     pub rewarded_addresses: Vec<Address>,
 }
@@ -66,7 +70,7 @@ where
     pub fn from_block_proofs(
         block_proofs: &[&BlockProof<Address, Da, Root>],
         genesis_state_root: Root,
-        outer_vk_hash: OuterCodeCommitmentHash,
+        outer_vk_hash: CodeCommitmentHash,
     ) -> Self {
         let initial = block_proofs
             .first()

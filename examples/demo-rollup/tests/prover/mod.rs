@@ -220,7 +220,7 @@ impl TestHost {
     }
 
     fn verifying_key_bytes(&self) -> Vec<u8> {
-        self.code_commitment.encode()
+        self.code_commitment.0.clone()
     }
 
     #[allow(dead_code)]

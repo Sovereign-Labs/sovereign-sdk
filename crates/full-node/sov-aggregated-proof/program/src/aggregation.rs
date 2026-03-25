@@ -3,7 +3,8 @@ use sov_aggregated_proof_shared::{
     AggPubData, AggregatedProofWitness, DeferredProofInput, StfPubData,
 };
 use sov_modules_api::da::BlockHeaderTrait;
-use sov_modules_api::{DaSpec, OuterCodeCommitmentHash, Spec, Storage};
+use sov_modules_api::ZkVerifier;
+use sov_modules_api::{CodeCommitmentHash, DaSpec, Spec, Storage};
 use sov_rollup_interface::common::SlotNumber;
 
 struct BoundaryData<Hash, Root> {
@@ -24,9 +25,13 @@ type VerifyResult<S, Da> = VerifiedProofData<
     <<S as Spec>::Storage as Storage>::Root,
 >;
 
-pub(crate) fn run_aggregation_program<S: Spec<Da = Da>, Da: DaSpec>(
+pub(crate) fn run_aggregation_program<
+    S: Spec<Da = Da>,
+    Da: DaSpec,
+    V: ZkVerifier<CodeCommitment = CodeCommitmentHash>,
+>(
     witness: AggregatedProofWitness<Da>,
-    inner_vkey_hash: [u32; 8],
+    inner_vkey_hash: CodeCommitmentHash,
 ) {
     let proof_inputs = witness.proof_inputs;
     let outer_vkey_hash = witness.outer_vkey_hash;
@@ -35,16 +40,22 @@ pub(crate) fn run_aggregation_program<S: Spec<Da = Da>, Da: DaSpec>(
     // Verify the previous aggregation proof if one exists. On the first aggregation
     // after genesis, there is no predecessor, the chain starts here.
     let previous_public_data = if let Some(prev_outer_proof_witness) = prev_outer_proof_witness {
-        Some(deserialize_and_verify_pub_data::<AggPubData<S, Da>>(
+        let pub_data = V::verify::<AggPubData<S, Da>>(
             &prev_outer_proof_witness.public_values,
-            outer_vkey_hash,
-        ))
+            &outer_vkey_hash,
+        )
+        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
+
+        Some(pub_data)
     } else {
         None
     };
 
-    let verified_proof_data: VerifyResult<S, Da> =
-        verify_proof_chain::<S, Da>(proof_inputs, inner_vkey_hash, previous_public_data.as_ref());
+    let verified_proof_data: VerifyResult<S, Da> = verify_proof_chain::<S, Da, V>(
+        proof_inputs,
+        inner_vkey_hash,
+        previous_public_data.as_ref(),
+    );
 
     let VerifiedProofData {
         initial_boundary,
@@ -60,8 +71,6 @@ pub(crate) fn run_aggregation_program<S: Spec<Da = Da>, Da: DaSpec>(
         .map(|public_data| public_data.genesis_state_root.clone())
         .unwrap_or_else(|| initial_boundary.state_root.clone());
 
-    let outer_vk_hash = outer_vk_hash_from_vkey_hash(outer_vkey_hash);
-
     let aggregated_public_data = AggPubData::<S, Da> {
         initial_slot_number: initial_boundary.slot_number,
         final_slot_number: final_boundary.slot_number,
@@ -70,7 +79,7 @@ pub(crate) fn run_aggregation_program<S: Spec<Da = Da>, Da: DaSpec>(
         final_state_root: final_boundary.state_root,
         initial_slot_hash: initial_boundary.slot_hash,
         final_slot_hash: final_boundary.slot_hash,
-        outer_vk_hash,
+        outer_vk_hash: outer_vkey_hash,
         rewarded_addresses,
     };
 
@@ -79,9 +88,9 @@ pub(crate) fn run_aggregation_program<S: Spec<Da = Da>, Da: DaSpec>(
     sp1_zkvm::io::commit(&aggregated_public_data);
 }
 
-fn verify_proof_chain<S: Spec, Da: DaSpec>(
+fn verify_proof_chain<S: Spec, Da: DaSpec, V: ZkVerifier<CodeCommitment = CodeCommitmentHash>>(
     proof_inputs: Vec<DeferredProofInput<Da>>,
-    vkey_hash: [u32; 8],
+    vkey_hash: CodeCommitmentHash,
     previous_agg_proof_public_data: Option<&AggPubData<S, Da>>,
 ) -> VerifyResult<S, Da> {
     assert!(
@@ -105,10 +114,9 @@ fn verify_proof_chain<S: Spec, Da: DaSpec>(
     let mut rewarded_addresses = Vec::with_capacity(proof_inputs.len());
 
     for (index, proof_input) in proof_inputs.iter().enumerate() {
-        let stf_public_data = deserialize_and_verify_pub_data::<StfPubData<S, Da>>(
-            &proof_input.public_values,
-            vkey_hash,
-        );
+        let stf_public_data =
+            V::verify::<StfPubData<S, Da>>(&proof_input.public_values, &vkey_hash)
+                .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
         let current_slot_number = SlotNumber::new(proof_input.da_block_header.height());
 
@@ -176,27 +184,4 @@ fn verify_proof_chain<S: Spec, Da: DaSpec>(
         final_boundary,
         rewarded_addresses,
     }
-}
-
-// Verify that a proof with the given vkey_hash actually
-// produced these public values, then deserialize them. This is the core
-// trust anchor: the vkey_hash pins which program generated the proof.
-fn deserialize_and_verify_pub_data<T: serde::de::DeserializeOwned>(
-    pub_values: &[u8],
-    vkey_hash: [u32; 8],
-) -> T {
-    let public_values_digest: [u8; 32] = Sha256::digest(pub_values).into();
-    sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash, &public_values_digest);
-
-    bincode::deserialize(pub_values)
-        .unwrap_or_else(|error| panic!("Failed to deserialize aggregated public data: {error}"))
-}
-
-fn outer_vk_hash_from_vkey_hash(vkey_hash: [u32; 8]) -> OuterCodeCommitmentHash {
-    let mut bytes = Vec::with_capacity(32);
-    for word in vkey_hash {
-        // Match SP1's HashableKey::hash_bytes representation for hash_u32().
-        bytes.extend_from_slice(&word.to_be_bytes());
-    }
-    OuterCodeCommitmentHash(bytes)
 }

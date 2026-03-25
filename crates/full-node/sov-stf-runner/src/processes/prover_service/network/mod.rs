@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use super::{ProverService, ProverServiceError, Verifier};
@@ -49,7 +49,7 @@ where
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
         da_verifier: Da::Verifier,
-        code_commitment: OuterCodeCommitmentHash,
+        code_commitment: CodeCommitmentHash,
         prover_address: Address,
         outer_proof_timeout: std::time::Duration,
     ) -> Self {

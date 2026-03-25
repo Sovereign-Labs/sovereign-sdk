@@ -19,7 +19,7 @@ use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, Sequencer
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::ProofBlobSender;
 use sov_state::nomt::prover_storage::NomtProverStorage;
@@ -148,7 +148,7 @@ where
             outer_vm,
             da_verifier,
             prover_config_disc,
-            OuterCodeCommitmentHash::default(),
+            CodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
         )
     }
