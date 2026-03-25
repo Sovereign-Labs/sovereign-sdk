@@ -5,6 +5,7 @@
 //! framework's macro exports. See `sov-test-utils` crate for additional information
 
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::{Base58Address, Genesis, Spec};
 use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::runtime::traits::MinimalGenesis;
@@ -13,7 +14,7 @@ use crate::runtime::Runtime;
 
 impl<S: Spec> MinimalGenesis<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     /// Returns a reference to the sequencer registry config.
     fn sequencer_registry_config(

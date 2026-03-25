@@ -10,6 +10,7 @@ use demo_stf::runtime::{GenesisConfig, Runtime, RuntimeCall};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::prelude::arbitrary;
 use sov_modules_api::prelude::arbitrary::Unstructured;
 use sov_modules_api::Base58Address;
@@ -43,7 +44,7 @@ pub type RT = Runtime<S>;
 #[serde(bound = "S: Spec", rename_all = "snake_case")]
 pub enum BenchmarkData<S: Spec>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     Genesis(GenesisConfig<S>),
     Initialization(GeneratedBatch<S>),
@@ -57,7 +58,7 @@ where
 #[derive(Clone)]
 pub struct Benchmark<S: Spec>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     /// The name of the benchmark.
     pub name: String,
@@ -81,7 +82,7 @@ where
 
 impl<S: Spec> Benchmark<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
     S: Serialize + DeserializeOwned,
 {
     /// Generates the benchmark messages for a given batch.
