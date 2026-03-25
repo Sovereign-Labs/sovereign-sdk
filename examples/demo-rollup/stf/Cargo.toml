@@ -60,8 +60,6 @@ arbitrary = [
 	"sov-address/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-evm/arbitrary",
-	"sov-mock-da/arbitrary",
-	"sov-mock-zkvm/arbitrary",
 	"sov-modules-api/arbitrary",
 	"sov-paymaster/arbitrary",
 	"sov-rollup-interface/arbitrary",
@@ -93,9 +91,7 @@ native = [
 	"sov-paymaster/native",
 	"sov-address/native",
 	"sov-test-modules/native",
-	"sov-solana-offchain-auth/native",
-	"sov-mock-da/native",
-	"sov-mock-zkvm/native"
+	"sov-solana-offchain-auth/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.
