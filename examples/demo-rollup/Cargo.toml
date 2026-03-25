@@ -141,9 +141,6 @@ testcontainers = { workspace = true }
 [build-dependencies]
 anyhow = { workspace = true }
 sov-zkvm-utils = { workspace = true }
-# These are needed to ensure correct feature unification with dev-dependencies
-sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
 
 
 [features]

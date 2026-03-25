@@ -47,11 +47,9 @@ sov-test-utils = { workspace = true, optional = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
-demo-stf-declaration = { workspace = true, features = ["native"] }
-sov-address = { workspace = true, features = ["evm", "arbitrary"] }
-sov-modules-api = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
+demo-stf-declaration = { workspace = true, features = ["build-utils"] }
+sov-address = { workspace = true, features = ["evm"] }
+sov-modules-api = { workspace = true, features = ["native"] }
 sov-build = { workspace = true }
 
 [features]
@@ -69,9 +67,7 @@ arbitrary = [
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils?/arbitrary",
-	"sov-uniqueness/arbitrary",
-	"sov-mock-da/arbitrary",
-	"sov-mock-zkvm/arbitrary"
+	"sov-uniqueness/arbitrary"
 ]
 native = [
 	"demo-stf-declaration/native",
@@ -98,9 +94,7 @@ native = [
 	"sov-paymaster/native",
 	"sov-address/native",
 	"sov-test-modules/native",
-	"sov-solana-offchain-auth/native",
-	"sov-mock-da/native",
-	"sov-mock-zkvm/native"
+	"sov-solana-offchain-auth/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.
