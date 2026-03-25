@@ -408,7 +408,7 @@ where
             .expect("gas_to_charge_per_evm_gas() should not be zero")
     }
 
-    fn create_receipt(
+    pub(crate) fn create_receipt(
         &self,
         tx: &TxSignedAndRecovered,
         tx_index: u64,
@@ -481,7 +481,7 @@ where
     }
 
     #[cfg(feature = "native")]
-    fn set_accessory_state(
+    pub(crate) fn set_accessory_state(
         &mut self,
         head: crate::Block,
         pending_transaction: &PendingTransaction,

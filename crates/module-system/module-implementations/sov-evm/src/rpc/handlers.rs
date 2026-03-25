@@ -1,8 +1,9 @@
 use crate::error::into_rpc_error;
 use crate::rpc::error::ensure_success;
-use alloy_consensus::ReceiptEnvelope;
+use alloy_consensus::private::alloy_eips::Encodable2718;
+use alloy_consensus::{EthereumTxEnvelope, ReceiptEnvelope, Signed, TxEip1559};
 use alloy_eips::BlockId;
-use alloy_primitives::{Address, U64};
+use alloy_primitives::{Address, TxKind, U64};
 use alloy_primitives::{Bytes, B256, U256};
 use alloy_rpc_types::{
     state::StateOverride, AccessListResult, Block, BlockNumberOrTag, BlockOverrides, FeeHistory,
@@ -10,23 +11,34 @@ use alloy_rpc_types::{
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
+use borsh::BorshDeserialize;
 use jsonrpsee::core::RpcResult;
 use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
 use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_modules_api::capabilities::{
+    ChainState, GasEnforcer, HasCapabilities, SequencingDataHandler, TransactionAuthenticator,
+    TransactionAuthorizer,
+};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
+use sov_modules_api::{
+    ApiStateAccessor, DaSpec, DispatchCall, ExecutionContext, Gas, GasMeter, GasSpec, GetGasPrice,
+    RawTx, Runtime, SequencerType, Spec, StateAccessor, StateProvider as _, WorkingSet,
+};
+use sov_rollup_interface::common::RollupHeight;
 use sov_rpc_eth_types::{
     EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
 };
-use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
 use std::ops::DerefMut;
 use tracing::trace;
 
-use crate::Evm;
+use crate::evm::primitive_types::{PendingTransaction, TxSignedAndRecovered};
+use crate::{
+    build_request_preflight_auth, EthereumAuthenticator, Evm, RlpEvmTransaction, TransactionSigned,
+};
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -575,6 +587,17 @@ where
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<ApiStateAccessor<S>, EthApiError> {
+        if let Some(BlockId::Number(
+            tag @ BlockNumberOrTag::Earliest
+            | tag @ BlockNumberOrTag::Finalized
+            | tag @ BlockNumberOrTag::Safe
+            | tag @ BlockNumberOrTag::Number(_),
+        )) = block_id
+        {
+            let rollup_height = RollupHeight::new(self.resolve_block_number(tag, state));
+            return Ok(state.get_archival_state(rollup_height)?);
+        }
+
         let state = match self.resolve_state_for_block_id(block_id, state)? {
             super::maybe_archival_state::MaybeArchivalState::Current(current) => {
                 current.clone_without_local_writes()
@@ -603,139 +626,423 @@ where
             method = "eth_estimateGas",
             "EVM module JSON-RPC request"
         );
-
-        // Estimate the serialized transaction size for sig/deser gas charges.
-        // 1000 bytes accounts for all Transaction fields besides calldata.
-        // Capped at 2500 so deploy transactions (large calldata) don't
-        // overcharge — the real auth pipeline cost does not scale linearly
-        // with calldata beyond ~1.5 KB.
-        let tx_size = request
-            .input
-            .input()
-            .as_ref()
-            .map(|input| input.len())
-            .unwrap_or(0)
-            .saturating_add(1000)
-            .min(2500);
-
-        let (block_env, mut maybe_archival_state, cfg) =
-            self.resolve_simulation_context_for_block_id(block_id, state)?;
-        let multiplier = self
-            .fee_multiplier(maybe_archival_state.deref_mut())
+        let mut metered_state = {
+            let mut preflight_root = state.clone_without_local_writes();
+            self.preflight_state_for_block_id(block_id, &mut preflight_root)
+                .map_err(into_rpc_error)?
+        };
+        let block_env = self
+            .resolve_block_env_for_call(block_id, state)
             .map_err(into_rpc_error)?;
+        let cfg = self.cfg_infallible(&mut metered_state);
+        let mut normalized_request = request.clone();
+        Self::normalize_runtime_parity_request(
+            &mut normalized_request,
+            block_env.gas_limit,
+            cfg.chain_spec.tx_gas_limit,
+            metered_state.gas_price().as_ref()[0].0,
+        );
+        Self::fill_current_nonce_if_missing(
+            &self.uniqueness_module,
+            &mut normalized_request,
+            &mut metered_state,
+        );
+        let mut auth_state = metered_state
+            .clone_without_local_writes()
+            .to_provable_reader();
+        let (_, auth_data) =
+            build_request_preflight_auth::<_, S>(&normalized_request, &mut auth_state).map_err(
+                |err| into_rpc_error(format!("estimate_gas auth preflight failed: {err}")),
+            )?;
+        let signer = normalized_request.from.unwrap_or_default();
+        let synthetic_nonce = Self::runtime_parity_nonce(&auth_data).map_err(into_rpc_error)?;
+        let synthetic_signed_tx =
+            Self::build_runtime_parity_signed_tx(&normalized_request, synthetic_nonce)
+                .map_err(into_rpc_error)?;
 
         let ResultAndState {
             result,
             state: changes,
         } = self.call_with_context(
             request,
-            block_env,
-            maybe_archival_state,
+            block_env.clone(),
+            super::maybe_archival_state::MaybeArchivalState::Current(&mut metered_state),
             &cfg,
             state_overrides,
             block_overrides,
         )?;
 
-        let (gas_used, logs) = match result {
-            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
+        let gas_used = match &result {
+            ExecutionResult::Success { gas_used, .. } => *gas_used,
             ExecutionResult::Revert { output, .. } => {
-                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
+                return Err(
+                    RpcInvalidTransactionError::Revert(RevertError::new(output.clone())).into(),
+                );
             }
             ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
+                return Err(RpcInvalidTransactionError::halt(reason.clone(), *gas_used).into());
             }
         };
 
-        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
-        // This intentionally includes override-based hypothetical state, because estimateGas
-        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
-        self.db(state)
+        // Commit into the block-pinned RPC-local DB so post-simulation metering runs against
+        // the same state snapshot used for the simulation itself.
+        self.db(&mut metered_state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");
 
-        // Charge for logs storage in the receipt.
-        let logs_size = self
-            .receipts
-            .codec()
-            .value_codec()
-            .encode_to_vec(&logs)
-            .len();
-        let logs_size =
-            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        charge_write(
-            state,
-            Accessory::NAMESPACE,
-            &self.receipts.slot_key(&u64::MAX),
-            logs_size,
-        )
-        .map_err(into_rpc_error)?;
-
-        // --- Replay execute_call pipeline operations ---
-        // The real execution path in execute_call (call.rs) performs metered state
-        // operations that the simulation above does not replicate.  By performing
-        // equivalent reads through the gas-metered ApiStateAccessor the charges
-        // are captured naturally—no empirical constants required.
-        //
-        // Note: accounts.get (fetch_state nonce lookup) is omitted because the
-        // EvmDb already reads the sender account during simulation, and its charge
-        // is captured through the same gas meter.
-        //
-        // Note: pending_transactions.push (the write of a full PendingTransaction)
-        // is omitted because the existing charge_gas_for_sig / charge_tx_deserialization
-        // charges scale with tx_size and already compensate for the majority of
-        // the push write cost.
-
-        // create_receipt (call.rs:418): pending_transactions.last (reads len + last element).
-        // This also covers the fetch_state len read since last() reads the length
-        // counter internally.
-        let _ = self.pending_transactions.last(state).unwrap_infallible();
-
-        // execute_call (call.rs:297): oracle time read
-        let _ = self
-            .chain_state_module
-            .get_oracle_time(state)
+        let pending_len = self
+            .pending_transactions
+            .len(&mut metered_state)
             .unwrap_infallible();
+        let synthetic_tx =
+            TxSignedAndRecovered::new(signer, synthetic_signed_tx, block_env.number.to::<u64>());
+        let mut evm = self.clone();
+        let receipt = evm
+            .create_receipt(&synthetic_tx, pending_len, result, &mut metered_state)
+            .map_err(|err| {
+                into_rpc_error(format!("estimate_gas receipt reconstruction failed: {err}"))
+            })?;
 
-        // execute_call (call.rs:307): head.get
-        let _ = self.head.get(state).unwrap_infallible();
-
-        let gas_meter = state
+        let gas_meter = metered_state
             .try_as_basic_gas_meter()
             .expect("ApiState has BasicGasMeter");
-
-        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
         let gas_used =
             u32::try_from(gas_used).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
         gas_meter
             .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
             .expect("Gas meter is initialized with INF");
+        let time = evm
+            .chain_state_module
+            .get_oracle_time(&mut metered_state)
+            .unwrap_infallible();
+        let mut pending_tx = PendingTransaction::new(synthetic_tx, receipt, time);
 
-        let estimated_gas = match multiplier {
-            crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckActive => {
-                // Use fee projection to match the receipt's `project_receipt_gas_from_actual_fee`.
-                // This computes ceil(total_fee / gas_price[0]), accounting for all gas dimensions.
-                let gas_info = gas_meter.gas_info();
-                crate::sov_fee_and_gas_utils::derive_receipt_gas_used_from_actual_fee(&gas_info)
-                    .map_err(|e| {
-                        tracing::warn!("estimate_gas: fee-to-gas projection failed: {e}");
-                        RpcInvalidTransactionError::GasUintOverflow
-                    })?
-            }
-            crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive => {
-                // When fee check is inactive the real tx path multiplies gas_limit by 100.
-                // Receipt does not use fee projection (no fee charged), so use dimension-0 only.
-                let total_gas_used =
-                    gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-                total_gas_used.div_ceil(multiplier.as_u64())
-            }
+        let mut pending_transactions = self.pending_transactions.clone();
+        pending_transactions
+            .push(&pending_tx, &mut metered_state)
+            .unwrap_infallible();
+        let head = self
+            .head
+            .get(&mut metered_state)
+            .unwrap_infallible()
+            .expect("Head is set in genesis and never deleted");
+
+        let gas_info = metered_state
+            .try_as_basic_gas_meter()
+            .expect("ApiState has BasicGasMeter")
+            .gas_info();
+        if let Some(projected_gas) =
+            crate::sov_fee_and_gas_utils::project_receipt_gas_from_actual_fee::<S>(
+                &pending_tx.receipt,
+                &gas_info,
+            )
+            .map_err(into_rpc_error)?
+        {
+            pending_tx.receipt.gas_used = projected_gas.gas_used;
+            pending_tx.receipt.receipt.cumulative_gas_used = projected_gas.cumulative_gas_used;
+
+            let mut unmetered_state = metered_state.to_unmetered();
+            pending_transactions
+                .set(pending_len, &pending_tx, &mut unmetered_state)
+                .unwrap_infallible()
+                .map_err(into_rpc_error)?;
+        }
+
+        evm.set_accessory_state(
+            head,
+            &pending_tx,
+            pending_len + 1,
+            gas_info.gas_value,
+            &mut metered_state,
+        )
+        .unwrap_infallible();
+
+        Ok(U64::from(pending_tx.receipt.gas_used))
+    }
+}
+
+impl<S: Spec> Evm<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    /// Runs the real runtime pre-exec and dispatch path on a forked accessor
+    /// and returns the simulated EVM receipt gas used.
+    #[cfg(feature = "native")]
+    pub fn estimate_gas_via_runtime_parity<R>(
+        &self,
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        snapshot_state: &ApiStateAccessor<S>,
+        sequencer_da_address: &<S::Da as DaSpec>::Address,
+        sequencer_rollup_address: S::Address,
+        sequencer_type: SequencerType,
+    ) -> Result<U64, String>
+    where
+        R: Runtime<S> + EthereumAuthenticator<S> + Default,
+    {
+        let mut api_state = snapshot_state.clone_without_local_writes();
+        let mut block_env_state = snapshot_state.clone_without_local_writes();
+        let mut preflight_state = self
+            .preflight_state_for_block_id(block_id, &mut api_state)
+            .map_err(|err| format!("preflight state error: {err}"))?;
+        let block_env = self
+            .resolve_block_env_for_call(block_id, &mut block_env_state)
+            .map_err(|err| format!("block env read error: {err}"))?;
+        let cfg = self
+            .cfg(&mut preflight_state)
+            .map_err(|err| format!("cfg read error: {err}"))?;
+
+        let mut normalized_request = request;
+        Self::normalize_runtime_parity_request(
+            &mut normalized_request,
+            block_env.gas_limit,
+            cfg.chain_spec.tx_gas_limit,
+            preflight_state.gas_price().as_ref()[0].0,
+        );
+        Self::fill_current_nonce_if_missing(
+            &self.uniqueness_module,
+            &mut normalized_request,
+            &mut preflight_state,
+        );
+
+        let mut runtime = R::default();
+        let sequencing_data = if sequencer_type == SequencerType::Preferred {
+            Some(
+                borsh::to_vec(&runtime.sequencing_data_handler().create_sequencing_data())
+                    .map(sov_rollup_interface::Bytes::from)
+                    .map_err(|err| format!("sequencing data serialization failed: {err}"))?,
+            )
+        } else {
+            None
         };
+        let mut operating_mode_state = preflight_state.clone_without_local_writes();
+        let operating_mode = runtime
+            .chain_state()
+            .operating_mode(&mut operating_mode_state);
+        let gas_price = preflight_state.gas_price();
+        let mut pre_exec_working_set = preflight_state.to_tx_scratchpad().to_pre_exec_working_set(
+            sov_modules_api::BasicGasMeter::new_with_gas(
+                <S as GasSpec>::max_tx_check_costs(),
+                gas_price,
+            ),
+        );
+        pre_exec_working_set
+            .charge_gas(<S as GasSpec>::process_tx_pre_exec_checks_gas())
+            .map_err(|err| format!("pre-exec gas charge failed: {err}"))?;
+        let (authenticated_tx, auth_data) =
+            build_request_preflight_auth::<_, S>(&normalized_request, &mut pre_exec_working_set)
+                .map_err(|err| format!("request preflight auth error: {err}"))?;
+        let (_tx_hash, runtime_call) =
+            Self::build_runtime_parity_call::<R>(normalized_request, &auth_data)?;
 
-        Ok(U64::from(estimated_gas))
+        let execution_context = ExecutionContext::Sequencer;
+        let mut context = runtime
+            .transaction_authorizer()
+            .resolve_context(
+                &auth_data,
+                sequencer_da_address,
+                sequencer_rollup_address,
+                &mut pre_exec_working_set,
+                sequencing_data,
+                execution_context,
+                sequencer_type,
+            )
+            .map_err(|err| format!("resolve_context failed: {err}"))?;
+
+        runtime
+            .transaction_authorizer()
+            .check_uniqueness(
+                &auth_data,
+                &context,
+                &execution_context,
+                &mut pre_exec_working_set,
+            )
+            .map_err(|err| format!("check_uniqueness failed: {err}"))?;
+
+        runtime
+            .transaction_authorizer()
+            .mark_tx_attempted(&auth_data, sequencer_da_address, &mut pre_exec_working_set)
+            .map_err(|err| format!("mark_tx_attempted failed: {err}"))?;
+
+        let gas_price = pre_exec_working_set.gas_price();
+        runtime
+            .gas_enforcer()
+            .try_reserve_gas(
+                &authenticated_tx,
+                gas_price,
+                &mut context,
+                &mut pre_exec_working_set,
+            )
+            .map_err(|err| format!("try_reserve_gas failed: {err}"))?;
+
+        let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.to_scratchpad_and_gas_meter();
+        let mut working_set = WorkingSet::create_working_set(
+            scratchpad,
+            &authenticated_tx,
+            authenticated_tx.gas_meter(pre_exec_gas_meter.gas_info().gas_price, <S::Gas>::max()),
+        );
+
+        working_set
+            .charge_gas(pre_exec_gas_meter.gas_info().gas_used)
+            .map_err(|err| format!("charging pre-exec gas failed: {err}"))?;
+
+        if runtime.is_unauthorized_system_tx(&runtime_call, &context, &mut working_set) {
+            return Err("unauthorized system transaction".to_string());
+        }
+
+        if let Some(sequencing_data) = context.sequencing_data().as_ref() {
+            match <R as HasCapabilities<S>>::SequencingData::try_from_slice(sequencing_data) {
+                Ok(decoded) => runtime
+                    .sequencing_data_handler()
+                    .handle_sequencing_data(decoded, &context, &mut working_set)
+                    .map_err(|err| format!("handle_sequencing_data failed: {err}"))?,
+                Err(err) => tracing::warn!(%err, "invalid sequencing metadata; ignoring"),
+            }
+        }
+
+        runtime
+            .pre_dispatch_tx_hook(&authenticated_tx, &mut working_set)
+            .map_err(|err| format!("pre_dispatch_tx_hook failed: {err}"))?;
+        runtime
+            .dispatch_call(runtime_call, &mut working_set, &context)
+            .map_err(|err| format!("dispatch_call failed: {err}"))?;
+        runtime
+            .post_dispatch_tx_hook(&authenticated_tx, &context, &mut working_set)
+            .map_err(|err| format!("post_dispatch_tx_hook failed: {err}"))?;
+
+        let (mut tx_scratchpad, transaction_consumption, _) = working_set.finalize();
+        runtime.gas_enforcer().refund_remaining_gas(
+            context.gas_refund_recipient(),
+            &transaction_consumption.remaining_funds(),
+            &mut tx_scratchpad,
+        );
+        runtime.gas_enforcer().reward_prover(
+            &transaction_consumption.base_fee_value(),
+            operating_mode,
+            &mut tx_scratchpad,
+        );
+
+        let pending_tx = self
+            .pending_transactions
+            .last(&mut tx_scratchpad)
+            .map_err(|err| format!("pending tx read failed: {err}"))?
+            .ok_or_else(|| "no pending EVM transaction produced by parity estimate".to_string())?;
+
+        Ok(U64::from(pending_tx.receipt.gas_used))
+    }
+
+    #[cfg(feature = "native")]
+    fn normalize_runtime_parity_request(
+        request: &mut TransactionRequest,
+        block_gas_limit: u64,
+        tx_gas_limit: Option<u64>,
+        default_gas_price: u128,
+    ) {
+        if request.from.is_none() {
+            request.from = Some(Address::ZERO);
+        }
+
+        if request.gas.is_none() {
+            request.gas = Some(block_gas_limit.min(tx_gas_limit.unwrap_or(block_gas_limit)));
+        }
+
+        if request.max_fee_per_gas.is_none() && request.gas_price.is_none() {
+            request.gas_price = Some(default_gas_price);
+        }
+
+        if request.chain_id.is_none() {
+            request.chain_id = Some(config_value!("CHAIN_ID"));
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn fill_current_nonce_if_missing(
+        uniqueness_module: &sov_uniqueness::Uniqueness<S>,
+        request: &mut TransactionRequest,
+        state: &mut ApiStateAccessor<S>,
+    ) {
+        if request.nonce.is_some() {
+            return;
+        }
+
+        let Some(from) = request.from else {
+            return;
+        };
+        let credential_id = EthereumAddress::from(from).as_credential_id();
+        let mut nonce_state = state.clone_without_local_writes();
+        let nonce = uniqueness_module
+            .next_nonce(&credential_id, &mut nonce_state)
+            .unwrap_or_default();
+        request.nonce = Some(nonce);
+    }
+
+    #[cfg(feature = "native")]
+    fn runtime_parity_nonce(
+        auth_data: &sov_modules_api::capabilities::AuthorizationData<S>,
+    ) -> Result<u64, String> {
+        match auth_data.uniqueness {
+            sov_modules_api::capabilities::UniquenessData::Nonce(nonce) => Ok(nonce),
+            other => Err(format!(
+                "unexpected uniqueness type for EVM estimate: {other:?}"
+            )),
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn build_runtime_parity_signed_tx(
+        request: &TransactionRequest,
+        nonce: u64,
+    ) -> Result<TransactionSigned, String> {
+        let gas_limit = request
+            .gas
+            .ok_or_else(|| "normalized request missing gas".to_string())?;
+        let max_fee_per_gas = request
+            .max_fee_per_gas
+            .or(request.gas_price)
+            .ok_or_else(|| "normalized request missing fee field".to_string())?;
+        let input = request.input.clone().into_input().unwrap_or_default();
+        Ok(EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
+            TxEip1559 {
+                chain_id: request.chain_id.unwrap_or(config_value!("CHAIN_ID")),
+                nonce,
+                gas_limit,
+                max_fee_per_gas,
+                max_priority_fee_per_gas: request.max_priority_fee_per_gas.unwrap_or(0),
+                to: request.to.unwrap_or(TxKind::Create),
+                value: request.value.unwrap_or_default(),
+                input,
+                access_list: request.access_list.clone().unwrap_or_default(),
+            },
+            alloy_primitives::Signature::test_signature(),
+            Default::default(),
+        )))
+    }
+
+    #[cfg(feature = "native")]
+    fn build_runtime_parity_call<R>(
+        request: TransactionRequest,
+        auth_data: &sov_modules_api::capabilities::AuthorizationData<S>,
+    ) -> Result<(B256, <R as DispatchCall>::Decodable), String>
+    where
+        R: Runtime<S> + EthereumAuthenticator<S>,
+    {
+        let nonce = Self::runtime_parity_nonce(auth_data)?;
+        request
+            .from
+            .ok_or_else(|| "normalized request missing from".to_string())?;
+        let envelope = Self::build_runtime_parity_signed_tx(&request, nonce)?;
+        let tx_hash = *envelope.hash();
+        let raw_tx = borsh::to_vec(&RlpEvmTransaction {
+            rlp: envelope.encoded_2718(),
+        })
+        .map_err(|err| format!("borsh serialize synthetic tx failed: {err}"))?;
+        let serialized_tx = R::encode_with_ethereum_auth(RawTx::new(raw_tx));
+        let auth_call =
+            <R::Auth as TransactionAuthenticator<S>>::decode_serialized_tx(&serialized_tx)
+                .map_err(|err| format!("decode_serialized_tx failed: {err}"))?;
+        let runtime_call = R::wrap_call(auth_call);
+
+        Ok((tx_hash, runtime_call))
     }
 }
 

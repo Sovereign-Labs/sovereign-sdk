@@ -936,16 +936,17 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                // Always prefer archival for explicitly sealed block numbers.
-                if self.blocks.get(&number, state).unwrap_infallible().is_none()
-                    // Treat explicit pending-block numbers as current only when there are pending txs.
-                    && self.has_pending_block(state)
-                    && self.block_env(state).unwrap_infallible().number == number
-                {
-                    return Ok(MaybeArchivalState::Current(state));
+                match state.get_archival_state(RollupHeight::new(number)) {
+                    Ok(archival_state) => Ok(MaybeArchivalState::Archival(archival_state.into())),
+                    Err(err) => {
+                        let block_env = self.block_env(state).unwrap_infallible();
+                        if block_env.number == number {
+                            Ok(MaybeArchivalState::Current(state))
+                        } else {
+                            Err(err.into())
+                        }
+                    }
                 }
-                let archival_state = state.get_archival_state(RollupHeight::new(number))?;
-                Ok(MaybeArchivalState::Archival(archival_state.into()))
             }
             PendingOrBlock::PastSynthetic {
                 block_number,
