@@ -72,6 +72,8 @@ UNREGISTERED_BLOBS_PER_SLOT = 5
 # Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
 # Preferrably to use milliseconds as a value in tx
 PAST_TRANSACTION_GENERATIONS = 5_000
+# How many past transactions to keep in the windowed uniqueness.
+PAST_TRANSACTION_WINDOW = 1_000
 # The maximum number of transactions hashes we remember per credential. 
 # Higher numbers allow accounts to send more transactions without updating their generation number. 
 # This is more user friendly for power users, but increases the worst case cost of the uniqueness check.

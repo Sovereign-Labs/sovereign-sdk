@@ -76,6 +76,11 @@ pub enum UniquenessData {
     /// Transactions older than this buffer are invalid, transactions falling within it or with a
     /// higher generation are valid but must have a unique hash within their generation
     Generation(u64),
+    /// Window-based uniqueness: each transaction of an account must have a unique but not
+    /// necessarily consecutive nonce. Older unique nonces upto `PAST_TRANSACTION_WINDOW` are still
+    /// accepted. Note that `PAST_TRANSACTION_WINDOW` will be rounded down to the next multiple of
+    /// eight to simplify the code.
+    Window(u64),
 }
 
 /// Data required to authorize a sov-transaction.

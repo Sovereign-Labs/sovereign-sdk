@@ -3,6 +3,7 @@
 mod capabilities;
 mod generations;
 mod nonces;
+mod window;
 use std::collections::{BTreeMap, HashSet};
 
 use sov_modules_api::{
@@ -33,6 +34,10 @@ pub struct Uniqueness<S: Spec> {
     /// Mapping from a credential id to a nonce.
     #[state]
     pub(crate) nonces: StateMap<CredentialId, u64>,
+
+    /// Mapping from a credential id to a window of seen nonces.
+    #[state]
+    pub(crate) window: StateMap<CredentialId, (u64, Vec<u8>)>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,
