@@ -46,7 +46,7 @@ async fn test_network_proof_generation() {
     let inner_vm = SP1Network::new(elf)
         .await
         .expect("Failed to create SP1 network prover");
-     // auto-complete outer proofs - real outer not supported yet
+    // auto-complete outer proofs - real outer not supported yet
     let outer_vm = MockZkvmNetwork::new(true);
 
     let da_verifier = sov_mock_da::MockDaVerifier::default();
