@@ -11549,6 +11549,7 @@ dependencies = [
  "borsh",
  "derive_more 1.0.0",
  "proptest",
+ "proptest-derive 0.5.1",
  "schemars 0.8.22",
  "serde",
  "serde_json",
