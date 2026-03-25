@@ -168,9 +168,8 @@ where
             snapshot_state,
             ethereum.sequencer_type,
         )?;
-        let tx_hash = <[u8; 32]>::from(prepared.authenticated_tx.raw_tx_hash.clone());
         let metrics = AuthAndProcessMetrics::new(
-            tx_hash,
+            prepared.authenticated_tx.raw_tx_hash.0,
             AuthAndProcessTimings::new_with_defaults(ExecutionContext::Sequencer.str()),
         );
         let validated_output = (

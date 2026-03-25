@@ -50,8 +50,8 @@ use serde::Serialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
 use sov_modules_api::{
-    err_detail, AccessoryStateMap, AccessoryStateValue, ApiStateAccessor, Context, CoreModuleError,
-    DaSpec, ErrorContext, ErrorDetail, GenesisState, Module, ModuleId, ModuleInfo, Spec, StateMap,
+    err_detail, AccessoryStateMap, AccessoryStateValue, Context, CoreModuleError, DaSpec,
+    ErrorContext, ErrorDetail, GenesisState, Module, ModuleId, ModuleInfo, Spec, StateMap,
     StateReader, StateValue, StateVec, TxState, VersionReader,
 };
 use sov_state::codec::BcsCodec;
@@ -73,7 +73,8 @@ use thiserror::Error;
 #[doc(hidden)]
 pub struct PreparedRuntimeParityEstimate<S: Spec, Call> {
     /// The pre-exec working set pinned to the selected block context.
-    pub pre_exec_working_set: sov_modules_api::PreExecWorkingSet<S, ApiStateAccessor<S>>,
+    pub pre_exec_working_set:
+        sov_modules_api::PreExecWorkingSet<S, sov_modules_api::ApiStateAccessor<S>>,
     /// The authenticated transaction data plus the synthetic raw tx hash.
     pub authenticated_tx: sov_modules_api::transaction::AuthenticatedTransactionAndRawHash<S>,
     /// Authorization data used by the runtime transaction authorizer.
