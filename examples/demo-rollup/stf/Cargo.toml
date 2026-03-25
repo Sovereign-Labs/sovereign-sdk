@@ -12,12 +12,12 @@ publish = false
 workspace = true
 
 [dependencies]
+demo-stf-declaration = { workspace = true }
+
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["alloc", "derive"] }
-strum = { workspace = true, features = ["derive"] }
 schemars = { workspace = true }
-arbitrary = { workspace = true, optional = true }
 
 sov-accounts = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
@@ -43,15 +43,26 @@ sov-rollup-apis = { workspace = true, optional = true }
 sov-test-modules = { workspace = true }
 sov-test-utils = { workspace = true, optional = true }
 
+[build-dependencies]
+anyhow = { workspace = true }
+demo-stf-declaration = { workspace = true, features = ["native"] }
+sov-address = { workspace = true, features = ["evm"] }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-build = { workspace = true }
+
 [features]
 default = []
 arbitrary = [
-	"dep:arbitrary",
-	"sov-address/arbitrary",
-	"sov-modules-api/arbitrary",
+	"demo-stf-declaration/arbitrary",
 	"sov-accounts/arbitrary",
+	"sov-address/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-evm/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-mock-zkvm/arbitrary",
+	"sov-modules-api/arbitrary",
 	"sov-paymaster/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-sequencer-registry/arbitrary",
@@ -60,6 +71,7 @@ arbitrary = [
 	"sov-uniqueness/arbitrary"
 ]
 native = [
+	"demo-stf-declaration/native",
 	"sov-accounts/native",
 	"sov-attester-incentives/native",
 	"sov-bank/native",
@@ -81,7 +93,9 @@ native = [
 	"sov-paymaster/native",
 	"sov-address/native",
 	"sov-test-modules/native",
-	"sov-solana-offchain-auth/native"
+	"sov-solana-offchain-auth/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.

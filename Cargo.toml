@@ -82,6 +82,7 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-rollup/stf",
+    "examples/demo-rollup/stf/stf-declaration",
     "examples/demo-rollup/sov-benchmarks",
     "examples/demo-rollup/rest-api-load-testing",
     "examples/demo-rollup/stf/demo-stf-json-client",
@@ -128,6 +129,7 @@ float_arithmetic = "deny"              # Can cause subtle bugs due to different 
 
 [workspace.dependencies]
 demo-stf = { path = "examples/demo-rollup/stf", default-features = false, version = "0.3" }
+demo-stf-declaration = { path = "examples/demo-rollup/stf/stf-declaration", default-features = false, version = "0.3" }
 sov-soak-testing-lib = { path = "crates/utils/sov-soak-testing-lib", default-features = false }
 sov-eth-client = { path = "crates/utils/sov-eth-client", default-features = false, version = "0.3" }
 sov-blob-sender = { path = "crates/full-node/sov-blob-sender", default-features = false, version = "0.3" }
