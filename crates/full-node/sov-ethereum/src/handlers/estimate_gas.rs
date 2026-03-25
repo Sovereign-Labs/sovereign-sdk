@@ -89,18 +89,13 @@ where
         Self::validate_request_stale_nonce_preflight(&request, block_id, snapshot_state)?;
 
         let has_explicit_gas = request.gas.is_some();
-        let affordability_preflight = if has_explicit_gas && !has_overrides {
-            Some(Self::run_request_affordability_preflight(
+        if has_explicit_gas && !has_overrides {
+            Self::run_request_affordability_preflight(
                 &request,
                 block_id,
                 snapshot_state,
                 ethereum,
-            )?)
-        } else {
-            None
-        };
-        if let Some(AffordabilityPreflight::Rejected(err)) = affordability_preflight.as_ref() {
-            return Err(err.clone());
+            )?;
         }
 
         let estimate_with_legacy = || {
@@ -113,11 +108,11 @@ where
                 &mut state,
             )
         };
-        let estimated_gas = if Self::should_use_runtime_parity_estimate(
-            &request,
-            has_overrides,
-            affordability_preflight.as_ref(),
-        ) {
+        // Runtime parity only covers the no-override path with a concrete sender.
+        // Override requests still need the legacy estimator because it applies RPC
+        // state/block overrides, and non-successful STF outcomes still fall back so
+        // the RPC preserves the existing Ethereum-facing result/error behavior.
+        let estimated_gas = if Self::should_use_runtime_parity_estimate(&request, has_overrides) {
             match Self::estimate_gas_via_runtime_parity(
                 request.clone(),
                 block_id,
@@ -140,16 +135,12 @@ where
         if !has_explicit_gas && !has_overrides {
             let mut request_with_estimated_gas = request;
             request_with_estimated_gas.gas = Some(estimated_gas.to::<u64>());
-            if let AffordabilityPreflight::Rejected(err) =
-                Self::run_request_affordability_preflight(
-                    &request_with_estimated_gas,
-                    block_id,
-                    snapshot_state,
-                    ethereum,
-                )?
-            {
-                return Err(err);
-            }
+            Self::run_request_affordability_preflight(
+                &request_with_estimated_gas,
+                block_id,
+                snapshot_state,
+                ethereum,
+            )?;
         }
 
         Ok(estimated_gas)
@@ -182,6 +173,9 @@ where
         let (result, mut tx_scratchpad, _) = process_tx_and_reward_prover(
             &mut runtime,
             prepared.pre_exec_working_set,
+            // `eth_estimateGas` should not depend on transient remaining slot budget.
+            // We disable the STF slot-gas clamp here and still remain bounded by the
+            // transaction's own gas limit inside the real execution pipeline.
             <S::Gas>::MAX,
             validated_output,
             prepared.raw_tx,
@@ -210,14 +204,8 @@ where
     fn should_use_runtime_parity_estimate(
         request: &TransactionRequest,
         has_overrides: bool,
-        affordability_preflight: Option<&AffordabilityPreflight>,
     ) -> bool {
-        !has_overrides
-            && request.from.is_some()
-            && !matches!(
-                affordability_preflight,
-                Some(AffordabilityPreflight::Rejected(_))
-            )
+        !has_overrides && request.from.is_some()
     }
 
     pub(crate) fn run_request_affordability_preflight(
@@ -225,17 +213,17 @@ where
         block_id: Option<BlockId>,
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> RpcResult<AffordabilityPreflight> {
+    ) -> RpcResult<()> {
         let Some(from) = request.from else {
-            return Ok(AffordabilityPreflight::Skip);
+            return Ok(());
         };
         // This guard is defensive: omitted-gas callers synthesize `gas` from a pinned estimate
         // before calling this helper.
         if request.gas.is_none() {
-            return Ok(AffordabilityPreflight::Skip);
+            return Ok(());
         }
         if request.max_fee_per_gas.or(request.gas_price).is_none() {
-            return Ok(AffordabilityPreflight::Skip);
+            return Ok(());
         }
 
         let evm = Evm::<S>::default();
@@ -258,17 +246,20 @@ where
                     );
                     // Wrapper preflight is best-effort only. Sequencer admission still authenticates
                     // and reserves gas before accepting the transaction.
-                    return Ok(AffordabilityPreflight::Skip);
+                    return Ok(());
                 }
             };
-        Self::request_affordability_preflight(
+        match Self::request_affordability_preflight(
             &authenticated_tx,
             &auth_data,
             S::Address::from_vm_address(EthereumAddress::from(from)),
             request.value.unwrap_or_default(),
             &mut affordability_state,
             ethereum,
-        )
+        )? {
+            AffordabilityPreflight::Affordable | AffordabilityPreflight::Skip => Ok(()),
+            AffordabilityPreflight::Rejected(err) => Err(err),
+        }
     }
 
     pub(crate) fn request_affordability_preflight(

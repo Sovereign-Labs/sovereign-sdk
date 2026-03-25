@@ -919,7 +919,7 @@ where
             .expect("Maybe pending block should never return None if allow_empty is true")
     }
 
-    /// Resolves a block ID to either current or archival state.
+    /// Resolves a block ID to current, archival, or cached synthetic state.
     ///
     /// Explicit numeric selectors are resolved by block kind, not by height arithmetic:
     /// - if the number identifies the current synthetic pending block, use `Current`
@@ -936,6 +936,11 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
+                // Numeric selectors prefer archival state for the exact block number.
+                // Fall back to `Current` only when that number is the live synthetic
+                // pending height and no archival snapshot exists yet. Block-pinned
+                // `eth_estimateGas` uses `preflight_state_for_block_id` instead of
+                // relying on this generic fallback.
                 match state.get_archival_state(RollupHeight::new(number)) {
                     Ok(archival_state) => Ok(MaybeArchivalState::Archival(archival_state.into())),
                     Err(err) => {
