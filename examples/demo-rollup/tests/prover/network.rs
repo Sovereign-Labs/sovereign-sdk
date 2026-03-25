@@ -29,7 +29,7 @@ type TestNetworkProverService = NetworkProverService<
 /// (inner) proofs, and uses MockZkvmNetwork (auto-complete) for aggregation (outer).
 ///
 /// Prerequisites:
-///   - `SP1_PRIVATE_KEY` env var set (Succinct network auth)
+///   - `NETWORK_PRIVATE_KEY` env var set (Succinct network auth)
 ///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
 ///   - Network access to Succinct's proving infrastructure
 #[tokio::test(flavor = "multi_thread")]
@@ -45,8 +45,9 @@ async fn test_network_proof_generation() {
 
     let inner_vm = SP1Network::new(elf)
         .await
-        .expect("Failed to create SP1Network — is SP1_PRIVATE_KEY set?");
-    let outer_vm = MockZkvmNetwork::new(true); // auto-complete outer proofs
+        .expect("Failed to create SP1 network prover");
+     // auto-complete outer proofs - real outer not supported yet
+    let outer_vm = MockZkvmNetwork::new(true);
 
     let da_verifier = sov_mock_da::MockDaVerifier::default();
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
