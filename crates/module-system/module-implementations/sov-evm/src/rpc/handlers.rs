@@ -616,12 +616,10 @@ where
             "EVM module JSON-RPC request"
         );
         let mut metered_state = state.clone_without_local_writes();
-        let block_number;
-        let multiplier;
         let (block_env, mut maybe_archival_state, cfg) =
             self.resolve_simulation_context_for_block_id(block_id, state)?;
-        block_number = block_env.number.to::<u64>();
-        multiplier = self
+        let block_number = block_env.number.to::<u64>();
+        let multiplier = self
             .fee_multiplier(maybe_archival_state.deref_mut())
             .map_err(into_rpc_error)?;
 
@@ -637,7 +635,11 @@ where
             block_overrides,
         )?;
 
-        if multiplier.as_u64() > 1 {
+        // Fee-check-inactive estimates still return the legacy margin-based gas limit.
+        if matches!(
+            multiplier,
+            crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive
+        ) {
             // Add 1,000 bytes to account for all Transaction fields besides calldata.
             let tx_size = request
                 .input
@@ -736,8 +738,8 @@ where
             }
         };
 
-        // Commit into the block-pinned RPC-local DB so post-simulation metering runs against
-        // the same state snapshot used for the simulation itself.
+        // `metered_state` was cloned before block-resolution reads so receipt-style overhead
+        // reflects only this request, not selector-resolution gas from `"pending"` vs numeric tags.
         self.db(&mut metered_state)
             .try_commit(changes)
             .expect("Gas meter is initialized with INF");

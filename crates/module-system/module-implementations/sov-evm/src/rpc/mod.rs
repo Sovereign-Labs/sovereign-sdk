@@ -134,6 +134,7 @@ pub enum PendingOrBlock {
 }
 
 const ABSOLUTE_MARGIN: u64 = 100_000;
+/// Backwards-compatibility margin for fee-check-inactive `eth_estimateGas`.
 /// gas * 1.5 + 100_000
 pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
     (gas / 2)
