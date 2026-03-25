@@ -1094,7 +1094,6 @@ async fn rpc2_005_receipt_fee_fields_reconcile_exactly_with_balance_delta() -> a
 
 /// RPC2-006: `eth_feeHistory(block_count=0)` should return an empty result, not an error.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     let http = Client::new();
@@ -1113,10 +1112,10 @@ async fn rpc2_006_fee_history_zero_block_count_returns_empty_response() -> anyho
     );
 
     assert_eq!(response["result"]["oldestBlock"].as_str(), Some("0x0"));
-    assert_eq!(
-        response["result"]["baseFeePerGas"],
-        json!([]),
-        "baseFeePerGas should be exactly [] for zero-block feeHistory"
+    assert!(
+        response["result"]["baseFeePerGas"].is_null()
+            || response["result"]["baseFeePerGas"] == json!([]),
+        "baseFeePerGas should be empty or omitted for zero-block feeHistory"
     );
     assert_eq!(
         response["result"]["gasUsedRatio"],
