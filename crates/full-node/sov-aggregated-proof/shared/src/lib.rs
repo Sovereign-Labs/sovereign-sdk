@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use sov_modules_api::CodeCommitmentHash;
 use sov_modules_api::{
     AggregatedProofPublicData, DaSpec, Spec, StateTransitionPublicData, Storage,
 };
@@ -18,7 +19,7 @@ pub struct DeferredProofInput<Da: DaSpec> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AggregatedProofWitness<Da: DaSpec> {
     pub proof_inputs: Vec<DeferredProofInput<Da>>,
-    pub outer_vkey_hash: [u32; 8],
+    pub outer_vkey_hash: CodeCommitmentHash,
     pub prev_outer_proof_witness: Option<PreviousOuterProofWitness>,
 }
 

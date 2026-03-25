@@ -23,7 +23,7 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::execution_mode::WitnessGeneration;
-use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
@@ -171,7 +171,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             outer_vm,
             da_verifier,
             prover_config_disc,
-            OuterCodeCommitmentHash::default(),
+            CodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
         )
     }

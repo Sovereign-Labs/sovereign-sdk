@@ -7,7 +7,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, OuterCodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, CodeCommitmentHash, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -36,7 +36,7 @@ pub(crate) struct Prover<Address, StateRoot, Witness, Da: DaService> {
     // and automatically terminate.
     // """
     pool: rayon::ThreadPool,
-    outer_vk_hash: OuterCodeCommitmentHash,
+    outer_vk_hash: CodeCommitmentHash,
     phantom: std::marker::PhantomData<(StateRoot, Witness, Da)>,
 }
 
@@ -51,7 +51,7 @@ where
     pub(crate) fn new(
         prover_address: Address,
         num_threads: usize,
-        outer_vk_hash: OuterCodeCommitmentHash,
+        outer_vk_hash: CodeCommitmentHash,
     ) -> Self {
         Self {
             outer_vk_hash,

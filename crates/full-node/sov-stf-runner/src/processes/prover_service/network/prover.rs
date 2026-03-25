@@ -5,7 +5,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, OuterCodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, CodeCommitmentHash, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -55,7 +55,7 @@ pub(crate) struct NetworkProver<
     inner_vm: InnerVm::Network,
     outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
-    code_commitment: OuterCodeCommitmentHash,
+    code_commitment: CodeCommitmentHash,
     outer_proof_timeout: std::time::Duration,
     phantom: PhantomData<Witness>,
 }
@@ -75,7 +75,7 @@ where
         prover_address: Address,
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
-        code_commitment: OuterCodeCommitmentHash,
+        code_commitment: CodeCommitmentHash,
         outer_proof_timeout: std::time::Duration,
     ) -> Self {
         Self {
