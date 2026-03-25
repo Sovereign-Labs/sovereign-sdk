@@ -16,8 +16,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{
-    CodeCommitment, StateTransitionPublicData, StateTransitionWitness,
-    StateTransitionWitnessWithAddress, ZkvmHost,
+    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
 };
 use sov_sp1_adapter::host::SP1Host;
 use sov_sp1_adapter::BlockHeaderWithProof;

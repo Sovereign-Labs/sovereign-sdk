@@ -14,7 +14,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 #[cfg(not(target_os = "zkvm"))]
 use sov_rollup_interface::zk::Proof;
-use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
+use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
 
 pub mod crypto;
