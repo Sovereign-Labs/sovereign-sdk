@@ -11,7 +11,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
+use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -40,8 +40,6 @@ impl Debug for SP1MethodId {
         f.debug_tuple("SP1MethodId").field(&self.0).finish()
     }
 }
-
-impl CodeCommitment for SP1MethodId {}
 
 /// The cryptographic primitives provided by SP1.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy, JsonSchema)]

@@ -25,9 +25,6 @@ pub struct BlockProof<Address, Da: DaSpec, Root> {
 )]
 pub struct CodeCommitmentHash(pub [u32; 8]);
 
-use crate::zk::CodeCommitment;
-impl CodeCommitment for CodeCommitmentHash {}
-
 impl core::fmt::Display for CodeCommitmentHash {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "CodeCommitmentHash(0x")?;

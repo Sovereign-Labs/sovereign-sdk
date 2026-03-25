@@ -68,8 +68,6 @@ impl Zkvm for MockZkvm {
 )]
 pub struct MockCodeCommitment(pub [u32; 8]);
 
-impl sov_rollup_interface::zk::CodeCommitment for MockCodeCommitment {}
-
 /// An error that can occur when converting a byte vector to a `MockCodeCommitment`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum MockCodeCommitmentError {
@@ -129,7 +127,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 #[cfg(test)]
 mod tests {
     use sov_rollup_interface::crypto::PublicKey;
-    use sov_rollup_interface::zk::{CodeCommitment, ZkVerifier, ZkvmHost, ZkvmNetwork};
+    use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost, ZkvmNetwork};
 
     use super::*;
 

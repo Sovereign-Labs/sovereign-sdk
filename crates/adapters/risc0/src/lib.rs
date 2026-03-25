@@ -46,8 +46,6 @@ impl PartialEq<[u32; 8]> for Risc0MethodId {
     }
 }
 
-impl CodeCommitment for Risc0MethodId {}
-
 /// An error that can occur when converting a byte vector to a `Risc0MethodId`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Risc0MethodIdError {

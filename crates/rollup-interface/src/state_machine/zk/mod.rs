@@ -114,17 +114,11 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>>;
 }
 
-/// A commitment to a zkVM program.
-pub trait CodeCommitment:
-    Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq
-{
-}
-
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
 pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// A commitment to the zkVM program which is being proven
-    type CodeCommitment: CodeCommitment;
+    type CodeCommitment: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// Defines the cryptographic operations provided natively by the Zkvm.
     type CryptoSpec: CryptoSpec;
