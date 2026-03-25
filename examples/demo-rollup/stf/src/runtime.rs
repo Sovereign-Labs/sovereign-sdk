@@ -48,6 +48,25 @@ pub struct Runtime<S: Spec>(pub(crate) RuntimeInner<S>)
 where
     S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>;
 
+impl<S: Spec> std::ops::Deref for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+{
+    type Target = RuntimeInner<S>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S: Spec> std::ops::DerefMut for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl<S> sov_modules_stf_blueprint::Runtime<S> for Runtime<S>
 where
     S: Spec,

@@ -106,11 +106,11 @@ where
         visible_hash: &<<Self::Spec as Spec>::Storage as Storage>::Root,
         state: &mut StateCheckpoint<Self::Spec>,
     ) {
-        self.0.begin_rollup_block_hook(visible_hash, state)
+        self.0.begin_rollup_block_hook(visible_hash, state);
     }
 
     fn end_rollup_block_hook(&mut self, state: &mut StateCheckpoint<Self::Spec>) {
-        self.0.end_rollup_block_hook(state)
+        self.0.end_rollup_block_hook(state);
     }
 }
 
@@ -150,7 +150,7 @@ where
         root_hash: &<<Self::Spec as Spec>::Storage as Storage>::Root,
         state: &mut impl sov_modules_api::AccessoryStateReaderAndWriter,
     ) {
-        self.0.finalize_hook(root_hash, state)
+        self.0.finalize_hook(root_hash, state);
     }
 }
 

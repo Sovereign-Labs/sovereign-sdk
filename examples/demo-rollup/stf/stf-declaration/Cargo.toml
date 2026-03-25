@@ -33,6 +33,7 @@ sov-synthetic-load = { workspace = true }
 sov-kernels = { workspace = true }
 sov-rollup-apis = { workspace = true, optional = true }
 sov-test-modules = { workspace = true }
+sov-test-utils = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
@@ -81,5 +82,10 @@ arbitrary = [
     "sov-rollup-interface/arbitrary",
     "sov-sequencer-registry/arbitrary",
     "sov-state/arbitrary",
-    "sov-uniqueness/arbitrary"
+    "sov-uniqueness/arbitrary",
+    "sov-test-utils?/arbitrary",
+]
+test-utils = [
+    "native",
+    "sov-test-utils",
 ]

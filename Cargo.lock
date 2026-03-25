@@ -3644,6 +3644,7 @@ dependencies = [
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
+ "sov-test-utils",
  "sov-uniqueness",
  "strum 0.26.3",
 ]
