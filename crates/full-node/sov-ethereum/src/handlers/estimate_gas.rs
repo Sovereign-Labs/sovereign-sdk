@@ -10,13 +10,16 @@ use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::{build_request_preflight_auth, EthereumAuthenticator, Evm};
+use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::GasEnforcer;
 use sov_modules_api::capabilities::{
     AuthorizationData, HasCapabilities, HasKernel, TransactionAuthorizer,
 };
 use sov_modules_api::{
-    ApiStateAccessor, AuthenticatedTransactionData, ExecutionContext, GetGasPrice, Spec,
+    ApiStateAccessor, AuthenticatedTransactionData, ExecutionContext, GasArray, GetGasPrice,
+    NoOpControlFlow, Spec, TxEffect,
 };
+use sov_modules_stf_blueprint::process_tx_and_reward_prover;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
@@ -115,13 +118,11 @@ where
             has_overrides,
             affordability_preflight.as_ref(),
         ) {
-            match evm.estimate_gas_via_runtime_parity::<Seq::Rt>(
+            match Self::estimate_gas_via_runtime_parity(
                 request.clone(),
                 block_id,
                 snapshot_state,
-                &ethereum.sequencer_da_address,
-                ethereum.sequencer_rollup_address,
-                ethereum.sequencer_type,
+                ethereum,
             ) {
                 Ok(estimated_gas) => estimated_gas,
                 Err(err) => {
@@ -152,6 +153,59 @@ where
         }
 
         Ok(estimated_gas)
+    }
+
+    fn estimate_gas_via_runtime_parity(
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        snapshot_state: &ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> Result<U64, String> {
+        let evm = Evm::<S>::default();
+        let prepared = evm.prepare_runtime_parity_estimate::<Seq::Rt>(
+            request,
+            block_id,
+            snapshot_state,
+            ethereum.sequencer_type,
+        )?;
+        let tx_hash = <[u8; 32]>::from(prepared.authenticated_tx.raw_tx_hash.clone());
+        let metrics = AuthAndProcessMetrics::new(
+            tx_hash,
+            AuthAndProcessTimings::new_with_defaults(ExecutionContext::Sequencer.str()),
+        );
+        let validated_output = (
+            prepared.authenticated_tx,
+            prepared.auth_data,
+            prepared.runtime_call,
+        );
+
+        let mut runtime = Seq::Rt::default();
+        let (result, mut tx_scratchpad, _) = process_tx_and_reward_prover(
+            &mut runtime,
+            prepared.pre_exec_working_set,
+            <S::Gas>::MAX,
+            validated_output,
+            prepared.raw_tx,
+            &ethereum.sequencer_da_address,
+            ethereum.sequencer_rollup_address,
+            ExecutionContext::Sequencer,
+            &NoOpControlFlow,
+            prepared.operating_mode,
+            metrics,
+            ethereum.sequencer_type,
+        );
+
+        match result {
+            Ok(apply_tx_result) => match apply_tx_result.receipt.receipt {
+                TxEffect::Successful(_) => {
+                    evm.read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
+                }
+                other => Err(format!(
+                    "runtime parity transaction was not successful: {other:?}"
+                )),
+            },
+            Err((error, _)) => Err(format!("runtime parity process_tx failed: {error}")),
+        }
     }
 
     fn should_use_runtime_parity_estimate(

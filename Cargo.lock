@@ -12010,6 +12010,7 @@ dependencies = [
  "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
+ "sov-modules-stf-blueprint",
  "sov-rest-utils",
  "sov-rpc-eth-types",
  "sov-sequencer",

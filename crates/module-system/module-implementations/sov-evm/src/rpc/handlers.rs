@@ -11,33 +11,33 @@ use alloy_rpc_types::{
 };
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
-use borsh::BorshDeserialize;
 use jsonrpsee::core::RpcResult;
 use revm::context::result::{ExecutionResult, ResultAndState};
 use revm::Database;
 use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::capabilities::{
-    ChainState, GasEnforcer, HasCapabilities, SequencingDataHandler, TransactionAuthenticator,
-    TransactionAuthorizer,
-};
+use sov_modules_api::capabilities::{ChainState, SequencingDataHandler, TransactionAuthenticator};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::{
-    ApiStateAccessor, DaSpec, DispatchCall, ExecutionContext, Gas, GasMeter, GasSpec, GetGasPrice,
-    RawTx, Runtime, SequencerType, Spec, StateAccessor, StateProvider as _, WorkingSet,
+    ApiStateAccessor, DispatchCall, GasMeter, GasSpec, GetGasPrice, InfallibleStateReaderAndWriter,
+    RawTx, Runtime, SequencerType, Spec, StateAccessor, StateProvider as _,
 };
 use sov_rollup_interface::common::RollupHeight;
+use sov_rollup_interface::TxHash;
 use sov_rpc_eth_types::{
     EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
 };
+use sov_state::User;
 use std::ops::DerefMut;
 use tracing::trace;
 
 use crate::evm::primitive_types::{PendingTransaction, TxSignedAndRecovered};
 use crate::{
-    build_request_preflight_auth, EthereumAuthenticator, Evm, RlpEvmTransaction, TransactionSigned,
+    build_request_preflight_auth, EthereumAuthenticator, Evm, PreparedRuntimeParityEstimate,
+    RlpEvmTransaction, TransactionSigned,
 };
 
 #[rpc_gen(client, server)]
@@ -765,18 +765,17 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    /// Runs the real runtime pre-exec and dispatch path on a forked accessor
-    /// and returns the simulated EVM receipt gas used.
+    /// Prepares the pinned pre-exec state and synthetic transaction needed to
+    /// run the STF pipeline for runtime-parity gas estimation.
     #[cfg(feature = "native")]
-    pub fn estimate_gas_via_runtime_parity<R>(
+    #[doc(hidden)]
+    pub fn prepare_runtime_parity_estimate<R>(
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
         snapshot_state: &ApiStateAccessor<S>,
-        sequencer_da_address: &<S::Da as DaSpec>::Address,
-        sequencer_rollup_address: S::Address,
         sequencer_type: SequencerType,
-    ) -> Result<U64, String>
+    ) -> Result<PreparedRuntimeParityEstimate<S, <R as DispatchCall>::Decodable>, String>
     where
         R: Runtime<S> + EthereumAuthenticator<S> + Default,
     {
@@ -832,100 +831,39 @@ where
         let (authenticated_tx, auth_data) =
             build_request_preflight_auth::<_, S>(&normalized_request, &mut pre_exec_working_set)
                 .map_err(|err| format!("request preflight auth error: {err}"))?;
-        let (_tx_hash, runtime_call) =
-            Self::build_runtime_parity_call::<R>(normalized_request, &auth_data)?;
+        let (raw_tx_hash, raw_tx, runtime_call) = Self::build_runtime_parity_baked_tx::<R>(
+            normalized_request,
+            &auth_data,
+            sequencing_data,
+        )?;
 
-        let execution_context = ExecutionContext::Sequencer;
-        let mut context = runtime
-            .transaction_authorizer()
-            .resolve_context(
-                &auth_data,
-                sequencer_da_address,
-                sequencer_rollup_address,
-                &mut pre_exec_working_set,
-                sequencing_data,
-                execution_context,
-                sequencer_type,
-            )
-            .map_err(|err| format!("resolve_context failed: {err}"))?;
-
-        runtime
-            .transaction_authorizer()
-            .check_uniqueness(
-                &auth_data,
-                &context,
-                &execution_context,
-                &mut pre_exec_working_set,
-            )
-            .map_err(|err| format!("check_uniqueness failed: {err}"))?;
-
-        runtime
-            .transaction_authorizer()
-            .mark_tx_attempted(&auth_data, sequencer_da_address, &mut pre_exec_working_set)
-            .map_err(|err| format!("mark_tx_attempted failed: {err}"))?;
-
-        let gas_price = pre_exec_working_set.gas_price();
-        runtime
-            .gas_enforcer()
-            .try_reserve_gas(
-                &authenticated_tx,
-                gas_price,
-                &mut context,
-                &mut pre_exec_working_set,
-            )
-            .map_err(|err| format!("try_reserve_gas failed: {err}"))?;
-
-        let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.to_scratchpad_and_gas_meter();
-        let mut working_set = WorkingSet::create_working_set(
-            scratchpad,
-            &authenticated_tx,
-            authenticated_tx.gas_meter(pre_exec_gas_meter.gas_info().gas_price, <S::Gas>::max()),
-        );
-
-        working_set
-            .charge_gas(pre_exec_gas_meter.gas_info().gas_used)
-            .map_err(|err| format!("charging pre-exec gas failed: {err}"))?;
-
-        if runtime.is_unauthorized_system_tx(&runtime_call, &context, &mut working_set) {
-            return Err("unauthorized system transaction".to_string());
-        }
-
-        if let Some(sequencing_data) = context.sequencing_data().as_ref() {
-            match <R as HasCapabilities<S>>::SequencingData::try_from_slice(sequencing_data) {
-                Ok(decoded) => runtime
-                    .sequencing_data_handler()
-                    .handle_sequencing_data(decoded, &context, &mut working_set)
-                    .map_err(|err| format!("handle_sequencing_data failed: {err}"))?,
-                Err(err) => tracing::warn!(%err, "invalid sequencing metadata; ignoring"),
-            }
-        }
-
-        runtime
-            .pre_dispatch_tx_hook(&authenticated_tx, &mut working_set)
-            .map_err(|err| format!("pre_dispatch_tx_hook failed: {err}"))?;
-        runtime
-            .dispatch_call(runtime_call, &mut working_set, &context)
-            .map_err(|err| format!("dispatch_call failed: {err}"))?;
-        runtime
-            .post_dispatch_tx_hook(&authenticated_tx, &context, &mut working_set)
-            .map_err(|err| format!("post_dispatch_tx_hook failed: {err}"))?;
-
-        let (mut tx_scratchpad, transaction_consumption, _) = working_set.finalize();
-        runtime.gas_enforcer().refund_remaining_gas(
-            context.gas_refund_recipient(),
-            &transaction_consumption.remaining_funds(),
-            &mut tx_scratchpad,
-        );
-        runtime.gas_enforcer().reward_prover(
-            &transaction_consumption.base_fee_value(),
+        Ok(PreparedRuntimeParityEstimate {
+            pre_exec_working_set,
+            authenticated_tx: AuthenticatedTransactionAndRawHash {
+                raw_tx_hash,
+                authenticated_tx,
+            },
+            auth_data,
+            runtime_call,
+            raw_tx,
             operating_mode,
-            &mut tx_scratchpad,
-        );
+        })
+    }
 
+    /// Reads the simulated gas estimate from the newest pending EVM receipt in
+    /// the provided scratch state.
+    #[cfg(feature = "native")]
+    #[doc(hidden)]
+    pub fn read_runtime_parity_estimate_from_pending_tail<
+        Accessor: InfallibleStateReaderAndWriter<User>,
+    >(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<U64, String> {
         let pending_tx = self
             .pending_transactions
-            .last(&mut tx_scratchpad)
-            .map_err(|err| format!("pending tx read failed: {err}"))?
+            .last(state)
+            .unwrap_infallible()
             .ok_or_else(|| "no pending EVM transaction produced by parity estimate".to_string())?;
 
         Ok(U64::from(pending_tx.receipt.gas_used))
@@ -1019,10 +957,18 @@ where
     }
 
     #[cfg(feature = "native")]
-    fn build_runtime_parity_call<R>(
+    fn build_runtime_parity_baked_tx<R>(
         request: TransactionRequest,
         auth_data: &sov_modules_api::capabilities::AuthorizationData<S>,
-    ) -> Result<(B256, <R as DispatchCall>::Decodable), String>
+        sequencing_data: Option<sov_rollup_interface::Bytes>,
+    ) -> Result<
+        (
+            TxHash,
+            sov_modules_api::FullyBakedTx,
+            <R as DispatchCall>::Decodable,
+        ),
+        String,
+    >
     where
         R: Runtime<S> + EthereumAuthenticator<S>,
     {
@@ -1031,18 +977,19 @@ where
             .from
             .ok_or_else(|| "normalized request missing from".to_string())?;
         let envelope = Self::build_runtime_parity_signed_tx(&request, nonce)?;
-        let tx_hash = *envelope.hash();
+        let tx_hash = TxHash::new(**envelope.hash());
         let raw_tx = borsh::to_vec(&RlpEvmTransaction {
             rlp: envelope.encoded_2718(),
         })
         .map_err(|err| format!("borsh serialize synthetic tx failed: {err}"))?;
-        let serialized_tx = R::encode_with_ethereum_auth(RawTx::new(raw_tx));
+        let mut serialized_tx = R::encode_with_ethereum_auth(RawTx::new(raw_tx));
+        serialized_tx.sequencing_data = sequencing_data;
         let auth_call =
             <R::Auth as TransactionAuthenticator<S>>::decode_serialized_tx(&serialized_tx)
                 .map_err(|err| format!("decode_serialized_tx failed: {err}"))?;
         let runtime_call = R::wrap_call(auth_call);
 
-        Ok((tx_hash, runtime_call))
+        Ok((tx_hash, serialized_tx, runtime_call))
     }
 }
 
