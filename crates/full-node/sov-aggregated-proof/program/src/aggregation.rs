@@ -39,17 +39,10 @@ pub(crate) fn run_aggregation_program<
 
     // Verify the previous aggregation proof if one exists. On the first aggregation
     // after genesis, there is no predecessor, the chain starts here.
-    let previous_public_data = if let Some(prev_outer_proof_witness) = prev_outer_proof_witness {
-        let pub_data = V::verify::<AggPubData<S, Da>>(
-            &prev_outer_proof_witness.public_values,
-            &outer_vkey_hash,
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
-
-        Some(pub_data)
-    } else {
-        None
-    };
+    let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
+        V::verify::<AggPubData<S, Da>>(&prev_outer_proof_witness.public_values, &outer_vkey_hash)
+            .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"))
+    });
 
     let verified_proof_data: VerifyResult<S, Da> = verify_proof_chain::<S, Da, V>(
         proof_inputs,
