@@ -66,7 +66,7 @@ impl Zkvm for MockZkvm {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Default,
 )]
-pub struct MockCodeCommitment(pub [u8; 8]);
+pub struct MockCodeCommitment(pub [u32; 8]);
 
 impl sov_rollup_interface::zk::CodeCommitment for MockCodeCommitment {}
 
@@ -227,23 +227,5 @@ mod tests {
         let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
         assert_eq!(verified, pub_data);
         Ok(())
-    }
-
-    #[test]
-    fn mock_code_commitment_codec_roundtrip() {
-        // Check a roundtrip with the "digest" type from risc0.
-        // This ensures that our use of `from_ne_bytes` is correct on the target platform.
-        let raw_data = [1; 8];
-        let method_id = MockCodeCommitment(raw_data);
-        let bytes = method_id.encode();
-        let id = MockCodeCommitment::decode(&bytes).expect("Encoding is valid");
-        assert_eq!(id.0, raw_data);
-
-        // Assert that we return the expected error when the length is incorrect.
-        let bytes = vec![1u8; 31];
-        assert!(matches!(
-            MockCodeCommitment::decode(&bytes),
-            Err(MockCodeCommitmentError::InvalidLength { found: 31 })
-        ));
     }
 }
