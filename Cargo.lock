@@ -11869,7 +11869,6 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "prometheus_exporter",
- "proptest",
  "rand 0.8.5",
  "reqwest",
  "reth-primitives",

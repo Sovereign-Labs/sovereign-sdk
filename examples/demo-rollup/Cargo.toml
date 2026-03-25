@@ -84,27 +84,25 @@ alloy-rlp = { workspace = true }
 [dev-dependencies]
 sov-eth-client = { workspace = true }
 jsonrpsee = { workspace = true }
-sov-address = { workspace = true, features = ["native", "arbitrary"] }
-sov-risc0-adapter = { workspace = true, features = ["native", "arbitrary"] }
-sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
-sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
+sov-address = { workspace = true, features = ["native"] }
+sov-risc0-adapter = { workspace = true, features = ["native"] }
+sov-celestia-adapter = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true }
 sov-modules-api = { workspace = true, features = [
     "native",
-    "arbitrary",
     "test-utils",
 ] }
-sov-mock-da = { workspace = true, features = ["arbitrary"] }
-sov-bank = { workspace = true, features = ["native", "arbitrary"] }
+sov-mock-da = { workspace = true }
+sov-bank = { workspace = true, features = ["native"] }
 sov-sequencer-registry = { workspace = true, features = [
     "native",
-    "arbitrary",
 ] }
-sov-accounts = { workspace = true, features = ["native", "arbitrary"] }
+sov-accounts = { workspace = true, features = ["native"] }
 sov-api-spec = { workspace = true }
-sov-evm = { workspace = true, features = ["native", "arbitrary"] }
+sov-evm = { workspace = true, features = ["native"] }
 sov-hyperlane-integration = { workspace = true, features = ["evm"] }
-sov-modules-macros = { workspace = true, features = ["arbitrary"] }
+sov-modules-macros = { workspace = true }
 sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
@@ -112,7 +110,7 @@ sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
 reth-primitives = { workspace = true, default-features = false }
 futures = { workspace = true }
-demo-stf = { workspace = true, features = ["native", "arbitrary"] }
+demo-stf = { workspace = true, features = ["native"] }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
 tracing-panic = { version = "0.1.2" }
 
@@ -120,7 +118,6 @@ base64 = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
-proptest = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
