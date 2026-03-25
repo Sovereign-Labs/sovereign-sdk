@@ -95,6 +95,23 @@ where
     }
 }
 
+impl<S: Spec> EncodeCall<sov_synthetic_load::SyntheticLoad<S>> for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+{
+    fn encode_call(
+        data: <sov_synthetic_load::SyntheticLoad<S> as sov_modules_api::Module>::CallMessage,
+    ) -> Vec<u8> {
+        <RuntimeInner<S> as EncodeCall<sov_synthetic_load::SyntheticLoad<S>>>::encode_call(data)
+    }
+
+    fn to_decodable(
+        data: <sov_synthetic_load::SyntheticLoad<S> as sov_modules_api::Module>::CallMessage,
+    ) -> Self::Decodable {
+        <RuntimeInner<S> as EncodeCall<sov_synthetic_load::SyntheticLoad<S>>>::to_decodable(data)
+    }
+}
+
 impl<S: Spec> BlockHooks for Runtime<S>
 where
     S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,

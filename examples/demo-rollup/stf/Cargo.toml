@@ -66,7 +66,9 @@ arbitrary = [
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils?/arbitrary",
-	"sov-uniqueness/arbitrary"
+	"sov-uniqueness/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-mock-zkvm/arbitrary"
 ]
 native = [
 	"demo-stf-declaration/native",
@@ -91,7 +93,9 @@ native = [
 	"sov-paymaster/native",
 	"sov-address/native",
 	"sov-test-modules/native",
-	"sov-solana-offchain-auth/native"
+	"sov-solana-offchain-auth/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.
