@@ -37,7 +37,7 @@ pub fn run_aggregation_program<Address, Da, Root, V, G>(
     Da: DaSpec,
     Root: Clone + Debug + PartialEq + Serialize + DeserializeOwned,
     V: ZkVerifier<CodeCommitment = CodeCommitmentHash>,
-    G: ZkvmGuest,
+    G: ZkvmGuest<Verifier = V>,
 {
     let witness = guest.read_from_host::<AggregatedProofWitness<Da>>();
 
