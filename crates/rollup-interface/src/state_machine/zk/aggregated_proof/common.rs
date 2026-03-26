@@ -5,6 +5,10 @@ use crate::da::DaSpec;
 
 /// A single deferred proof input containing its public values and associated DA block header.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "Da::BlockHeader: Serialize",
+    deserialize = "Da::BlockHeader: Deserialize<'de>"
+))]
 pub struct DeferredProofInput<Da: DaSpec> {
     /// The public values of the proof.
     pub public_values: Vec<u8>,
