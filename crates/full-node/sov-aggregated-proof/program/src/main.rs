@@ -21,6 +21,6 @@ type ProgramSpec = ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSo
 pub fn main() {
     let witness = sp1_zkvm::io::read::<AggregatedProofWitness<MockDaSpec>>();
 
-    let inner = CodeCommitmentHash(INNER_VKEY_HASH);
+    let inner = CodeCommitmentHash::from_u32_array(INNER_VKEY_HASH);
     run_aggregation_program::<ProgramSpec, MockDaSpec, SP1Verifier>(witness, inner);
 }
