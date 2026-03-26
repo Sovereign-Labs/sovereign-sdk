@@ -2356,11 +2356,6 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
             c.rollup_prover_config = None;
             c.storage = StoragePath::Tmp(dir);
             c.axum_port = port;
-            // Use a high ideal_lag so that 5 setup DA blocks don't trigger
-            // automatic batch production and shift hardcoded slot numbers.
-            if let SequencerKindConfig::Preferred(ref mut pref) = c.sequencer_config {
-                pref.ideal_lag_behind_finalized_slot = 10;
-            }
         })
         .set_da_config(|c| {
             c.sender_address = sequencer_addr;
@@ -2625,9 +2620,9 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         Ok(())
     };
 
-    // +10 to ensure enough finalized slots remain available with ideal_lag=3
+    // +5 to be sure
     test_rollup
-        .tenderly_produce_blocks(TEST_FINALIZATION_BLOCKS as usize + 10)
+        .tenderly_produce_blocks(TEST_FINALIZATION_BLOCKS as usize + 5)
         .await
         .unwrap();
     test_rollup.wait_for_node_synced().await.unwrap();
