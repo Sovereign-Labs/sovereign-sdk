@@ -13,9 +13,9 @@ use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::Ed25519Signature;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransaction};
 use sov_modules_api::{prelude::*, Base58Address, PrivateKey, SafeVec};
-use sov_modules_api::{FullyBakedTx, RawTx, Runtime, Spec};
+use sov_modules_api::{CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{
     AuthorizedSequencers, PayeePolicy, PayerGenesisConfig, PaymasterConfig,
@@ -24,8 +24,9 @@ use sov_paymaster::{
 use sov_rollup_interface::execution_mode::Native;
 use sov_sequencer::rest_api::AcceptTx;
 use sov_solana_offchain_auth::authentication::{
-    SolanaOffchainSimpleMessage, SolanaOffchainSpecCompliantMessage,
-    SolanaOffchainUnsignedTransaction,
+    SolanaOffchainSimpleMessage, SolanaOffchainSimpleMultisigMessage,
+    SolanaOffchainSpecCompliantMessage, SolanaOffchainUnsignedTransaction,
+    MULTISIG_SIMPLE_DISCRIMINATOR,
 };
 use sov_solana_offchain_auth::utils::make_preamble_for_message;
 use sov_solana_offchain_auth::{
@@ -84,6 +85,7 @@ impl<S: Spec> SolanaOffchainAuthenticatorTrait<S> for TestRuntime<S> {
 
 type RT = TestRuntime<SolanaTestSpec>;
 type S = SolanaTestSpec;
+type TestHasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
 
 async fn create_test_rollup() -> anyhow::Result<(
     TestRollup<SolanaOffchainAuthBlueprint<SolanaTestSpec, RT>>,
@@ -423,4 +425,201 @@ fn test_auth_wrapper() {
         solana_auth,
         SolanaOffchainAuthenticatorInput::SolanaOffchain(_)
     ));
+}
+
+fn create_multisig_signed_message(json_str: &str) -> Vec<u8> {
+    let mut signed_message = vec![MULTISIG_SIMPLE_DISCRIMINATOR];
+    signed_message.extend_from_slice(json_str.as_bytes());
+    signed_message
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_multisig_simple_message_transaction() {
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+
+    // Create 3 signers for a 2-of-3 multisig
+    let key1 = Ed25519PrivateKey::generate();
+    let key2 = Ed25519PrivateKey::generate();
+    let key3 = Ed25519PrivateKey::generate();
+    let pub1 = key1.pub_key();
+    let pub2 = key2.pub_key();
+    let pub3 = key3.pub_key();
+    let min_signers: u8 = 2;
+
+    // Compute the multisig address
+    let multisig = sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let credential_id = multisig.credential_id::<TestHasher>();
+    let multisig_address: <SolanaTestSpec as Spec>::Address = credential_id.into();
+    let multisig_address_str = multisig_address.to_string();
+
+    // Fund the multisig address from admin
+    {
+        let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
+        let encoded_tx = funding_json.as_bytes().to_vec();
+        let signer = admin.private_key();
+        let pubkey = signer.pub_key();
+        let signature = signer.sign(&encoded_tx);
+
+        let message = SolanaOffchainSimpleMessage::<S> {
+            signed_message: encoded_tx,
+            chain_hash: RT::CHAIN_HASH,
+            pubkey,
+            signature,
+        };
+        let raw_tx_bytes = borsh::to_vec(&message).unwrap();
+        let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
+        assert!(
+            response.status().is_success(),
+            "Expected funding transaction to succeed"
+        );
+    }
+
+    let funded_balance = query_balance(&test_rollup.client, &multisig_address_str).await;
+    assert_eq!(funded_balance, Some(Amount::new(20_000)));
+
+    // Build a transfer from the multisig to the recipient
+    let transfer_json = create_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS);
+    let signed_message = create_multisig_signed_message(&transfer_json);
+
+    // Signers 1 and 2 sign the message (2 of 3)
+    let sig1 = key1.sign(&signed_message);
+    let sig2 = key2.sign(&signed_message);
+
+    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+        signed_message: signed_message.clone(),
+        chain_hash: RT::CHAIN_HASH,
+        signatures: vec![
+            PubKeyAndSignature { signature: sig1, pub_key: pub1.clone() },
+            PubKeyAndSignature { signature: sig2, pub_key: pub2.clone() },
+        ],
+        unused_pub_keys: vec![pub3.clone()],
+        min_signers,
+    };
+
+    let raw_tx_bytes = borsh::to_vec(&multisig_msg).unwrap();
+    let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
+    assert!(
+        response.status().is_success(),
+        "Expected multisig transaction to succeed. Response: {response:?}"
+    );
+
+    let recipient_balance = query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await;
+    assert_eq!(
+        recipient_balance,
+        Some(Amount::new(7_000)),
+        "Expected recipient to have received 7,000 tokens"
+    );
+
+    let multisig_balance = query_balance(&test_rollup.client, &multisig_address_str).await;
+    assert_eq!(
+        multisig_balance,
+        Some(Amount::new(13_000)),
+        "Expected multisig to have 13,000 tokens remaining"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_multisig_insufficient_signatures() {
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+
+    let key1 = Ed25519PrivateKey::generate();
+    let key2 = Ed25519PrivateKey::generate();
+    let key3 = Ed25519PrivateKey::generate();
+    let pub1 = key1.pub_key();
+    let pub2 = key2.pub_key();
+    let pub3 = key3.pub_key();
+    let min_signers: u8 = 2;
+
+    let multisig = sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let credential_id = multisig.credential_id::<TestHasher>();
+    let multisig_address: <SolanaTestSpec as Spec>::Address = credential_id.into();
+    let multisig_address_str = multisig_address.to_string();
+
+    // Fund the multisig
+    {
+        let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
+        let encoded_tx = funding_json.as_bytes().to_vec();
+        let signer = admin.private_key();
+        let message = SolanaOffchainSimpleMessage::<S> {
+            signed_message: encoded_tx.clone(),
+            chain_hash: RT::CHAIN_HASH,
+            pubkey: signer.pub_key(),
+            signature: signer.sign(&encoded_tx),
+        };
+        let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&message).unwrap()).await;
+        assert!(response.status().is_success());
+    }
+
+    // Only 1 signer for a 2-of-3 multisig — should fail
+    let transfer_json = create_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS);
+    let signed_message = create_multisig_signed_message(&transfer_json);
+    let sig1 = key1.sign(&signed_message);
+
+    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+        signed_message,
+        chain_hash: RT::CHAIN_HASH,
+        signatures: vec![
+            PubKeyAndSignature { signature: sig1, pub_key: pub1 },
+        ],
+        unused_pub_keys: vec![pub2, pub3],
+        min_signers,
+    };
+
+    let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&multisig_msg).unwrap()).await;
+    assert_eq!(response.status(), 400, "Expected 400 for insufficient signatures");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_multisig_invalid_signature() {
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+
+    let key1 = Ed25519PrivateKey::generate();
+    let key2 = Ed25519PrivateKey::generate();
+    let key3 = Ed25519PrivateKey::generate();
+    let pub1 = key1.pub_key();
+    let pub2 = key2.pub_key();
+    let pub3 = key3.pub_key();
+    let min_signers: u8 = 2;
+
+    let multisig = sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let credential_id = multisig.credential_id::<TestHasher>();
+    let multisig_address: <SolanaTestSpec as Spec>::Address = credential_id.into();
+    let multisig_address_str = multisig_address.to_string();
+
+    // Fund the multisig
+    {
+        let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
+        let encoded_tx = funding_json.as_bytes().to_vec();
+        let signer = admin.private_key();
+        let message = SolanaOffchainSimpleMessage::<S> {
+            signed_message: encoded_tx.clone(),
+            chain_hash: RT::CHAIN_HASH,
+            pubkey: signer.pub_key(),
+            signature: signer.sign(&encoded_tx),
+        };
+        let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&message).unwrap()).await;
+        assert!(response.status().is_success());
+    }
+
+    // Corrupt the second signature
+    let transfer_json = create_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS);
+    let signed_message = create_multisig_signed_message(&transfer_json);
+    let sig1 = key1.sign(&signed_message);
+    let mut sig2_bytes = key2.sign(&signed_message).msg_sig.to_bytes();
+    sig2_bytes[10] = sig2_bytes[10].wrapping_add(1);
+    let sig2: Ed25519Signature = sig2_bytes.as_slice().try_into().unwrap();
+
+    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+        signed_message,
+        chain_hash: RT::CHAIN_HASH,
+        signatures: vec![
+            PubKeyAndSignature { signature: sig1, pub_key: pub1 },
+            PubKeyAndSignature { signature: sig2, pub_key: pub2 },
+        ],
+        unused_pub_keys: vec![pub3],
+        min_signers,
+    };
+
+    let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&multisig_msg).unwrap()).await;
+    assert_eq!(response.status(), 400, "Expected 400 for invalid signature");
 }
