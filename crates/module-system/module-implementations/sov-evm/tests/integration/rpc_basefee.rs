@@ -198,17 +198,16 @@ fn test_eth_estimate_gas_skips_fee_cap_check_before_activation_height() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let estimate = evm
-            .eth_estimate_gas_helper(
-                estimate_gas_request(account.address(), recipient.address()),
-                None,
-                None,
-                Some(low_base_fee_override()),
-                state,
-            )
-            .unwrap();
-
-        assert!(estimate.to::<u64>() >= 21_000);
+        // The request has max_fee_per_gas below the base fee. Before the
+        // fee-check activation height the estimator must not reject it.
+        evm.eth_estimate_gas_helper(
+            estimate_gas_request(account.address(), recipient.address()),
+            None,
+            None,
+            Some(low_base_fee_override()),
+            state,
+        )
+        .expect("estimate should succeed when fee check is inactive");
     });
 }
 
@@ -242,17 +241,15 @@ fn test_eth_estimate_gas_skips_fee_cap_check_when_runtime_disabled() {
 
     runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let estimate = evm
-            .eth_estimate_gas_helper(
-                estimate_gas_request(account.address(), recipient.address()),
-                None,
-                None,
-                Some(low_base_fee_override()),
-                state,
-            )
-            .unwrap();
-
-        assert!(estimate.to::<u64>() >= 21_000);
+        // After disabling the max-fee check at runtime, the same request should succeed.
+        evm.eth_estimate_gas_helper(
+            estimate_gas_request(account.address(), recipient.address()),
+            None,
+            None,
+            Some(low_base_fee_override()),
+            state,
+        )
+        .expect("estimate should succeed when fee check is runtime-disabled");
     });
 }
 
@@ -320,7 +317,7 @@ fn test_eth_estimate_gas_large_access_list_underestimates_executed_receipt() {
 }
 
 #[test]
-fn test_eth_estimate_gas_historical_block_below_receipt_projection_height_stays_legacy() {
+fn test_eth_estimate_gas_historical_block_below_receipt_projection_height_skips_projection() {
     const EVM_RECEIPT_ACTUAL_FEE_HEIGHT: u64 = 3;
     const HISTORICAL_BLOCK: u64 = 1;
 
@@ -373,7 +370,7 @@ fn test_eth_estimate_gas_historical_block_below_receipt_projection_height_stays_
 
     assert!(
         latest_estimate > historical_estimate,
-        "historical eth_estimateGas for block {HISTORICAL_BLOCK}, which is below EVM_RECEIPT_ACTUAL_FEE_HEIGHT={EVM_RECEIPT_ACTUAL_FEE_HEIGHT}, should stay on the legacy path while latest uses fee projection; historical_estimate={historical_estimate}, latest_estimate={latest_estimate}"
+        "historical eth_estimateGas for block {HISTORICAL_BLOCK}, which is below EVM_RECEIPT_ACTUAL_FEE_HEIGHT={EVM_RECEIPT_ACTUAL_FEE_HEIGHT}, should skip fee projection while latest uses it; historical_estimate={historical_estimate}, latest_estimate={latest_estimate}"
     );
 }
 

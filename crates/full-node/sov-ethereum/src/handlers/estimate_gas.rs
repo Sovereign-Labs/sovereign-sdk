@@ -98,7 +98,7 @@ where
             )?;
         }
 
-        let estimate_with_legacy = || {
+        let estimate_with_fallback = || {
             let mut state = snapshot_state.clone_without_local_writes();
             evm.eth_estimate_gas_helper(
                 request.clone(),
@@ -109,27 +109,18 @@ where
             )
         };
         // Runtime parity only covers the no-override path with a concrete sender.
-        // Override requests still need the legacy estimator because it applies RPC
-        // state/block overrides, and non-successful STF outcomes still fall back so
-        // the RPC preserves the existing Ethereum-facing result/error behavior.
+        // Override requests still need the fallback estimator because it applies RPC
+        // state/block overrides that the runtime-parity path does not support.
         let estimated_gas = if Self::should_use_runtime_parity_estimate(&request, has_overrides) {
-            match Self::estimate_gas_via_runtime_parity(
+            Self::estimate_gas_via_runtime_parity(
                 request.clone(),
                 block_id,
                 snapshot_state,
                 ethereum,
-            ) {
-                Ok(estimated_gas) => estimated_gas,
-                Err(err) => {
-                    tracing::warn!(
-                        error = %err,
-                        "runtime-parity estimateGas failed; falling back to legacy estimator"
-                    );
-                    estimate_with_legacy()?
-                }
-            }
+            )
+            .map_err(|err| ErrorObjectOwned::owned(-32603, err, None::<()>))?
         } else {
-            estimate_with_legacy()?
+            estimate_with_fallback()?
         };
 
         if !has_explicit_gas && !has_overrides {
