@@ -447,7 +447,8 @@ async fn test_submit_multisig_simple_message_transaction() {
     let min_signers: u8 = 2;
 
     // Compute the multisig address
-    let multisig = sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let multisig =
+        sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
     let credential_id = multisig.credential_id::<TestHasher>();
     let multisig_address: <SolanaTestSpec as Spec>::Address = credential_id.into();
     let multisig_address_str = multisig_address.to_string();
@@ -481,18 +482,27 @@ async fn test_submit_multisig_simple_message_transaction() {
     let transfer_json = create_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS);
     let signed_message = create_multisig_signed_message(&transfer_json);
 
-    // Signers 1 and 2 sign the message (2 of 3)
+    // Signers 3 and 1 sign (deliberately out of order relative to how the credential was
+    // constructed from [pub1, pub2, pub3]) to verify order independence.
+    let sig3 = key3.sign(&signed_message);
     let sig1 = key1.sign(&signed_message);
-    let sig2 = key2.sign(&signed_message);
 
     let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
         signed_message: signed_message.clone(),
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
-            PubKeyAndSignature { signature: sig1, pub_key: pub1.clone() },
-            PubKeyAndSignature { signature: sig2, pub_key: pub2.clone() },
-        ],
-        unused_pub_keys: vec![pub3.clone()],
+            PubKeyAndSignature {
+                signature: sig3,
+                pub_key: pub3.clone(),
+            },
+            PubKeyAndSignature {
+                signature: sig1,
+                pub_key: pub1.clone(),
+            },
+        ]
+        .try_into()
+        .unwrap(),
+        unused_pub_keys: vec![pub2.clone()].try_into().unwrap(),
         min_signers,
     };
 
@@ -530,7 +540,8 @@ async fn test_submit_multisig_insufficient_signatures() {
     let pub3 = key3.pub_key();
     let min_signers: u8 = 2;
 
-    let multisig = sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let multisig =
+        sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
     let credential_id = multisig.credential_id::<TestHasher>();
     let multisig_address: <SolanaTestSpec as Spec>::Address = credential_id.into();
     let multisig_address_str = multisig_address.to_string();
@@ -558,15 +569,26 @@ async fn test_submit_multisig_insufficient_signatures() {
     let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
         signed_message,
         chain_hash: RT::CHAIN_HASH,
-        signatures: vec![
-            PubKeyAndSignature { signature: sig1, pub_key: pub1 },
-        ],
-        unused_pub_keys: vec![pub2, pub3],
+        signatures: vec![PubKeyAndSignature {
+            signature: sig1,
+            pub_key: pub1,
+        }]
+        .try_into()
+        .unwrap(),
+        unused_pub_keys: vec![pub2, pub3].try_into().unwrap(),
         min_signers,
     };
 
-    let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&multisig_msg).unwrap()).await;
-    assert_eq!(response.status(), 400, "Expected 400 for insufficient signatures");
+    let response = submit_tx(
+        test_rollup.api_client(),
+        borsh::to_vec(&multisig_msg).unwrap(),
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 for insufficient signatures"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -581,7 +603,8 @@ async fn test_submit_multisig_invalid_signature() {
     let pub3 = key3.pub_key();
     let min_signers: u8 = 2;
 
-    let multisig = sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let multisig =
+        sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
     let credential_id = multisig.credential_id::<TestHasher>();
     let multisig_address: <SolanaTestSpec as Spec>::Address = credential_id.into();
     let multisig_address_str = multisig_address.to_string();
@@ -613,13 +636,25 @@ async fn test_submit_multisig_invalid_signature() {
         signed_message,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
-            PubKeyAndSignature { signature: sig1, pub_key: pub1 },
-            PubKeyAndSignature { signature: sig2, pub_key: pub2 },
-        ],
-        unused_pub_keys: vec![pub3],
+            PubKeyAndSignature {
+                signature: sig1,
+                pub_key: pub1,
+            },
+            PubKeyAndSignature {
+                signature: sig2,
+                pub_key: pub2,
+            },
+        ]
+        .try_into()
+        .unwrap(),
+        unused_pub_keys: vec![pub3].try_into().unwrap(),
         min_signers,
     };
 
-    let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&multisig_msg).unwrap()).await;
+    let response = submit_tx(
+        test_rollup.api_client(),
+        borsh::to_vec(&multisig_msg).unwrap(),
+    )
+    .await;
     assert_eq!(response.status(), 400, "Expected 400 for invalid signature");
 }
