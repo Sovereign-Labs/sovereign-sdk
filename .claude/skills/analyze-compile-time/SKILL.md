@@ -232,25 +232,15 @@ Look for:
 
 ## Level 6 — Linker Bottleneck
 
-Often overlooked: linking can dominate incremental build time.
+Linking can dominate incremental build time. Measure with:
 
 ```bash
-# Measure link time specifically:
 cargo clean
 cargo +nightly rustc --bin <binary> -- -Ztime-passes 2>&1 | grep "^time:"
 ```
 
-**Fast linker options** (add to `.cargo/config.toml`):
-
-```toml
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]   # mold: fastest
-# OR:
-rustflags = ["-C", "link-arg=-fuse-ld=lld"]     # lld: good, ships with LLVM
-```
-
-Install mold: `sudo apt install mold` (Debian/Ubuntu) or build from source.
+- **macOS**: The default Apple linker is fast. No action needed.
+- **Linux**: Use `mold` (`sudo apt install mold`) or `lld` as the linker via `-C link-arg=-fuse-ld=mold` in rustflags.
 
 ---
 
@@ -311,7 +301,7 @@ cargo build --timings
         │                                ↳ Heavy transitive dep? → optional feature / replace
         │                                ↳ Duplicate versions?   → cargo update / [patch]
         │
-        └─ Build fast but link slow? ──► Switch to mold or lld linker
+        └─ Build fast but link slow? ──► Check linker (see Level 6)
 ```
 
 ---
@@ -322,5 +312,5 @@ cargo build --timings
 - Rust Performance Book (compile times): https://nnethercote.github.io/perf-book/compile-times.html
 - corrode: Tips for Faster Rust Compile Times: https://corrode.dev/blog/tips-for-faster-rust-compile-times/
 - cargo-llvm-lines: https://github.com/dtolnay/cargo-llvm-lines
-- mold linker: https://github.com/rui314/mold
+
 - measureme / self-profile: https://github.com/rust-lang/measureme
