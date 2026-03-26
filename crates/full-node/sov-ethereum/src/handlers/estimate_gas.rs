@@ -220,7 +220,9 @@ where
         match effect {
             TxEffect::Reverted(contents) => rpc_tx_rejected(contents.reason),
             TxEffect::Skipped(contents) => rpc_tx_rejected(contents.error),
-            TxEffect::Successful(_) => rpc_internal_error("Bug: successful TxEffect is passed to error handling branch")
+            TxEffect::Successful(_) => {
+                rpc_internal_error("Bug: successful TxEffect is passed to error handling branch")
+            }
         }
     }
 
@@ -293,6 +295,14 @@ where
         state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<AffordabilityPreflight> {
+        let evm = Evm::<S>::default();
+        let fee_check_active = evm
+            .is_max_fee_check_active(state)
+            .map_err(|e| rpc_internal_error(format!("state read error: {e}")))?;
+        if !fee_check_active {
+            return Ok(AffordabilityPreflight::Skip);
+        }
+
         let gas_cost = U256::from(authenticated_tx.0.max_fee.0);
         if gas_cost.is_zero() && requested_value.is_zero() {
             return Ok(AffordabilityPreflight::Affordable);
