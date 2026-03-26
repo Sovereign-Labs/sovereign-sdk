@@ -188,9 +188,17 @@ where
 
         match result {
             Ok(apply_tx_result) => match apply_tx_result.receipt.receipt {
-                TxEffect::Successful(_) => evm
-                    .read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
-                    .map_err(|err| ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, err, None::<()>)),
+                TxEffect::Successful(_) => {
+                    // When `preferred_sequencer_publish_reverted_txs = true` the
+                    // SDK tx succeeds but the EVM receipt may still be reverted.
+                    // `read_runtime_parity_estimate_from_pending_tail` detects
+                    // this and returns a descriptive error.  That is a
+                    // transaction-level rejection, not an internal error.
+                    let rejected_code =
+                        alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code();
+                    evm.read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
+                        .map_err(|err| ErrorObjectOwned::owned(rejected_code, err, None::<()>))
+                }
                 other => Err(Self::tx_effect_to_rpc_error(other)),
             },
             // process_tx failures are transaction-level rejections (e.g. insufficient
@@ -211,6 +219,11 @@ where
     /// `check_for_evm_revert` pre-check (which returns code `3`).
     /// Anything that reaches this function is a STF-level rejection
     /// (allowlist, gas reservation, auth) with no raw EVM revert data.
+    ///
+    /// Sources:
+    ///  - -32003: <https://github.com/MetaMask/rpc-errors/blob/df5f688c20e392187cec307dac314816c2f73691/src/error-constants.ts#L6>
+    ///  - 3 (used by pre-check): <https://github.com/ethereum/go-ethereum/blob/8a3a309fa97bff7252da3e7e8cac47d024d2e281/internal/ethapi/errors.go#L44>
+    ///  - 3 (used by pre-check): <https://github.com/ethereum/execution-apis/blob/46ef717413592098cd743aab2d1e28d8f04d99a4/src/eth/execute.yaml#L51>
     fn tx_effect_to_rpc_error(effect: TxEffect<S>) -> ErrorObjectOwned {
         let code = alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code();
         match effect {

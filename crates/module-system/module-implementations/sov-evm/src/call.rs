@@ -524,7 +524,7 @@ pub(crate) fn verify_contract_creation_allowlist<
     signer: &Address,
     cfg: &EvmRuntimeConfig,
     db: &mut DB,
-) -> Result<(), anyhow::Error> {
+) -> anyhow::Result<()> {
     if cfg.contract_creation_policy.allows(signer) {
         return Ok(());
     }

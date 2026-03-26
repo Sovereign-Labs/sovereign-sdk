@@ -1015,8 +1015,12 @@ where
     let tx_env = prepare_call_env(block_env, request, cfg.chain_spec.tx_gas_limit)?;
     let caller = tx_env.caller;
     let result = executor::transact(&mut *db, block_env, tx_env, cfg_env)?;
-    verify_contract_creation_allowlist(&result.state, &caller, cfg, db)
-        .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+    verify_contract_creation_allowlist(&result.state, &caller, cfg, db).map_err(|e| {
+        EthApiError::other(sov_rpc_eth_types::rpc_error_with_code(
+            alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),
+            e.to_string(),
+        ))
+    })?;
     Ok(result)
 }
 
