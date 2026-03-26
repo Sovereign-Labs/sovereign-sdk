@@ -238,10 +238,14 @@ def main():
         else:
             html_path = find_html_report()
             if html_path:
-                print(f"Using HTML report: {html_path}")
+                if not args.compact:
+                    print(f"Using HTML report: {html_path}")
                 units, wall_clock = parse_html_report(html_path)
-                print(f"Wall clock: {wall_clock}s")
-                print_table(units, top=top)
+                if args.compact:
+                    print_compact(units, top)
+                else:
+                    print(f"Wall clock: {wall_clock}s")
+                    print_table(units, top=top)
             else:
                 parser.print_help()
                 sys.exit(1)
