@@ -17,7 +17,6 @@ borsh = { workspace = true }
 
 anyhow = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
-sov-hyperlane-integration = { workspace = true, features = ["evm"] }
 sov-test-utils = { workspace = true }
 sov-cli = { workspace = true }
 rest-api-load-testing = {workspace = true}
