@@ -18,7 +18,7 @@ async fn setup_test_rollup() -> (
 ) {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    let test_rollup = start_node(config, 0, Some(EVM_EXTENSION), None).await;
+    let test_rollup = start_node(config, 0, Some(EVM_EXTENSION), None, 3).await;
     test_rollup.wait_for_rollup_height_advance_by(10).await;
     let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
 

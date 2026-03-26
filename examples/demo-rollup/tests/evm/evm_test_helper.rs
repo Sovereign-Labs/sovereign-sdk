@@ -61,6 +61,7 @@ pub(crate) async fn start_node(
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
+    ideal_lag: u64,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
@@ -80,7 +81,7 @@ pub(crate) async fn start_node(
         c.max_channel_size = 20;
         c.extension = extension;
         if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 3;
+            seq.ideal_lag_behind_finalized_slot = ideal_lag;
         }
     })
     .start()
@@ -415,9 +416,24 @@ pub async fn setup_test_rollup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
+    setup_test_rollup_with_ideal_lag(finalization_blocks, extension, 3).await
+}
+
+pub async fn setup_test_rollup_with_ideal_lag(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    ideal_lag: u64,
+) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, finalization_blocks, Some(extension), None).await
+    start_node(
+        config,
+        finalization_blocks,
+        Some(extension),
+        None,
+        ideal_lag,
+    )
+    .await
 }
 
 pub async fn setup_test_rollup_with_paymaster(
@@ -535,7 +551,16 @@ pub async fn setup_with_simple_storage(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
-    let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
+    setup_with_simple_storage_with_ideal_lag(finalization_blocks, extension, 3).await
+}
+
+pub async fn setup_with_simple_storage_with_ideal_lag(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    ideal_lag: u64,
+) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
+    let test_rollup =
+        setup_test_rollup_with_ideal_lag(finalization_blocks, extension, ideal_lag).await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_rollup_height_advance_by(1).await;
     let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
