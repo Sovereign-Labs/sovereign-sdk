@@ -2632,6 +2632,8 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         .unwrap();
     test_rollup.wait_for_node_synced().await.unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
+    // Ensure sequencer has actually processed finalized slots before sending transactions
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = test_rollup.api_client().clone();
 

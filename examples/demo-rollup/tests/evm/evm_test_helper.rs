@@ -537,6 +537,7 @@ pub async fn setup_with_simple_storage(
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
     let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
     test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
     (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }

@@ -86,6 +86,7 @@ async fn create_test_nomt_rollup() -> (TestRollup<TestNomtBlueprint>, TestUser<T
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 6000;
+            config.ideal_lag_behind_finalized_slot = 10;
         }
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
