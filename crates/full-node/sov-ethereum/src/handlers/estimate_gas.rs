@@ -117,8 +117,7 @@ where
                 block_id,
                 snapshot_state,
                 ethereum,
-            )
-            .map_err(|err| ErrorObjectOwned::owned(-32603, err, None::<()>))?
+            )?
         } else {
             estimate_with_fallback()?
         };
@@ -142,14 +141,16 @@ where
         block_id: Option<BlockId>,
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
-    ) -> Result<U64, String> {
+    ) -> Result<U64, ErrorObjectOwned> {
         let evm = Evm::<S>::default();
-        let prepared = evm.prepare_runtime_parity_estimate::<Seq::Rt>(
-            request,
-            block_id,
-            snapshot_state,
-            ethereum.sequencer_type,
-        )?;
+        let prepared = evm
+            .prepare_runtime_parity_estimate::<Seq::Rt>(
+                request,
+                block_id,
+                snapshot_state,
+                ethereum.sequencer_type,
+            )
+            .map_err(|err| ErrorObjectOwned::owned(-32603, err, None::<()>))?;
         let metrics = AuthAndProcessMetrics::new(
             prepared.authenticated_tx.raw_tx_hash.0,
             AuthAndProcessTimings::new_with_defaults(ExecutionContext::Sequencer.str()),
@@ -181,14 +182,36 @@ where
 
         match result {
             Ok(apply_tx_result) => match apply_tx_result.receipt.receipt {
-                TxEffect::Successful(_) => {
-                    evm.read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
-                }
-                other => Err(format!(
-                    "runtime parity transaction was not successful: {other:?}"
-                )),
+                TxEffect::Successful(_) => evm
+                    .read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
+                    .map_err(|err| ErrorObjectOwned::owned(-32603, err, None::<()>)),
+                other => Err(Self::tx_effect_to_rpc_error(other)),
             },
-            Err((error, _)) => Err(format!("runtime parity process_tx failed: {error}")),
+            Err((error, _)) => Err(ErrorObjectOwned::owned(
+                alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),
+                error.to_string(),
+                None::<()>,
+            )),
+        }
+    }
+
+    /// Converts a non-successful `TxEffect` into the appropriate RPC error.
+    /// Transaction-level failures (reverts, skips) use the standard transaction-rejected
+    /// error code so that RPC clients see the same classification as `eth_sendRawTransaction`.
+    fn tx_effect_to_rpc_error(effect: TxEffect<S>) -> ErrorObjectOwned {
+        let code = alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code();
+        match effect {
+            TxEffect::Reverted(contents) => {
+                ErrorObjectOwned::owned(code, contents.reason.to_string(), None::<()>)
+            }
+            TxEffect::Skipped(contents) => {
+                ErrorObjectOwned::owned(code, contents.error.to_string(), None::<()>)
+            }
+            other => ErrorObjectOwned::owned(
+                code,
+                format!("runtime parity transaction was not successful: {other:?}"),
+                None::<()>,
+            ),
         }
     }
 

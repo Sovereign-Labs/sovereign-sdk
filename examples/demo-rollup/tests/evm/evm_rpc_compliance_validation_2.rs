@@ -494,9 +494,10 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         -32003,
         "estimate should use transaction-rejected error class for insufficient funds"
     );
+    let estimate_msg = rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"));
     assert!(
-        rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
-            .contains(INSUFFICIENT_FUNDS_ERROR),
+        estimate_msg.contains(INSUFFICIENT_FUNDS_ERROR)
+            || estimate_msg.contains("Insufficient balance"),
         "estimate should report insufficient-funds affordability failure: {estimate_response}"
     );
 
