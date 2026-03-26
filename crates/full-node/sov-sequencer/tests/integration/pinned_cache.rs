@@ -320,7 +320,10 @@ async fn test_pinning_after_recovery() {
     // Finalise some blocks
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    eprintln!("[TIMING] Stage 1 (setup + finalize + ready): {:?}", t_stage.elapsed());
+    eprintln!(
+        "[TIMING] Stage 1 (setup + finalize + ready): {:?}",
+        t_stage.elapsed()
+    );
 
     // Sanity check tx that the rollup works, and send the tx all the way through to DA.
     // Set a value in the pinned cache.
@@ -337,7 +340,10 @@ async fn test_pinning_after_recovery() {
     client.send_raw_tx_to_sequencer(&tx).await.unwrap();
     test_rollup.force_close_batch().await.unwrap();
     da_layer.produce_and_wait_for_n_slots(1).await;
-    eprintln!("[TIMING] Stage 2 (sanity write tx + 1 slot): {:?}", t_stage.elapsed());
+    eprintln!(
+        "[TIMING] Stage 2 (sanity write tx + 1 slot): {:?}",
+        t_stage.elapsed()
+    );
 
     // Pause sequencer update_state and run some blocks so deferred_slots_count is reached
     test_rollup.pause_preferred_batches().await;
@@ -351,7 +357,10 @@ async fn test_pinning_after_recovery() {
     test_rollup.tenderly_produce_blocks(40).await.unwrap();
     // Make sure the DA has synced everything
     test_rollup.wait_for_node_synced().await.unwrap();
-    eprintln!("[TIMING] Stage 3 (pause + 40 DA blocks + sync): {:?}", t_stage.elapsed());
+    eprintln!(
+        "[TIMING] Stage 3 (pause + 40 DA blocks + sync): {:?}",
+        t_stage.elapsed()
+    );
 
     tracing::info!("Resuming preferred sequencer batch production.");
     test_rollup.resume_preferred_batches().await;
@@ -375,7 +384,10 @@ async fn test_pinning_after_recovery() {
         // while recovery catches up.
         tokio::time::sleep(reasonable_time_for_rollup).await;
     }
-    eprintln!("[TIMING] Stage 4 (recovery entry): {i} iterations, {:?}", t_entry.elapsed());
+    eprintln!(
+        "[TIMING] Stage 4 (recovery entry): {i} iterations, {:?}",
+        t_entry.elapsed()
+    );
     test_rollup.wait_for_node_synced().await.unwrap();
 
     i = 0;
@@ -392,7 +404,10 @@ async fn test_pinning_after_recovery() {
         // while waiting for sequencer readiness to flip back.
         tokio::time::sleep(reasonable_time_for_rollup).await;
     }
-    eprintln!("[TIMING] Stage 5 (recovery exit): {i} iterations, {:?}", t_exit.elapsed());
+    eprintln!(
+        "[TIMING] Stage 5 (recovery exit): {i} iterations, {:?}",
+        t_exit.elapsed()
+    );
 
     // Read the value that should be in pinned cache. We should get the correct value (1) and not touch storage.
     let tx2 = tx_read_pinned_cache(
@@ -407,7 +422,10 @@ async fn test_pinning_after_recovery() {
     );
     let t_stage = std::time::Instant::now();
     client.send_raw_tx_to_sequencer(&tx2).await.unwrap();
-    eprintln!("[TIMING] Stage 6 (post-recovery read tx): {:?}", t_stage.elapsed());
+    eprintln!(
+        "[TIMING] Stage 6 (post-recovery read tx): {:?}",
+        t_stage.elapsed()
+    );
 
     test_rollup.force_close_batch().await.unwrap();
     // For some reason DA subscriptions are still broken at this point; if we use produce_and_wait_for_n_slots, the test will hang.
@@ -417,7 +435,10 @@ async fn test_pinning_after_recovery() {
         .await
         .unwrap()
         .unwrap();
-    eprintln!("[TIMING] Total (test_pinning_after_recovery): {:?}", t_total.elapsed());
+    eprintln!(
+        "[TIMING] Total (test_pinning_after_recovery): {:?}",
+        t_total.elapsed()
+    );
 }
 
 /// Ensures that RAM pinning still works after a total resync.
