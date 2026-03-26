@@ -11,15 +11,10 @@ mod test_utils;
 
 pub use address::MultiAddressEvmSolana;
 
-// Re-exports for build.rs usage
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_hyperlane_integration::{
     warp::Warp, HyperlaneAddress, InterchainGasPaymaster, Mailbox as RawMailbox, MerkleTreeHook,
 };
-#[cfg(feature = "build-utils")]
-pub use sov_mock_da::MockDaSpec;
-#[cfg(feature = "build-utils")]
-pub use sov_mock_zkvm::MockZkvm;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::prelude::*;

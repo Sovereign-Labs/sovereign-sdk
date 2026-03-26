@@ -18,7 +18,7 @@ use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
 use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, TransactionAuthenticator};
-use sov_modules_api::{prelude::*, Base58Address};
+use sov_modules_api::Base58Address;
 use sov_modules_api::{RawTx, Spec};
 
 pub use demo_stf_declaration::GenesisConfig;
