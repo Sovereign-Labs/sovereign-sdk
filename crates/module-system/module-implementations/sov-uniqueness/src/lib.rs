@@ -3,6 +3,7 @@
 mod capabilities;
 mod generations;
 mod nonces;
+pub(crate) mod window_v2;
 use std::collections::{BTreeMap, HashSet};
 
 use sov_modules_api::{
@@ -33,6 +34,10 @@ pub struct Uniqueness<S: Spec> {
     /// Mapping from a credential id to a nonce.
     #[state]
     pub(crate) nonces: StateMap<CredentialId, u64>,
+
+    /// Mapping from a credential id to a fixed-size sliding window nonce state.
+    #[state]
+    pub(crate) window_v2: StateMap<CredentialId, window_v2::WindowNonceState>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,
@@ -92,6 +97,26 @@ impl<S: Spec> Uniqueness<S> {
             .nonces
             .get(credential_id, state)
             .map(|maybe_nonce| maybe_nonce.unwrap_or_default())?)
+    }
+
+    /// Retrieves the next recommended nonce for window-based uniqueness.
+    ///
+    /// Returns the window start (lowest accepted nonce). Clients should use
+    /// a counter starting from this value, incrementing per transaction.
+    /// Any nonce in `[start, start + 1024)` that hasn't been used is valid.
+    ///
+    /// # Errors
+    /// May return an error if state access fails (e.g. if we run out of gas).
+    pub fn next_window_nonce<Reader: StateReader<User>>(
+        &self,
+        credential_id: &CredentialId,
+        state: &mut Reader,
+    ) -> Result<u64, anyhow::Error> {
+        Ok(self
+            .window_v2
+            .get(credential_id, state)?
+            .map(|w| w.start())
+            .unwrap_or(0))
     }
 }
 

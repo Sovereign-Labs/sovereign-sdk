@@ -76,6 +76,11 @@ pub enum UniquenessData {
     /// Transactions older than this buffer are invalid, transactions falling within it or with a
     /// higher generation are valid but must have a unique hash within their generation
     Generation(u64),
+    /// Window-based uniqueness: each transaction must have a unique nonce within a fixed
+    /// sliding window of 1024 positions. Nonces do not need to be consecutive. The window
+    /// automatically advances when nonces land in the upper quarter. Storage is constant
+    /// at 136 bytes per account regardless of usage.
+    Window(u64),
 }
 
 /// Data required to authorize a sov-transaction.

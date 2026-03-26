@@ -38,6 +38,12 @@ sov-rollup-interface = { workspace = true }
 sov-kernels = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
 sov-eth-dev-signer = { workspace = true }
+criterion = { version = "0.5", default-features = false }
+rand = { workspace = true }
+
+[[bench]]
+name = "uniqueness_bench"
+harness = false
 
 [features]
 default = []

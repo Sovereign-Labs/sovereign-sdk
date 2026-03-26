@@ -13247,6 +13247,8 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "borsh",
+ "criterion",
+ "rand 0.8.5",
  "reth-primitives",
  "schemars 0.8.22",
  "secp256k1 0.30.0",

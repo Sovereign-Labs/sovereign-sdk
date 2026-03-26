@@ -428,7 +428,7 @@ where
         }
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
-            UniquenessData::Generation(_) => (
+            UniquenessData::Generation(_) | UniquenessData::Window(_) => (
                 self.synchronized_state_updator
                     .accept_tx_msg(
                         &baked_tx,

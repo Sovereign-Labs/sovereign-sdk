@@ -79,7 +79,38 @@ pub(crate) fn generate_default_tx(
             ))
         }
         UniquenessData::Generation(generation) => generate_value_setter_tx(generation, 10, admin),
+        UniquenessData::Window(nonce) => generate_window_tx(nonce, 10, admin),
     }
+}
+
+pub(crate) fn generate_window_tx(
+    nonce: u64,
+    value: u32,
+    admin: &TestUser<S>,
+) -> TransactionType<RT, S> {
+    let runtime_msg =
+        <RT as EncodeCall<ValueSetter<S>>>::to_decodable(sov_value_setter::CallMessage::SetValue {
+            value,
+            gas: None,
+        });
+
+    let transaction = UnsignedTransaction::new(
+        runtime_msg,
+        config_chain_id(),
+        TEST_DEFAULT_MAX_PRIORITY_FEE,
+        TEST_DEFAULT_MAX_FEE,
+        UniquenessData::Window(nonce),
+        None,
+    );
+
+    let transaction = Transaction::<RT, S>::new_signed_tx(
+        admin.private_key(),
+        &<TestNonceRuntime<S> as Runtime<S>>::CHAIN_HASH,
+        transaction,
+    );
+    TransactionType::PreAuthenticated(<RT as Runtime<S>>::Auth::encode_with_standard_auth(RawTx {
+        data: borsh::to_vec(&transaction).unwrap(),
+    }))
 }
 
 pub(crate) fn generate_value_setter_tx(

@@ -31,6 +31,9 @@ impl<S: Spec> Uniqueness<S> {
             UniquenessData::Generation(generation) => {
                 self.check_generation_uniqueness(credential_id, generation, transaction_hash, state)
             }
+            UniquenessData::Window(nonce) => {
+                self.check_window_v2_uniqueness(credential_id, nonce, state)
+            }
         }
     }
 
@@ -53,6 +56,9 @@ impl<S: Spec> Uniqueness<S> {
                 transaction_hash,
                 state,
             ),
+            UniquenessData::Window(nonce) => {
+                self.mark_window_v2_tx_attempted(credential_id, nonce, state)
+            }
         }
     }
 }
