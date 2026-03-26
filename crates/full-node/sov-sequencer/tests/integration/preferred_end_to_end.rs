@@ -924,9 +924,7 @@ const SEQUENCER_RECOVERY_ERROR: &str = "The preferred sequencer is recovering fr
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_behind_deferred_slots_count_simple_lagging() {
-    let t_total = std::time::Instant::now();
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
-    let t_stage = std::time::Instant::now();
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -939,10 +937,6 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    eprintln!(
-        "[TIMING] Stage 1 (setup + finalize + ready): {:?}",
-        t_stage.elapsed()
-    );
 
     let client = test_rollup.api_client().clone();
 
@@ -955,16 +949,10 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
         .await
         .unwrap();
 
-    let t_stage = std::time::Instant::now();
     tracing::info!("Producing DA blocks for inclusion sanity check tx inclusion");
     da_layer.produce_and_wait_for_n_slots(10).await;
-    eprintln!(
-        "[TIMING] Stage 2 (sanity tx + 10 slots): {:?}",
-        t_stage.elapsed()
-    );
 
     // Pause sequencer update_state and run some blocks so deferred_slots_count is reached
-    let t_stage = std::time::Instant::now();
     test_rollup.pause_preferred_batches().await;
     tracing::info!("Preferred sequencer batch production paused.");
 
@@ -987,10 +975,6 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     }
     // Make sure the DA has synced everything
     test_rollup.wait_for_node_synced().await.unwrap();
-    eprintln!(
-        "[TIMING] Stage 3 (pause + 30 DA blocks + sync): {:?}",
-        t_stage.elapsed()
-    );
 
     tracing::info!("Resuming preferred sequencer batch production.");
     // Subscribe to state update notifications BEFORE resuming, so we don't miss the
@@ -1030,22 +1014,14 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    let t_exit = std::time::Instant::now();
-    let mut exit_iters = 0u32;
     while !test_rollup.is_sequencer_ready().await {
         let _ = da_layer.produce_block().await;
         sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
-        exit_iters += 1;
     }
-    eprintln!(
-        "[TIMING] Stage 5 (recovery exit): {exit_iters} iterations, {:?}",
-        t_exit.elapsed()
-    );
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
     // This transaction will be soft-confirmed. The assertion should pass at this stage.
-    let t_stage = std::time::Instant::now();
     client
         .send_raw_tx_to_sequencer(&tx_update_vec)
         .await
@@ -1057,10 +1033,6 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     let actual_many_value =
         wait_for_many_values_item(&test_rollup, &mut da_layer, 0, UPDATE_VEC_VALUE, 80).await;
     test_rollup.wait_for_node_synced().await.unwrap();
-    eprintln!(
-        "[TIMING] Stage 6 (post-recovery tx + wait): {:?}",
-        t_stage.elapsed()
-    );
 
     // Assert that the earlier transactions sent just before the sequencer went into recovery was
     // flushed and processed by the node
@@ -1087,14 +1059,11 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
         .await
         .unwrap()
         .unwrap();
-    eprintln!("[TIMING] Total (simple_lagging): {:?}", t_total.elapsed());
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_behind_deferred_slots_count_with_shutdown() {
-    let t_total = std::time::Instant::now();
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
-    let t_stage = std::time::Instant::now();
     let (test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
@@ -1111,10 +1080,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(8).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    eprintln!(
-        "[TIMING] Stage 1 (setup + 8 slots + ready): {:?}",
-        t_stage.elapsed()
-    );
 
     // Sanity check tx that the rollup works
     let tx_update_one = tx_set_value(&admin.private_key, 0, 8);
@@ -1125,13 +1090,8 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
         .await
         .unwrap();
 
-    let t_stage = std::time::Instant::now();
     tracing::info!("Producing DA blocks for inclusion sanity check tx inclusion");
     da_layer.produce_and_wait_for_n_slots(10).await;
-    eprintln!(
-        "[TIMING] Stage 2 (sanity tx + 10 slots): {:?}",
-        t_stage.elapsed()
-    );
 
     // Send a transaction that will be queued while rollup is shut down
     const UPDATE_TWO_VALUE: u64 = 19;
@@ -1147,7 +1107,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let da_service = test_rollup.da_service.clone();
 
     // Shutdown the rollup while preserving the DA layer
-    let t_stage = std::time::Instant::now();
     tracing::info!("Shutting down rollup to test restart behavior");
     let builder = test_rollup.shutdown().await.unwrap();
 
@@ -1156,13 +1115,8 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     // a) possible node lag
     // b) a 90% threshold.
     da_service.produce_n_blocks_now(30).await.unwrap();
-    eprintln!(
-        "[TIMING] Stage 3 (shutdown + 30 DA blocks): {:?}",
-        t_stage.elapsed()
-    );
 
     // Restart the rollup
-    let t_stage = std::time::Instant::now();
     tracing::info!("Restarting rollup after exceeding deferred_slots_count");
     let test_rollup = builder.start().await.unwrap();
     let client = test_rollup.api_client().clone();
@@ -1187,10 +1141,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     })
     .await
     .expect("Timed out waiting for sequencer to enter recovery");
-    eprintln!(
-        "[TIMING] Stage 4 (restart + sync + recovery entry): {:?}",
-        t_stage.elapsed()
-    );
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
     const UPDATE_VEC_VALUE: u8 = 12;
@@ -1209,21 +1159,13 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    let t_exit = std::time::Instant::now();
-    let mut exit_iters = 0u32;
     while !test_rollup.is_sequencer_ready().await {
         test_rollup.da_service.produce_block_now().await.unwrap();
         sleep(Duration::from_millis(50)).await;
-        exit_iters += 1;
     }
-    eprintln!(
-        "[TIMING] Stage 5 (recovery exit): {exit_iters} iterations, {:?}",
-        t_exit.elapsed()
-    );
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
-    let t_stage = std::time::Instant::now();
     client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx_update_vec),
@@ -1237,10 +1179,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let actual_many_value =
         wait_for_many_values_item(&test_rollup, &mut da_layer, 0, UPDATE_VEC_VALUE, 80).await;
     test_rollup.wait_for_node_synced().await.unwrap();
-    eprintln!(
-        "[TIMING] Stage 6 (post-recovery tx + wait): {:?}",
-        t_stage.elapsed()
-    );
 
     // Assert that the earlier transaction sent before shutdown was processed
     let response = test_rollup
@@ -1262,7 +1200,6 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     tracing::info!("All asserts successful, shutting down rollup");
     test_rollup.shutdown().await.unwrap();
-    eprintln!("[TIMING] Total (with_shutdown): {:?}", t_total.elapsed());
 }
 
 #[tokio::test(flavor = "multi_thread")]
