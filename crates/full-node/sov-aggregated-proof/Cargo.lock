@@ -6233,7 +6233,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slop-algebra",
- "sov-aggregated-proof-shared",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
@@ -6255,7 +6254,6 @@ dependencies = [
  "demo-stf",
  "serde",
  "sha2 0.10.9",
- "sov-aggregated-proof-shared",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
@@ -6263,14 +6261,6 @@ dependencies = [
  "sov-sp1-adapter",
  "sp1-sdk",
  "sp1-zkvm",
-]
-
-[[package]]
-name = "sov-aggregated-proof-shared"
-version = "0.1.0"
-dependencies = [
- "serde",
- "sov-modules-api",
 ]
 
 [[package]]

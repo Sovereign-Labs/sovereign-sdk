@@ -1,4 +1,9 @@
 //! Defines types that are related to the `AggregatedProof`.
+/// Core aggregation circuit logic.
+pub mod circuit;
+/// Common types shared between the aggregated proof program and the host script.
+pub mod common;
+
 use core::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
