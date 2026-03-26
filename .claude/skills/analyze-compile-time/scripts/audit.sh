@@ -69,7 +69,7 @@ TOTAL_COUNT=$(cargo tree ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_A
 echo "  Direct deps : $DEP_COUNT"
 echo "  Total deps  : $TOTAL_COUNT"
 
-DUP_COUNT=$(cargo tree -d ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null | grep -c '^\[' || true)
+DUP_COUNT=$(cargo tree -d ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null | grep -cE '^[a-zA-Z]' || true)
 if [[ $DUP_COUNT -gt 0 ]]; then
   echo "  ⚠ Duplicate crate versions: $DUP_COUNT"
   echo ""
