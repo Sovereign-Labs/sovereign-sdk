@@ -55,9 +55,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-consensus"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20d33348e61388eb90da06e176030abf496120e54795273210eeea2cd76339c4"
+checksum = "1e56cae3909bcb2347f77c0f318ef5eb7e131ea6d0a94d31f8bfb6e4c5e3c7c7"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -82,9 +82,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-consensus-any"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d145b64057ea2b66c6146817bee0ffc3adfb3f51c2b60f282f5200b23a6b4bfa"
+checksum = "f4394690a8a64757316c57c57f2c663bf8395febb4c4baa049a058ebd122b668"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -148,9 +148,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-eips"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5194943ebbbf25d308e13797b275dd1bf41487f22156dd2c8e17d24726a03888"
+checksum = "7b97433ffdb356d11b6c89b08c69a787b9f55d787cdeee733c12fdf85d465ef1"
 dependencies = [
  "alloy-eip2124",
  "alloy-eip2930",
@@ -188,9 +188,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-genesis"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3de7e0b146edaf966a1d2b5320903ce4a3e4e8452e4710585c0a22967216366"
+checksum = "6173ced325833e40ccb781bb372c720df638a966bad6ed6733682b6bff63d855"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -243,9 +243,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-network-primitives"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b6e4eef41e348207945ae12d445d1d168ade6ada09161b0c9b05169f47ca81f"
+checksum = "2158d382ef9743ae7185c9fcd33cd9a99967419fdcd5eebc83ff7c0e79cad2bc"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -305,9 +305,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3376d47ea19afa3261157c0272d22b87329da3b372e0b5360e37105bccc93946"
+checksum = "4f20059ff046049aae59f6e19d96462214ad3290cf9920394309dd7ffc284390"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-eth",
@@ -317,9 +317,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types-eth"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f71d86495861c7b6cff4ed7e0c114f13c8d12c5406f03e88981b834c18715aa8"
+checksum = "1641df7ef4d15cd43843d399252c90a95abf465a67e2a2b2fd76f4e93cc60e15"
 dependencies = [
  "alloy-consensus",
  "alloy-consensus-any",
@@ -338,9 +338,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types-trace"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6ca445ba4f9736c9a4fc2843b664926b2b3946ee5bc5073eddcdadc56169015"
+checksum = "b00e2d5ab1f7310c7ecd69962af8c99d2557335ff8cf1baf39c8ff6eec9c171d"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-eth",
@@ -352,9 +352,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-serde"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54d6afd8bd1ec6d34a01d03d3a6c547cfcb197dd631cc8908d183da69b7c4c92"
+checksum = "8f1c2c0b5f024814f1c04ae76ff71862d06c836e7d67102daf8a557e5056be68"
 dependencies = [
  "alloy-primitives",
  "serde",
@@ -473,9 +473,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-tx-macros"
-version = "1.8.1"
+version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf7a6b9edd1f6ea02b4f131d76b1aaf01b6ae53fbf91edec97a4e18ef60c1a0a"
+checksum = "1a3684226a2220bb6e84a5ab74877e66628882336ecfba97482c9d473aa2b1cc"
 dependencies = [
  "darling 0.23.0",
  "proc-macro2",
@@ -1853,7 +1853,6 @@ dependencies = [
  "sov-capabilities",
  "sov-chain-state",
  "sov-evm",
- "sov-hyperlane-integration",
  "sov-kernels",
  "sov-mock-da",
  "sov-mock-zkvm",
@@ -1862,7 +1861,6 @@ dependencies = [
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
- "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-solana-offchain-auth",
@@ -1870,6 +1868,7 @@ dependencies = [
  "sov-synthetic-load",
  "sov-test-modules",
  "sov-uniqueness",
+ "tracing",
 ]
 
 [[package]]
@@ -1890,14 +1889,12 @@ dependencies = [
  "sov-capabilities",
  "sov-chain-state",
  "sov-evm",
- "sov-hyperlane-integration",
  "sov-kernels",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
- "sov-revenue-share",
  "sov-rollup-apis",
  "sov-rollup-interface",
  "sov-sequencer-registry",
@@ -6535,29 +6532,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-hyperlane-integration"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "derive_more 1.0.0",
- "k256",
- "ruint",
- "schemars 0.8.22",
- "serde",
- "serde_json",
- "serde_yaml",
- "sha3",
- "sov-address",
- "sov-bank",
- "sov-metrics",
- "sov-modules-api",
- "sov-state",
- "strum 0.26.3",
- "tracing",
-]
-
-[[package]]
 name = "sov-kernels"
 version = "0.3.0"
 dependencies = [
@@ -6793,20 +6767,6 @@ dependencies = [
  "tower-http 0.5.2",
  "tower-request-id",
  "tracing",
-]
-
-[[package]]
-name = "sov-revenue-share"
-version = "0.3.0"
-dependencies = [
- "anyhow",
- "borsh",
- "schemars 0.8.22",
- "serde",
- "sov-bank",
- "sov-modules-api",
- "sov-sequencer-registry",
- "thiserror 1.0.69",
 ]
 
 [[package]]

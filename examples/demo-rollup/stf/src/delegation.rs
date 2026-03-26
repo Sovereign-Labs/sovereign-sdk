@@ -1,7 +1,6 @@
 //! This is a technical only module to forward all necessary implementations to inner, non-authenticated Runtime.
 
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::{prelude::*, Base58Address};
 use sov_modules_api::{
     AuthenticatedTransactionData, BlockHooks, DispatchCall, EncodeCall, Genesis, GenesisState,
@@ -17,7 +16,7 @@ use demo_stf_declaration::RuntimeCall;
 
 impl<S: Spec> Genesis for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Spec = S;
     type Config = GenesisConfig<S>;
@@ -34,7 +33,7 @@ where
 
 impl<S: Spec> DispatchCall for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Spec = S;
     type Decodable = RuntimeCall<S>;
@@ -66,7 +65,7 @@ where
 
 impl<S: Spec> EncodeCall<sov_bank::Bank<S>> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn encode_call(data: <sov_bank::Bank<S> as sov_modules_api::Module>::CallMessage) -> Vec<u8> {
         <RuntimeInner<S> as EncodeCall<sov_bank::Bank<S>>>::encode_call(data)
@@ -81,7 +80,7 @@ where
 
 impl<S: Spec> EncodeCall<sov_test_modules::access_pattern::AccessPattern<S>> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn encode_call(
         data: <sov_test_modules::access_pattern::AccessPattern<S> as sov_modules_api::Module>::CallMessage,
@@ -98,7 +97,7 @@ where
 
 impl<S: Spec> EncodeCall<sov_synthetic_load::SyntheticLoad<S>> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn encode_call(
         data: <sov_synthetic_load::SyntheticLoad<S> as sov_modules_api::Module>::CallMessage,
@@ -115,7 +114,7 @@ where
 
 impl<S: Spec> BlockHooks for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Spec = S;
 
@@ -134,7 +133,7 @@ where
 
 impl<S: Spec> TxHooks for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Spec = S;
 
@@ -159,7 +158,7 @@ where
 #[cfg(feature = "native")]
 impl<S: Spec> sov_modules_api::FinalizeHook for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Spec = S;
 
@@ -174,7 +173,7 @@ where
 
 impl<S: Spec> RuntimeEventProcessor for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type RuntimeEvent = demo_stf_declaration::RuntimeEvent<S>;
 
@@ -186,7 +185,7 @@ where
 #[cfg(feature = "native")]
 impl<S: Spec> sov_modules_api::CliWallet for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type CliStringRepr<T> = demo_stf_declaration::RuntimeMessage<T, S>;
 }
@@ -194,7 +193,7 @@ where
 #[cfg(feature = "native")]
 impl<S: Spec> sov_modules_api::rest::HasRestApi<S> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn rest_api(&self, state: sov_modules_api::rest::ApiState<S>) -> axum::Router<()> {
         self.0.rest_api(state)
@@ -211,7 +210,7 @@ impl<T, S> sov_modules_api::cli::CliFrontEnd<Runtime<S>>
 where
     T: clap::Args,
     S: Spec + for<'de> serde::Deserialize<'de>,
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
     demo_stf_declaration::RuntimeSubcommand<T, S>:
         sov_modules_api::cli::CliFrontEnd<RuntimeInner<S>>,
 {

@@ -17,7 +17,9 @@ demo-stf-declaration = { workspace = true }
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["alloc", "derive"] }
+serde_json = { workspace = true, optional = true }
 schemars = { workspace = true }
+tracing = { workspace = true }
 
 sov-accounts = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
@@ -27,14 +29,12 @@ sov-capabilities = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-evm = { workspace = true }
-sov-hyperlane-integration = { workspace = true, features = ["evm"] }
 sov-modules-api = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
 sov-uniqueness = { workspace = true }
 sov-paymaster = { workspace = true }
 sov-operator-incentives = { workspace = true }
 sov-prover-incentives = { workspace = true }
-sov-revenue-share = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-sequencer-registry = { workspace = true }
 sov-solana-offchain-auth = { workspace = true }
@@ -62,14 +62,15 @@ arbitrary = [
 	"sov-address/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-evm/arbitrary",
-	"sov-hyperlane-integration/arbitrary",
 	"sov-modules-api/arbitrary",
 	"sov-paymaster/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils?/arbitrary",
-	"sov-uniqueness/arbitrary"
+	"sov-uniqueness/arbitrary",
+	"sov-mock-da/arbitrary",
+	"sov-mock-zkvm/arbitrary"
 ]
 native = [
 	"demo-stf-declaration/native",
@@ -79,7 +80,6 @@ native = [
 	"sov-capabilities/native",
 	"sov-chain-state/native",
 	"sov-evm/native",
-	"sov-hyperlane-integration/native",
 	"sov-kernels/native",
 	"sov-modules-api/native",
 	"sov-modules-stf-blueprint/native",
@@ -91,12 +91,14 @@ native = [
 	"sov-state/native",
 	"sov-synthetic-load/native",
 	"sov-blob-storage/native",
-	"sov-revenue-share/native",
 	"sov-rollup-apis",
+	"serde_json",
 	"sov-paymaster/native",
 	"sov-address/native",
 	"sov-test-modules/native",
-	"sov-solana-offchain-auth/native"
+	"sov-solana-offchain-auth/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.

@@ -12,7 +12,6 @@ use sov_attester_incentives::AttesterIncentivesConfig;
 pub use sov_bank::{BankConfig, Coins, TokenConfig};
 pub use sov_chain_state::ChainStateConfig;
 pub use sov_evm::EvmGenesisConfig;
-use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::{prelude::*, Base58Address};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_operator_incentives::OperatorIncentivesConfig;
@@ -78,7 +77,7 @@ pub fn create_genesis_config<S: Spec>(
     genesis_paths: &GenesisPaths,
 ) -> anyhow::Result<<Runtime<S> as RuntimeTrait<S>>::GenesisConfig>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     let bank_config: BankConfig<S> = read_genesis_json(&genesis_paths.bank_genesis_path)?;
 
@@ -110,11 +109,6 @@ where
     let access_pattern: sov_test_modules::access_pattern::AccessPatternGenesisConfig<S> =
         read_genesis_json(&genesis_paths.access_pattern)?;
 
-    let revenue_share_config = ();
-    let mailbox_config = ();
-    let interchain_gas_paymaster_config = ();
-    let merkle_tree_hook_config = ();
-    let warp_config = ();
     let synthetic_load_config = ();
 
     Ok(GenesisConfig::new(
@@ -128,11 +122,6 @@ where
         chain_state_config,
         blob_storage_config,
         paymaster_config,
-        revenue_share_config,
-        mailbox_config,
-        interchain_gas_paymaster_config,
-        merkle_tree_hook_config,
-        warp_config,
         evm_config,
         access_pattern,
         synthetic_load_config,

@@ -9,7 +9,6 @@ use sov_address::FromVmAddress;
 use sov_bank::Coins;
 use sov_bank::TokenId;
 use sov_demo_rollup::MockDemoRollup;
-use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::Transaction;
@@ -25,7 +24,7 @@ pub type DemoRollupSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::S
 
 pub fn test_genesis_source<S: Spec>(operating_mode: OperatingMode) -> GenesisSource<S, Runtime<S>>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     GenesisSource::Paths(test_genesis_paths(operating_mode))
 }
@@ -53,8 +52,7 @@ pub fn build_transfer_token_tx_uniqueness_data<S>(
 ) -> Transaction<Runtime<S>, S>
 where
     S: Spec,
-    <S as Spec>::Address:
-        HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    <S as Spec>::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     let msg = RuntimeCall::<S>::Bank(sov_bank::CallMessage::<S>::Transfer {
         to: recipient,
@@ -81,8 +79,7 @@ pub fn build_transfer_token_tx_with_generation<S>(
 ) -> Transaction<Runtime<S>, S>
 where
     S: Spec,
-    <S as Spec>::Address:
-        HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    <S as Spec>::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     build_transfer_token_tx_uniqueness_data(
         key,
@@ -102,8 +99,7 @@ pub fn build_transfer_token_tx<S>(
 ) -> Transaction<Runtime<S>, S>
 where
     S: Spec,
-    <S as Spec>::Address:
-        HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    <S as Spec>::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     build_transfer_token_tx_uniqueness_data(
         key,

@@ -10,7 +10,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::capabilities::{
     self, BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
@@ -44,7 +43,7 @@ pub struct EvmAndSolanaOffchainAuthenticator<S, Rt>(PhantomData<(S, Rt)>);
 impl<S, Rt> TransactionAuthenticator<S> for EvmAndSolanaOffchainAuthenticator<S, Rt>
 where
     S: Spec,
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
     Rt: Runtime<S> + DispatchCall<Spec = S>,
     <Rt as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {

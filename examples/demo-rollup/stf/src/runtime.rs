@@ -13,7 +13,6 @@ use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_attester_incentives::BondingProofServiceImpl;
 use sov_capabilities::StandardProvenRollupCapabilities as StandardCapabilities;
 use sov_evm::EthereumAuthenticator;
-use sov_hyperlane_integration::HyperlaneAddress;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
@@ -47,11 +46,11 @@ pub use __generated::CHAIN_HASH;
 #[derive(Default, Clone)]
 pub struct Runtime<S: Spec>(pub(crate) RuntimeInner<S>)
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>;
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>;
 
 impl<S: Spec> std::ops::Deref for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Target = RuntimeInner<S>;
     fn deref(&self) -> &Self::Target {
@@ -61,7 +60,7 @@ where
 
 impl<S: Spec> std::ops::DerefMut for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -71,7 +70,7 @@ where
 impl<S> sov_modules_stf_blueprint::Runtime<S> for Runtime<S>
 where
     S: Spec,
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
 
@@ -185,7 +184,7 @@ where
 
 impl<S: Spec> HasCapabilities<S> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Capabilities<'a> = StandardCapabilities<'a, S, &'a mut sov_paymaster::Paymaster<S>>;
     type SequencingData = sov_modules_api::HDTimestamp;
@@ -207,7 +206,7 @@ where
 
 impl<S: Spec> HasKernel<S> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     type Kernel<'a> = SoftConfirmationsKernel<'a, S>;
 
@@ -226,7 +225,7 @@ where
 
 impl<S: Spec> EthereumAuthenticator<S> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn add_ethereum_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
         EvmAndSolanaOffchainAuthenticatorInput::Evm(tx)
@@ -235,7 +234,7 @@ where
 
 impl<S: Spec> SolanaOffchainAuthenticatorTrait<S> for Runtime<S>
 where
-    S::Address: HyperlaneAddress + FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
 {
     fn add_solana_offchain_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
         EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(tx)

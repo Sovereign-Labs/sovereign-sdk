@@ -20,13 +20,11 @@ sov-blob-storage = { workspace = true }
 sov-capabilities = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-evm = { workspace = true }
-sov-hyperlane-integration = { workspace = true, features = ["evm"] }
 sov-kernels = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
 sov-operator-incentives = { workspace = true }
 sov-paymaster = { workspace = true }
-sov-revenue-share = { workspace = true }
 sov-prover-incentives = { workspace = true }
 sov-rollup-apis = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
@@ -59,14 +57,12 @@ native = [
 	"sov-capabilities/native",
 	"sov-chain-state/native",
 	"sov-evm/native",
-	"sov-hyperlane-integration/native",
 	"sov-kernels/native",
 	"sov-modules-api/native",
 	"sov-modules-stf-blueprint/native",
 	"sov-operator-incentives/native",
 	"sov-paymaster/native",
 	"sov-prover-incentives/native",
-	"sov-revenue-share/native",
 	"sov-rollup-apis",
 	"sov-rollup-interface/native",
 	"sov-sequencer-registry/native",
@@ -81,7 +77,6 @@ arbitrary = [
 	"sov-address/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-evm/arbitrary",
-	"sov-hyperlane-integration/arbitrary",
 	"sov-modules-api/arbitrary",
 	"sov-paymaster/arbitrary",
 	"sov-rollup-interface/arbitrary",
