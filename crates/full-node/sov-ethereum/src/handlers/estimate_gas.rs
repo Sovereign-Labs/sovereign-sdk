@@ -98,16 +98,6 @@ where
             )?;
         }
 
-        let estimate_with_fallback = || {
-            let mut state = snapshot_state.clone_without_local_writes();
-            evm.eth_estimate_gas_helper(
-                request.clone(),
-                block_id,
-                state_overrides.clone(),
-                block_overrides.clone(),
-                &mut state,
-            )
-        };
         // Runtime parity only covers the no-override path with a concrete sender.
         // Override requests still need the fallback estimator because it applies RPC
         // state/block overrides that the runtime-parity path does not support.
@@ -119,7 +109,14 @@ where
                 ethereum,
             )?
         } else {
-            estimate_with_fallback()?
+            let mut state = snapshot_state.clone_without_local_writes();
+            evm.eth_estimate_gas_helper(
+                request.clone(),
+                block_id,
+                state_overrides.clone(),
+                block_overrides.clone(),
+                &mut state,
+            )?
         };
 
         if !has_explicit_gas && !has_overrides {

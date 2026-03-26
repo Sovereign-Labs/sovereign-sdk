@@ -844,6 +844,15 @@ where
             .unwrap_infallible()
             .ok_or_else(|| "no pending EVM transaction produced by parity estimate".to_string())?;
 
+        // When `preferred_sequencer_publish_reverted_txs = true`, the SDK tx
+        // succeeds even though the EVM tx reverted (`TxEffect::Successful`).
+        // The receipt's `success` field is always set correctly by
+        // `create_receipt()`, so we check it here to ensure `eth_estimateGas`
+        // returns a revert error rather than a gas estimate.
+        if !pending_tx.receipt.success {
+            return Err("EVM transaction reverted".to_string());
+        }
+
         Ok(U64::from(pending_tx.receipt.gas_used))
     }
 
