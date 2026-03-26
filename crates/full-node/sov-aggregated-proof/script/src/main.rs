@@ -7,15 +7,16 @@ use anyhow::{bail, ensure, Context};
 use demo_stf::MultiAddressEvmSolana;
 use slop_algebra::PrimeField32;
 
-use sov_aggregated_proof_shared::{
-    AggPubData, AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness, StfPubData,
-};
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Zk;
-use sov_modules_api::CodeCommitmentHash;
-use sov_modules_api::{Spec, Storage};
+use sov_modules_api::{
+    AggregatedProofPublicData, CodeCommitmentHash, Spec, StateTransitionPublicData, Storage,
+};
+use sov_rollup_interface::zk::aggregated_proof::common::{
+    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
+};
 use sov_sp1_adapter::BlockHeaderWithProof;
 use sov_sp1_adapter::SP1;
 use sp1_recursion_executor::RecursionPublicValues;
@@ -72,7 +73,7 @@ fn main() -> anyhow::Result<()> {
         let previous_outer_public_data = previous_outer_proof
             .as_ref()
             .map(|proof| {
-                deserialize_pub_data::<AggPubData<S, MockDaSpec>>(proof.public_values.as_slice())
+                deserialize_pub_data::<AggregatedProofPublicData<<S as Spec>::Address, MockDaSpec, <<S as Spec>::Storage as Storage>::Root>>(proof.public_values.as_slice())
             })
             .transpose()
             .context("Failed to deserialize previous outer proof public data")?;
@@ -89,7 +90,7 @@ fn main() -> anyhow::Result<()> {
             previous_outer_proof.take(),
         )?;
 
-        let public_data: AggPubData<S, MockDaSpec> =
+        let public_data: AggregatedProofPublicData<<S as Spec>::Address, MockDaSpec, <<S as Spec>::Storage as Storage>::Root> =
             deserialize_pub_data(outer_proof.public_values.as_slice())
                 .context("Failed to deserialize outer proof public data")?;
 
@@ -189,7 +190,7 @@ fn create_agg_proof<P: Prover>(
         stdin.write_proof(*recursion_proof.clone(), verification_key.vk.clone());
     }
 
-    let outer_vkey_hash = CodeCommitmentHash(aggregation_vk_hash);
+    let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
 
     let witness = AggregatedProofWitness {
         proof_inputs,
@@ -211,7 +212,7 @@ fn create_agg_proof<P: Prover>(
         .verify(&outer_proof, aggregation_pk.verifying_key(), None)
         .context("Failed to verify the outer SP1 aggregation proof")?;
 
-    let public_data: AggPubData<S, MockDaSpec> =
+    let public_data: AggregatedProofPublicData<<S as Spec>::Address, MockDaSpec, <<S as Spec>::Storage as Storage>::Root> =
         deserialize_pub_data(outer_proof.public_values.as_slice())
             .context("Failed to deserialize outer proof public data")?;
 
@@ -303,12 +304,12 @@ fn batch_state_roots(
         .last()
         .expect("proof batches are guaranteed to be non-empty");
 
-    let first_public_data: StfPubData<S, MockDaSpec> = deserialize_pub_data(
+    let first_public_data: StateTransitionPublicData<<S as Spec>::Address, MockDaSpec, <<S as Spec>::Storage as Storage>::Root> = deserialize_pub_data(
         sov_sp1_adapter::decode_sp1_proof(&first_proof.proof)?
             .public_values
             .as_slice(),
     )?;
-    let last_public_data: StfPubData<S, MockDaSpec> = deserialize_pub_data(
+    let last_public_data: StateTransitionPublicData<<S as Spec>::Address, MockDaSpec, <<S as Spec>::Storage as Storage>::Root> = deserialize_pub_data(
         sov_sp1_adapter::decode_sp1_proof(&last_proof.proof)?
             .public_values
             .as_slice(),
