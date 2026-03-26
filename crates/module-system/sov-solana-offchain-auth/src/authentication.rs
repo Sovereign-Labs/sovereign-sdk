@@ -9,10 +9,13 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::transaction::{
-    self, AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
+    AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
 };
+use sov_modules_api::capabilities::AuthorizationData;
+use sov_modules_api::transaction::PubKeyAndSignature;
+use sov_modules_api::transaction::Credentials;
 use sov_modules_api::{
-    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter,
+    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, GasSpec, Multisig,
     MeteredSigVerificationError, MeteredSignature, ProvableStateReader, SafeString, Signature,
     Spec, TxHash,
 };
@@ -86,6 +89,29 @@ pub struct SolanaOffchainSimpleMessage<S: Spec> {
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
 }
 
+/// Discriminator byte prepended to the signed message in the multisig simple format.
+/// This byte is `0x80`, which cannot occur as the first byte of valid UTF-8 (and therefore JSON),
+/// nor does it collide with the spec-compliant preamble's `0xff` prefix.
+pub const MULTISIG_SIMPLE_DISCRIMINATOR: u8 = 0x80;
+
+/// The envelope for a multisig "simple" (preamble-less) solana offchain message.
+/// Each signer independently signs the same `signed_message` bytes, which consist of the
+/// [`MULTISIG_SIMPLE_DISCRIMINATOR`] byte followed by the JSON-serialized unsigned transaction.
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct SolanaOffchainSimpleMultisigMessage<S: Spec> {
+    /// The signed message: `[0x80][JSON-serialized SolanaOffchainUnsignedTransaction]`.
+    /// All signers sign the full content of this field (including the discriminator prefix).
+    pub signed_message: Vec<u8>,
+    /// The chain hash at time of signing.
+    pub chain_hash: [u8; 32],
+    /// Signatures with their corresponding public keys (the signers who actually signed).
+    pub signatures: Vec<PubKeyAndSignature<S::CryptoSpec>>,
+    /// Public keys that are part of the multisig but did not sign this transaction.
+    pub unused_pub_keys: Vec<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+    /// Minimum number of signers required for the multisig (the K in K-of-N).
+    pub min_signers: u8,
+}
+
 /// The length of a preamble with a single 32-byte signer. This is just the sum of the lengths of
 /// the byte fields/arrays of the struct below.
 pub const PREAMBLE_LEN: usize = 85;
@@ -140,31 +166,61 @@ impl RawSolanaOffchainMessagePreamble {
     }
 }
 
-struct UnpackedSolanaMessage<S: Spec> {
-    pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
-    signature: <S::CryptoSpec as CryptoSpec>::Signature,
-    chain_hash: [u8; 32],
-    signed_bytes: Vec<u8>,
-    json_start: usize,
+enum UnpackedSolanaMessage<S: Spec> {
+    V0 {
+        pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
+        signature: <S::CryptoSpec as CryptoSpec>::Signature,
+        chain_hash: [u8; 32],
+        signed_bytes: Vec<u8>,
+        json_start: usize,
+    },
+    V1 {
+        signatures: Vec<PubKeyAndSignature<S::CryptoSpec>>,
+        unused_pub_keys: Vec<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+        min_signers: u8,
+        chain_hash: [u8; 32],
+        signed_bytes: Vec<u8>,
+    },
 }
 
 impl<S: Spec> UnpackedSolanaMessage<S> {
     fn json_bytes(&self) -> &[u8] {
-        &self.signed_bytes[self.json_start..]
+        match self {
+            UnpackedSolanaMessage::V0 {
+                signed_bytes,
+                json_start,
+                ..
+            } => &signed_bytes[*json_start..],
+            UnpackedSolanaMessage::V1 { signed_bytes, .. } => {
+                // Skip the 0x80 discriminator prefix
+                &signed_bytes[1..]
+            }
+        }
+    }
+
+    fn chain_hash(&self) -> &[u8; 32] {
+        match self {
+            UnpackedSolanaMessage::V0 { chain_hash, .. }
+            | UnpackedSolanaMessage::V1 { chain_hash, .. } => chain_hash,
+        }
+    }
+
+    fn signed_bytes(&self) -> &[u8] {
+        match self {
+            UnpackedSolanaMessage::V0 { signed_bytes, .. }
+            | UnpackedSolanaMessage::V1 { signed_bytes, .. } => signed_bytes,
+        }
     }
 }
 
-/// Verifies a signature over the signed bytes with gas metering
-fn verify_solana_signature<S: Spec>(
-    pub_key: &<S::CryptoSpec as CryptoSpec>::PublicKey,
+fn charge_sig_gas<S: Spec>(
     signature: &<S::CryptoSpec as CryptoSpec>::Signature,
-    signed_bytes: &[u8],
+    msg_len: usize,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    // Charge gas first, before checking the cache
     MeteredSignature::new::<S>(signature.clone())
-        .charge_gas(meter, signed_bytes.len())
+        .charge_gas(meter, msg_len)
         .map_err(|e| match e {
             MeteredSigVerificationError::GasError(e) => {
                 AuthenticationError::OutOfGas(format!("Signature verification ran out of gas: {e}"))
@@ -173,25 +229,127 @@ fn verify_solana_signature<S: Spec>(
                 FatalError::SigVerificationFailed(e.to_string()),
                 raw_tx_hash,
             ),
-        })?;
+        })
+}
 
+/// Verifies signatures with gas metering and caching, handling both single-sig and multisig.
+fn verify_signatures<S: Spec>(
+    unpacked: &UnpackedSolanaMessage<S>,
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<(), AuthenticationError> {
+    let signed_bytes = unpacked.signed_bytes();
+
+    // 1. Charge gas for all signatures before checking the cache
+    match unpacked {
+        UnpackedSolanaMessage::V0 { signature, .. } => {
+            charge_sig_gas::<S>(signature, signed_bytes.len(), raw_tx_hash, meter)?;
+        }
+        UnpackedSolanaMessage::V1 { signatures, .. } => {
+            for sig in signatures {
+                charge_sig_gas::<S>(&sig.signature, signed_bytes.len(), raw_tx_hash, meter)?;
+            }
+        }
+    }
+
+    // 2. Check cache (native-only)
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
         return known_result;
     }
 
-    // Now perform the verification (unmetered)
-    let res = signature.verify(pub_key, signed_bytes).map_err(|err| {
-        AuthenticationError::FatalError(
-            FatalError::SigVerificationFailed(err.to_string()),
-            raw_tx_hash,
-        )
-    });
+    // 3. Verify signatures (unmetered)
+    let res = match unpacked {
+        UnpackedSolanaMessage::V0 {
+            pub_key,
+            signature,
+            ..
+        } => signature.verify(pub_key, signed_bytes).map_err(|err| {
+            AuthenticationError::FatalError(
+                FatalError::SigVerificationFailed(err.to_string()),
+                raw_tx_hash,
+            )
+        }),
+        UnpackedSolanaMessage::V1 {
+            signatures,
+            unused_pub_keys,
+            min_signers,
+            ..
+        } => {
+            let all_keys: Vec<_> = signatures
+                .iter()
+                .map(|s| s.pub_key.clone())
+                .chain(unused_pub_keys.iter().cloned())
+                .collect();
+            Multisig::new(*min_signers, all_keys)
+                .verify_signature(signed_bytes, signatures)
+                .map_err(|err| {
+                    AuthenticationError::FatalError(
+                        FatalError::SigVerificationFailed(err.to_string()),
+                        raw_tx_hash,
+                    )
+                })
+        }
+    };
 
+    // 4. Cache result (native-only)
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
 
     res
+}
+
+/// Builds authorization data for either single-sig or multisig transactions.
+fn build_auth_data<S: Spec>(
+    unpacked: &UnpackedSolanaMessage<S>,
+    uniqueness: UniquenessData,
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthorizationData<S>, AuthenticationError> {
+    match unpacked {
+        UnpackedSolanaMessage::V0 { pub_key, .. } => {
+            let credential_id = sov_modules_api::metered_credential::<S, S::CryptoSpec>(
+                pub_key, meter,
+            )
+            .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+
+            Ok(AuthorizationData {
+                uniqueness,
+                tx_hash: raw_tx_hash,
+                credential_id,
+                credentials: Credentials::new(pub_key.clone()),
+                default_address: credential_id.into(),
+            })
+        }
+        UnpackedSolanaMessage::V1 {
+            signatures,
+            unused_pub_keys,
+            min_signers,
+            ..
+        } => {
+            let num_keys = (signatures.len() + unused_pub_keys.len()) as u32;
+            meter
+                .charge_linear_gas(S::gas_to_charge_for_credential(), num_keys)
+                .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+
+            let all_keys: Vec<_> = signatures
+                .iter()
+                .map(|s| s.pub_key.clone())
+                .chain(unused_pub_keys.iter().cloned())
+                .collect();
+            let multisig = Multisig::new(*min_signers, all_keys);
+            let credential_id =
+                multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
+
+            Ok(AuthorizationData {
+                uniqueness,
+                tx_hash: raw_tx_hash,
+                credential_id,
+                credentials: Credentials::new(multisig),
+                default_address: credential_id.into(),
+            })
+        }
+    }
 }
 
 fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage<S>, FatalError> {
@@ -202,52 +360,84 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
         ));
     }
 
-    // The fifth byte tells us which format we're dealing with
+    // The fifth byte tells us which format we're dealing with:
+    // 0xff → Spec-compliant message (preamble starts with \xffsolana offchain)
+    // 0x80 → Multisig simple message (discriminator prefix)
+    // Anything else → Simple message (JSON, typically starts with '{')
     if raw_tx[4] == 0xff {
-        // Spec-compliant message with preamble
-        let envelope: SolanaOffchainSpecCompliantMessage<S> = borsh::from_slice(raw_tx)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-
-        // Verify preamble is present and valid
-        if envelope.signed_message_with_preamble.len() < PREAMBLE_LEN {
-            return Err(FatalError::DeserializationFailed(
-                "Message too short for preamble".to_string(),
-            ));
-        }
-
-        let preamble: RawSolanaOffchainMessagePreamble =
-            borsh::from_slice(&envelope.signed_message_with_preamble[0..PREAMBLE_LEN])
-                .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-
-        // Calculate actual message length (excluding preamble)
-        let actual_message_length = envelope.signed_message_with_preamble.len() - PREAMBLE_LEN;
-
-        // Validate the preamble
-        preamble.validate(actual_message_length)?;
-
-        let signer: <S::CryptoSpec as CryptoSpec>::PublicKey = borsh::from_slice(&preamble.signer)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-
-        Ok(UnpackedSolanaMessage {
-            pub_key: signer,
-            signature: envelope.signature,
-            chain_hash: preamble.application_domain,
-            signed_bytes: envelope.signed_message_with_preamble,
-            json_start: PREAMBLE_LEN,
-        })
+        unpack_spec_compliant_message(raw_tx)
+    } else if raw_tx[4] == MULTISIG_SIMPLE_DISCRIMINATOR {
+        unpack_multisig_simple_message(raw_tx)
     } else {
-        // Raw message without preamble (should start with ASCII character, typically '{')
-        let raw_message: SolanaOffchainSimpleMessage<S> = borsh::from_slice(raw_tx)
+        unpack_simple_message(raw_tx)
+    }
+}
+
+fn unpack_spec_compliant_message<S: Spec>(
+    raw_tx: &[u8],
+) -> Result<UnpackedSolanaMessage<S>, FatalError> {
+    let envelope: SolanaOffchainSpecCompliantMessage<S> = borsh::from_slice(raw_tx)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+    if envelope.signed_message_with_preamble.len() < PREAMBLE_LEN {
+        return Err(FatalError::DeserializationFailed(
+            "Message too short for preamble".to_string(),
+        ));
+    }
+
+    let preamble: RawSolanaOffchainMessagePreamble =
+        borsh::from_slice(&envelope.signed_message_with_preamble[0..PREAMBLE_LEN])
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
-        Ok(UnpackedSolanaMessage {
-            pub_key: raw_message.pubkey,
-            signature: raw_message.signature,
-            chain_hash: raw_message.chain_hash,
-            signed_bytes: raw_message.signed_message,
-            json_start: 0,
-        })
+    let actual_message_length = envelope.signed_message_with_preamble.len() - PREAMBLE_LEN;
+    preamble.validate(actual_message_length)?;
+
+    let signer: <S::CryptoSpec as CryptoSpec>::PublicKey = borsh::from_slice(&preamble.signer)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+    Ok(UnpackedSolanaMessage::V0 {
+        pub_key: signer,
+        signature: envelope.signature,
+        chain_hash: preamble.application_domain,
+        signed_bytes: envelope.signed_message_with_preamble,
+        json_start: PREAMBLE_LEN,
+    })
+}
+
+fn unpack_simple_message<S: Spec>(
+    raw_tx: &[u8],
+) -> Result<UnpackedSolanaMessage<S>, FatalError> {
+    let raw_message: SolanaOffchainSimpleMessage<S> = borsh::from_slice(raw_tx)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+    Ok(UnpackedSolanaMessage::V0 {
+        pub_key: raw_message.pubkey,
+        signature: raw_message.signature,
+        chain_hash: raw_message.chain_hash,
+        signed_bytes: raw_message.signed_message,
+        json_start: 0,
+    })
+}
+
+fn unpack_multisig_simple_message<S: Spec>(
+    raw_tx: &[u8],
+) -> Result<UnpackedSolanaMessage<S>, FatalError> {
+    let msg: SolanaOffchainSimpleMultisigMessage<S> = borsh::from_slice(raw_tx)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+    if msg.signed_message.first() != Some(&MULTISIG_SIMPLE_DISCRIMINATOR) {
+        return Err(FatalError::DeserializationFailed(
+            "Multisig simple message must start with 0x80 discriminator".to_string(),
+        ));
     }
+
+    Ok(UnpackedSolanaMessage::V1 {
+        signatures: msg.signatures,
+        unused_pub_keys: msg.unused_pub_keys,
+        min_signers: msg.min_signers,
+        chain_hash: msg.chain_hash,
+        signed_bytes: msg.signed_message,
+    })
 }
 
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
@@ -282,6 +472,7 @@ where
     let unpacked_message = unpack_solana_message::<S>(raw_tx)
         .map_err(|e| AuthenticationError::FatalError(e, raw_tx_hash))?;
 
+    // Deserialize the JSON unsigned transaction (shared for all variants)
     let json_slice = unpacked_message.json_bytes();
     charge_gas_to_deserialize_json(json_slice, state).map_err(|e| {
         AuthenticationError::OutOfGas(format!(
@@ -299,22 +490,14 @@ where
     })?;
 
     let provided_chain_name = solana_unsigned_tx.chain_name.to_string();
-
-    // This is useful to be able to reuse some of the standard authenticator's logic
     let unsigned_tx = solana_unsigned_tx.into_unsigned_tx();
-    let reconstructed_tx_v0 = transaction::Version0::<_, S, S::CryptoSpec> {
-        runtime_call: unsigned_tx.runtime_call,
-        uniqueness: unsigned_tx.uniqueness,
-        details: unsigned_tx.details,
-        signature: unpacked_message.signature,
-        pub_key: unpacked_message.pub_key,
-    };
 
-    if unpacked_message.chain_hash != *runtime_chain_hash {
+    // Validate chain hash, chain name, and chain ID (shared for all variants)
+    if *unpacked_message.chain_hash() != *runtime_chain_hash {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainHash {
                 expected: hex::encode(runtime_chain_hash),
-                got: hex::encode(unpacked_message.chain_hash),
+                got: hex::encode(unpacked_message.chain_hash()),
             },
             raw_tx_hash,
         ));
@@ -330,28 +513,21 @@ where
         ));
     }
 
-    verify_chain_id(&reconstructed_tx_v0.details, raw_tx_hash)?;
+    verify_chain_id(&unsigned_tx.details, raw_tx_hash)?;
 
-    verify_solana_signature::<S>(
-        &reconstructed_tx_v0.pub_key,
-        &reconstructed_tx_v0.signature,
-        &unpacked_message.signed_bytes,
-        raw_tx_hash,
-        state,
-    )?;
+    // Verify signatures (branches internally for single-sig vs multisig)
+    verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;
 
-    let authorization_data = reconstructed_tx_v0.auth_data(raw_tx_hash, state)?;
+    // Build authorization data (branches internally for single-sig vs multisig)
+    let authorization_data =
+        build_auth_data::<S>(&unpacked_message, unsigned_tx.uniqueness, raw_tx_hash, state)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,
-        authenticated_tx: reconstructed_tx_v0.details.clone().into(),
+        authenticated_tx: unsigned_tx.details.into(),
     };
 
-    Ok((
-        tx_and_raw_hash,
-        authorization_data,
-        reconstructed_tx_v0.runtime_call,
-    ))
+    Ok((tx_and_raw_hash, authorization_data, unsigned_tx.runtime_call))
 }
 
 #[cfg(test)]
@@ -371,7 +547,6 @@ pub mod test {
         let message = b"{\"test\":\"abcd\"}";
         let message_len = message.len() as u16;
 
-        // Placeholder pubkey and signature, this is only testing parsing and not authentication
         let pubkey = Ed25519PrivateKey::generate().pub_key();
         let signature: Ed25519Signature = [4u8; 64].as_slice().try_into().unwrap();
 
@@ -388,22 +563,28 @@ pub mod test {
 
         let serialized = borsh::to_vec(&envelope).unwrap();
 
-        let result = unpack_solana_message::<TestSpec>(&serialized);
-        assert!(result.is_ok());
-
-        let unpacked = result.unwrap();
-        assert_eq!(unpacked.pub_key, pubkey);
-        assert_eq!(unpacked.signature, signature);
-        assert_eq!(unpacked.chain_hash, TEST_CHAIN_HASH);
+        let unpacked = unpack_solana_message::<TestSpec>(&serialized).unwrap();
+        let UnpackedSolanaMessage::V0 {
+            pub_key: got_pk,
+            signature: got_sig,
+            chain_hash: got_ch,
+            signed_bytes: got_sb,
+            ..
+        } = &unpacked
+        else {
+            panic!("Expected SingleSig variant");
+        };
+        assert_eq!(*got_pk, pubkey);
+        assert_eq!(*got_sig, signature);
+        assert_eq!(*got_ch, TEST_CHAIN_HASH);
         assert_eq!(unpacked.json_bytes(), message);
-        assert_eq!(unpacked.signed_bytes, signed_message);
+        assert_eq!(*got_sb, signed_message);
     }
 
     #[test]
     fn test_unpack_raw_message() {
         let message = b"{\"test\":\"abcd\"}";
 
-        // Placeholder pubkey and signature, this is only testing parsing and not authentication
         let pubkey = Ed25519PrivateKey::generate().pub_key();
         let signature: Ed25519Signature = [4u8; 64].as_slice().try_into().unwrap();
 
@@ -416,15 +597,74 @@ pub mod test {
 
         let serialized = borsh::to_vec(&raw_message).unwrap();
 
-        let result = unpack_solana_message::<TestSpec>(&serialized);
-        assert!(result.is_ok());
-
-        let unpacked = result.unwrap();
-        assert_eq!(unpacked.pub_key, pubkey);
-        assert_eq!(unpacked.signature, signature);
-        assert_eq!(unpacked.chain_hash, TEST_CHAIN_HASH);
+        let unpacked = unpack_solana_message::<TestSpec>(&serialized).unwrap();
+        let UnpackedSolanaMessage::V0 {
+            pub_key: got_pk,
+            signature: got_sig,
+            chain_hash: got_ch,
+            signed_bytes: got_sb,
+            ..
+        } = &unpacked
+        else {
+            panic!("Expected SingleSig variant");
+        };
+        assert_eq!(*got_pk, pubkey);
+        assert_eq!(*got_sig, signature);
+        assert_eq!(*got_ch, TEST_CHAIN_HASH);
         assert_eq!(unpacked.json_bytes(), message);
-        assert_eq!(unpacked.signed_bytes, message);
+        assert_eq!(got_sb.as_slice(), message);
+    }
+
+    #[test]
+    fn test_unpack_multisig_simple_message() {
+        let json_message = b"{\"test\":\"abcd\"}";
+        let mut signed_message = vec![MULTISIG_SIMPLE_DISCRIMINATOR];
+        signed_message.extend_from_slice(json_message);
+
+        let pubkey1 = Ed25519PrivateKey::generate().pub_key();
+        let pubkey2 = Ed25519PrivateKey::generate().pub_key();
+        let pubkey3 = Ed25519PrivateKey::generate().pub_key();
+        let sig1: Ed25519Signature = [1u8; 64].as_slice().try_into().unwrap();
+        let sig2: Ed25519Signature = [2u8; 64].as_slice().try_into().unwrap();
+
+        let envelope = SolanaOffchainSimpleMultisigMessage::<TestSpec> {
+            signed_message: signed_message.clone(),
+            chain_hash: TEST_CHAIN_HASH,
+            signatures: vec![
+                PubKeyAndSignature {
+                    signature: sig1,
+                    pub_key: pubkey1.clone(),
+                },
+                PubKeyAndSignature {
+                    signature: sig2,
+                    pub_key: pubkey2.clone(),
+                },
+            ],
+            unused_pub_keys: vec![pubkey3.clone()],
+            min_signers: 2,
+        };
+
+        let serialized = borsh::to_vec(&envelope).unwrap();
+
+        let unpacked = unpack_solana_message::<TestSpec>(&serialized).unwrap();
+        let UnpackedSolanaMessage::V1 {
+            signatures,
+            unused_pub_keys,
+            min_signers,
+            chain_hash,
+            signed_bytes,
+        } = &unpacked
+        else {
+            panic!("Expected Multisig variant");
+        };
+        assert_eq!(signatures.len(), 2);
+        assert_eq!(signatures[0].pub_key, pubkey1);
+        assert_eq!(signatures[1].pub_key, pubkey2);
+        assert_eq!(unused_pub_keys, &vec![pubkey3]);
+        assert_eq!(*min_signers, 2);
+        assert_eq!(*chain_hash, TEST_CHAIN_HASH);
+        assert_eq!(signed_bytes, &signed_message);
+        assert_eq!(unpacked.json_bytes(), json_message);
     }
 
     #[test]
@@ -455,7 +695,6 @@ pub mod test {
 
         let serialized = borsh::to_vec(&envelope).unwrap();
 
-        // Should fail validation
         let result = unpack_solana_message::<TestSpec>(&serialized);
         assert!(result.is_err());
         assert!(matches!(result, Err(FatalError::DeserializationFailed(_))));
