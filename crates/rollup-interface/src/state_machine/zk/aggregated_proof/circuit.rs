@@ -177,7 +177,7 @@ where
             initial_boundary = Some(BoundaryData {
                 slot_hash: proof_input.da_block_header.hash(),
                 state_root: stf_public_data.initial_state_root.clone(),
-                slot_number: current_slot_number.clone(),
+                slot_number: current_slot_number,
             });
         }
 
