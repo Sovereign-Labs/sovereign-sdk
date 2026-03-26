@@ -13,7 +13,3 @@ compactArrays = true
 
 [[overrides]]
 files = ["*.yaml", "*.yml"]
-
-[overrides.options]
-tabWidth = 2
-

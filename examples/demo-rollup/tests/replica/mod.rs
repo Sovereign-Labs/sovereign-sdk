@@ -104,6 +104,7 @@ async fn start_rollup_with_connection_string(
             SequencerKindConfig::Preferred(p) => {
                 p.num_cache_warmup_workers = 0;
                 p.recovery_strategy = RecoveryStrategy::TryToSave;
+                p.ideal_lag_behind_finalized_slot = 3;
                 if let Some(connection_string) = postgres_connection_override.as_ref() {
                     p.postgres_config
                         .as_mut()
