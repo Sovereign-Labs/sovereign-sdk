@@ -23,15 +23,40 @@ pub struct BlockProof<Address, Da: DaSpec, Root> {
 #[derive(
     Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Default,
 )]
-pub struct CodeCommitmentHash(pub [u32; 8]);
+pub struct CodeCommitmentHash(pub Vec<u8>);
+
+impl CodeCommitmentHash {
+    /// Creates a [`CodeCommitmentHash`] from a `[u32; 8]` array using big-endian byte order.
+    /// This matches the representation used by SP1's `HashableKey::hash_bytes`.
+    pub fn from_u32_array(arr: [u32; 8]) -> Self {
+        let mut bytes = Vec::with_capacity(32);
+        for word in arr {
+            bytes.extend_from_slice(&word.to_be_bytes());
+        }
+        Self(bytes)
+    }
+
+    /// Converts this hash back to a `[u32; 8]` array using big-endian byte order.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the inner byte vector is not exactly 32 bytes long.
+    pub fn to_u32_array(&self) -> [u32; 8] {
+        assert_eq!(self.0.len(), 32, "CodeCommitmentHash must be 32 bytes");
+        let mut arr = [0u32; 8];
+        for (idx, chunk) in self.0.chunks_exact(4).enumerate() {
+            arr[idx] = u32::from_be_bytes(chunk.try_into().unwrap());
+        }
+        arr
+    }
+}
 
 impl core::fmt::Display for CodeCommitmentHash {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "CodeCommitmentHash(0x")?;
-        for word in self.0 {
-            write!(f, "{word:08x}")?;
+        if self.0.is_empty() {
+            return write!(f, "CodeCommitmentHash([])");
         }
-        write!(f, ")")
+        write!(f, "CodeCommitmentHash(0x{})", hex::encode(&self.0))
     }
 }
 

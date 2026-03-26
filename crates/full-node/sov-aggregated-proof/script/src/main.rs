@@ -189,7 +189,7 @@ fn create_agg_proof<P: Prover>(
         stdin.write_proof(*recursion_proof.clone(), verification_key.vk.clone());
     }
 
-    let outer_vkey_hash = CodeCommitmentHash(aggregation_vk_hash);
+    let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
 
     let witness = AggregatedProofWitness {
         proof_inputs,

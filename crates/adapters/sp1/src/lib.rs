@@ -120,7 +120,8 @@ impl ZkVerifier for SP1Verifier {
         use sha2::Digest;
 
         let public_values_digest: [u8; 32] = sha2::Sha256::digest(public_values).into();
-        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
+        let vkey_u32 = vkey_hash.to_u32_array();
+        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_u32, &public_values_digest);
         Ok(bincode::deserialize(public_values)?)
     }
 }
