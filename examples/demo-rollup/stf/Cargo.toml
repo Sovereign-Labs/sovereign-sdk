@@ -47,11 +47,11 @@ sov-test-utils = { workspace = true, optional = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
-demo-stf-declaration = { workspace = true, features = ["native"] }
+demo-stf-declaration = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
-sov-modules-api = { workspace = true, features = ["native"] }
-sov-mock-zkvm = { workspace = true, features = ["native"] }
-sov-mock-da = { workspace = true, features = ["native"] }
+sov-modules-api = { workspace = true }
+sov-mock-zkvm = { workspace = true }
+sov-mock-da = { workspace = true }
 sov-build = { workspace = true }
 
 [features]

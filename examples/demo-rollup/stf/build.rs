@@ -2,14 +2,19 @@ use demo_stf_declaration::MultiAddressEvmSolana;
 use demo_stf_declaration::Runtime;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
-use sov_modules_api::execution_mode::Native;
+
+#[cfg(feature = "native")]
+type ExecMode = sov_modules_api::execution_mode::Native;
+
+#[cfg(not(feature = "native"))]
+type ExecMode = sov_modules_api::execution_mode::Zk;
 
 type S = sov_modules_api::configurable_spec::ConfigurableSpec<
     MockDaSpec,
     MockZkvm,
     MockZkvm,
     MultiAddressEvmSolana,
-    Native,
+    ExecMode,
 >;
 
 fn main() -> anyhow::Result<()> {
