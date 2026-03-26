@@ -26,16 +26,17 @@ deeper levels are more surgical but also more invasive.
 
 ## Scripts
 
-Two helper scripts are bundled in `scripts/`. Run them from the workspace root.
+Four helper scripts are bundled in `.claude/skills/analyze-compile-time/scripts/`.
+Run them from the workspace root.
 
 | Script | Purpose |
 |--------|---------|
-| `bash scripts/audit.sh` | Full audit: workspace structure, dep count, timed build, proc-macros, llvm-lines. Prints a structured report for Claude to read. |
-| `python3 scripts/parse_timings.py` | Parse `target/cargo-timings/cargo-timing-*.json` (or `.html`) and print a sorted table of per-crate compile durations. Run after any `cargo build --timings`. |
-| `bash scripts/binary_sizes.sh` | Report test binary sizes and optional CGU breakdown (`--cgu` flag). |
-| `bash scripts/measure_incremental.sh -p <crate> --file <path>` | Measure incremental rebuild time for a crate. Requires `-p <crate>` and `--file <path-to-touch>`. Optional `--test <target>`. |
+| `bash .claude/skills/analyze-compile-time/scripts/audit.sh` | Full audit: workspace structure, dep count, timed build, proc-macros, llvm-lines. Prints a structured report for Claude to read. |
+| `python3 .claude/skills/analyze-compile-time/scripts/parse_timings.py` | Parse `target/cargo-timings/cargo-timing-*.json` or `target/cargo-timings/cargo-timing.html` and print a sorted table of per-crate compile durations. Run after any `cargo build --timings`. |
+| `bash .claude/skills/analyze-compile-time/scripts/binary_sizes.sh` | Report test binary sizes and optional CGU breakdown (`--cgu` flag). |
+| `bash .claude/skills/analyze-compile-time/scripts/measure_incremental.sh -p <crate> --file <path>` | Measure incremental rebuild time for a crate. Requires `-p <crate>` and `--file <path-to-touch>`. Optional `--test <target>`. |
 
-**When helping a user, ask them to run `bash scripts/audit.sh` first.** The output
+**When helping a user, ask them to run `bash .claude/skills/analyze-compile-time/scripts/audit.sh` first.** The output
 gives you everything needed to diagnose the bottleneck in one pass.
 
 ---
@@ -92,10 +93,10 @@ primary target. Note its name and proceed to Level 2 or 3.
 `cargo-bloat --time` was **removed** in v0.12.0 — the flag no longer exists.
 For per-crate compile time you have two options:
 
-**Option A — Parse the timings JSON directly (recommended):**
+**Option A — Parse the timings report directly (recommended):**
 ```bash
-cargo build --timings              # generates target/cargo-timings/cargo-timing*.json
-python3 scripts/parse_timings.py   # reads the JSON, prints a sorted table
+cargo build --timings                                                  # stable Cargo always generates target/cargo-timings/cargo-timing.html
+python3 .claude/skills/analyze-compile-time/scripts/parse_timings.py   # prefers cargo-timing-*.json when present, otherwise falls back to the HTML report
 ```
 
 **Option B — Use the `--message-format` output and time manually:**
@@ -297,7 +298,7 @@ cargo build --timings
         │                           ↳ High copies? → de-monomorphize
         │                           ↳ High lines?  → macro-stats, split crate
         │
-        ├─ Many small crates blocked? ──► cargo-bloat --time
+        ├─ Many small crates blocked? ──► parse the timings report + inspect cargo tree
         │                                ↳ Heavy transitive dep? → optional feature / replace
         │                                ↳ Duplicate versions?   → cargo update / [patch]
         │

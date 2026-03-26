@@ -4,7 +4,7 @@
 Supports both JSON (cargo-timing-*.json) and HTML (cargo-timing.html) reports.
 
 Usage:
-    python3 parse_timings.py                                        # auto-find latest timing JSON
+    python3 parse_timings.py                                        # auto-find latest timing report
     python3 parse_timings.py target/cargo-timings/cargo-timing-*.json
     python3 parse_timings.py target/cargo-timings/cargo-timing.html # HTML report
     python3 parse_timings.py --top 15 --compact                     # short table for audit.sh
@@ -104,6 +104,12 @@ def find_latest_timing_json():
     return json_files[0] if json_files else None
 
 
+def find_html_report():
+    """Return the default HTML timing report path if it exists."""
+    html_path = "target/cargo-timings/cargo-timing.html"
+    return html_path if os.path.exists(html_path) else None
+
+
 def print_compact(units, top):
     """Print a short crate/duration/mode table (used by audit.sh)."""
     if not units:
@@ -171,7 +177,7 @@ def print_table(units, title="Per-Crate Build Times", top=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Parse cargo build timing data.")
-    parser.add_argument("files", nargs="*", help="Timing JSON file(s) to parse")
+    parser.add_argument("files", nargs="*", help="Timing report file(s) to parse")
     parser.add_argument("--top", type=int, default=0, help="Show only the top N slowest crates")
     parser.add_argument("--compact", action="store_true", help="Short table (crate/duration/mode only)")
     args = parser.parse_args()
@@ -208,14 +214,30 @@ def main():
                 print_table(units, top=top)
         elif not sys.stdin.isatty():
             units = parse_stdin()
-            if args.compact:
-                print_compact(units, top)
+            if units:
+                if args.compact:
+                    print_compact(units, top)
+                else:
+                    print_table(units, title="Crates compiled (no timing data in message format)", top=top)
             else:
-                print_table(units, title="Crates compiled (no timing data in message format)", top=top)
+                html_path = find_html_report()
+                if html_path:
+                    if not args.compact:
+                        print(f"Using HTML report: {html_path}")
+                    units, wall_clock = parse_html_report(html_path)
+                    if args.compact:
+                        print_compact(units, top)
+                    else:
+                        print(f"Wall clock: {wall_clock}s")
+                        print_table(units, top=top)
+                else:
+                    if args.compact:
+                        print_compact(units, top)
+                    else:
+                        print_table(units, title="Crates compiled (no timing data in message format)", top=top)
         else:
-            # Try HTML report as last resort
-            html_path = "target/cargo-timings/cargo-timing.html"
-            if os.path.exists(html_path):
+            html_path = find_html_report()
+            if html_path:
                 print(f"Using HTML report: {html_path}")
                 units, wall_clock = parse_html_report(html_path)
                 print(f"Wall clock: {wall_clock}s")

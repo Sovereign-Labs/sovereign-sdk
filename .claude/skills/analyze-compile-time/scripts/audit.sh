@@ -35,7 +35,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 # ── Temp file cleanup ────────────────────────────────────────────────────────
-BUILD_LOG=$(mktemp /tmp/cargo_build_XXXXXX.json)
+BUILD_LOG=$(mktemp "${TMPDIR:-/tmp}/cargo_build_XXXXXX")
 trap 'rm -f "$BUILD_LOG"' EXIT
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -105,12 +105,12 @@ if [[ -n "$TIMINGS_HTML" ]]; then
   echo ""
   echo "  ✓ Timings report: $TIMINGS_HTML"
 
-  # Use parse_timings.py to show top 15 slowest crates (it auto-finds the JSON)
+  # Use parse_timings.py to show top 15 slowest crates from the timings report.
   if command -v python3 &>/dev/null; then
     echo ""
-    echo "  Top 15 slowest crates (from timings JSON):"
+    echo "  Top 15 slowest crates (from timings report):"
     python3 "$SCRIPT_DIR/parse_timings.py" --top 15 --compact 2>/dev/null \
-      || echo "  (could not parse timing JSON)"
+      || echo "  (could not parse timings report)"
   fi
 fi
 
