@@ -114,6 +114,7 @@ pub(crate) mod error;
 pub(crate) mod handlers;
 pub(crate) mod maybe_archival_state;
 
+mod estimate_gas;
 mod fee_history;
 mod trace;
 
