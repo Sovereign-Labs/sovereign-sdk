@@ -24,8 +24,7 @@ struct VerifiedProofData<Address, Hash, Root> {
     rewarded_addresses: Vec<Address>,
 }
 
-type VerifyResult<Address, Da, Root> =
-    VerifiedProofData<Address, <Da as DaSpec>::SlotHash, Root>;
+type VerifyResult<Address, Da, Root> = VerifiedProofData<Address, <Da as DaSpec>::SlotHash, Root>;
 
 /// Runs the aggregation circuit: reads a witness from the host, verifies inner
 /// proofs and an optional previous outer proof, checks DA and state-root
