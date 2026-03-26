@@ -99,7 +99,7 @@ TIMINGS_HTML="target/cargo-timings/cargo-timing.html"
 
 echo ""
 echo "  Build output summary:"
-grep -E '(Compiling|Finished|error)' "$BUILD_LOG" | tail -20 | sed 's/^/    /'
+grep -E '(Compiling|Finished|error)' "$BUILD_LOG" | tail -20 | sed 's/^/    /' || true
 
 if [[ -n "$TIMINGS_HTML" ]]; then
   echo ""
