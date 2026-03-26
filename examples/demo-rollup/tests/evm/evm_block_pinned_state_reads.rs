@@ -7,7 +7,7 @@
 
 use crate::evm::evm_test_helper::{
     deploy_contract_check, finalized_block_number_and_hash, hash_selector, hex_u64,
-    set_value_check, setup_with_simple_storage, EVM_EXTENSION,
+    set_value_check, setup_with_simple_storage_with_ideal_lag, EVM_EXTENSION,
 };
 use alloy_primitives::{Address, Bytes, TxHash, B256, U256, U64};
 use alloy_rpc_types_eth::TransactionRequest;
@@ -117,7 +117,7 @@ async fn estimate_gas_request_at_with_state_overrides(
 }
 
 async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let (rollup, client, _) = setup_with_simple_storage_with_ideal_lag(0, EVM_EXTENSION, 10).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }

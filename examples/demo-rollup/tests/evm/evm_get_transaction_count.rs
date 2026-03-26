@@ -20,7 +20,6 @@ async fn setup_rollup_with_finality(
     finalization_blocks: u32,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let (rollup, client, _) = setup_with_simple_storage(finalization_blocks, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }
 

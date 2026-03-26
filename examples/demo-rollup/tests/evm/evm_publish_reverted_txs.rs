@@ -47,6 +47,7 @@ pub(crate) async fn start_node_with_execution_config(
         c.extension = Some(EVM_EXTENSION);
         if let SequencerKindConfig::Preferred(config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
+            config.ideal_lag_behind_finalized_slot = 3;
         };
     })
     .start()

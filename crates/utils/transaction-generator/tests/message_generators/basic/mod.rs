@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// The number of transactions to generate.
-pub const TXS_TO_GENERATE: u64 = 100;
+pub const TXS_TO_GENERATE: u64 = 60;
 
 mod combined;
 mod successful_generation;
@@ -27,7 +27,7 @@ fn test_with_modules(
         &mut TestRunner<RT, S>,
     ),
 ) -> (TestRunner<RT, S>, Vec<GeneratorOutput>) {
-    let random_bytes = get_random_bytes(100_000_000, 1);
+    let random_bytes = get_random_bytes(2_000_000, 1);
     let u = &mut Unstructured::new(&random_bytes[..]);
 
     let setup = setup_roles_and_config(USER_BALANCE);

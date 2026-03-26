@@ -112,6 +112,7 @@ mod helpers {
     use sov_cli::wallet_state::PrivateKeyAndAddress;
     use sov_modules_api::prelude::serde::de::DeserializeOwned;
     use sov_modules_api::transaction::Transaction;
+    use sov_modules_api::Base58Address;
     use sov_modules_api::{
         Address, Amount, CryptoSpec, PrivateKey, PublicKey, Runtime as RuntimeTrait, SafeVec, Spec,
     };
@@ -132,7 +133,7 @@ mod helpers {
         pub async fn send_transactions<S>(&self, transactions: &[Transaction<Runtime<S>, S>])
         where
             S: Spec,
-            S::Address: FromVmAddress<EthereumAddress>,
+            S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
         {
             let _ = self.0.send_txs_to_sequencer(transactions).await;
         }

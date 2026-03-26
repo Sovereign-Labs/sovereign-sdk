@@ -114,28 +114,11 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>>;
 }
 
-/// A commitment to a zkVM program.
-pub trait CodeCommitment:
-    Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq
-{
-    /// An error that occurs while trying to decode a commitment.
-    type DecodeError: Debug;
-
-    /// Encodes the commitment into a byte sequence. Any kind of serializer may be used,
-    /// as long as this method is inverted by the [`CodeCommitment::decode`] method.
-    fn encode(&self) -> Vec<u8>;
-
-    /// Decodes the commitment from a byte sequence.
-    ///
-    /// This method must be the inverse of the [`CodeCommitment::encode`] method.
-    fn decode(data: &[u8]) -> Result<Self, Self::DecodeError>;
-}
-
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
 pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// A commitment to the zkVM program which is being proven
-    type CodeCommitment: CodeCommitment;
+    type CodeCommitment: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// Defines the cryptographic operations provided natively by the Zkvm.
     type CryptoSpec: CryptoSpec;
@@ -143,10 +126,10 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// The error type which is returned when a proof fails to verify
     type Error: Debug;
 
-    /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
-    /// If the proof is valid, return a public outputs of the proof.
+    /// Interpret a sequence of a bytes as a receipt and attempt to verify it against the code commitment.
+    /// If the receipt is valid, return a public outputs of the proof.
     fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+        serialized_receipt: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error>;
 }
