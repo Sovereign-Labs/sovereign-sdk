@@ -2625,15 +2625,13 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         Ok(())
     };
 
-    // +5 to be sure
+    // +10 to ensure enough finalized slots remain available with ideal_lag=3
     test_rollup
-        .tenderly_produce_blocks(TEST_FINALIZATION_BLOCKS as usize + 5)
+        .tenderly_produce_blocks(TEST_FINALIZATION_BLOCKS as usize + 10)
         .await
         .unwrap();
     test_rollup.wait_for_node_synced().await.unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    // Ensure sequencer has actually processed finalized slots before sending transactions
-    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     let client = test_rollup.api_client().clone();
 
