@@ -1053,6 +1053,7 @@ fn apply_block_overrides<DB: Database>(
         random,
         base_fee,
         block_hash,
+        ..
     } = block_overrides;
 
     if let Some(block_hash) = block_hash {

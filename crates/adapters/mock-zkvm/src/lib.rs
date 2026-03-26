@@ -66,7 +66,7 @@ impl Zkvm for MockZkvm {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Default,
 )]
-pub struct MockCodeCommitment(pub [u32; 8]);
+pub struct MockCodeCommitment(pub [u8; 8]);
 
 /// An error that can occur when converting a byte vector to a `MockCodeCommitment`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
