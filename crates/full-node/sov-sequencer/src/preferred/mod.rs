@@ -666,6 +666,7 @@ where
                     slot_number: info.slot_number,
                     finalized_slot_number: info.latest_finalized_slot_number,
                     update_skipped_due_to_pause: true,
+                    triggered_recovery: false,
                 });
         }
         return Ok(());
@@ -686,6 +687,28 @@ where
         )
         .await
         .map_err(|e| e.into_state_update_error())?;
+
+    // For recovery/resync operations, notify tests BEFORE entering the long-running
+    // handler. This bypasses the state updator message queue (which may be blocked
+    // during trigger_recovery's async calls under CPU pressure), letting tests detect
+    // recovery without going through the is_ready() RPC.
+    // For ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary (the normal path), the
+    // notification is already sent by sync_state.rs after processing — skip here to
+    // avoid duplicates that would desync produce_and_wait_for_slot().
+    #[cfg(feature = "test-utils")]
+    if !matches!(
+        operation,
+        PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(..)
+    ) {
+        let _ = seq
+            .test_only_state_update_notification_sender
+            .send(StateUpdateNotification {
+                slot_number: info.slot_number,
+                finalized_slot_number: info.latest_finalized_slot_number,
+                update_skipped_due_to_pause: false,
+                triggered_recovery: matches!(operation, PreferredSeqOperation::RecoverAndCatchUp),
+            });
+    }
 
     match operation {
         PreferredSeqOperation::Unreachable => {
