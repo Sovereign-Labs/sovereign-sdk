@@ -44,8 +44,8 @@ echo "RUST COMPILE TIME AUDIT"
 echo "Date     : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo "Toolchain: $(rustc --version)"
 echo "Cargo    : $(cargo --version)"
-echo "Profile  : ${RELEASE_ARGS[0]:-debug}"
-echo "Target   : ${PACKAGE_ARGS[*]:-workspace}"
+echo "Profile  : ${RELEASE_ARGS[0]+${RELEASE_ARGS[0]}}${RELEASE_ARGS[0]-debug}"
+echo "Target   : ${PACKAGE_ARGS[*]+${PACKAGE_ARGS[*]}}${PACKAGE_ARGS[*]-workspace}"
 echo "$HR"
 
 # ── 1. Workspace structure ───────────────────────────────────────────────────
