@@ -16,6 +16,9 @@ echo "=== Test binary sizes ==="
 echo ""
 
 # Find test binaries (executables, not .d/.o/.rmeta files)
+# Collect output first, then sort — piping the loop to sort would run it in a
+# subshell and lose the `found` counter.
+output=""
 found=0
 for bin in target/debug/deps/*-????????????????; do
     [[ "$bin" == *.d || "$bin" == *.o || "$bin" == *.rmeta ]] && continue
@@ -29,9 +32,13 @@ for bin in target/debug/deps/*-????????????????; do
         else printf "%dB", $1
     }')
     name=$(basename "$bin" | sed 's/-[a-f0-9]\{16\}$//')
-    echo "  $human	$name	$(basename "$bin")"
+    output+="  $human	$name	$(basename "$bin")"$'\n'
     found=$((found + 1))
-done | sort -t'	' -k1 -rh
+done
+
+if [[ -n "$output" ]]; then
+    echo "$output" | sort -t'	' -k1 -rh
+fi
 
 echo ""
 echo "Total binaries: $found"

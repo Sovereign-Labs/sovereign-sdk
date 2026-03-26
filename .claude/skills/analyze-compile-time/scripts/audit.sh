@@ -22,11 +22,13 @@ RELEASE_ARGS=()
 PACKAGE_ARGS=()
 WORKSPACE_ARGS=(--workspace)
 SKIP_CLEAN=0
+PROFILE_DISPLAY="debug"
+TARGET_DISPLAY="workspace"
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --release)   RELEASE_ARGS=(--release); shift ;;
-    -p)          PACKAGE_ARGS=(-p "$2"); WORKSPACE_ARGS=(); shift 2 ;;
+    --release)   RELEASE_ARGS=(--release); PROFILE_DISPLAY="release"; shift ;;
+    -p)          PACKAGE_ARGS=(-p "$2"); WORKSPACE_ARGS=(); TARGET_DISPLAY="$2"; shift 2 ;;
     --no-clean)  SKIP_CLEAN=1; shift ;;
     *) echo "Unknown flag: $1" >&2; exit 1 ;;
   esac
@@ -44,8 +46,8 @@ echo "RUST COMPILE TIME AUDIT"
 echo "Date     : $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 echo "Toolchain: $(rustc --version)"
 echo "Cargo    : $(cargo --version)"
-echo "Profile  : ${RELEASE_ARGS[0]+${RELEASE_ARGS[0]}}${RELEASE_ARGS[0]-debug}"
-echo "Target   : ${PACKAGE_ARGS[*]+${PACKAGE_ARGS[*]}}${PACKAGE_ARGS[*]-workspace}"
+echo "Profile  : $PROFILE_DISPLAY"
+echo "Target   : $TARGET_DISPLAY"
 echo "$HR"
 
 # ── 1. Workspace structure ───────────────────────────────────────────────────
@@ -62,17 +64,17 @@ fi
 # ── 2. Dependency count ──────────────────────────────────────────────────────
 echo ""
 echo "▶ DEPENDENCY SUMMARY"
-DEP_COUNT=$(cargo tree --depth 1 "${WORKSPACE_ARGS[@]}" "${PACKAGE_ARGS[@]}" 2>/dev/null | grep -c '── ' || true)
-TOTAL_COUNT=$(cargo tree "${WORKSPACE_ARGS[@]}" "${PACKAGE_ARGS[@]}" 2>/dev/null | grep -c '── ' || true)
+DEP_COUNT=$(cargo tree --depth 1 ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null | grep -c '── ' || true)
+TOTAL_COUNT=$(cargo tree ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null | grep -c '── ' || true)
 echo "  Direct deps : $DEP_COUNT"
 echo "  Total deps  : $TOTAL_COUNT"
 
-DUP_COUNT=$(cargo tree -d "${WORKSPACE_ARGS[@]}" "${PACKAGE_ARGS[@]}" 2>/dev/null | grep -c '^\[' || true)
+DUP_COUNT=$(cargo tree -d ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null | grep -c '^\[' || true)
 if [[ $DUP_COUNT -gt 0 ]]; then
   echo "  ⚠ Duplicate crate versions: $DUP_COUNT"
   echo ""
   echo "  Duplicates:"
-  cargo tree -d "${WORKSPACE_ARGS[@]}" "${PACKAGE_ARGS[@]}" 2>/dev/null | head -30 | sed 's/^/    /'
+  cargo tree -d ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null | head -30 | sed 's/^/    /'
 else
   echo "  ✓ No duplicate crate versions detected"
 fi
@@ -87,7 +89,7 @@ else
   echo "  Skipping clean (--no-clean)"
 fi
 
-cargo build "${WORKSPACE_ARGS[@]}" "${PACKAGE_ARGS[@]}" "${RELEASE_ARGS[@]}" \
+cargo build ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} ${RELEASE_ARGS[@]+"${RELEASE_ARGS[@]}"} \
   --timings --message-format=json 2>&1 \
   | tee "$BUILD_LOG" \
   | grep -E '(^error|Compiling|Finished|cargo-timing)' || true
@@ -115,7 +117,7 @@ fi
 # ── 4. Proc-macro crates ────────────────────────────────────────────────────
 echo ""
 echo "▶ PROC-MACRO DEPENDENCIES  (potential compile-time amplifiers)"
-cargo tree "${WORKSPACE_ARGS[@]}" "${PACKAGE_ARGS[@]}" 2>/dev/null \
+cargo tree ${WORKSPACE_ARGS[@]+"${WORKSPACE_ARGS[@]}"} ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} 2>/dev/null \
   | grep -i 'proc.macro\|derive\|macro' \
   | grep -v '^#' \
   | sort -u \
@@ -128,7 +130,7 @@ echo ""
 echo "▶ LLVM IR SIZE  (cargo-llvm-lines)"
 if command -v cargo-llvm-lines &>/dev/null || cargo llvm-lines --version &>/dev/null 2>&1; then
   echo "  Top 20 generic functions by LLVM IR lines:"
-  cargo llvm-lines "${PACKAGE_ARGS[@]}" "${RELEASE_ARGS[@]}" 2>/dev/null \
+  cargo llvm-lines ${PACKAGE_ARGS[@]+"${PACKAGE_ARGS[@]}"} ${RELEASE_ARGS[@]+"${RELEASE_ARGS[@]}"} 2>/dev/null \
     | head -22 | sed 's/^/  /' \
     || echo "  (cargo-llvm-lines failed — run manually)"
 else
