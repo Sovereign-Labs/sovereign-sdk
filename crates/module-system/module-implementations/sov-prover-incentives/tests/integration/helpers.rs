@@ -23,7 +23,6 @@ use sov_value_setter::ValueSetterConfig;
 pub(crate) type S = sov_test_utils::TestSpec;
 pub(crate) type TestProverIncentives = ProverIncentives<S>;
 pub(crate) type RT = TestRuntime<S>;
-pub(crate) const MOCK_CODE_COMMITMENT: MockCodeCommitment = MockCodeCommitment([0u8; 8]);
 
 generate_zk_runtime!(TestRuntime <= value_setter: sov_value_setter::ValueSetter<S>);
 
