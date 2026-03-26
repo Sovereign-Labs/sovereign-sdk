@@ -2356,6 +2356,11 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
             c.rollup_prover_config = None;
             c.storage = StoragePath::Tmp(dir);
             c.axum_port = port;
+            // Use a high ideal_lag so that 5 setup DA blocks don't trigger
+            // automatic batch production and shift hardcoded slot numbers.
+            if let SequencerKindConfig::Preferred(ref mut pref) = c.sequencer_config {
+                pref.ideal_lag_behind_finalized_slot = 10;
+            }
         })
         .set_da_config(|c| {
             c.sender_address = sequencer_addr;

@@ -79,6 +79,9 @@ pub(crate) async fn start_node(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = extension;
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     })
     .start()
     .await
@@ -441,6 +444,9 @@ pub async fn setup_test_rollup_with_paymaster(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = Some(extension);
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     })
     .start()
     .await
@@ -530,7 +536,7 @@ pub async fn setup_with_simple_storage(
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
     let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
-    test_rollup.wait_for_rollup_height_advance_by(10).await;
+    test_rollup.produce_enough_finalized_slots().await;
     let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
     (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }
