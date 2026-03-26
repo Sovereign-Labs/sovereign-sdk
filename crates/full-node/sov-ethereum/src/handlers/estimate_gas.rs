@@ -1,11 +1,10 @@
 use crate::handlers::Handlers;
-use crate::Ethereum;
+use crate::{rpc_internal_error, rpc_tx_rejected, Ethereum};
 use alloy_eips::BlockId;
 use alloy_primitives::{U256, U64};
 use alloy_rpc_types::state::StateOverride;
 use alloy_rpc_types::{BlockOverrides, TransactionRequest};
 use jsonrpsee::core::RpcResult;
-use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -156,7 +155,7 @@ where
                 snapshot_state,
                 ethereum.sequencer_type,
             )
-            .map_err(|err| ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, err, None::<()>))?;
+            .map_err(rpc_internal_error)?;
         let metrics = AuthAndProcessMetrics::new(
             prepared.authenticated_tx.raw_tx_hash.0,
             AuthAndProcessTimings::new_with_defaults(ExecutionContext::Sequencer.str()),
@@ -194,21 +193,14 @@ where
                     // `read_runtime_parity_estimate_from_pending_tail` detects
                     // this and returns a descriptive error.  That is a
                     // transaction-level rejection, not an internal error.
-                    let rejected_code =
-                        alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code();
                     evm.read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
-                        .map_err(|err| ErrorObjectOwned::owned(rejected_code, err, None::<()>))
+                        .map_err(rpc_tx_rejected)
                 }
                 other => Err(Self::tx_effect_to_rpc_error(other)),
             },
             // process_tx failures are transaction-level rejections (e.g. insufficient
             // balance for gas reservation), not internal server errors.
-            Err((error, _)) => Err(ErrorObjectOwned::owned(
-                // https://github.com/MetaMask/rpc-errors/blob/df5f688c20e392187cec307dac314816c2f73691/src/error-constants.ts#L6
-                alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),
-                error.to_string(),
-                None::<()>,
-            )),
+            Err((error, _)) => Err(rpc_tx_rejected(error)),
         }
     }
 
@@ -225,19 +217,10 @@ where
     ///  - 3 (used by pre-check): <https://github.com/ethereum/go-ethereum/blob/8a3a309fa97bff7252da3e7e8cac47d024d2e281/internal/ethapi/errors.go#L44>
     ///  - 3 (used by pre-check): <https://github.com/ethereum/execution-apis/blob/46ef717413592098cd743aab2d1e28d8f04d99a4/src/eth/execute.yaml#L51>
     fn tx_effect_to_rpc_error(effect: TxEffect<S>) -> ErrorObjectOwned {
-        let code = alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code();
         match effect {
-            TxEffect::Reverted(contents) => {
-                ErrorObjectOwned::owned(code, contents.reason.to_string(), None::<()>)
-            }
-            TxEffect::Skipped(contents) => {
-                ErrorObjectOwned::owned(code, contents.error.to_string(), None::<()>)
-            }
-            other => ErrorObjectOwned::owned(
-                code,
-                format!("runtime parity transaction was not successful: {other:?}"),
-                None::<()>,
-            ),
+            TxEffect::Reverted(contents) => rpc_tx_rejected(contents.reason),
+            TxEffect::Skipped(contents) => rpc_tx_rejected(contents.error),
+            TxEffect::Successful(_) => rpc_internal_error("Bug: successful TxEffect is passed to error handling branch")
         }
     }
 

@@ -410,9 +410,6 @@ where
         R: Runtime<S> + EthereumAuthenticator<S>,
     {
         let nonce = Self::runtime_parity_nonce(auth_data)?;
-        request
-            .from
-            .ok_or_else(|| "normalized request missing from".to_string())?;
         let envelope = Self::build_runtime_parity_signed_tx(&request, nonce)?;
         let tx_hash = TxHash::new(**envelope.hash());
         let raw_tx = borsh::to_vec(&RlpEvmTransaction {
