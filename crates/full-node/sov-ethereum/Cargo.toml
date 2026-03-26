@@ -15,7 +15,7 @@ workspace = true
 
 [dependencies]
 tracing = { workspace = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+jsonrpsee = { workspace = true, features = ["http-client", "server", "jsonrpsee-types"] }
 sov-address = { workspace = true, features = ["evm"] }
 
 sov-evm = { workspace = true, features = ["native"] }

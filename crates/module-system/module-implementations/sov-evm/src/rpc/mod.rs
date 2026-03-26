@@ -489,7 +489,7 @@ where
         Ok((block_env, maybe_archival_state, cfg))
     }
 
-    fn call(
+    pub(crate) fn call(
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,

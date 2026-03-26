@@ -33,6 +33,32 @@ impl<S: Spec> Evm<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
+    /// Runs a quick EVM simulation and returns `Err` with a proper revert
+    /// error (including raw output bytes) if the transaction would revert.
+    /// Returns `Ok(())` for successful calls.
+    ///
+    /// This is used as a pre-check before the runtime-parity STF pipeline,
+    /// which loses revert output bytes during receipt construction.
+    #[doc(hidden)]
+    pub fn check_for_evm_revert(
+        &self,
+        request: &TransactionRequest,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<()> {
+        let ResultAndState { result, .. } =
+            self.call(request.clone(), block_id, None, None, state)?;
+        match result {
+            ExecutionResult::Success { .. } => Ok(()),
+            ExecutionResult::Revert { output, .. } => {
+                Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
+            }
+            ExecutionResult::Halt { reason, gas_used } => {
+                Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+            }
+        }
+    }
+
     /// Runs gas estimation logic for `eth_estimateGas`.
     ///
     /// This is a library method called by `sov-ethereum`'s RPC handler, which

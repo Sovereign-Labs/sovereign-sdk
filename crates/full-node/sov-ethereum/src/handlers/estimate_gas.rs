@@ -5,6 +5,7 @@ use alloy_primitives::{U256, U64};
 use alloy_rpc_types::state::StateOverride;
 use alloy_rpc_types::{BlockOverrides, TransactionRequest};
 use jsonrpsee::core::RpcResult;
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
@@ -102,6 +103,14 @@ where
         // Override requests still need the fallback estimator because it applies RPC
         // state/block overrides that the runtime-parity path does not support.
         let estimated_gas = if Self::should_use_runtime_parity_estimate(&request, has_overrides) {
+            // Pre-check: run a lightweight EVM call to catch reverts with raw
+            // output bytes. The runtime parity STF pipeline loses revert data
+            // during receipt construction.
+            {
+                let mut revert_check_state = snapshot_state.clone_without_local_writes();
+                evm.check_for_evm_revert(&request, block_id, &mut revert_check_state)?;
+            }
+
             Self::estimate_gas_via_runtime_parity(
                 request.clone(),
                 block_id,
@@ -147,7 +156,7 @@ where
                 snapshot_state,
                 ethereum.sequencer_type,
             )
-            .map_err(|err| ErrorObjectOwned::owned(-32603, err, None::<()>))?;
+            .map_err(|err| ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, err, None::<()>))?;
         let metrics = AuthAndProcessMetrics::new(
             prepared.authenticated_tx.raw_tx_hash.0,
             AuthAndProcessTimings::new_with_defaults(ExecutionContext::Sequencer.str()),
@@ -181,10 +190,13 @@ where
             Ok(apply_tx_result) => match apply_tx_result.receipt.receipt {
                 TxEffect::Successful(_) => evm
                     .read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
-                    .map_err(|err| ErrorObjectOwned::owned(-32603, err, None::<()>)),
+                    .map_err(|err| ErrorObjectOwned::owned(INTERNAL_ERROR_CODE, err, None::<()>)),
                 other => Err(Self::tx_effect_to_rpc_error(other)),
             },
+            // process_tx failures are transaction-level rejections (e.g. insufficient
+            // balance for gas reservation), not internal server errors.
             Err((error, _)) => Err(ErrorObjectOwned::owned(
+                // https://github.com/MetaMask/rpc-errors/blob/df5f688c20e392187cec307dac314816c2f73691/src/error-constants.ts#L6
                 alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),
                 error.to_string(),
                 None::<()>,
@@ -192,9 +204,13 @@ where
         }
     }
 
-    /// Converts a non-successful `TxEffect` into the appropriate RPC error.
-    /// Transaction-level failures (reverts, skips) use the standard transaction-rejected
-    /// error code so that RPC clients see the same classification as `eth_sendRawTransaction`.
+    /// Converts a non-successful `TxEffect` into an RPC error.
+    ///
+    /// All variants use `-32003` (`TransactionRejected`, per EIP-1474).
+    /// EVM-level reverts with raw output bytes are already caught by the
+    /// `check_for_evm_revert` pre-check (which returns code `3`).
+    /// Anything that reaches this function is a STF-level rejection
+    /// (allowlist, gas reservation, auth) with no raw EVM revert data.
     fn tx_effect_to_rpc_error(effect: TxEffect<S>) -> ErrorObjectOwned {
         let code = alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code();
         match effect {
