@@ -3,7 +3,6 @@ use std::convert::Infallible;
 use serde::Serialize;
 use sov_bank::{config_gas_token_id, Bank};
 use sov_chain_state::ChainState;
-use sov_mock_zkvm::MockCodeCommitment;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
