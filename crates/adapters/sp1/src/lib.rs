@@ -126,7 +126,7 @@ impl ZkVerifier for SP1Verifier {
 #[cfg(not(target_os = "zkvm"))]
 pub fn decode_sp1_proof(
     serialized_proof: &[u8],
-) -> Result<sp1_sdk::SP1ProofWithPublicValues, anyhow::Error> {
+) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
     match bincode::deserialize::<
         sov_rollup_interface::zk::Proof<
             sp1_sdk::SP1ProofWithPublicValues,
