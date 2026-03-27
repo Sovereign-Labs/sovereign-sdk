@@ -9,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::OuterCodeCommitmentHash;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants, Verifier};
@@ -53,7 +53,7 @@ where
         da_verifier: Da::Verifier,
         config: RollupProverConfigDiscriminants,
         num_threads: usize,
-        outer_vk_hash: OuterCodeCommitmentHash,
+        outer_vk_hash: CodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });
@@ -74,7 +74,7 @@ where
         outer_vm: OuterVm::Host,
         da_verifier: Da::Verifier,
         config: RollupProverConfigDiscriminants,
-        outer_vk_hash: OuterCodeCommitmentHash,
+        outer_vk_hash: CodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let num_cpus = num_cpus::get();

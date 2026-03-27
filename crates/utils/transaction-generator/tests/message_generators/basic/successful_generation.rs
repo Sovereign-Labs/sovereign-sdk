@@ -62,7 +62,7 @@ async fn test_successful_generation_helper(modules: Distribution<ModulesToUse>) 
         .flat_map(|output| output.outcome.unwrap_changes())
         .collect();
 
-    assert_logs_against_state(changes, Arc::new(config), 1)
+    assert_logs_against_state(changes, Arc::new(config), 4)
         .await
         .expect("Failed to assert against state");
 

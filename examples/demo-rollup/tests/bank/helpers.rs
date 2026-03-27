@@ -296,6 +296,7 @@ pub async fn start_test_rollup(
             sequencer_config.disable_state_root_consistency_checks =
                 disable_state_root_consistency_check;
             sequencer_config.num_cache_warmup_workers = 0;
+            sequencer_config.ideal_lag_behind_finalized_slot = 3;
         }
     })
     .start()

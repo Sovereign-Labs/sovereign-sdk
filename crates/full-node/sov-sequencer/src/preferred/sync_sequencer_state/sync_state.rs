@@ -295,6 +295,8 @@ where
                             finalized_slot_number,
                             #[cfg(feature = "test-utils")]
                             update_skipped_due_to_pause: false,
+                            #[cfg(feature = "test-utils")]
+                            triggered_recovery: false,
                         });
             }
             Message::PruneSequencerDb { reason } => {
@@ -339,6 +341,8 @@ where
                             finalized_slot_number,
                             #[cfg(feature = "test-utils")]
                             update_skipped_due_to_pause: false,
+                            #[cfg(feature = "test-utils")]
+                            triggered_recovery: false,
                         });
             }
             Message::ReplicaBatchStartMsg {

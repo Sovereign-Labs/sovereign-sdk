@@ -41,8 +41,6 @@ async fn test_db_elected_leader_recovery_with_replica() {
     // Pause the sequencer update_state loop to prevent batch production.
     leader.pause_preferred_batches().await;
 
-    // Produce DA blocks while sequencer is paused to exceed the deferred slots threshold.
-    // With DEFERRED_SLOTS_COUNT=40, the 90% threshold triggers at ~26 blocks of lag.
     for _ in 0..30 {
         setup.da_service.produce_block_now().await.unwrap();
     }
@@ -52,13 +50,83 @@ async fn test_db_elected_leader_recovery_with_replica() {
 
     // Resume batch production; on the next state update the leader should enter recovery
     leader.resume_preferred_batches().await;
-    setup.da_service.produce_block_now().await.unwrap();
 
     // Wait until the leader enters recovery.
     leader.wait_for_sequencer_recovering().await.unwrap();
     leader.wait_for_sequencer_ready().await.unwrap();
 
     // // Send a transaction to confirm the cluster works after recovery.
+    verify_replica_processes_tx(
+        &leader,
+        &replica,
+        &key_and_address.private_key,
+        token_id,
+        receiver_addr,
+        1,
+    )
+    .await;
+
+    replica.shutdown().await.unwrap();
+    leader.shutdown().await.unwrap();
+    setup.shutdown().await;
+}
+
+/// Test that if only the elected leader pauses batch production and enters
+/// recovery after falling behind, the replica continues to function correctly
+/// once recovery completes.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused() {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
+
+    let Some(setup) = NodeDiscoveryTestSetup::new().await else {
+        return;
+    };
+
+    let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
+
+    let node_1 = setup
+        .start_node("node_1", ConfiguredNodeRole::DbElected)
+        .await;
+    let node_2 = setup
+        .start_node("node_2", ConfiguredNodeRole::DbElected)
+        .await;
+
+    node_1.wait_for_sequencer_ready().await.unwrap();
+    node_2.wait_for_sequencer_ready().await.unwrap();
+
+    let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
+
+    // Send a transaction to confirm the cluster works before recovery.
+    let token_id = config_gas_token_id();
+    let receiver_addr = random_address();
+
+    verify_replica_processes_tx(
+        &leader,
+        &replica,
+        &key_and_address.private_key,
+        token_id,
+        receiver_addr,
+        0,
+    )
+    .await;
+
+    // Pause only the elected leader's sequencer update_state loop.
+    leader.pause_preferred_batches_for_node().await;
+
+    for _ in 0..30 {
+        setup.da_service.produce_block_now().await.unwrap();
+    }
+
+    leader.wait_for_node_synced().await.unwrap();
+
+    // Resume batch production only for the leader; on the next state update it should enter recovery.
+    leader.resume_preferred_batches_for_node().await;
+
+    // Wait until the leader enters recovery.
+    leader.wait_for_sequencer_recovering().await.unwrap();
+    leader.wait_for_sequencer_ready().await.unwrap();
+
+    // Send a transaction to confirm the cluster works after recovery.
     verify_replica_processes_tx(
         &leader,
         &replica,
@@ -91,6 +159,5 @@ async fn verify_replica_processes_tx(
         .unwrap();
 
     leader.send_tx_to_sequencer(&tx).await.unwrap();
-
     wait_for_all_events_with_timeout(Duration::from_millis(500), 1, &mut event_subscription).await;
 }

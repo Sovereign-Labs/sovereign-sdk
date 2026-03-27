@@ -53,6 +53,9 @@ async fn start_node(
             max_log_limit: 20000,
             response_size_limit: (1024 * 1024),
         });
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     })
     .start()
     .await

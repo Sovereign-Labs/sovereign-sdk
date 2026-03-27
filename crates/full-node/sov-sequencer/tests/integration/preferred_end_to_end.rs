@@ -977,14 +977,24 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     test_rollup.wait_for_node_synced().await.unwrap();
 
     tracing::info!("Resuming preferred sequencer batch production.");
+    // Subscribe to state update notifications BEFORE resuming, so we don't miss the
+    // recovery notification. This channel bypasses the state updator message queue
+    // (which blocks during trigger_recovery's async calls under CPU pressure).
+    let mut recovery_sub = test_rollup.subscribe_state_updates().await.unwrap();
     test_rollup.resume_preferred_batches().await;
-    // Normally on the next state update, the sequencer should always enter recovery.
+    // Produce one block to trigger the state update that detects the gap.
     test_rollup.da_service.produce_block_now().await.unwrap();
-    while test_rollup.is_sequencer_ready().await {
-        let _ = da_layer.produce_block().await;
-        sleep(Duration::from_millis(30)).await;
-    }
-    test_rollup.wait_for_node_synced().await.unwrap();
+    // Wait for the notification that indicates recovery was triggered.
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let notification = recovery_sub.next().await.unwrap().unwrap();
+            if notification.triggered_recovery {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timed out waiting for sequencer to enter recovery");
 
     // Create transaction that should fail: sequencer should not accept transactions while in
     // recovery.
@@ -1111,13 +1121,26 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let test_rollup = builder.start().await.unwrap();
     let client = test_rollup.api_client().clone();
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    // Subscribe BEFORE node sync so we don't miss the recovery notification
+    // (recovery may trigger during the sync phase itself).
+    let mut recovery_sub = test_rollup.subscribe_state_updates().await.unwrap();
 
-    // First we sync the node to the new DA blocks
+    // Sync the node to the new DA blocks. Recovery may trigger during sync.
     test_rollup.wait_for_node_synced().await.unwrap();
-    // Now on the next state update, the sequencer should always enter recovery
+    // Produce one more block in case recovery hasn't triggered yet.
     test_rollup.da_service.produce_block_now().await.unwrap();
-    sleep(Duration::from_millis(50)).await;
-    assert!(!test_rollup.is_sequencer_ready().await);
+    // Wait for the notification that indicates recovery was triggered. This
+    // bypasses the state updator (which blocks during trigger_recovery under load).
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let notification = recovery_sub.next().await.unwrap().unwrap();
+            if notification.triggered_recovery {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timed out waiting for sequencer to enter recovery");
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
     const UPDATE_VEC_VALUE: u8 = 12;

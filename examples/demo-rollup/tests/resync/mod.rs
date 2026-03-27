@@ -119,6 +119,7 @@ async fn start_rollup(
             if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
+                seq_config.ideal_lag_behind_finalized_slot = 3;
             }
         })
         .start(),
