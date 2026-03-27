@@ -574,6 +574,7 @@ jobs:
       SP1_SKIP_PROGRAM_BUILD: "true"
       SKIP_GUEST_BUILD: "1"
       CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
       - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
