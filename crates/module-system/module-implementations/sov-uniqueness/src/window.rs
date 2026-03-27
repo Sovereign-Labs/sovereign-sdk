@@ -37,7 +37,7 @@ impl<S: Spec> Uniqueness<S> {
         assert!(nonce >= start);
 
         // drop outdated bits at the front first
-        let drop = (nonce - start).saturating_sub(config_value!("PAST_TRANSACTION_WINDOW")) / 8;
+        let drop = (nonce + 8 - start).saturating_sub(config_value!("PAST_TRANSACTION_WINDOW")) / 8;
         let mut bits = bits.split_off(drop.min(bits.len() as u64) as usize);
 
         // forward start to trail nonce by at most `PAST_TRANSACTION_WINDOW` bits

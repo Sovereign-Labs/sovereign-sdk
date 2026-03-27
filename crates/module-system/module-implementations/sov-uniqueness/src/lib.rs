@@ -98,6 +98,18 @@ impl<S: Spec> Uniqueness<S> {
             .get(credential_id, state)
             .map(|maybe_nonce| maybe_nonce.unwrap_or_default())?)
     }
+
+    /// Retrieves the nonce window for a given credential id.
+    ///
+    /// # Errors
+    /// May return an error if state access fails (e.g if we run out of gas).
+    pub fn window<Reader: StateReader<User>>(
+        &self,
+        credential_id: &CredentialId,
+        state: &mut Reader,
+    ) -> Result<Option<(u64, Vec<u8>)>, Reader::Error> {
+        self.window.get(credential_id, state)
+    }
 }
 
 impl<S: Spec> Module for Uniqueness<S> {
