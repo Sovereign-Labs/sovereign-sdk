@@ -494,9 +494,12 @@ async fn rpc2_002_estimate_send_affordability_consistency() -> anyhow::Result<()
         -32003,
         "estimate should use transaction-rejected error class for insufficient funds"
     );
+    let estimate_msg = rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"));
     assert!(
-        rpc_error_message(rpc_error_object(&estimate_response, "eth_estimateGas"))
-            .contains(INSUFFICIENT_FUNDS_ERROR),
+        // The EVM-level check returns INSUFFICIENT_FUNDS_ERROR; the paymaster-aware
+        // try_reserve_gas path returns "Insufficient balance …". Both are valid.
+        estimate_msg.contains(INSUFFICIENT_FUNDS_ERROR)
+            || estimate_msg.contains("Insufficient balance"),
         "estimate should report insufficient-funds affordability failure: {estimate_response}"
     );
 
@@ -1012,7 +1015,6 @@ async fn rpc2_003_omitted_gas_simulation_matches_real_tx_cap() -> anyhow::Result
 
 /// RPC2-004: `eth_estimateGas` units track receipt `gasUsed` (internal consistency).
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Known discrepancy: will be fixed in the follow up"]
 async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
     let contract = deploy_contract_check(&client)
@@ -1032,6 +1034,87 @@ async fn rpc2_004_estimate_gas_tracks_receipt_gas_used() -> anyhow::Result<()> {
     assert!(
         estimate_value.abs_diff(receipt.gas_used) < 10_000,
         "estimate should be near actual execution gasUsed (estimate={estimate_value}, gasUsed={})",
+        receipt.gas_used
+    );
+
+    Ok(())
+}
+
+/// RPC2-004b: `eth_estimateGas` tracks receipt `gasUsed` for a plain ETH transfer.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_004b_estimate_gas_tracks_receipt_for_eth_transfer() -> anyhow::Result<()> {
+    let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+
+    let recipient = Address::repeat_byte(0x77);
+    let value = U256::from(1_000_000u64);
+
+    let tx_request = client.make_tx(Some(recipient), None).value(value);
+    let estimate: U64 = client
+        .ws
+        .request("eth_estimateGas", rpc_params![&tx_request, "latest"])
+        .await?;
+
+    let tx_hash = client.send_eth(recipient, value).await;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+
+    let estimate_value = estimate.to::<u64>();
+    assert!(
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
+        "ETH transfer: estimate should be near actual gasUsed (estimate={estimate_value}, gasUsed={})",
+        receipt.gas_used
+    );
+
+    Ok(())
+}
+
+/// RPC2-004c: `eth_estimateGas` tracks receipt `gasUsed` for a contract deployment.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_004c_estimate_gas_tracks_receipt_for_contract_deploy() -> anyhow::Result<()> {
+    let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+
+    let tx_request = client.make_tx(None, Some(client.contract.byte_code()));
+    let estimate: U64 = client
+        .ws
+        .request("eth_estimateGas", rpc_params![&tx_request, "latest"])
+        .await?;
+
+    let tx_hash = client
+        .deploy_contract()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+
+    let estimate_value = estimate.to::<u64>();
+    assert!(
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
+        "contract deploy: estimate should be near actual gasUsed (estimate={estimate_value}, gasUsed={})",
+        receipt.gas_used
+    );
+
+    Ok(())
+}
+
+/// RPC2-004d: `eth_estimateGas` tracks receipt `gasUsed` for a log-emitting call.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_004d_estimate_gas_tracks_receipt_for_log_emission() -> anyhow::Result<()> {
+    let (_rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let contract = deploy_contract_check(&client)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+
+    let tx_request = client.make_tx(Some(contract), Some(client.contract.emit_logs(0x42, 3)));
+    let estimate: U64 = client
+        .ws
+        .request("eth_estimateGas", rpc_params![&tx_request, "latest"])
+        .await?;
+
+    let tx_hash = client.alloy_emit_logs(contract, 0x42, 3).await;
+    let receipt = client.wait_for_receipt(tx_hash).await;
+
+    let estimate_value = estimate.to::<u64>();
+    assert!(
+        estimate_value.abs_diff(receipt.gas_used) < 10_000,
+        "log emission: estimate should be near actual gasUsed (estimate={estimate_value}, gasUsed={})",
         receipt.gas_used
     );
 

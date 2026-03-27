@@ -59,7 +59,6 @@ pub(crate) const PAYER_SOV_BANK_BALANCE: u128 = 5_000_000_000_000_000;
 pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
 pub(crate) const POLL_INTERVAL_MS: u64 = 25;
-pub(crate) const INVALID_PARAMS_CODE: i64 = -32602;
 pub(crate) const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
 pub(crate) const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 
@@ -305,7 +304,7 @@ pub(crate) fn assert_invalid_params(response: &Value) {
     let error = rpc_error_object(response, "assert_invalid_params");
     assert_eq!(
         rpc_error_code(error),
-        INVALID_PARAMS_CODE,
+        jsonrpsee::types::error::INVALID_PARAMS_CODE as i64,
         "expected JSON-RPC invalid params code"
     );
 }

@@ -116,6 +116,7 @@ demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features =
 tracing-panic = { version = "0.1.2" }
 
 base64 = { workspace = true }
+bincode = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
@@ -124,9 +125,9 @@ tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
 alloy-primitives = { workspace = true }
-alloy-rpc-types-eth = "1.0.30"
+alloy-rpc-types-eth = { workspace = true }
 alloy-rpc-types-trace = { workspace = true }
-alloy-pubsub = "1.0"
+alloy-pubsub = { workspace = true }
 alloy-provider = { workspace = true, features = ["debug-api", "reqwest"] }
 sov-rpc-eth-types = { workspace = true }
 strum = { workspace = true }
