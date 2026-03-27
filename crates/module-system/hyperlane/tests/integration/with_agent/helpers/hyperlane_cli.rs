@@ -14,7 +14,7 @@ use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerRequest, GenericImage, ImageExt};
 
 const IMAGE: &str = "ghcr.io/sovereign-labs/hyperlane-cli";
-const TAG: &str = "sov-integration-3";
+const TAG: &str = "sov-integration-11";
 
 pub struct HyperlaneCliRunner {
     data: tempfile::TempDir,
