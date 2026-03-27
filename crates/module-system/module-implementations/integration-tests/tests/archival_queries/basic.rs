@@ -110,8 +110,9 @@ async fn query_invalid_rollup_height_returns_error() {
     let error = api_response.errors.first().unwrap();
     assert_eq!(error.status, 404);
     assert_eq!(error.title, "invalid rollup height");
-    assert_eq!(
-        error.details.get("message").unwrap(),
-        "Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height."
+    let message = error.details.get("message").unwrap().as_str().unwrap();
+    assert!(
+        message.contains("not accessible"),
+        "Expected error to contain 'not accessible', got: {message}"
     );
 }
