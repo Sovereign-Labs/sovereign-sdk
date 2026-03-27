@@ -6635,6 +6635,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-rollup-interface",
  "sov-zkvm-utils",
+ "sp1-core-executor",
  "sp1-lib",
  "sp1-sdk",
  "sp1-zkvm",

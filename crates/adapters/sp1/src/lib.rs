@@ -27,9 +27,6 @@ pub mod network;
 pub mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
-/// TODO: When there's a nice representation of SP1VerifyingKey that can be compiled in SP1, we can use that.
-/// e.g. If SP1VerifyingKey is moved to a crate that can be compiled in an SP1 program.
-///
 ///
 /// Use the [`ZkvmHost::code_commitment`](sov_rollup_interface::zk::ZkvmHost) method to get the MethodId for a given binary.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]

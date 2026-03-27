@@ -115,6 +115,7 @@ demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features =
 tracing-panic = { version = "0.1.2" }
 
 base64 = { workspace = true }
+bincode = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
