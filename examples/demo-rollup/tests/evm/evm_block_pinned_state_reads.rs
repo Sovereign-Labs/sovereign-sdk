@@ -119,6 +119,12 @@ async fn estimate_gas_request_at_with_state_overrides(
 async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
     let (rollup, client, _) = setup_with_simple_storage_with_ideal_lag(0, EVM_EXTENSION, 10).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
+    // produce_enough_finalized_slots() fires off 12 DA blocks via
+    // tenderly_produce_blocks but does not wait for them to be fully
+    // processed (the wait loop is empty when finalization_blocks == 0).
+    // Drain the pipeline so background slot processing cannot advance the
+    // finalized head while the test is running.
+    rollup.wait_for_node_synced().await.unwrap();
     (rollup, client)
 }
 
