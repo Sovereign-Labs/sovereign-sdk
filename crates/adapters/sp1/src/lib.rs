@@ -6,7 +6,6 @@
 use std::fmt;
 use std::fmt::Debug;
 
-use anyhow::Error;
 use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
@@ -127,7 +126,7 @@ impl ZkVerifier for SP1Verifier {
 #[cfg(not(target_os = "zkvm"))]
 pub fn decode_sp1_proof(
     serialized_proof: &[u8],
-) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
+) -> Result<sp1_sdk::SP1ProofWithPublicValues, anyhow::Error> {
     match bincode::deserialize::<
         sov_rollup_interface::zk::Proof<
             sp1_sdk::SP1ProofWithPublicValues,
