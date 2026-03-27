@@ -1,3 +1,6 @@
+# 2026-03-27
+- #2650 Adds more information to ApiStateAccessorError errors.
+
 # 2026-03-24
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
