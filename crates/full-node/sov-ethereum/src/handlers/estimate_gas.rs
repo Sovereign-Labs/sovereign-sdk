@@ -1,5 +1,5 @@
 use crate::handlers::Handlers;
-use crate::{rpc_internal_error, Ethereum};
+use crate::{rpc_internal_error, rpc_tx_rejected, Ethereum};
 use alloy_eips::BlockId;
 use alloy_primitives::{U256, U64};
 use alloy_rpc_types::state::StateOverride;
@@ -10,12 +10,16 @@ use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::{build_request_preflight_auth, EthereumAuthenticator, Evm};
+use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::GasEnforcer;
-use sov_modules_api::capabilities::TransactionAuthorizer;
-use sov_modules_api::capabilities::{AuthorizationData, HasCapabilities, HasKernel};
-use sov_modules_api::{
-    ApiStateAccessor, AuthenticatedTransactionData, ExecutionContext, GetGasPrice, Spec,
+use sov_modules_api::capabilities::{
+    AuthorizationData, HasCapabilities, HasKernel, TransactionAuthorizer,
 };
+use sov_modules_api::{
+    ApiStateAccessor, AuthenticatedTransactionData, ExecutionContext, GasArray, GetGasPrice,
+    NoOpControlFlow, Spec, TxEffect,
+};
+use sov_modules_stf_blueprint::process_tx_and_reward_prover;
 use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
@@ -94,14 +98,34 @@ where
             )?;
         }
 
-        let mut state = snapshot_state.clone_without_local_writes();
-        let estimated_gas = evm.eth_estimate_gas_helper(
-            request.clone(),
-            block_id,
-            state_overrides,
-            block_overrides,
-            &mut state,
-        )?;
+        // Runtime parity only covers the no-override path with a concrete sender.
+        // Override requests still need the fallback estimator because it applies RPC
+        // state/block overrides that the runtime-parity path does not support.
+        let estimated_gas = if Self::should_use_runtime_parity_estimate(&request, has_overrides) {
+            // Pre-check: run a lightweight EVM call to catch reverts with raw
+            // output bytes. The runtime parity STF pipeline loses revert data
+            // during receipt construction.
+            {
+                let mut revert_check_state = snapshot_state.clone_without_local_writes();
+                evm.check_for_evm_revert(&request, block_id, &mut revert_check_state)?;
+            }
+
+            Self::estimate_gas_via_runtime_parity(
+                request.clone(),
+                block_id,
+                snapshot_state,
+                ethereum,
+            )?
+        } else {
+            let mut state = snapshot_state.clone_without_local_writes();
+            evm.eth_estimate_gas_helper(
+                request.clone(),
+                block_id,
+                state_overrides.clone(),
+                block_overrides.clone(),
+                &mut state,
+            )?
+        };
 
         if !has_explicit_gas && !has_overrides {
             let mut request_with_estimated_gas = request;
@@ -115,6 +139,98 @@ where
         }
 
         Ok(estimated_gas)
+    }
+
+    fn estimate_gas_via_runtime_parity(
+        request: TransactionRequest,
+        block_id: Option<BlockId>,
+        snapshot_state: &ApiStateAccessor<S>,
+        ethereum: &Arc<Ethereum<S, Seq>>,
+    ) -> Result<U64, ErrorObjectOwned> {
+        let evm = Evm::<S>::default();
+        let prepared = evm
+            .prepare_runtime_parity_estimate::<Seq::Rt>(
+                request,
+                block_id,
+                snapshot_state,
+                ethereum.sequencer_type,
+            )
+            .map_err(rpc_internal_error)?;
+        let metrics = AuthAndProcessMetrics::new(
+            prepared.authenticated_tx.raw_tx_hash.0,
+            AuthAndProcessTimings::new_with_defaults(ExecutionContext::Sequencer.str()),
+        );
+        let validated_output = (
+            prepared.authenticated_tx,
+            prepared.auth_data,
+            prepared.runtime_call,
+        );
+
+        let mut runtime = Seq::Rt::default();
+        let (result, mut tx_scratchpad, _) = process_tx_and_reward_prover(
+            &mut runtime,
+            prepared.pre_exec_working_set,
+            // `eth_estimateGas` should not depend on transient remaining slot budget.
+            // We disable the STF slot-gas clamp here and still remain bounded by the
+            // transaction's own gas limit inside the real execution pipeline.
+            <S::Gas>::MAX,
+            validated_output,
+            prepared.raw_tx,
+            &ethereum.sequencer_da_address,
+            ethereum.sequencer_rollup_address,
+            ExecutionContext::Sequencer,
+            &NoOpControlFlow,
+            prepared.operating_mode,
+            metrics,
+            ethereum.sequencer_type,
+        );
+
+        match result {
+            Ok(apply_tx_result) => match apply_tx_result.receipt.receipt {
+                TxEffect::Successful(_) => {
+                    // When `preferred_sequencer_publish_reverted_txs = true` the
+                    // SDK tx succeeds but the EVM receipt may still be reverted.
+                    // `read_runtime_parity_estimate_from_pending_tail` detects
+                    // this and returns a descriptive error.  That is a
+                    // transaction-level rejection, not an internal error.
+                    evm.read_runtime_parity_estimate_from_pending_tail(&mut tx_scratchpad)
+                        .map_err(rpc_tx_rejected)
+                }
+                other => Err(Self::tx_effect_to_rpc_error(other)),
+            },
+            // process_tx failures are transaction-level rejections (e.g. insufficient
+            // balance for gas reservation), not internal server errors.
+            Err((error, _)) => Err(rpc_tx_rejected(error)),
+        }
+    }
+
+    /// Converts a non-successful `TxEffect` into an RPC error.
+    ///
+    /// All variants use `-32003` (`TransactionRejected`, per EIP-1474).
+    /// EVM-level reverts with raw output bytes are already caught by the
+    /// `check_for_evm_revert` pre-check (which returns code `3`).
+    /// Anything that reaches this function is a STF-level rejection
+    /// (allowlist, gas reservation, auth) with no raw EVM revert data.
+    ///
+    /// Sources:
+    ///  - -32003: <https://github.com/MetaMask/rpc-errors/blob/df5f688c20e392187cec307dac314816c2f73691/src/error-constants.ts#L6>
+    ///  - 3 (used by pre-check): <https://github.com/ethereum/go-ethereum/blob/8a3a309fa97bff7252da3e7e8cac47d024d2e281/internal/ethapi/errors.go#L44>
+    ///  - 3 (used by pre-check): <https://github.com/ethereum/execution-apis/blob/46ef717413592098cd743aab2d1e28d8f04d99a4/src/eth/execute.yaml#L51>
+    fn tx_effect_to_rpc_error(effect: TxEffect<S>) -> ErrorObjectOwned {
+        match effect {
+            TxEffect::Reverted(contents) => rpc_tx_rejected(contents.reason),
+            TxEffect::Skipped(contents) => rpc_tx_rejected(contents.error),
+            TxEffect::Successful(_) => {
+                rpc_internal_error("Bug: successful TxEffect is passed to error handling branch")
+            }
+        }
+    }
+
+    fn should_use_runtime_parity_estimate(
+        request: &TransactionRequest,
+        has_overrides: bool,
+    ) -> bool {
+        !has_overrides && request.from.is_some()
     }
 
     pub(crate) fn run_request_affordability_preflight(

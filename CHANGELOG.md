@@ -1,5 +1,5 @@
 # 2026-03-24
-- #2621 EVM: Fix feeHistory endpoint for zero blocks
+- #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
 - #2631 Reorganize and extend demo-stf
 
@@ -7,6 +7,7 @@
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints
 - #2599 Make EVM RPC affordances checks paymaster-aware
+- #2621 EVM: Fix feeHistory endpoint for zero blocks
 
 # 2026-03-13
 - #2587 EVM: RPC only: Fixes Fee-cap admission consistency across simulation and submission.
