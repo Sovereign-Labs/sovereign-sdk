@@ -83,6 +83,7 @@ alloy-rlp = { workspace = true }
 
 [dev-dependencies]
 arbitrary = { workspace = true }
+proptest = { workspace = true }
 sov-eth-client = { workspace = true }
 jsonrpsee = { workspace = true }
 sov-address = { workspace = true, features = ["native"] }
