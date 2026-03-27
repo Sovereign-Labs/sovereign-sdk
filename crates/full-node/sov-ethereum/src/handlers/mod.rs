@@ -263,10 +263,10 @@ where
         auth_data: &AuthorizationData<S>,
         snapshot_state: &ApiStateAccessor<S>,
     ) -> RpcResult<()> {
+        use sov_modules_api::capabilities::UniquenessData;
         let tx_nonce = match auth_data.uniqueness {
-            sov_modules_api::capabilities::UniquenessData::Nonce(tx_nonce) => tx_nonce,
-            sov_modules_api::capabilities::UniquenessData::Generation(_) => return Ok(()),
-            sov_modules_api::capabilities::UniquenessData::Window(_) => return Ok(()),
+            UniquenessData::Nonce(tx_nonce) => tx_nonce,
+            UniquenessData::Generation(_) | UniquenessData::Window(_) => return Ok(()),
         };
 
         let mut state = snapshot_state.clone_without_local_writes();
