@@ -11,9 +11,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::{
-    address_prefix, Address, AddressBech32, Base58Address, BasicAddress, CredentialId,
+    address_prefix, Address, AddressBech32, Base58Address, BasicAddress, CredentialId, HexHash,
 };
 
 /// An address type which supports standard rollup addresses, EVM addresses, and Solana-style
@@ -188,5 +189,28 @@ impl std::str::FromStr for MultiAddressEvmSolana {
         }
 
         Ok(Self::Solana(Base58Address::from_str(s)?))
+    }
+}
+
+impl HyperlaneAddress for MultiAddressEvmSolana {
+    fn to_sender(&self) -> HexHash {
+        match self {
+            MultiAddressEvmSolana::Standard(addr) => addr.to_sender(),
+            MultiAddressEvmSolana::Evm(addr) => addr.to_sender(),
+            MultiAddressEvmSolana::Solana(addr) => addr.to_sender(),
+        }
+    }
+
+    fn from_sender(recipient: HexHash) -> anyhow::Result<Self> {
+        // Try EVM first (expects 12 leading zero bytes for a 20-byte address),
+        // then Standard (expects 4 leading zero bytes for a 28-byte address),
+        // then Solana (accepts any 32 bytes).
+        if let Ok(addr) = EthereumAddress::from_sender(recipient) {
+            return Ok(Self::Evm(addr));
+        }
+        if let Ok(addr) = Address::from_sender(recipient) {
+            return Ok(Self::Standard(addr));
+        }
+        Ok(Self::Solana(Base58Address::from_sender(recipient)?))
     }
 }

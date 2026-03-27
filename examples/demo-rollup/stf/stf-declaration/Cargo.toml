@@ -20,6 +20,8 @@ sov-blob-storage = { workspace = true }
 sov-capabilities = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-evm = { workspace = true }
+sov-hyperlane-integration = { workspace = true, features = ["evm"] }
+sov-revenue-share = { workspace = true }
 sov-kernels = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
@@ -57,6 +59,8 @@ native = [
 	"sov-capabilities/native",
 	"sov-chain-state/native",
 	"sov-evm/native",
+	"sov-hyperlane-integration/native",
+	"sov-revenue-share/native",
 	"sov-kernels/native",
 	"sov-modules-api/native",
 	"sov-modules-stf-blueprint/native",
@@ -84,6 +88,7 @@ arbitrary = [
 	"sov-state/arbitrary",
 	"sov-test-utils?/arbitrary",
 	"sov-uniqueness/arbitrary",
+	"sov-hyperlane-integration/arbitrary"
 ]
 test-utils = [
     "native",
