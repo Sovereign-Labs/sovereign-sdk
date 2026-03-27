@@ -2,14 +2,6 @@
 
 TARGET_HEIGHT=4
 
-# Check existence of the token file
-echo "Checking network head. Token file: '$1'"
-if [ ! -f "$1" ]; then
-  echo "Error: Token file $1 does not exist."
-  exit 1
-fi
-TOKEN=$(cat "$1")
-
 # Check header.NetworkHead
 CURL_OUTPUT=$(curl -s --fail -X POST http://127.0.0.1:26658 \
      -H "Content-Type: application/json" \
