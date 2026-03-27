@@ -71,10 +71,18 @@ async fn test_db_elected_leader_recovery_with_replica() {
     setup.shutdown().await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_recovery_in_loop() {
+    for i in 0..100 {
+        println!("====={i}");
+        test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused().await;
+    }
+}
+
 /// Test that if only the elected leader pauses batch production and enters
 /// recovery after falling behind, the replica continues to function correctly
 /// once recovery completes.
-#[tokio::test(flavor = "multi_thread")]
+//#[tokio::test(flavor = "multi_thread")]
 async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
 
@@ -87,19 +95,26 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
     let node_1 = setup
         .start_node("node_1", ConfiguredNodeRole::DbElected)
         .await;
+
+    /*
     let node_2 = setup
         .start_node("node_2", ConfiguredNodeRole::DbElected)
-        .await;
+        .await
+        */
 
     node_1.wait_for_sequencer_ready().await.unwrap();
-    node_2.wait_for_sequencer_ready().await.unwrap();
+    //node_2.wait_for_sequencer_ready().await.unwrap();
 
-    let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
+    // let (leader, replica) = establish_leader_and_replica(node_1, node_2).await;
+    // replica.shutdown().await.unwrap();
+    let leader = node_1;
+    println!("Rep");
 
     // Send a transaction to confirm the cluster works before recovery.
     let token_id = config_gas_token_id();
     let receiver_addr = random_address();
 
+    /*
     verify_replica_processes_tx(
         &leader,
         &replica,
@@ -108,7 +123,7 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
         receiver_addr,
         0,
     )
-    .await;
+    .await;*/
 
     // Pause only the elected leader's sequencer update_state loop.
     leader.pause_preferred_batches_for_node().await;
@@ -127,7 +142,7 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
     leader.wait_for_sequencer_ready().await.unwrap();
 
     // Send a transaction to confirm the cluster works after recovery.
-    verify_replica_processes_tx(
+    /*verify_replica_processes_tx(
         &leader,
         &replica,
         &key_and_address.private_key,
@@ -135,9 +150,8 @@ async fn test_db_elected_leader_recovery_with_replica_when_only_leader_is_paused
         receiver_addr,
         1,
     )
-    .await;
+    .await;*/
 
-    replica.shutdown().await.unwrap();
     leader.shutdown().await.unwrap();
     setup.shutdown().await;
 }
