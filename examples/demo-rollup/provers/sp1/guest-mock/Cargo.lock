@@ -369,7 +369,7 @@ version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b2289a842d02fe63f8c466db964168bb2c7a9fdfb7b24816dbb17d45520575fb"
 dependencies = [
- "darling 0.21.3",
+ "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -1581,36 +1581,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.20.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee"
-dependencies = [
- "darling_core 0.20.11",
- "darling_macro 0.20.11",
-]
-
-[[package]]
-name = "darling"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9cdf337090841a411e2a7f3deb9187445851f91b309c0c0a29e05f74a00a48c0"
 dependencies = [
- "darling_core 0.21.3",
- "darling_macro 0.21.3",
-]
-
-[[package]]
-name = "darling_core"
-version = "0.20.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
-dependencies = [
- "fnv",
- "ident_case",
- "proc-macro2",
- "quote",
- "strsim",
- "syn 2.0.114",
+ "darling_core",
+ "darling_macro",
 ]
 
 [[package]]
@@ -1630,22 +1606,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.20.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead"
-dependencies = [
- "darling_core 0.20.11",
- "quote",
- "syn 2.0.114",
-]
-
-[[package]]
-name = "darling_macro"
 version = "0.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d38308df82d1080de0afee5d069fa14b0326a88c14f15c5ccda35b4a6c414c81"
 dependencies = [
- "darling_core 0.21.3",
+ "darling_core",
  "quote",
  "syn 2.0.114",
 ]
@@ -1897,7 +1862,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
- "unicode-xid",
 ]
 
 [[package]]
@@ -5542,9 +5506,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.16.1"
+version = "3.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fa237f2807440d238e0364a218270b98f767a00d3dada77b1c53ae88940e2e7"
+checksum = "aa66c845eee442168b2c8134fec70ac50dc20e760769c8ba0ad1319ca1959b04"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -5562,11 +5526,11 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.16.1"
+version = "3.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a8e3ca0ca629121f70ab50f95249e5a6f925cc0f6ffe8256c45b728875706c"
+checksum = "b91a903660542fced4e99881aa481bdbaec1634568ee02e0b8bd57c64cb38955"
 dependencies = [
- "darling 0.21.3",
+ "darling",
  "proc-macro2",
  "quote",
  "syn 2.0.114",
@@ -6223,7 +6187,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6233,7 +6197,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -6241,7 +6205,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6251,7 +6215,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "hex",
  "schemars 0.8.22",
  "serde",
@@ -6305,7 +6269,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6352,7 +6316,7 @@ dependencies = [
  "borsh",
  "bytes",
  "derive-new",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "hex",
  "itertools 0.14.0",
  "reth-ethereum-primitives",
@@ -6374,7 +6338,7 @@ dependencies = [
  "sov-state",
  "sov-uniqueness",
  "sov-universal-wallet",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6410,7 +6374,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "hex",
  "schemars 0.8.22",
  "serde",
@@ -6435,7 +6399,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "sov-rollup-interface",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6447,7 +6411,7 @@ dependencies = [
  "borsh",
  "bs58",
  "derivative",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "digest 0.10.7",
  "hex",
  "nearly-linear",
@@ -6461,7 +6425,7 @@ dependencies = [
  "sov-state",
  "sov-universal-wallet",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "toml",
  "tracing",
  "unwrap-infallible",
@@ -6475,8 +6439,8 @@ dependencies = [
  "bech32",
  "blake2",
  "convert_case 0.6.0",
- "darling 0.20.11",
- "derive_more 1.0.0",
+ "darling",
+ "derive_more 2.1.1",
  "hex",
  "prettier-please",
  "proc-macro2",
@@ -6501,7 +6465,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6511,14 +6475,14 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "schemars 0.8.22",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6530,7 +6494,7 @@ dependencies = [
  "bcs",
  "borsh",
  "derivative",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "schemars 0.8.22",
  "serde",
  "sov-bank",
@@ -6546,7 +6510,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "schemars 0.8.22",
  "serde",
  "sov-bank",
@@ -6554,7 +6518,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6566,7 +6530,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "digest 0.10.7",
  "hex",
  "schemars 0.8.22",
@@ -6574,7 +6538,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sov-universal-wallet",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6588,7 +6552,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-state",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6635,7 +6599,7 @@ dependencies = [
  "bcs",
  "borsh",
  "derivative",
- "derive_more 1.0.0",
+ "derive_more 2.1.1",
  "hex",
  "jmt",
  "nomt-core",
@@ -6679,7 +6643,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "strum 0.26.3",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6712,7 +6676,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sov-universal-wallet-macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6723,7 +6687,7 @@ dependencies = [
  "borsh",
  "bs58",
  "convert_case 0.6.0",
- "darling 0.20.11",
+ "darling",
  "hex",
  "proc-macro2",
  "quote",
