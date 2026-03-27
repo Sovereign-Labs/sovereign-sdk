@@ -1,6 +1,5 @@
 # 2026-03-24
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
-- #2621 EVM: Fix feeHistory endpoint for zero blocks
 - #2634 Test only changes
 - #2631 Reorganize and extend demo-stf
 
