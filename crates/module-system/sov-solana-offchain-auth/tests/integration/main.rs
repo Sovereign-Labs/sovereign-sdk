@@ -172,12 +172,14 @@ async fn create_test_rollup() -> anyhow::Result<(
     Ok((rollup, admin))
 }
 
-fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
+fn create_transfer_tx_json(
+    amount: Amount,
+    recipient: &str,
+) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
         coins: Coins {
             amount,
-            // Use the gas token ID from the config (which is the pre-configured token)
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
@@ -456,7 +458,7 @@ fn create_multisig_transfer_tx_json(
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
-        UniquenessData::Generation(0),
+        UniquenessData::Nonce(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
     );
     let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV1::<RT, S> {

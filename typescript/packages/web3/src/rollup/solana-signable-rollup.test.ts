@@ -386,6 +386,100 @@ describe("SolanaSignableRollup", () => {
     });
   });
 
+    it("should generate identical bytes to Rust test_submit_multisig_simple_message_transaction", async () => {
+      // These values were captured from the Rust test_submit_multisig_simple_message_transaction
+      // integration test in sov-solana-offchain-auth.
+      // The test uses a 2-of-3 multisig with signers 3 and 1 (out of order).
+      const key1PrivHex =
+        "277f38bac604af5f6645aaef9699685d329d732f1dffe04f38aff8f794adf260";
+      const key2PrivHex =
+        "91f03579b0cbf2dfbf74fe0b6748d1f86001150523318292140059ff4aace502";
+      const key3PrivHex =
+        "346f7dd5658fab5eddfd3e18852d1bd96742a700af12da546e3c59672ad15eda";
+      const expectedJson =
+        '{"body":{"body":"awEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9pZCI6NDMyMX0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4ifQsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLAgAAAD95q7hlXqc8Ei+b7blyeXXzuMR+cumBVMbcIpYveRlL6o2mKCPHNnL0k0bnmJrEVHVddEwqkxcmHlj3c05j1AVGb+NP/A5/44De9Zt2O5Ibx0jJNv/57lTA8tWWgxOl3W24TVCFNEBKdlb9QAppby4HcoMds8L75A6O7AVgWXDmoGMAmoKQuQGeynzpyUkB3p1H91j+1SwwShQno6sSXwa043PL9G67myiBhUpBRCOkXP/zydpVeat9wugV4hMPJwEAAAD7HLZGRVKk6PmhWBhYCFMxlyf4Q7qUe+CoceRdWPDuHgI="}}';
+
+      const mockClient = createMockClient({
+        chainId: 4321,
+        chainName: "TestChain",
+        chainHash:
+          "0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      });
+
+      let capturedPayload: any;
+      mockClient.post = vi
+        .fn()
+        .mockImplementation((path: string, options: any) => {
+          capturedPayload = options;
+          return Promise.resolve({ id: "test-tx-hash" });
+        });
+
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: (schema: any) =>
+          ({
+            schema,
+          }) as any,
+      });
+
+      const signer1 = new Ed25519Signer(key1PrivHex);
+      const signer3 = new Ed25519Signer(key3PrivHex);
+
+      const runtimeCall = {
+        bank: {
+          transfer: {
+            to: "4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL",
+            coins: {
+              amount: "7000",
+              token_id:
+                "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7",
+            },
+          },
+        },
+      };
+
+      const unsignedTx = {
+        runtime_call: runtimeCall,
+        uniqueness: { nonce: 0 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "100000000000",
+          gas_limit: [1000000000, 1000000000],
+          chain_id: 4321,
+        },
+      };
+
+      // Each signer signs independently via signTransaction (same order as Rust: key3, key1)
+      const signedTx3 = await rollup.signTransaction(unsignedTx, signer3);
+      const signedTx1 = await rollup.signTransaction(unsignedTx, signer1);
+
+      // Build V1 transaction manually (avoids a cyclic dependency on @sovereign-sdk/multisig)
+      // TODO: split solana rollup into its own crate to avoid these issues?
+      const signer2 = new Ed25519Signer(key2PrivHex);
+      const { bytesToHex } = await import("@sovereign-sdk/utils");
+      const pub2Hex = bytesToHex(await signer2.publicKey());
+
+      const v0_3 = (signedTx3 as any).V0;
+      const v0_1 = (signedTx1 as any).V0;
+
+      const multisigV1 = {
+        V1: {
+          ...unsignedTx,
+          signatures: [
+            { pub_key: v0_3.pub_key, signature: v0_3.signature },
+            { pub_key: v0_1.pub_key, signature: v0_1.signature },
+          ],
+          unused_pub_keys: [pub2Hex],
+          min_signers: 2,
+        },
+      };
+
+      await rollup.submitMultisigTransaction(multisigV1 as any);
+
+      const actualJson = JSON.stringify(capturedPayload);
+      expect(actualJson).toBe(expectedJson);
+    });
+
   describe("solanaAuto authenticator", () => {
     it("should use 'solana' authenticator for LedgerSolanaSigner", async () => {
       const mockClient = createMockClient();
