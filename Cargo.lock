@@ -12087,7 +12087,6 @@ dependencies = [
  "itertools 0.14.0",
  "jsonrpsee",
  "jsonschema",
- "lazy_static",
  "proptest",
  "rand 0.8.5",
  "reth-ethereum-primitives",
@@ -13421,7 +13420,6 @@ name = "sp1"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "lazy_static",
  "sov-zkvm-utils",
  "sp1-build",
 ]
