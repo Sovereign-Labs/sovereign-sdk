@@ -579,14 +579,14 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ./typescript/package.json
       - uses: actions/setup-node@v6
         with:
           node-version: 20.x
           cache: "pnpm"
-          cache-dependency-path: examples/demo-rollup/dapps/phantom/pnpm-lock.yaml
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: ./examples/demo-rollup/dapps/phantom/package.json
+          cache-dependency-path: typescript/pnpm-lock.yaml
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -598,7 +598,7 @@ jobs:
         with:
           name: phantom-dapp-e2e-artifacts
           path: |
-            examples/demo-rollup/dapps/phantom/playwright-report/
-            examples/demo-rollup/dapps/phantom/test-results/
+            typescript/examples/phantom/playwright-report/
+            typescript/examples/phantom/test-results/
             examples/demo-rollup/demo_rollup_log.log
           retention-days: 7

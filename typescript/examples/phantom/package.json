@@ -5,7 +5,7 @@
   "packageManager": "pnpm@9.0.0",
   "type": "module",
   "scripts": {
-    "schema": "quicktype -s schema ../../.artifacts/json-schema.json -o src/types.ts --top-level RuntimeCall",
+    "schema": "quicktype -s schema ../../../examples/demo-rollup/.artifacts/json-schema.json -o src/types.ts --top-level RuntimeCall",
     "dev": "vite dev",
     "build": "vite build && tsc --noEmit",
     "lint": "eslint .",
@@ -13,15 +13,15 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@sovereign-sdk/signers": "^0.5.1",
-    "@sovereign-sdk/web3": "0.12.6",
+    "@sovereign-sdk/signers": "workspace:^",
+    "@sovereign-sdk/web3": "workspace:^",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.30.1",
     "@playwright/test": "^1.40.0",
-    "@types/node": "^25.0.8",
+    "@types/node": "^22.13.4",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
@@ -32,6 +32,6 @@
     "quicktype": "^23.2.6",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.35.1",
-    "vite": "^7.0.3"
+    "vite": "^6.2.3"
   }
 }

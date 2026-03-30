@@ -4,7 +4,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEMO_DIR="$ROOT_DIR/examples/demo-rollup"
-DAPP_DIR="$DEMO_DIR/dapps/phantom"
+TS_DIR="$ROOT_DIR/typescript"
+DAPP_DIR="$ROOT_DIR/typescript/examples/phantom"
+DAPP_PACKAGE="phantom-solana-offchain-example"
 ROLLUP_BIN="$ROOT_DIR/target/debug/sov-demo-rollup"
 ROLLUP_LOG="$DEMO_DIR/demo_rollup_log.log"
 ROLLUP_PID=""
@@ -47,7 +49,8 @@ if ! curl -sf http://127.0.0.1:12346/healthcheck >/dev/null; then
 fi
 
 cd "$DAPP_DIR"
-pnpm install --frozen-lockfile
+pnpm --dir "$TS_DIR" install --frozen-lockfile
+pnpm --dir "$TS_DIR" --filter "${DAPP_PACKAGE}..." build
 pnpm exec playwright install --with-deps chromium
 
 CI=true \

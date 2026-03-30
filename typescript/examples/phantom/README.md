@@ -35,7 +35,7 @@ SKIP_GUEST_BUILD=1 cargo build -p sov-demo-rollup --bin sov-demo-rollup
 pnpm run schema
 ```
 
-The script reads `../../.artifacts/json-schema.json` and rewrites `src/types.ts`.
+The script reads `examples/demo-rollup/.artifacts/json-schema.json` and rewrites `src/types.ts`.
 
 ### End-to-End Tests
 
