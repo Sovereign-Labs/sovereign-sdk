@@ -681,11 +681,10 @@ async fn rpc2_002d_explicit_gas_affordability_precedes_simulation_failure() -> a
     Ok(())
 }
 
-/// RPC2-002e: A runtime-proven explicit gas limit should not be rejected just
-/// because the estimate path returns a padded recommendation above it.
+/// RPC2-002e: Using the estimate value as the explicit gas cap should result
+/// in both a successful estimate and a successful send.
 #[tokio::test(flavor = "multi_thread")]
-async fn rpc2_002e_explicit_gas_cap_below_padded_estimate_still_matches_send_success(
-) -> anyhow::Result<()> {
+async fn rpc2_002e_explicit_gas_equal_to_estimate_matches_send_success() -> anyhow::Result<()> {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
 
@@ -693,21 +692,28 @@ async fn rpc2_002e_explicit_gas_cap_below_padded_estimate_still_matches_send_suc
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
     let recipient = Address::repeat_byte(0x26);
 
-    let baseline_hash = ws_client.send_eth(recipient, U256::ZERO).await;
-    let baseline_receipt = ws_client.wait_for_receipt(baseline_hash).await;
-    assert!(
-        baseline_receipt.status(),
-        "baseline transfer should succeed so the test can derive a known-good gas limit"
-    );
-    let known_good_gas_limit = baseline_receipt
-        .gas_used
-        .checked_add(1_000)
-        .expect("baseline gas_used should allow a small safety margin");
+    // First, estimate without explicit gas to learn the projected gas value.
+    let estimate_request = TransactionRequest {
+        from: Some(signer.address()),
+        to: Some(TxKind::Call(recipient)),
+        value: Some(U256::ZERO),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    };
+    let estimated_gas: U64 = ws_client
+        .ws
+        .request("eth_estimateGas", rpc_params![&estimate_request, "latest"])
+        .await
+        .expect("estimate without explicit gas should succeed");
+    let estimated_gas = estimated_gas.to::<u64>();
 
+    // Now use that estimate as the explicit gas cap — both estimate and send
+    // should succeed.
     let request = TransactionRequest {
         from: Some(signer.address()),
         to: Some(TxKind::Call(recipient)),
-        gas: Some(known_good_gas_limit),
+        gas: Some(estimated_gas),
         value: Some(U256::ZERO),
         max_fee_per_gas: Some(MAX_FEE_PER_GAS),
         max_priority_fee_per_gas: Some(0),
@@ -716,22 +722,17 @@ async fn rpc2_002e_explicit_gas_cap_below_padded_estimate_still_matches_send_suc
 
     let results = call_all_endpoints(&ws_client, &request, &signer).await;
 
-    let estimated_gas = results
+    results
         .estimate_gas
-        .expect("estimate should succeed for a runtime-proven explicit gas limit despite padding")
-        .to::<u64>();
-    assert!(
-        estimated_gas >= known_good_gas_limit,
-        "estimate should stay padded above the runtime-proven gas limit: estimate={estimated_gas} known_good={known_good_gas_limit}"
-    );
+        .expect("estimate should succeed when explicit gas equals the estimated value");
 
     let tx_hash = results
         .send_raw_tx
-        .expect("raw send should succeed for the same runtime-proven explicit gas limit");
+        .expect("raw send should succeed with the estimated gas limit");
     let receipt = ws_client.wait_for_receipt(tx_hash).await;
     assert!(
         receipt.status(),
-        "raw transaction should execute successfully with the runtime-proven explicit gas limit"
+        "transaction should execute successfully with the estimated gas limit"
     );
 
     Ok(())

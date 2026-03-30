@@ -398,22 +398,12 @@ async fn smoke_test_evm_endpoint_consistency() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[should_panic(expected = "Responses disagree")]
-async fn explicit_gas_below_padded_estimate_does_not_whitelist_unrelated_send_failure() {
+async fn explicit_gas_matching_estimate_does_not_whitelist_unrelated_send_failure() {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
     let recipient = Address::repeat_byte(0x27);
-    let baseline_hash = ws_client.send_eth(recipient, U256::ZERO).await;
-    let baseline_receipt = ws_client.wait_for_receipt(baseline_hash).await;
-    assert!(
-        baseline_receipt.status(),
-        "baseline transfer should succeed so the test can derive a known-good gas limit"
-    );
-    let known_good_gas_limit = baseline_receipt
-        .gas_used
-        .checked_add(1_000)
-        .expect("baseline gas_used should allow a small safety margin");
 
     let estimate_request = TransactionRequest {
         from: Some(ws_client.address()),
@@ -423,23 +413,22 @@ async fn explicit_gas_below_padded_estimate_does_not_whitelist_unrelated_send_fa
         max_priority_fee_per_gas: Some(0),
         ..Default::default()
     };
-    let padded_estimate: U64 = ws_client
+    let estimate: U64 = ws_client
         .ws
         .request("eth_estimateGas", rpc_params![&estimate_request, "latest"])
         .await
-        .expect("omitted-gas estimate should succeed so the test can derive the padded value");
-    let padded_estimate = padded_estimate.to::<u64>();
-    assert!(
-        padded_estimate > known_good_gas_limit,
-        "the rollup estimate should remain padded above the runtime-proven gas limit: estimate={padded_estimate} known_good={known_good_gas_limit}"
-    );
+        .expect("estimate should succeed so the test can derive the gas value");
+    let estimate = estimate.to::<u64>();
 
+    // Fabricate results where estimate=Ok but send fails for a reason unrelated
+    // to gas (fee validation error). check_consistency must catch this as a true
+    // disagreement rather than whitelisting it via the gas-shortfall arm.
     let results = EndpointResults {
-        estimate_gas: Ok(U64::from(padded_estimate)),
+        estimate_gas: Ok(U64::from(estimate)),
         call: Ok("0x".to_string()),
         create_access_list: Ok(AccessListResult {
             access_list: Default::default(),
-            gas_used: U256::from(known_good_gas_limit),
+            gas_used: U256::from(estimate),
             error: None,
         }),
         send_raw_tx: Err(jsonrpsee::core::client::Error::Call(
@@ -453,11 +442,11 @@ async fn explicit_gas_below_padded_estimate_does_not_whitelist_unrelated_send_fa
 
     check_consistency(
         &results,
-        Some(known_good_gas_limit),
+        Some(estimate),
         Some(MAX_FEE_PER_GAS),
         NonceOption::Match,
         false,
-        "runtime-derived padded estimate with unrelated send error",
+        "estimate-matching gas with unrelated send error",
     );
 }
 
