@@ -4,6 +4,7 @@ mod prover_service;
 mod stf_info_manager;
 mod zk_manager;
 use std::num::NonZero;
+use std::sync::Arc;
 
 use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
@@ -23,6 +24,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    status: Option<Arc<ZkProofManagerStatus>>,
 ) -> anyhow::Result<JoinHandle<()>>
 where
     Ps: ProverService,
@@ -35,6 +37,7 @@ where
         genesis_state_root,
         stf_info_receiver,
         shutdown_receiver,
+        status,
     )
     .post_aggregated_proof_to_da_in_background()
     .await)

@@ -8,7 +8,12 @@ use std::sync::Arc;
 
 pub use generators::MessageGenerator;
 pub use interface::*;
+pub use manual_proof_posting::{ManualProofPostingControl, ManualProofPostingProverService};
 pub use rt_agnostic_blueprint::RtAgnosticBlueprint;
+pub use rt_agnostic_blueprint::{
+    ManualProofPostingRtAgnosticBlueprint, ManualProofPostingRtAgnosticProverService,
+    RtAgnosticProverService,
+};
 use serde::{Deserialize, Serialize};
 pub use sov_db::schema::SchemaBatch;
 pub use sov_mock_da::verifier::MockDaSpec;
@@ -41,6 +46,7 @@ pub use {
 /// Utilities for working with PostgreSQL.
 pub mod postgres;
 
+mod manual_proof_posting;
 mod rt_agnostic_blueprint;
 
 /// Utilities for recording logs.

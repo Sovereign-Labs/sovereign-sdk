@@ -1,4 +1,6 @@
 use std::num::NonZero;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -20,12 +22,99 @@ const BACKOFF_POLICY_MIN_DELAY: u64 = 1;
 const BACKOFF_POLICY_MAX_DELAY: u64 = 60;
 const BACKOFF_POLICY_MAX_NUM_RETRIES: usize = 5;
 
+/// Shared status for observing aggregate-proof progress from outside the proof manager task.
+#[derive(Debug, Default)]
+pub struct ZkProofManagerStatus {
+    blocks_until_next_aggregate_proof: AtomicUsize,
+}
+
+impl ZkProofManagerStatus {
+    /// Returns how many more blocks are needed before the next aggregate proof is ready.
+    pub fn blocks_until_next_aggregate_proof(&self) -> usize {
+        self.blocks_until_next_aggregate_proof
+            .load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn set_blocks_until_next_aggregate_proof(&self, value: usize) {
+        self.blocks_until_next_aggregate_proof
+            .store(value, Ordering::SeqCst);
+    }
+}
+
+struct ProofProgress<Ps: ProverService> {
+    proofs_to_create: UnAggregatedProofList<Ps>,
+    aggregated_proof_block_jump: NonZero<usize>,
+    status: Option<Arc<ZkProofManagerStatus>>,
+    aggregate_proof_in_flight: bool,
+}
+
+impl<Ps: ProverService> ProofProgress<Ps> {
+    fn new(
+        aggregated_proof_block_jump: NonZero<usize>,
+        status: Option<Arc<ZkProofManagerStatus>>,
+    ) -> Self {
+        let progress = Self {
+            proofs_to_create: UnAggregatedProofList::new(),
+            aggregated_proof_block_jump,
+            status,
+            aggregate_proof_in_flight: false,
+        };
+        progress.publish_status();
+        progress
+    }
+
+    fn blocks_until_next_aggregate_proof(&self) -> usize {
+        if self.aggregate_proof_in_flight {
+            return 0;
+        }
+
+        self.aggregated_proof_block_jump
+            .get()
+            .saturating_sub(self.proofs_to_create.current_proof_jump())
+    }
+
+    fn current_proof_jump(&self) -> usize {
+        self.proofs_to_create.current_proof_jump()
+    }
+
+    fn oldest_mut(&mut self) -> &mut AggregateProofMetadata<Ps> {
+        self.proofs_to_create.oldest_mut()
+    }
+
+    fn append(&mut self, block: BlockProofInfo<Ps>) {
+        self.proofs_to_create.append(block);
+        self.publish_status();
+    }
+
+    fn should_create_aggregate_proof(&self) -> bool {
+        self.current_proof_jump() >= self.aggregated_proof_block_jump.get()
+    }
+
+    fn begin_aggregate_proof_creation(&mut self) -> AggregateProofMetadata<Ps> {
+        self.aggregate_proof_in_flight = true;
+        self.proofs_to_create.close_newest_proof();
+        let metadata = self.proofs_to_create.take_oldest();
+        self.publish_status();
+        metadata
+    }
+
+    fn finish_aggregate_proof_creation(&mut self) {
+        self.aggregate_proof_in_flight = false;
+        self.publish_status();
+    }
+
+    fn publish_status(&self) {
+        if let Some(status) = &self.status {
+            status.set_blocks_until_next_aggregate_proof(self.blocks_until_next_aggregate_proof());
+        }
+    }
+}
+
 /// Manages the lifecycle of the `AggregatedProof`.
 #[allow(clippy::type_complexity)]
 pub struct ZkProofManager<Ps: ProverService> {
     prover_service: Ps,
-    proofs_to_create: UnAggregatedProofList<Ps>,
-    aggregated_proof_block_jump: NonZero<usize>,
+    proof_progress: ProofProgress<Ps>,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
     genesis_state_root: Ps::StateRoot,
@@ -46,11 +135,11 @@ where
         genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        status: Option<Arc<ZkProofManagerStatus>>,
     ) -> Self {
         Self {
             prover_service,
-            proofs_to_create: UnAggregatedProofList::new(),
-            aggregated_proof_block_jump,
+            proof_progress: ProofProgress::new(aggregated_proof_block_jump, status),
             proof_sender,
             backoff_policy: ExponentialBuilder::default()
                 .with_min_delay(Duration::from_secs(BACKOFF_POLICY_MIN_DELAY))
@@ -60,6 +149,11 @@ where
             stf_info_receiver,
             shutdown_receiver,
         }
+    }
+
+    /// Returns how many more blocks are needed before the next aggregate proof is ready.
+    pub fn blocks_until_next_aggregate_proof(&self) -> usize {
+        self.proof_progress.blocks_until_next_aggregate_proof()
     }
 
     async fn create_aggregate_proof_with_retries(
@@ -170,14 +264,14 @@ where
 
         // We ensure that we're not trying to prove blocks that are being proven.
         // If that is not the case, we add the block to the queue.
-        if first_height_unproven.saturating_add(self.proofs_to_create.current_proof_jump() as u64)
+        if first_height_unproven.saturating_add(self.proof_progress.current_proof_jump() as u64)
             <= stf_info.slot_number
         {
             let block_hash = stf_info.da_block_header().hash();
             // Save the transition for later proving. This is temporarily redundant
             // since we always just try to prove blocks right away (because we don't have fee
             // estimates for proving built out yet).
-            self.proofs_to_create.append(BlockProofInfo {
+            self.proof_progress.append(BlockProofInfo {
                 status: BlockProofStatus::Waiting(stf_info),
                 hash: block_hash,
                 // TODO(@preston-evans98): estimate public data size. This requires a new API on the `prover_service`.
@@ -187,17 +281,16 @@ where
         }
 
         // Start proving the next block right away... for now.
-        self.proofs_to_create
+        self.proof_progress
             .oldest_mut()
             .prove_any_unproven_blocks(prover_service)
             .await;
 
-        let num_proofs_to_create = self.proofs_to_create.current_proof_jump();
+        let num_proofs_to_create = self.proof_progress.current_proof_jump();
 
         // If we've covered enough blocks for the aggregate proof, generate and submit it to DA
-        if num_proofs_to_create >= self.aggregated_proof_block_jump.get() {
-            self.proofs_to_create.close_newest_proof();
-            let metadata = self.proofs_to_create.take_oldest();
+        if self.proof_progress.should_create_aggregate_proof() {
+            let metadata = self.proof_progress.begin_aggregate_proof_creation();
 
             let agg_proof = self
                 .create_aggregate_proof_with_retries(
@@ -219,6 +312,7 @@ where
             // Update the next height to receive
             self.stf_info_receiver
                 .inc_next_height_to_receive_by(num_proofs_to_create as u64);
+            self.proof_progress.finish_aggregate_proof_creation();
         }
         Ok(())
     }
