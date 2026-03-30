@@ -16,7 +16,7 @@ use sov_modules_api::{DispatchCall, Spec};
 /// Writes to `target` atomically using a temp file + rename pattern.
 ///
 /// The `write_fn` closure receives a buffered writer for the temp file.
-/// After the closure returns, data is flushed and synced to disk, then the
+/// After the closure returns, data is flushed, synced to disk, and the
 /// temp file is atomically renamed to `target`.
 ///
 /// The temp file name includes PID and timestamp to avoid collisions when
@@ -37,38 +37,29 @@ where
     temp_os.push(&unique_suffix);
     let temp_path = PathBuf::from(temp_os);
 
-    let result = (|| -> anyhow::Result<()> {
-        let file = File::create(&temp_path)
-            .with_context(|| format!("Failed to create temp file {temp_path:?}"))?;
-        let mut buf_writer = BufWriter::new(file);
+    let file = File::create(&temp_path)
+        .with_context(|| format!("Failed to create temp file {temp_path:?}"))?;
+    let mut buf_writer = BufWriter::new(file);
 
-        write_fn(&mut buf_writer)
-            .with_context(|| format!("Failed to write to temp file {temp_path:?}"))?;
+    write_fn(&mut buf_writer)
+        .with_context(|| format!("Failed to write to temp file {temp_path:?}"))?;
 
-        buf_writer
-            .flush()
-            .with_context(|| format!("Failed to flush temp file {temp_path:?}"))?;
+    buf_writer
+        .flush()
+        .with_context(|| format!("Failed to flush temp file {temp_path:?}"))?;
 
-        let file = buf_writer
-            .into_inner()
-            .map_err(|e| e.into_error())
-            .with_context(|| format!("Failed to unwrap BufWriter for {temp_path:?}"))?;
+    let file = buf_writer
+        .into_inner()
+        .map_err(|e| e.into_error())
+        .with_context(|| format!("Failed to unwrap BufWriter for {temp_path:?}"))?;
 
-        file.sync_all()
-            .with_context(|| format!("Failed to sync temp file {temp_path:?} to disk"))?;
+    file.sync_all()
+        .with_context(|| format!("Failed to sync temp file {temp_path:?} to disk"))?;
 
-        std::fs::rename(&temp_path, target)
-            .with_context(|| format!("Failed to rename {temp_path:?} to {target:?}"))?;
+    std::fs::rename(&temp_path, target)
+        .with_context(|| format!("Failed to rename {temp_path:?} to {target:?}"))?;
 
-        Ok(())
-    })();
-
-    if result.is_err() {
-        // Best-effort cleanup of temp file on failure.
-        let _ = std::fs::remove_file(&temp_path);
-    }
-
-    result
+    Ok(())
 }
 
 /// Builder for configuring build options.
