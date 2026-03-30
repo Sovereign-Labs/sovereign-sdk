@@ -28,6 +28,7 @@ use sov_full_node_configs::sequencer::{PreferredSequencerConfig, SequencerConfig
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::GasArray;
 use sov_modules_api::GasSpec;
+use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::collections::BTreeMap;
@@ -191,15 +192,19 @@ where
         seq_config.max_batch_size_bytes,
     );
 
+    let executor = RollupBlockExecutor::new(
+        &latest_info,
+        rollup_exec_config.clone(),
+        seq_config.clone(),
+        Default::default(),
+        None, // We'll populate the pinned cache on the first `update_state` call.
+    );
+    let executor_rebase_height = executor.checkpoint.rollup_height_to_access();
+
     let inner = Inner {
         seq_role,
-        executor: RollupBlockExecutor::new(
-            &latest_info,
-            rollup_exec_config.clone(),
-            seq_config.clone(),
-            Default::default(),
-            None, // We'll populate the pinned cache on the first `update_state` call.
-        ),
+        executor,
+        executor_rebase_height,
         latest_info,
         tx_queue_id,
         batch_execution_time_limit_micros,
