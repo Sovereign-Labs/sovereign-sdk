@@ -482,15 +482,6 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(entry) = self.local_user_writes.get(key) {
             return Ok(entry.clone());
         }
-        // Check uncommitted sequencer state changes (already filtered to the
-        // requested height by `build_archival_state`) before falling through to
-        // committed storage.  This is essential when the preferred sequencer
-        // runs ahead of committed storage.
-        if let Some(changes) = self.uncommitted_changes.as_ref() {
-            if let MaybePresentValue::Present(entry) = changes.get(Namespace::User, key) {
-                return Ok(entry);
-            }
-        }
         // If not, read it from storage
         self.checkpoint_and_read_txn
             .state_checkpoint
@@ -509,11 +500,6 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(entry) = self.local_kernel_writes.get(key) {
             return Ok(entry.clone());
         }
-        if let Some(changes) = self.uncommitted_changes.as_ref() {
-            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Kernel, key) {
-                return Ok(entry);
-            }
-        }
         // If not, read it from storage
         self.checkpoint_and_read_txn
             .state_checkpoint
@@ -529,11 +515,6 @@ impl<S: Spec> ApiStateAccessor<S> {
         // First, check if the accessory has written this value. This allows users to write during eth_call even if they're reading historical state.
         if let Some(write) = self.local_accessory_writes.get(key) {
             return Ok(write.value.clone());
-        }
-        if let Some(changes) = self.uncommitted_changes.as_ref() {
-            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
-                return Ok(entry);
-            }
         }
         // If not, read it from storage
         self.checkpoint_and_read_txn
@@ -812,10 +793,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     if max_height < height {
                         return Err(ApiStateAccessorError::HeightNotAccessible);
                     }
-                    // The data for this height lives (partly or fully) in
-                    // uncommitted changes.  Filtering is deferred to after
-                    // `rollup_height` is resolved so that it applies to every
-                    // code-path uniformly.
+                    // Otherwise, drop any uncommitted changes that are after the requested height and use our latest slot number from storage as a safe commit.
+                    // (Anything not already in storage by that point will be in the uncommitted changes)
+                    if let Some(c) = state.uncommitted_changes.as_mut() {
+                        c.ignore_changes_after_height(height);
+                    }
                     latest_true_slot_number
                 } else if height == kernel.current_rollup_height(&mut state) {
                     // There's a tricky case here where the height exists in storage but the true slot number is not available via the kernel yet.
@@ -849,13 +831,6 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 result.unwrap_or_else(|| panic!("Visible slot number not available for slot_number {slot_number}, but that slot exists in storage. This is a bug. Please report it."))
             }
         };
-        // Always filter uncommitted changes to the requested rollup height so
-        // that archival reads never see state from blocks beyond the requested
-        // one.  This is essential in the preferred-sequencer setup where the
-        // sequencer runs ahead of committed storage by `ideal_lag` blocks.
-        if let Some(c) = state.uncommitted_changes.as_mut() {
-            c.ignore_changes_after_height(rollup_height);
-        }
         // Use the slot number to find the visible slot number.
         let result = kernel.visible_slot_number_at(true_slot_number, &mut state);
 
