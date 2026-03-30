@@ -4,6 +4,7 @@
 - #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
 - #2671 Fixes API archival query race condition
 - #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
+- #2658 (Non-breaking) Add multisig support to the sov-solana-offchain-authenticator, but only when using simple signing (i.e. multisigs are not yet supported with Ledger wallets).
 
 # 2026-03-24
 - #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
