@@ -933,15 +933,17 @@ where
         .base_fee_per_gas(&mut accessor)
         .unwrap_or(S::initial_base_fee_per_gas());
     // Note that we need to escrow gas for each batch and proof. The escrow amount is `max_tx_check_costs` in each case.
-    let needed_gas_escrow =
-        if target_rollup_height > <S as GasSpec>::change_gas_limit_after_height() {
+    let standard_gas_escrow = S::max_tx_check_costs()
+        .checked_value(next_gas_price)
+        .expect("Gas price overflow! This is a bug, please report it.");
+    let needed_gas_escrow_for_preferred_sequencer =
+    // The blob sender decides what the gas limit should be *before* we call `increment_rollup_height`. Use the same height
+        if old_rollup_height > <S as GasSpec>::change_gas_limit_after_height() {
             Amount::ZERO
         } else {
-            S::max_tx_check_costs()
-                .checked_value(next_gas_price)
-                .expect("Gas price overflow! This is a bug, please report it.")
+            standard_gas_escrow
         };
-    kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+    kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
 
     let blob_selector_output = {
         let preferred_blob = SelectedBlob {
@@ -954,7 +956,7 @@ where
                 sequencer_rollup_address,
                 is_responsible_for_gating_admins,
             )),
-            reserved_gas_tokens: Some(needed_gas_escrow),
+            reserved_gas_tokens: Some(needed_gas_escrow_for_preferred_sequencer),
             sender: sequencer_da_address,
         };
 
@@ -972,7 +974,7 @@ where
                 // Batches from unregistered sequencers don't reserve any gas
                 // tokens.
                 if b.reserved_gas_tokens.is_some() {
-                    b.reserved_gas_tokens = Some(needed_gas_escrow);
+                    b.reserved_gas_tokens = Some(standard_gas_escrow);
                 }
                 b.map_batch(MaybeAsyncBatch::<S>::new_sync)
             })
@@ -983,7 +985,7 @@ where
         let selected_blobs = proofs_to_replay
             .into_iter()
             .map(|p| {
-                kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+                kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
                 let proof_with_sequence_number = PreferredProofData::try_from_slice(&p.data.0).expect("Failed to deserialize trusted proof data within the sequencer. This is a bug, please report it.");
                 SelectedBlob {
                 blob_data: BlobDataWithId::Proof {
@@ -991,7 +993,7 @@ where
                     id: [0u8; 32], // Following the preferred batch logic, we use the zero hash for proofs whose blob ID is unknown because they haven't been published yet
                     sequencer_address: sequencer_rollup_address,
                 },
-                reserved_gas_tokens: Some(needed_gas_escrow),
+                reserved_gas_tokens: Some(needed_gas_escrow_for_preferred_sequencer),
                 sender: sequencer_da_address,
             }})
             .chain(std::iter::once(preferred_blob))

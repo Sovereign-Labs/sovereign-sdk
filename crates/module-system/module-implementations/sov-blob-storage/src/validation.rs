@@ -127,6 +127,10 @@ impl<S: Spec> BlobStorage<S> {
         } else {
             gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?
         };
+
+        if funds_needed > available_balance {
+            return None;
+        }
         self.escrow_funds_for_preferred_sequencer(funds_needed, state)
             .ok()?;
 

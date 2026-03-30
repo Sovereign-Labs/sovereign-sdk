@@ -2338,8 +2338,9 @@ async fn test_gas_limit_update() {
                 .unwrap();
             // Parse the integer price from a string like "[10, 10]"
             let current_base_fee = base_fee_per_gas
-                .trim_start_matches('[')
-                .split(|c: char| c == ',')
+                .trim()
+                .trim_start_matches(r#"{"base_fee_per_gas":[""#)
+                .split(|c: char| c == '"')
                 .next()
                 .unwrap()
                 .parse::<u64>()
