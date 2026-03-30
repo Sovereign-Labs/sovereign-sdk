@@ -527,9 +527,22 @@ impl<S: Spec> ApiStateAccessor<S> {
 /// An error that can occur when creating an [`ApiStateAccessor`].
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 pub enum ApiStateAccessorError {
-    /// The requested height is not accessible.
-    #[error("Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.")]
-    HeightNotAccessible,
+    /// The requested height is not accessible (future, not found, or not yet committed).
+    #[error("Rollup state not accessible. Requested: {requested}, latest: {latest}")]
+    HeightNotAccessible {
+        /// The height or slot number that was requested.
+        requested: u64,
+        /// The latest available height or slot number.
+        latest: u64,
+    },
+    /// The requested height has been pruned from storage.
+    #[error("Rollup state has been pruned. Requested: {requested}, latest: {latest}")]
+    HeightPruned {
+        /// The height or slot number that was requested.
+        requested: u64,
+        /// The latest available height or slot number.
+        latest: u64,
+    },
 }
 
 impl<S: Spec + 'static> ApiStateAccessor<S> {
@@ -694,13 +707,33 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             let Some(rollup_height) =
                 kernel.true_slot_number_to_rollup_height(slot_number, &mut out)
             else {
-                return Err(ApiStateAccessorError::HeightNotAccessible);
+                return Err(ApiStateAccessorError::HeightNotAccessible {
+                    requested: slot_number.get(),
+                    latest: out
+                        .checkpoint_and_read_txn
+                        .state_checkpoint
+                        .storage()
+                        .latest_version()
+                        .get(),
+                });
             };
             out.state_to_access = StateToAccess::TrueSlotNumber(slot_number, Some(rollup_height));
         }
 
         let Some(visible_slot_number) = out.lookup_visible_slot_number() else {
-            return Err(ApiStateAccessorError::HeightNotAccessible);
+            let requested = match state_to_access {
+                StateToAccess::RollupHeight(h) => h.get(),
+                StateToAccess::TrueSlotNumber(s, _) => s.get(),
+            };
+            return Err(ApiStateAccessorError::HeightNotAccessible {
+                requested,
+                latest: out
+                    .checkpoint_and_read_txn
+                    .state_checkpoint
+                    .storage()
+                    .latest_version()
+                    .get(),
+            });
         };
 
         out.visible_slot_number = Some(visible_slot_number);
@@ -791,7 +824,10 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 {
                     // If the requested height is greater than our uncommitted changes, we can't access it.
                     if max_height < height {
-                        return Err(ApiStateAccessorError::HeightNotAccessible);
+                        return Err(ApiStateAccessorError::HeightNotAccessible {
+                            requested: height.get(),
+                            latest: max_height.get(),
+                        });
                     }
                     // Otherwise, drop any uncommitted changes that are after the requested height and use our latest slot number from storage as a safe commit.
                     // (Anything not already in storage by that point will be in the uncommitted changes)
@@ -808,12 +844,18 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     // as reported by the kernel. (Recall that, since the caches are empty, the "current_rollup_height" value reported by the kernel is the value stored at S::Storage::latest_version.)
                     latest_true_slot_number
                 } else {
-                    return Err(ApiStateAccessorError::HeightNotAccessible);
+                    return Err(ApiStateAccessorError::HeightNotAccessible {
+                        requested: height.get(),
+                        latest: latest_true_slot_number.get(),
+                    });
                 }
             }
             StateToAccess::TrueSlotNumber(slot_number, _) => {
                 if slot_number > latest_true_slot_number {
-                    return Err(ApiStateAccessorError::HeightNotAccessible);
+                    return Err(ApiStateAccessorError::HeightNotAccessible {
+                        requested: slot_number.get(),
+                        latest: latest_true_slot_number.get(),
+                    });
                 }
                 slot_number
             }
@@ -826,7 +868,10 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             StateToAccess::TrueSlotNumber(slot_number, None) => {
                 let result = kernel.true_slot_number_to_rollup_height(slot_number, &mut state);
                 if state.encountered_pruning_error.is_some() {
-                    return Err(ApiStateAccessorError::HeightNotAccessible);
+                    return Err(ApiStateAccessorError::HeightPruned {
+                        requested: slot_number.get(),
+                        latest: latest_true_slot_number.get(),
+                    });
                 }
                 result.unwrap_or_else(|| panic!("Visible slot number not available for slot_number {slot_number}, but that slot exists in storage. This is a bug. Please report it."))
             }
@@ -853,7 +898,10 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             &mut StateAccessMetric::new_read(), // We throw away the metric from this test query because it should almost always be cached and wasn't requested by the user
         );
         if state.encountered_pruning_error.is_some() {
-            return Err(ApiStateAccessorError::HeightNotAccessible);
+            return Err(ApiStateAccessorError::HeightPruned {
+                requested: true_slot_number.get(),
+                latest: latest_true_slot_number.get(),
+            });
         }
 
         // Clear out any new values that were put in cache during initialization. Otherwise, we'd incorrectly estimate gas costs for

@@ -334,7 +334,7 @@ async fn check_historical_data(client: &demo_stf_json_client::Client) -> anyhow:
         state_vec_element_response,
         "invalid rollup height",
         "error",
-        "Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.",
+        "not accessible",
     );
     Ok(())
 }
@@ -343,7 +343,7 @@ fn check_not_found_error(
     credential_id_response: demo_stf_json_client::Error<RuntimeError>,
     expected_title: &str,
     expected_details_key: &str,
-    expected_key: &str,
+    expected_substring: &str,
 ) {
     match credential_id_response {
         demo_stf_json_client::Error::ErrorResponse(error) => {
@@ -351,9 +351,15 @@ fn check_not_found_error(
             assert_eq!(404, error.status);
             assert_eq!(1, error.details.len());
             assert!(error.details.contains_key(expected_details_key));
-            assert_eq!(
-                Some(serde_json::Value::String(expected_key.to_string())),
-                error.details.get(expected_details_key).cloned()
+            let value = error
+                .details
+                .get(expected_details_key)
+                .unwrap()
+                .as_str()
+                .unwrap();
+            assert!(
+                value.contains(expected_substring),
+                "Expected error to contain '{expected_substring}', got: {value}"
             );
         }
         _ => {

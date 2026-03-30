@@ -248,7 +248,7 @@ impl<S: Spec, T> ApiState<S, T> {
                 .kernel
                 .base_fee_per_gas_at(height, &mut state)
                 .ok_or_else(|| {
-                    anyhow::anyhow!("Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.")
+                    anyhow::anyhow!("Base fee per gas not available at rollup height {height}. The height may have been pruned or is not yet fully committed.")
                 })?;
 
                 state.set_gas_price(gas_price);
@@ -273,7 +273,7 @@ impl<S: Spec, T> ApiState<S, T> {
                 .kernel
                 .base_fee_per_gas_at(height, &mut state)
                 .ok_or_else(|| {
-                    anyhow::anyhow!("Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.")
+                    anyhow::anyhow!("Base fee per gas not available at current rollup height {height}. This may indicate a transient state during slot processing.")
                 })?;
 
                 state.set_gas_price(gas_price);
