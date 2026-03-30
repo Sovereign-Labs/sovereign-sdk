@@ -1,21 +1,39 @@
+use std::sync::Arc;
+use std::time::Duration;
+
 use demo_stf::MultiAddressEvmSolana;
+use std::sync::LazyLock;
 use sov_celestia_adapter::verifier::CelestiaSpec;
-use sov_mock_da::{BlockProducingConfig, MockDaSpec};
-use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
+use sov_db::ledger_db::LedgerDb;
+use sov_db::storage_manager::NomtStorageManager;
+use sov_mock_da::storable::StorableMockDaService;
+use sov_mock_da::{BlockProducingConfig, MockDaSpec, MockHash};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmNetwork};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::Amount;
+use sov_modules_api::default_spec::DefaultNomtSpec;
+use sov_modules_api::execution_mode::Native;
+use sov_modules_api::prelude::axum::async_trait;
+use sov_modules_api::rest::StateUpdateReceiver;
+use sov_modules_api::{Amount, CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier};
+use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
+use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_paymaster::{
     PayeePolicy, PayerGenesisConfig, Paymaster, PaymasterConfig, PaymasterPolicyInitializer,
     SafeVec,
 };
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::Native;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
-use sov_sequencer::SequencerKindConfig;
+use sov_sequencer::{ProofBlobSender, SequencerKindConfig};
+use sov_sp1_adapter::network::SP1Network;
+use sov_sp1_adapter::{SP1, SP1MethodId};
 pub use sov_soak_testing_lib::*;
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::DefaultStorageSpec;
+use sov_state::{DefaultStorageSpec, Storage};
+use sov_stf_runner::processes::{NetworkProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::RollupConfig;
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
@@ -33,9 +51,10 @@ pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingC
 
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 5;
 
+
 pub type TestRT = TestRuntime<TestSpec>;
-pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRT>;
-pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
+pub type MockRollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRT>;
+pub type TestRollupBuilder = RollupBuilder<MockRollupBlueprint>;
 
 type SoakHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 
@@ -67,6 +86,20 @@ pub type MockDemoRollupSpec = ConfigurableSpec<
 >;
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
+
+pub type SP1TestSpec = DefaultNomtSpec<MockDaSpec, SP1, MockZkvm, Native>;
+pub type SP1TestRT = TestRuntime<SP1TestSpec>;
+
+type SP1StorageManager = NomtStorageManager<
+    MockDaSpec,
+    <<SP1TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+    NomtProverStorage<
+        DefaultStorageSpec<<<SP1TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+        MockHash,
+    >,
+>;
+
+
 generate_runtime! {
     name: TestRuntime,
     modules: [paymaster: Paymaster<S>, synthetic_load: SyntheticLoad<S>],
@@ -79,24 +112,143 @@ generate_runtime! {
     auth_call_wrapper: |call| call,
 }
 
-pub struct Setup {
-    /// A user who is pre-registered as a payer for [`Setup::sequencer`].
-    #[allow(dead_code)]
-    pub paymaster: TestUser<TestSpec>,
-    /// The pre-registered sequencer
-    pub sequencer: TestSequencer<TestSpec>,
-    /// The pre-registered prover
-    pub prover: TestProver<TestSpec>,
-    #[allow(missing_docs)]
-    pub genesis_config: GenesisConfig<TestSpec>,
+
+pub static SOAK_INNER_GUEST_SP1_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
+    let path = format!(
+        "{}/inner-guest-sp1/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-soak-testing-inner-guest-sp1",
+        env!("CARGO_MANIFEST_DIR")
+    );
+    let elf = std::fs::read(&path)
+        .unwrap_or_else(|e| panic!("Failed to read SP1 inner guest ELF at '{path}': {e}. Build it first (unset SKIP_GUEST_BUILD)."));
+    assert!(
+        !elf.is_empty(),
+        "SP1 inner guest ELF at '{path}' is empty. Build it first (unset SKIP_GUEST_BUILD)."
+    );
+    Vec::leak(elf)
+});
+
+
+#[derive(Default)]
+pub struct NetworkProvingBlueprint;
+
+impl RollupBlueprint<Native> for NetworkProvingBlueprint {
+    type Spec = SP1TestSpec;
+    type Runtime = SP1TestRT;
 }
 
-pub fn setup_roles_and_config() -> Setup {
-    let mut genesis_config = HighLevelZkGenesisConfig::generate();
+#[async_trait]
+impl FullNodeBlueprint<Native> for NetworkProvingBlueprint {
+    type DaService = StorableMockDaService;
 
+    type StorageManager = SP1StorageManager;
+
+    type ProverService = NetworkProverService<
+        <SP1TestSpec as Spec>::Address,
+        <<SP1TestSpec as Spec>::Storage as Storage>::Root,
+        <<SP1TestSpec as Spec>::Storage as Storage>::Witness,
+        StorableMockDaService,
+        SP1,
+        MockZkvm,
+    >;
+
+    type ProofSender = SovApiProofSender<SP1TestSpec>;
+
+    fn create_outer_code_commitment(
+        &self,
+    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
+        MockCodeCommitment::default()
+    }
+
+    async fn create_endpoints(
+        &self,
+        state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
+        sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        ledger_db: &LedgerDb,
+        sequencer: &SequencerCreationReceipt<Self::Spec>,
+        _da_service: &Self::DaService,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+    ) -> anyhow::Result<NodeEndpoints> {
+        Ok(
+            sov_modules_rollup_blueprint::register_endpoints::<Self, Native>(
+                state_update_receiver,
+                sync_status_receiver,
+                shutdown_receiver,
+                ledger_db,
+                sequencer,
+                rollup_config,
+            )
+            .await?,
+        )
+    }
+
+    async fn create_da_service(
+        &self,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    ) -> Self::DaService {
+        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
+    }
+
+    async fn create_prover_service(
+        &self,
+        _prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        _da_service: &Self::DaService,
+    ) -> Self::ProverService {
+        let inner_vm = SP1Network::new(*SOAK_INNER_GUEST_SP1_ELF)
+            .await
+            .expect("Failed to create SP1Network — is NETWORK_PRIVATE_KEY set?");
+        // auto-complete outer proofs — real outer not supported yet
+        let outer_vm = MockZkvmNetwork::new(true);
+        let da_verifier = Default::default();
+
+        NetworkProverService::new(
+            inner_vm,
+            outer_vm,
+            da_verifier,
+            CodeCommitmentHash::default(),
+            rollup_config.proof_manager.prover_address,
+            Duration::from_secs(600),
+        )
+    }
+
+    fn create_storage_manager(
+        &self,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        witness_generation: bool,
+    ) -> anyhow::Result<Self::StorageManager> {
+        NomtStorageManager::new(rollup_config.storage.clone(), witness_generation)
+    }
+
+    fn create_proof_sender(
+        &self,
+        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        proof_blob_sender: Arc<dyn ProofBlobSender>,
+    ) -> anyhow::Result<Self::ProofSender> {
+        Ok(Self::ProofSender::new(proof_blob_sender))
+    }
+}
+
+
+pub struct Setup<S: Spec = TestSpec> {
+    /// A user who is pre-registered as a payer for [`Setup::sequencer`].
+    #[allow(dead_code)]
+    pub paymaster: TestUser<S>,
+    /// The pre-registered sequencer
+    pub sequencer: TestSequencer<S>,
+    /// The pre-registered prover
+    pub prover: TestProver<S>,
+    #[allow(missing_docs)]
+    pub genesis_config: GenesisConfig<S>,
+}
+
+fn finalize_genesis_config<S: Spec<Da = MockDaSpec>>(
+    mut genesis_config: HighLevelZkGenesisConfig<S>,
+) -> Setup<S> {
     let sequencer = genesis_config.initial_sequencer.clone();
     let prover = genesis_config.initial_prover.clone();
-    let paymaster = TestUser::generate(
+    let paymaster = TestUser::<S>::generate(
         TEST_DEFAULT_USER_BALANCE
             .checked_mul(Amount::new(10))
             .unwrap(),
@@ -105,9 +257,9 @@ pub fn setup_roles_and_config() -> Setup {
         .additional_accounts_mut()
         .push(paymaster.clone());
 
-    let users: Vec<TestUser<TestSpec>> = vec![TestUser::generate_with_default_balance(); 20];
-
+    let users: Vec<TestUser<S>> = vec![TestUser::generate_with_default_balance(); 20];
     genesis_config.additional_accounts_mut().extend(users);
+
     let genesis_config = GenesisConfig::from_minimal_config(
         genesis_config.into(),
         PaymasterConfig {
@@ -140,18 +292,65 @@ pub fn setup_roles_and_config() -> Setup {
     }
 }
 
-pub async fn setup_rollup(
-    storage_path: PathBuf,
+pub fn setup_roles_and_config() -> Setup<TestSpec> {
+    finalize_genesis_config(HighLevelZkGenesisConfig::generate())
+}
+
+pub fn setup_roles_and_config_sp1() -> Setup<SP1TestSpec> {
+    finalize_genesis_config(
+        HighLevelZkGenesisConfig::<SP1TestSpec>::generate_with_additional_accounts_and_code_commitments(
+            0,
+            SP1MethodId(vec![]),
+            Default::default(), // MockCodeCommitment for outer
+        ),
+    )
+}
+
+
+pub type SP1RollupBuilder = RollupBuilder<NetworkProvingBlueprint>;
+
+/// Common rollup builder configuration shared by all modes.
+fn configure_rollup_builder<R>(
+    builder: RollupBuilder<R>,
+    setup: &Setup<R::Spec>,
     axum_port: u16,
-    setup: Setup,
-    db_connection_url: Option<String>,
-) -> TestRollup<RollupBlueprint> {
-    let postgres_config = db_connection_url.map(|url| PostgresConfig {
+    postgres_config: Option<PostgresConfig>,
+) -> RollupBuilder<R>
+where
+    R: FullNodeBlueprint<Native> + Default + 'static,
+    R::Spec: Spec<Da = MockDaSpec>,
+{
+    builder.set_config(|config| {
+        config.telegraf_address = sov_metrics::MonitoringConfig::standard().telegraf_address;
+        config.automatic_batch_production = true;
+        config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
+            minimum_profit_per_tx: 0,
+            postgres_config,
+            batch_execution_time_limit_millis: 400,
+            ..Default::default()
+        });
+        config.prover_address = setup.prover.user_info.address().to_string();
+        config.aggregated_proof_block_jump = 3;
+        config.axum_port = axum_port;
+    })
+}
+
+fn make_postgres_config(db_connection_url: Option<String>) -> Option<PostgresConfig> {
+    db_connection_url.map(|url| PostgresConfig {
         postgres_connection_string: url,
         node_id: "Primary".to_string(),
         node_role: ConfiguredNodeRole::Leader,
         leader_election: Default::default(),
-    });
+    })
+}
+
+pub async fn setup_rollup(
+    storage_path: PathBuf,
+    axum_port: u16,
+    setup: Setup<TestSpec>,
+    db_connection_url: Option<String>,
+) -> TestRollup<MockRollupBlueprint> {
+    let postgres_config = make_postgres_config(db_connection_url);
 
     let rollup_builder = TestRollupBuilder::new_with_storage_path(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
@@ -159,28 +358,46 @@ pub async fn setup_rollup(
         DEFAULT_FINALIZATION_BLOCKS,
         StoragePath::Buf(storage_path),
         false,
-    )
-    .set_config(|config| {
-        config.telegraf_address = sov_metrics::MonitoringConfig::standard().telegraf_address;
-        config.automatic_batch_production = true;
-        config.rollup_prover_config = None;
-        config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
-            minimum_profit_per_tx: 0,
-            postgres_config,
-            ..Default::default()
+    );
+    let rollup_builder = configure_rollup_builder(rollup_builder, &setup, axum_port, postgres_config)
+        .set_config(|config| {
+            config.rollup_prover_config = None;
+        })
+        .set_da_config(|da_config| {
+            da_config.sender_address = setup.sequencer.da_address;
         });
-        config.prover_address = setup.prover.user_info.address().to_string();
-        config.aggregated_proof_block_jump = 3;
-        config.axum_port = axum_port;
-        if let SequencerKindConfig::Preferred(preferred_sequencer_config) =
-            &mut config.sequencer_config
-        {
-            preferred_sequencer_config.batch_execution_time_limit_millis = 400;
-        }
-    })
-    .set_da_config(|da_config| {
-        da_config.sender_address = setup.sequencer.da_address;
-    });
+    rollup_builder
+        .start()
+        .await
+        .expect("Impossible to start rollup")
+}
+
+pub async fn setup_rollup_with_network_proving(
+    storage_path: PathBuf,
+    axum_port: u16,
+    setup: Setup<SP1TestSpec>,
+    db_connection_url: Option<String>,
+) -> TestRollup<NetworkProvingBlueprint> {
+    let postgres_config = make_postgres_config(db_connection_url);
+
+    let rollup_builder = SP1RollupBuilder::new_with_storage_path(
+        GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
+        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        DEFAULT_FINALIZATION_BLOCKS,
+        StoragePath::Buf(storage_path),
+        false,
+    );
+    let rollup_builder = configure_rollup_builder(rollup_builder, &setup, axum_port, postgres_config)
+        .set_config(|config| {
+            // Enable witness generation so proofs can be submitted to the network.
+            // The actual host args are unused by NetworkProverService.
+            config.rollup_prover_config = Some(RollupProverConfig::Execute(Arc::new(
+                *SOAK_INNER_GUEST_SP1_ELF,
+            )));
+        })
+        .set_da_config(|da_config| {
+            da_config.sender_address = setup.sequencer.da_address;
+        });
     rollup_builder
         .start()
         .await

@@ -48,6 +48,16 @@ sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 sov-soak-testing-lib = { workspace = true }
+sov-db = { workspace = true }
+sov-sp1-adapter = { workspace = true, features = ["native", "arbitrary"] }
+sov-stf-runner = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
+tracing = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+sp1-build = "6.0.2"
+sov-zkvm-utils = { workspace = true }
 
 [[bin]]
 name = "main"
