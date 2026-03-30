@@ -74,7 +74,9 @@ where
     }))
 }
 
-fn derive_receipt_gas_used_from_actual_fee<GU: Gas>(gas_info: &GasInfo<GU>) -> anyhow::Result<u64> {
+pub(crate) fn derive_receipt_gas_used_from_actual_fee<GU: Gas>(
+    gas_info: &GasInfo<GU>,
+) -> anyhow::Result<u64> {
     let Some(primary_gas_price) = gas_info.gas_price.as_ref().first() else {
         bail!("EVM: gas price vector must have at least one dimension");
     };

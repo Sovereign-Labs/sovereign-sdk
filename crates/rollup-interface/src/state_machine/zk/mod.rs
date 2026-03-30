@@ -114,28 +114,11 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>>;
 }
 
-/// A commitment to a zkVM program.
-pub trait CodeCommitment:
-    Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq
-{
-    /// An error that occurs while trying to decode a commitment.
-    type DecodeError: Debug;
-
-    /// Encodes the commitment into a byte sequence. Any kind of serializer may be used,
-    /// as long as this method is inverted by the [`CodeCommitment::decode`] method.
-    fn encode(&self) -> Vec<u8>;
-
-    /// Decodes the commitment from a byte sequence.
-    ///
-    /// This method must be the inverse of the [`CodeCommitment::encode`] method.
-    fn decode(data: &[u8]) -> Result<Self, Self::DecodeError>;
-}
-
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
 pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// A commitment to the zkVM program which is being proven
-    type CodeCommitment: CodeCommitment;
+    type CodeCommitment: Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq;
 
     /// Defines the cryptographic operations provided natively by the Zkvm.
     type CryptoSpec: CryptoSpec;
@@ -143,10 +126,10 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// The error type which is returned when a proof fails to verify
     type Error: Debug;
 
-    /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
-    /// If the proof is valid, return a public outputs of the proof.
+    /// Interpret a sequence of a bytes as a receipt and attempt to verify it against the code commitment.
+    /// If the receipt is valid, return a public outputs of the proof.
     fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+        serialized_receipt: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error>;
 }
@@ -165,15 +148,13 @@ pub trait ZkvmNetwork: Send + Sync + 'static {
     /// An opaque handle returned by [`ZkvmNetwork::submit`] that identifies a pending proof.
     type ProofHandle: Send + Sync + Clone + core::fmt::Debug + 'static;
 
-    /// Give the guest a piece of advice non-deterministically.
-    fn add_hint<T: Serialize>(&mut self, item: &T);
-
-    /// Submit the current program and hints for remote proving.
+    /// Add a hint and submit the proof request in one atomic operation.
     ///
     /// Network proving always generates a real proof.
     /// Returns a [`Self::ProofHandle`] that can be passed to [`ZkvmNetwork::poll`] to check for the result.
-    fn submit(
-        &mut self,
+    fn add_hint_and_submit<T: Serialize + Send + Sync>(
+        &self,
+        item: &T,
     ) -> impl core::future::Future<Output = anyhow::Result<Self::ProofHandle>> + Send;
 
     /// Check whether a previously submitted proof is ready.
@@ -201,11 +182,10 @@ impl<G: ZkvmGuest + 'static> ZkvmNetwork for NoopZkvmNetwork<G> {
     type Guest = G;
     type ProofHandle = ();
 
-    fn add_hint<T: Serialize>(&mut self, _item: &T) {
-        match self._void {}
-    }
-
-    async fn submit(&mut self) -> anyhow::Result<Self::ProofHandle> {
+    async fn add_hint_and_submit<T: Serialize + Send + Sync>(
+        &self,
+        _item: &T,
+    ) -> anyhow::Result<Self::ProofHandle> {
         match self._void {}
     }
 

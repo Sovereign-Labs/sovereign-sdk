@@ -6,6 +6,7 @@ mod genesis;
 mod helpers;
 mod max_fee;
 mod pruning;
+mod request_preflight;
 mod rpc_basefee;
 mod rpc_call_overrides;
 mod runtime;

@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use alloy_consensus::BlockHeader;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_rpc_types::FeeHistory;
-use jsonrpsee::types::error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE};
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
@@ -43,11 +43,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<FeeHistory, EthApiError> {
         if block_count == 0 {
-            return Err(EthApiError::other(ErrorObjectOwned::owned(
-                INVALID_PARAMS_CODE,
-                "block_count must be greater than 0",
-                None::<()>,
-            )));
+            return Ok(FeeHistory::default());
         }
 
         if block_count > 1024 {

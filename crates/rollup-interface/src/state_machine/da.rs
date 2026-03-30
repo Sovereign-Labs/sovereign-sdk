@@ -34,13 +34,13 @@ pub trait DaSpec:
     type Address: BasicAddress + Send + Sync;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
-    type InclusionMultiProof: Serialize + DeserializeOwned + Send + Sync;
+    type InclusionMultiProof: Serialize + DeserializeOwned + Clone + Send + Sync;
 
     /// A proof that a claimed set of transactions is complete.
     /// For example, this could be a range proof demonstrating that
     /// the provided BlobTransactions represent the entire contents
     /// of Celestia namespace in a given block
-    type CompletenessProof: Serialize + DeserializeOwned + Send + Sync;
+    type CompletenessProof: Serialize + DeserializeOwned + Clone + Send + Sync;
 
     /// The parameters of the rollup which are baked into the state-transition function.
     /// For example, this could include the namespace of the rollup on Celestia.

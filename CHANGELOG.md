@@ -1,15 +1,26 @@
-# 2025-03-16
+# 2026-03-30
+- #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
+- #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
+
+# 2026-03-24
+- #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
+- #2634 Test only changes
+- #2631 Reorganize and extend demo-stf
+
+# 2026-03-16
 - #2592 Fixes EVM RPC regression for paymaster enabled rollups
 - #2598 Fixes EVM RPC omitted gas limit for simulation endpoints
+- #2599 Make EVM RPC affordances checks paymaster-aware
+- #2621 EVM: Fix feeHistory endpoint for zero blocks
 
-# 2025-03-13
+# 2026-03-13
 - #2587 EVM: RPC only: Fixes Fee-cap admission consistency across simulation and submission.
 
-# 2025-03-10
+# 2026-03-10
 - #2569 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
 - #2554 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
 
-# 2025-03-05
+# 2026-03-05
 - #2554 More stabilization in demo-rollup EVM tests
 - #2556 **Breaking change**: only for runtimes with AccessPattern module.
 - #2548 Updates sp1 to v6.

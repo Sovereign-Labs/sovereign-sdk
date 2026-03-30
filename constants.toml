@@ -33,6 +33,8 @@ BATCH_NAMESPACE = { byte_string = "sov-test-b" }
 # Should be 10 bytes long for Celestia
 PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
 
+# The number of bytes a transaction can have.
+MAX_TX_SIZE=1_048_576
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
@@ -61,7 +63,7 @@ DEFERRED_SLOTS_COUNT = 120
 MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT = 10
 # How many *rollup blocks* we wait before making a state root visible to the rollup.
 # This value should always be set to at least 1
-STATE_ROOT_DELAY_BLOCKS = 3
+STATE_ROOT_DELAY_BLOCKS = 5
 # How many blobs from unregistered sequencers we will accept per slot
 # We can't slash misbehaving senders because they aren't a registered sequencer with a stake so
 # this serves as protection against spam.

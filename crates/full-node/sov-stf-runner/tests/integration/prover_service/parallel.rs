@@ -1,20 +1,43 @@
-use sov_mock_da::{MockBlockHeader, MockDaService, MockDaSpec, MockDaVerifier, MockHash};
+use sov_mock_da::{MockDaService, MockDaSpec, MockDaVerifier, MockHash};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier, MockZkvm, MockZkvmHost};
 use sov_modules_api::ZkVerifier;
-use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::{DaProof, RelevantBlobs, RelevantProofs, Time};
 use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
-use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_stf_runner::processes::{
     ParallelProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
-    ProverServiceError, RollupProverConfigDiscriminants, StateTransitionInfo,
+    ProverServiceError, RollupProverConfigDiscriminants,
 };
-use tokio::time;
 
-use crate::helpers::{genesis_state_root, RawGenesisStateRoot};
+use super::{make_transition_info, wait_for_aggregated_proof, Address, StateRoot};
+use crate::helpers::genesis_state_root;
 
-type StateRoot = Vec<u8>;
-type Address = Vec<u8>;
+struct TestProver {
+    prover_service:
+        ParallelProverService<Address, StateRoot, Vec<u8>, MockDaService, MockZkvm, MockZkvm>,
+    inner_vm: MockZkvmHost,
+    num_worker_threads: usize,
+}
+
+fn make_new_prover() -> TestProver {
+    let num_threads = 10;
+    let inner_vm = MockZkvmHost::new();
+    let outer_vm = MockZkvmHost::new_non_blocking();
+
+    let prover_config = RollupProverConfigDiscriminants::Execute;
+    let da_verifier = MockDaVerifier::default();
+    TestProver {
+        prover_service: ParallelProverService::new(
+            inner_vm.clone(),
+            outer_vm,
+            da_verifier,
+            prover_config,
+            num_threads,
+            Default::default(),
+            Default::default(),
+        ),
+        inner_vm,
+        num_worker_threads: num_threads,
+    }
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_successful_prover_execution() -> Result<(), ProverServiceError> {
@@ -271,98 +294,4 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
     }
 
     Ok(())
-}
-
-struct TestProver {
-    prover_service:
-        ParallelProverService<Address, StateRoot, Vec<u8>, MockDaService, MockZkvm, MockZkvm>,
-    inner_vm: MockZkvmHost,
-    num_worker_threads: usize,
-}
-
-async fn wait_for_aggregated_proof(
-    header_hashes: &[MockHash],
-    genesis_state_root: &RawGenesisStateRoot,
-    prover_service: &ParallelProverService<
-        Address,
-        StateRoot,
-        Vec<u8>,
-        MockDaService,
-        MockZkvm,
-        MockZkvm,
-    >,
-) -> anyhow::Result<ProofAggregationStatus> {
-    let mut counter = 0;
-    loop {
-        let status = prover_service
-            .create_aggregated_proof(header_hashes, &genesis_state_root.0)
-            .await?;
-
-        if let ProofAggregationStatus::Success(_) = &status {
-            return Ok(status);
-        }
-
-        if counter == 10 {
-            return Ok(status);
-        }
-
-        time::sleep(time::Duration::from_millis(1000)).await;
-        counter += 1;
-    }
-}
-
-fn make_new_prover() -> TestProver {
-    let num_threads = 10;
-    let inner_vm = MockZkvmHost::new();
-    let outer_vm = MockZkvmHost::new_non_blocking();
-
-    let prover_config = RollupProverConfigDiscriminants::Execute;
-    let da_verifier = MockDaVerifier::default();
-    TestProver {
-        prover_service: ParallelProverService::new(
-            inner_vm.clone(),
-            outer_vm,
-            da_verifier,
-            prover_config,
-            num_threads,
-            Default::default(),
-            Default::default(),
-        ),
-        inner_vm,
-        num_worker_threads: num_threads,
-    }
-}
-
-fn make_transition_info(
-    header_hash: MockHash,
-    height: u64,
-) -> StateTransitionInfo<StateRoot, Vec<u8>, MockDaSpec> {
-    StateTransitionInfo::new(
-        StateTransitionWitness {
-            initial_state_root: Vec::default(),
-            final_state_root: Vec::default(),
-            da_block_header: MockBlockHeader {
-                prev_hash: [0; 32].into(),
-                hash: header_hash,
-                height,
-                time: Time::now(),
-            },
-            relevant_proofs: RelevantProofs {
-                batch: DaProof {
-                    inclusion_proof: Default::default(),
-                    completeness_proof: Default::default(),
-                },
-                proof: DaProof {
-                    inclusion_proof: Default::default(),
-                    completeness_proof: Default::default(),
-                },
-            },
-            relevant_blobs: RelevantBlobs {
-                proof_blobs: vec![],
-                batch_blobs: vec![],
-            },
-            witness: vec![],
-        },
-        SlotNumber::new_dangerous(height),
-    )
 }

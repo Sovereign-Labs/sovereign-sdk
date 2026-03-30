@@ -4,7 +4,6 @@ use serde_json::json;
 use crate::evm::evm_test_helper::{
     eth_call_params, rpc_call, rpc_error_code, rpc_error_data_str, rpc_error_message,
     rpc_error_object, rpc_result_str, setup_with_simple_storage, EVM_EXTENSION,
-    INVALID_PARAMS_CODE,
 };
 
 const REVERT_ERROR_CODE: i64 = 3;
@@ -97,7 +96,7 @@ async fn eth_call_invalid_params_returns_invalid_params_code() -> anyhow::Result
 
     let error = rpc_error_object(&response, "eth_call");
     let code = rpc_error_code(error);
-    assert_eq!(code, INVALID_PARAMS_CODE);
+    assert_eq!(code, jsonrpsee::types::error::INVALID_PARAMS_CODE as i64);
 
     Ok(())
 }

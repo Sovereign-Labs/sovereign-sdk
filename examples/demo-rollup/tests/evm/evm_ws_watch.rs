@@ -7,8 +7,8 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 use crate::evm::evm_test_helper::alloy_ws_client;
-use crate::evm::evm_test_helper::setup_test_rollup;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
+use crate::evm::evm_test_helper::{setup_test_rollup, setup_test_rollup_with_ideal_lag};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_watch_returns_receipt() -> anyhow::Result<()> {
@@ -63,7 +63,7 @@ async fn ws_subscribe_new_heads() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn ws_subscribe_new_heads_sizes() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let rollup = setup_test_rollup_with_ideal_lag(0, EVM_EXTENSION, 0).await;
     let client = alloy_ws_client(rollup.http_addr).await;
     let mut subscription = client.subscribe_blocks().await?;
     rollup.wait_for_rollup_height_advance_by(1).await;

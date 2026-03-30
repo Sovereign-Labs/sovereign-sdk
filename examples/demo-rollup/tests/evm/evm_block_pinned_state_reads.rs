@@ -7,13 +7,14 @@
 
 use crate::evm::evm_test_helper::{
     deploy_contract_check, finalized_block_number_and_hash, hash_selector, hex_u64,
-    set_value_check, setup_with_simple_storage, EVM_EXTENSION,
+    set_value_check, setup_with_simple_storage_with_ideal_lag, EVM_EXTENSION,
 };
 use alloy_primitives::{Address, Bytes, TxHash, B256, U256, U64};
 use alloy_rpc_types_eth::TransactionRequest;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use serde::Serialize;
+use serde_json::json;
 use sov_demo_rollup::MockDemoRollup;
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::execution_mode::Native;
@@ -91,8 +92,32 @@ async fn estimate_gas_at(
         .unwrap()
 }
 
+async fn estimate_gas_request_at(
+    client: &SimpleStorageClient,
+    tx: &TransactionRequest,
+    block: impl Serialize,
+) -> U256 {
+    client
+        .ws
+        .request("eth_estimateGas", rpc_params![tx, block])
+        .await
+        .unwrap()
+}
+
+async fn estimate_gas_request_at_with_state_overrides(
+    client: &SimpleStorageClient,
+    tx: &TransactionRequest,
+    block: impl Serialize,
+) -> U256 {
+    client
+        .ws
+        .request("eth_estimateGas", rpc_params![tx, block, json!({})])
+        .await
+        .unwrap()
+}
+
 async fn setup_rollup_and_client() -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient) {
-    let (rollup, client, _) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let (rollup, client, _) = setup_with_simple_storage_with_ideal_lag(0, EVM_EXTENSION, 10).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
     (rollup, client)
 }
@@ -415,5 +440,90 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     assert_eq!(
         latest_estimate, pending_estimate,
         "Latest estimate should match pending estimate in pending-inclusive semantics"
+    );
+}
+
+/// Block-pinned `eth_estimateGas` must accept the explicit current pending block number
+/// on the runtime-parity path.
+#[tokio::test(flavor = "multi_thread")]
+async fn block_pinned_pending_number_estimate_gas_matches_pending_runtime_parity() {
+    let (rollup, client) = setup_rollup_and_client().await;
+
+    let contract_addr = deploy_contract_check(&client).await.unwrap();
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let (sealed_head_number, _) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
+
+    let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
+    let sealed_estimate = estimate_gas_at(&client, &set_tx, hex_u64(sealed_head_number)).await;
+
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before estimate_gas assertions");
+    let tx_hash = client.set_value(contract_addr, 0x1234).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+
+    let pending_block_number = client.block_number().await;
+    let mut explicit_request = set_tx.clone();
+    explicit_request.nonce = Some(nonce_at(&client, client.address(), "pending").await);
+
+    let pending_by_number =
+        estimate_gas_request_at(&client, &explicit_request, hex_u64(pending_block_number)).await;
+    let pending_by_tag = estimate_gas_request_at(&client, &explicit_request, "pending").await;
+
+    assert_eq!(
+        pending_by_number, pending_by_tag,
+        "Explicit current pending block number must match the pending estimate"
+    );
+    assert_ne!(
+        pending_by_number, sealed_estimate,
+        "Explicit current pending block number must not fall back to the last sealed state"
+    );
+}
+
+/// Block-pinned `eth_estimateGas` must accept the explicit current pending block number
+/// on the legacy estimator path when overrides are present.
+#[tokio::test(flavor = "multi_thread")]
+async fn block_pinned_pending_number_estimate_gas_matches_pending_with_state_overrides() {
+    let (rollup, client) = setup_rollup_and_client().await;
+
+    let contract_addr = deploy_contract_check(&client).await.unwrap();
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let (sealed_head_number, _) = sealed_head_number_and_hash(&client).await;
+    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
+
+    let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
+    let sealed_estimate = estimate_gas_at(&client, &set_tx, hex_u64(sealed_head_number)).await;
+
+    rollup
+        .pause_preferred_batches_and_wait()
+        .await
+        .expect("pause should be acknowledged before estimate_gas assertions");
+    let tx_hash = client.set_value(contract_addr, 0x1234).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+
+    let pending_block_number = client.block_number().await;
+    let mut explicit_request = set_tx.clone();
+    explicit_request.nonce = Some(nonce_at(&client, client.address(), "pending").await);
+
+    let pending_by_number = estimate_gas_request_at_with_state_overrides(
+        &client,
+        &explicit_request,
+        hex_u64(pending_block_number),
+    )
+    .await;
+    let pending_by_tag =
+        estimate_gas_request_at_with_state_overrides(&client, &explicit_request, "pending").await;
+
+    assert_eq!(
+        pending_by_number, pending_by_tag,
+        "Explicit current pending block number must match the pending estimate with overrides"
+    );
+    assert_ne!(
+        pending_by_number, sealed_estimate,
+        "Explicit current pending block number with overrides must not fall back to the last sealed state"
     );
 }

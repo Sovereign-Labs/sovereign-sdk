@@ -9,7 +9,7 @@ use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::stf::{BatchReceipt, BlobDiscardReason, TransactionReceipt, TxEffect};
 use sov_rollup_interface::stf::{DiscardedBlob, StoredEvent};
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
+    AggregatedProofPublicData, CodeCommitmentHash, SerializedAggregatedProof,
 };
 use sov_rollup_interface::TxHash;
 use sov_test_utils::ledger_db::sov_api_spec::types::IntOrHash;
@@ -94,7 +94,7 @@ async fn test_save_aggregated_proof() {
             final_state_root: vec![i + 1],
             initial_slot_hash: MockHash([i + 2; 32]),
             final_slot_hash: MockHash([i + 3; 32]),
-            code_commitment: CodeCommitment::default(),
+            outer_vk_hash: CodeCommitmentHash::default(),
             rewarded_addresses: vec![MockAddress::default()],
         };
 

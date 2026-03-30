@@ -176,7 +176,7 @@ fn query_historical_call_and_estimate(
             )
             .unwrap();
         let estimate = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 request.clone(),
                 Some(BlockId::number(HISTORICAL_BLOCK)),
                 None,

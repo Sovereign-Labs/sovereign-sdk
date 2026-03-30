@@ -251,7 +251,7 @@ impl FilteredCelestiaBlock {
 }
 
 /// Proof of namespace end boundary in the last relevant row.
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamespaceBoundaryProof {
     /// Namespace proof for the boundary.
     /// For presence proofs this is narrowed to the last namespace share.

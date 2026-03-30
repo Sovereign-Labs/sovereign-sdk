@@ -274,6 +274,10 @@ pub struct StateUpdateNotification {
     #[cfg(feature = "test-utils")]
     #[serde(default)]
     pub update_skipped_due_to_pause: bool,
+    /// True when the sequencer entered recovery on this state update.
+    #[cfg(feature = "test-utils")]
+    #[serde(default)]
+    pub triggered_recovery: bool,
 }
 
 /// A notification that the sequencer has processed a forced (non-preferred) batch.

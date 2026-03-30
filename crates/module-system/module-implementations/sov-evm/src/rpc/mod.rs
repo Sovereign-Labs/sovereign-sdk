@@ -114,6 +114,7 @@ pub(crate) mod error;
 pub(crate) mod handlers;
 pub(crate) mod maybe_archival_state;
 
+mod estimate_gas;
 mod fee_history;
 mod trace;
 
@@ -133,22 +134,12 @@ pub enum PendingOrBlock {
     },
 }
 
-const ABSOLUTE_MARGIN: u64 = 100_000;
-/// gas * 1.5 + 100_000
-pub(crate) fn apply_margins(gas: u64) -> Result<u64, RpcInvalidTransactionError> {
-    (gas / 2)
-        .checked_mul(3)
-        .and_then(|with_relative_margin| with_relative_margin.checked_add(ABSOLUTE_MARGIN))
-        .ok_or(RpcInvalidTransactionError::GasUintOverflow)
-}
-
 /// Validates fee-field consistency in an `eth_call` / `eth_estimateGas` /
 /// `eth_createAccessList` request.
 ///
 /// These are request-format checks independent of the caller's balance.
-/// Balance-based upfront cost validation was removed because the RPC layer
-/// cannot determine whether a paymaster will cover the caller's gas.
-/// TODO: re-add a paymaster-aware balance check when sov-ethereum supports it.
+/// Balance-based upfront cost validation lives in `sov-ethereum`'s RPC
+/// handler where full paymaster context is available.
 fn validate_call_fee_fields(request: &TransactionRequest) -> Result<(), EthApiError> {
     if request.gas_price.is_some()
         && (request.max_fee_per_gas.is_some() || request.max_priority_fee_per_gas.is_some())
@@ -498,7 +489,7 @@ where
         Ok((block_env, maybe_archival_state, cfg))
     }
 
-    fn call(
+    pub(crate) fn call(
         &self,
         request: TransactionRequest,
         block_id: Option<BlockId>,
@@ -929,7 +920,7 @@ where
             .expect("Maybe pending block should never return None if allow_empty is true")
     }
 
-    /// Resolves a block ID to either current or archival state.
+    /// Resolves a block ID to current, archival, or cached synthetic state.
     ///
     /// Explicit numeric selectors are resolved by block kind, not by height arithmetic:
     /// - if the number identifies the current synthetic pending block, use `Current`
@@ -946,9 +937,16 @@ where
         match pending_or_block_nr {
             PendingOrBlock::Pending => Ok(MaybeArchivalState::Current(state)),
             PendingOrBlock::Number(number) => {
-                // Always prefer archival for explicitly sealed block numbers.
-                if self.blocks.get(&number, state).unwrap_infallible().is_none()
-                    // Treat explicit pending-block numbers as current only when there are pending txs.
+                // The live pending block is addressable by explicit number before it
+                // is sealed. `get_archival_state` may still succeed for the current
+                // rollup height via uncommitted changes, so archival lookup success
+                // is not a valid test for "this EVM block is sealed". Match `dev`:
+                // explicit current pending block numbers must resolve to `Current`.
+                if self
+                    .blocks
+                    .get(&number, state)
+                    .unwrap_infallible()
+                    .is_none()
                     && self.has_pending_block(state)
                     && self.block_env(state).unwrap_infallible().number == number
                 {
@@ -1017,8 +1015,12 @@ where
     let tx_env = prepare_call_env(block_env, request, cfg.chain_spec.tx_gas_limit)?;
     let caller = tx_env.caller;
     let result = executor::transact(&mut *db, block_env, tx_env, cfg_env)?;
-    verify_contract_creation_allowlist(&result.state, &caller, cfg, db)
-        .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+    verify_contract_creation_allowlist(&result.state, &caller, cfg, db).map_err(|e| {
+        EthApiError::other(sov_rpc_eth_types::rpc_error_with_code(
+            alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),
+            e.to_string(),
+        ))
+    })?;
     Ok(result)
 }
 
@@ -1054,6 +1056,7 @@ fn apply_block_overrides<DB: Database>(
         random,
         base_fee,
         block_hash,
+        ..
     } = block_overrides;
 
     if let Some(block_hash) = block_hash {
