@@ -1,6 +1,7 @@
 # 2026-03-30
 - #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
 - #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
+- #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
 
 # 2026-03-24
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
