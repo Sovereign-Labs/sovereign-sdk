@@ -735,21 +735,24 @@ where
         }
     };
 
-    if sequencer_bond.amount() < max_tx_check_value {
-        if !(scratchpad.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
+    // If the sequencer isn't bonded enough, reject the input unless unless we've passed the gas limit update height (meaning we've done an update) *AND*
+    // the tx is from the preferred sequencer with zero escrow.
+    // (note: The preferred sequencer sending txs with no escrow is a new pattern that becomes legal
+    // after we update the gas limit.)
+    if sequencer_bond.amount() < max_tx_check_value
+        && !(scratchpad.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
             && matches!(sequencer_bond, SequencerBondForTx::Preferred(Amount::ZERO)))
-        {
-            return AuthAndProcessOutput {
-                outcome: AuthAndProcessOutcome::IllegalSequencer {
-                    reason: OutOfFundsReason::SequencerBondTooLow {
-                        sequencer_bond: sequencer_bond.amount(),
-                        max_tx_check_value,
-                    },
+    {
+        return AuthAndProcessOutput {
+            outcome: AuthAndProcessOutcome::IllegalSequencer {
+                reason: OutOfFundsReason::SequencerBondTooLow {
+                    sequencer_bond: sequencer_bond.amount(),
+                    max_tx_check_value,
                 },
-                scratchpad,
-                gas_used: <S as Spec>::Gas::zero(),
-            };
-        }
+            },
+            scratchpad,
+            gas_used: <S as Spec>::Gas::zero(),
+        };
     }
 
     // 3. The slot gas is higher than the gas needed to validate the transaction.

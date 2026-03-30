@@ -241,7 +241,7 @@ where
         #[allow(clippy::float_arithmetic)]
         let gas_used_ratios = gas_used
             .into_iter()
-            .zip(gas_limits.into_iter())
+            .zip(gas_limits)
             .map(|(gas, limit)| gas as f64 / limit as f64)
             .collect();
         Ok(FeesAndUsage {

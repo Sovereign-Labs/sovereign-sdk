@@ -2299,7 +2299,7 @@ async fn test_gas_limit_update() {
         .unwrap();
 
     // 4. Main loop Submit a tx and save the receipt. Then, force close the batch and produce a block.
-    for i in 0..20 as u64 {
+    for i in 0..20_u64 {
         // 4.1 Submit a tx and save the receipt.
         let receipt = test_rollup
             .api_client()
@@ -2312,7 +2312,7 @@ async fn test_gas_limit_update() {
             .await;
 
         if let Err(e) = &receipt {
-            panic!("Tx {i} failed with error: {}", e.to_string());
+            panic!("Tx {i} failed with error: {e}");
         } else {
             nonce += 1;
             sequencer_receipts.push(receipt.unwrap());
@@ -2340,7 +2340,7 @@ async fn test_gas_limit_update() {
             let current_base_fee = base_fee_per_gas
                 .trim()
                 .trim_start_matches(r#"{"base_fee_per_gas":[""#)
-                .split(|c: char| c == '"')
+                .split('"')
                 .next()
                 .unwrap()
                 .parse::<u64>()
