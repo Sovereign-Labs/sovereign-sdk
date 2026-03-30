@@ -15,7 +15,7 @@ use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransaction};
 use sov_modules_api::{prelude::*, Base58Address, PrivateKey, SafeVec};
-use sov_modules_api::{CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
+use sov_modules_api::{CredentialId, CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{
     AuthorizedSequencers, PayeePolicy, PayerGenesisConfig, PaymasterConfig,
@@ -25,8 +25,8 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_sequencer::rest_api::AcceptTx;
 use sov_solana_offchain_auth::authentication::{
     SolanaOffchainSimpleMessage, SolanaOffchainSimpleMultisigMessage,
-    SolanaOffchainSpecCompliantMessage, SolanaOffchainUnsignedTransaction,
-    MULTISIG_SIMPLE_DISCRIMINATOR,
+    SolanaOffchainSpecCompliantMessage, SolanaOffchainUnsignedTransactionV0,
+    SolanaOffchainUnsignedTransactionV1, MULTISIG_SIMPLE_DISCRIMINATOR,
 };
 use sov_solana_offchain_auth::utils::make_preamble_for_message;
 use sov_solana_offchain_auth::{
@@ -186,7 +186,7 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
         UniquenessData::Generation(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
     );
-    let solana_unsigned_tx = SolanaOffchainUnsignedTransaction::<RT, S> {
+    let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV0::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -427,7 +427,38 @@ fn test_auth_wrapper() {
     ));
 }
 
-fn create_multisig_signed_message(json_str: &str) -> Vec<u8> {
+fn create_multisig_transfer_tx_json(
+    amount: Amount,
+    recipient: &str,
+    credential_id: CredentialId,
+) -> String {
+    let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
+        to: <S as Spec>::Address::from_str(recipient).unwrap(),
+        coins: Coins {
+            amount,
+            token_id: config_value!("GAS_TOKEN_ID"),
+        },
+    });
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
+        msg,
+        config_value!("CHAIN_ID"),
+        TEST_DEFAULT_MAX_PRIORITY_FEE,
+        TEST_DEFAULT_MAX_FEE,
+        UniquenessData::Generation(0),
+        Some(TEST_DEFAULT_GAS_LIMIT.into()),
+    );
+    let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV1::<RT, S> {
+        runtime_call: unsigned_tx.runtime_call,
+        uniqueness: unsigned_tx.uniqueness,
+        details: unsigned_tx.details,
+        chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
+        credential_id,
+        version: 1,
+    };
+    serde_json::to_string(&solana_unsigned_tx).unwrap()
+}
+
+fn create_multisig_wire_bytes(json_str: &str) -> Vec<u8> {
     let mut signed_message = vec![MULTISIG_SIMPLE_DISCRIMINATOR];
     signed_message.extend_from_slice(json_str.as_bytes());
     signed_message
@@ -478,17 +509,20 @@ async fn test_submit_multisig_simple_message_transaction() {
     let funded_balance = query_balance(&test_rollup.client, &multisig_address_str).await;
     assert_eq!(funded_balance, Some(Amount::new(20_000)));
 
-    // Build a transfer from the multisig to the recipient
-    let transfer_json = create_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS);
-    let signed_message = create_multisig_signed_message(&transfer_json);
+    // Build a transfer from the multisig to the recipient, using V1 format which commits
+    // to the credential_id in the signed message.
+    let transfer_json =
+        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, credential_id);
+    let json_bytes = transfer_json.as_bytes();
+    let wire_bytes = create_multisig_wire_bytes(&transfer_json);
 
-    // Signers 3 and 1 sign (deliberately out of order relative to how the credential was
-    // constructed from [pub1, pub2, pub3]) to verify order independence.
-    let sig3 = key3.sign(&signed_message);
-    let sig1 = key1.sign(&signed_message);
+    // Signers 3 and 1 sign the JSON directly (deliberately out of order relative to how
+    // the credential was constructed from [pub1, pub2, pub3]) to verify order independence.
+    let sig3 = key3.sign(json_bytes);
+    let sig1 = key1.sign(json_bytes);
 
     let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
-        signed_message: signed_message.clone(),
+        wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
             PubKeyAndSignature {
@@ -562,12 +596,14 @@ async fn test_submit_multisig_insufficient_signatures() {
     }
 
     // Only 1 signer for a 2-of-3 multisig — should fail
-    let transfer_json = create_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS);
-    let signed_message = create_multisig_signed_message(&transfer_json);
-    let sig1 = key1.sign(&signed_message);
+    let transfer_json =
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, credential_id);
+    let json_bytes = transfer_json.as_bytes();
+    let wire_bytes = create_multisig_wire_bytes(&transfer_json);
+    let sig1 = key1.sign(json_bytes);
 
     let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
-        signed_message,
+        wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![PubKeyAndSignature {
             signature: sig1,
@@ -625,15 +661,17 @@ async fn test_submit_multisig_invalid_signature() {
     }
 
     // Corrupt the second signature
-    let transfer_json = create_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS);
-    let signed_message = create_multisig_signed_message(&transfer_json);
-    let sig1 = key1.sign(&signed_message);
-    let mut sig2_bytes = key2.sign(&signed_message).msg_sig.to_bytes();
+    let transfer_json =
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, credential_id);
+    let json_bytes = transfer_json.as_bytes();
+    let wire_bytes = create_multisig_wire_bytes(&transfer_json);
+    let sig1 = key1.sign(json_bytes);
+    let mut sig2_bytes = key2.sign(json_bytes).msg_sig.to_bytes();
     sig2_bytes[10] = sig2_bytes[10].wrapping_add(1);
     let sig2: Ed25519Signature = sig2_bytes.as_slice().try_into().unwrap();
 
     let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
-        signed_message,
+        wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
             PubKeyAndSignature {
