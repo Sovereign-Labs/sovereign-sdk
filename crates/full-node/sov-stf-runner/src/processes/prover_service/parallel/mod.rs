@@ -9,17 +9,11 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
-use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants};
+use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
-pub(crate) struct Verifier<Da>
-where
-    Da: DaService,
-{
-    pub(crate) da_verifier: Da::Verifier,
-}
 
 /// Prover service that generates proofs in parallel.
 pub struct ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
@@ -59,7 +53,7 @@ where
         da_verifier: Da::Verifier,
         config: RollupProverConfigDiscriminants,
         num_threads: usize,
-        code_commitment: CodeCommitment,
+        outer_vk_hash: CodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });
@@ -68,7 +62,7 @@ where
             inner_vm,
             outer_vm,
             prover_config: config,
-            prover_state: Prover::new(prover_address, num_threads, code_commitment),
+            prover_state: Prover::new(prover_address, num_threads, outer_vk_hash),
             verifier,
         }
     }
@@ -80,7 +74,7 @@ where
         outer_vm: OuterVm::Host,
         da_verifier: Da::Verifier,
         config: RollupProverConfigDiscriminants,
-        code_commitment: CodeCommitment,
+        outer_vk_hash: CodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let num_cpus = num_cpus::get();
@@ -92,7 +86,7 @@ where
             da_verifier,
             config,
             num_cpus - 1,
-            code_commitment,
+            outer_vk_hash,
             prover_address,
         )
     }

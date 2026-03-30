@@ -19,8 +19,9 @@ use sov_modules_api::{GasPrice, GasUnit};
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
-    alloy_client, create_simple_storage_client, deploy_contract_check, set_value_check,
-    setup_test_rollup, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS, HIGH_PRIORITY_FEE_PER_GAS,
+    alloy_client, create_simple_storage_client, deploy_contract_check,
+    estimate_gas_and_check_affordability, set_value_check, setup_test_rollup,
+    setup_test_rollup_with_ideal_lag, EVM_EXTENSION, HIGH_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS,
     SENDER_PRIV_KEY,
 };
 
@@ -200,8 +201,10 @@ async fn send_high_fee_set_value(
 ) -> anyhow::Result<TransactionReceipt> {
     let mut tx = client.make_tx(Some(contract_address), Some(client.contract.set(value)));
     tx = tx
-        .max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
+        .max_fee_per_gas(MAX_FEE_PER_GAS)
         .max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
+    let sender_balance = client.eth_get_balance(client.address()).await;
+    estimate_gas_and_check_affordability(client, &mut tx, MAX_FEE_PER_GAS, sender_balance).await?;
     client
         .send_tx_and_wait_finalized(tx)
         .await
@@ -1451,7 +1454,7 @@ async fn test_fee_history_consistent_query_methods() -> anyhow::Result<()> {
 /// TC34: Mixed history pattern - verify ratios match pattern [0, >0, 0, >0, >0]
 #[tokio::test(flavor = "multi_thread")]
 async fn test_fee_history_mixed_pattern() -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let rollup = setup_test_rollup_with_ideal_lag(0, EVM_EXTENSION, 0).await;
     let client = alloy_client(rollup.http_addr);
     rollup.wait_for_rollup_height_advance_by(2).await;
 

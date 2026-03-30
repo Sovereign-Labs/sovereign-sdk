@@ -41,6 +41,16 @@ pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!(
 /// You can change this constant by modifying PROOF_NAMESPACE in constants.toml
 pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(config_value!("PROOF_NAMESPACE"));
 
+fn sequencer_type(
+    config: &sov_full_node_configs::sequencer::SequencerConfig<impl Copy>,
+) -> sov_modules_api::SequencerType {
+    if config.is_preferred_sequencer() {
+        sov_modules_api::SequencerType::Preferred
+    } else {
+        sov_modules_api::SequencerType::NonPreferred
+    }
+}
+
 // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/387
 fn eth_dev_signer() -> sov_ethereum::Signers {
     sov_ethereum::Signers::new(vec![secp256k1::SecretKey::from_str(

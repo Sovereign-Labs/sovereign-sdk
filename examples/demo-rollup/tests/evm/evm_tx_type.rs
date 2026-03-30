@@ -59,7 +59,7 @@ async fn test_legacy_transaction_returns_tx_type_not_supported() -> anyhow::Resu
 
     assert_eq!(
         code, TX_REJECTED_CODE,
-        "Expected TransactionRejected error code (-32003), got {code}"
+        "Expected TransactionRejected error code ({TX_REJECTED_CODE}), got {code}"
     );
     assert!(
         message.contains("transaction type not supported"),

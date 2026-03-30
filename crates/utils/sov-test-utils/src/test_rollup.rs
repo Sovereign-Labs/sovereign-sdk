@@ -255,13 +255,21 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 
     pub async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
         let blueprint = self.blueprint.clone();
+
+        let mut node_id = None;
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
             if self.config.rollup_prover_config.is_some()
                 && !sequencer_conf.disable_state_root_consistency_checks
             {
                 tracing::warn!("Prover process is enabled, but state root consistency checks are not disabled. This will cause crashes in the sequencer since proofs are created but not yet handled by the sequencer. Consider disabling one of the two options.");
             }
+
+            node_id = sequencer_conf
+                .postgres_config
+                .as_ref()
+                .map(|postgres_config| postgres_config.node_id.clone());
         }
+
         std::fs::create_dir_all(self.config.storage.path()).with_context(|| {
             format!(
                 "Failed to create storage directory: {}",
@@ -337,6 +345,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             rollup_task,
             http_addr: rest_addr,
             rollup_config,
+            node_id,
             client,
             da_service,
             shutdown_sender,
@@ -700,6 +709,8 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     pub http_addr: SocketAddr,
     /// The rollup config used to run the rollup.
     pub rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
+    /// Configured postgres node id for preferred-sequencer tests, if present.
+    pub node_id: Option<String>,
     /// A copy of the [`DaService`]
     /// that the node uses.
     ///
@@ -906,6 +917,18 @@ where
         }
     }
 
+    /// Check if the sequencer is recovering.
+    pub async fn is_sequencer_recovering(&self) -> bool {
+        let is_ready = self.client.client.is_ready().await;
+
+        if let Err(err) = is_ready {
+            err.to_string()
+                .contains("The preferred sequencer is recovering from downtime")
+        } else {
+            false
+        }
+    }
+
     /// Returns the current sequencer role.
     pub async fn sequencer_role(&self) -> anyhow::Result<SequencerRole> {
         self.client.query_rest_endpoint("/sequencer/role").await
@@ -925,6 +948,17 @@ where
     /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_sequencer_ready(&self) -> anyhow::Result<()> {
         self.wait_for_sequencer_state(true).await
+    }
+
+    /// Polls the sequencer until it enters recovery mode.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
+    pub async fn wait_for_sequencer_recovering(&self) -> anyhow::Result<()> {
+        self.wait_for_condition(
+            || async { Ok(self.is_sequencer_recovering().await) },
+            "sequencer to enter recovery",
+        )
+        .await
     }
 
     /// Generic helper for waiting on a condition with timeout and polling.
@@ -998,6 +1032,17 @@ where
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
     }
 
+    /// Like [`TestRollup::pause_preferred_batches`], but only pauses this
+    /// rollup's configured postgres node. Other nodes sharing the same process
+    /// (e.g. a replica) will continue producing batches.
+    pub async fn pause_preferred_batches_for_node(&self) {
+        let node_id = self
+            .node_id
+            .as_deref()
+            .expect("pause_preferred_batches_for_node requires TestRollup.node_id to be set");
+        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", node_id);
+    }
+
     /// Pauses preferred batch production and waits until the sequencer confirms
     /// that at least one state update was skipped because of the pause flag.
     ///
@@ -1042,6 +1087,24 @@ where
             std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
             "1",
             "Resuming but it was never paused in the first place",
+        );
+
+        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
+    }
+
+    /// Resumes batch production after [`TestRollup::pause_preferred_batches_for_node`].
+    ///
+    /// Note: calling this method MAY NOT immediately produce a batch.
+    pub async fn resume_preferred_batches_for_node(&self) {
+        let node_id = self
+            .node_id
+            .as_deref()
+            .expect("resume_preferred_batches_for_node requires TestRollup.node_id to be set");
+
+        assert_eq!(
+            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
+            node_id,
+            "Resuming but it was never paused for this node in the first place",
         );
 
         std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");

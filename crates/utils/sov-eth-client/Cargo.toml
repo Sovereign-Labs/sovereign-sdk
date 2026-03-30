@@ -17,7 +17,7 @@ alloy-eips = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types  = { workspace = true }
 alloy-provider = { workspace = true }
-alloy-pubsub = "1.0"
+alloy-pubsub = { workspace = true }
 alloy-signer = { workspace = true }
 reqwest = { workspace = true }
 async-trait = { workspace = true }

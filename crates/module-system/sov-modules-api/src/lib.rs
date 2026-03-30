@@ -117,7 +117,7 @@ pub use sov_rollup_interface::stf::{
     ProofSender, StateTransitionFunction, StoredEvent,
 };
 pub use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
+    AggregatedProofPublicData, CodeCommitmentHash, SerializedAggregatedProof,
 };
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::zk::HostArgs;

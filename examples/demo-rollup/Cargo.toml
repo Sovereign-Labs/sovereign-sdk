@@ -55,20 +55,20 @@ anyhow = { workspace = true }
 axum = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
-  "alloc",
-  "derive",
+    "alloc",
+    "derive",
 ] }
 serde_json = { workspace = true, default-features = false, features = [
-  "alloc",
+    "alloc",
 ] }
 hex = { workspace = true, optional = true }
 bincode = { workspace = true, optional = true }
 tokio = { workspace = true, features = [
-  "rt-multi-thread",
-  "sync",
-  "time",
-  "macros",
-  "tracing",
+    "rt-multi-thread",
+    "sync",
+    "time",
+    "macros",
+    "tracing",
 ] }
 tokio-stream = { workspace = true }
 tracing = { workspace = true }
@@ -84,26 +84,25 @@ alloy-rlp = { workspace = true }
 [dev-dependencies]
 sov-eth-client = { workspace = true }
 jsonrpsee = { workspace = true }
-sov-address = { workspace = true, features = ["native", "arbitrary"] }
-sov-risc0-adapter = { workspace = true, features = ["native", "arbitrary"] }
-sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
-sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
+sov-address = { workspace = true, features = ["native"] }
+sov-risc0-adapter = { workspace = true, features = ["native"] }
+sov-celestia-adapter = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true }
 sov-modules-api = { workspace = true, features = [
-  "native",
-  "arbitrary",
-  "test-utils",
+    "native",
+    "test-utils",
 ] }
-sov-mock-da = { workspace = true, features = ["arbitrary"] }
-sov-bank = { workspace = true, features = ["native", "arbitrary"] }
+sov-mock-da = { workspace = true }
+sov-bank = { workspace = true, features = ["native"] }
 sov-sequencer-registry = { workspace = true, features = [
-  "native",
-  "arbitrary",
+    "native",
 ] }
-sov-accounts = { workspace = true, features = ["native", "arbitrary"] }
+sov-accounts = { workspace = true, features = ["native"] }
 sov-api-spec = { workspace = true }
-sov-evm = { workspace = true, features = ["native", "arbitrary"] }
-sov-modules-macros = { workspace = true, features = ["arbitrary"] }
+sov-evm = { workspace = true, features = ["native"] }
+sov-hyperlane-integration = { workspace = true, features = ["evm"] }
+sov-modules-macros = { workspace = true }
 sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
@@ -111,25 +110,25 @@ sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
 reth-primitives = { workspace = true, default-features = false }
 futures = { workspace = true }
-demo-stf = { workspace = true, features = ["native", "arbitrary"] }
+demo-stf = { workspace = true, features = ["native"] }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
 tracing-panic = { version = "0.1.2" }
 
 base64 = { workspace = true }
+bincode = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
-proptest = { workspace = true, features = ["alloc"] }
 tokio = { workspace = true, features = ["full"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
 alloy-primitives = { workspace = true }
-alloy-rpc-types-eth = "1.0.30"
+alloy-rpc-types-eth = { workspace = true }
 alloy-rpc-types-trace = { workspace = true }
-alloy-pubsub = "1.0"
+alloy-pubsub = { workspace = true }
 alloy-provider = { workspace = true, features = ["debug-api", "reqwest"] }
-sov-rpc-eth-types = { workspace = true}
+sov-rpc-eth-types = { workspace = true }
 strum = { workspace = true }
 
 
@@ -139,19 +138,7 @@ testcontainers = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
-serde_json = { workspace = true, features = ["alloc"] }
-borsh = { workspace = true }
-sov-universal-wallet = { workspace = true, features = ["serde"] }
-sov-modules-api = { workspace = true }
-sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
-sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
-demo-stf = { workspace = true, features = ["native", "arbitrary"] }
-sov-address = { workspace = true, features = ["evm"] }
-sov-state = { workspace = true, features = ["native"] }
-sov-modules-macros = { workspace = true, features = ["arbitrary"] }
 sov-zkvm-utils = { workspace = true }
-sov-build = { workspace = true }
-sov-ethereum = { workspace = true }
 
 
 [features]
@@ -159,14 +146,14 @@ default = []
 # Used for using different encoding between host and guest
 bincode = ["risc0/bincode", "sov-risc0-adapter/bincode"]
 migration-script = [
-  "dep:sov-blob-storage",
-  "dep:rockbound",
-  "dep:bincode",
-  "dep:hex",
-  "dep:sov-chain-state",
-  "dep:sov-paymaster",
-  "dep:sov-sequencer-registry",
-  "sov-db/migration-script",
+    "dep:sov-blob-storage",
+    "dep:rockbound",
+    "dep:bincode",
+    "dep:hex",
+    "dep:sov-chain-state",
+    "dep:sov-paymaster",
+    "dep:sov-sequencer-registry",
+    "sov-db/migration-script",
 ]
 
 [[bin]]

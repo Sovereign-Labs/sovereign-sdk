@@ -13,6 +13,7 @@ use alloy_provider::DynProvider;
 use alloy_provider::Provider as _;
 use alloy_provider::ProviderBuilder;
 use alloy_provider::WsConnect;
+use alloy_rpc_types_eth::{AccessListResult, TransactionRequest};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Client;
@@ -50,7 +51,6 @@ pub(crate) const PAYER_SOV_BANK_BALANCE: u128 = 5_000_000_000_000_000;
 pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
 pub(crate) const POLL_INTERVAL_MS: u64 = 25;
-pub(crate) const INVALID_PARAMS_CODE: i64 = -32602;
 pub(crate) const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
 pub(crate) const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 
@@ -60,6 +60,7 @@ pub(crate) async fn start_node(
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
+    ideal_lag: u64,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
@@ -78,6 +79,9 @@ pub(crate) async fn start_node(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = extension;
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = ideal_lag;
+        }
     })
     .start()
     .await
@@ -290,9 +294,32 @@ pub(crate) fn assert_invalid_params(response: &Value) {
     let error = rpc_error_object(response, "assert_invalid_params");
     assert_eq!(
         rpc_error_code(error),
-        INVALID_PARAMS_CODE,
+        jsonrpsee::types::error::INVALID_PARAMS_CODE as i64,
         "expected JSON-RPC invalid params code"
     );
+}
+
+/// Estimates gas for `tx`, asserts the sender can afford it, and sets the gas limit.
+/// The affordability check includes `tx.value` in the ceiling.
+pub(crate) async fn estimate_gas_and_check_affordability(
+    client: &SimpleStorageClient,
+    tx: &mut TransactionRequest,
+    max_fee_per_gas: u128,
+    sender_balance: U256,
+) -> anyhow::Result<()> {
+    tx.gas = None;
+    let estimated_gas_limit = client.eth_estimate_gas(tx.clone()).await;
+    let tx_value = tx.value.unwrap_or(U256::ZERO);
+    let ceiling = U256::from(estimated_gas_limit)
+        .checked_mul(U256::from(max_fee_per_gas))
+        .and_then(|cost| cost.checked_add(tx_value))
+        .ok_or_else(|| anyhow::anyhow!("gas affordability ceiling overflow"))?;
+    assert!(
+        ceiling < sender_balance,
+        "test precondition failed: gas ceiling {ceiling} must be below sender balance {sender_balance}"
+    );
+    tx.gas = Some(estimated_gas_limit);
+    Ok(())
 }
 
 pub(crate) async fn finalized_block_number_and_hash(client: &SimpleStorageClient) -> (u64, B256) {
@@ -388,9 +415,24 @@ pub async fn setup_test_rollup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
+    setup_test_rollup_with_ideal_lag(finalization_blocks, extension, 3).await
+}
+
+pub async fn setup_test_rollup_with_ideal_lag(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    ideal_lag: u64,
+) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, finalization_blocks, Some(extension), None).await
+    start_node(
+        config,
+        finalization_blocks,
+        Some(extension),
+        None,
+        ideal_lag,
+    )
+    .await
 }
 
 pub async fn setup_test_rollup_with_paymaster(
@@ -417,18 +459,109 @@ pub async fn setup_test_rollup_with_paymaster(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = Some(extension);
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     })
     .start()
     .await
     .unwrap()
 }
 
+#[derive(Debug)]
+pub(crate) struct EndpointResults {
+    pub estimate_gas: Result<U64, jsonrpsee::core::client::Error>,
+    pub call: Result<String, jsonrpsee::core::client::Error>,
+    pub create_access_list: Result<AccessListResult, String>,
+    pub send_raw_tx: Result<B256, jsonrpsee::core::client::Error>,
+}
+
+/// Calls all 4 simulation/submission endpoints with the same request.
+/// Returns individual results without any consistency assertions.
+pub(crate) async fn call_all_endpoints(
+    client: &SimpleStorageClient,
+    request: &TransactionRequest,
+    signer: &PrivateKeySigner,
+) -> EndpointResults {
+    // Step 1: 3 simulation calls
+    let estimate_gas: Result<U64, _> = client
+        .ws
+        .request("eth_estimateGas", rpc_params![request, "latest"])
+        .await;
+
+    let call: Result<String, _> = client
+        .ws
+        .request("eth_call", rpc_params![request, "latest"])
+        .await;
+
+    let access_list_result: Result<AccessListResult, _> = client
+        .ws
+        .request("eth_createAccessList", rpc_params![request, "latest"])
+        .await;
+
+    // Normalize eth_createAccessList: the RPC call itself may succeed but return
+    // an error in the `error` field of the response.
+    let create_access_list: Result<AccessListResult, String> = match access_list_result {
+        Ok(alr) if alr.error.is_some() => Err(alr.error.unwrap()),
+        Ok(alr) => Ok(alr),
+        Err(e) => Err(e.to_string()),
+    };
+
+    // Step 2: Build and send raw tx
+    let chain_id: U64 = client
+        .ws
+        .request("eth_chainId", rpc_params![])
+        .await
+        .unwrap();
+
+    let nonce = match request.nonce {
+        Some(n) => n,
+        None => tx_count(client, signer.address(), "latest").await.unwrap(),
+    };
+
+    let raw_tx = raw_signed_eip1559(
+        signer,
+        chain_id.to::<u64>(),
+        nonce,
+        request.gas.unwrap_or(1_000_000),
+        request.to.unwrap_or(TxKind::Create),
+        request.value.unwrap_or(U256::ZERO),
+        request.input.input.clone().unwrap_or_default(),
+        request.gas_price.or(request.max_fee_per_gas).unwrap_or(0),
+        request.max_priority_fee_per_gas.unwrap_or(0),
+    )
+    .await
+    .unwrap();
+
+    let send_raw_tx: Result<B256, _> = client
+        .ws
+        .request("eth_sendRawTransaction", rpc_params![&raw_tx])
+        .await;
+
+    EndpointResults {
+        estimate_gas,
+        call,
+        create_access_list,
+        send_raw_tx,
+    }
+}
+
 pub async fn setup_with_simple_storage(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
-    let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
-    test_rollup.wait_for_rollup_height_advance_by(10).await;
+    setup_with_simple_storage_with_ideal_lag(finalization_blocks, extension, 3).await
+}
+
+pub async fn setup_with_simple_storage_with_ideal_lag(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    ideal_lag: u64,
+) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
+    let test_rollup =
+        setup_test_rollup_with_ideal_lag(finalization_blocks, extension, ideal_lag).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
     (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }

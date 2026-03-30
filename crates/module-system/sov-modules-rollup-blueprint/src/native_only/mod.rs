@@ -194,6 +194,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         _sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _shutdown_receiver: watch::Receiver<()>,
+        _sequencer_da_address: <<Self::Spec as Spec>::Da as DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -231,11 +232,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     )
                     .await?;
 
+                let da_address = da_service.get_signer().await.context(
+                    "Full node with standard sequencer require DaService with signer support",
+                )?;
                 let mut endpoints = self
                     .sequencer_additional_apis(
                         sequencer.clone(),
                         rollup_config,
                         shutdown_receiver.clone(),
+                        da_address,
                     )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
@@ -248,9 +253,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await.context(
-                        "Full node with standard sequencer require DaService with signer support",
-                    )?,
+                    da_address,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -271,11 +274,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     )
                     .await?;
 
+                let da_address = da_service.get_signer().await.context(
+                    "Full node with preferred sequencer require DaService with signer support",
+                )?;
                 let mut endpoints = self
                     .sequencer_additional_apis(
                         sequencer.clone(),
                         rollup_config,
                         shutdown_receiver.clone(),
+                        da_address,
                     )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
@@ -288,9 +295,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     background_handles,
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
-                    da_address: da_service.get_signer().await.context(
-                        "Full node with preferred sequencer require DaService with signer support",
-                    )?,
+                    da_address,
                 })
             }
         }

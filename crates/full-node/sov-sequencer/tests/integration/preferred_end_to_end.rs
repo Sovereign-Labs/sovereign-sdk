@@ -33,7 +33,9 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
 use sov_sequencer::{SequencerKindConfig, StateUpdateNotification};
 use sov_test_modules::hooks_count::HooksCount;
-use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
+use sov_test_utils::runtime::genesis::optimistic::{
+    HighLevelOptimisticGenesisConfig, MinimalOptimisticGenesisConfig,
+};
 use sov_test_utils::test_rollup::FullNodeBlueprint;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
@@ -975,14 +977,24 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     test_rollup.wait_for_node_synced().await.unwrap();
 
     tracing::info!("Resuming preferred sequencer batch production.");
+    // Subscribe to state update notifications BEFORE resuming, so we don't miss the
+    // recovery notification. This channel bypasses the state updator message queue
+    // (which blocks during trigger_recovery's async calls under CPU pressure).
+    let mut recovery_sub = test_rollup.subscribe_state_updates().await.unwrap();
     test_rollup.resume_preferred_batches().await;
-    // Normally on the next state update, the sequencer should always enter recovery.
+    // Produce one block to trigger the state update that detects the gap.
     test_rollup.da_service.produce_block_now().await.unwrap();
-    while test_rollup.is_sequencer_ready().await {
-        let _ = da_layer.produce_block().await;
-        sleep(Duration::from_millis(30)).await;
-    }
-    test_rollup.wait_for_node_synced().await.unwrap();
+    // Wait for the notification that indicates recovery was triggered.
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let notification = recovery_sub.next().await.unwrap().unwrap();
+            if notification.triggered_recovery {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timed out waiting for sequencer to enter recovery");
 
     // Create transaction that should fail: sequencer should not accept transactions while in
     // recovery.
@@ -1109,13 +1121,26 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     let test_rollup = builder.start().await.unwrap();
     let client = test_rollup.api_client().clone();
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    // Subscribe BEFORE node sync so we don't miss the recovery notification
+    // (recovery may trigger during the sync phase itself).
+    let mut recovery_sub = test_rollup.subscribe_state_updates().await.unwrap();
 
-    // First we sync the node to the new DA blocks
+    // Sync the node to the new DA blocks. Recovery may trigger during sync.
     test_rollup.wait_for_node_synced().await.unwrap();
-    // Now on the next state update, the sequencer should always enter recovery
+    // Produce one more block in case recovery hasn't triggered yet.
     test_rollup.da_service.produce_block_now().await.unwrap();
-    sleep(Duration::from_millis(50)).await;
-    assert!(!test_rollup.is_sequencer_ready().await);
+    // Wait for the notification that indicates recovery was triggered. This
+    // bypasses the state updator (which blocks during trigger_recovery under load).
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            let notification = recovery_sub.next().await.unwrap().unwrap();
+            if notification.triggered_recovery {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timed out waiting for sequencer to enter recovery");
 
     // Create transaction that should fail: sequencer should not accept transactions while in recovery
     const UPDATE_VEC_VALUE: u8 = 12;
@@ -3725,6 +3750,74 @@ fn tx_assert_state_root(
     encode_call::<TestRuntime<TestSpec>>(key, nonce, &msg)
 }
 
+#[tokio::test(flavor = "multi_thread")]
+#[should_panic(expected = "DA address mismatch")]
+async fn preferred_sequencer_fails_on_da_address_mismatch() {
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate();
+    let genesis_params = GenesisParams {
+        runtime: <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
+            genesis_config.into(),
+            ValueSetterConfig {
+                admin: sov_modules_api::Address::from([0; 28]),
+            },
+            (),
+            PaymasterConfig::default(),
+            (),
+            (),
+        ),
+    };
+
+    RollupBuilder::<TestBlueprint>::new(
+        GenesisSource::CustomParams(genesis_params),
+        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        0,
+    )
+    .set_config(|conf| {
+        conf.sequencer_config = SequencerKindConfig::Preferred(Default::default());
+    })
+    .start()
+    .await
+    .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[should_panic(expected = "No preferred sequencer is registered in the sequencer registry")]
+async fn preferred_sequencer_fails_when_no_preferred_sequencer_in_registry() {
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate();
+    let seq_da_address = HighLevelOptimisticGenesisConfig::<TestSpec>::sequencer_da_addr();
+    let mut minimal: MinimalOptimisticGenesisConfig<TestSpec> = genesis_config.into();
+    minimal
+        .config
+        .sequencer_registry
+        .sequencer_config
+        .is_preferred_sequencer = false;
+    let genesis_params = GenesisParams {
+        runtime: <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
+            minimal,
+            ValueSetterConfig {
+                admin: sov_modules_api::Address::from([0; 28]),
+            },
+            (),
+            PaymasterConfig::default(),
+            (),
+            (),
+        ),
+    };
+
+    RollupBuilder::<TestBlueprint>::new(
+        GenesisSource::CustomParams(genesis_params),
+        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        0,
+    )
+    .set_config(|conf| {
+        conf.sequencer_config = SequencerKindConfig::Preferred(Default::default());
+    })
+    .set_da_config(|c| c.sender_address = seq_da_address)
+    .start()
+    .await
+    .unwrap();
+}
+
 mod tests_with_basic_kernel {
     use sov_modules_stf_blueprint::GenesisParams;
     use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
@@ -3745,6 +3838,7 @@ mod tests_with_basic_kernel {
     )]
     async fn preferred_sequencer_panics_with_basic_kernel() {
         let genesis_config = HighLevelOptimisticGenesisConfig::generate();
+        let seq_da_address = HighLevelOptimisticGenesisConfig::<TestSpec>::sequencer_da_addr();
         let genesis_params = GenesisParams {
             runtime: GenesisConfig::from_minimal_config(genesis_config.into()),
         };
@@ -3758,6 +3852,7 @@ mod tests_with_basic_kernel {
             conf.sequencer_config =
                 sov_sequencer::SequencerKindConfig::Preferred(Default::default());
         })
+        .set_da_config(|c| c.sender_address = seq_da_address)
         .start()
         .await
         .unwrap();

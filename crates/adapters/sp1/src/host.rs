@@ -3,11 +3,12 @@
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
-use sp1_sdk::blocking::{CpuProver, SP1PublicValues};
+use sp1_sdk::blocking::CpuProver;
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
-use sp1_sdk::{ProvingKey, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{ProvingKey, SP1Proof, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
+use crate::SP1MethodId;
 
 /// SP1 Host implementation.
 pub struct SP1Host<'host> {
@@ -28,6 +29,24 @@ impl<'host> SP1Host<'host> {
     /// Create a new `Sp1Guest` that reads the provided hints
     pub fn simulate_with_hints(&mut self) -> SP1Guest {
         SP1Guest::with_hints(self.stdin.buffer.clone())
+    }
+
+    /// Adds a compressed SP1 proof and its verifying key to the host's stdin
+    /// so it can be verified inside the guest program during aggregation.
+    pub fn add_proof(
+        &mut self,
+        proof: &SP1ProofWithPublicValues,
+        method_id: &SP1MethodId,
+    ) -> anyhow::Result<()> {
+        let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
+            anyhow::bail!("Expected a compressed SP1 proof");
+        };
+        let vk: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&method_id.0)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize SP1VerifyingKey: {e}"))?;
+
+        self.stdin
+            .write_proof(*recursion_proof.clone(), vk.vk.clone());
+        Ok(())
     }
 
     fn create_prover_and_pk(&self) -> anyhow::Result<(CpuProver, SP1ProvingKey)> {
@@ -68,25 +87,24 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let proof: Proof<_, SP1PublicValues> = {
-            if with_proof {
-                let (prover, pk) = self.create_prover_and_pk()?;
-                let output: sp1_sdk::SP1ProofWithPublicValues = prover
-                    .prove(&pk, self.stdin.clone())
-                    .compressed()
-                    .run()
-                    .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
+        let stdin = std::mem::take(&mut self.stdin);
 
-                Proof::Full(output)
-            } else {
-                let prover = ProverClient::builder().mock().build();
-                let output = prover.execute(self.elf.into(), self.stdin.clone()).run()?;
-                Proof::PublicData(output.0)
-            }
+        let result = if with_proof {
+            let (prover, pk) = self.create_prover_and_pk()?;
+            let output: sp1_sdk::SP1ProofWithPublicValues = prover
+                .prove(&pk, stdin)
+                .compressed()
+                .run()
+                .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
+
+            Proof::Full(output)
+        } else {
+            let prover = ProverClient::builder().mock().build();
+            let output = prover.execute(self.elf.into(), stdin).run()?;
+            Proof::PublicData(output.0)
         };
 
-        self.stdin = SP1Stdin::new();
-        Ok(bincode::serialize(&proof)?)
+        Ok(bincode::serialize(&result)?)
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{

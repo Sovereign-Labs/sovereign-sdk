@@ -1,5 +1,5 @@
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, B256, U256, U64};
+use alloy_primitives::{Address, U256, U64};
 use alloy_rpc_types_eth::{AccessListResult, TransactionRequest};
 use demo_stf::MultiAddressEvmSolana;
 use jsonrpsee::core::client::ClientT;
@@ -13,7 +13,7 @@ use sov_modules_api::Amount;
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::evm::evm_test_helper::{
-    create_simple_storage_client, raw_signed_eip1559, setup_test_rollup_with_paymaster, tx_count,
+    call_all_endpoints, create_simple_storage_client, setup_test_rollup_with_paymaster,
     EVM_EXTENSION, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
@@ -118,70 +118,13 @@ async fn get_consistent_response(
     request: &TransactionRequest,
     signer: &PrivateKeySigner,
 ) -> Result<GasValues, CombinedErrors> {
-    // Step 1: 3 simulation calls
-    let eth_estimate_gas_result: Result<U64, _> = client
-        .ws
-        .request("eth_estimateGas", rpc_params![request, "latest"])
-        .await;
+    let results = call_all_endpoints(client, request, signer).await;
 
-    let eth_call_result: Result<String, _> = client
-        .ws
-        .request("eth_call", rpc_params![request, "latest"])
-        .await;
-
-    let access_list_result: Result<AccessListResult, _> = client
-        .ws
-        .request("eth_createAccessList", rpc_params![request, "latest"])
-        .await;
-
-    // Normalize eth_createAccessList: the RPC call itself may succeed but return
-    // an error in the `error` field of the response.
-    let access_list_result: Result<AccessListResult, String> = match access_list_result {
-        Ok(alr) if alr.error.is_some() => Err(alr.error.unwrap()),
-        Ok(alr) => Ok(alr),
-        Err(e) => Err(e.to_string()),
-    };
-
-    // Step 2: Build and send raw tx
-    let chain_id: U64 = client
-        .ws
-        .request("eth_chainId", rpc_params![])
-        .await
-        .unwrap();
-    let nonce = tx_count(client, signer.address(), "latest").await.unwrap();
-
-    let gas = request.gas.unwrap_or(GAS_LIMIT);
-    let value = request.value.unwrap_or(U256::ZERO);
-    let max_priority_fee = request.max_priority_fee_per_gas.unwrap_or(0);
-    let max_fee = request.gas_price.or(request.max_fee_per_gas).unwrap_or(0);
-    let to = request.to.unwrap_or(alloy_primitives::TxKind::Create);
-    let input = request.input.input.clone().unwrap_or_default();
-
-    let raw_tx = raw_signed_eip1559(
-        signer,
-        chain_id.to::<u64>(),
-        nonce,
-        gas,
-        to,
-        value,
-        input,
-        max_fee,
-        max_priority_fee,
-    )
-    .await
-    .unwrap();
-
-    let send_raw_tx_result: Result<B256, _> = client
-        .ws
-        .request("eth_sendRawTransaction", rpc_params![&raw_tx])
-        .await;
-
-    // Step 3: Return
     match (
-        &eth_estimate_gas_result,
-        &eth_call_result,
-        &access_list_result,
-        &send_raw_tx_result,
+        &results.estimate_gas,
+        &results.call,
+        &results.create_access_list,
+        &results.send_raw_tx,
     ) {
         (Ok(estimate_gas), Ok(_), Ok(access_list), Ok(tx_hash)) => {
             let estimate_gas = estimate_gas.to::<u64>();
@@ -218,14 +161,14 @@ async fn get_consistent_response(
                 send_raw_tx_error: send_err.to_string(),
             })
         }
-        // The consistency check above already panics on mismatch, so this is unreachable.
         _ => {
             panic!(
                 "Endpoints disagree!\n  \
-             eth_estimateGas: {eth_estimate_gas_result:?}\n  \
-             eth_call: {eth_call_result:?}\n  \
-             eth_createAccessList: {access_list_result:?}\n  \
-             eth_sendRawTransaction: {send_raw_tx_result:?}"
+             eth_estimateGas: {:?}\n  \
+             eth_call: {:?}\n  \
+             eth_createAccessList: {:?}\n  \
+             eth_sendRawTransaction: {:?}",
+                results.estimate_gas, results.call, results.create_access_list, results.send_raw_tx,
             );
         }
     }

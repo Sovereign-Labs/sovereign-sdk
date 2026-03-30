@@ -178,7 +178,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-all-targets-1-93
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -209,7 +209,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-default-targets-1-93
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -254,7 +254,7 @@ jobs:
   nextest_all_features:
     name: nextest_all_features
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -538,3 +538,28 @@ jobs:
         run: |
           cd examples/demo-rollup
           bash ./web3-js-sdk-test-runner.sh
+
+  # Optional by design: keep this out of `check-aggregate` so failures stay
+  # visible without blocking merges.
+  rollup_starter_lint:
+    name: rollup_starter_lint
+    if: ${{ github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    timeout-minutes: 90
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Clone rollup-starter
+        run: git clone --depth 1 https://github.com/Sovereign-Labs/rollup-starter "${RUNNER_TEMP}/rollup-starter"
+      - name: Update starter SDK revision
+        working-directory: ${{ runner.temp }}/rollup-starter
+        # For pull_request events, github.sha is a synthetic merge commit that
+        # can't be fetched from the repo. Use the actual PR head SHA instead.
+        run: ./scripts/update_rev.sh "${{ github.event.pull_request.head.sha || github.sha }}"
+      - name: Run starter lint
+        working-directory: ${{ runner.temp }}/rollup-starter
+        run: make lint

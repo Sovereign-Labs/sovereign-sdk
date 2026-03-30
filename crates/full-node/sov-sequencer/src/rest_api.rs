@@ -16,6 +16,7 @@ use serde_with::base64::Base64;
 use serde_with::serde_as;
 use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::Runtime;
 use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
 use sov_rest_utils::handle_bad_ws_request;
@@ -225,6 +226,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     ) -> Result<impl IntoResponse, axum::response::Response> {
         let ip_addr = get_client_ip(headers, Some(&connect_info))
             .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
+        // Limit the incoming messsages directly on the web-socket
+        // layer.
+        //
+        // We choose 2x here for simplicity to cover the base64
+        // encoding overhead and the few bytes for the JSON around.
+        let ws = ws.max_message_size(config_value!("MAX_TX_SIZE") * 2);
 
         Ok(ws.on_upgrade(move |mut socket| async move {
             let mut shutdown_receiver = state.shutdown_receiver.clone();

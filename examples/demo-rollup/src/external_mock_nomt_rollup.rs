@@ -22,7 +22,7 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_risc0_adapter::Risc0;
 use sov_risc0_adapter::Risc0CryptoSpec;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
@@ -121,6 +121,7 @@ impl FullNodeBlueprint<Native> for ExternalMockNomtDemoRollup<Native> {
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        sequencer_da_address: <MockDaSpec as sov_modules_api::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -129,6 +130,9 @@ impl FullNodeBlueprint<Native> for ExternalMockNomtDemoRollup<Native> {
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
+            sequencer_rollup_address: rollup_config.sequencer.rollup_address,
+            sequencer_da_address,
+            sequencer_type: crate::sequencer_type(&rollup_config.sequencer),
             shutdown_receiver,
         };
         let axum_router = solana_offchain_router(sequencer.clone());
@@ -167,7 +171,7 @@ impl FullNodeBlueprint<Native> for ExternalMockNomtDemoRollup<Native> {
             outer_vm,
             da_verifier,
             prover_config_discriminant,
-            CodeCommitment::default(),
+            CodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
         )
     }

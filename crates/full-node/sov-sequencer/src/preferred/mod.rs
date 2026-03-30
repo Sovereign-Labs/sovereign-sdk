@@ -24,6 +24,7 @@ use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
 use async_trait::async_trait;
+use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
@@ -54,6 +55,7 @@ use sov_modules_api::{
 use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
+use sov_rest_utils::json_obj;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
@@ -625,6 +627,17 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     ),
 }
 
+/// Returns `true` when the test pause flag is set and applies to this node.
+///
+/// * `"1"` pauses all nodes (backward-compatible).
+/// * A specific `node_id` pauses only the node whose postgres config matches.
+fn should_skip_update_state(postgres_config: Option<&PostgresConfig>) -> bool {
+    let Ok(flag_value) = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE") else {
+        return false;
+    };
+    flag_value == "1" || postgres_config.is_some_and(|c| c.node_id == flag_value)
+}
+
 #[tracing::instrument(skip_all, level = "debug")]
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
@@ -638,22 +651,23 @@ where
 {
     let info =
         poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
-    if cfg!(debug_assertions) {
-        let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
-        if skip_flag == Ok("1".to_string()) {
-            tracing::warn!("skipping state update due to env var flag");
-            #[cfg(feature = "test-utils")]
-            {
-                let _ =
-                    seq.test_only_state_update_notification_sender
-                        .send(StateUpdateNotification {
-                            slot_number: info.slot_number,
-                            finalized_slot_number: info.latest_finalized_slot_number,
-                            update_skipped_due_to_pause: true,
-                        });
-            }
-            return Ok(());
+
+    if cfg!(debug_assertions)
+        && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
+    {
+        tracing::warn!("skipping state update due to env var flag");
+        #[cfg(feature = "test-utils")]
+        {
+            let _ = seq
+                .test_only_state_update_notification_sender
+                .send(StateUpdateNotification {
+                    slot_number: info.slot_number,
+                    finalized_slot_number: info.latest_finalized_slot_number,
+                    update_skipped_due_to_pause: true,
+                    triggered_recovery: false,
+                });
         }
+        return Ok(());
     }
 
     let mut rt = Rt::default();
@@ -671,6 +685,28 @@ where
         )
         .await
         .map_err(|e| e.into_state_update_error())?;
+
+    // For recovery/resync operations, notify tests BEFORE entering the long-running
+    // handler. This bypasses the state updator message queue (which may be blocked
+    // during trigger_recovery's async calls under CPU pressure), letting tests detect
+    // recovery without going through the is_ready() RPC.
+    // For ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary (the normal path), the
+    // notification is already sent by sync_state.rs after processing — skip here to
+    // avoid duplicates that would desync produce_and_wait_for_slot().
+    #[cfg(feature = "test-utils")]
+    if !matches!(
+        operation,
+        PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(..)
+    ) {
+        let _ = seq
+            .test_only_state_update_notification_sender
+            .send(StateUpdateNotification {
+                slot_number: info.slot_number,
+                finalized_slot_number: info.latest_finalized_slot_number,
+                update_skipped_due_to_pause: false,
+                triggered_recovery: matches!(operation, PreferredSeqOperation::RecoverAndCatchUp),
+            });
+    }
 
     match operation {
         PreferredSeqOperation::Unreachable => {
@@ -850,6 +886,16 @@ where
         baked_tx: FullyBakedTx,
         ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        if baked_tx.data.len() > config_value!("MAX_TX_SIZE") {
+            return Err(ErrorObject {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Transaction is too big".to_string(),
+                details: json_obj!({
+                    "max_allowed_size": config_value!("MAX_TX_SIZE"),
+                    "submitted_size": baked_tx.len(),
+                }),
+            });
+        }
         let sequencer = self.clone();
         tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, ip_addr).await })
             .await
