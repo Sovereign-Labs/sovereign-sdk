@@ -25,8 +25,8 @@ use sov_test_utils::test_rollup::TestRollup;
 use crate::evm::evm_test_helper::{
     alloy_client, create_simple_storage_client, deploy_contract_check,
     estimate_gas_and_check_affordability, set_value_check, setup_test_rollup,
-    setup_test_rollup_with_ideal_lag, EVM_EXTENSION, HIGH_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS,
-    SENDER_PRIV_KEY,
+    setup_test_rollup_with_ideal_lag, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
+    HIGH_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 
 #[derive(Debug, Deserialize)]
