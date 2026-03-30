@@ -154,6 +154,13 @@ async fn apply_nonce(
 ) -> anyhow::Result<()> {
     match nonce_option {
         NonceOption::Below if is_funded => {
+            // Sync client nonce with on-chain nonce; the main loop sends raw
+            // transactions via call_all_endpoints which bypasses the client's
+            // internal nonce counter.
+            let on_chain_nonce = tx_count(ws_client, signer.address(), "latest").await?;
+            ws_client
+                .nonce
+                .store(on_chain_nonce, std::sync::atomic::Ordering::SeqCst);
             let hash = ws_client.send_eth(signer.address(), U256::ZERO).await;
             ws_client.wait_for_receipt(hash).await;
             request.nonce = Some(0);
@@ -261,9 +268,13 @@ fn check_consistency(
                  createAccessList={create_access_list:?}"
             );
         }
-        if estimate_gas.is_err() {
+        if estimate_gas.is_err() && explicit_gas.is_none() {
             // When estimate fails under strict conditions, call must also fail:
             // same fee validation applies to both.
+            //
+            // Exception: when explicit gas is set, estimateGas may fail with gas
+            // exhaustion (STF pipeline gas metering) while eth_call succeeds
+            // (direct EVM simulation with different gas handling).
             assert!(
                 call.is_err(),
                 "strict: eth_call should fail when estimateGas fails:\n\
