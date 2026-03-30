@@ -1,3 +1,6 @@
+# 2026-03-30
+- #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
+
 # 2026-03-24
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
