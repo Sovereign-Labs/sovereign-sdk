@@ -90,7 +90,6 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 tempfile = { workspace = true }
 bytes = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
-lazy_static = { workspace = true }
 jsonschema = { workspace = true }
 bincode = { workspace = true }
 
