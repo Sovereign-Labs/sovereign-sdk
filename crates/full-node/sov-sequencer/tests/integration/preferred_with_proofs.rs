@@ -479,6 +479,18 @@ async fn test_manual_proof_posting_resync_replays_interleaved_batches_and_proofs
     let (visible_proofs, aggregated_proof_counter_task) =
         spawn_aggregated_proof_counter(&client).await?;
 
+    wait_until_ready_proof_count(
+        &test_rollup,
+        &control,
+        1,
+        "proof warmup before pausing preferred batches",
+    )
+    .await?;
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT",
+        RESYNC_DEFERRED_SLOTS_COUNT_OVERRIDE,
+    );
+
     test_rollup.da_service.set_blob_submission_pause().await;
     pause_preferred_batches_and_confirm(&test_rollup).await?;
 
@@ -524,10 +536,6 @@ async fn test_manual_proof_posting_resync_replays_interleaved_batches_and_proofs
     )
     .await?;
 
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT",
-        RESYNC_DEFERRED_SLOTS_COUNT_OVERRIDE,
-    );
     test_rollup.da_service.resume_blob_submission().await;
     test_rollup.resume_preferred_batches().await;
 
