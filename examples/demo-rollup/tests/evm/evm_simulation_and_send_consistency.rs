@@ -7,91 +7,89 @@ use crate::evm::evm_test_helper::{
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, TxKind, U256, U64};
 use alloy_rpc_types_eth::{AccessListResult, TransactionRequest};
-use arbitrary::Arbitrary;
-use arbitrary::Unstructured;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use jsonrpsee::types::ErrorObjectOwned;
-use proptest::prelude::*;
 use sov_eth_client::SimpleStorageClient;
+
+// Rollup thresholds (from genesis config):
+//   base_fee        = 10 wei
+//   sender_balance  = 100_000_000_000_000_000 (1e17)
+//   tx_gas_limit    = 30_000_000
+//   intrinsic_gas   = 21_000 (simple ETH transfer)
+const BASE_FEE: u128 = 10;
 
 // ---------------------------------------------------------------------------
 // Test input types
 // ---------------------------------------------------------------------------
 
-pub struct TestTransactionRequest {
-    pub max_fee_per_gas: Option<u128>,
-    pub max_priority_fee_per_gas: Option<u128>,
-    pub gas: Option<u64>,
-    pub value: Option<U256>,
-    pub to: Option<Address>,
+#[derive(Debug)]
+struct TestTransactionRequest {
+    max_fee_per_gas: Option<u128>,
+    max_priority_fee_per_gas: Option<u128>,
+    gas: Option<u64>,
+    value: Option<U256>,
+    to: Option<Address>,
 }
 
 impl TestTransactionRequest {
-    pub fn build_tx_request(self, sender: Address) -> TransactionRequest {
-        let TestTransactionRequest {
-            max_fee_per_gas,
-            max_priority_fee_per_gas,
-            gas,
-            value,
-            to,
-        } = self;
+    fn build_tx_request(&self, sender: Address) -> TransactionRequest {
         TransactionRequest {
             from: Some(sender),
-            to: to.map(TxKind::Call),
-            max_fee_per_gas,
-            max_priority_fee_per_gas,
-            gas,
-            value,
+            to: self.to.map(TxKind::Call),
+            max_fee_per_gas: self.max_fee_per_gas,
+            max_priority_fee_per_gas: self.max_priority_fee_per_gas,
+            gas: self.gas,
+            value: self.value,
             ..Default::default()
         }
     }
 }
 
-impl<'a> Arbitrary<'a> for TestTransactionRequest {
-    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        // Rollup thresholds:
-        //   base_fee        = 10 wei
-        //   sender_balance  = 100_000_000_000_000_000 (1e17)
-        //   tx_gas_limit    = 30_000_000
-        //   intrinsic_gas   = 21_000 (simple ETH transfer)
+/// Generates all transaction field combinations from the boundary-value sets.
+fn all_tx_field_combinations() -> Vec<TestTransactionRequest> {
+    let max_fees: &[Option<u128>] = &[
+        None,
+        Some(0),
+        Some(9),
+        Some(10),
+        Some(11),
+        Some(10_000_000_000_000),
+    ];
+    let gases: &[Option<u64>] = &[None, Some(0), Some(20_999), Some(21_000), Some(30_000_001)];
+    let values: &[Option<U256>] = &[
+        None,
+        Some(U256::ZERO),
+        Some(U256::from(1u64)),
+        Some(U256::from(100_000_000_000_000_001u128)),
+    ];
+    let tos: &[Option<Address>] = &[None, Some(Address::repeat_byte(0x22))];
 
-        let max_fee_per_gas = u.choose(&[
-            None,
-            Some(0),
-            Some(9),
-            Some(10),
-            Some(11),
-            Some(10_000_000_000_000),
-        ])?;
-
-        let max_priority_fee_per_gas = if max_fee_per_gas.is_none() {
-            u.choose(&[None, Some(0)])?
+    let mut combos = Vec::new();
+    for &max_fee_per_gas in max_fees {
+        // Priority fee options depend on whether max_fee is set (mirrors original Arbitrary impl)
+        let priority_fees: &[Option<u128>] = if max_fee_per_gas.is_none() {
+            &[None, Some(0)]
         } else {
-            u.choose(&[None, Some(0), Some(11)])?
+            &[None, Some(0), Some(11)]
         };
-
-        let gas = u.choose(&[None, Some(0), Some(20_999), Some(21_000), Some(30_000_001)])?;
-
-        let values = [
-            None,
-            Some(U256::ZERO),
-            Some(U256::from(1u64)),
-            Some(U256::from(100_000_000_000_000_001u128)),
-        ];
-        let value = u.choose(&values)?;
-
-        let to_options = [None, Some(Address::repeat_byte(0x22))];
-        let to = u.choose(&to_options)?;
-
-        Ok(TestTransactionRequest {
-            max_fee_per_gas: *max_fee_per_gas,
-            max_priority_fee_per_gas: *max_priority_fee_per_gas,
-            gas: *gas,
-            value: *value,
-            to: *to,
-        })
+        for &max_priority_fee_per_gas in priority_fees {
+            for &gas in gases {
+                for value in values {
+                    for to in tos {
+                        combos.push(TestTransactionRequest {
+                            max_fee_per_gas,
+                            max_priority_fee_per_gas,
+                            gas,
+                            value: *value,
+                            to: *to,
+                        });
+                    }
+                }
+            }
+        }
     }
+    combos
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,13 +97,6 @@ enum NonceOption {
     Below,
     Match,
     Future,
-}
-
-impl<'a> Arbitrary<'a> for NonceOption {
-    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        u.choose(&[NonceOption::Below, NonceOption::Match, NonceOption::Future])
-            .copied()
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -127,16 +118,6 @@ impl RegularTestAccount {
     }
 }
 
-impl<'a> Arbitrary<'a> for RegularTestAccount {
-    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        u.choose(&[
-            RegularTestAccount::Funded,
-            RegularTestAccount::UnfundedUncovered,
-        ])
-        .copied()
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 enum PaymasterTestAccount {
     FundedCovered,
@@ -155,17 +136,6 @@ impl PaymasterTestAccount {
 
     fn is_funded(self) -> bool {
         matches!(self, Self::FundedCovered)
-    }
-}
-
-impl<'a> Arbitrary<'a> for PaymasterTestAccount {
-    fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        u.choose(&[
-            PaymasterTestAccount::FundedCovered,
-            PaymasterTestAccount::UnfundedCovered,
-            PaymasterTestAccount::UnfundedUncovered,
-        ])
-        .copied()
     }
 }
 
@@ -202,6 +172,24 @@ async fn apply_nonce(
 // Consistency check
 // ---------------------------------------------------------------------------
 
+/// Returns true when createAccessList is expected to agree with estimate+send.
+///
+/// createAccessList diverges from estimate/send in three known ways:
+///   - It skips fee cap validation (accepts below-base-fee requests)
+///   - It skips nonce validation
+///   - It skips affordability checks (gas_price hardcoded to 0)
+///
+/// So strict checking is safe only when none of these divergences apply.
+fn should_strict_check(
+    nonce_option: NonceOption,
+    is_funded: bool,
+    max_fee_per_gas: Option<u128>,
+) -> bool {
+    matches!(nonce_option, NonceOption::Match)
+        && is_funded
+        && max_fee_per_gas.is_some_and(|f| f >= BASE_FEE)
+}
+
 fn check_consistency(
     results: &EndpointResults,
     explicit_gas: Option<u64>,
@@ -217,154 +205,103 @@ fn check_consistency(
         send_raw_tx,
     } = results;
 
-    // Primary consistency check: estimateGas and sendRawTransaction must agree.
-    // Known expected divergences:
-    //   - eth_call and createAccessList don't check affordability by design
-    //   - when user provides explicit gas below the estimated gas, send fails (user error)
-    //   - simulation doesn't validate nonce; Below/Future nonce may cause send to fail
-    match (estimate_gas, call, create_access_list, send_raw_tx) {
-        // All 4 agree OK
-        (Ok(_), Ok(_), Ok(_), Ok(_)) => {
-            println!("Consistent Ok");
+    // ── Step 1: estimateGas vs sendRawTransaction must agree ──
+    //
+    // Known expected divergences where estimate=Ok but send=Err:
+    //   (a) user provided explicit gas below the estimated gas (user error)
+    //   (b) simulation doesn't validate nonce; Below/Future nonce causes send to fail
+    //   (c) fee fields omitted → estimate skips affordability preflight,
+    //       but raw tx gets base fee filled in and sequencer checks affordability
+    match (estimate_gas, send_raw_tx) {
+        (Ok(_), Ok(_)) | (Err(_), Err(_)) => {
+            // Primary pair agrees — checked further in step 2.
         }
-        // estimate and send agree OK; createAccessList may diverge
-        (Ok(_), Ok(_), _, Ok(_)) => {
-            if strict_check {
-                assert!(
-                    create_access_list.is_ok(),
-                    "createAccessList should also succeed: {create_access_list:?}"
-                );
-            }
+        (Ok(estimated), Err(_)) if explicit_gas.is_some_and(|g| g < estimated.to::<u64>()) => {
+            // (a) explicit gas cap below estimate
         }
-        // All 4 agree Err
-        (Err(_), Err(_), Err(_), Err(_)) => {
-            println!("Consistent Err");
+        (Ok(_), Err(_)) if !matches!(nonce_option, NonceOption::Match) => {
+            // (b) simulation skips nonce check
         }
-        // estimate and send agree Err; call/createAccessList may succeed
-        // (eth_call and createAccessList don't enforce affordability checks)
-        (Err(_), _, _, Err(_)) => {
-            println!(
-                "estimate+send Err, call/createAccessList may diverge (no affordability check)"
-            );
-        }
-        // estimateGas=Ok but sendRawTransaction=Err: allowed when user provided
-        // explicit gas below the estimated amount (user sent with insufficient gas)
-        (Ok(estimated), _, _, Err(_))
-            if explicit_gas.is_some_and(|g| g < estimated.to::<u64>()) =>
-        {
-            println!(
-                "estimate=Ok({estimated}) but send=Err: explicit gas {} < estimated (expected)",
-                explicit_gas.unwrap()
-            );
-        }
-        // estimateGas=Ok but sendRawTransaction=Err with non-Match nonce:
-        // simulation doesn't validate nonce, so Below/Future nonce can cause send to fail
-        (Ok(_), _, _, Err(_)) if !matches!(nonce_option, NonceOption::Match) => {
-            println!(
-                "estimate=Ok but send=Err with nonce={nonce_option:?} (simulation skips nonce check)"
-            );
-        }
-        // estimateGas=Ok but sendRawTransaction=Err when fee fields were omitted:
-        // estimateGas skips affordability preflight when no fee fields are present,
-        // but the raw tx gets the base fee filled in and the sequencer checks affordability
-        (Ok(_), _, _, Err(send_err))
+        (Ok(_), Err(send_err))
             if explicit_max_fee.is_none()
                 && send_err.to_string().contains(INSUFFICIENT_FUNDS_ERROR) =>
         {
-            println!(
-                "estimate=Ok but send=Err with max_fee=None (affordability preflight skipped without fee fields)"
-            );
+            // (c) affordability preflight skipped without fee fields
         }
-        // True disagreement between estimateGas and sendRawTransaction
         _ => {
             panic!(
-                "Responses disagree: \n\
+                "estimateGas and sendRawTransaction disagree:\n\
                  {context}\n\
                  estimateGas={estimate_gas:?}\n\
-                 call={call:?}\n\
-                 createAccessList={create_access_list:?}\n\
                  sendRawTransaction={send_raw_tx:?}"
-            )
+            );
+        }
+    }
+
+    // ── Step 2: simulation endpoints (call, createAccessList) ──
+    //
+    // eth_call and createAccessList skip affordability and nonce checks,
+    // so they can succeed when estimate/send fail. When strict_check is
+    // true (funded account, valid fee, matching nonce), they must agree
+    // with estimate.
+    if strict_check {
+        if estimate_gas.is_ok() {
+            assert!(
+                call.is_ok(),
+                "strict: eth_call should succeed when estimateGas succeeds:\n\
+                 {context}\n\
+                 estimateGas={estimate_gas:?}\n\
+                 eth_call={call:?}"
+            );
+            assert!(
+                create_access_list.is_ok(),
+                "strict: createAccessList should succeed when estimateGas succeeds:\n\
+                 {context}\n\
+                 estimateGas={estimate_gas:?}\n\
+                 createAccessList={create_access_list:?}"
+            );
+        }
+        if estimate_gas.is_err() {
+            // When estimate fails under strict conditions, call must also fail:
+            // same fee validation applies to both.
+            assert!(
+                call.is_err(),
+                "strict: eth_call should fail when estimateGas fails:\n\
+                 {context}\n\
+                 estimateGas={estimate_gas:?}\n\
+                 eth_call={call:?}"
+            );
+            // createAccessList intentionally skips fee cap validation,
+            // so it may succeed even when estimate fails. No assertion here.
         }
     }
 }
 
 // ---------------------------------------------------------------------------
-// Inner test functions
+// Inner test logic (shared rollup variant)
 // ---------------------------------------------------------------------------
 
-async fn test_regular_rollup_simulation_and_send_consistency(
-    request: TestTransactionRequest,
-    account: RegularTestAccount,
+async fn run_consistency_check(
+    ws_client: &SimpleStorageClient,
+    signer: &PrivateKeySigner,
+    request: &TestTransactionRequest,
     nonce_option: NonceOption,
-    strict_check: bool,
+    is_funded: bool,
+    account_label: &str,
 ) -> anyhow::Result<()> {
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
+    let mut tx_request = request.build_tx_request(signer.address());
+    apply_nonce(nonce_option, is_funded, ws_client, signer, &mut tx_request).await?;
 
-    let priv_key = account.priv_key();
-    let ws_client = create_simple_storage_client(rollup.http_addr, priv_key).await;
-    let signer: PrivateKeySigner = priv_key.parse()?;
-
-    let mut request = request.build_tx_request(signer.address());
-    apply_nonce(
-        nonce_option,
-        account.is_funded(),
-        &ws_client,
-        &signer,
-        &mut request,
-    )
-    .await?;
-
+    let strict_check = should_strict_check(nonce_option, is_funded, request.max_fee_per_gas);
     let context = format!(
-        "account={account:?} nonce={nonce_option:?} to={:?} gas={:?} max_fee={:?} max_priority_fee={:?} value={:?} nonce_field={:?}",
-        request.to, request.gas, request.max_fee_per_gas, request.max_priority_fee_per_gas, request.value, request.nonce
+        "account={account_label} nonce={nonce_option:?} request={request:?} nonce_field={:?}",
+        tx_request.nonce
     );
-    let results = call_all_endpoints(&ws_client, &request, &signer).await;
+    let results = call_all_endpoints(ws_client, &tx_request, signer).await;
     check_consistency(
         &results,
-        request.gas,
-        request.max_fee_per_gas,
-        nonce_option,
-        strict_check,
-        &context,
-    );
-
-    Ok(())
-}
-
-async fn test_paymaster_rollup_simulation_and_send_consistency(
-    request: TestTransactionRequest,
-    account: PaymasterTestAccount,
-    nonce_option: NonceOption,
-    strict_check: bool,
-) -> anyhow::Result<()> {
-    let rollup = setup_test_rollup_with_selective_paymaster(0, EVM_EXTENSION).await;
-    rollup.wait_for_rollup_height_advance_by(1).await;
-
-    let priv_key = account.priv_key();
-    let ws_client = create_simple_storage_client(rollup.http_addr, priv_key).await;
-    let signer: PrivateKeySigner = priv_key.parse()?;
-
-    let mut request = request.build_tx_request(signer.address());
-    apply_nonce(
-        nonce_option,
-        account.is_funded(),
-        &ws_client,
-        &signer,
-        &mut request,
-    )
-    .await?;
-
-    let context = format!(
-        "account={account:?} nonce={nonce_option:?} to={:?} gas={:?} max_fee={:?} max_priority_fee={:?} value={:?} nonce_field={:?}",
-        request.to, request.gas, request.max_fee_per_gas, request.max_priority_fee_per_gas, request.value, request.nonce
-    );
-    let results = call_all_endpoints(&ws_client, &request, &signer).await;
-    check_consistency(
-        &results,
-        request.gas,
-        request.max_fee_per_gas,
+        tx_request.gas,
+        tx_request.max_fee_per_gas,
         nonce_option,
         strict_check,
         &context,
@@ -379,7 +316,13 @@ async fn test_paymaster_rollup_simulation_and_send_consistency(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn smoke_test_evm_endpoint_consistency() -> anyhow::Result<()> {
-    let test_tx_request = TestTransactionRequest {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+
+    let request = TestTransactionRequest {
         max_fee_per_gas: Some(10),
         max_priority_fee_per_gas: Some(0),
         gas: None,
@@ -387,17 +330,19 @@ async fn smoke_test_evm_endpoint_consistency() -> anyhow::Result<()> {
         to: Some(Address::repeat_byte(0x22)),
     };
 
-    test_regular_rollup_simulation_and_send_consistency(
-        test_tx_request,
-        RegularTestAccount::Funded,
+    run_consistency_check(
+        &ws_client,
+        &signer,
+        &request,
         NonceOption::Match,
-        false,
+        true,
+        "Funded",
     )
     .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[should_panic(expected = "Responses disagree")]
+#[should_panic(expected = "estimateGas and sendRawTransaction disagree")]
 async fn explicit_gas_matching_estimate_does_not_whitelist_unrelated_send_failure() {
     let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
     rollup.wait_for_rollup_height_advance_by(1).await;
@@ -451,61 +396,168 @@ async fn explicit_gas_matching_estimate_does_not_whitelist_unrelated_send_failur
 }
 
 // ---------------------------------------------------------------------------
-// Property tests
+// Exhaustive enumeration tests
 // ---------------------------------------------------------------------------
 
-proptest! {
-    #![proptest_config(ProptestConfig::with_cases(5))]
+/// Representative subset of tx combinations for nonce variant testing.
+/// Avoids the full Cartesian product since Below nonce requires a self-transfer
+/// (1 block time wait per case).
+fn representative_combos() -> Vec<TestTransactionRequest> {
+    vec![
+        // Funded happy path
+        TestTransactionRequest {
+            max_fee_per_gas: Some(11),
+            max_priority_fee_per_gas: Some(0),
+            gas: None,
+            value: Some(U256::from(1u64)),
+            to: Some(Address::repeat_byte(0x22)),
+        },
+        // No fee fields (affordability preflight skipped)
+        TestTransactionRequest {
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            gas: None,
+            value: Some(U256::ZERO),
+            to: Some(Address::repeat_byte(0x22)),
+        },
+        // Below base fee
+        TestTransactionRequest {
+            max_fee_per_gas: Some(9),
+            max_priority_fee_per_gas: Some(0),
+            gas: Some(21_000),
+            value: Some(U256::ZERO),
+            to: Some(Address::repeat_byte(0x22)),
+        },
+        // Contract creation
+        TestTransactionRequest {
+            max_fee_per_gas: Some(10),
+            max_priority_fee_per_gas: None,
+            gas: None,
+            value: None,
+            to: None,
+        },
+    ]
+}
 
-    #[test]
-    fn proptest_simulation_send_consistency(bytes in prop::collection::vec(any::<u8>(), 64..256)) {
-        let mut u = Unstructured::new(&bytes);
-        let Ok(request) = TestTransactionRequest::arbitrary(&mut u) else {
-            return Ok(());
-        };
-        let Ok(account) = RegularTestAccount::arbitrary(&mut u) else {
-            return Ok(());
-        };
-        let Ok(nonce) = NonceOption::arbitrary(&mut u) else {
-            return Ok(());
-        };
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async {
-                test_regular_rollup_simulation_and_send_consistency(
-                    request,
-                    account,
-                    nonce,
-                    false,
+#[tokio::test(flavor = "multi_thread")]
+async fn exhaustive_regular_rollup_consistency() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let combos = all_tx_field_combinations();
+    let accounts = [
+        RegularTestAccount::Funded,
+        RegularTestAccount::UnfundedUncovered,
+    ];
+
+    for account in accounts {
+        let ws_client = create_simple_storage_client(rollup.http_addr, account.priv_key()).await;
+        let signer: PrivateKeySigner = account.priv_key().parse()?;
+
+        // Main loop: Match nonce across all tx field combinations
+        for (i, combo) in combos.iter().enumerate() {
+            run_consistency_check(
+                &ws_client,
+                &signer,
+                combo,
+                NonceOption::Match,
+                account.is_funded(),
+                &format!("{account:?}"),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("case {i} failed for {account:?}: {e}"));
+        }
+
+        // Future nonce: representative subset (no extra tx overhead)
+        for combo in &representative_combos() {
+            run_consistency_check(
+                &ws_client,
+                &signer,
+                combo,
+                NonceOption::Future,
+                account.is_funded(),
+                &format!("{account:?}"),
+            )
+            .await?;
+        }
+
+        // Below nonce: representative subset (sends a self-transfer per case, only for funded)
+        if account.is_funded() {
+            for combo in &representative_combos() {
+                run_consistency_check(
+                    &ws_client,
+                    &signer,
+                    combo,
+                    NonceOption::Below,
+                    account.is_funded(),
+                    &format!("{account:?}"),
                 )
-                .await
-                .unwrap();
-            });
+                .await?;
+            }
+        }
     }
 
-    #[test]
-    fn proptest_paymaster_simulation_send_consistency(bytes in prop::collection::vec(any::<u8>(), 64..1024)) {
-        let mut u = Unstructured::new(&bytes);
-        let Ok(request) = TestTransactionRequest::arbitrary(&mut u) else {
-            return Ok(());
-        };
-        let Ok(account) = PaymasterTestAccount::arbitrary(&mut u) else {
-            return Ok(());
-        };
-        let Ok(nonce) = NonceOption::arbitrary(&mut u) else {
-            return Ok(());
-        };
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async {
-                test_paymaster_rollup_simulation_and_send_consistency(
-                    request,
-                    account,
-                    nonce,
-                    false,
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn exhaustive_paymaster_rollup_consistency() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup_with_selective_paymaster(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let combos = all_tx_field_combinations();
+    let accounts = [
+        PaymasterTestAccount::FundedCovered,
+        PaymasterTestAccount::UnfundedCovered,
+        PaymasterTestAccount::UnfundedUncovered,
+    ];
+
+    for account in accounts {
+        let ws_client = create_simple_storage_client(rollup.http_addr, account.priv_key()).await;
+        let signer: PrivateKeySigner = account.priv_key().parse()?;
+
+        // Main loop: Match nonce across all tx field combinations
+        for (i, combo) in combos.iter().enumerate() {
+            run_consistency_check(
+                &ws_client,
+                &signer,
+                combo,
+                NonceOption::Match,
+                account.is_funded(),
+                &format!("{account:?}"),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("case {i} failed for {account:?}: {e}"));
+        }
+
+        // Future nonce: representative subset
+        for combo in &representative_combos() {
+            run_consistency_check(
+                &ws_client,
+                &signer,
+                combo,
+                NonceOption::Future,
+                account.is_funded(),
+                &format!("{account:?}"),
+            )
+            .await?;
+        }
+
+        // Below nonce: representative subset (only for funded accounts)
+        if account.is_funded() {
+            for combo in &representative_combos() {
+                run_consistency_check(
+                    &ws_client,
+                    &signer,
+                    combo,
+                    NonceOption::Below,
+                    account.is_funded(),
+                    &format!("{account:?}"),
                 )
-                .await
-                .unwrap();
-            });
+                .await?;
+            }
+        }
     }
+
+    Ok(())
 }
