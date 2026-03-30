@@ -1,5 +1,6 @@
 # 2026-03-30
 - #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
+- #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
 
 # 2026-03-24
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
