@@ -94,7 +94,7 @@ where
         outer_vm,
         da_verifier,
         prover_config_disc,
-        CodeCommitment::default(),
+        CodeCommitmentHash::default(),
         rollup_config.proof_manager.prover_address,
     )
 }
