@@ -1,5 +1,12 @@
+use std::sync::Arc;
+
 use clap::Parser;
 use sov_modules_api::prelude::tracing;
+use sov_modules_rollup_blueprint::FullNodeBlueprint;
+use sov_soak_testing::{
+    MockRollupBlueprint, NetworkProvingBlueprint, RollupProverConfig, SOAK_INNER_GUEST_SP1_ELF,
+};
+use sov_test_utils::test_rollup::RollupBuilder;
 use tokio::signal::unix::SignalKind;
 
 #[derive(Parser)]
@@ -33,43 +40,49 @@ async fn main() -> Result<(), anyhow::Error> {
 
     if args.network_proving {
         let setup = sov_soak_testing::setup_roles_and_config_sp1();
-        let rollup = sov_soak_testing::setup_rollup_with_network_proving(
+        let builder = sov_soak_testing::create_rollup_builder::<NetworkProvingBlueprint>(
             args.storage_path.into(),
             args.axum_port,
-            setup,
+            &setup,
             args.db_connection_url,
         )
-        .await;
-        wait_for_shutdown_and_stop(rollup.shutdown_sender.subscribe(), || async {
-            rollup.shutdown().await
-        })
-        .await?;
+        .set_config(|config| {
+            // Enable witness generation so proofs can be submitted to the network.
+            // The actual host args are unused by NetworkProverService.
+            config.rollup_prover_config = Some(RollupProverConfig::Execute(Arc::new(
+                *SOAK_INNER_GUEST_SP1_ELF,
+            )));
+        });
+        start_and_wait(builder).await?;
     } else {
         let setup = sov_soak_testing::setup_roles_and_config();
-        let rollup = sov_soak_testing::setup_rollup(
+        let builder = sov_soak_testing::create_rollup_builder::<MockRollupBlueprint>(
             args.storage_path.into(),
             args.axum_port,
-            setup,
+            &setup,
             args.db_connection_url,
         )
-        .await;
-        wait_for_shutdown_and_stop(rollup.shutdown_sender.subscribe(), || async {
-            rollup.shutdown().await
-        })
-        .await?;
+        .set_config(|config| {
+            config.rollup_prover_config = None;
+        });
+        start_and_wait(builder).await?;
     };
 
     Ok(())
 }
 
-async fn wait_for_shutdown_and_stop<F, Fut, T>(
-    mut shutdown_recv: tokio::sync::watch::Receiver<()>,
-    shutdown_fn: F,
-) -> Result<(), anyhow::Error>
+async fn start_and_wait<R>(builder: RollupBuilder<R>) -> Result<(), anyhow::Error>
 where
-    F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = Result<T, anyhow::Error>>,
+    R: FullNodeBlueprint<
+            sov_modules_api::execution_mode::Native,
+            DaService = sov_mock_da::storable::StorableMockDaService,
+        > + Default
+        + 'static,
+    R::Spec: sov_modules_api::Spec<Da = sov_mock_da::MockDaSpec>,
 {
+    let rollup = builder.start().await.expect("Impossible to start rollup");
+    let mut shutdown_recv = rollup.shutdown_sender.subscribe();
+
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
         .expect("Failed to set up SIGTERM handler");
     let mut quit =
@@ -83,6 +96,6 @@ where
         _ = shutdown_recv.changed() => tracing::warn!("Rollup execution finished, this might not be desired!!"),
     }
 
-    shutdown_fn().await?;
+    rollup.shutdown().await?;
     Ok(())
 }

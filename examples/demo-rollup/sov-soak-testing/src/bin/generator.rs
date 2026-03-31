@@ -5,8 +5,8 @@ use sov_bank::Bank;
 use sov_modules_api::prelude::tracing;
 use sov_modules_api::{EncodeCall, Runtime, Spec};
 use sov_soak_testing::{
-    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SoakTestRunner, TestRT,
-    ValidityProfile,
+    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SP1TestRT, SP1TestSpec,
+    SoakTestRunner, TestRT, ValidityProfile,
 };
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::TestSpec;
@@ -20,6 +20,8 @@ use tokio::task::JoinSet;
 enum SelectedRuntime {
     /// Generated test runtime, running by the sov-soak-testing
     Test,
+    /// Generated test runtime with SP1 as inner zkvm (for use with --network-proving)
+    Sp1Test,
     /// demo-stf with Celestia DA
     DemoCelestia,
     /// demo-stf with Mock DA
@@ -110,6 +112,18 @@ async fn worker_task(
     let result = match runtime {
         SelectedRuntime::Test => {
             run_soak_test_with_demo_runtime::<TestRT, TestSpec>(
+                client,
+                rx,
+                worker_id,
+                num_workers,
+                validity,
+                tx_type,
+                restart_after,
+            )
+            .await
+        }
+        SelectedRuntime::Sp1Test => {
+            run_soak_test_with_demo_runtime::<SP1TestRT, SP1TestSpec>(
                 client,
                 rx,
                 worker_id,

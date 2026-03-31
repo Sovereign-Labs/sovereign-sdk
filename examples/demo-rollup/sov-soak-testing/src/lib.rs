@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use demo_stf::MultiAddressEvmSolana;
@@ -29,12 +28,13 @@ use sov_sp1_adapter::{SP1, SP1MethodId};
 pub use sov_soak_testing_lib::*;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{NetworkProverService, RollupProverConfig};
+use sov_stf_runner::processes::NetworkProverService;
+pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::RollupConfig;
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
+use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath};
 use sov_test_utils::{
     generate_runtime, ProverFactory, RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec,
     TestUser, TEST_DEFAULT_USER_BALANCE,
@@ -240,20 +240,33 @@ pub fn setup_roles_and_config_sp1() -> Setup<SP1TestSpec> {
 }
 
 
-pub type SP1RollupBuilder = RollupBuilder<NetworkProvingBlueprint>;
-
-/// Common rollup builder configuration shared by all modes.
-fn configure_rollup_builder<R>(
-    builder: RollupBuilder<R>,
-    setup: &Setup<R::Spec>,
+pub fn create_rollup_builder<R>(
+    storage_path: PathBuf,
     axum_port: u16,
-    postgres_config: Option<PostgresConfig>,
+    setup: &Setup<R::Spec>,
+    db_connection_url: Option<String>,
 ) -> RollupBuilder<R>
 where
-    R: FullNodeBlueprint<Native> + Default + 'static,
+    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
     R::Spec: Spec<Da = MockDaSpec>,
+    R::Runtime: sov_modules_stf_blueprint::Runtime<R::Spec, GenesisConfig = GenesisConfig<R::Spec>>,
 {
-    builder.set_config(|config| {
+    let postgres_config = db_connection_url.map(|url| PostgresConfig {
+        postgres_connection_string: url,
+        node_id: "Primary".to_string(),
+        node_role: ConfiguredNodeRole::Leader,
+        leader_election: Default::default(),
+    });
+    let da_address = setup.sequencer.da_address;
+
+    RollupBuilder::<R>::new_with_storage_path(
+        GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
+        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        DEFAULT_FINALIZATION_BLOCKS,
+        StoragePath::Buf(storage_path),
+        false,
+    )
+    .set_config(|config| {
         config.telegraf_address = sov_metrics::MonitoringConfig::standard().telegraf_address;
         config.automatic_batch_production = true;
         config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
@@ -266,73 +279,7 @@ where
         config.aggregated_proof_block_jump = 3;
         config.axum_port = axum_port;
     })
-}
-
-fn make_postgres_config(db_connection_url: Option<String>) -> Option<PostgresConfig> {
-    db_connection_url.map(|url| PostgresConfig {
-        postgres_connection_string: url,
-        node_id: "Primary".to_string(),
-        node_role: ConfiguredNodeRole::Leader,
-        leader_election: Default::default(),
+    .set_da_config(|da_config| {
+        da_config.sender_address = da_address;
     })
-}
-
-pub async fn setup_rollup(
-    storage_path: PathBuf,
-    axum_port: u16,
-    setup: Setup<TestSpec>,
-    db_connection_url: Option<String>,
-) -> TestRollup<MockRollupBlueprint> {
-    let postgres_config = make_postgres_config(db_connection_url);
-
-    let rollup_builder = TestRollupBuilder::new_with_storage_path(
-        GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
-        DEFAULT_BLOCK_PRODUCING_CONFIG,
-        DEFAULT_FINALIZATION_BLOCKS,
-        StoragePath::Buf(storage_path),
-        false,
-    );
-    let rollup_builder = configure_rollup_builder(rollup_builder, &setup, axum_port, postgres_config)
-        .set_config(|config| {
-            config.rollup_prover_config = None;
-        })
-        .set_da_config(|da_config| {
-            da_config.sender_address = setup.sequencer.da_address;
-        });
-    rollup_builder
-        .start()
-        .await
-        .expect("Impossible to start rollup")
-}
-
-pub async fn setup_rollup_with_network_proving(
-    storage_path: PathBuf,
-    axum_port: u16,
-    setup: Setup<SP1TestSpec>,
-    db_connection_url: Option<String>,
-) -> TestRollup<NetworkProvingBlueprint> {
-    let postgres_config = make_postgres_config(db_connection_url);
-
-    let rollup_builder = SP1RollupBuilder::new_with_storage_path(
-        GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
-        DEFAULT_BLOCK_PRODUCING_CONFIG,
-        DEFAULT_FINALIZATION_BLOCKS,
-        StoragePath::Buf(storage_path),
-        false,
-    );
-    let rollup_builder = configure_rollup_builder(rollup_builder, &setup, axum_port, postgres_config)
-        .set_config(|config| {
-            // Enable witness generation so proofs can be submitted to the network.
-            // The actual host args are unused by NetworkProverService.
-            config.rollup_prover_config = Some(RollupProverConfig::Execute(Arc::new(
-                *SOAK_INNER_GUEST_SP1_ELF,
-            )));
-        })
-        .set_da_config(|da_config| {
-            da_config.sender_address = setup.sequencer.da_address;
-        });
-    rollup_builder
-        .start()
-        .await
-        .expect("Impossible to start rollup")
 }
