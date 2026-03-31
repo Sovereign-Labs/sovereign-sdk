@@ -36,7 +36,7 @@ static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
 /// to the user doesn't get too nested.
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize, UniversalWallet)]
-#[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
+#[serde(deny_unknown_fields, bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct SolanaOffchainUnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     /// The runtime call
     pub runtime_call: R::Call,
@@ -71,7 +71,7 @@ where
 
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize, UniversalWallet)]
-#[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
+#[serde(deny_unknown_fields, bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// The runtime call
     pub runtime_call: R::Call,
