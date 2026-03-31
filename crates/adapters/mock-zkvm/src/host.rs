@@ -69,14 +69,10 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
     }
 
     fn run(&mut self, _with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        println!("Run 1");
         if self.wait_for_proof {
             self.notification_manager.wait();
         }
         let data = self.committed_data.pop_front().unwrap_or_default();
-
-        println!("Run 2");
-
         Ok(bincode::serialize(&sov_rollup_interface::zk::Proof::<
             Empty,
             _,

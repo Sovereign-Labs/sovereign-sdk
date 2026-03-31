@@ -60,11 +60,9 @@ async fn test_parallel_proof_generation() {
 
     let (genesis_state_root, witnesses) = super::generate_witnesses().await;
 
-    println!("WS {}", witnesses.len());
     // Submit all blocks to the parallel prover.
     let mut block_hashes = Vec::new();
     for (i, witness) in witnesses.into_iter().enumerate() {
-        println!("I {i}");
         let block_header_hash = witness.da_block_header.hash();
         block_hashes.push(block_header_hash);
 
