@@ -483,6 +483,30 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(entry) = self.local_user_writes.get(key) {
             return Ok(entry.clone());
         }
+        if let Some(uncommited_changes) = self.uncommitted_changes.as_ref() {
+            let from_uncommited = uncommited_changes.get(Namespace::User, key);
+            match from_uncommited {
+                MaybePresentValue::Present(present_uncommited_value) => {
+                    eprintln!(
+                        "[DIAG] key {} value from uncommited changes: {:?}",
+                        String::from_utf8_lossy(key.as_ref()),
+                        present_uncommited_value
+                    );
+                }
+                MaybePresentValue::Absent => {
+                    eprintln!(
+                        "[DIAG] key {} absent from uncommited changes",
+                        String::from_utf8_lossy(key.as_ref())
+                    );
+                }
+            }
+        } else {
+            eprintln!(
+                "[DIAG] no uncommited changes for key {}",
+                String::from_utf8_lossy(key.as_ref())
+            );
+        }
+
         // If not, read it from storage
         self.checkpoint_and_read_txn
             .state_checkpoint
@@ -813,6 +837,9 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     //
                     // Since the ApiStateAccessor has empty caches right now, we can check if we're in this case by checking whether the requested height is equal to the current rollup height
                     // as reported by the kernel. (Recall that, since the caches are empty, the "current_rollup_height" value reported by the kernel is the value stored at S::Storage::latest_version.)
+                    eprintln!(
+                        "[DIAG] build_archival_state: height={height} resolved via 3rd branch height == kernel.current_rollup_height(&mut state) → using latest_in_storage={latest_true_slot_number}"
+                    );
                     latest_true_slot_number
                 } else {
                     return Err(ApiStateAccessorError::HeightNotAccessible);
