@@ -26,14 +26,13 @@ type TestParallelProverService = ParallelProverService<
 
 /// Tests proof generation using the SP1 parallel (local CPU) prover service.
 ///
-/// This runs SP1 proofs locally using the parallel prover service for per-block
-/// (inner) proofs, and uses MockZkvmNetwork (auto-complete) for aggregation (outer).
+/// This runs SP1 proofs locally using the parallel prover service for per-block.
 ///
 /// Prerequisites:
 ///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
 ///   - Sufficient CPU resources for local proving
 #[tokio::test(flavor = "multi_thread")]
-//#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
+#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
 async fn test_parallel_proof_generation() {
     tracing_subscriber::fmt::init();
 
