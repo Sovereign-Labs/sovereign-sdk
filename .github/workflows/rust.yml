@@ -110,6 +110,8 @@ jobs:
         with:
           cache: rust
           path: ./crates/fuzz/target
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -144,6 +146,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -164,6 +168,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - name: rollup bench check
         env:
           SOV_BENCH_BLOCKS: 10
@@ -194,6 +200,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -225,6 +233,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -265,6 +275,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -285,6 +297,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -307,6 +321,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # Coverage is intentionally run without heavy crates, like demo-rollup.
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
@@ -329,6 +345,8 @@ jobs:
       - uses: taiki-e/install-action@cargo-deny
         with:
           tool: cargo-deny@0.18.4
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -444,6 +462,8 @@ jobs:
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - name: Login to Docker Hub
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: docker/login-action@v3
@@ -472,6 +492,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -488,6 +510,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - run: make check-constant-overriding-is-disabled-in-release-mode
 
   validate-packages-to-publish-yml:
@@ -520,6 +544,8 @@ jobs:
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       - uses: actions/checkout@v5
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
