@@ -4,14 +4,13 @@ pub mod circuit;
 /// Common types shared between the aggregated proof program and the host script.
 pub mod common;
 
-use core::marker::PhantomData;
-
 use super::{StateTransitionPublicData, ZkVerifier};
 use crate::common::SlotNumber;
 use crate::da::DaSpec;
 use crate::zk::ZkvmGuest;
 use crate::zk::ZkvmHost;
 use borsh::{BorshDeserialize, BorshSerialize};
+use core::marker::PhantomData;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
