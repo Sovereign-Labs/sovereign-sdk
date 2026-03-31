@@ -35,6 +35,7 @@ pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSp
 
 mod datagen;
 mod network;
+mod parallel;
 mod sp1_cpu_prover;
 
 pub(super) type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
