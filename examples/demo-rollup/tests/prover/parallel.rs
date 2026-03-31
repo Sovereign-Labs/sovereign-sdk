@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use sov_mock_da::{MockDaService, MockDaSpec};
-use sov_mock_zkvm::{MockZkvm, MockZkvmHost, MockZkvmNetwork};
+use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::Spec;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::BlockHeaderTrait;
