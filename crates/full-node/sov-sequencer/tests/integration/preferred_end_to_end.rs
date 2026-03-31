@@ -2345,7 +2345,7 @@ async fn test_gas_limit_update() {
 
         // 4.2 Force close the batch and produce a block.
         let _ = test_rollup.force_close_batch().await;
-        test_rollup.da_service.produce_block_now().await.unwrap();
+        test_rollup.tenderly_produce_blocks(1).await.unwrap();
         let slot = slot_subscription.next().await.unwrap().unwrap();
         for batch in slot.batches {
             for tx in batch.txs {
