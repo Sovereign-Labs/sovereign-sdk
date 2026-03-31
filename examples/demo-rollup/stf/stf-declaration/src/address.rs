@@ -202,15 +202,11 @@ impl HyperlaneAddress for MultiAddressEvmSolana {
     }
 
     fn from_sender(recipient: HexHash) -> anyhow::Result<Self> {
-        // Try EVM first (expects 12 leading zero bytes for a 20-byte address),
-        // then Standard (expects 4 leading zero bytes for a 28-byte address),
-        // then Solana (accepts any 32 bytes).
-        if let Ok(addr) = EthereumAddress::from_sender(recipient) {
-            return Ok(Self::Evm(addr));
-        }
-        if let Ok(addr) = Address::from_sender(recipient) {
-            return Ok(Self::Standard(addr));
-        }
+        // The 32-byte HexHash cannot encode which enum variant produced it
+        // (no room for a discriminant). As the HyperlaneAddress trait docs
+        // require: pick one variant and always deserialize into it.
+        // Solana (Base58Address) is the only 32-byte variant, so it
+        // preserves all bytes with zero information loss.
         Ok(Self::Solana(Base58Address::from_sender(recipient)?))
     }
 }
