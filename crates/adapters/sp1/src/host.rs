@@ -1,16 +1,15 @@
 //! Implementation of the SP1 host for the Sovereign ZkvmHost trait.
 
-use crate::guest::SP1Guest;
-use crate::SP1MethodId;
-use crate::ZkVerifier;
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::ZkvmHostWithInnerProofs;
-use sov_rollup_interface::zk::ZkvmGuest;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 use sp1_sdk::blocking::CpuProver;
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
 use sp1_sdk::{ProvingKey, SP1Proof, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
+
+use crate::guest::SP1Guest;
+use crate::SP1MethodId;
 
 /// SP1 Host implementation.
 pub struct SP1Host<'host> {
@@ -121,7 +120,7 @@ impl ZkvmHostWithInnerProofs for SP1Host<'static> {
     fn add_proof(
         &mut self,
         proof: &Self::Proof,
-        code_commitment: &<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment,
+        code_commitment: &<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as crate::ZkVerifier>::CodeCommitment,
     ) -> anyhow::Result<()> {
         self.add_proof_inner(proof, code_commitment)
     }
