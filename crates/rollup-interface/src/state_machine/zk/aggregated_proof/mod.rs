@@ -25,14 +25,7 @@ pub trait ZkvmHostWithInnerProofs: ZkvmHost {
         &mut self,
         proof: &Self::Proof,
         code_commitment: &<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment,
-    );
-
-    /// Run the guest in the true zk environment using the provided hints.
-    ///
-    /// This runs the guest binary compiled for the zkVM target, optionally
-    /// creating a SNARK of correct execution. Running the true guest binary comes
-    /// with some mild performance overhead, but it is orders of magnitude less expensive than generating a proof.
-    fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>>;
+    ) -> anyhow::Result<()>;
 }
 
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
