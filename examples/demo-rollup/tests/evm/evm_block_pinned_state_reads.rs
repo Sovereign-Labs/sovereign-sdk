@@ -369,14 +369,14 @@ async fn block_pinned_eth_call_excludes_pending() {
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, hex_u64(head_number)).await),
         U256::from(initial_value),
-        "eth_call at block number N must not reflect pending change.\n\
+        "eth_call at block number N({head_number}) must not reflect pending change.\n\
         If left value is 0 (storage default) instead of {initial_value} ({initial_value:#06x}). The contract IS deployed (no revert), but storage slot 0 has the default value. This means the archival state has the contract but NOT the set_value({initial_value:#06x}).\n\
         If left value is {new_value} ({new_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
     );
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, hash_selector(head_hash)).await),
         U256::from(initial_value),
-        "eth_call at block hash H must not reflect pending change.\n\
+        "eth_call at block hash H({head_hash}) must not reflect pending change.\n\
         If left value is 0 (storage default) instead of {initial_value} ({initial_value:#06x}). The contract IS deployed (no revert), but storage slot 0 has the default value. This means the archival state has the contract but NOT the set_value({initial_value:#06x}).\n\
         If left value is {new_value} ({new_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
     );
