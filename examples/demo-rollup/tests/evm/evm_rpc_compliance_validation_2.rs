@@ -681,6 +681,63 @@ async fn rpc2_002d_explicit_gas_affordability_precedes_simulation_failure() -> a
     Ok(())
 }
 
+/// RPC2-002e: Using the estimate value as the explicit gas cap should result
+/// in both a successful estimate and a successful send.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_002e_explicit_gas_equal_to_estimate_matches_send_success() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let ws_client = create_simple_storage_client(rollup.http_addr, SENDER_PRIV_KEY).await;
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let recipient = Address::repeat_byte(0x26);
+
+    // First, estimate without explicit gas to learn the projected gas value.
+    let estimate_request = TransactionRequest {
+        from: Some(signer.address()),
+        to: Some(TxKind::Call(recipient)),
+        value: Some(U256::ZERO),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    };
+    let estimated_gas: U64 = ws_client
+        .ws
+        .request("eth_estimateGas", rpc_params![&estimate_request, "latest"])
+        .await
+        .expect("estimate without explicit gas should succeed");
+    let estimated_gas = estimated_gas.to::<u64>();
+
+    // Now use that estimate as the explicit gas cap — both estimate and send
+    // should succeed.
+    let request = TransactionRequest {
+        from: Some(signer.address()),
+        to: Some(TxKind::Call(recipient)),
+        gas: Some(estimated_gas),
+        value: Some(U256::ZERO),
+        max_fee_per_gas: Some(MAX_FEE_PER_GAS),
+        max_priority_fee_per_gas: Some(0),
+        ..Default::default()
+    };
+
+    let results = call_all_endpoints(&ws_client, &request, &signer).await;
+
+    results
+        .estimate_gas
+        .expect("estimate should succeed when explicit gas equals the estimated value");
+
+    let tx_hash = results
+        .send_raw_tx
+        .expect("raw send should succeed with the estimated gas limit");
+    let receipt = ws_client.wait_for_receipt(tx_hash).await;
+    assert!(
+        receipt.status(),
+        "transaction should execute successfully with the estimated gas limit"
+    );
+
+    Ok(())
+}
+
 /// RPC2-003 (gasleft probe): Omitted-gas `eth_call` should default to the tx gas cap.
 #[tokio::test(flavor = "multi_thread")]
 async fn rpc2_003_eth_call_default_gas_uses_tx_cap() -> anyhow::Result<()> {

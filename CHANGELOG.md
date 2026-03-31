@@ -3,6 +3,7 @@
 - #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
 
 # 2026-03-24
+- #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
 - #2631 Reorganize and extend demo-stf

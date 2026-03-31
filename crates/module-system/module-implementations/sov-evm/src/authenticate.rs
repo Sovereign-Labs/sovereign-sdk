@@ -154,6 +154,15 @@ fn create_auth_tx_and_hash<
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
     let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
+    if let Some(max_priority_fee) = tx.max_priority_fee_per_gas() {
+        if max_priority_fee > tx.max_fee_per_gas() {
+            return Err(AuthenticationError::FatalError(
+                FatalError::Other("max priority fee per gas higher than max fee per gas".into()),
+                tx_hash,
+            ));
+        }
+    }
+
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
         tx_hash,
         tx_chain_id,
