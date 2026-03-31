@@ -21,6 +21,8 @@ const MAX_STATE_ROOTS_TO_CACHE: usize = 100;
 const NUM_STATE_ROOT_COMPUTE_REQUESTS: usize = 50;
 
 type Hasher<S> = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
+type StateRootCacheKey = (RollupHeight, Uuid);
+
 pub(crate) struct StateRootComputeRequest<S: Spec> {
     pub executor_id: Uuid,
     pub raw_state_changes: Arc<RawStateChanges>,
@@ -208,7 +210,7 @@ impl<S: Spec> StateRootTask<S> {
         info!("Starting sequencer state root computation background task");
         let (request_sender, mut request_receiver) = mpsc::channel(NUM_STATE_ROOT_COMPUTE_REQUESTS);
 
-        let mut cached_results: BTreeMap<(Uuid, RollupHeight), StateRootCacheEntry<S>> =
+        let mut cached_results: BTreeMap<StateRootCacheKey, StateRootCacheEntry<S>> =
             BTreeMap::new();
         let mut cached_results_size = 0;
         let handle = tokio::spawn(async move {
@@ -245,7 +247,7 @@ impl<S: Spec> StateRootTask<S> {
                 } = request;
                 uncommitted_changes.push_front(raw_state_changes);
                 let state_accesses = uncommitted_changes.to_state_accesses();
-                let cache_key = (executor_id, rollup_height);
+                let cache_key = (rollup_height, executor_id);
                 // If the entry is in cache, check that the state root is consistent and return early
                 if let Some(cached_entry) = cached_results.get(&cache_key) {
                     trace!(%executor_id, %rollup_height, "Known state root");
@@ -327,7 +329,7 @@ impl<S: Spec> StateRootTask<S> {
     }
 
     fn prune_cache(
-        cached_results: &mut BTreeMap<(Uuid, RollupHeight), StateRootCacheEntry<S>>,
+        cached_results: &mut BTreeMap<StateRootCacheKey, StateRootCacheEntry<S>>,
         cached_results_size: &mut usize,
     ) {
         // If the cache is too big, prune the oldest writes sets
