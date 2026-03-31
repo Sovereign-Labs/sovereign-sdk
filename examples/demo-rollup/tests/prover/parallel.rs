@@ -32,7 +32,7 @@ type TestParallelProverService = ParallelProverService<
 ///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
 ///   - Sufficient CPU resources for local proving
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
+//#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
 async fn test_parallel_proof_generation() {
     tracing_subscriber::fmt::init();
 
@@ -60,9 +60,11 @@ async fn test_parallel_proof_generation() {
 
     let (genesis_state_root, witnesses) = super::generate_witnesses().await;
 
+    println!("WS {}", witnesses.len());
     // Submit all blocks to the parallel prover.
     let mut block_hashes = Vec::new();
     for (i, witness) in witnesses.into_iter().enumerate() {
+        println!("I {i}");
         let block_header_hash = witness.da_block_header.hash();
         block_hashes.push(block_header_hash);
 
@@ -96,8 +98,8 @@ async fn test_parallel_proof_generation() {
         {
             Ok(ProofAggregationStatus::Success(proof)) => break proof,
             Ok(ProofAggregationStatus::ProofGenerationInProgress) => {
-                tracing::info!("Inner proofs still in progress, polling again in 30s...");
-                tokio::time::sleep(Duration::from_secs(30)).await;
+                tracing::info!("Inner proofs still in progress, polling again in 5s...");
+                tokio::time::sleep(Duration::from_secs(5)).await;
             }
             Err(e) => panic!("Aggregation failed: {e}"),
         }
