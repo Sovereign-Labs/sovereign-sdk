@@ -4,6 +4,7 @@
 - #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
 
 # 2026-03-24
+- #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
 - #2631 Reorganize and extend demo-stf

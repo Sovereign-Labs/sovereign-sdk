@@ -303,7 +303,27 @@ where
     }
 
     /// Handler for: `eth_call`
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    ///
+    /// Simulates a transaction without committing state changes.
+    ///
+    /// # Affordability checks
+    ///
+    /// No balance check is performed when fee fields are omitted (the common case).
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) hardcodes `gas_price = 0`,
+    /// making revm's upfront-cost formula evaluate to zero so any account can call.
+    /// When `value > 0`, revm still verifies the caller holds at least `value`.
+    ///
+    /// **Desired behaviour** (matching geth): when the caller explicitly provides
+    /// `gasPrice > 0` or `maxFeePerGas > 0`, enforce `gas_limit * gas_price + value
+    /// <= balance` and return `InsufficientFunds` on failure. This is not yet
+    /// implemented — see the divergence note on [`prepare_call_env`](crate::helpers::prepare_call_env).
+    ///
+    /// This differs from `eth_estimateGas`, which runs a paymaster-aware
+    /// affordability preflight in `sov-ethereum` (see `estimate_gas.rs`).
+    ///
+    /// References:
+    /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
+    /// - Reth `call`: <https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-eth-api/src/helpers/call.rs>
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,
@@ -326,6 +346,20 @@ where
     }
 
     /// Handler for: `eth_createAccessList`
+    ///
+    /// Generates an EIP-2930 access list by running the transaction with an
+    /// [`AccessListInspector`]. Affordability semantics are identical to `eth_call`:
+    /// no balance check when fee fields are omitted, because
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) sets `gas_price = 0`.
+    /// This matches geth's `AccessList()` path which also uses zero-fee defaults.
+    ///
+    /// Note: EIP-2930 (<https://eips.ethereum.org/EIPS/eip-2930>) defines the access
+    /// list *transaction type*; the `eth_createAccessList` RPC method itself is a
+    /// client-level addition defined in `execution-apis`
+    /// (<https://github.com/ethereum/execution-apis>).
+    ///
+    /// See [`prepare_call_env`](crate::helpers::prepare_call_env) for the full
+    /// affordability analysis and current divergence from geth.
     #[rpc_method(name = "eth_createAccessList")]
     pub fn eth_create_access_list(
         &self,

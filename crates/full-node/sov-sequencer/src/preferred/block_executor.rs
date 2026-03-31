@@ -285,6 +285,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
         self.uncommitted_changes = other.uncommitted_changes;
+        self.id = other.id;
 
         // Update our list of state roots from the other executor.
         self.state_roots = other.state_roots;
@@ -814,6 +815,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         if self
             .state_root_request_sender
             .send(StateRootComputeRequest {
+                executor_id: self.id,
                 raw_state_changes: changes.clone(),
                 uncommitted_changes: self.uncommitted_changes.clone(),
                 storage: self.checkpoint.storage().clone(),

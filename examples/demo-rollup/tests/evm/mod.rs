@@ -24,6 +24,7 @@ mod evm_rate_limit;
 mod evm_rpc;
 mod evm_rpc_compliance_validation;
 mod evm_rpc_compliance_validation_2;
+mod evm_simulation_and_send_consistency;
 mod evm_soft_conf;
 mod evm_subscribe;
 pub(crate) mod evm_test_helper;
