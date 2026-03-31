@@ -17,7 +17,7 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::aggregated_proof::common::{
     AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
 };
-use sov_rollup_interface::zk::aggregated_proof::ZkvmHostWithInnerProofs;
+use sov_rollup_interface::zk::aggregated_proof::RecursiveZkvmHost;
 use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
 use sov_sp1_adapter::host::SP1Host;
 use sov_sp1_adapter::SP1;

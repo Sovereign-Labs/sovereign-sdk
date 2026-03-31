@@ -16,7 +16,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 /// Extension of `ZkvmHost` that enables recursive proving.
-pub trait ZkvmHostWithInnerProofs: ZkvmHost {
+pub trait RecursiveZkvmHost: ZkvmHost {
     /// Inner proof.
     type Proof;
 

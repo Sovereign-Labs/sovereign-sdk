@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
-use sov_rollup_interface::zk::aggregated_proof::ZkvmHostWithInnerProofs;
+use sov_rollup_interface::zk::aggregated_proof::RecursiveZkvmHost;
 use sov_rollup_interface::zk::{Proof, ZkvmHost};
 use sp1_sdk::blocking::CpuProver;
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
@@ -114,7 +114,7 @@ impl ZkvmHost for SP1Host<'static> {
     }
 }
 
-impl ZkvmHostWithInnerProofs for SP1Host<'static> {
+impl RecursiveZkvmHost for SP1Host<'static> {
     type Proof = SP1ProofWithPublicValues;
 
     fn add_proof(
