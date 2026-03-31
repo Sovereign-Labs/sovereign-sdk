@@ -172,10 +172,7 @@ async fn create_test_rollup() -> anyhow::Result<(
     Ok((rollup, admin))
 }
 
-fn create_transfer_tx_json(
-    amount: Amount,
-    recipient: &str,
-) -> String {
+fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
         coins: Coins {

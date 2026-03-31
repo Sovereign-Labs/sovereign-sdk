@@ -23,6 +23,12 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
     chain_name: string;
   };
 
+export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
+  SolanaOffchainUnsignedTransaction<RuntimeCall> & {
+    credential_id: string;
+    version: number;
+  };
+
 export type SolanaOffchainSimpleMessage = {
   signed_message: Uint8Array;
   chain_hash: Uint8Array;
@@ -36,7 +42,8 @@ export type SolanaOffchainSpecCompliantMessage = {
 };
 
 export type SolanaOffchainSimpleMultisigMessage = {
-  signed_message: Uint8Array;
+  /** Wire format: [0x80][JSON payload]. The 0x80 prefix is a parsing discriminator only. */
+  wire_bytes: Uint8Array;
   chain_hash: Uint8Array;
   signatures: Array<{ signature: Uint8Array; pub_key: Uint8Array }>;
   unused_pub_keys: Uint8Array[];
@@ -50,7 +57,8 @@ export type Authenticator =
   | "solanaAuto";
 
 /**
- * Discriminator byte prepended to the signed message in the multisig simple format.
+ * Discriminator byte prepended to the wire bytes in the multisig simple format.
+ * Used only for borsh-level format routing — not part of the signed content.
  * Matches `MULTISIG_SIMPLE_DISCRIMINATOR` on the Rust side.
  */
 const MULTISIG_SIMPLE_DISCRIMINATOR = 0x80;
@@ -371,23 +379,50 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
+   * Creates V1 JSON bytes for a multisig transaction, including credential_id and version.
+   * The resulting JSON is what each signer signs directly (no discriminator prefix).
+   */
+  private async createMultisigJsonBytes(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    multisigAddress: string,
+  ): Promise<Uint8Array> {
+    const serializer = await this.inner.serializer();
+    const schema = serializer.schema;
+    const chainName = schema.chain_data.chain_name || "";
+
+    const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV1<RuntimeCall> = {
+      runtime_call: unsignedTx.runtime_call,
+      uniqueness: unsignedTx.uniqueness,
+      details: unsignedTx.details,
+      chain_name: chainName,
+      credential_id: multisigAddress,
+      version: 1,
+    };
+
+    return new TextEncoder().encode(JSON.stringify(solanaUnsignedTx));
+  }
+
+  /**
    * Signs an unsigned transaction for use in a Solana offchain multisig.
    *
-   * The signer signs `[0x80][json_bytes]` where `0x80` is the multisig discriminator
-   * and `json_bytes` is the JSON-serialized unsigned transaction. The returned V0-shaped
-   * transaction is compatible with `MultisigTransaction.fromTransactions()`.
+   * The signer signs the V1 JSON payload directly (which includes the credential_id
+   * and version fields). The returned V0-shaped transaction is compatible with
+   * `MultisigTransaction.fromTransactions()`.
+   *
+   * @param multisigAddress - The 0x-prefixed hex credential_id of the multisig account.
    */
-  async signTransaction(
+  async signTransactionForMultisig(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     signer: Signer,
+    multisigAddress: string,
   ): Promise<Transaction<RuntimeCall>> {
-    const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
-    const messageToSign = new Uint8Array(1 + jsonBytes.length);
-    messageToSign[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
-    messageToSign.set(jsonBytes, 1);
+    const jsonBytes = await this.createMultisigJsonBytes(
+      unsignedTx,
+      multisigAddress,
+    );
 
     const pubkey = await signer.publicKey();
-    const signature = await signer.sign(messageToSign);
+    const signature = await signer.sign(jsonBytes);
 
     return this.typeBuilder.transaction({
       unsignedTx,
@@ -401,11 +436,14 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Submits a multisig transaction using the Solana offchain simple multisig format.
    *
    * Accepts the V1 transaction produced by `MultisigTransaction.asTransaction()`, rebuilds
-   * the Solana multisig envelope with the `0x80`-prefixed signed message, and submits it
+   * the Solana multisig envelope with the `0x80`-prefixed wire bytes, and submits it
    * to the Solana offchain endpoint.
+   *
+   * @param multisigAddress - The 0x-prefixed hex credential_id of the multisig account.
    */
   async submitMultisigTransaction(
     multisigTx: TransactionV1<RuntimeCall>,
+    multisigAddress: string,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const { V1: tx } = multisigTx;
 
@@ -414,15 +452,19 @@ export class SolanaSignableRollup<RuntimeCall> {
       uniqueness: tx.uniqueness,
       details: tx.details,
     };
-    const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
-    const signedMessage = new Uint8Array(1 + jsonBytes.length);
-    signedMessage[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
-    signedMessage.set(jsonBytes, 1);
+    const jsonBytes = await this.createMultisigJsonBytes(
+      unsignedTx,
+      multisigAddress,
+    );
+    // Prepend 0x80 discriminator for borsh wire format only (not part of signed content)
+    const wireBytes = new Uint8Array(1 + jsonBytes.length);
+    wireBytes[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
+    wireBytes.set(jsonBytes, 1);
 
     const chainHash = await this.inner.chainHash();
 
     const serialized = this.serializeSolanaMultisigMessage({
-      signed_message: signedMessage,
+      wire_bytes: wireBytes,
       chain_hash: chainHash,
       signatures: tx.signatures.map((s) => ({
         signature: hexToBytes(s.signature),
@@ -652,7 +694,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   /**
    * Serializes a SolanaOffchainSimpleMultisigMessage using borsh encoding.
    * Layout matches the Rust struct:
-   *   [u32 LE: signed_message.len][signed_message bytes]
+   *   [u32 LE: wire_bytes.len][wire_bytes]
    *   [32 bytes: chain_hash]
    *   [u32 LE: signatures.len]
    *     for each: [64 bytes: signature][32 bytes: pub_key]
@@ -674,7 +716,7 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     const totalSize =
       VEC_LENGTH_PREFIX_SIZE +
-      message.signed_message.length +
+      message.wire_bytes.length +
       CHAIN_HASH_SIZE +
       VEC_LENGTH_PREFIX_SIZE +
       sigCount * (SIGNATURE_SIZE + PUBKEY_SIZE) +
@@ -686,11 +728,11 @@ export class SolanaSignableRollup<RuntimeCall> {
     const view = new DataView(buffer.buffer);
     let offset = 0;
 
-    // signed_message: Vec<u8>
-    view.setUint32(offset, message.signed_message.length, true);
+    // wire_bytes: Vec<u8>
+    view.setUint32(offset, message.wire_bytes.length, true);
     offset += VEC_LENGTH_PREFIX_SIZE;
-    buffer.set(message.signed_message, offset);
-    offset += message.signed_message.length;
+    buffer.set(message.wire_bytes, offset);
+    offset += message.wire_bytes.length;
 
     // chain_hash: [u8; 32]
     buffer.set(message.chain_hash, offset);

@@ -391,13 +391,13 @@ describe("SolanaSignableRollup", () => {
       // integration test in sov-solana-offchain-auth.
       // The test uses a 2-of-3 multisig with signers 3 and 1 (out of order).
       const key1PrivHex =
-        "277f38bac604af5f6645aaef9699685d329d732f1dffe04f38aff8f794adf260";
+        "afefc9649c04d4a37a88c34f2459ff874743ed5ae4f121de66f9ff0680406455";
       const key2PrivHex =
-        "91f03579b0cbf2dfbf74fe0b6748d1f86001150523318292140059ff4aace502";
+        "80dd42d1c88ab874c7887202424f66a8d777c542ee07cc9266fca219511ecfd1";
       const key3PrivHex =
-        "346f7dd5658fab5eddfd3e18852d1bd96742a700af12da546e3c59672ad15eda";
+        "2756c0fcdfbcd18d502a2adf475ed941c11d5a344bae192ad6ad8ff203d89879";
       const expectedJson =
-        '{"body":{"body":"awEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9pZCI6NDMyMX0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4ifQsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLAgAAAD95q7hlXqc8Ei+b7blyeXXzuMR+cumBVMbcIpYveRlL6o2mKCPHNnL0k0bnmJrEVHVddEwqkxcmHlj3c05j1AVGb+NP/A5/44De9Zt2O5Ibx0jJNv/57lTA8tWWgxOl3W24TVCFNEBKdlb9QAppby4HcoMds8L75A6O7AVgWXDmoGMAmoKQuQGeynzpyUkB3p1H91j+1SwwShQno6sSXwa043PL9G67myiBhUpBRCOkXP/zydpVeat9wugV4hMPJwEAAAD7HLZGRVKk6PmhWBhYCFMxlyf4Q7qUe+CoceRdWPDuHgI="}}';
+        '{"body":{"body":"zAEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9pZCI6NDMyMX0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4iLCJjcmVkZW50aWFsX2lkIjoiMHg4MjFlOTU4ZDMzNzk0ZjNkODZiZGQ3MjZkYjkxY2I5OTFkMWUxNGMyNzMzNjQ0MjgxYzViNTgwOTc2YzVhYzMwIiwidmVyc2lvbiI6MX0LCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwIAAACQDkS1kgwURRS15gnT2928D/lOFvYvJ1YzHLB2pN9uTtBnXZ4IvF4KFGNibKQs1c2uh1+eom2Lpvov3xtT6/ELouBL5PAKsnYzSQkbpS9u/SZInLVEH0UuaV9So93EMkPhGx3nH+64PjYMpx4fJ4XbAtZhMf5PSDY3PgmexMCLbVQxh6UEV76abYNDSDu1SRlsVQ5S9lGlo/eoCnWiccMEoZ38rdBqNp845v8n17iS68vYznXopFh8LQNpKuQPgA8BAAAAoxKlaU5+8K2u2hAgnPhIhlG7+m8gxQc0BAyQhL6dRgcC"}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
@@ -423,7 +423,27 @@ describe("SolanaSignableRollup", () => {
       });
 
       const signer1 = new Ed25519Signer(key1PrivHex);
+      const signer2 = new Ed25519Signer(key2PrivHex);
       const signer3 = new Ed25519Signer(key3PrivHex);
+
+      const { bytesToHex, hexToBytes } = await import("@sovereign-sdk/utils");
+      const { sha256 } = await import("@noble/hashes/sha2");
+
+      // Compute the multisig address (credential_id) from the 3 public keys.
+      // Mirrors MultisigTransaction.getMultisigAddress() from @sovereign-sdk/multisig.
+      const pub1Hex = bytesToHex(await signer1.publicKey());
+      const pub2Hex = bytesToHex(await signer2.publicKey());
+      const pub3Hex = bytesToHex(await signer3.publicKey());
+      const minSigners = 2;
+
+      const sortedPubKeys = [pub1Hex, pub2Hex, pub3Hex].sort();
+      const pubKeyBytes = sortedPubKeys.map((pk) => Array.from(hexToBytes(pk)));
+      const borshData = new Uint8Array(1 + 4 + 3 * 32);
+      const dv = new DataView(borshData.buffer);
+      borshData[0] = minSigners;
+      dv.setUint32(1, 3, true);
+      pubKeyBytes.forEach((pk, i) => borshData.set(pk, 5 + i * 32));
+      const multisigAddress = "0x" + bytesToHex(sha256(borshData));
 
       const runtimeCall = {
         bank: {
@@ -449,16 +469,19 @@ describe("SolanaSignableRollup", () => {
         },
       };
 
-      // Each signer signs independently via signTransaction (same order as Rust: key3, key1)
-      const signedTx3 = await rollup.signTransaction(unsignedTx, signer3);
-      const signedTx1 = await rollup.signTransaction(unsignedTx, signer1);
+      // Each signer signs independently (same order as Rust: key3, key1)
+      const signedTx3 = await rollup.signTransactionForMultisig(
+        unsignedTx,
+        signer3,
+        multisigAddress,
+      );
+      const signedTx1 = await rollup.signTransactionForMultisig(
+        unsignedTx,
+        signer1,
+        multisigAddress,
+      );
 
       // Build V1 transaction manually (avoids a cyclic dependency on @sovereign-sdk/multisig)
-      // TODO: split solana rollup into its own crate to avoid these issues?
-      const signer2 = new Ed25519Signer(key2PrivHex);
-      const { bytesToHex } = await import("@sovereign-sdk/utils");
-      const pub2Hex = bytesToHex(await signer2.publicKey());
-
       const v0_3 = (signedTx3 as any).V0;
       const v0_1 = (signedTx1 as any).V0;
 
@@ -470,11 +493,14 @@ describe("SolanaSignableRollup", () => {
             { pub_key: v0_1.pub_key, signature: v0_1.signature },
           ],
           unused_pub_keys: [pub2Hex],
-          min_signers: 2,
+          min_signers: minSigners,
         },
       };
 
-      await rollup.submitMultisigTransaction(multisigV1 as any);
+      await rollup.submitMultisigTransaction(
+        multisigV1 as any,
+        multisigAddress,
+      );
 
       const actualJson = JSON.stringify(capturedPayload);
       expect(actualJson).toBe(expectedJson);
