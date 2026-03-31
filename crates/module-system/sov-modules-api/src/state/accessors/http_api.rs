@@ -476,8 +476,9 @@ impl<S: Spec> ApiStateAccessor<S> {
         key: &SlotKey,
         version: Option<SlotNumber>,
     ) -> anyhow::Result<Option<SlotValue>> {
-        // First, check if the user has written this value. This allows users to write during eth_call even if they're reading historical state.
-        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
+        // First, check if the user has written this value.
+        // This allows users to write during eth_call even if they're reading historical state.
+        // IMPORTANT: Note that we do *not* empty the state checkpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
         // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
         if let Some(entry) = self.local_user_writes.get(key) {
             return Ok(entry.clone());
@@ -783,6 +784,9 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 if let Some(true_slot_number) =
                     kernel.true_slot_number_at_historical_height(height, &mut state)
                 {
+                    eprintln!(
+                        "[DIAG] build_archival_state: height={height} resolved via kernel mapping → true_slot={true_slot_number}, latest_in_storage={latest_true_slot_number}"
+                    );
                     true_slot_number
                 } else if let Some(max_height) = state
                     .uncommitted_changes
@@ -798,6 +802,9 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     if let Some(c) = state.uncommitted_changes.as_mut() {
                         c.ignore_changes_after_height(height);
                     }
+                    eprintln!(
+                        "[DIAG] build_archival_state: height={height} resolved via uncommitted_changes (max_height={max_height}) → using latest_in_storage={latest_true_slot_number}"
+                    );
                     latest_true_slot_number
                 } else if height == kernel.current_rollup_height(&mut state) {
                     // There's a tricky case here where the height exists in storage but the true slot number is not available via the kernel yet.

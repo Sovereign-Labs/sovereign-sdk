@@ -345,6 +345,8 @@ async fn block_pinned_storage_excludes_pending() {
 #[tokio::test(flavor = "multi_thread")]
 async fn block_pinned_eth_call_excludes_pending() {
     let (rollup, client) = setup_rollup_and_client().await;
+    // SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS
+    // std::env::set_var("SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS", "300");
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     let initial_value = 0x1234u32;
@@ -352,9 +354,11 @@ async fn block_pinned_eth_call_excludes_pending() {
         .await
         .unwrap();
     rollup.wait_for_rollup_height_advance_by(1).await;
+    // Maybe this helps
+    rollup.wait_for_node_synced().await.unwrap();
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
+    eprintln!("Head number {head_number}");
 
     let get_tx = client.make_tx(Some(contract_addr), Some(client.contract.get()));
 
@@ -362,19 +366,30 @@ async fn block_pinned_eth_call_excludes_pending() {
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before eth_call assertions");
+    let finalized_after_the_pause = finalized_block_number_and_hash(&client).await;
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_after_the_pause).await;
 
+    let pinned_number_raw = eth_call_at(&client, &get_tx, hex_u64(head_number)).await;
+    eprintln!(
+        "pinned eth_call by number raw=0x{}",
+        hex::encode(pinned_number_raw.as_ref())
+    );
     assert_eq!(
-        U256::from_be_slice(&eth_call_at(&client, &get_tx, hex_u64(head_number)).await),
+        U256::from_be_slice(&pinned_number_raw),
         U256::from(initial_value),
         "eth_call at block number N({head_number}) must not reflect pending change.\n\
         If left value is 0 (storage default) instead of {initial_value} ({initial_value:#06x}). The contract IS deployed (no revert), but storage slot 0 has the default value. This means the archival state has the contract but NOT the set_value({initial_value:#06x}).\n\
         If left value is {new_value} ({new_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
     );
+    let pinned_hash_raw = eth_call_at(&client, &get_tx, hash_selector(head_hash)).await;
+    eprintln!(
+        "pinned eth_call by hash raw=0x{}",
+        hex::encode(pinned_hash_raw.as_ref())
+    );
     assert_eq!(
-        U256::from_be_slice(&eth_call_at(&client, &get_tx, hash_selector(head_hash)).await),
+        U256::from_be_slice(&pinned_hash_raw),
         U256::from(initial_value),
         "eth_call at block hash H({head_hash}) must not reflect pending change.\n\
         If left value is 0 (storage default) instead of {initial_value} ({initial_value:#06x}). The contract IS deployed (no revert), but storage slot 0 has the default value. This means the archival state has the contract but NOT the set_value({initial_value:#06x}).\n\

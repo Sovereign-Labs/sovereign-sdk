@@ -1117,6 +1117,7 @@ where
     pub async fn wait_for_rollup_height_advance_by(&self, delta: u64) {
         let current_height = get_height(&self.client).await.unwrap();
         let end_height = current_height.get() + delta;
+        eprintln!("current_height={current_height}, will wait for {end_height}");
         self.wait_for_height(end_height).await;
     }
 

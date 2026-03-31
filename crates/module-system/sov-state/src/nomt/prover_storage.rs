@@ -129,6 +129,9 @@ where
             None => Some(None),
             Some(passed_version) => {
                 if passed_version >= next_version {
+                    eprintln!(
+                        "[DIAG] NomtProverStorage::get_version_to_use: requested version {passed_version} >= next_version {next_version} — returning None (data not yet committed to storage)"
+                    );
                     None
                 } else {
                     Some(Some(passed_version))

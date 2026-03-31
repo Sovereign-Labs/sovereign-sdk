@@ -363,6 +363,10 @@ pub(crate) async fn deploy_contract_check(
 
     let tx_hash = client.deploy_contract().await?;
     let receipt = client.wait_for_receipt(tx_hash).await;
+    eprintln!(
+        "deploy receipt: block_number={:?} block_hash={:?}",
+        receipt.block_number, receipt.block_hash
+    );
     let contract_address = receipt.contract_address.unwrap();
 
     // Assert contract deployed correctly
@@ -380,7 +384,11 @@ pub(crate) async fn set_value_check(
     set_arg: u32,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let tx_hash = client.set_value(contract_address, set_arg).await;
-    client.wait_for_receipt(tx_hash).await;
+    let set_value_receipt = client.wait_for_receipt(tx_hash).await;
+    eprintln!(
+        "set value receipt: block_number={:?} block_hash={:?}",
+        set_value_receipt.block_number, set_value_receipt.block_hash
+    );
 
     let get_arg = client.query_contract(contract_address).await?;
     assert_eq!(U256::from(set_arg), get_arg);
