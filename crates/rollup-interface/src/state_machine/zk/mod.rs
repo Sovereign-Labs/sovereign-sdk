@@ -165,6 +165,14 @@ pub trait ZkvmNetwork: Send + Sync + 'static {
         &self,
         handle: &Self::ProofHandle,
     ) -> impl core::future::Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send;
+
+    /// Returns a commitment to the program being proven.
+    ///
+    /// This is the verifying key that identifies the guest program and can be
+    /// stored at genesis for proof verification.
+    fn code_commitment(
+        &self,
+    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment>;
 }
 
 /// A no-op [`ZkvmNetwork`] for ZKVMs that don't support network proving.
@@ -190,6 +198,12 @@ impl<G: ZkvmGuest + 'static> ZkvmNetwork for NoopZkvmNetwork<G> {
     }
 
     async fn poll(&self, _handle: &Self::ProofHandle) -> anyhow::Result<Option<Vec<u8>>> {
+        match self._void {}
+    }
+
+    fn code_commitment(
+        &self,
+    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment> {
         match self._void {}
     }
 }

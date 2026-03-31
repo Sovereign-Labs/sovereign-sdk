@@ -105,4 +105,12 @@ impl sov_rollup_interface::zk::ZkvmNetwork for MockZkvmNetwork {
             None => anyhow::bail!("unknown proof handle: {handle}"),
         }
     }
+
+    fn code_commitment(
+        &self,
+    ) -> anyhow::Result<
+        <<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment,
+    >{
+        Ok(crate::MockCodeCommitment::default())
+    }
 }
