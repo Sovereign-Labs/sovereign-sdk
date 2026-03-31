@@ -76,6 +76,8 @@ where
     pub(crate) shutdown_sender: watch::Sender<()>,
 
     pub(crate) executor: RollupBlockExecutor<S, Rt>,
+    /// The rollup height of the latest node checkpoint applied to this executor's storage.
+    pub(crate) executor_rebase_height: RollupHeight,
     pub(crate) latest_info: StateUpdateInfo<S::Storage>,
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
@@ -251,6 +253,7 @@ where
 
         // Replace known info
         self.latest_info = info.clone();
+        self.executor_rebase_height = new_executor.checkpoint.rollup_height_to_access();
 
         // Replace executor state
         self.executor.replace_state(new_executor).await;

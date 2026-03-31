@@ -734,6 +734,10 @@ where
             inner.next_unassigned_sequence_number = node_sequence_number;
         }
 
+        inner.executor_rebase_height =
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+                .rollup_height_to_access();
+
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
         inner.latest_info = info;
@@ -955,6 +959,8 @@ where
         let batch_from_master =
             Self::ensure_replica_batch_start_visible_slot_matches(&mut inner, batch_from_master)?;
 
+        Self::ensure_replica_batch_start_within_rebase_window(&mut inner, batch_from_master)?;
+
         inner
             .do_batch_start(
                 batch_from_master.visible_slot_number_after_increase,
@@ -1088,6 +1094,44 @@ where
             %replica_expected,
             master_expected = %batch_from_master.visible_slot_number_after_increase,
             "Replica VSN diverged from master. Entering sync mode and retrying."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
+    }
+
+    fn ensure_replica_batch_start_within_rebase_window(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<(), ReplicaError<S>> {
+        let state_root_delay_blocks: u64 =
+            sov_modules_api::macros::config_value!("STATE_ROOT_DELAY_BLOCKS");
+        let current_height = inner.executor.checkpoint.rollup_height_to_access();
+        let rebase_height = inner.executor_rebase_height;
+
+        if current_height.get().saturating_sub(rebase_height.get())
+            <= state_root_delay_blocks.saturating_sub(1)
+        {
+            return Ok(());
+        }
+
+        let heights_since_rebase = current_height.get().saturating_sub(rebase_height.get());
+
+        tracing::warn!(
+            %current_height,
+            %rebase_height,
+            %heights_since_rebase,
+            %state_root_delay_blocks,
+            "Replica has accepted too many PG batches since the last executor rebase. Rejecting batch start until node replay catches up."
         );
 
         let sync_details = SequencerNotReadyDetails::Syncing {
