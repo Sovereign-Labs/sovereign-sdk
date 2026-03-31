@@ -89,6 +89,8 @@ impl ZkvmHost for SP1Host<'static> {
     fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
         let stdin = std::mem::take(&mut self.stdin);
 
+        println!("Start inner proof");
+
         let result = if with_proof {
             let (prover, pk) = self.create_prover_and_pk()?;
             let output: sp1_sdk::SP1ProofWithPublicValues = prover
@@ -103,6 +105,8 @@ impl ZkvmHost for SP1Host<'static> {
             let output = prover.execute(self.elf.into(), stdin).run()?;
             Proof::PublicData(output.0)
         };
+
+        println!("End inner proof");
 
         Ok(bincode::serialize(&result)?)
     }

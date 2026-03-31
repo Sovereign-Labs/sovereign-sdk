@@ -44,7 +44,7 @@ async fn test_parallel_proof_generation() {
 
     let inner_vm = SP1Host::new(elf);
     // auto-complete outer proofs - real outer not supported yet
-    let outer_vm = MockZkvmHost::new();
+    let outer_vm = MockZkvmHost::new_non_blocking();
 
     let da_verifier = sov_mock_da::MockDaVerifier::default();
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
