@@ -430,7 +430,7 @@ fn test_auth_wrapper() {
 fn create_multisig_transfer_tx_json(
     amount: Amount,
     recipient: &str,
-    credential_id: CredentialId,
+    multisig_address: CredentialId,
 ) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -452,7 +452,7 @@ fn create_multisig_transfer_tx_json(
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
-        credential_id,
+        multisig_address,
         version: 1,
     };
     serde_json::to_string(&solana_unsigned_tx).unwrap()

@@ -83,11 +83,11 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
-    /// The credential_id derived from the multisig parameters (hash of min_signers + sorted
-    /// pubkeys). Included in the signed message so that signers commit to the multisig
-    /// configuration and prevent credential_id malleability from reusing signed bytes in a
-    /// different multisig envelope.
-    pub credential_id: CredentialId,
+    /// The credential_id (i.e. multisig address) derived from the multisig parameters (hash of
+    /// min_signers + sorted pubkeys). Included in the signed message so that signers commit to
+    /// the multisig configuration and prevent credential malleability from reusing signed bytes
+    /// in a different multisig envelope.
+    pub multisig_address: CredentialId,
     /// Message format version. Must be `1` for this struct.
     pub version: u8,
 }
@@ -594,7 +594,7 @@ where
                 ));
             }
             verify_multisig_commitment::<S>(
-                tx.credential_id,
+                tx.multisig_address,
                 signatures,
                 unused_pub_keys,
                 *min_signers,
