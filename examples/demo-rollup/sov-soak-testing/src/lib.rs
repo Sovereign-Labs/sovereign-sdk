@@ -4,19 +4,16 @@ use std::time::Duration;
 use demo_stf::MultiAddressEvmSolana;
 use std::sync::LazyLock;
 use sov_celestia_adapter::verifier::CelestiaSpec;
-use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockDaSpec, MockHash};
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmNetwork};
+use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec, MockZkvmNetwork};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::default_spec::DefaultNomtSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::prelude::axum::async_trait;
-use sov_modules_api::rest::StateUpdateReceiver;
-use sov_modules_api::{Amount, CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier};
-use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
-use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
+use sov_modules_api::{Amount, CryptoSpec, Spec};
+use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_paymaster::{
     PayeePolicy, PayerGenesisConfig, Paymaster, PaymasterConfig, PaymasterPolicyInitializer,
     SafeVec,
@@ -26,21 +23,21 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
-use sov_sequencer::{ProofBlobSender, SequencerKindConfig};
+use sov_sequencer::SequencerKindConfig;
 use sov_sp1_adapter::network::SP1Network;
 use sov_sp1_adapter::{SP1, SP1MethodId};
 pub use sov_soak_testing_lib::*;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{NetworkProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{NetworkProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
 use sov_test_utils::{
-    generate_runtime, RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser,
-    TEST_DEFAULT_USER_BALANCE,
+    generate_runtime, ProverFactory, RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec,
+    TestUser, TEST_DEFAULT_USER_BALANCE,
 };
 use std::path::PathBuf;
 
@@ -128,20 +125,11 @@ pub static SOAK_INNER_GUEST_SP1_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| 
 });
 
 
-#[derive(Default)]
-pub struct NetworkProvingBlueprint;
-
-impl RollupBlueprint<Native> for NetworkProvingBlueprint {
-    type Spec = SP1TestSpec;
-    type Runtime = SP1TestRT;
-}
+/// Prover factory that submits proofs to the SP1 Succinct proving network.
+pub struct NetworkProverFactory;
 
 #[async_trait]
-impl FullNodeBlueprint<Native> for NetworkProvingBlueprint {
-    type DaService = StorableMockDaService;
-
-    type StorageManager = SP1StorageManager;
-
+impl ProverFactory<SP1TestSpec> for NetworkProverFactory {
     type ProverService = NetworkProverService<
         <SP1TestSpec as Spec>::Address,
         <<SP1TestSpec as Spec>::Storage as Storage>::Root,
@@ -151,84 +139,29 @@ impl FullNodeBlueprint<Native> for NetworkProvingBlueprint {
         MockZkvm,
     >;
 
-    type ProofSender = SovApiProofSender<SP1TestSpec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        MockCodeCommitment::default()
-    }
-
-    async fn create_endpoints(
-        &self,
-        state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
-        sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
-        ledger_db: &LedgerDb,
-        sequencer: &SequencerCreationReceipt<Self::Spec>,
-        _da_service: &Self::DaService,
-        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-    ) -> anyhow::Result<NodeEndpoints> {
-        Ok(
-            sov_modules_rollup_blueprint::register_endpoints::<Self, Native>(
-                state_update_receiver,
-                sync_status_receiver,
-                shutdown_receiver,
-                ledger_db,
-                sequencer,
-                rollup_config,
-            )
-            .await?,
-        )
-    }
-
-    async fn create_da_service(
-        &self,
-        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    ) -> Self::DaService {
-        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
-    }
-
-    async fn create_prover_service(
-        &self,
-        _prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
-        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _da_service: &Self::DaService,
+    async fn create(
+        _prover_config: RollupProverConfig<SP1>,
+        rollup_config: &RollupConfig<<SP1TestSpec as Spec>::Address, StorableMockDaService>,
     ) -> Self::ProverService {
         let inner_vm = SP1Network::new(*SOAK_INNER_GUEST_SP1_ELF)
             .await
             .expect("Failed to create SP1Network — is NETWORK_PRIVATE_KEY set?");
         // auto-complete outer proofs — real outer not supported yet
         let outer_vm = MockZkvmNetwork::new(true);
-        let da_verifier = Default::default();
 
         NetworkProverService::new(
             inner_vm,
             outer_vm,
-            da_verifier,
+            Default::default(),
             CodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
             Duration::from_secs(600),
         )
     }
-
-    fn create_storage_manager(
-        &self,
-        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        witness_generation: bool,
-    ) -> anyhow::Result<Self::StorageManager> {
-        NomtStorageManager::new(rollup_config.storage.clone(), witness_generation)
-    }
-
-    fn create_proof_sender(
-        &self,
-        _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        proof_blob_sender: Arc<dyn ProofBlobSender>,
-    ) -> anyhow::Result<Self::ProofSender> {
-        Ok(Self::ProofSender::new(proof_blob_sender))
-    }
 }
+
+pub type NetworkProvingBlueprint =
+    RtAgnosticBlueprint<SP1TestSpec, SP1TestRT, SP1StorageManager, NetworkProverFactory>;
 
 
 pub struct Setup<S: Spec = TestSpec> {

@@ -12908,7 +12908,6 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-rollup-blueprint",
- "sov-modules-stf-blueprint",
  "sov-node-client",
  "sov-paymaster",
  "sov-rollup-interface",
