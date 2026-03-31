@@ -25,7 +25,7 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
 
 export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
-    credential_id: string;
+    multisig_address: string;
     version: number;
   };
 
@@ -379,7 +379,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Creates V1 JSON bytes for a multisig transaction, including credential_id and version.
+   * Creates V1 JSON bytes for a multisig transaction, including multisig_address and version.
    * The resulting JSON is what each signer signs directly (no discriminator prefix).
    */
   private async createMultisigJsonBytes(
@@ -395,7 +395,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
       chain_name: chainName,
-      credential_id: multisigAddress,
+      multisig_address: multisigAddress,
       version: 1,
     };
 
@@ -405,11 +405,12 @@ export class SolanaSignableRollup<RuntimeCall> {
   /**
    * Signs an unsigned transaction for use in a Solana offchain multisig.
    *
-   * The signer signs the V1 JSON payload directly (which includes the credential_id
+   * The signer signs the V1 JSON payload directly (which includes the multisig_address
    * and version fields). The returned V0-shaped transaction is compatible with
    * `MultisigTransaction.fromTransactions()`.
    *
-   * @param multisigAddress - The 0x-prefixed hex credential_id of the multisig account.
+   * @param multisigAddress - The 0x-prefixed hex multisig_address (i.e. credential_id) of the
+   * multisig account.
    */
   async signTransactionForMultisig(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
@@ -439,7 +440,8 @@ export class SolanaSignableRollup<RuntimeCall> {
    * the Solana multisig envelope with the `0x80`-prefixed wire bytes, and submits it
    * to the Solana offchain endpoint.
    *
-   * @param multisigAddress - The 0x-prefixed hex credential_id of the multisig account.
+   * @param multisigAddress - The 0x-prefixed hex multisig_address (i.e. credential_id) of the
+   * multisig account.
    */
   async submitMultisigTransaction(
     multisigTx: TransactionV1<RuntimeCall>,
