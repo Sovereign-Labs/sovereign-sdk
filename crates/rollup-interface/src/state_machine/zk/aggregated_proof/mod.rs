@@ -6,13 +6,34 @@ pub mod common;
 
 use core::marker::PhantomData;
 
+use super::{StateTransitionPublicData, ZkVerifier};
+use crate::common::SlotNumber;
+use crate::da::DaSpec;
+use crate::zk::ZkvmGuest;
+use crate::zk::ZkvmHost;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use super::{StateTransitionPublicData, ZkVerifier};
-use crate::common::SlotNumber;
-use crate::da::DaSpec;
+/// TODO
+pub trait ZkvmHostWithInnerProofs: ZkvmHost {
+    /// Innet proof.
+    type Proof;
+
+    /// Add inner proof.
+    fn add_proof(
+        &mut self,
+        proof: &Self::Proof,
+        code_commitment: &<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment,
+    );
+
+    /// Run the guest in the true zk environment using the provided hints.
+    ///
+    /// This runs the guest binary compiled for the zkVM target, optionally
+    /// creating a SNARK of correct execution. Running the true guest binary comes
+    /// with some mild performance overhead, but it is orders of magnitude less expensive than generating a proof.
+    fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>>;
+}
 
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
 pub struct BlockProof<Address, Da: DaSpec, Root> {
