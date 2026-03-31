@@ -34,7 +34,7 @@ impl<'host> SP1Host<'host> {
 
     /// Adds a compressed SP1 proof and its verifying key to the host's stdin
     /// so it can be verified inside the guest program during aggregation.
-    pub fn add_proof_inner(
+    fn add_proof_inner(
         &mut self,
         proof: &SP1ProofWithPublicValues,
         method_id: &SP1MethodId,
