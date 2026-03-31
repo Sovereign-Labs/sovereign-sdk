@@ -15,7 +15,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-/// TODO
+/// Extension of `ZkvmHost`` that enables recursive proving.
 pub trait ZkvmHostWithInnerProofs: ZkvmHost {
     /// Innet proof.
     type Proof;
