@@ -125,8 +125,7 @@ where
 }
 
 #[async_trait]
-impl<S, R, Manager, Prover> FullNodeBlueprint<Native>
-    for RtAgnosticBlueprint<S, R, Manager, Prover>
+impl<S, R, Manager, Prover> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover>
 where
     S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
