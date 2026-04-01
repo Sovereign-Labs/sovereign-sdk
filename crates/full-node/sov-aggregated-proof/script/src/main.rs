@@ -136,12 +136,10 @@ fn create_agg_proof(
 
     let prev_outer_proof_witness =
         if let Some(previous_outer_proof_serialized) = previous_outer_proof_serialized {
-            let previous_outer_proof = sov_sp1_adapter::decode_sp1_proof(
+            let public_values = agg_host.add_proof(
                 &previous_outer_proof_serialized.raw_aggregated_proof,
+                &aggregation_code_commitment,
             )?;
-
-            agg_host.add_proof(&previous_outer_proof, &aggregation_code_commitment)?;
-            let public_values = previous_outer_proof.public_values.to_vec();
 
             Some(PreviousOuterProofWitness { public_values })
         } else {
@@ -151,9 +149,7 @@ fn create_agg_proof(
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
     for (index, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
-        let proof = sov_sp1_adapter::decode_sp1_proof(&block_header_with_proof.proof)?;
-        agg_host.add_proof(&proof, verification_key)?;
-        let public_values = proof.public_values.to_vec();
+        let public_values = agg_host.add_proof(&block_header_with_proof.proof, verification_key)?;
 
         let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
             public_values: public_values,

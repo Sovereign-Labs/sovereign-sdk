@@ -35,9 +35,11 @@ impl<'host> SP1Host<'host> {
     /// so it can be verified inside the guest program during aggregation.
     pub fn add_proof(
         &mut self,
-        proof: &SP1ProofWithPublicValues,
+        proof: &Vec<u8>,
         method_id: &SP1MethodId,
-    ) -> anyhow::Result<()> {
+    ) -> anyhow::Result<Vec<u8>> {
+        let proof = crate::decode_sp1_proof(proof)?;
+
         let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
             anyhow::bail!("Expected a compressed SP1 proof");
         };
@@ -46,7 +48,7 @@ impl<'host> SP1Host<'host> {
 
         self.stdin
             .write_proof(*recursion_proof.clone(), vk.vk.clone());
-        Ok(())
+        Ok(proof.public_values.to_vec())
     }
 
     fn create_prover_and_pk(&self) -> anyhow::Result<(CpuProver, SP1ProvingKey)> {
