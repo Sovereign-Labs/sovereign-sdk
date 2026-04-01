@@ -17,13 +17,14 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::aggregated_proof::common::{
     AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
 };
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
 use sov_sp1_adapter::host::SP1Host;
 use sov_sp1_adapter::SP1;
 use sov_sp1_adapter::{BlockHeaderWithProof, SP1MethodId, SP1Verifier};
 use sp1_recursion_executor::RecursionPublicValues;
 use sp1_sdk::prelude::{include_elf, Elf, HashableKey};
-use sp1_sdk::{SP1Proof, SP1ProofWithPublicValues, SP1VerifyingKey};
+use sp1_sdk::{SP1Proof, SP1VerifyingKey};
 
 const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 const JUMP: usize = 3;
@@ -59,7 +60,7 @@ fn main() -> anyhow::Result<()> {
 
     let num_outer_proofs = proof_batches.len();
 
-    let mut previous_outer_proof: Option<SP1ProofWithPublicValues> = None;
+    let mut previous_outer_proof: Option<SerializedAggregatedProof> = None;
 
     for (batch_index, proof_batch) in proof_batches.into_iter().enumerate() {
         println!(
@@ -68,20 +69,6 @@ fn main() -> anyhow::Result<()> {
             num_outer_proofs,
             proof_batch.len()
         );
-
-        let previous_outer_public_data = previous_outer_proof
-            .as_ref()
-            .map(|proof| {
-                deserialize_pub_data::<
-                    AggregatedProofPublicData<
-                        <S as Spec>::Address,
-                        MockDaSpec,
-                        <<S as Spec>::Storage as Storage>::Root,
-                    >,
-                >(proof.public_values.as_slice())
-            })
-            .transpose()
-            .context("Failed to deserialize previous outer proof public data")?;
 
         let (expected_initial_state_root, expected_final_state_root) =
             batch_state_roots(&proof_batch)
@@ -98,7 +85,7 @@ fn main() -> anyhow::Result<()> {
             <S as Spec>::Address,
             MockDaSpec,
             <<S as Spec>::Storage as Storage>::Root,
-        > = SP1Verifier::verify(&outer_proof_bytes, &code_commitment)
+        > = SP1Verifier::verify(&outer_proof_bytes.raw_aggregated_proof, &code_commitment)
             .context("Failed to verify the outer SP1 aggregation proof")?;
 
         println!(
@@ -120,23 +107,7 @@ fn main() -> anyhow::Result<()> {
             batch_index + 1
         );
 
-        if let Some(previous_outer_public_data) = previous_outer_public_data.as_ref() {
-            ensure!(
-                public_data.genesis_state_root == previous_outer_public_data.genesis_state_root,
-                "Outer proof {} genesis_state_root changed across recursive aggregation",
-                batch_index + 1
-            );
-            ensure!(
-                public_data.initial_state_root == previous_outer_public_data.final_state_root,
-                "Outer proof {} initial_state_root does not continue the previous outer proof final_state_root",
-                batch_index + 1
-            );
-        }
-
-        let outer_proof = sov_sp1_adapter::decode_sp1_proof(&outer_proof_bytes)
-            .context("Failed to decode outer proof")?;
-
-        previous_outer_proof = Some(outer_proof);
+        previous_outer_proof = Some(outer_proof_bytes);
     }
 
     println!("[host] verified outer proof(s) in {:?}", start.elapsed());
@@ -148,8 +119,8 @@ fn create_agg_proof(
     agg_host: &mut SP1Host<'static>,
     verification_key: &SP1MethodId,
     raw_proofs: Vec<BlockHeaderWithProof<MockDaSpec>>,
-    previous_outer_proof: Option<SP1ProofWithPublicValues>,
-) -> anyhow::Result<(Vec<u8>, SP1MethodId)> {
+    previous_outer_proof_serialized: Option<SerializedAggregatedProof>,
+) -> anyhow::Result<(SerializedAggregatedProof, SP1MethodId)> {
     ensure!(
         !raw_proofs.is_empty(),
         "At least one proof file is required"
@@ -163,15 +134,21 @@ fn create_agg_proof(
         .context("Failed to deserialize inner SP1VerifyingKey")?;
     let inner_vk_hash = inner_vk.hash_u32();
 
-    let prev_outer_proof_witness = if let Some(previous_outer_proof) = previous_outer_proof {
-        agg_host.add_proof(&previous_outer_proof, &aggregation_code_commitment)?;
+    let prev_outer_proof_witness =
+        if let Some(previous_outer_proof_serialized) = previous_outer_proof_serialized {
+            let previous_outer_proof = sov_sp1_adapter::decode_sp1_proof(
+                &previous_outer_proof_serialized.raw_aggregated_proof,
+            )
+            .context("Failed to decode outer proof")?;
 
-        Some(PreviousOuterProofWitness {
-            public_values: previous_outer_proof.public_values.to_vec(),
-        })
-    } else {
-        None
-    };
+            agg_host.add_proof(&previous_outer_proof, &aggregation_code_commitment)?;
+
+            Some(PreviousOuterProofWitness {
+                public_values: previous_outer_proof.public_values.to_vec(),
+            })
+        } else {
+            None
+        };
 
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
@@ -215,7 +192,12 @@ fn create_agg_proof(
     agg_host.add_hint(witness);
 
     let outer_proof_bytes = agg_host.run(true)?;
-    Ok((outer_proof_bytes, aggregation_code_commitment))
+    Ok((
+        SerializedAggregatedProof {
+            raw_aggregated_proof: outer_proof_bytes,
+        },
+        aggregation_code_commitment,
+    ))
 }
 
 fn proofs() -> Vec<BlockHeaderWithProof<MockDaSpec>> {
