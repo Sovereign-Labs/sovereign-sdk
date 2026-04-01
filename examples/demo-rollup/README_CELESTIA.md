@@ -364,7 +364,7 @@ It is possible to run several nodes and sequencers on the same host. But this re
 6. Run second node:
 
 ```
-cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia --prometheus-exporter-bind=127.0.0.1:9846 
+cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 ```
 
 Note that it uses newly generated config and also passes a different option for prometheus exporter.
