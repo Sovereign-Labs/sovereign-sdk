@@ -28,6 +28,7 @@ reqwest = { workspace = true }
 sov-api-spec = { workspace = true }
 sov-metrics = { workspace = true }
 sov-modules-rollup-blueprint = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-transaction-generator = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
@@ -49,15 +50,9 @@ sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 sov-soak-testing-lib = { workspace = true }
 sov-db = { workspace = true }
-sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-sp1-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-stf-runner = { workspace = true }
-tracing = { workspace = true }
-
-[build-dependencies]
-anyhow = { workspace = true }
-sp1-build = "6.0.2"
-sov-zkvm-utils = { workspace = true }
+sp1 = { path = "../provers/sp1" }
 
 [[bin]]
 name = "main"

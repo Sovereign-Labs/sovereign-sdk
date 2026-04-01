@@ -12921,11 +12921,9 @@ dependencies = [
  "sov-test-utils",
  "sov-transaction-generator",
  "sov-value-setter",
- "sov-zkvm-utils",
- "sp1-build",
+ "sp1",
  "strum 0.26.3",
  "tokio",
- "tracing",
 ]
 
 [[package]]

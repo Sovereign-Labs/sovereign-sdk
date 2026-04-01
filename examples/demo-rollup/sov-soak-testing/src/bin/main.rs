@@ -3,9 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use sov_modules_api::prelude::tracing;
 use sov_modules_rollup_blueprint::FullNodeBlueprint;
-use sov_soak_testing::{
-    MockRollupBlueprint, NetworkProvingBlueprint, RollupProverConfig, SOAK_INNER_GUEST_SP1_ELF,
-};
+use sov_soak_testing::{MockRollupBlueprint, NetworkProvingBlueprint, RollupProverConfig};
 use sov_test_utils::test_rollup::RollupBuilder;
 use tokio::signal::unix::SignalKind;
 
@@ -39,24 +37,22 @@ async fn main() -> Result<(), anyhow::Error> {
     std::fs::create_dir_all(&args.storage_path)?;
 
     if args.network_proving {
-        let setup = sov_soak_testing::setup_roles_and_config_sp1();
-        let builder = sov_soak_testing::create_rollup_builder::<NetworkProvingBlueprint>(
+        let builder = sov_soak_testing::create_sp1_rollup_builder(
             args.storage_path.into(),
             args.axum_port,
-            &setup,
             args.db_connection_url,
         )
         .set_config(|config| {
             // Enable witness generation so proofs can be submitted to the network.
             // The actual host args are unused by NetworkProverService.
             config.rollup_prover_config = Some(RollupProverConfig::Execute(Arc::new(
-                *SOAK_INNER_GUEST_SP1_ELF,
+                *sp1::SP1_GUEST_MOCK_ELF,
             )));
         });
         start_and_wait(builder).await?;
     } else {
         let setup = sov_soak_testing::setup_roles_and_config();
-        let builder = sov_soak_testing::create_rollup_builder::<MockRollupBlueprint>(
+        let builder = sov_soak_testing::create_mock_rollup_builder(
             args.storage_path.into(),
             args.axum_port,
             &setup,
@@ -91,8 +87,6 @@ where
         _ = tokio::signal::ctrl_c() => tracing::info!("Received Ctrl+C"),
         _ = terminate.recv() => tracing::info!("Received SIGTERM"),
         _ = quit.recv() => tracing::info!("Received SIGQUIT"),
-        // might not be desired because soak tests are intended to run continously until we stop
-        // them, if we got a shutdown msg something probably went wrong :-)
         _ = shutdown_recv.changed() => tracing::warn!("Rollup execution finished, this might not be desired!!"),
     }
 

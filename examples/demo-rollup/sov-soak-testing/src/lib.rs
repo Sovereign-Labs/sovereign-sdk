@@ -1,18 +1,17 @@
+use std::path::Path;
 use std::time::Duration;
 
+use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::MultiAddressEvmSolana;
-use std::sync::LazyLock;
 use sov_celestia_adapter::verifier::CelestiaSpec;
-use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{BlockProducingConfig, MockDaSpec, MockHash};
+use sov_mock_da::{BlockProducingConfig, MockDaSpec};
 use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec, MockZkvmNetwork};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::default_spec::DefaultNomtSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::prelude::axum::async_trait;
-use sov_modules_api::{Amount, CryptoSpec, Spec};
-use sov_modules_rollup_blueprint::FullNodeBlueprint;
+use sov_modules_api::{Amount, Spec};
+use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{
     PayeePolicy, PayerGenesisConfig, Paymaster, PaymasterConfig, PaymasterPolicyInitializer,
     SafeVec,
@@ -26,8 +25,7 @@ use sov_sequencer::SequencerKindConfig;
 use sov_sp1_adapter::network::SP1Network;
 use sov_sp1_adapter::SP1;
 pub use sov_soak_testing_lib::*;
-use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::{DefaultStorageSpec, Storage};
+use sov_state::Storage;
 use sov_stf_runner::processes::NetworkProverService;
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::RollupConfig;
@@ -48,10 +46,9 @@ pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingC
 
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 5;
 
-
+// Mock prover types (existing)
 pub type TestRT = TestRuntime<TestSpec>;
 pub type MockRollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRT>;
-pub type TestRollupBuilder = RollupBuilder<MockRollupBlueprint>;
 
 type SoakHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 
@@ -83,19 +80,10 @@ pub type MockDemoRollupSpec = ConfigurableSpec<
 >;
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
-
-pub type SP1TestSpec = DefaultNomtSpec<MockDaSpec, SP1, MockZkvm, Native>;
-pub type SP1TestRT = TestRuntime<SP1TestSpec>;
-
-type SP1StorageManager = NomtStorageManager<
-    MockDaSpec,
-    <<SP1TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
-    NomtProverStorage<
-        DefaultStorageSpec<<<SP1TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
-        MockHash,
-    >,
->;
-
+// SP1 network proving types — uses demo-stf Runtime with the existing guest-mock ELF
+pub type SP1Spec =
+    ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Native>;
+pub type SP1RT = demo_stf::runtime::Runtime<SP1Spec>;
 
 generate_runtime! {
     name: TestRuntime,
@@ -109,31 +97,15 @@ generate_runtime! {
     auth_call_wrapper: |call| call,
 }
 
-
-pub static SOAK_INNER_GUEST_SP1_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
-    let path = format!(
-        "{}/inner-guest-sp1/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-soak-testing-inner-guest-sp1",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let elf = std::fs::read(&path)
-        .unwrap_or_else(|e| panic!("Failed to read SP1 inner guest ELF at '{path}': {e}. Build it first (unset SKIP_GUEST_BUILD)."));
-    assert!(
-        !elf.is_empty(),
-        "SP1 inner guest ELF at '{path}' is empty. Build it first (unset SKIP_GUEST_BUILD)."
-    );
-    Vec::leak(elf)
-});
-
-
 /// Prover factory that submits proofs to the SP1 Succinct proving network.
 pub struct NetworkProverFactory;
 
 #[async_trait]
-impl ProverFactory<SP1TestSpec> for NetworkProverFactory {
+impl ProverFactory<SP1Spec> for NetworkProverFactory {
     type ProverService = NetworkProverService<
-        <SP1TestSpec as Spec>::Address,
-        <<SP1TestSpec as Spec>::Storage as Storage>::Root,
-        <<SP1TestSpec as Spec>::Storage as Storage>::Witness,
+        <SP1Spec as Spec>::Address,
+        <<SP1Spec as Spec>::Storage as Storage>::Root,
+        <<SP1Spec as Spec>::Storage as Storage>::Witness,
         StorableMockDaService,
         SP1,
         MockZkvm,
@@ -141,9 +113,15 @@ impl ProverFactory<SP1TestSpec> for NetworkProverFactory {
 
     async fn create(
         _prover_config: RollupProverConfig<SP1>,
-        rollup_config: &RollupConfig<<SP1TestSpec as Spec>::Address, StorableMockDaService>,
+        rollup_config: &RollupConfig<<SP1Spec as Spec>::Address, StorableMockDaService>,
     ) -> Self::ProverService {
-        let inner_vm = SP1Network::new(*SOAK_INNER_GUEST_SP1_ELF)
+        let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        assert!(
+            !elf.is_empty(),
+            "SP1 guest ELF is empty — build it first (cd provers/sp1 && cargo build)"
+        );
+
+        let inner_vm = SP1Network::new(elf)
             .await
             .expect("Failed to create SP1Network — is NETWORK_PRIVATE_KEY set?");
         // auto-complete outer proofs — real outer not supported yet
@@ -160,28 +138,33 @@ impl ProverFactory<SP1TestSpec> for NetworkProverFactory {
     }
 }
 
-pub type NetworkProvingBlueprint =
-    RtAgnosticBlueprint<SP1TestSpec, SP1TestRT, SP1StorageManager, NetworkProverFactory>;
+pub type NetworkProvingBlueprint = RtAgnosticBlueprint<
+    SP1Spec,
+    SP1RT,
+    sov_db::storage_manager::NativeStorageManager<
+        MockDaSpec,
+        <SP1Spec as Spec>::Storage,
+    >,
+    NetworkProverFactory,
+>;
 
+// Mock path setup (TestRuntime)
 
-pub struct Setup<S: Spec = TestSpec> {
-    /// A user who is pre-registered as a payer for [`Setup::sequencer`].
+pub struct Setup {
     #[allow(dead_code)]
-    pub paymaster: TestUser<S>,
-    /// The pre-registered sequencer
-    pub sequencer: TestSequencer<S>,
-    /// The pre-registered prover
-    pub prover: TestProver<S>,
+    pub paymaster: TestUser<TestSpec>,
+    pub sequencer: TestSequencer<TestSpec>,
+    pub prover: TestProver<TestSpec>,
     #[allow(missing_docs)]
-    pub genesis_config: GenesisConfig<S>,
+    pub genesis_config: GenesisConfig<TestSpec>,
 }
 
-fn finalize_genesis_config<S: Spec<Da = MockDaSpec>>(
-    mut genesis_config: HighLevelZkGenesisConfig<S>,
-) -> Setup<S> {
+pub fn setup_roles_and_config() -> Setup {
+    let mut genesis_config = HighLevelZkGenesisConfig::generate();
+
     let sequencer = genesis_config.initial_sequencer.clone();
     let prover = genesis_config.initial_prover.clone();
-    let paymaster = TestUser::<S>::generate(
+    let paymaster = TestUser::generate(
         TEST_DEFAULT_USER_BALANCE
             .checked_mul(Amount::new(10))
             .unwrap(),
@@ -190,7 +173,7 @@ fn finalize_genesis_config<S: Spec<Da = MockDaSpec>>(
         .additional_accounts_mut()
         .push(paymaster.clone());
 
-    let users: Vec<TestUser<S>> = vec![TestUser::generate_with_default_balance(); 20];
+    let users: Vec<TestUser<TestSpec>> = vec![TestUser::generate_with_default_balance(); 20];
     genesis_config.additional_accounts_mut().extend(users);
 
     let genesis_config = GenesisConfig::from_minimal_config(
@@ -225,42 +208,16 @@ fn finalize_genesis_config<S: Spec<Da = MockDaSpec>>(
     }
 }
 
-pub fn setup_roles_and_config() -> Setup<TestSpec> {
-    finalize_genesis_config(HighLevelZkGenesisConfig::generate())
-}
-
-pub fn setup_roles_and_config_sp1() -> Setup<SP1TestSpec> {
-    finalize_genesis_config(
-        HighLevelZkGenesisConfig::<SP1TestSpec>::generate_with_additional_accounts_and_code_commitments(
-            0,
-            sov_sp1_adapter::code_commitment_from_elf(*SOAK_INNER_GUEST_SP1_ELF)
-                .expect("Failed to compute SP1 code commitment from guest ELF"),
-            Default::default(), // MockCodeCommitment for outer
-        ),
-    )
-}
-
-
-pub fn create_rollup_builder<R>(
+pub fn create_mock_rollup_builder(
     storage_path: PathBuf,
     axum_port: u16,
-    setup: &Setup<R::Spec>,
+    setup: &Setup,
     db_connection_url: Option<String>,
-) -> RollupBuilder<R>
-where
-    R: FullNodeBlueprint<Native, DaService = StorableMockDaService> + Default + 'static,
-    R::Spec: Spec<Da = MockDaSpec>,
-    R::Runtime: sov_modules_stf_blueprint::Runtime<R::Spec, GenesisConfig = GenesisConfig<R::Spec>>,
-{
-    let postgres_config = db_connection_url.map(|url| PostgresConfig {
-        postgres_connection_string: url,
-        node_id: "Primary".to_string(),
-        node_role: ConfiguredNodeRole::Leader,
-        leader_election: Default::default(),
-    });
+) -> RollupBuilder<MockRollupBlueprint> {
+    let postgres_config = make_postgres_config(db_connection_url);
     let da_address = setup.sequencer.da_address;
 
-    RollupBuilder::<R>::new_with_storage_path(
+    RollupBuilder::<MockRollupBlueprint>::new_with_storage_path(
         GenesisSource::CustomParams(setup.genesis_config.clone().into_genesis_params()),
         DEFAULT_BLOCK_PRODUCING_CONFIG,
         DEFAULT_FINALIZATION_BLOCKS,
@@ -282,5 +239,56 @@ where
     })
     .set_da_config(|da_config| {
         da_config.sender_address = da_address;
+    })
+}
+
+// SP1 network proving path setup (demo-stf Runtime)
+
+fn sp1_genesis_paths() -> GenesisPaths {
+    let dir: &dyn AsRef<Path> = &"../test-data/genesis/integration-tests/";
+    let mut paths = GenesisPaths::from_dir(dir.as_ref());
+    paths.chain_state_genesis_path = dir.as_ref().join("chain_state_zk.json");
+    paths
+}
+
+pub fn create_sp1_rollup_builder(
+    storage_path: PathBuf,
+    axum_port: u16,
+    db_connection_url: Option<String>,
+) -> RollupBuilder<NetworkProvingBlueprint> {
+    let genesis_config =
+        demo_stf::genesis_config::create_genesis_config::<SP1Spec>(&sp1_genesis_paths())
+            .expect("Failed to create demo-stf genesis config");
+    let postgres_config = make_postgres_config(db_connection_url);
+
+    RollupBuilder::<NetworkProvingBlueprint>::new_with_storage_path(
+        GenesisSource::CustomParams(GenesisParams {
+            runtime: genesis_config,
+        }),
+        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        DEFAULT_FINALIZATION_BLOCKS,
+        StoragePath::Buf(storage_path),
+        false,
+    )
+    .set_config(|config| {
+        config.telegraf_address = sov_metrics::MonitoringConfig::standard().telegraf_address;
+        config.automatic_batch_production = true;
+        config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
+            minimum_profit_per_tx: 0,
+            postgres_config,
+            batch_execution_time_limit_millis: 400,
+            ..Default::default()
+        });
+        config.aggregated_proof_block_jump = 3;
+        config.axum_port = axum_port;
+    })
+}
+
+fn make_postgres_config(db_connection_url: Option<String>) -> Option<PostgresConfig> {
+    db_connection_url.map(|url| PostgresConfig {
+        postgres_connection_string: url,
+        node_id: "Primary".to_string(),
+        node_role: ConfiguredNodeRole::Leader,
+        leader_election: Default::default(),
     })
 }
