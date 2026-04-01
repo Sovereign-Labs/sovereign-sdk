@@ -620,8 +620,8 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     #[cfg(feature = "test-utils")]
-    async fn axum_force_close_batch(state: State<Self>) -> ApiResult<()> {
-        state
+    async fn axum_force_close_batch(state: State<Self>) -> ApiResult<bool> {
+        let result = state
             .sequencer
             .force_close_current_batch()
             .await
@@ -630,8 +630,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 errors::internal_server_error_response_500("Unable to force close batch")
                     .into_response()
             })?;
-
-        Ok(().into())
+        Ok(result.into())
     }
 
     #[cfg(feature = "test-utils")]

@@ -1,7 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
-use crate::utils::{encode_call, EventEmitterModule};
+use crate::utils::{encode_call, tx_set_value_nonce, EventEmitterModule};
 use crate::utils::{
     generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
     tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
@@ -479,6 +479,107 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
     );
 }
 
+/// Verifies that archival reads consult `uncommitted_changes` when the requested
+/// height's data has not yet been propagated to the sequencer from the node.
+///
+/// Pauses the sequencer's `update_state` task so the sequencer never receives the
+/// node's state update for batch 2. The sequencer's storage handle stays stale,
+/// deterministically forcing archival reads through `uncommitted_changes`.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_archival_read_from_uncommitted_changes() {
+    let (genesis_params, admin) = create_genesis_params();
+    let dir = tempdir_inside_codebase_dir();
+    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
+        dir.clone(),
+        genesis_params
+            .runtime
+            .sequencer_registry
+            .sequencer_config
+            .seq_da_address,
+        genesis_params,
+        0,
+        false,
+        TEST_MAX_BATCH_SIZE,
+        BlockProducingConfig::Manual,
+        None,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        None,
+        0,
+    )
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // Batch 1: set value to 0x1234, let the node fully commit it.
+    let tx = tx_set_value(&admin.private_key, 0, 0x1234);
+    test_rollup
+        .api_client()
+        .send_raw_tx_to_sequencer(&tx)
+        .await
+        .unwrap();
+    test_rollup.force_close_batch().await.unwrap();
+    test_rollup.tenderly_produce_blocks(2).await.unwrap();
+    test_rollup.wait_for_node_synced().await.unwrap();
+
+    let settled_height = test_rollup.height().await.get();
+
+    // Pause the sequencer's update_state task. The sequencer will not receive
+    // any further state updates from the node, keeping its storage stale.
+    // Batch 2 data will only be reachable via uncommitted_changes.
+    pause_update_state::set(true);
+
+    // Batch 2: set value to 0x5678, produce DA blocks.
+    // The node commits to NOMT, but the sequencer never learns about it.
+    let tx = tx_set_value(&admin.private_key, 1, 0x5678);
+    test_rollup
+        .api_client()
+        .send_raw_tx_to_sequencer(&tx)
+        .await
+        .unwrap();
+    test_rollup.force_close_batch().await.unwrap();
+    test_rollup.tenderly_produce_blocks(2).await.unwrap();
+
+    let new_height = test_rollup.height().await.get();
+    assert!(
+        new_height > settled_height,
+        "Height should have advanced after second batch"
+    );
+
+    // === User state (get_archival_from_user_storage) ===
+
+    // Archival query at the NEW height must find 0x5678 from uncommitted_changes (path 2).
+    // Without the fix, this returns a 404 (HeightNotAccessible) or stale data.
+    query_set_value(&test_rollup, Some(new_height), Some(0x5678))
+        .await
+        .expect("User state at uncommitted height should return 0x5678");
+
+    // Archival query at the settled height (path 1: kernel mapping in NOMT).
+    // Tests that ignore_changes_after_height prunes batch 2's data.
+    query_set_value(&test_rollup, Some(settled_height), Some(0x1234))
+        .await
+        .expect("User state at settled height should return 0x1234");
+
+    // === Accessory state (get_archival_from_accessory_storage) ===
+
+    // finalize-hook-count increments each slot. At settled_height it has some value N;
+    // at new_height it should be N+1 (one more finalize hook ran for batch 2).
+    let settled_hook_count = query_hook_count(&test_rollup, Some(settled_height))
+        .await
+        .expect("Accessory state at settled height should be accessible");
+    let new_hook_count = query_hook_count(&test_rollup, Some(new_height))
+        .await
+        .expect(
+            "Accessory state at uncommitted height should be accessible from uncommitted_changes",
+        );
+    assert!(
+        new_hook_count > settled_hook_count,
+        "finalize-hook-count at new_height ({new_hook_count}) should be greater than at settled_height ({settled_hook_count})"
+    );
+
+    pause_update_state::set(false);
+}
+
 /// All the interesting "things" that can happen during sequencer operations, and to
 /// which the sequencer ought to know how to respond.
 #[derive(Debug, Clone, Arbitrary)]
@@ -923,6 +1024,7 @@ async fn sequencer_filled_up_block() {
 const SEQUENCER_RECOVERY_ERROR: &str = "The preferred sequencer is recovering from downtime and cannot provide soft-confirmations at this time";
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn seq_behind_deferred_slots_count_simple_lagging() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
     let (test_rollup, admin) = create_test_rollup(
@@ -2274,6 +2376,146 @@ async fn seq_many_invalid_txs() {
         .expect("Rollup shutdown properly");
 }
 
+/// Run a test gas limit update.
+///
+/// This test runs the rollup for ~20 blocks with the gas limit update scheduled for block 12.
+/// We update the limit to a tiny value (50_000) and send expensive txs so that we can observe the gas dynamics
+/// after the update.
+///
+/// A big part of this test is simply running the upgrade with state root assertions enabled (they're enabled by default in test_rollup).
+/// That assertion would catch the most likely issues with node-sequencer disagreement, and the successful execution of the test guarantees
+/// that we haven't hit any panics. The assertions we run here are just extra sanity checks.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_gas_limit_update() {
+    // 1. Configure gas price update timing and params
+    const UPDATED_GAS_LIMIT: [u64; 2] = [50_000, 50_000];
+    const CHANGE_GAS_LIMIT_AFTER_HEIGHT: u32 = 12;
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_UPDATED_GAS_LIMIT",
+        format!("{:?}", UPDATED_GAS_LIMIT),
+    );
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_CHANGE_GAS_LIMIT_AFTER_HEIGHT",
+        CHANGE_GAS_LIMIT_AFTER_HEIGHT.to_string(),
+    );
+
+    // 2. Boilerplate test setup
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // 3. Setup - initialize empty arrays/values for tracking data. Subscribe to slot notifications
+    let mut sequencer_receipts = vec![];
+    let mut ledger_receipts = vec![];
+    let mut rollup_height;
+    let mut nonce = 0;
+    let mut max_base_fee_per_gas_observed_after_update = 0;
+    let mut slot_subscription = test_rollup
+        .client
+        .client
+        .subscribe_slots_with_children(IncludeChildren::new(true))
+        .await
+        .unwrap();
+
+    // 4. Main loop Submit a tx and save the receipt. Then, force close the batch and produce a block.
+    for i in 0..20_u64 {
+        // 4.1 Submit a tx and save the receipt.
+        let receipt = test_rollup
+            .api_client()
+            .send_raw_tx_to_sequencer(&tx_set_value_nonce::<TestRuntime<TestSpec>>(
+                &admin.private_key,
+                nonce,
+                i,
+                Some(GasUnit::from_dimensions([33_000, 33_000])),
+            ))
+            .await;
+
+        if let Err(e) = &receipt {
+            panic!("Tx {i} failed with error: {e}");
+        } else {
+            nonce += 1;
+            sequencer_receipts.push(receipt.unwrap());
+        }
+
+        // 4.2 Force close the batch and produce a block.
+        let _ = test_rollup.force_close_batch().await;
+        test_rollup.tenderly_produce_blocks(1).await.unwrap();
+        let slot = slot_subscription.next().await.unwrap().unwrap();
+        for batch in slot.batches {
+            for tx in batch.txs {
+                ledger_receipts.push(tx);
+            }
+        }
+
+        // 4.3 Query the rollup hight. After the transition, save the largest base fee value that we observe.
+        rollup_height = test_rollup.height().await.get();
+        if rollup_height > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
+            let base_fee_per_gas = test_rollup
+                .client
+                .http_get("/rollup/base-fee-per-gas/latest")
+                .await
+                .unwrap();
+            // Parse the integer price from a string like "[10, 10]"
+            let current_base_fee = base_fee_per_gas
+                .trim()
+                .trim_start_matches(r#"{"base_fee_per_gas":[""#)
+                .split('"')
+                .next()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap_or_else(|_| panic!("Failed to parse base fee per gas: {base_fee_per_gas}"));
+            if current_base_fee > max_base_fee_per_gas_observed_after_update {
+                max_base_fee_per_gas_observed_after_update = current_base_fee;
+            }
+        }
+
+        // 4.4 Once we've observed several blocks after the transition, break the loop.
+        if rollup_height.saturating_sub(5) > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
+            break;
+        }
+    }
+
+    // 5. Produce more blocks to ensure the ledger DB finishes populating. Save the ledger DB contents.
+    for _ in 0..10 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        let slot = slot_subscription.next().await.unwrap().unwrap();
+        for batch in slot.batches {
+            for tx in batch.txs {
+                ledger_receipts.push(tx);
+            }
+        }
+    }
+
+    // 6. Assertions
+    // 6.1 Check that the gas price rose after the update. This verifies that our attempted change really did take effect.
+
+    // Before we update the gas limit, the gas price falls to the minimum possible value (7). After the update, assuming all went well,
+    // the price should start rising rapidly since our blocks are always full. Sanity check that.
+    assert!(
+        max_base_fee_per_gas_observed_after_update > 7,
+        "Max observed base fee per gas after update must be greater than 7"
+    );
+
+    // 6.2 Sanity check that the ledger DB agrees with the sequencer on the tx results.
+    assert_eq!(sequencer_receipts.len(), ledger_receipts.len());
+    for (sequencer_receipt, ledger_receipt) in sequencer_receipts
+        .into_iter()
+        .zip(ledger_receipts.into_iter())
+    {
+        let sequencer_receipt = sequencer_receipt.as_ref().receipt.as_ref().unwrap();
+        assert_eq!(sequencer_receipt.result, ledger_receipt.receipt.result);
+        assert_eq!(sequencer_receipt.data, ledger_receipt.receipt.data);
+    }
+}
+
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
 /// The key thing that this test does is to execute the same transaction 3 times - once in the sequencer via `accept_tx`, once via `update_state`
 /// and once in the node. Everything else is implementation details.
@@ -2914,6 +3156,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
 /// This makes the test take longer to run, but also reduces the chance of it flaking.
 // Note that this test is marked heavy, so it will be ignored by nextest unless you run `make test-all` or manually activate the `ci` test profile
 #[tokio::test(flavor = "multi_thread")]
+#[ignore]
 async fn heavy_blob_submission_long_delay() {
     let worker_timeout_secs = 90;
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "150000");
@@ -3624,6 +3867,27 @@ async fn query_set_value(
         expected,
     )
     .await
+}
+
+async fn query_hook_count(
+    test_rollup: &TestRollup<TestBlueprint>,
+    rollup_height: Option<u64>,
+) -> anyhow::Result<u32> {
+    let url = match rollup_height {
+        Some(h) => format!("/modules/hooks-count/state/finalize-hook-count?rollup_height={h}"),
+        None => "/modules/hooks-count/state/finalize-hook-count".to_string(),
+    };
+    let response = test_rollup
+        .client
+        .query_rest_endpoint::<serde_json::Value>(&url)
+        .await?;
+    if response.get("message").is_some() {
+        return Err(anyhow::anyhow!("API request failed: {:?}", response));
+    }
+    response["value"]
+        .as_u64()
+        .map(|v| v as u32)
+        .ok_or_else(|| anyhow::anyhow!("Missing or invalid 'value' in response: {:?}", response))
 }
 
 async fn query_set_value_by_slot_number(

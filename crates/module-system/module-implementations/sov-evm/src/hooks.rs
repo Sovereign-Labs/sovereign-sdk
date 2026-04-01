@@ -102,7 +102,7 @@ impl<S: Spec> BlockHooks for Evm<S> {
             .map(|tx| tx.transaction.signed_transaction.clone())
             .collect();
 
-        let receipts: Vec<reth_primitives::ReceiptWithBloom<&reth_primitives::Receipt>> =
+        let receipts: Vec<alloy_consensus::ReceiptWithBloom<&reth_primitives::Receipt>> =
             pending_transactions
                 .iter()
                 .map(|tx| tx.receipt.receipt.with_bloom_ref())

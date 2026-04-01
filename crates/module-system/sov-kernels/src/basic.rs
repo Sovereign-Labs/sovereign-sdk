@@ -150,15 +150,13 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
             .unwrap_infallible()
     }
 
-    fn block_gas_limit<
-        Reader: VersionReader
-            + StateReader<Kernel, Error = Infallible>
-            + StateReader<User, Error = Infallible>,
-    >(
+    fn block_gas_limit(
         &self,
-        state: &mut Reader,
-    ) -> Option<<Self::Spec as Spec>::Gas> {
-        self.chain_state.block_gas_limit(state).unwrap_infallible()
+        current_rollup_height: RollupHeight,
+        is_stale_height: bool,
+    ) -> <Self::Spec as Spec>::Gas {
+        self.chain_state
+            .block_gas_limit(current_rollup_height, is_stale_height)
     }
 
     fn visible_hash_for(
