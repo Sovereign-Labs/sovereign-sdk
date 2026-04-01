@@ -89,13 +89,28 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
-    /// The multisig address derived from the multisig parameters (hash of min_signers + sorted
+    /// The multisig credential derived from the multisig parameters (hash of min_signers + sorted
     /// pubkeys), formatted in the rollup's native address format. Included in the signed message
     /// so that signers commit to the multisig configuration and prevent credential malleability
     /// from reusing signed bytes in a different multisig envelope.
-    pub multisig_address: S::Address,
+    /// This is the "multisig address" except if the credential is mapped to another address in
+    /// `sov-accounts`.
+    pub multisig_id: S::Address,
     /// Message format version. Must be `1` for this struct.
+    #[serde(deserialize_with = "deserialize_version_1")]
     pub version: u8,
+}
+
+fn deserialize_version_1<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u8, D::Error> {
+    let v = <u8 as serde::Deserialize>::deserialize(deserializer)?;
+    if v != 1 {
+        return Err(serde::de::Error::custom(format!(
+            "expected message version 1, got {v}"
+        )));
+    }
+    Ok(v)
 }
 
 impl<R, S> SolanaOffchainUnsignedTransactionV1<R, S>
@@ -478,7 +493,13 @@ fn unpack_spec_compliant_message<S: Spec>(
         borsh::from_slice(&envelope.signed_message_with_preamble[0..PREAMBLE_LEN])
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
-    let actual_message_length = envelope.signed_message_with_preamble.len() - PREAMBLE_LEN;
+    // Unwrap: we just checked that `envelope.signed_message_with_preamble.len()` >= `PREAMBLE_LEN`,
+    // so this can't underflow
+    let actual_message_length = envelope
+        .signed_message_with_preamble
+        .len()
+        .checked_sub(PREAMBLE_LEN)
+        .unwrap();
     preamble.validate(actual_message_length)?;
 
     let signer: <S::CryptoSpec as CryptoSpec>::PublicKey = borsh::from_slice(&preamble.signer)
@@ -602,17 +623,8 @@ where
         } => {
             let tx = SolanaOffchainUnsignedTransactionV1::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
-            if tx.version != 1 {
-                return Err(AuthenticationError::FatalError(
-                    FatalError::DeserializationFailed(format!(
-                        "Expected message version 1, got {}",
-                        tx.version
-                    )),
-                    raw_tx_hash,
-                ));
-            }
             verify_multisig_commitment::<S>(
-                tx.multisig_address,
+                tx.multisig_id,
                 signatures,
                 unused_pub_keys,
                 *min_signers,
