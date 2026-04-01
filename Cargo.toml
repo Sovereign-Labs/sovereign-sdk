@@ -225,7 +225,7 @@ byteorder = { version = "1.5.0", default-features = false }
 bytes = { version = "1.10", default-features = false }
 convert_case = { version = "0.6", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["now"] }
-darling = "0.20"
+darling = "0.21"
 dashmap = "6.1.0"
 delegate = "0.13.4"
 derive-new = "0.7.0"
@@ -240,7 +240,7 @@ insta = { version = "1.39", features = ["json"] }
 jsonschema = "0.26.1"
 once_cell = "1.19"
 openapiv3 = "2.0.0"
-prometheus = { version = "0.13.4", default-features = false }
+prometheus = { version = "0.14", default-features = false }
 proc-macro2 = { version = "1.0" }
 proptest = { version = "1.5", default-features = false, features = ["std", "alloc"] }
 proptest-derive = "0.5.0"
@@ -259,16 +259,16 @@ serde = { version = "1.0.208", default-features = false, features = [
 serde_arrays = "0.1"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_yaml = { version = "0.9", default-features = false }
-serde_with = { version = "3.12", features = ["schemars_0_8", "base64"] }
+serde_with = { version = "=3.15", features = ["schemars_0_8", "base64"] }
 # Pinned version because zkvm-guests rely on patches. Upgrade `examples/demo-rollup/provers/* to use same patch as this one.
 sha2 = { version = "=0.10.9", default-features = false }
 sha3 = { version = "0.10.8", default-features = false }
 strum = { version = "0.26.3", features = ["derive"] }
 syn = { version = "2.0" }
 itertools = { version = "0.14.0" }
-thiserror = "1.0.64"
+thiserror = "2"
 tower = { version = "0.5", default-features = false }
-tower-http = "0.5"
+tower-http = "0.6"
 tower-request-id = "0.3"
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disable its default features.
@@ -279,7 +279,7 @@ utoipa = "4.2"
 utoipa-swagger-ui = { version = "7.1.1-rc.0", features = ["axum", "debug-embed", "vendored"] }
 unwrap-infallible = "0.1.5"
 bech32 = { version = "0.11" }
-derive_more = { version = "1.0", default-features = false, features = ["std"] }
+derive_more = { version = "2.0", default-features = false, features = ["std"] }
 clap = { version = "4.5.16", features = ["derive"] }
 toml = { version = "0.8.19", features = ["parse"] }
 jsonrpsee = { version = "0.26.0", default-features = false }

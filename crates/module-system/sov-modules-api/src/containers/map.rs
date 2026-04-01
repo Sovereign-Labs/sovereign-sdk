@@ -54,7 +54,7 @@ where
 #[derive(Debug, Error)]
 pub enum StateMapError<N> {
     /// Value not found.
-    #[error("Value not found for prefix: {0} and storage key: {1} in namespace {}", std::any::type_name::<N>())]
+    #[error("Value not found for prefix: {0} and storage key: {1} in namespace {ns}", ns = std::any::type_name::<N>())]
     MissingValue(Prefix, SlotKey, PhantomData<N>),
 }
 

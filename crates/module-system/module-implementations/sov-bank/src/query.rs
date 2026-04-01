@@ -4,12 +4,12 @@ use crate::TokenHolder;
 use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
 use axum::routing::get;
 use axum::Json;
-use derive_more::FromStr;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, serde_yaml, UnwrapInfallible};
 use sov_modules_api::rest::utils::{errors, ApiResult, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, Spec};
+use std::str::FromStr;
 
 /// Structure returned by the `balance_of` method.
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]

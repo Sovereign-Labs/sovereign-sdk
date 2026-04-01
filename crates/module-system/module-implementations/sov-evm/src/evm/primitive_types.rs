@@ -12,7 +12,7 @@ use alloy_primitives::private::alloy_rlp::Encodable;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
-use derive_more::{Deref, DerefMut, From};
+use derive_more::{Deref, DerefMut};
 use derive_new::new;
 use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;

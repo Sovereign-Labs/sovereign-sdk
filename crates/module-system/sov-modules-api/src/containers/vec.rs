@@ -42,10 +42,10 @@ where
 #[derive(Debug, Error)]
 pub enum StateVecError<N> {
     /// Operation failed because the index was out of bounds.
-    #[error("Index out of bounds for index: {0} with namespace {}", std::any::type_name::<N>())]
+    #[error("Index out of bounds for index: {0} with namespace {ns}", ns = std::any::type_name::<N>())]
     IndexOutOfBounds(u64),
     /// Value not found.
-    #[error("Value not found for prefix: {0} and index: {1} with namespace {}", std::any::type_name::<N>())]
+    #[error("Value not found for prefix: {0} and index: {1} with namespace {ns}", ns = std::any::type_name::<N>())]
     MissingValue(Prefix, u64, PhantomData<N>),
 }
 
