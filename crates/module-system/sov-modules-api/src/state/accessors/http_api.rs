@@ -813,11 +813,9 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     if max_height < height {
                         return Err(ApiStateAccessorError::HeightNotAccessible);
                     }
-                    // Otherwise, drop any uncommitted changes that are after the requested height and use our latest slot number from storage as a safe commit.
-                    // (Anything not already in storage by that point will be in the uncommitted changes)
-                    if let Some(c) = state.uncommitted_changes.as_mut() {
-                        c.ignore_changes_after_height(height);
-                    }
+                    // Use our latest slot number from storage as a safe commit.
+                    // (Anything not already in storage by that point will be in the uncommitted changes,
+                    // which are pruned to the requested height below.)
                     latest_true_slot_number
                 } else if height == kernel.current_rollup_height(&mut state) {
                     // There's a tricky case here where the height exists in storage but the true slot number is not available via the kernel yet.
@@ -851,6 +849,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 result.unwrap_or_else(|| panic!("Visible slot number not available for slot_number {slot_number}, but that slot exists in storage. This is a bug. Please report it."))
             }
         };
+        // Prune uncommitted changes to only contain data at heights <= the requested rollup height.
+        // This ensures archival reads never return values from newer uncommitted blocks.
+        if let Some(c) = state.uncommitted_changes.as_mut() {
+            c.ignore_changes_after_height(rollup_height);
+        }
         // Use the slot number to find the visible slot number.
         let result = kernel.visible_slot_number_at(true_slot_number, &mut state);
 
