@@ -802,12 +802,12 @@ where
     }
 
     #[cfg(feature = "test-utils")]
-    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
-        self.synchronized_state_updator
+    async fn force_close_current_batch(&self) -> anyhow::Result<bool> {
+        Ok(self
+            .synchronized_state_updator
             .force_close_current_batch_msg("force_close_current_batch")
             .await
-            .map_err(|e| e.into_state_update_error())?;
-        Ok(())
+            .map_err(|e| e.into_state_update_error())?)
     }
 
     #[cfg(feature = "test-utils")]

@@ -2,7 +2,7 @@ use sov_chain_state::ChainState;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::GasSpec;
-use sov_rollup_interface::common::IntoSlotNumber;
+use sov_rollup_interface::common::{IntoSlotNumber, RollupHeight};
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 
 use crate::kernel_interactions::{HighLevelOptimisticGenesisConfig, TestRunner, S};
@@ -95,6 +95,7 @@ fn test_gas_price_soft_confirmations() {
                     .unwrap()
                     .gas_info()
                     .clone(),
+                RollupHeight::GENESIS,
                 1,
             ),
             "The gas price should be the one for the slot after the last visible slot"
