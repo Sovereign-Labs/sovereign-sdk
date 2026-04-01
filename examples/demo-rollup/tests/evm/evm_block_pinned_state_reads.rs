@@ -140,15 +140,15 @@ async fn sealed_head_number_and_hash(client: &SimpleStorageClient) -> (u64, B256
 
 async fn assert_pause_effect(
     client: &SimpleStorageClient,
-    finalized_head_before_pause: (u64, B256),
+    finalized_head_after_pause: (u64, B256),
 ) {
     let finalized_after = finalized_block_number_and_hash(client).await;
     assert_eq!(
-        finalized_after.0, finalized_head_before_pause.0,
+        finalized_after.0, finalized_head_after_pause.0,
         "Finalized head number should not change while batches are paused"
     );
     assert_eq!(
-        finalized_after.1, finalized_head_before_pause.1,
+        finalized_after.1, finalized_head_after_pause.1,
         "Finalized head hash should not change while batches are paused"
     );
 }
@@ -156,12 +156,12 @@ async fn assert_pause_effect(
 async fn wait_for_pending_tx(
     client: &SimpleStorageClient,
     tx_hash: TxHash,
-    finalized_head_before_pause: (u64, B256),
+    finalized_head_after_pause: (u64, B256),
 ) {
     // Sovereign currently exposes receipts for pending txs. If this changes to
     // strict Ethereum semantics (null pending receipt), this helper must be adapted.
     client.wait_for_receipt(tx_hash).await;
-    assert_pause_effect(client, finalized_head_before_pause).await;
+    assert_pause_effect(client, finalized_head_after_pause).await;
 }
 
 /// Block-pinned `eth_getTransactionCount` must not reflect pending nonce changes.
@@ -171,15 +171,15 @@ async fn block_pinned_nonce_excludes_pending() {
 
     let address = client.address();
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
     let sealed_nonce = nonce_at(&client, address, "latest").await;
 
     rollup
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before nonce assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let tx_hash = client.send_eth(Address::ZERO, U256::from(0x1234)).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     assert_eq!(
         nonce_at(&client, address, hex_u64(head_number)).await,
@@ -211,7 +211,6 @@ async fn block_pinned_balance_excludes_pending() {
 
     let receiver = Address::repeat_byte(0xBB);
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     let sealed_balance = balance_at(&client, receiver, "latest").await;
     assert_eq!(
@@ -224,9 +223,10 @@ async fn block_pinned_balance_excludes_pending() {
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before balance assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let transfer_amount = U256::from(0x1_0000_0000u64);
     let tx_hash = client.send_eth(receiver, transfer_amount).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     assert_eq!(
         balance_at(&client, receiver, hex_u64(head_number)).await,
@@ -257,15 +257,15 @@ async fn block_pinned_code_excludes_pending() {
     let (rollup, client) = setup_rollup_and_client().await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     rollup
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before code assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let deploy_tx = client.deploy_contract().await.unwrap();
     let receipt = client.wait_for_receipt(deploy_tx).await;
-    assert_pause_effect(&client, finalized_head_before_pause).await;
+    assert_pause_effect(&client, finalized_head_after_pause).await;
     let contract_address = receipt.contract_address.unwrap();
 
     assert!(
@@ -308,15 +308,15 @@ async fn block_pinned_storage_excludes_pending() {
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     rollup
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before storage assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     assert_eq!(
         storage_at(&client, contract_addr, U256::ZERO, hex_u64(head_number)).await,
@@ -354,7 +354,6 @@ async fn block_pinned_eth_call_excludes_pending() {
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     let get_tx = client.make_tx(Some(contract_addr), Some(client.contract.get()));
 
@@ -362,9 +361,10 @@ async fn block_pinned_eth_call_excludes_pending() {
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before eth_call assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let new_value = 0x5678u32;
     let tx_hash = client.set_value(contract_addr, new_value).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, hex_u64(head_number)).await),
@@ -398,7 +398,6 @@ async fn block_pinned_estimate_gas_excludes_pending() {
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     // Baseline at sealed state (slot is still zero): set(non-zero) pays higher SSTORE cost.
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
@@ -418,9 +417,10 @@ async fn block_pinned_estimate_gas_excludes_pending() {
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before estimate_gas assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     // Pending mutation makes slot non-zero in current state, lowering cost for the same call.
     let tx_hash = client.set_value(contract_addr, 0x1234).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     assert_eq!(
         estimate_gas_at(&client, &set_tx, hex_u64(head_number)).await,
@@ -459,7 +459,6 @@ async fn block_pinned_pending_number_estimate_gas_matches_pending_runtime_parity
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (sealed_head_number, _) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
     let sealed_estimate = estimate_gas_at(&client, &set_tx, hex_u64(sealed_head_number)).await;
@@ -468,8 +467,9 @@ async fn block_pinned_pending_number_estimate_gas_matches_pending_runtime_parity
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before estimate_gas assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let tx_hash = client.set_value(contract_addr, 0x1234).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     let pending_block_number = client.block_number().await;
     let mut explicit_request = set_tx.clone();
@@ -499,7 +499,6 @@ async fn block_pinned_pending_number_estimate_gas_matches_pending_with_state_ove
     rollup.wait_for_rollup_height_advance_by(1).await;
 
     let (sealed_head_number, _) = sealed_head_number_and_hash(&client).await;
-    let finalized_head_before_pause = finalized_block_number_and_hash(&client).await;
 
     let set_tx = client.make_tx(Some(contract_addr), Some(client.contract.set(0x5678)));
     let sealed_estimate = estimate_gas_at(&client, &set_tx, hex_u64(sealed_head_number)).await;
@@ -508,8 +507,9 @@ async fn block_pinned_pending_number_estimate_gas_matches_pending_with_state_ove
         .pause_preferred_batches_and_wait()
         .await
         .expect("pause should be acknowledged before estimate_gas assertions");
+    let finalized_head_after_pause = finalized_block_number_and_hash(&client).await;
     let tx_hash = client.set_value(contract_addr, 0x1234).await;
-    wait_for_pending_tx(&client, tx_hash, finalized_head_before_pause).await;
+    wait_for_pending_tx(&client, tx_hash, finalized_head_after_pause).await;
 
     let pending_block_number = client.block_number().await;
     let mut explicit_request = set_tx.clone();
