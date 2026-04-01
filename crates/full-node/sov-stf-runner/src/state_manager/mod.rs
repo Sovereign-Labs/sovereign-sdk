@@ -544,6 +544,17 @@ where
             query_state_update_info(&self.ledger_db, stf_state, self.da_sync_state.as_ref())
                 .await?;
 
+        // Debug-only delay before notifying the sequencer about new state.
+        // Widens the window where archival reads must consult uncommitted_changes
+        // instead of NOMT, useful for reproducing race conditions in tests.
+        // Usage: SOV_TEST_DELAY_STATE_UPDATE_MS=500
+        #[cfg(debug_assertions)]
+        if let Ok(ms) = std::env::var("SOV_TEST_DELAY_STATE_UPDATE_MS") {
+            if let Ok(ms) = ms.parse::<u64>() {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+        }
+
         // `send_replace` is superior to `send` for our use case. It never fails
         // because it doesn't need to notify all receivers, unlike `send`, which
         // we don't need. It will also keep working even if there are no
