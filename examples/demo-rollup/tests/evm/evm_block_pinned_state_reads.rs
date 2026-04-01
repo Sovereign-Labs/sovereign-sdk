@@ -306,6 +306,7 @@ async fn block_pinned_storage_excludes_pending() {
         .await
         .unwrap();
     rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.wait_for_node_synced().await.unwrap();
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
 
@@ -352,6 +353,7 @@ async fn block_pinned_eth_call_excludes_pending() {
         .await
         .unwrap();
     rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.wait_for_node_synced().await.unwrap();
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
 
@@ -396,6 +398,7 @@ async fn block_pinned_estimate_gas_excludes_pending() {
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.wait_for_node_synced().await.unwrap();
 
     let (head_number, head_hash) = sealed_head_number_and_hash(&client).await;
 
@@ -457,6 +460,7 @@ async fn block_pinned_pending_number_estimate_gas_matches_pending_runtime_parity
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.wait_for_node_synced().await.unwrap();
 
     let (sealed_head_number, _) = sealed_head_number_and_hash(&client).await;
 
@@ -497,6 +501,7 @@ async fn block_pinned_pending_number_estimate_gas_matches_pending_with_state_ove
 
     let contract_addr = deploy_contract_check(&client).await.unwrap();
     rollup.wait_for_rollup_height_advance_by(1).await;
+    rollup.wait_for_node_synced().await.unwrap();
 
     let (sealed_head_number, _) = sealed_head_number_and_hash(&client).await;
 
