@@ -16,7 +16,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::SafeVec;
 use sov_modules_api::{
-    charge_gas_to_deserialize_json, CredentialId, CryptoSpec, DispatchCall, GasMeter, GasSpec,
+    charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, GasSpec,
     MeteredSigVerificationError, MeteredSignature, Multisig, ProvableStateReader, SafeString,
     Signature, Spec, TxHash,
 };
@@ -36,7 +36,10 @@ static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
 /// to the user doesn't get too nested.
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize, UniversalWallet)]
-#[serde(deny_unknown_fields, bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
+#[serde(
+    deny_unknown_fields,
+    bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned"
+)]
 pub struct SolanaOffchainUnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     /// The runtime call
     pub runtime_call: R::Call,
@@ -71,7 +74,10 @@ where
 
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize, UniversalWallet)]
-#[serde(deny_unknown_fields, bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
+#[serde(
+    deny_unknown_fields,
+    bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned"
+)]
 pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// The runtime call
     pub runtime_call: R::Call,
@@ -83,11 +89,11 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
-    /// The credential_id (i.e. multisig address) derived from the multisig parameters (hash of
-    /// min_signers + sorted pubkeys). Included in the signed message so that signers commit to
-    /// the multisig configuration and prevent credential malleability from reusing signed bytes
-    /// in a different multisig envelope.
-    pub multisig_address: CredentialId,
+    /// The multisig address derived from the multisig parameters (hash of min_signers + sorted
+    /// pubkeys), formatted in the rollup's native address format. Included in the signed message
+    /// so that signers commit to the multisig configuration and prevent credential malleability
+    /// from reusing signed bytes in a different multisig envelope.
+    pub multisig_address: S::Address,
     /// Message format version. Must be `1` for this struct.
     pub version: u8,
 }
@@ -402,12 +408,12 @@ fn build_auth_data<S: Spec>(
     }
 }
 
-/// Verifies that the credential_id committed to in the signed message matches the one derived
-/// from the multisig parameters in the transaction envelope. This prevents credential_id
+/// Verifies that the multisig address committed to in the signed message matches the one derived
+/// from the multisig parameters in the transaction envelope. This prevents credential
 /// malleability, where signed bytes are reused in a different multisig envelope to derive a
 /// different account.
 fn verify_multisig_commitment<S: Spec>(
-    signed_credential_id: CredentialId,
+    signed_address: S::Address,
     envelope_signatures: &SafeVec<PubKeyAndSignature<S::CryptoSpec>, MAX_SIGNERS>,
     envelope_unused_pub_keys: &SafeVec<<S::CryptoSpec as CryptoSpec>::PublicKey, MAX_SIGNERS>,
     envelope_min_signers: u8,
@@ -418,14 +424,15 @@ fn verify_multisig_commitment<S: Spec>(
         .map(|s| s.pub_key.clone())
         .chain(envelope_unused_pub_keys.iter().cloned())
         .collect();
-    let envelope_credential_id = Multisig::new(envelope_min_signers, all_keys)
-        .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>();
+    let envelope_address: S::Address = Multisig::new(envelope_min_signers, all_keys)
+        .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
+        .into();
 
-    if signed_credential_id != envelope_credential_id {
+    if signed_address != envelope_address {
         return Err(AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(format!(
-                "Multisig credential_id mismatch: signed message commits to \
-                 {signed_credential_id}, but envelope parameters derive {envelope_credential_id}"
+                "Multisig address mismatch: signed message commits to \
+                 {signed_address}, but envelope parameters derive {envelope_address}"
             )),
             raw_tx_hash,
         ));
@@ -531,10 +538,21 @@ where
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
     let unpacked_message = unpack_solana_message::<S>(raw_tx)?;
-    let solana_unsigned_tx: SolanaOffchainUnsignedTransactionV0<D, S> =
-        serde_json::from_slice(unpacked_message.json_bytes())
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
-    Ok(solana_unsigned_tx.into_unsigned_tx().call())
+    let json_bytes = unpacked_message.json_bytes();
+    let deser_err = |e: serde_json::Error| FatalError::DeserializationFailed(e.to_string());
+    let unsigned_tx = match &unpacked_message {
+        UnpackedSolanaMessage::V0 { .. } => {
+            SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_bytes)
+                .map_err(deser_err)?
+                .into_unsigned_tx()
+        }
+        UnpackedSolanaMessage::V1 { .. } => {
+            SolanaOffchainUnsignedTransactionV1::<D, S>::unmetered_deserialize(json_bytes)
+                .map_err(deser_err)?
+                .into_unsigned_tx()
+        }
+    };
+    Ok(unsigned_tx.call())
 }
 
 pub fn authenticate<Accessor, S, D>(

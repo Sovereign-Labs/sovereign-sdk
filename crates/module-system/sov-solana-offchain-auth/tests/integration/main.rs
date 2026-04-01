@@ -15,7 +15,7 @@ use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransaction};
 use sov_modules_api::{prelude::*, Base58Address, PrivateKey, SafeVec};
-use sov_modules_api::{CredentialId, CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
+use sov_modules_api::{CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{
     AuthorizedSequencers, PayeePolicy, PayerGenesisConfig, PaymasterConfig,
@@ -430,7 +430,7 @@ fn test_auth_wrapper() {
 fn create_multisig_transfer_tx_json(
     amount: Amount,
     recipient: &str,
-    multisig_address: CredentialId,
+    multisig_address: <S as Spec>::Address,
 ) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -512,7 +512,7 @@ async fn test_submit_multisig_simple_message_transaction() {
     // Build a transfer from the multisig to the recipient, using V1 format which commits
     // to the credential_id in the signed message.
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, credential_id);
+        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address);
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_wire_bytes(&transfer_json);
 
@@ -597,7 +597,7 @@ async fn test_submit_multisig_insufficient_signatures() {
 
     // Only 1 signer for a 2-of-3 multisig — should fail
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, credential_id);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_wire_bytes(&transfer_json);
     let sig1 = key1.sign(json_bytes);
@@ -662,7 +662,7 @@ async fn test_submit_multisig_invalid_signature() {
 
     // Corrupt the second signature
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, credential_id);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_wire_bytes(&transfer_json);
     let sig1 = key1.sign(json_bytes);
