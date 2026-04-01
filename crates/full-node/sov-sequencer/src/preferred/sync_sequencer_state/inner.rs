@@ -403,6 +403,12 @@ where
     }
 
     pub(crate) async fn trigger_batch_production(&mut self) {
+        if !self.seq_config.automatic_batch_production {
+            tracing::error!("Producing batch even though automatic batch production is disabled. This is probably a test bug");
+            #[cfg(debug_assertions)]
+            panic!("Producing batch even though automatic batch production is disabled. This is probably a test bug");
+        }
+
         if let Err(e) = self
             .try_to_create_and_start_batch_if_none_in_progress(true)
             .await
