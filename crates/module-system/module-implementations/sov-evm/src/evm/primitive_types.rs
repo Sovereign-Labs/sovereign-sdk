@@ -164,7 +164,7 @@ impl Block {
 
     #[cfg(feature = "native")]
     fn calculate_rlp_size(&self, transactions: Vec<TransactionSigned>) -> usize {
-        let body = crate::BlockBody {
+        let body = BlockBody {
             transactions,
             ommers: vec![],
             withdrawals: None,
