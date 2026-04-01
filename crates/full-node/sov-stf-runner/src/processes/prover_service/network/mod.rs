@@ -10,7 +10,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
-use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
+use sov_rollup_interface::zk::Zkvm;
 
 use super::{ProverService, ProverServiceError, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
@@ -84,7 +84,6 @@ where
     type StateRoot = StateRoot;
     type Witness = Witness;
     type DaService = Da;
-    type Verifier = <OuterVm::Guest as ZkvmGuest>::Verifier;
 
     async fn prove(
         &self,

@@ -13,7 +13,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{ZkVerifier, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 use strum::{Display, EnumString};
 use thiserror::Error;
 
@@ -175,9 +175,6 @@ pub trait ProverService: Send + Sync + 'static {
     type Witness: Serialize + DeserializeOwned + Send + Sync;
     /// Data Availability service.
     type DaService: DaService;
-
-    /// Verifier for the aggregated proof.
-    type Verifier: ZkVerifier;
 
     /// Creates ZK proof for a block corresponding to `block_header_hash`.
     async fn prove(

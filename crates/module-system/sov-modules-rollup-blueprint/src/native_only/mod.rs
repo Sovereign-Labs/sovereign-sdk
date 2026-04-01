@@ -22,6 +22,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
+use sov_rollup_interface::zk::Zkvm;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
 use sov_sequencer::standard::StdSequencer;
@@ -80,7 +81,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Creates code commitments for the outer zkVM program.
     fn create_outer_code_commitment(
         &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment;
+    ) -> <<<Self::Spec as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment;
 
     /// Creates RPC methods and REST APIs for the rollup.
     async fn create_endpoints(
