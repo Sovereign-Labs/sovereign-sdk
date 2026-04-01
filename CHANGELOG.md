@@ -1,7 +1,9 @@
 # 2026-03-30
+- #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
 - #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
 - #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
 - #2671 Fixes API archival query race condition
+- #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
 
 # 2026-03-24
 - #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction

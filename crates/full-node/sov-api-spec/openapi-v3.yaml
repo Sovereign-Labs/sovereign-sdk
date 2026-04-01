@@ -818,8 +818,11 @@ components:
             - successful
             - reverted
             - skipped
+        data:
+          description: Receipt data associated with the transaction result. Contents are generic and vary by rollup implementation.
       required:
         - result
+        - data
     LedgerTx:
       type: object
       properties:

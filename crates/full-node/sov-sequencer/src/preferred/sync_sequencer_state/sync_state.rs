@@ -315,8 +315,12 @@ where
                     .await;
             }
             #[cfg(feature = "test-utils")]
-            Message::ForceCloseCurrentBatch { reason: _reason } => {
-                self.process_force_close_current_batch(_reason).await;
+            Message::ForceCloseCurrentBatch {
+                reason: _reason,
+                result_sender,
+            } => {
+                self.process_force_close_current_batch(_reason, result_sender)
+                    .await;
             }
             Message::ProofBlob {
                 blob_id,
@@ -831,9 +835,18 @@ where
 
     /// Closes the current batch
     #[cfg(feature = "test-utils")]
-    async fn process_force_close_current_batch(&mut self, reason: &'static str) {
+    async fn process_force_close_current_batch(
+        &mut self,
+        reason: &'static str,
+        result_sender: oneshot::Sender<bool>,
+    ) {
         let mut inner = self.get_inner_with_timing(reason).await;
+        if !inner.executor.has_in_progress_batch() {
+            let _ = result_sender.send(false); // If the receiver has dropped, we don't need to do anything about it.
+            return;
+        }
         inner.close_current_batch().await;
+        let _ = result_sender.send(true);
     }
 
     async fn process_proof_blob(
