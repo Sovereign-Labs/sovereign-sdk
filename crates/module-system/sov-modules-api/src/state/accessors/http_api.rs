@@ -477,10 +477,17 @@ impl<S: Spec> ApiStateAccessor<S> {
         version: Option<SlotNumber>,
     ) -> anyhow::Result<Option<SlotValue>> {
         // First, check if the user has written this value. This allows users to write during eth_call even if they're reading historical state.
-        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
-        // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
+        // IMPORTANT: Note that we do *not* read from the state checkpoint during archival queries (it's Arc'd and may contain
+        // unrelated data from the current state). However, reading from uncommitted_changes is safe because build_archival_state
+        // filters them via ignore_changes_after_height(height) to only contain data at heights <= the requested height.
         if let Some(entry) = self.local_user_writes.get(key) {
             return Ok(entry.clone());
+        }
+        // Check uncommitted changes (sequencer state not yet committed to NOMT)
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::User, key) {
+                return Ok(entry);
+            }
         }
         // If not, read it from storage
         self.checkpoint_and_read_txn
@@ -495,10 +502,17 @@ impl<S: Spec> ApiStateAccessor<S> {
         version: Option<SlotNumber>,
     ) -> anyhow::Result<Option<SlotValue>> {
         // First, check if the kernel has written this value. This allows users to write during eth_call even if they're reading historical state.
-        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
-        // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
+        // IMPORTANT: Note that we do *not* read from the state checkpoint during archival queries (it's Arc'd and may contain
+        // unrelated data from the current state). However, reading from uncommitted_changes is safe because build_archival_state
+        // filters them via ignore_changes_after_height(height) to only contain data at heights <= the requested height.
         if let Some(entry) = self.local_kernel_writes.get(key) {
             return Ok(entry.clone());
+        }
+        // Check uncommitted changes (sequencer state not yet committed to NOMT)
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Kernel, key) {
+                return Ok(entry);
+            }
         }
         // If not, read it from storage
         self.checkpoint_and_read_txn
@@ -515,6 +529,12 @@ impl<S: Spec> ApiStateAccessor<S> {
         // First, check if the accessory has written this value. This allows users to write during eth_call even if they're reading historical state.
         if let Some(write) = self.local_accessory_writes.get(key) {
             return Ok(write.value.clone());
+        }
+        // Check uncommitted changes (sequencer state not yet committed to NOMT)
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
+                return Ok(entry);
+            }
         }
         // If not, read it from storage
         self.checkpoint_and_read_txn
