@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::{Spec, ZkVerifier};
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::zk::SerializedInnerProof;
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitnessWithAddress, ZkvmHost,
 };
@@ -20,7 +21,7 @@ type ProofInput = StateTransitionWitnessWithAddress<
 >;
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
+//#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
     let host = TestHost::new().await;
     let proof_data = generate_proofs(true, &host).await;
@@ -33,7 +34,7 @@ async fn test_save_proofs() {
     std::fs::write(proofs_dir.join("inner_vk.bin"), host.verifying_key_bytes()).unwrap();
 
     for (i, data) in proof_data.into_iter().enumerate() {
-        let proof_public_data = host.verify(data.proof.clone()).await;
+        let proof_public_data = host.verify(data.proof.raw_inner_proof.clone()).await;
         assert_eq!(proof_public_data.slot_hash, data.da_block_header.hash());
         let json = serde_json::to_string(&data).unwrap();
         std::fs::write(proofs_dir.join(format!("inner_{i}_proof.json")), &json).unwrap();
@@ -65,10 +66,10 @@ async fn generate_proofs(
             prover_address,
         };
 
-        let proof = host.run(data, with_proof).await;
+        let raw_inner_proof = host.run(data, with_proof).await;
         proofs.push(BlockHeaderWithProof {
             da_block_header,
-            proof,
+            proof: SerializedInnerProof { raw_inner_proof },
         });
     }
 
