@@ -282,6 +282,15 @@ impl<S: Spec> StateRootTask<S> {
                     (None, 0)
                 };
 
+                // [DIAG] Delay state root computation to widen the race window for debugging.
+                // Remove after investigation.
+                if let Ok(ms) = std::env::var("SOV_TEST_DELAY_STATE_ROOT_MS") {
+                    if let Ok(ms) = ms.parse::<u64>() {
+                        eprintln!("[DIAG] Delaying state root computation for rollup_height={rollup_height} by {ms}ms");
+                        tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                    }
+                }
+
                 // Compute the new root
                 let mut root = compute_state_root::<S, Rt>(
                     state_accesses,
