@@ -1,11 +1,9 @@
-use std::borrow::Borrow;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use anyhow::{bail, ensure, Context};
+use anyhow::{ensure, Context};
 use demo_stf::MultiAddressEvmSolana;
-use slop_algebra::PrimeField32;
 
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
@@ -22,9 +20,8 @@ use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
 use sov_sp1_adapter::host::SP1Host;
 use sov_sp1_adapter::SP1;
 use sov_sp1_adapter::{BlockHeaderWithProof, SP1MethodId, SP1Verifier};
-use sp1_recursion_executor::RecursionPublicValues;
 use sp1_sdk::prelude::{include_elf, Elf, HashableKey};
-use sp1_sdk::{SP1Proof, SP1VerifyingKey};
+use sp1_sdk::SP1VerifyingKey;
 
 const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 const JUMP: usize = 3;
@@ -130,9 +127,6 @@ fn create_agg_proof(
     let aggregation_vk: SP1VerifyingKey = bincode::deserialize(&aggregation_code_commitment.0)
         .context("Failed to deserialize aggregation SP1VerifyingKey")?;
     let aggregation_vk_hash = aggregation_vk.hash_u32();
-    let inner_vk: SP1VerifyingKey = bincode::deserialize(&verification_key.0)
-        .context("Failed to deserialize inner SP1VerifyingKey")?;
-    let inner_vk_hash = inner_vk.hash_u32();
 
     let prev_outer_proof_witness =
         if let Some(previous_outer_proof_serialized) = previous_outer_proof_serialized {
@@ -148,7 +142,7 @@ fn create_agg_proof(
 
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
-    for (index, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
+    for (_, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
         let public_values = agg_host.add_proof(&block_header_with_proof.proof, verification_key)?;
 
         let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
