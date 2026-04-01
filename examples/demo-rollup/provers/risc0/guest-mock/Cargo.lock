@@ -785,12 +785,11 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
 name = "bcs"
-version = "0.1.6"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85b6598a2f5d564fb7855dc6b06fd1c38cff5a72bd8b863a4d021938497b440a"
+checksum = "302fd2afb39688efc82f6138a68861b8f04f95be5faab2a06805a8a49f28deb6"
 dependencies = [
- "serde",
- "thiserror 1.0.69",
+ "serde_core",
 ]
 
 [[package]]
@@ -3998,7 +3997,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 1.0.0",
+ "derive_more",
  "k256",
  "ruint",
  "schemars 0.8.22",
@@ -4204,7 +4203,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-sequencer-registry",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
