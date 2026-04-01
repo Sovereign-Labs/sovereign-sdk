@@ -23,8 +23,6 @@ paths:
         '404':
           # Referring type from `runtime-base.yaml`
           $ref: '#/components/responses/StateNotFound'
-        '500':
-          description: Internal server error
   /route/{route}/limits:
     get:
       summary: Get transfer limits of a warp route
@@ -44,8 +42,6 @@ paths:
         '404':
           # Referring type from `runtime-base.yaml`
           $ref: '#/components/responses/StateNotFound'
-        '500':
-          description: Internal server error
 
 components:
   schemas:

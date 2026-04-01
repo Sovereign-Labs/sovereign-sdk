@@ -2,6 +2,7 @@
 
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_evm::Evm;
+use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::Base58Address;
 use sov_modules_api::{Genesis, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -13,7 +14,7 @@ use crate::GenesisConfig;
 
 impl<S: Spec> GenesisConfig<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     /// Creates a new [`GenesisConfig`] from a minimal genesis config [`::sov_modules_api::Genesis::Config`].
     pub fn from_minimal_config(
@@ -32,8 +33,13 @@ where
             operator_incentives: minimal_config.config.operator_incentives,
             prover_incentives: minimal_config.config.prover_incentives,
             attester_incentives: minimal_config.config.attester_incentives,
-            evm: evm_config,
             paymaster: paymaster_config,
+            revenue_share: (),
+            mailbox: (),
+            interchain_gas_paymaster: (),
+            merkle_tree_hook: (),
+            warp: (),
+            evm: evm_config,
             synthetic_load: (),
             access_pattern: access_pattern_config,
         }
@@ -42,7 +48,7 @@ where
 
 impl<S: Spec> GenesisConfig<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     /// Creates a [`GenesisParams`] from a [`GenesisConfig`].
     pub fn into_genesis_params(self) -> GenesisParams<Self> {

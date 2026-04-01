@@ -1881,6 +1881,7 @@ dependencies = [
  "sov-capabilities",
  "sov-chain-state",
  "sov-evm",
+ "sov-hyperlane-integration",
  "sov-kernels",
  "sov-mock-da",
  "sov-mock-zkvm",
@@ -1889,6 +1890,7 @@ dependencies = [
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
+ "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-solana-offchain-auth",
@@ -1915,12 +1917,14 @@ dependencies = [
  "sov-capabilities",
  "sov-chain-state",
  "sov-evm",
+ "sov-hyperlane-integration",
  "sov-kernels",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
+ "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
@@ -6717,6 +6721,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-hyperlane-integration"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "derive_more 1.0.0",
+ "k256",
+ "ruint",
+ "schemars 0.8.22",
+ "serde",
+ "sha3",
+ "sov-address",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-state",
+ "strum 0.26.3",
+ "tracing",
+]
+
+[[package]]
 name = "sov-kernels"
 version = "0.3.0"
 dependencies = [
@@ -6894,6 +6918,20 @@ dependencies = [
  "sov-state",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "sov-revenue-share"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "schemars 0.8.22",
+ "serde",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-sequencer-registry",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

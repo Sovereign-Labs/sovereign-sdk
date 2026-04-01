@@ -118,9 +118,9 @@ components:
       type: string
       pattern: "^token_1[02-9ac-hj-np-z]+$"
       description: bech32 encoded token id, prefix with "token_".
-    Coins:
+    InterchainCoins:
       type: object
-      description: Token Id and amount.
+      description: Token Id and amount for interchain gas payments.
       properties:
         token_id:
           $ref: "#/components/schemas/TokenId"
@@ -159,4 +159,4 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Coins"
+            $ref: "#/components/schemas/InterchainCoins"
