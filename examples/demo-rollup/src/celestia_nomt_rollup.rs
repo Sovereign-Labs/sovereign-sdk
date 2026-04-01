@@ -25,10 +25,11 @@ use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::execution_mode::WitnessGeneration;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::CryptoSpec;
+use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::solana_offchain_endpoint::solana_offchain_router;
@@ -91,7 +92,7 @@ impl FullNodeBlueprint<Native> for CelestiaNomtDemoRollup<Native> {
 
     fn create_outer_code_commitment(
         &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
+    ) -> <<<Self::Spec as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment {
         MockCodeCommitment::default()
     }
 

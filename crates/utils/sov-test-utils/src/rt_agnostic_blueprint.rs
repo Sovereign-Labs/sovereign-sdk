@@ -152,7 +152,7 @@ where
 
     fn create_outer_code_commitment(
         &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
+    ) -> <<<Self::Spec as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment {
         MockCodeCommitment::default()
     }
 
