@@ -91,7 +91,7 @@ async fn test_parallel_proof_generation() {
     // Poll until the aggregated proof is ready.
     let status = loop {
         match prover_service
-            .create_aggregated_proof(&block_hashes, &genesis_state_root)
+            .create_aggregated_proof(&block_hashes, &genesis_state_root, &None)
             .await
         {
             Ok(ProofAggregationStatus::Success(proof)) => break proof,
