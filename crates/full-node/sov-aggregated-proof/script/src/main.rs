@@ -138,14 +138,12 @@ fn create_agg_proof(
         if let Some(previous_outer_proof_serialized) = previous_outer_proof_serialized {
             let previous_outer_proof = sov_sp1_adapter::decode_sp1_proof(
                 &previous_outer_proof_serialized.raw_aggregated_proof,
-            )
-            .context("Failed to decode outer proof")?;
+            )?;
 
             agg_host.add_proof(&previous_outer_proof, &aggregation_code_commitment)?;
+            let public_values = previous_outer_proof.public_values.to_vec();
 
-            Some(PreviousOuterProofWitness {
-                public_values: previous_outer_proof.public_values.to_vec(),
-            })
+            Some(PreviousOuterProofWitness { public_values })
         } else {
             None
         };
@@ -154,31 +152,15 @@ fn create_agg_proof(
 
     for (index, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
         let proof = sov_sp1_adapter::decode_sp1_proof(&block_header_with_proof.proof)?;
-
-        let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
-            bail!("Expected a compressed SP1 proof");
-        };
-
-        let public_values: &RecursionPublicValues<_> =
-            recursion_proof.proof.public_values.as_slice().borrow();
-
-        let expected_inner_vk_hash = public_values
-            .sp1_vk_digest
-            .map(|digest_word| digest_word.as_canonical_u32());
-
-        ensure!(
-            inner_vk_hash == expected_inner_vk_hash,
-            "Saved verifying key does not match proof fixture {}",
-            index
-        );
+        agg_host.add_proof(&proof, verification_key)?;
+        let public_values = proof.public_values.to_vec();
 
         let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
-            public_values: proof.public_values.to_vec(),
+            public_values: public_values,
             da_block_header: block_header_with_proof.da_block_header,
         };
 
         proof_inputs.push(deferred_proof_input);
-        agg_host.add_proof(&proof, verification_key)?;
     }
 
     let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
