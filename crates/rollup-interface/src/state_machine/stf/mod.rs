@@ -333,12 +333,7 @@ pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
 
 /// The result of applying a slot to current state.
 #[allow(type_alias_bounds)]
-pub type ApplySlotOutput<
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    Da: DaSpec,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da>,
-> = ApplySlotOutputInner<
+pub type ApplySlotOutput<Da: DaSpec, Stf: StateTransitionFunction<Da>> = ApplySlotOutputInner<
     Stf::StateRoot,
     Stf::ChangeSet,
     BatchReceipt<Stf::BatchReceiptContents, Stf::TxReceiptContents>,
@@ -357,7 +352,7 @@ pub type ApplySlotOutput<
 /// The STF is generic over a DA layer and two `Zkvm`s. The `InnerVm` is used to prove individual slots,
 /// while the `OuterVm` is used to generate recursive proofs over multiple slots. The two VMs *may* be set to be
 /// the  same type.
-pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
+pub trait StateTransitionFunction<Da: DaSpec> {
     /// Root hash of state merkle tree
     type StateRoot: Serialize
         + DeserializeOwned
@@ -429,7 +424,7 @@ pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
         slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self>;
+    ) -> ApplySlotOutput<Da, Self>;
 }
 
 /// The parameters for the genesis block.

@@ -8,9 +8,7 @@ use crate::zk::{StateTransitionPublicData, StateTransitionWitnessWithAddress, Zk
 pub struct StateTransitionVerifier<ST, Da, InnerVm, OuterVm>
 where
     Da: DaVerifier,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    ST: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
+    ST: StateTransitionFunction<Da::Spec>,
 {
     app: ST,
     da_verifier: Da,
@@ -22,7 +20,7 @@ where
     Da: DaVerifier,
     InnerVm: Zkvm,
     OuterVm: Zkvm,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
+    Stf: StateTransitionFunction<Da::Spec>,
 {
     /// Create a [`StateTransitionVerifier`]
     pub fn new(app: Stf, da_verifier: Da) -> Self {
