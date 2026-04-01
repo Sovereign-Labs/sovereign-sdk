@@ -227,6 +227,7 @@ impl<H> SequencerStateChanges<H> {
 }
 
 /// A value that may not be present in the given cache.
+#[derive(Debug)]
 pub enum MaybePresentValue<T = SlotValue> {
     /// The key is present in the cache; it's value may be some or none
     Present(Option<T>),

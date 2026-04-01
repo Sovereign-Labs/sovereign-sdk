@@ -367,8 +367,8 @@ async fn block_pinned_eth_call_excludes_pending() {
         .await
         .expect("pause should be acknowledged before eth_call assertions");
     let finalized_after_the_pause = finalized_block_number_and_hash(&client).await;
-    let new_value = 0x5678u32;
-    let tx_hash = client.set_value(contract_addr, new_value).await;
+    let pending_value = 0x5678u32;
+    let tx_hash = client.set_value(contract_addr, pending_value).await;
     wait_for_pending_tx(&client, tx_hash, finalized_after_the_pause).await;
 
     let pinned_number_raw = eth_call_at(&client, &get_tx, hex_u64(head_number)).await;
@@ -381,7 +381,7 @@ async fn block_pinned_eth_call_excludes_pending() {
         U256::from(initial_value),
         "eth_call at block number N({head_number}) must not reflect pending change.\n\
         If left value is 0 (storage default) instead of {initial_value} ({initial_value:#06x}). The contract IS deployed (no revert), but storage slot 0 has the default value. This means the archival state has the contract but NOT the set_value({initial_value:#06x}).\n\
-        If left value is {new_value} ({new_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
+        If left value is {pending_value} ({pending_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
     );
     let pinned_hash_raw = eth_call_at(&client, &get_tx, hash_selector(head_hash)).await;
     eprintln!(
@@ -393,17 +393,17 @@ async fn block_pinned_eth_call_excludes_pending() {
         U256::from(initial_value),
         "eth_call at block hash H({head_hash}) must not reflect pending change.\n\
         If left value is 0 (storage default) instead of {initial_value} ({initial_value:#06x}). The contract IS deployed (no revert), but storage slot 0 has the default value. This means the archival state has the contract but NOT the set_value({initial_value:#06x}).\n\
-        If left value is {new_value} ({new_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
+        If left value is {pending_value} ({pending_value:#06x}, pending value) instead of {initial_value} ({initial_value:#06x}), it means that pending state has leaked."
     );
 
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, "pending").await),
-        U256::from(new_value),
+        U256::from(pending_value),
         "eth_call at pending must reflect pending change"
     );
     assert_eq!(
         U256::from_be_slice(&eth_call_at(&client, &get_tx, "latest").await),
-        U256::from(new_value),
+        U256::from(pending_value),
         "eth_call at latest must reflect pending change"
     );
 }

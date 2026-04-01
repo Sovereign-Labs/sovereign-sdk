@@ -119,15 +119,17 @@ impl<S: Spec> UniversalStateAccessor for ApiStateAccessor<S> {
                     // [DIAG] Compare archival read vs what uncommitted changes have
                     if let Ok(ref val) = archival_result {
                         if val.is_none() {
-                            let has_in_uncommitted = self.uncommitted_changes.as_ref().map(|c| {
-                                matches!(
-                                    c.get(sov_state::Namespace::User, key),
-                                    MaybePresentValue::Present(Some(_))
-                                )
-                            });
-                            eprintln!(
-                                "[DIAG] get_value(User): archival read at version={number} returned None. uncommitted_changes has value: {has_in_uncommitted:?}"
-                            );
+                            let uncommited_maybe_value = self
+                                .uncommitted_changes
+                                .as_ref()
+                                .map(|c| c.get(sov_state::Namespace::User, key));
+                            let hex_key = hex::encode(key.as_ref());
+                            let is_evm = hex_key.starts_with("0b");
+                            if is_evm {
+                                eprintln!(
+                                    "[DIAG] get_value(User): archival read at version={number} returned None. uncommitted_changes has value: {uncommited_maybe_value:?}"
+                                );
+                            }
                         }
                     }
                     archival_result
@@ -858,7 +860,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                         "[DIAG] build_archival_state: height={height} resolved via kernel mapping → true_slot={true_slot_number}, latest_in_storage={latest_true_slot_number}"
                     );
                     true_slot_number
-                } else if let Some(max_height) = state
+                } else if let Some(max_height) = state // THIS IS "PATH 2", CAUSES BUG.
                     .uncommitted_changes
                     .as_ref()
                     .and_then(|c| c.latest_rollup_height())
