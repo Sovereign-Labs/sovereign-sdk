@@ -7,7 +7,7 @@ use sov_rollup_interface::zk::{Proof, ZkVerifier, ZkvmGuest, ZkvmNetwork};
 use sp1_sdk::network::proto::auction_types::FulfillmentStatus;
 use sp1_sdk::network::{NetworkMode, B256};
 use sp1_sdk::prover::{ProveRequest, Prover};
-use sp1_sdk::{NetworkProver, ProverClient, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{NetworkProver, ProverClient, ProvingKey, SP1ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
