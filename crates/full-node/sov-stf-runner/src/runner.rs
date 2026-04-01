@@ -112,7 +112,6 @@ where
 impl<Stf, Sm, Da> StateTransitionRunner<Stf, Sm, Da>
 where
     Da: DaService<Error = anyhow::Error>,
-
     Sm: HierarchicalStorageManager<
         Da::Spec,
         LedgerChangeSet = SchemaBatch,

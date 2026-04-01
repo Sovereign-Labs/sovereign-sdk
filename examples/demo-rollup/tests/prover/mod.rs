@@ -6,7 +6,6 @@ use demo_stf::runtime::Runtime;
 use sov_db::schema::SchemaBatch;
 use sov_db::storage_manager::NativeStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
 use sov_modules_api::{OperatingMode, SlotData};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
@@ -15,7 +14,6 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_sp1_adapter::SP1;
 use sov_state::ProverStorage;
 use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::TestStorageSpec;
@@ -39,10 +37,8 @@ mod parallel;
 mod sp1_cpu_prover;
 
 pub(super) type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
-pub(super) type ProofStateRoot =
-    <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
-pub(super) type ProofWitness =
-    <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness;
+pub(super) type ProofStateRoot = <TestSTF as StateTransitionFunction<MockDaSpec>>::StateRoot;
+pub(super) type ProofWitness = <TestSTF as StateTransitionFunction<MockDaSpec>>::Witness;
 pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
 
 /// Executes the STF against mock DA blocks and produces per-block witnesses.

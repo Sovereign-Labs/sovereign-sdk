@@ -35,7 +35,7 @@ pub fn main() {
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
     };
 
-    let stf_verifier = StfVerifier::<_, _, _, _, _>::new(stf, CelestiaVerifier::new(rollup_params));
+    let stf_verifier = StfVerifier::new(stf, CelestiaVerifier::new(rollup_params));
     stf_verifier
         .run_block(guest, storage)
         .expect("Prover must be honest");
