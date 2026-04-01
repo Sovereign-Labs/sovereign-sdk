@@ -84,6 +84,13 @@ pub type HostArgs<Vm> = <<Vm as Zkvm>::Host as ZkvmHost>::HostArgs;
 /// The code commitment for the Zkvm
 pub type CodeCommitmentFor<Vm> = <<Vm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment;
 
+/// TODO
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct SerializedInnerProof {
+    /// TODO
+    pub raw_inner_proof: Vec<u8>,
+}
+
 /// A prover instance for a particular Zkvm program/circuit.
 pub trait ZkvmHost: Clone + Send + Sync + 'static {
     /// The associated guest type

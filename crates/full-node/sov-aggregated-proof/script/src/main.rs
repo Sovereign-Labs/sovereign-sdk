@@ -13,7 +13,7 @@ use sov_modules_api::{
 };
 use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::aggregated_proof::common::{
-    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
+    AggregatedProofWitness, DeferredProofInput,
 };
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
@@ -130,12 +130,11 @@ fn create_agg_proof(
 
     let prev_outer_proof_witness =
         if let Some(previous_outer_proof_serialized) = previous_outer_proof_serialized {
-            let public_values = agg_host.add_proof(
-                &previous_outer_proof_serialized.raw_aggregated_proof,
+            let witness = agg_host.add_aggregated_proof(
+                &previous_outer_proof_serialized,
                 &aggregation_code_commitment,
             )?;
-
-            Some(PreviousOuterProofWitness { public_values })
+            Some(witness)
         } else {
             None
         };
@@ -143,7 +142,8 @@ fn create_agg_proof(
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
     for (_, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
-        let public_values = agg_host.add_proof(&block_header_with_proof.proof, verification_key)?;
+        let public_values =
+            agg_host.add_inner_proof(&block_header_with_proof.proof, verification_key)?;
 
         let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
             public_values: public_values,
@@ -244,7 +244,7 @@ fn batch_state_roots(
         MockDaSpec,
         <<S as Spec>::Storage as Storage>::Root,
     > = deserialize_pub_data(
-        sov_sp1_adapter::decode_sp1_proof(&first_proof.proof)?
+        sov_sp1_adapter::decode_sp1_proof(&first_proof.proof.raw_inner_proof)?
             .public_values
             .as_slice(),
     )?;
@@ -253,7 +253,7 @@ fn batch_state_roots(
         MockDaSpec,
         <<S as Spec>::Storage as Storage>::Root,
     > = deserialize_pub_data(
-        sov_sp1_adapter::decode_sp1_proof(&last_proof.proof)?
+        sov_sp1_adapter::decode_sp1_proof(&last_proof.proof.raw_inner_proof)?
             .public_values
             .as_slice(),
     )?;
