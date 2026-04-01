@@ -20,7 +20,7 @@ use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
-use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::ProofBlobSender;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
@@ -40,7 +40,6 @@ pub trait ProverFactory<S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>>:
         StateRoot = <S::Storage as Storage>::Root,
         Witness = <S::Storage as Storage>::Witness,
         DaService = StorableMockDaService,
-        Verifier = <<MockZkvm as Zkvm>::Guest as ZkvmGuest>::Verifier,
     >;
 
     /// Create the prover service from the given config.
