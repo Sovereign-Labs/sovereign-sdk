@@ -546,18 +546,36 @@ async fn test_archival_read_from_uncommitted_changes() {
         "Height should have advanced after second batch"
     );
 
-    // Archival query at the NEW height must find 0x5678 from uncommitted_changes.
+    // === User state (get_archival_from_user_storage) ===
+
+    // Archival query at the NEW height must find 0x5678 from uncommitted_changes (path 2).
     // Without the fix, this returns a 404 (HeightNotAccessible) or stale data.
     query_set_value(&test_rollup, Some(new_height), Some(0x5678))
         .await
-        .expect(
-            "Archival read at uncommitted height should return 0x5678 from uncommitted_changes",
-        );
+        .expect("User state at uncommitted height should return 0x5678");
 
-    // Archival query at the settled height must still return 0x1234.
+    // Archival query at the settled height (path 1: kernel mapping in NOMT).
+    // Tests that ignore_changes_after_height prunes batch 2's data.
     query_set_value(&test_rollup, Some(settled_height), Some(0x1234))
         .await
-        .expect("Archival read at settled height should return 0x1234");
+        .expect("User state at settled height should return 0x1234");
+
+    // === Accessory state (get_archival_from_accessory_storage) ===
+
+    // finalize-hook-count increments each slot. At settled_height it has some value N;
+    // at new_height it should be N+1 (one more finalize hook ran for batch 2).
+    let settled_hook_count = query_hook_count(&test_rollup, Some(settled_height))
+        .await
+        .expect("Accessory state at settled height should be accessible");
+    let new_hook_count = query_hook_count(&test_rollup, Some(new_height))
+        .await
+        .expect(
+            "Accessory state at uncommitted height should be accessible from uncommitted_changes",
+        );
+    assert!(
+        new_hook_count > settled_hook_count,
+        "finalize-hook-count at new_height ({new_hook_count}) should be greater than at settled_height ({settled_hook_count})"
+    );
 
     pause_update_state::set(false);
 }
@@ -3709,6 +3727,27 @@ async fn query_set_value(
         expected,
     )
     .await
+}
+
+async fn query_hook_count(
+    test_rollup: &TestRollup<TestBlueprint>,
+    rollup_height: Option<u64>,
+) -> anyhow::Result<u32> {
+    let url = match rollup_height {
+        Some(h) => format!("/modules/hooks-count/state/finalize-hook-count?rollup_height={h}"),
+        None => "/modules/hooks-count/state/finalize-hook-count".to_string(),
+    };
+    let response = test_rollup
+        .client
+        .query_rest_endpoint::<serde_json::Value>(&url)
+        .await?;
+    if response.get("message").is_some() {
+        return Err(anyhow::anyhow!("API request failed: {:?}", response));
+    }
+    response["value"]
+        .as_u64()
+        .map(|v| v as u32)
+        .ok_or_else(|| anyhow::anyhow!("Missing or invalid 'value' in response: {:?}", response))
 }
 
 async fn query_set_value_by_slot_number(

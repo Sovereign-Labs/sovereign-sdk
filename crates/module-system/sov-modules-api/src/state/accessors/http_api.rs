@@ -488,7 +488,7 @@ impl<S: Spec> ApiStateAccessor<S> {
                 return Ok(entry);
             }
         }
-        // If not, read it from storage
+
         self.checkpoint_and_read_txn
             .state_checkpoint
             .storage()
@@ -512,7 +512,7 @@ impl<S: Spec> ApiStateAccessor<S> {
                 return Ok(entry);
             }
         }
-        // If not, read it from storage
+
         self.checkpoint_and_read_txn
             .state_checkpoint
             .storage()
@@ -528,12 +528,13 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(write) = self.local_accessory_writes.get(key) {
             return Ok(write.value.clone());
         }
+
         if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
                 return Ok(entry);
             }
         }
-        // If not, read it from storage
+
         self.checkpoint_and_read_txn
             .state_checkpoint
             .storage()
