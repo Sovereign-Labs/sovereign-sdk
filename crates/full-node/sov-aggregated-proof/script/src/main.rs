@@ -141,12 +141,12 @@ fn create_agg_proof(
 
     let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
 
-    for (_, block_header_with_proof) in raw_proofs.into_iter().enumerate() {
+    for block_header_with_proof in raw_proofs {
         let public_values =
             agg_host.add_inner_proof(&block_header_with_proof.proof, verification_key)?;
 
         let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
-            public_values: public_values,
+            public_values,
             da_block_header: block_header_with_proof.da_block_header,
         };
 

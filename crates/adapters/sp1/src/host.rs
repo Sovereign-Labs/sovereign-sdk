@@ -65,7 +65,7 @@ impl<'host> SP1Host<'host> {
 
     fn add_proof_helper(
         &mut self,
-        proof: &Vec<u8>,
+        proof: &[u8],
         method_id: &SP1MethodId,
     ) -> anyhow::Result<Vec<u8>> {
         let proof = crate::decode_sp1_proof(proof)?;
