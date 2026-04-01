@@ -58,6 +58,7 @@ use sov_state::codec::BcsCodec;
 
 use crate::account_storage_key::AccountStorageKey;
 use crate::db::DbAccount;
+pub use crate::evm::primitive_types::BlockBody;
 pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{Block, PendingTransaction, TxSignedAndRecovered};
 
