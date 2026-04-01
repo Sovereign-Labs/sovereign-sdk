@@ -24,7 +24,7 @@ use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::SequencerKindConfig;
 use sov_sp1_adapter::network::SP1Network;
-use sov_sp1_adapter::{SP1, SP1MethodId};
+use sov_sp1_adapter::SP1;
 pub use sov_soak_testing_lib::*;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
@@ -233,7 +233,8 @@ pub fn setup_roles_and_config_sp1() -> Setup<SP1TestSpec> {
     finalize_genesis_config(
         HighLevelZkGenesisConfig::<SP1TestSpec>::generate_with_additional_accounts_and_code_commitments(
             0,
-            SP1MethodId(vec![]),
+            sov_sp1_adapter::code_commitment_from_elf(*SOAK_INNER_GUEST_SP1_ELF)
+                .expect("Failed to compute SP1 code commitment from guest ELF"),
             Default::default(), // MockCodeCommitment for outer
         ),
     )
