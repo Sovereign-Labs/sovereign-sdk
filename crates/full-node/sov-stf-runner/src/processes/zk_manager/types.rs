@@ -126,7 +126,6 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
         mut self,
         prover_service: &Ps,
         genesis_state_root: &Ps::StateRoot,
-        previous_aggregated_proof: &Option<SerializedAggregatedProof>,
     ) -> Result<SerializedAggregatedProof, (Self, anyhow::Error)> {
         self.prove_any_unproven_blocks(prover_service).await;
         let agg_proof_hashes: Vec<_> = self
@@ -137,11 +136,7 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
 
         loop {
             let status = prover_service
-                .create_aggregated_proof(
-                    agg_proof_hashes.as_slice(),
-                    genesis_state_root,
-                    previous_aggregated_proof,
-                )
+                .create_aggregated_proof(agg_proof_hashes.as_slice(), genesis_state_root)
                 .await;
 
             match status {

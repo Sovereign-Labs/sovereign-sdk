@@ -2,10 +2,12 @@
 
 use serde::Serialize;
 use sov_rollup_interface::reexports::anyhow;
-use sov_rollup_interface::zk::{Proof, ZkvmHost};
+use sov_rollup_interface::zk::aggregated_proof::common::PreviousOuterProofWitness;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::zk::{Proof, SerializedInnerProof, ZkvmHost};
 use sp1_sdk::blocking::CpuProver;
 use sp1_sdk::blocking::{ProveRequest, Prover, ProverClient};
-use sp1_sdk::{ProvingKey, SP1Proof, SP1ProofWithPublicValues, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{ProvingKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
 use crate::SP1MethodId;
@@ -31,22 +33,25 @@ impl<'host> SP1Host<'host> {
         SP1Guest::with_hints(self.stdin.buffer.clone())
     }
 
-    /// Adds a compressed SP1 proof and its verifying key to the host's stdin
+    /// Adds a compressed SP1 inner proof and its verifying key to the host's stdin
     /// so it can be verified inside the guest program during aggregation.
-    pub fn add_proof(
+    pub fn add_inner_proof(
         &mut self,
-        proof: &SP1ProofWithPublicValues,
+        proof: &SerializedInnerProof,
         method_id: &SP1MethodId,
-    ) -> anyhow::Result<()> {
-        let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
-            anyhow::bail!("Expected a compressed SP1 proof");
-        };
-        let vk: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&method_id.0)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize SP1VerifyingKey: {e}"))?;
+    ) -> anyhow::Result<Vec<u8>> {
+        self.add_proof_helper(&proof.raw_inner_proof, method_id)
+    }
 
-        self.stdin
-            .write_proof(*recursion_proof.clone(), vk.vk.clone());
-        Ok(())
+    /// Adds a compressed SP1 aggregated proof and its verifying key to the host's stdin
+    /// so it can be verified inside the guest program during aggregation.
+    pub fn add_aggregated_proof(
+        &mut self,
+        proof: &SerializedAggregatedProof,
+        method_id: &SP1MethodId,
+    ) -> anyhow::Result<PreviousOuterProofWitness> {
+        let public_values = self.add_proof_helper(&proof.raw_aggregated_proof, method_id)?;
+        Ok(PreviousOuterProofWitness { public_values })
     }
 
     fn create_prover_and_pk(&self) -> anyhow::Result<(CpuProver, SP1ProvingKey)> {
@@ -56,6 +61,24 @@ impl<'host> SP1Host<'host> {
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
         Ok((prover, pk))
+    }
+
+    fn add_proof_helper(
+        &mut self,
+        proof: &Vec<u8>,
+        method_id: &SP1MethodId,
+    ) -> anyhow::Result<Vec<u8>> {
+        let proof = crate::decode_sp1_proof(proof)?;
+
+        let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
+            anyhow::bail!("Expected a compressed SP1 proof");
+        };
+        let vk: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&method_id.0)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize SP1VerifyingKey: {e}"))?;
+
+        self.stdin
+            .write_proof(*recursion_proof.clone(), vk.vk.clone());
+        Ok(proof.public_values.to_vec())
     }
 }
 

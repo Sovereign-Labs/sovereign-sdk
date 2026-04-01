@@ -10,7 +10,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
+use sov_rollup_interface::zk::{CryptoSpec, SerializedInnerProof, ZkVerifier};
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -147,7 +147,7 @@ pub struct BlockHeaderWithProof<Da: sov_rollup_interface::da::DaSpec> {
     /// The DA layer block header associated with this proof.
     pub da_block_header: Da::BlockHeader,
     /// The serialized proof bytes.
-    pub proof: Vec<u8>,
+    pub proof: SerializedInnerProof,
 }
 
 #[cfg(test)]

@@ -198,7 +198,6 @@ pub trait ProverService: Send + Sync + 'static {
         &self,
         block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
         genesis_state_root: &Self::StateRoot,
-        previous_aggregated_proof: &Option<SerializedAggregatedProof>,
     ) -> anyhow::Result<ProofAggregationStatus>;
 }
 
