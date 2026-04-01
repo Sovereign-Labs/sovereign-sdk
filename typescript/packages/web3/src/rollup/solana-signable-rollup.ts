@@ -26,7 +26,7 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
 
 export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
-    multisig_address: string;
+    multisig_id: string;
     version: number;
   };
 
@@ -380,7 +380,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Creates V1 JSON bytes for a multisig transaction, including multisig_address and version.
+   * Creates V1 JSON bytes for a multisig transaction, including multisig_id and version.
    * The resulting JSON is what each signer signs directly (no discriminator prefix).
    */
   private async createMultisigJsonBytes(
@@ -399,7 +399,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       // Hardcoded to base58 encoding, only correct for rollups using Base58Address as their
       // primary address type. Will be replaced with rollup-aware address formatting once the
       // SDK supports flexible address encoding (see #2673).
-      multisig_address: bs58.encode(multisigAddress),
+      multisig_id: bs58.encode(multisigAddress),
       version: 1,
     };
 
@@ -409,7 +409,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   /**
    * Signs an unsigned transaction for use in a Solana offchain multisig.
    *
-   * The signer signs the V1 JSON payload directly (which includes the multisig_address
+   * The signer signs the V1 JSON payload directly (which includes the multisig_id
    * and version fields). The returned V0-shaped transaction is compatible with
    * `MultisigTransaction.fromTransactions()`.
    *
