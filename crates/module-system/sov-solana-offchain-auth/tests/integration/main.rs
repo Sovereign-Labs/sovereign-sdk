@@ -483,6 +483,11 @@ async fn test_submit_multisig_simple_message_transaction() {
     let key1 = Ed25519PrivateKey::generate();
     let key2 = Ed25519PrivateKey::generate();
     let key3 = Ed25519PrivateKey::generate();
+    // To update the TypeScript byte-compatibility test vectors in
+    // solana-signable-rollup.test.ts, run this test with --nocapture and copy the printed values.
+    println!("KEY1_PRIV_HEX: {}", key1.as_hex());
+    println!("KEY2_PRIV_HEX: {}", key2.as_hex());
+    println!("KEY3_PRIV_HEX: {}", key3.as_hex());
     let pub1 = key1.pub_key();
     let pub2 = key2.pub_key();
     let pub3 = key3.pub_key();
@@ -552,6 +557,17 @@ async fn test_submit_multisig_simple_message_transaction() {
     };
 
     let raw_tx_bytes = borsh::to_vec(&multisig_msg).unwrap();
+    {
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob {
+                blob: raw_tx_bytes.clone(),
+            },
+        };
+        println!(
+            "MULTISIG_POST_PAYLOAD: {}",
+            serde_json::to_string(&request).unwrap()
+        );
+    }
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),

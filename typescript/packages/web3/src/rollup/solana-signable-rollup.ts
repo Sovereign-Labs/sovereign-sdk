@@ -6,6 +6,7 @@ import type {
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import { hexToBytes } from "@sovereign-sdk/utils";
+import bs58 from "bs58";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
 import type { DeepPartial } from "../utils";
@@ -384,7 +385,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async createMultisigJsonBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
-    multisigAddress: string,
+    multisigAddress: Uint8Array,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
     const schema = serializer.schema;
@@ -395,7 +396,10 @@ export class SolanaSignableRollup<RuntimeCall> {
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
       chain_name: chainName,
-      multisig_address: multisigAddress,
+      // Hardcoded to base58 encoding, only correct for rollups using Base58Address as their
+      // primary address type. Will be replaced with rollup-aware address formatting once the
+      // SDK supports flexible address encoding (see #2673).
+      multisig_address: bs58.encode(multisigAddress),
       version: 1,
     };
 
@@ -409,13 +413,13 @@ export class SolanaSignableRollup<RuntimeCall> {
    * and version fields). The returned V0-shaped transaction is compatible with
    * `MultisigTransaction.fromTransactions()`.
    *
-   * @param multisigAddress - The 0x-prefixed hex multisig_address (i.e. credential_id) of the
-   * multisig account.
+   * @param multisigAddress - The raw 32-byte multisig address, as returned by
+   *   `MultisigTransaction.getMultisigAddress()`.
    */
   async signTransactionForMultisig(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     signer: Signer,
-    multisigAddress: string,
+    multisigAddress: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
@@ -440,12 +444,12 @@ export class SolanaSignableRollup<RuntimeCall> {
    * the Solana multisig envelope with the `0x80`-prefixed wire bytes, and submits it
    * to the Solana offchain endpoint.
    *
-   * @param multisigAddress - The 0x-prefixed hex multisig_address (i.e. credential_id) of the
-   * multisig account.
+   * @param multisigAddress - The raw 32-byte multisig address, as returned by
+   *   `MultisigTransaction.getMultisigAddress()`.
    */
   async submitMultisigTransaction(
     multisigTx: TransactionV1<RuntimeCall>,
-    multisigAddress: string,
+    multisigAddress: Uint8Array,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const { V1: tx } = multisigTx;
 

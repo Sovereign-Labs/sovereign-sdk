@@ -391,13 +391,13 @@ describe("SolanaSignableRollup", () => {
     // integration test in sov-solana-offchain-auth.
     // The test uses a 2-of-3 multisig with signers 3 and 1 (out of order).
     const key1PrivHex =
-      "afefc9649c04d4a37a88c34f2459ff874743ed5ae4f121de66f9ff0680406455";
+      "efb4cf7eb571b009053e3958385901d03489476bffe63f5da231ada38ee97337";
     const key2PrivHex =
-      "80dd42d1c88ab874c7887202424f66a8d777c542ee07cc9266fca219511ecfd1";
+      "b1cffab829c7005b0456685f5c1de719e32ced6bb9aa66f65a35a6fae0e0cbaa";
     const key3PrivHex =
-      "2756c0fcdfbcd18d502a2adf475ed941c11d5a344bae192ad6ad8ff203d89879";
+      "75d9d30b976094be75695c09b8b39c8878d1c16abbb831069592450a260d0956";
     const expectedJson =
-      '{"body":{"body":"zwEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9pZCI6NDMyMX0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4iLCJtdWx0aXNpZ19hZGRyZXNzIjoiMHg4MjFlOTU4ZDMzNzk0ZjNkODZiZGQ3MjZkYjkxY2I5OTFkMWUxNGMyNzMzNjQ0MjgxYzViNTgwOTc2YzVhYzMwIiwidmVyc2lvbiI6MX0LCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwIAAAB2E/hJJ7V8w03CKyjcpK+2sQkLhzc202XeKi+QbxJE33qKWqk2zP1KfAe10+FvogT5jr80aoRPzcv/5zmnB4wCouBL5PAKsnYzSQkbpS9u/SZInLVEH0UuaV9So93EMkMf9wwY4M9tAwdk/jrLLzkyoCQRnQbWMm4j1lEr47LJgw4r+giK5P8sQy/JNav6kyCS3OIy8KIhANqY5yKirLIJoZ38rdBqNp845v8n17iS68vYznXopFh8LQNpKuQPgA8BAAAAoxKlaU5+8K2u2hAgnPhIhlG7+m8gxQc0BAyQhL6dRgcC"}}';
+      '{"body":{"body":"uAEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9pZCI6NDMyMX0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4iLCJtdWx0aXNpZ19hZGRyZXNzIjoic015eEsydXVBN1kzQ3BVY0tqODhhWEhGQnJ2VUo1dWFidkF2VzJ0bTlpMSIsInZlcnNpb24iOjF9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsCAAAAL5AyIYnBoECsdg0Cj0uV7CzW39feoH1q1pH33dhRjR7C1OhLAKMi0oGsUWBZE1oKy1a6k3J4Tavq+++CRWDCAJHiNIWgLairVLKvKaN6s08p9OadbkdKenlslHFp2mrFrMTuKssv+I4aZHHKLYf3JbFXgSfBEMQWQwU/NDgn9Q4PqjGbvEgbRcDW/T8QUm5ehb3wS7lASsqvAxrCa8DZCsY8BlsZZHVjnWYG3YEcGvdZcCVztM14LhD0FG8ekraxAQAAAAhkeQqLeck/5arEMn57HRCykj2aXKzCSZeR/XdThJXhAg=="}}';
 
     const mockClient = createMockClient({
       chainId: 4321,
@@ -429,7 +429,7 @@ describe("SolanaSignableRollup", () => {
     const { bytesToHex, hexToBytes } = await import("@sovereign-sdk/utils");
     const { sha256 } = await import("@noble/hashes/sha2");
 
-    // Compute the multisig address (credential_id) from the 3 public keys.
+    // Compute the multisig address from the 3 public keys.
     // Mirrors MultisigTransaction.getMultisigAddress() from @sovereign-sdk/multisig.
     const pub1Hex = bytesToHex(await signer1.publicKey());
     const pub2Hex = bytesToHex(await signer2.publicKey());
@@ -443,7 +443,7 @@ describe("SolanaSignableRollup", () => {
     borshData[0] = minSigners;
     dv.setUint32(1, 3, true);
     pubKeyBytes.forEach((pk, i) => borshData.set(pk, 5 + i * 32));
-    const multisigAddress = `0x${bytesToHex(sha256(borshData))}`;
+    const multisigAddress = sha256(borshData);
 
     const runtimeCall = {
       bank: {
