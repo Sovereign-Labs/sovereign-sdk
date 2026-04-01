@@ -3998,7 +3998,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 1.0.0",
+ "derive_more",
  "k256",
  "ruint",
  "schemars 0.8.22",
@@ -4204,7 +4204,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-sequencer-registry",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
