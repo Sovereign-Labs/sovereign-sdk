@@ -167,6 +167,7 @@ where
         mut outer_vm: OuterVm,
         block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
         genesis_state_root: &StateRoot,
+        _previous_aggregated_proof: &Option<SerializedAggregatedProof>,
     ) -> anyhow::Result<ProofAggregationStatus> {
         assert!(!block_header_hashes.is_empty());
         let mut prover_state = self.prover_state.write().expect("Lock was poisoned");

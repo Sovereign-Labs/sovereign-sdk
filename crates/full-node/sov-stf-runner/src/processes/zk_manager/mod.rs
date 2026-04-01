@@ -67,6 +67,7 @@ where
         mut metadata: AggregateProofMetadata<Ps>,
         prover_service: &Ps,
         genesis_state_root: &Ps::StateRoot,
+        previous_aggregated_proof: Option<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
         let mut attempt_num = 1u32;
         let mut backoff_iter = self.backoff_policy.build();
@@ -74,7 +75,14 @@ where
         loop {
             let maybe_backoff_duration = backoff_iter.next();
 
-            match metadata.prove(prover_service, genesis_state_root).await {
+            match metadata
+                .prove(
+                    prover_service,
+                    genesis_state_root,
+                    &previous_aggregated_proof,
+                )
+                .await
+            {
                 Ok(proof) => return Ok(proof),
                 Err((returned_metadata, error)) => {
                     let error_message = format!("Failed to generate aggregate proof: {error}");
@@ -204,6 +212,8 @@ where
                     metadata,
                     prover_service,
                     &self.genesis_state_root,
+                    // TODO
+                    None,
                 )
                 .await?;
 

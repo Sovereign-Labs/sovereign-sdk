@@ -10,6 +10,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use super::{ProverService, ProverServiceError, Verifier};
@@ -106,6 +107,7 @@ where
         &self,
         block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
         genesis_state_root: &Self::StateRoot,
+        _previous_aggregated_proof: &Option<SerializedAggregatedProof>,
     ) -> anyhow::Result<ProofAggregationStatus> {
         self.prover
             .create_aggregated_proof(block_header_hashes, genesis_state_root)
