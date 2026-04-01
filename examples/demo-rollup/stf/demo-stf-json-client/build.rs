@@ -19,7 +19,7 @@ fn main() {
 
     let spec = runtime.openapi_spec().unwrap();
     let serialized = serde_json::to_string_pretty(&spec).unwrap();
-    // crate: openapiv3"
+    // crate: openapiv3
     let spec = serde_json::from_str(&serialized).unwrap();
     let mut generator = progenitor::Generator::default();
 

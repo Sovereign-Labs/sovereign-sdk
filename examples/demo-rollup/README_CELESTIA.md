@@ -250,19 +250,24 @@ Import a transaction from a JSON file at the provided path
 Usage: sov-cli transactions import from-file <COMMAND>
 
 Commands:
-  bank                 A subcommand for the `Bank` module
-  sequencer-registry   A subcommand for the `SequencerRegistry` module
-  operator-incentives  A subcommand for the `OperatorIncentives` module
-  attester-incentives  A subcommand for the `AttesterIncentives` module
-  prover-incentives    A subcommand for the `ProverIncentives` module
-  accounts             A subcommand for the `Accounts` module
-  uniqueness           A subcommand for the `Uniqueness` module
-  chain-state          A subcommand for the `ChainState` module
-  blob-storage         A subcommand for the `BlobStorage` module
-  paymaster            A subcommand for the `Paymaster` module
-  access-pattern       A subcommand for the `AccessPattern` module
-  synthetic-load       A subcommand for the `SyntheticLoad` module
-  help                 Print this message or the help of the given subcommand(s)
+  bank                      A subcommand for the `Bank` module
+  sequencer-registry        A subcommand for the `SequencerRegistry` module
+  operator-incentives       A subcommand for the `OperatorIncentives` module
+  attester-incentives       A subcommand for the `AttesterIncentives` module
+  prover-incentives         A subcommand for the `ProverIncentives` module
+  accounts                  A subcommand for the `Accounts` module
+  uniqueness                A subcommand for the `Uniqueness` module
+  chain-state               A subcommand for the `ChainState` module
+  blob-storage              A subcommand for the `BlobStorage` module
+  paymaster                 A subcommand for the `Paymaster` module
+  revenue-share             A subcommand for the `RevenueShare` module
+  mailbox                   A subcommand for the `Mailbox` module
+  interchain-gas-paymaster  A subcommand for the `InterchainGasPaymaster` module
+  merkle-tree-hook          A subcommand for the `MerkleTreeHook` module
+  warp                      A subcommand for the `Warp` module
+  access-pattern            A subcommand for the `AccessPattern` module
+  synthetic-load            A subcommand for the `SyntheticLoad` module
+  help                      Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help  Print help
@@ -285,7 +290,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x4982c5078a9a2ebd1e064a184837553c1d92ea31a44b85c9ba5854ad923080b2",
+  "chain_hash": "0x6ac7496d0e70518f8368d4771e5cd3cf056e9653987ce89e5c47e01d415fbcd3",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
