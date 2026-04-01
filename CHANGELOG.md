@@ -1,6 +1,7 @@
 # 2026-03-30
 - #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
 - #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
+- #2671 Fixes API archival query race condition
 
 # 2026-03-24
 - #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction

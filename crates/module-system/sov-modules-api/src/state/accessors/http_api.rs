@@ -483,7 +483,6 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(entry) = self.local_user_writes.get(key) {
             return Ok(entry.clone());
         }
-        // Check uncommitted changes (sequencer state not yet committed to NOMT)
         if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::User, key) {
                 return Ok(entry);
@@ -508,7 +507,6 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(entry) = self.local_kernel_writes.get(key) {
             return Ok(entry.clone());
         }
-        // Check uncommitted changes (sequencer state not yet committed to NOMT)
         if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::Kernel, key) {
                 return Ok(entry);
@@ -530,7 +528,6 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(write) = self.local_accessory_writes.get(key) {
             return Ok(write.value.clone());
         }
-        // Check uncommitted changes (sequencer state not yet committed to NOMT)
         if let Some(changes) = self.uncommitted_changes.as_ref() {
             if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
                 return Ok(entry);
