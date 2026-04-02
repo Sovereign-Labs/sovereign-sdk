@@ -232,23 +232,22 @@ impl StorableMockDaLayer {
             .checked_sub(self.blocks_to_finality.saturating_add(1))
             .unwrap_or_default();
         // Meaning that "chain head - blocks to finalization" has moved beyond genesis block.
-        let finalized_header = if next_finalized_height > 0
-            && next_finalized_height > self.last_finalized_height
-        {
-            finalized_height::update_value(&txn, next_finalized_height)
-                .await
-                .context("update finalized_height")?;
-            let header = BlockHeaders::find()
-                .filter(block_headers::Column::Height.eq(next_finalized_height))
-                .one(&txn)
-                .await
-                .context("get finalized header")?
-                .map(MockBlockHeader::from)
-                .expect("Finalized block header not found");
-            Some(header)
-        } else {
-            None
-        };
+        let finalized_header =
+            if next_finalized_height > 0 && next_finalized_height > self.last_finalized_height {
+                finalized_height::update_value(&txn, next_finalized_height)
+                    .await
+                    .context("update finalized_height")?;
+                let header = BlockHeaders::find()
+                    .filter(block_headers::Column::Height.eq(next_finalized_height))
+                    .one(&txn)
+                    .await
+                    .context("get finalized header")?
+                    .map(MockBlockHeader::from)
+                    .expect("Finalized block header not found");
+                Some(header)
+            } else {
+                None
+            };
 
         txn.commit()
             .await
