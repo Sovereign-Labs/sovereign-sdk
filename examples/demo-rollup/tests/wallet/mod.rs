@@ -4,7 +4,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_bank::{CallMessage, Coins, TokenId};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction, UnsignedTransactionV0};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
 use sov_modules_macros::config_value;
 use sov_test_utils::{
@@ -15,7 +15,7 @@ use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 
 type S = DemoRollupSpec;
 
-fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
+fn make_unsigned_tx() -> UnsignedTransactionV0<Runtime<S>, S> {
     let msg: RuntimeCall<S> = RuntimeCall::Bank(CallMessage::Mint {
         mint_to_address: <S as Spec>::Address::from_str(
             "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
@@ -29,7 +29,7 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
             .unwrap(),
         },
     });
-    UnsignedTransaction::<_, S>::new(
+    UnsignedTransactionV0::<_, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,

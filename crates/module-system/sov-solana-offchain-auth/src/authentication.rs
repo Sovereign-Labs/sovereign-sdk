@@ -12,7 +12,7 @@ use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::transaction::Credentials;
 use sov_modules_api::transaction::{v1::MAX_SIGNERS, PubKeyAndSignature};
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransaction,
+    AuthenticatedTransactionAndRawHash, TransactionCallable, TxDetails, UnsignedTransactionV0,
 };
 use sov_modules_api::SafeVec;
 use sov_modules_api::{
@@ -59,12 +59,8 @@ where
     R: TransactionCallable,
     <R as TransactionCallable>::Call: Serialize + DeserializeOwned,
 {
-    fn into_unsigned_tx(self) -> UnsignedTransaction<R, S> {
-        UnsignedTransaction {
-            runtime_call: self.runtime_call,
-            uniqueness: self.uniqueness,
-            details: self.details,
-        }
+    fn into_unsigned_tx(self) -> UnsignedTransactionV0<R, S> {
+        UnsignedTransactionV0::new_with_details(self.runtime_call, self.uniqueness, self.details)
     }
 
     fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {
@@ -119,12 +115,8 @@ where
     R: TransactionCallable,
     <R as TransactionCallable>::Call: Serialize + DeserializeOwned,
 {
-    fn into_unsigned_tx(self) -> UnsignedTransaction<R, S> {
-        UnsignedTransaction {
-            runtime_call: self.runtime_call,
-            uniqueness: self.uniqueness,
-            details: self.details,
-        }
+    fn into_unsigned_tx(self) -> UnsignedTransactionV0<R, S> {
+        UnsignedTransactionV0::new_with_details(self.runtime_call, self.uniqueness, self.details)
     }
 
     fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {

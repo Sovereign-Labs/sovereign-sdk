@@ -1,5 +1,5 @@
 use sov_accounts::{Accounts, CallMessage, Response};
-use sov_modules_api::transaction::{UnsignedTransaction, Version1};
+use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
     CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
 };
@@ -209,7 +209,7 @@ fn test_setup_multisig_and_act() {
     // - Submitting the transaction and asserting it is skipped
     let generate_multisig_tx = || {
         let key = TestPrivateKey::generate();
-        UnsignedTransaction::<RT, S>::new_with_details(
+        UnsignedTransactionV0::<RT, S>::new_with_details(
             TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(
                 key.pub_key().credential_id(),
             )),

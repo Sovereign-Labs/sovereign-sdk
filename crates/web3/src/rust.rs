@@ -39,7 +39,9 @@ use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::{CallMessage, CryptoSpec, RuntimeDiscriminant, UnmanagedRuntimeCall};
 
 pub use sov_modules_api::capabilities::UniquenessData;
-pub use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
+pub use sov_modules_api::transaction::{
+    PriorityFeeBips, Transaction, UnsignedTransaction, UnsignedTransactionV0,
+};
 pub use sov_modules_api::{Amount, Spec};
 
 /// Errors that can occur when building transactions.
@@ -196,11 +198,11 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
     ///
     /// # Returns
     ///
-    /// Returns an `UnsignedTransaction` that can be signed later, or an error
+    /// Returns an `UnsignedTransactionV0` that can be signed later, or an error
     /// if the transaction could not be constructed.
     pub fn build(
         self,
-    ) -> Result<UnsignedTransaction<UnmanagedRuntimeCall<M>, S>, TransactionBuilderError> {
+    ) -> Result<UnsignedTransactionV0<UnmanagedRuntimeCall<M>, S>, TransactionBuilderError> {
         let priority_fee = self
             .priority_fee_bips
             .unwrap_or(DEFAULT_MAX_PRIORITY_FEE_BIPS);
@@ -208,7 +210,7 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
         let gas_limit = self.gas_limit.unwrap_or(None);
         let uniqueness = self.uniqueness.unwrap_or_else(default_uniqueness);
 
-        Ok(UnsignedTransaction::new(
+        Ok(UnsignedTransactionV0::new(
             self.call,
             config_chain_id(),
             priority_fee,

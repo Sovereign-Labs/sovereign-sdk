@@ -11,7 +11,7 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PubKeyAndSignature;
 use sov_modules_api::transaction::TxDetails;
-use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransactionV0};
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::Multisig;
 use sov_modules_api::SkippedTxContents;
@@ -132,18 +132,18 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
     (runner, admin)
 }
 
-pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
+pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransactionV0<RT, S> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     };
-    UnsignedTransaction::new_with_details(message, UniquenessData::Generation(0), details)
+    UnsignedTransactionV0::new_with_details(message, UniquenessData::Generation(0), details)
 }
 
 pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
-    utx: &UnsignedTransaction<RT, S>,
+    utx: &UnsignedTransactionV0<RT, S>,
     private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
 ) -> <S::CryptoSpec as CryptoSpec>::Signature {
     let schema = TestSchemaProvider::get_schema();
@@ -163,7 +163,7 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 }
 
 pub fn sign_utx<S: Spec, RT: Runtime<S>>(
-    utx: UnsignedTransaction<RT, S>,
+    utx: UnsignedTransactionV0<RT, S>,
     signer: &TestUser<S>,
 ) -> Transaction<RT, S> {
     let signature = sign_utx_in_place(&utx, signer.private_key());
