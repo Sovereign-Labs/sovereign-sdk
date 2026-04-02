@@ -29,6 +29,7 @@ use crate::preferred::{AcceptTxError, PreferredBlobToReplay};
 use crate::{
     PreferredProofDataBytes, SequencerNotReadyDetails, SerializedProofWithDetailsBytes, TxHash,
 };
+use rand::Rng;
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
@@ -153,7 +154,7 @@ where
                                 return;
                             }
                             SequencerStateUpdatorError::Unexpected => {
-                                self.inner.shutdown_sender.send(()).unwrap();
+                                let _ = self.inner.shutdown_sender.send(());
                                 panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
                             }
                         }
@@ -874,6 +875,20 @@ where
         inner.trigger_batch_production_if_convenient().await;
     }
 
+    /// Get the acceptance probability for a given transaction based on the sync distance and the max allowed node distance behind.
+    fn get_acceptance_probability(&self, baked_tx: &FullyBakedTx) -> f64 {
+        // We subtract 1 from both the sync distance and the max_allowed_node distance so that a distance of 0 or 1 results in a 0% chance of shedding load
+        let sync_distance = self.inner.latest_info.sync_status.distance().saturating_sub(1) as f64;
+        let max_allowed_node_distance_behind = self.inner
+            .seq_config
+            .max_allowed_node_distance_behind
+            .saturating_sub(1)
+            .max(1) as f64;
+        let drop_with_probability = sync_distance / max_allowed_node_distance_behind;
+        let accept_probability = 1.0 - drop_with_probability;
+        self.runtime.accept_tx_probability(self.runtime.get_transaction_priority(baked_tx), accept_probability)
+    }
+
     async fn process_accept_tx(
         &mut self,
         baked_tx: FullyBakedTx,
@@ -886,6 +901,7 @@ where
             .runtime
             .sequencing_data_handler()
             .create_sequencing_data();
+        let load_based_accept_probability = self.get_acceptance_probability(&baked_tx);
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if inner.is_replica_role() {
@@ -928,6 +944,11 @@ where
             .rate_limiter
             .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
+
+        // Probabilistically shed load based on sync distance.
+        if !rand::thread_rng().gen_bool(load_based_accept_probability) {
+            return Err(AcceptTxError::SequencerOverloaded503);
+        }
 
         let mut baked_tx = baked_tx;
         // Important: we read the sequencing data from the baked tx inside apply_tx_to_in_progress_batch (which is called from do_new_tx)

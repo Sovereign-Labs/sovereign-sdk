@@ -30,6 +30,7 @@ jsonrpsee = { workspace = true, default-features = false, features = ["client", 
 mini-moka = "0.10"
 sov-full-node-configs = { workspace = true }
 rockbound = { workspace = true }
+rand = { workspace = true}
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
