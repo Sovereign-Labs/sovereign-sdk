@@ -96,29 +96,38 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
         if self.is_ready {
             return;
         }
+
+        // Collect all Waiting witnesses, marking their slots as Submitted.
+        let mut submissions = Vec::new();
         for proof in self.block_proof_info.iter_mut() {
             let mut prev_status = BlockProofStatus::Submitted;
             std::mem::swap(&mut prev_status, &mut proof.status);
-            if let BlockProofStatus::Waiting(mut witness) = prev_status {
-                // TODO: Add backoff on proof submission attempts
-                //  <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/446>
-                loop {
-                    let status = prover_service
-                        .prove(witness)
-                        .await
-                        .expect("The proof submission should succeed");
+            if let BlockProofStatus::Waiting(witness) = prev_status {
+                submissions.push(witness);
+            }
+        }
 
-                    // Stop the runner loop until prover is ready.
-                    match status {
-                        ProofProcessingStatus::ProvingInProgress => break,
-                        ProofProcessingStatus::Busy(data) => {
-                            witness = data;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
+        // Submit all proofs concurrently.
+        // TODO: Add backoff on proof submission attempts
+        //  <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/446>
+        let futs = submissions.into_iter().map(|mut witness| async {
+            loop {
+                let status = prover_service
+                    .prove(witness)
+                    .await
+                    .expect("The proof submission should succeed");
+
+                match status {
+                    ProofProcessingStatus::ProvingInProgress => break,
+                    ProofProcessingStatus::Busy(data) => {
+                        witness = data;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                 }
             }
-        }
+        });
+        futures::future::join_all(futs).await;
+
         self.is_ready = true;
     }
 
