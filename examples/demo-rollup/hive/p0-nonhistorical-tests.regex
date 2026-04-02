@@ -1,0 +1,37 @@
+# P0 non-historical smoke surface (phase-1)
+# Each line is a regex fragment; the runner joins them with | and wraps in ^(...)$
+# Source: docs/hive-rpc-compat-plan.md
+
+# Network identity
+eth_chainId/get-chain-id
+net_version/get-network-id
+eth_syncing/check-syncing
+
+# Transaction submission
+eth_sendRawTransaction/.*
+
+# Transaction/receipt presence semantics
+eth_getTransactionByHash/get-empty-tx
+eth_getTransactionByHash/get-notfound-tx
+eth_getTransactionReceipt/get-empty-tx
+eth_getTransactionReceipt/get-notfound-tx
+
+# Unknown-account / invalid-input behavior
+eth_getBalance/get-balance-unknown-account
+eth_getCode/get-code-unknown-account
+eth_getStorageAt/get-storage-invalid-key-too-large
+eth_getStorageAt/get-storage-invalid-key
+eth_getStorageAt/get-storage-unknown-account
+eth_getTransactionCount/get-nonce-unknown-account
+
+# Missing-block semantics
+eth_getBlockByHash/get-block-by-empty-hash
+eth_getBlockByHash/get-block-by-notfound-hash
+eth_getBlockByNumber/get-block-notfound
+eth_getBlockReceipts/get-block-receipts-empty
+eth_getBlockReceipts/get-block-receipts-future
+eth_getBlockReceipts/get-block-receipts-not-found
+
+# Minimal execution smoke
+eth_createAccessList/create-al-value-transfer
+eth_estimateGas/estimate-simple-transfer

@@ -2,6 +2,8 @@
 
 FROM rust:1.93-bookworm AS builder
 ARG HIVE_CHAIN_ID=3503995874084926
+ARG PROTOC_VERSION=23.2
+ARG MOLD_VERSION=2.40.4
 
 ENV DEBIAN_FRONTEND=noninteractive \
     SKIP_GUEST_BUILD=1 \
@@ -11,13 +13,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     clang \
     cmake \
+    curl \
     git \
     libclang-dev \
     libssl-dev \
-    lld \
     pkg-config \
-    protobuf-compiler \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install protoc from pinned release (includes well-known .proto files)
+RUN ARCH=$(dpkg --print-architecture) \
+    && case "$ARCH" in \
+         amd64) PROTOC_ARCH="linux-x86_64" ;; \
+         arm64) PROTOC_ARCH="linux-aarch_64" ;; \
+         *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
+       esac \
+    && curl -fsSLO "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-${PROTOC_ARCH}.zip" \
+    && unzip -o "protoc-${PROTOC_VERSION}-${PROTOC_ARCH}.zip" -d /usr/local bin/protoc 'include/*' \
+    && rm -f "protoc-${PROTOC_VERSION}-${PROTOC_ARCH}.zip"
+
+# Install mold linker for faster linking
+RUN ARCH=$(dpkg --print-architecture) \
+    && case "$ARCH" in \
+         amd64) MOLD_ARCH="x86_64" ;; \
+         arm64) MOLD_ARCH="aarch64" ;; \
+         *) echo "Unsupported arch: $ARCH" && exit 1 ;; \
+       esac \
+    && curl -fsSL -o /tmp/mold.tar.gz \
+         "https://github.com/rui314/mold/releases/download/v${MOLD_VERSION}/mold-${MOLD_VERSION}-${MOLD_ARCH}-linux.tar.gz" \
+    && tar -C /tmp -xzf /tmp/mold.tar.gz \
+    && cp "/tmp/mold-${MOLD_VERSION}-${MOLD_ARCH}-linux/bin/mold" /usr/local/bin/mold \
+    && mkdir -p /usr/local/libexec/mold \
+    && cp "/tmp/mold-${MOLD_VERSION}-${MOLD_ARCH}-linux/libexec/mold/ld" /usr/local/libexec/mold/ld \
+    && rm -rf /tmp/mold*
+
+# Configure cargo to use mold
+RUN mkdir -p /root/.cargo \
+    && printf '[target.x86_64-unknown-linux-gnu]\nlinker = "clang"\nrustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]\n\n[target.aarch64-unknown-linux-gnu]\nlinker = "clang"\nrustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]\n' \
+       > /root/.cargo/config.toml
 
 WORKDIR /src
 COPY . .
@@ -55,12 +88,14 @@ COPY examples/demo-rollup/hive/enode.sh /opt/sov/hive/enode.sh
 COPY examples/demo-rollup/hive/mock_nomt_rollup_config.toml /opt/sov/hive/mock_nomt_rollup_config.toml
 COPY examples/test-data/genesis/demo/mock /opt/sov/hive/genesis-template
 
+
 RUN chmod +x \
     /opt/sov/hive/entrypoint.sh \
     /opt/sov/hive/hive_services.py \
     /opt/sov/hive/wait_for_rpc.py \
     /opt/sov/hive/enode.sh \
     && ln -sf /opt/sov/hive/enode.sh /hive-bin/enode.sh \
+    && echo '{"payers": []}' > /opt/sov/hive/genesis-template/paymaster.json \
     && /opt/sov/bin/sov-demo-rollup --version > /version.txt
 
 EXPOSE 8545 8551
