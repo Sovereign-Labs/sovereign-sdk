@@ -18,9 +18,7 @@ use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{
-    RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec,
-};
+use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
