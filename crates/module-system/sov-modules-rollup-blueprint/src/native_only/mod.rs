@@ -408,7 +408,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
                 let genesis_header = rollup_genesis_block.header().clone();
                 let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root =
-                    initialize_state::<_, _, _, Self::DaService, _>(
+                    initialize_state::<_, Self::DaService, _>(
                         &native_stf,
                         &mut storage_manager,
                         rollup_genesis_block,
@@ -646,13 +646,8 @@ pub struct NodeEndpointsContainer {
 pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     /// The State Transition Runner.
     #[allow(clippy::type_complexity)]
-    pub runner: StateTransitionRunner<
-        StfBlueprint<S::Spec, S::Runtime>,
-        S::StorageManager,
-        S::DaService,
-        <S::Spec as Spec>::InnerZkvm,
-        <S::Spec as Spec>::OuterZkvm,
-    >,
+    pub runner:
+        StateTransitionRunner<StfBlueprint<S::Spec, S::Runtime>, S::StorageManager, S::DaService>,
 
     /// Server endpoints for the rollup.
     pub endpoints: NodeEndpointsContainer,

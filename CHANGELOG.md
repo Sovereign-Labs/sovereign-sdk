@@ -1,3 +1,6 @@
+# 2026-04-01
+- #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
+
 # 2026-03-30
 - #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
 - #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.

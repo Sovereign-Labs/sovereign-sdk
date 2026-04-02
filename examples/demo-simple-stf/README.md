@@ -87,7 +87,7 @@ Next we need to write the core logic in `apply_slot`:
         _witness: Self::Witness,
         _slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<I>,
-    ) -> ApplySlotOutput<Vm, Da, Self>
+    ) -> ApplySlotOutput<Da, Self>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
@@ -166,7 +166,6 @@ The following test checks the rollup logic. In the test, we call `init_chain, be
 ```rust
 use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf, Root};
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec};
-use sov_mock_zkvm::MockZkvm;
 use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 
@@ -174,7 +173,7 @@ fn test_stf_success() {
     let address = MockAddress::from([1; 32]);
 
     let stf = &mut CheckHashPreimageStf::default();
-    StateTransitionFunction::<MockZkvm, MockZkvm, MockDaSpec>::init_chain(stf, &Default::default(), (), Default::default());
+    StateTransitionFunction::<MockDaSpec>::init_chain(stf, &Default::default(), (), Default::default());
 
     let mut batch_blobs = {
         let incorrect_preimage = vec![1; 32];
@@ -207,7 +206,7 @@ fn test_stf_success() {
         batch_blobs: batch_blobs.as_mut_slice(),
     };
 
-    let result = StateTransitionFunction::<MockZkvm, MockZkvm, MockDaSpec>::apply_slot(
+    let result = StateTransitionFunction::<MockDaSpec>::apply_slot(
         stf,
         &Root([]),
         (),
