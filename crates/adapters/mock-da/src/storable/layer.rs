@@ -225,28 +225,17 @@ impl StorableMockDaLayer {
             .insert(&txn)
             .await
             .context("insert block_header")?;
-        let _ = self.head_header_sender.send_replace(new_head);
-        tracing::debug!(
-            blobs_count,
-            height = self.next_height,
-            prev_hash = %HexHash::new(prev_block_hash),
-            hash = %HexHash::new(this_block_hash),
-            producing_time = ?start.elapsed(),
-            "New block has been produced"
-        );
 
-        self.next_height += 1;
-
-        let next_finalized_height = self
-            .next_height
+        // Compute finalization using what next_height will be after increment.
+        let new_next_height = self.next_height + 1;
+        let next_finalized_height = new_next_height
             .checked_sub(self.blocks_to_finality.saturating_add(1))
             .unwrap_or_default();
         // Meaning that "chain head - blocks to finalization" has moved beyond genesis block.
         let finalized_header = if next_finalized_height > 0
             && next_finalized_height > self.last_finalized_height
         {
-            self.last_finalized_height = next_finalized_height;
-            finalized_height::update_value(&txn, self.last_finalized_height)
+            finalized_height::update_value(&txn, next_finalized_height)
                 .await
                 .context("update finalized_height")?;
             let header = BlockHeaders::find()
@@ -264,6 +253,21 @@ impl StorableMockDaLayer {
         txn.commit()
             .await
             .context("commit produce_block transaction")?;
+
+        // Only mutate in-memory state after successful commit.
+        let _ = self.head_header_sender.send_replace(new_head);
+        self.next_height = new_next_height;
+        if next_finalized_height > self.last_finalized_height {
+            self.last_finalized_height = next_finalized_height;
+        }
+        tracing::debug!(
+            blobs_count,
+            height = self.next_height - 1,
+            prev_hash = %HexHash::new(prev_block_hash),
+            hash = %HexHash::new(this_block_hash),
+            producing_time = ?start.elapsed(),
+            "New block has been produced"
+        );
 
         if let Some(finalized_header) = finalized_header {
             tracing::trace!(
