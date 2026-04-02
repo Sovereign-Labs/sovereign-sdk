@@ -18,7 +18,10 @@ use crate::{
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     /// The runtime call
-    #[borsh(bound(serialize = "", deserialize = "",))]
+    #[borsh(bound(
+        serialize = "R::Call: BorshSerialize",
+        deserialize = "R::Call: BorshDeserialize",
+    ))]
     pub runtime_call: R::Call,
     /// The uniqueness identifier
     pub uniqueness: UniquenessData,
@@ -44,7 +47,10 @@ impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV0<R, S> {}
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub struct UnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// The runtime call
-    #[borsh(bound(serialize = "", deserialize = "",))]
+    #[borsh(bound(
+        serialize = "R::Call: BorshSerialize",
+        deserialize = "R::Call: BorshDeserialize",
+    ))]
     pub runtime_call: R::Call,
     /// The uniqueness identifier
     pub uniqueness: UniquenessData,
@@ -80,9 +86,21 @@ impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV1<R, S> {}
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 pub enum UnsignedTransaction<R: TransactionCallable, S: Spec> {
     /// V0 (single-sig) unsigned transaction.
-    V0(#[borsh(bound(serialize = "", deserialize = "",))] UnsignedTransactionV0<R, S>),
+    V0(
+        #[borsh(bound(
+            serialize = "R::Call: BorshSerialize",
+            deserialize = "R::Call: BorshDeserialize",
+        ))]
+        UnsignedTransactionV0<R, S>,
+    ),
     /// V1 (multisig) unsigned transaction, includes credential commitment.
-    V1(#[borsh(bound(serialize = "", deserialize = "",))] UnsignedTransactionV1<R, S>),
+    V1(
+        #[borsh(bound(
+            serialize = "R::Call: BorshSerialize",
+            deserialize = "R::Call: BorshDeserialize",
+        ))]
+        UnsignedTransactionV1<R, S>,
+    ),
 }
 
 impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
