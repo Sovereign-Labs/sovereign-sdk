@@ -17,7 +17,7 @@ use crate::preferred::PreferredProofToReplay;
 use crate::preferred::RocksDbBackend;
 use crate::PreferredProofDataBytes;
 use anyhow::Result;
-use axum::async_trait;
+use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::{PreferredBatchData, SequenceNumber};

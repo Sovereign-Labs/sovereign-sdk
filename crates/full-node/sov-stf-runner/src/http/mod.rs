@@ -94,6 +94,10 @@ pub(crate) async fn start_http_server(
         let router = NormalizePathLayer::trim_trailing_slash().layer(router);
 
         // TODO: Is there a way to have max_connections and other params for axum::serve?
+        use axum::serve::ListenerExt;
+        let axum_listener = axum_listener.tap_io(|tcp| {
+            let _ = tcp.set_nodelay(true);
+        });
         let result = axum::serve(
             axum_listener,
             ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(
@@ -103,7 +107,6 @@ pub(crate) async fn start_http_server(
         .with_graceful_shutdown(async move {
             shutdown_receiver.changed().await.ok();
         })
-        .tcp_nodelay(true)
         .await
         .map_err(|e| anyhow::anyhow!(e));
 

@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::extract::{ConnectInfo, State};
 use axum::response::IntoResponse;
 use axum::routing::post;
@@ -10,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
 use sov_modules_api::{DaSpec, NodeEndpoints, RawTx, Spec, SyncStatus};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;

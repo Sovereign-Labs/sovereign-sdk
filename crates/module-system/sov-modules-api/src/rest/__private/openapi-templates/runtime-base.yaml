@@ -1,4 +1,4 @@
-openapi: "3.0.2"
+openapi: "3.1.0"
 info:
   title: Sovereign SDK Runtime API
   version: 0.1.0
@@ -103,7 +103,6 @@ components:
   schemas:
     RuntimeAnyJsonValue:
       description: "Any JSON type, including null."
-      nullable: true
       oneOf:
         - type: string
           title: "String"
@@ -113,8 +112,7 @@ components:
           title: "Boolean"
         - type: array
           title: "Array"
-          items:
-            x-stainless-any: true
+          items: {}
         - type: object
           title: "Object"
           additionalProperties: true

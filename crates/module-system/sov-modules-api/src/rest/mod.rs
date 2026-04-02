@@ -324,7 +324,6 @@ impl<'de> Deserialize<'de> for HeightParam {
         }
     }
 }
-#[axum::async_trait]
 impl<S, T> FromRequestParts<ApiState<S, T>> for ApiState<S, T>
 where
     S: Spec,
@@ -347,7 +346,6 @@ where
     }
 }
 
-#[axum::async_trait]
 impl<S, T> FromRequestParts<ApiState<S, T>> for ApiStateAccessor<S>
 where
     T: Send + Sync,

@@ -51,7 +51,6 @@ pub struct StateItemRestApiImpl<M: ModuleInfo, T> {
     pub phantom: PhantomData<T>,
 }
 
-#[axum::async_trait]
 impl<M, T> FromRequestParts<StateItemRestApiImpl<M, T>> for ApiStateAccessor<M::Spec>
 where
     M: ModuleSendSync,
@@ -203,7 +202,7 @@ where
     fn state_item_rest_api(&self) -> axum::Router<()> {
         axum::Router::new()
             .route("/", get(Self::get_state_vec_route))
-            .route("/items/:index", get(Self::get_state_vec_item_route))
+            .route("/items/{index}", get(Self::get_state_vec_item_route))
             .with_state(self.clone())
     }
 }
@@ -292,7 +291,7 @@ where
     fn state_item_rest_api(&self) -> axum::Router<()> {
         axum::Router::new()
             .route("/", get(Self::get_state_map_route))
-            .route("/items/:key", get(Self::get_state_map_item_route))
+            .route("/items/{key}", get(Self::get_state_map_item_route))
             .with_state(self.clone())
     }
 }

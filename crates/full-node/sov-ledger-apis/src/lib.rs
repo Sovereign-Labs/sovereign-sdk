@@ -138,21 +138,21 @@ where
                 )),
             )
             .nest(
-                "/slots/:slotId",
+                "/slots/{slotId}",
                 Self::router_slot(state.clone()).route_layer(middleware::from_fn_with_state(
                     state.clone(),
                     Self::resolve_slot_id,
                 )),
             )
             .nest(
-                "/batches/:batchId",
+                "/batches/{batchId}",
                 Self::router_batch(state.clone()).route_layer(middleware::from_fn_with_state(
                     state.clone(),
                     Self::resolve_batch_id,
                 )),
             )
             .nest(
-                "/txs/:txId",
+                "/txs/{txId}",
                 Self::router_tx(state.clone()).route_layer(middleware::from_fn_with_state(
                     state.clone(),
                     Self::resolve_tx_id,
@@ -162,7 +162,7 @@ where
             .route("/events/counts", get(Self::get_event_key_counts))
             .route("/events/latest", get(Self::get_latest_event))
             .nest(
-                "/events/:eventId",
+                "/events/{eventId}",
                 Self::router_event().route_layer(middleware::from_fn_with_state(
                     state,
                     Self::resolve_event_id,

@@ -209,10 +209,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         // Send a message with the initial status of the transaction,
         // without waiting for it to change for the first time.
         let initial_status = self.sequencer.tx_status(&tx_hash).await?;
-        let ws_msg = ws::Message::Text(serde_json::to_string(&TxInfo {
-            id: tx_hash,
-            status: initial_status,
-        })?);
+        let ws_msg = ws::Message::Text(
+            serde_json::to_string(&TxInfo {
+                id: tx_hash,
+                status: initial_status,
+            })?
+            .into(),
+        );
         socket.send(ws_msg).await?;
 
         Ok(())
@@ -325,7 +328,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                 break;
                             }
                             Some(Ok(ws::Message::Pong(data))) => {
-                                if awaiting_pong.is_some_and(|expected| data == expected) {
+                                if awaiting_pong.is_some_and(|expected| *data == expected) {
                                     awaiting_pong = None;
                                     ping_interval.reset();
                                     tracing::trace!("Received valid pong from client");
@@ -353,7 +356,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                         let Some(msg) = outbound_msg else {
                             break;
                         };
-                        if let Err(err) = socket.send(ws::Message::Text(msg)).await {
+                        if let Err(err) = socket.send(ws::Message::Text(msg.into())).await {
                             tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                             should_drain = false;
                             break;
@@ -371,7 +374,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
                         ping_counter = ping_counter.wrapping_add(1);
                         let ping_data = ping_counter.to_le_bytes();
-                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec())).await {
+                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec().into())).await {
                             tracing::warn!(?err, "Failed to send ping - disconnecting client");
                             should_drain = false;
                             break;
@@ -390,13 +393,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
             if should_drain {
                 while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                    if let Err(err) = socket.send(ws::Message::Text(msg)).await {
+                    if let Err(err) = socket.send(ws::Message::Text(msg.into())).await {
                         tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                         break;
                     }
                 }
             }
-            socket.close().await.ok();
+            socket.send(ws::Message::Close(None)).await.ok();
         }))
     }
 
