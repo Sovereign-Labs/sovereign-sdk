@@ -85,6 +85,110 @@ The script prints:
 - **Top failing method buckets**: grouped by RPC method
 - **Profile-scoped totals** (when using `--profile p0`): pass/fail for just the P0 test set
 
+## Manual Container Testing
+
+You can run the container directly (without Hive) to verify the image is operational.
+
+### 1. Build the image
+
+```bash
+bash examples/demo-rollup/hive/run-rpc-compat.sh --build-image
+```
+
+### 2. Run the container
+
+The entrypoint expects a geth-format `/genesis.json`. You can provide a minimal one:
+
+```bash
+docker run --rm -it -p 8545:8545 -p 8551:8551 \
+  -v "$(pwd)/examples/test-data/genesis/demo/mock/genesis.json:/genesis.json:ro" \
+  sov-demo-rollup-hive:local
+```
+
+You should see log output like:
+```
+Starting sov-demo-rollup backend (mock DA + NOMT) on :8546
+Waiting for backend RPC on :8546
+Starting hive services (engine stub :8551 and RPC root proxy :8545)
+```
+
+### 3. Verify RPC is responding
+
+In another terminal:
+
+```bash
+# Check chain ID
+curl -s -X POST http://localhost:8545 \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+
+# Check syncing status
+curl -s -X POST http://localhost:8545 \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}'
+```
+
+Both should return valid JSON-RPC responses with `"jsonrpc":"2.0"` and a `"result"` field.
+
+## Debugging
+
+### Where to look when things fail
+
+1. **Hive run directory** — each run stores logs under `<hive-dir>/workspace/logs/full-<timestamp>-<tag>/`:
+   - `hive.json` — Hive version and build metadata
+   - `runner.log` — captured stdout/stderr from the Hive process
+   - `*-simulator-*.log` — simulator container output (check here for RPC errors)
+
+2. **Increase Hive log verbosity**:
+   ```bash
+   HIVE_LOGLEVEL=5 HIVE_SIM_LOGLEVEL=5 bash examples/demo-rollup/hive/run-rpc-compat.sh ...
+   ```
+
+3. **Run Hive directly** to see full output (from the Hive repo directory):
+   ```bash
+   ./hive --sim ethereum/rpc-compat --client sov-demo-rollup --loglevel 5 --docker.output
+   ```
+   The `--docker.output` flag includes container build logs in the output.
+
+### Keeping containers alive after failure
+
+By default Hive removes containers after each test. To keep them for inspection:
+
+```bash
+./hive --sim ethereum/rpc-compat --client sov-demo-rollup \
+  --client.checktimelimit 1h \
+  --loglevel 5
+```
+
+The long `--client.checktimelimit` gives you time to `docker exec` into a running client container:
+
+```bash
+# Find the running container
+docker ps --filter "ancestor=hive/clients/sov-demo-rollup:latest"
+
+# Shell into it
+docker exec -it <container-id> bash
+
+# Check processes
+ps aux
+
+# Check backend RPC directly
+curl -s -X POST http://127.0.0.1:8546/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+
+# Check proxy RPC
+curl -s -X POST http://127.0.0.1:8545 \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
+```
+
+### Docker Desktop known issues
+
+- **`DOCKER_HOST` not set**: Hive expects Docker at `/var/run/docker.sock`. On macOS with Docker Desktop, set `export DOCKER_HOST="unix://$HOME/.docker/run/docker.sock"` in your shell profile.
+- **Container networking**: The simulator may fail with `dial tcp :8081: connection refused` if Docker Desktop's container-to-container networking has issues with IP resolution. Try restarting Docker Desktop or upgrading Hive.
+- **io_uring denied**: If NOMT crashes with `io_uring` errors, your Docker seccomp profile needs to allow `io_uring_setup`, `io_uring_enter`, and `io_uring_register` syscalls.
+
 ## How It Works
 
 1. `run-rpc-compat.sh` builds a Docker image containing `sov-demo-rollup` and `sov-hive-genesis-adapter`

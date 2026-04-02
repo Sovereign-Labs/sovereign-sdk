@@ -60,7 +60,15 @@ RUN sed -Ei "s/^(CHAIN_ID[[:space:]]*=[[:space:]]*).*/\\1${HIVE_CHAIN_ID}/" cons
     && sed -Ei "s/^(EVM_GAS_METERING_MODE[[:space:]]*=[[:space:]]*).*/\\1\"EVM\"/" constants.toml \
     && sed -Ei "s/^(EVM_GAS_METERING_MODE[[:space:]]*=[[:space:]]*).*/\\1\"EVM\"/" constants.testing.toml
 
-RUN cargo build -p sov-demo-rollup --bin sov-demo-rollup --bin sov-hive-genesis-adapter
+# Cache mounts persist cargo registry and build artifacts across Docker builds,
+# so incremental compilation works even when the COPY layer is invalidated.
+# Binaries are copied to /tmp/out/ since cache mounts aren't available in other stages.
+RUN --mount=type=cache,target=/root/.cargo/registry \
+    --mount=type=cache,target=/root/.cargo/git \
+    --mount=type=cache,target=/src/target \
+    cargo build -j 4 -p sov-demo-rollup --bin sov-demo-rollup --bin sov-hive-genesis-adapter \
+    && mkdir -p /tmp/out \
+    && cp target/debug/sov-demo-rollup target/debug/sov-hive-genesis-adapter /tmp/out/
 
 FROM debian:bookworm-slim AS runtime
 ARG HIVE_CHAIN_ID=3503995874084926
@@ -74,13 +82,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     jq \
+    libssl3 \
     python3 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /opt/sov/bin /opt/sov/hive /hive-bin /hive-data
 
-COPY --from=builder /src/target/debug/sov-demo-rollup /opt/sov/bin/sov-demo-rollup
-COPY --from=builder /src/target/debug/sov-hive-genesis-adapter /opt/sov/bin/sov-hive-genesis-adapter
+COPY --from=builder /tmp/out/sov-demo-rollup /opt/sov/bin/sov-demo-rollup
+COPY --from=builder /tmp/out/sov-hive-genesis-adapter /opt/sov/bin/sov-hive-genesis-adapter
 COPY examples/demo-rollup/hive/entrypoint.sh /opt/sov/hive/entrypoint.sh
 COPY examples/demo-rollup/hive/hive_services.py /opt/sov/hive/hive_services.py
 COPY examples/demo-rollup/hive/wait_for_rpc.py /opt/sov/hive/wait_for_rpc.py

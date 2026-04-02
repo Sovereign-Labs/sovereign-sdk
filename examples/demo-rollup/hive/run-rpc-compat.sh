@@ -167,6 +167,7 @@ mkdir -p "${RUN_DIR}"
 if [[ "${BUILD_IMAGE}" == "1" ]]; then
   log "Building image sov-demo-rollup-hive:${IMAGE_TAG} (chain_id=${CHAIN_ID})"
   docker build \
+    --provenance=false \
     --build-arg "HIVE_CHAIN_ID=${CHAIN_ID}" \
     -f "${SCRIPT_DIR}/Dockerfile" \
     -t "sov-demo-rollup-hive:${IMAGE_TAG}" \
