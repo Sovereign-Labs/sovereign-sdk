@@ -45,6 +45,42 @@ pub struct StorableMockDaLayer {
     last_reported_finalized: std::sync::atomic::AtomicU32,
 }
 
+const DB_RETRY_ATTEMPTS: u32 = 5;
+const DB_RETRY_BASE_DELAY_MS: u64 = 50;
+
+/// Retries a database operation with exponential backoff.
+/// Handles transient SQLite errors (SQLITE_CANTOPEN, SQLITE_BUSY) that occur under contention.
+async fn retry_db<T, F, Fut>(f: F) -> anyhow::Result<T>
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = anyhow::Result<T>>,
+{
+    let mut last_err = None;
+    for attempt in 0..DB_RETRY_ATTEMPTS {
+        match f().await {
+            Ok(val) => return Ok(val),
+            Err(err) => {
+                let err_str = err.to_string();
+                let is_retryable = err_str.contains("unable to open database file")
+                    || err_str.contains("database is locked");
+                if !is_retryable || attempt + 1 == DB_RETRY_ATTEMPTS {
+                    return Err(err);
+                }
+                let delay = DB_RETRY_BASE_DELAY_MS * (1 << attempt);
+                tracing::warn!(
+                    attempt = attempt + 1,
+                    delay_ms = delay,
+                    error = %err,
+                    "Retrying transient DB error"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                last_err = Some(err);
+            }
+        }
+    }
+    Err(last_err.unwrap())
+}
+
 impl StorableMockDaLayer {
     /// Creates new [`StorableMockDaLayer`] by passing connections string directly to [`Database`]
     pub async fn new_from_connection(
@@ -131,16 +167,21 @@ impl StorableMockDaLayer {
         );
         let prev_block_hash = self.head_header_sender.borrow().hash.0;
 
-        let blobs_for_hash = Blobs::find()
-            .filter(blobs::Column::BlockHeight.eq(self.next_height + self.delay_blobs_by))
-            .select_only()
-            .column(blobs::Column::Id)
-            .column(blobs::Column::Hash)
-            .column(blobs::Column::Sender)
-            .column(blobs::Column::Namespace)
-            .into_model::<blobs::BlobHashData>()
-            .all(&self.conn)
-            .await?;
+        let conn = &self.conn;
+        let blob_height = self.next_height + self.delay_blobs_by;
+        let blobs_for_hash = retry_db(|| async {
+            Ok(Blobs::find()
+                .filter(blobs::Column::BlockHeight.eq(blob_height))
+                .select_only()
+                .column(blobs::Column::Id)
+                .column(blobs::Column::Hash)
+                .column(blobs::Column::Sender)
+                .column(blobs::Column::Namespace)
+                .into_model::<blobs::BlobHashData>()
+                .all(conn)
+                .await?)
+        })
+        .await?;
         let blobs_count = blobs_for_hash.len();
         tracing::trace!(
             blobs_count,
@@ -158,8 +199,13 @@ impl StorableMockDaLayer {
             time: timestamp,
         };
 
-        let block_model = block_headers::ActiveModel::from(new_head.clone());
-        block_model.insert(&self.conn).await?;
+        let new_head_clone = new_head.clone();
+        retry_db(|| async {
+            let block_model = block_headers::ActiveModel::from(new_head_clone.clone());
+            block_model.insert(conn).await?;
+            Ok(())
+        })
+        .await?;
         let _ = self.head_header_sender.send_replace(new_head);
         tracing::debug!(
             blobs_count,
