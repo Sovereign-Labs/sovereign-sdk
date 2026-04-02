@@ -1,3 +1,6 @@
+# 2026-04-02
+- #2683 Removes JMT based rollup from demo-rollup examples. JMT-based storage is still available in sov-state.
+
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
 
