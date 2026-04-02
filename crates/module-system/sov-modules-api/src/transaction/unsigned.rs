@@ -29,7 +29,16 @@ pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     pub details: TxDetails<S>,
 }
 
-// Manually implemented to ensure correct trait bounds
+// Manually implemented to ensure correct trait bounds (derive would require R: Clone/PartialEq)
+impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV0<R, S> {
+    fn clone(&self) -> Self {
+        Self {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+        }
+    }
+}
 impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV0<R, S> {
     fn eq(&self, other: &Self) -> bool {
         self.runtime_call == other.runtime_call
@@ -64,6 +73,16 @@ pub struct UnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     pub credential_address: S::Address,
 }
 
+impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV1<R, S> {
+    fn clone(&self) -> Self {
+        Self {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            credential_address: self.credential_address,
+        }
+    }
+}
 impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV1<R, S> {
     fn eq(&self, other: &Self) -> bool {
         self.runtime_call == other.runtime_call
@@ -103,6 +122,14 @@ pub enum UnsignedTransaction<R: TransactionCallable, S: Spec> {
     ),
 }
 
+impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransaction<R, S> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::V0(v0) => Self::V0(v0.clone()),
+            Self::V1(v1) => Self::V1(v1.clone()),
+        }
+    }
+}
 impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {

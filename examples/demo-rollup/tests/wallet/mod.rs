@@ -84,7 +84,8 @@ fn test_transfer_template() {
 #[test]
 fn test_display_unsigned_tx() {
     let unsigned_tx = make_unsigned_tx();
-    let unsigned_data = borsh::to_vec(&unsigned_tx).unwrap();
+    let unsigned_enum = UnsignedTransaction::<Runtime<S>, S>::V0(unsigned_tx);
+    let unsigned_data = borsh::to_vec(&unsigned_enum).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
         UnsignedTransaction<Runtime<S>, S>,
@@ -104,7 +105,7 @@ fn test_display_unsigned_tx() {
                 &unsigned_data
             )
             .unwrap(),
-        r#"{ runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
+        r#"V0 { runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
     );
 }
 

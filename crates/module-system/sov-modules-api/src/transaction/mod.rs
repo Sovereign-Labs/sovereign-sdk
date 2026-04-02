@@ -104,11 +104,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         chain_hash: &[u8; 32],
         unsigned_tx: UnsignedTransactionV0<R, S>,
     ) -> Self {
-        let versioned = UnsignedTransaction::<R, S>::V0(UnsignedTransactionV0 {
-            runtime_call: unsigned_tx.runtime_call.clone(),
-            uniqueness: unsigned_tx.uniqueness,
-            details: unsigned_tx.details.clone(),
-        });
+        let versioned = UnsignedTransaction::<R, S>::V0(unsigned_tx.clone());
         let mut utx_bytes = borsh::to_vec(&versioned).unwrap();
         utx_bytes.extend_from_slice(chain_hash);
 
