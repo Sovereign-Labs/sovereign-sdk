@@ -265,7 +265,15 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
     // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
         std::fs::remove_dir_all(rollup_storage_path.path().join(path))?;
     }
     // sanity check

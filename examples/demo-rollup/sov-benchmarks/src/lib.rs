@@ -11,9 +11,10 @@ use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{Amount, CryptoSpecExt, Spec, ZkVerifier, Zkvm};
-use sov_risc0_adapter::Risc0;
+use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
 use sov_rollup_interface::da::DaSpec;
-use sov_sp1_adapter::SP1;
+use sov_rollup_interface::zk::CryptoSpec;
+use sov_sp1_adapter::{SP1CryptoSpec, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
 use sov_test_modules::access_pattern::AccessPatternGenesisConfig;
@@ -42,14 +43,34 @@ pub mod bench_runner;
 /// Benchmark transaction generator. Stores the transactions generated in benchmark files.
 pub mod bench_generator;
 
-/// [`ConfigurableSpec`] with [`MockDaSpec`] and a custom inner vm
-pub type BenchSpec<Vm> = ConfigurableSpec<MockDaSpec, Vm, MockZkvm, MultiAddressEvmSolana, Native>;
-/// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`Risc0`] inner vm
-pub type BenchRisc0Spec = BenchSpec<Risc0>;
-/// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`SP1`] inner vm
-pub type BenchSP1Spec = BenchSpec<SP1>;
+/// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`Risc0`] inner vm using NOMT storage
+pub type BenchRisc0Spec = ConfigurableSpec<
+    MockDaSpec,
+    Risc0,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    Risc0CryptoSpec,
+    NomtProverStorage<
+        DefaultStorageSpec<<Risc0CryptoSpec as CryptoSpec>::Hasher>,
+        <MockDaSpec as DaSpec>::SlotHash,
+    >,
+>;
+/// [`ConfigurableSpec`] with [`MockDaSpec`] and a [`SP1`] inner vm using NOMT storage
+pub type BenchSP1Spec = ConfigurableSpec<
+    MockDaSpec,
+    SP1,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    SP1CryptoSpec,
+    NomtProverStorage<
+        DefaultStorageSpec<<SP1CryptoSpec as CryptoSpec>::Hasher>,
+        <MockDaSpec as DaSpec>::SlotHash,
+    >,
+>;
 
-/// [`ConfigurableSpec`] with [`MockDaSpec`] and a custom inner vm
+/// [`ConfigurableSpec`] with [`MockDaSpec`] and [`MockZkvm`] using NOMT storage
 pub type NomtBenchSpec = ConfigurableSpec<
     MockDaSpec,
     MockZkvm,
@@ -59,7 +80,7 @@ pub type NomtBenchSpec = ConfigurableSpec<
     <<MockZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec,
     NomtProverStorage<
         DefaultStorageSpec<
-            <<<MockZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec as sov_rollup_interface::zk::CryptoSpec>::Hasher,
+            <<<MockZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec as CryptoSpec>::Hasher,
         >,
         <MockDaSpec as DaSpec>::SlotHash,
     >,

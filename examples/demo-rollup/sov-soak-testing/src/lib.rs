@@ -1,17 +1,21 @@
 use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::verifier::CelestiaSpec;
 use sov_mock_da::{BlockProducingConfig, MockDaSpec};
-use sov_mock_zkvm::MockZkvm;
+use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::Amount;
 use sov_paymaster::{
     PayeePolicy, PayerGenesisConfig, Paymaster, PaymasterConfig, PaymasterPolicyInitializer,
     SafeVec,
 };
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::Native;
+use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::SequencerKindConfig;
 pub use sov_soak_testing_lib::*;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
@@ -33,14 +37,34 @@ pub type TestRT = TestRuntime<TestSpec>;
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRT>;
 pub type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 
+type SoakHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
+
 // Celestia
-pub type CelestiaRollupSpec =
-    ConfigurableSpec<CelestiaSpec, MockZkvm, MockZkvm, MultiAddressEvmSolana, Native>;
+type CelestiaNativeStorage =
+    NomtProverStorage<DefaultStorageSpec<SoakHasher>, <CelestiaSpec as DaSpec>::SlotHash>;
+pub type CelestiaRollupSpec = ConfigurableSpec<
+    CelestiaSpec,
+    MockZkvm,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    MockZkvmCryptoSpec,
+    CelestiaNativeStorage,
+>;
 pub type DemoCelestiaRT = demo_stf::runtime::Runtime<CelestiaRollupSpec>;
 
 // Mock
-pub type MockDemoRollupSpec =
-    ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvmSolana, Native>;
+type MockNativeStorage =
+    NomtProverStorage<DefaultStorageSpec<SoakHasher>, <MockDaSpec as DaSpec>::SlotHash>;
+pub type MockDemoRollupSpec = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    MockZkvmCryptoSpec,
+    MockNativeStorage,
+>;
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
 generate_runtime! {
