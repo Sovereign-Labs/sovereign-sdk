@@ -1,5 +1,5 @@
 # 2026-04-02
-- #2682 Upgrades axum from 0.7 tp 0.8. Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
+- #2682 Upgrades axum from 0.7 to 0.8. OpenAPI specs are now served as version 3.1.0 (previously 3.0.2). Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
 

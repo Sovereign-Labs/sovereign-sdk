@@ -6,6 +6,7 @@ use axum::extract::{ConnectInfo, Request};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
+use axum::serve::ListenerExt;
 use axum::ServiceExt;
 use jsonrpsee::server::{
     stop_channel, ServerBuilder, ServerConfig, ServerHandle, StopHandle, TowerService,
@@ -94,7 +95,6 @@ pub(crate) async fn start_http_server(
         let router = NormalizePathLayer::trim_trailing_slash().layer(router);
 
         // TODO: Is there a way to have max_connections and other params for axum::serve?
-        use axum::serve::ListenerExt;
         let axum_listener = axum_listener.tap_io(|tcp| {
             let _ = tcp.set_nodelay(true);
         });
