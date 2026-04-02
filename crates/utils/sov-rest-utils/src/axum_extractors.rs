@@ -58,6 +58,11 @@ impl<S: Send + Sync, T: DeserializeOwned> FromRequestParts<S> for Query<T> {
     }
 }
 
+/// Allows `Option<Query<T>>` as a handler parameter in axum 0.8+.
+/// Deserialization failures return `None` (not an error) to preserve
+/// compatibility with handlers that use multiple `Option<Query<T>>`
+/// extractors sharing the same query string — each expects different
+/// parameters, so a parse failure for one should not reject the request.
 impl<S: Send + Sync, T: DeserializeOwned> OptionalFromRequestParts<S> for Query<T> {
     type Rejection = ErrorObject;
 
@@ -68,7 +73,7 @@ impl<S: Send + Sync, T: DeserializeOwned> OptionalFromRequestParts<S> for Query<
         if parts.uri.query().is_none() {
             return Ok(None);
         }
-        Self::try_from_uri(&parts.uri).map(Some)
+        Ok(Self::try_from_uri(&parts.uri).ok())
     }
 }
 
