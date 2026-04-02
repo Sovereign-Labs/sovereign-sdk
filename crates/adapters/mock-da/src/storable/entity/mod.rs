@@ -33,6 +33,11 @@ pub(crate) async fn setup_db(db: &DatabaseConnection) -> anyhow::Result<()> {
             "PRAGMA journal_mode = WAL".to_owned(),
         ))
         .await?;
+        db.execute(sea_orm::Statement::from_string(
+            sea_orm::DatabaseBackend::Sqlite,
+            "PRAGMA busy_timeout = 5000".to_owned(),
+        ))
+        .await?;
     }
     Ok(())
 }
