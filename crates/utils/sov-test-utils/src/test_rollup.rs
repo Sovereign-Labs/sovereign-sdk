@@ -373,6 +373,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_number_of_transitions_in_db: NonZero::new(self.config.max_infos_in_db).unwrap(),
                 max_number_of_transitions_in_memory: NonZero::new(self.config.max_channel_size)
                     .unwrap(),
+                eager_proof_submission: true,
             },
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,

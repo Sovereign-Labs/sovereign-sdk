@@ -416,6 +416,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             prover_address: MockAddress::new([0u8; 32]),
             max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
             max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
+            eager_proof_submission: true,
         },
         sequencer: SequencerConfig {
             automatic_batch_production: true,

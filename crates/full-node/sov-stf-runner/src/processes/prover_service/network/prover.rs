@@ -95,24 +95,29 @@ where
         verifier: &Verifier<Da>,
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
         let block_header_hash = state_transition_info.da_block_header().hash();
-        let mut tracker = self.tracker.write().await;
 
-        if let Some(status) = tracker.get(&block_header_hash) {
-            return match status {
-                NetworkProverStatus::Submitted { .. } => {
-                    Err(ProverServiceError::Other(anyhow::anyhow!(
-                        "Proof generation for {} still in progress",
-                        block_header_hash,
-                    )))
-                }
-                NetworkProverStatus::Proved(_) => Err(ProverServiceError::Other(anyhow::anyhow!(
-                    "Witness for block_header_hash {}, submitted multiple times.",
-                    block_header_hash,
-                ))),
-                NetworkProverStatus::Err(e) => {
-                    Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
-                }
-            };
+        // Short read lock: check for duplicate submission.
+        {
+            let tracker = self.tracker.read().await;
+            if let Some(status) = tracker.get(&block_header_hash) {
+                return match status {
+                    NetworkProverStatus::Submitted { .. } => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Proof generation for {} still in progress",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Proved(_) => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Witness for block_header_hash {}, submitted multiple times.",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Err(e) => {
+                        Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
+                    }
+                };
+            }
         }
 
         let slot_number = state_transition_info.slot_number;
@@ -133,6 +138,7 @@ where
                 ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
             })?;
 
+        // Network submission (~7s) — no lock held so concurrent submissions proceed in parallel.
         let handle = self
             .inner_vm
             .add_hint_and_submit(&data)
@@ -164,10 +170,14 @@ where
             block_header_hash
         );
 
-        tracker.insert(
-            block_header_hash,
-            NetworkProverStatus::Submitted { handle, metadata },
-        );
+        // Short write lock: store the proof handle.
+        {
+            let mut tracker = self.tracker.write().await;
+            tracker.insert(
+                block_header_hash,
+                NetworkProverStatus::Submitted { handle, metadata },
+            );
+        }
 
         Ok(ProofProcessingStatus::ProvingInProgress)
     }
