@@ -96,7 +96,6 @@ where
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
         let block_header_hash = state_transition_info.da_block_header().hash();
 
-        // Short read lock: check for duplicate submission.
         {
             let tracker = self.tracker.read().await;
             if let Some(status) = tracker.get(&block_header_hash) {
@@ -138,7 +137,6 @@ where
                 ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
             })?;
 
-        // Network submission (~7s) — no lock held so concurrent submissions proceed in parallel.
         let handle = self
             .inner_vm
             .add_hint_and_submit(&data)
@@ -170,7 +168,6 @@ where
             block_header_hash
         );
 
-        // Short write lock: store the proof handle.
         {
             let mut tracker = self.tracker.write().await;
             tracker.insert(

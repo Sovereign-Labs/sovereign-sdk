@@ -97,7 +97,6 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
             return;
         }
 
-        // Collect all Waiting witnesses, marking their slots as Submitted.
         let mut submissions = Vec::new();
         for proof in self.block_proof_info.iter_mut() {
             let mut prev_status = BlockProofStatus::Submitted;
@@ -107,9 +106,6 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
             }
         }
 
-        // Submit all proofs concurrently.
-        // TODO: Add backoff on proof submission attempts
-        //  <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/446>
         let futs = submissions.into_iter().map(|mut witness| async {
             loop {
                 let status = prover_service

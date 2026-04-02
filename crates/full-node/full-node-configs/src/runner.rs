@@ -129,11 +129,8 @@ pub struct ProofManagerConfig<Address> {
     /// A number of state transition info entries are allowed to be kept in memory.
     /// If the number is exceeded, rollup execution will be blocked until provers cathes up.
     pub max_number_of_transitions_in_memory: NonZero<u64>,
-    /// When true, proofs are submitted to the proving network as each block arrives.
-    /// When false, submission is deferred until the batch is full, then all proofs
-    /// are submitted concurrently.
-    /// Use true when block_time >= proof submission time (~7s for SP1 network).
-    /// Use false when block_time < proof submission time.
+    /// When true, proofs are submitted as each block arrives.
+    /// When false, submission is deferred until the batch is full, then submitted concurrently.
     #[serde(default = "default_eager_proof_submission")]
     pub eager_proof_submission: bool,
 }
