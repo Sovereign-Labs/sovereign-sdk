@@ -9,7 +9,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { version = "1.0.95" }
-sp1-zkvm = { version = "6.0.2" }
+sp1-zkvm = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1" }

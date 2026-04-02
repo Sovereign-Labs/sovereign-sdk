@@ -10,9 +10,9 @@ bincode = { workspace = true }
 demo-stf = { path = "../../../../examples/demo-rollup/stf", default-features = false, features = ["native"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slop-algebra = "6.0.2"
+slop-algebra = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
 sp1-core-executor = { workspace = true }
-sp1-recursion-executor = "6.0.2"
+sp1-recursion-executor = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
 
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }

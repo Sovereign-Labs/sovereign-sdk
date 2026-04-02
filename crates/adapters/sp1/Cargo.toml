@@ -27,23 +27,23 @@ serde = { workspace = true, features = [
     "derive",
 ] }
 sha2 = { workspace = true }
-sp1-lib = { version = "6.0.2" }
+sp1-lib = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
 
 sov-rollup-interface = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sp1-sdk = { version = "6.0.2", default-features = false, features = ["blocking"] }
+sp1-sdk = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5", default-features = false, features = ["blocking"] }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-zkvm = { version = "6.0.2", features = ["verify"] }
+sp1-zkvm = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5", features = ["verify"] }
 
 [dev-dependencies]
 reltester = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 sov-sp1-adapter = { path = ".", features = ["arbitrary", "native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sp1-build = { version = "6.0.2" }
+sp1-build = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
 
 [build-dependencies]
 anyhow = { workspace = true }

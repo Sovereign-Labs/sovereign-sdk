@@ -2094,29 +2094,9 @@ dependencies = [
  "bitflags 2.9.4",
  "cexpr",
  "clang-sys",
- "itertools 0.12.1",
+ "itertools 0.11.0",
  "lazy_static",
  "lazycell",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash 1.1.0",
- "shlex",
- "syn 2.0.106",
-]
-
-[[package]]
-name = "bindgen"
-version = "0.70.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f49d8fed880d473ea71efb9bf597651e77201bdd4893efe54c9e5d65ae04ce6f"
-dependencies = [
- "bitflags 2.9.4",
- "cexpr",
- "clang-sys",
- "itertools 0.13.0",
- "log",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -3106,6 +3086,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "crash-context"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "031ed29858d90cfdf27fe49fae28028a1f20466db97962fa2f4ea34809aeebf3"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "mach2",
+]
+
+[[package]]
+name = "crash-handler"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0df5c9639f4942eb7702b964b3f9adf03a55724a57558cc177407388a8b936e2"
+dependencies = [
+ "cfg-if",
+ "crash-context",
+ "libc",
+ "mach2",
+ "parking_lot",
 ]
 
 [[package]]
@@ -6248,9 +6252,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.175"
+version = "0.2.184"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a82ae493e598baaea5209805c49bbf2ea7de956d50d7da0da1164f9c6d28543"
+checksum = "48f5d2a454e16a5ea0f4ced81bd44e4cfc7bd3a507b61887c99fd3538b28e4af"
 
 [[package]]
 name = "libfuzzer-sys"
@@ -6295,7 +6299,7 @@ version = "0.16.0+8.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce3d60bc059831dc1c83903fb45c103f75db65c5a7bf22272764d9cc683e348c"
 dependencies = [
- "bindgen 0.69.5",
+ "bindgen",
  "bzip2-sys",
  "cc",
  "glob",
@@ -6468,6 +6472,15 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "mach2"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -8348,7 +8361,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be769465445e8c1474e9c5dac2018218498557af32d9ed057325ec9a41ae81bf"
 dependencies = [
  "heck 0.5.0",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "log",
  "multimap",
  "once_cell",
@@ -8368,7 +8381,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -8381,7 +8394,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -10933,8 +10946,7 @@ checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
 [[package]]
 name = "slop-air"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "242539aba9e5424923d7bd629775570c7d10ec28584e96ea599575a51bedcde8"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-air",
 ]
@@ -10942,8 +10954,7 @@ dependencies = [
 [[package]]
 name = "slop-algebra"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "691beea96fd18d4881f9ca1cb4e58194dac6366f24956a2fdae00c8ee382a0c9"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -10953,8 +10964,7 @@ dependencies = [
 [[package]]
 name = "slop-alloc"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f58b7800cba9b31377f9353174d13fd8e39608b6f1d1531f0e92b8ce4af49ae0"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "serde",
  "slop-algebra",
@@ -10964,8 +10974,7 @@ dependencies = [
 [[package]]
 name = "slop-baby-bear"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "949e3c822532a87b4ad04f7280283c256621b0a83aee1b40cbd721df29df641d"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "lazy_static",
  "p3-baby-bear",
@@ -10979,8 +10988,7 @@ dependencies = [
 [[package]]
 name = "slop-basefold"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58984f92091a668a006b6895487079d99209e599b02d636f061fe4ae26977fb5"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "itertools 0.14.0",
@@ -11002,8 +11010,7 @@ dependencies = [
 [[package]]
 name = "slop-basefold-prover"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b86eb8581b52f97860242fe5e8d6b49d2a37e1b38d4a647adf24acaa2965ee7d"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "itertools 0.14.0",
@@ -11029,8 +11036,7 @@ dependencies = [
 [[package]]
 name = "slop-bn254"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc1852499c245f7f3dec23408b4930b3ea7570ae914b9c31f12950ac539d85ee"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "ff 0.13.1",
  "p3-bn254-fr",
@@ -11045,8 +11051,7 @@ dependencies = [
 [[package]]
 name = "slop-challenger"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4349af93602f3876a3eda948a74d9d16d774c401dfe25f41a45ffd84f230bc1"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "futures",
  "p3-challenger",
@@ -11058,8 +11063,7 @@ dependencies = [
 [[package]]
 name = "slop-commit"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "584339690d20fb6b34b0dc957cbd267221ba2ab7b0c1292c118378f3498979c4"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-commit",
  "serde",
@@ -11069,8 +11073,7 @@ dependencies = [
 [[package]]
 name = "slop-dft"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "148281e1611ca570d016a733aac2f3ec9867241cc800a96d15bc6ecfd010daf7"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-dft",
  "serde",
@@ -11083,8 +11086,7 @@ dependencies = [
 [[package]]
 name = "slop-fri"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0857a346ea28496ee56b1dcad192db8c7ff0455a18bfd67ce6513323b594b746"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-fri",
 ]
@@ -11092,8 +11094,7 @@ dependencies = [
 [[package]]
 name = "slop-futures"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bbfea5447d243572da7aae8d5e57856229a97fb8bc6a42439d4c5f4de951ee0"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "crossbeam",
  "futures",
@@ -11107,8 +11108,7 @@ dependencies = [
 [[package]]
 name = "slop-jagged"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc420430b93d38e9aae903bc4bc11c342f8d49d015cca26eeb36a6ea3f7a0f1f"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "futures",
@@ -11141,8 +11141,7 @@ dependencies = [
 [[package]]
 name = "slop-keccak-air"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "288abf40d9901f79e221ece87f11324826289bf5d694fde07dd785bdb4afda38"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-keccak-air",
 ]
@@ -11150,8 +11149,7 @@ dependencies = [
 [[package]]
 name = "slop-koala-bear"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "574784c044d11cf9d8238dc18bce9b897bc34d0fb1daaceafd75ebb400084016"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "lazy_static",
  "p3-koala-bear",
@@ -11165,8 +11163,7 @@ dependencies = [
 [[package]]
 name = "slop-matrix"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd1117c395388bd172826115ac4f9a7e09bf9c937ceafa82194132a058e27c0d"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-matrix",
 ]
@@ -11174,8 +11171,7 @@ dependencies = [
 [[package]]
 name = "slop-maybe-rayon"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81316cfe721c3f47cd0af63002a8b6557c951ff9588fa7db0f4f3b99af091486"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-maybe-rayon",
 ]
@@ -11183,8 +11179,7 @@ dependencies = [
 [[package]]
 name = "slop-merkle-tree"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e700652778c15320f6269362103b87a3787a7c9d70fb05d9742dbce66c46f764"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "ff 0.13.1",
@@ -11203,6 +11198,7 @@ dependencies = [
  "slop-poseidon2",
  "slop-symmetric",
  "slop-tensor",
+ "slop-utils",
  "thiserror 1.0.69",
  "zkhash",
 ]
@@ -11210,8 +11206,7 @@ dependencies = [
 [[package]]
 name = "slop-multilinear"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6151db452ace0d960314f46c61a2b8d45e1fa4dfd5830447c67fc1e1e1e823b5"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "futures",
@@ -11231,8 +11226,7 @@ dependencies = [
 [[package]]
 name = "slop-poseidon2"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5af617970b63e8d7199204bc02996745b6c35c39f2b513a118c62c7b1a0b2f1b"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-poseidon2",
 ]
@@ -11240,8 +11234,7 @@ dependencies = [
 [[package]]
 name = "slop-primitives"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "58d82c53508f3ebff8acdabb5db2584f37686257a2549a17c977cf30cd9e24e6"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "slop-algebra",
 ]
@@ -11249,8 +11242,7 @@ dependencies = [
 [[package]]
 name = "slop-stacked"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a25c9fb9c908a2d10037934e2c299d30f98a2146f6ded87a7b529b05ddbfda27"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "futures",
@@ -11272,8 +11264,7 @@ dependencies = [
 [[package]]
 name = "slop-sumcheck"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05c691f34c05e933777059a10804e00f77834b927abc2701f5f394e9c2b49c1c"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "futures",
  "itertools 0.14.0",
@@ -11290,8 +11281,7 @@ dependencies = [
 [[package]]
 name = "slop-symmetric"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15acfa7f567ffa4f36de134492632a397c33fa6af2e48894e50978b52eeeb871"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-symmetric",
 ]
@@ -11299,8 +11289,7 @@ dependencies = [
 [[package]]
 name = "slop-tensor"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1796e5ff7dcdcd2c15f423a27550a4688e25009bd5ca648d9593d66f243950d6"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "arrayvec",
  "derive-where",
@@ -11319,8 +11308,7 @@ dependencies = [
 [[package]]
 name = "slop-uni-stark"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "504f32330985e48a6aa9c9e0985641a4dc084d3843ff59075591b24b818f2a67"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-uni-stark",
 ]
@@ -11328,8 +11316,7 @@ dependencies = [
 [[package]]
 name = "slop-utils"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba510663661800990c1207ddbf3a1e67a551f05d882a60197adbb19c6824754f"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "p3-util",
  "tracing-forest",
@@ -11339,8 +11326,7 @@ dependencies = [
 [[package]]
 name = "slop-whir"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c71f6a16450fc701450831121810da91c6ee3ac50e4705327dcd4957b046015a"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "derive-where",
  "futures",
@@ -13403,8 +13389,7 @@ dependencies = [
 [[package]]
 name = "sp1-build"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38fe5854ea3054c20b34fe85b08437583174e8cd71e612fcfef67ea841daea14"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "anyhow",
  "cargo_metadata 0.18.1",
@@ -13417,8 +13402,7 @@ dependencies = [
 [[package]]
 name = "sp1-core-executor"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cc9268de48a534ccb82287a517c0a07ee594136bc9fce6c7eb438c69e7917be"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "bincode",
  "bytemuck",
@@ -13458,10 +13442,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "sp1-core-executor-runner"
+version = "6.0.2"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
+dependencies = [
+ "base64 0.22.1",
+ "bincode",
+ "cargo_metadata 0.18.1",
+ "hashbrown 0.14.5",
+ "hex",
+ "libc",
+ "sha2 0.10.9",
+ "sp1-core-executor",
+ "sp1-core-executor-runner-binary",
+ "sp1-jit",
+ "sp1-primitives",
+ "sysinfo",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "sp1-core-executor-runner-binary"
+version = "6.0.2"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
+dependencies = [
+ "bincode",
+ "crash-handler",
+ "libc",
+ "serde",
+ "sp1-core-executor",
+ "sp1-jit",
+ "tracing-subscriber 0.3.20",
+]
+
+[[package]]
 name = "sp1-core-machine"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d436300d3052341854e58c88a9b5444a6f45689ee8933f9bec047ac367693182"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "bincode",
  "cfg-if",
@@ -13487,6 +13505,7 @@ dependencies = [
  "slop-uni-stark",
  "snowbridge-amcl",
  "sp1-core-executor",
+ "sp1-core-executor-runner",
  "sp1-curves",
  "sp1-derive",
  "sp1-hypercube",
@@ -13505,31 +13524,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "sp1-cuda"
-version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a03bb846daaabe6e94af5e5199aa110b42c68482d6380b7e765d9d6b65119d52"
-dependencies = [
- "bincode",
- "bytes",
- "reqwest",
- "serde",
- "serde_json",
- "sp1-core-executor",
- "sp1-core-machine",
- "sp1-primitives",
- "sp1-prover",
- "sp1-prover-types",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "sp1-curves"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e3ad4fc0f5ea7286fbe5c788d97125dc0cb40eb81f15becb432a65f350cd2f9"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "cfg-if",
  "dashu",
@@ -13549,8 +13546,7 @@ dependencies = [
 [[package]]
 name = "sp1-derive"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f111a90749619066fbd7ba102b22375bc6c824abb66804c3184ba0f650d017a2"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -13560,8 +13556,7 @@ dependencies = [
 [[package]]
 name = "sp1-hypercube"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "caff340db83b2c38b01f022624b8b792c38f201417581d6855dbe9a445d2485f"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "arrayref",
  "deepsize2",
@@ -13598,6 +13593,7 @@ dependencies = [
  "slop-whir",
  "sp1-derive",
  "sp1-primitives",
+ "static_assertions",
  "strum 0.27.2",
  "thiserror 1.0.69",
  "thousands",
@@ -13608,11 +13604,11 @@ dependencies = [
 [[package]]
 name = "sp1-jit"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bcadaa9206d36ae953c1b4390373879281ef1423115aa180e7ef0e82259d92aa"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "dynasmrt",
  "hashbrown 0.14.5",
+ "libc",
  "memfd",
  "memmap2",
  "serde",
@@ -13623,8 +13619,7 @@ dependencies = [
 [[package]]
 name = "sp1-lib"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "517e820776910468611149dda66791bdb700c1b7d68b96f0ea2e604f00ad8771"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "bincode",
  "elliptic-curve",
@@ -13635,8 +13630,7 @@ dependencies = [
 [[package]]
 name = "sp1-primitives"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f395525b4fc46d37136f45be264c81718a67f4409c14c547ff491a263e019e7"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "bincode",
  "blake3",
@@ -13659,14 +13653,12 @@ dependencies = [
 [[package]]
 name = "sp1-prover"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c64545387a6b5ee58155d75183223a8f19961e23d76a13a49c16514896e52ff7"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "anyhow",
  "bincode",
  "clap",
  "dirs",
- "downloader",
  "either",
  "enum-map",
  "eyre",
@@ -13697,6 +13689,7 @@ dependencies = [
  "slop-stacked",
  "slop-symmetric",
  "sp1-core-executor",
+ "sp1-core-executor-runner",
  "sp1-core-machine",
  "sp1-derive",
  "sp1-hypercube",
@@ -13723,8 +13716,7 @@ dependencies = [
 [[package]]
 name = "sp1-prover-types"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "834512266314b8dd35fd52b921d62abb113c3c35b27358acdbc178b3a17ec72e"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "anyhow",
  "async-scoped",
@@ -13744,8 +13736,7 @@ dependencies = [
 [[package]]
 name = "sp1-recursion-circuit"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "105531a782d66030eab608832e0829e4699053a6d41cd3c2c7931def9c9540fb"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "bincode",
  "itertools 0.14.0",
@@ -13784,8 +13775,7 @@ dependencies = [
 [[package]]
 name = "sp1-recursion-compiler"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34ab98d241444285539b0d4203288fbe9887707c355e346cfb176b461524c58d"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "backtrace",
  "cfg-if",
@@ -13805,8 +13795,7 @@ dependencies = [
 [[package]]
 name = "sp1-recursion-executor"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc69767dce218874edbef09515ccc5fb32d5e6b857a95a99944a66f6f405f5b1"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "backtrace",
  "cfg-if",
@@ -13829,12 +13818,10 @@ dependencies = [
 [[package]]
 name = "sp1-recursion-gnark-ffi"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f526cb636baa1ad67f1410884e7a5580b7068beee3ee88609fb39f906bab27b3"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "anyhow",
  "bincode",
- "bindgen 0.70.1",
  "cfg-if",
  "hex",
  "num-bigint 0.4.6",
@@ -13854,8 +13841,7 @@ dependencies = [
 [[package]]
 name = "sp1-recursion-machine"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "228ec6719240b0933289332d730be328d3a3e4f9e6ff9ee2e20ec2b4a99aeed9"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "itertools 0.14.0",
  "rand 0.8.5",
@@ -13877,8 +13863,7 @@ dependencies = [
 [[package]]
 name = "sp1-sdk"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d8dae789acfa3b4e8211234d05901c28cd1b988f230c9db0c29207fa131071a"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "alloy-primitives",
  "alloy-signer",
@@ -13905,26 +13890,15 @@ dependencies = [
  "rustls 0.23.31",
  "serde",
  "sha2 0.10.9",
- "slop-algebra",
- "slop-alloc",
- "slop-basefold",
- "slop-commit",
- "slop-jagged",
- "slop-merkle-tree",
- "slop-multilinear",
- "slop-stacked",
- "slop-sumcheck",
- "slop-tensor",
  "sp1-build",
  "sp1-core-executor",
+ "sp1-core-executor-runner",
  "sp1-core-machine",
- "sp1-cuda",
  "sp1-hypercube",
  "sp1-primitives",
  "sp1-prover",
  "sp1-prover-types",
  "sp1-recursion-executor",
- "sp1-recursion-gnark-ffi",
  "sp1-verifier",
  "strum 0.27.2",
  "tempfile",
@@ -13939,8 +13913,7 @@ dependencies = [
 [[package]]
 name = "sp1-verifier"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f11dd15bf0dc2325ced1f3bb58bfed84efc5228a09127ab6787ee5103514f09e"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "bincode",
  "blake3",
@@ -13956,7 +13929,6 @@ dependencies = [
  "slop-symmetric",
  "sp1-hypercube",
  "sp1-primitives",
- "sp1-recursion-executor",
  "sp1-recursion-machine",
  "strum 0.27.2",
  "substrate-bn-succinct-rs",
@@ -13966,8 +13938,7 @@ dependencies = [
 [[package]]
 name = "sp1-zkvm"
 version = "6.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45aa8c53b0332dcce1f588185df97e8ed9e7a6b37b0c6584f29674017628831f"
+source = "git+https://github.com/citizen-stig/sp1?rev=5b6143d9038b440ae295708207f008044d97c6e5#5b6143d9038b440ae295708207f008044d97c6e5"
 dependencies = [
  "cfg-if",
  "critical-section",

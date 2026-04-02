@@ -31,7 +31,7 @@ risc0-zkvm = { workspace = true, default-features = false, features = [
     "std",
 ], optional = true }
 risc0-zkvm-platform = { workspace = true, features = ["export-syscalls"], optional = true }
-sp1-lib = { version = "6.0.2", default-features = false, optional = true }
+sp1-lib = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5", default-features = false, optional = true }
 
 chrono = { workspace = true, optional = true }
 
