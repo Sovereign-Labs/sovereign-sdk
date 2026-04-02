@@ -14,7 +14,6 @@ use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockDaService,
     MockDaSpec, MockHash, PlannedFork, RandomizationBehaviour, RandomizationConfig,
 };
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{DaSpec, RelevantBlobIters};
@@ -24,7 +23,6 @@ use sov_rollup_interface::stf::GenesisParams;
 use sov_rollup_interface::stf::{
     ApplySlotOutput, BatchReceipt, ExecutionContext, StateTransitionFunction,
 };
-use sov_rollup_interface::zk::Zkvm;
 use sov_state::{
     ArrayWitness, NativeStorage, ProverStorage, SlotKey, SlotValue, StateAccesses, Storage,
 };
@@ -64,9 +62,7 @@ impl GenesisParams for MockGenesisParams {
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct MockStf;
 
-impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
-    for MockStf
-{
+impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
     type StateRoot = <ProverStorage<S> as Storage>::Root;
     type Address = Vec<u8>;
     type GenesisParams = MockGenesisParams;
@@ -96,8 +92,8 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         _slot_header: &Da::BlockHeader,
         _relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         _execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self> {
-        ApplySlotOutput::<InnerVm, OuterVm, Da, Self> {
+    ) -> ApplySlotOutput<Da, Self> {
+        ApplySlotOutput::<Da, Self> {
             state_root: <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
             change_set: (),
             proof_receipts: vec![],
@@ -114,15 +110,12 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
     }
 }
 
-type Vm = MockZkvm;
 type S = sov_state::DefaultStorageSpec<sha2::Sha256>;
 type Stf = MockStf;
-type StateRoot = <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::StateRoot;
-type TestBatchReceiptContents =
-    <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::BatchReceiptContents;
-type TestTxReceiptContents =
-    <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::TxReceiptContents;
-type Witness = <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::Witness;
+type StateRoot = <Stf as StateTransitionFunction<MockDaSpec>>::StateRoot;
+type TestBatchReceiptContents = <Stf as StateTransitionFunction<MockDaSpec>>::BatchReceiptContents;
+type TestTxReceiptContents = <Stf as StateTransitionFunction<MockDaSpec>>::TxReceiptContents;
+type Witness = <Stf as StateTransitionFunction<MockDaSpec>>::Witness;
 type MockSlotCommit = SlotCommit<MockBlock, Witness, TestTxReceiptContents>;
 type TestStateManager<Da> = StateManager<
     StateRoot,

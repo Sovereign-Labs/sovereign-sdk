@@ -23,7 +23,7 @@ use sov_rollup_interface::stf::{
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{StateTransitionWitness, Zkvm};
+use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
@@ -33,20 +33,17 @@ use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::{BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
-type GenesisParams<ST, InnerVm, OuterVm, Da> =
-    <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
+type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 type NextDaHeightToProcess = u64;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 #[allow(clippy::type_complexity)]
-pub struct StateTransitionRunner<Stf, Sm, Da, InnerVm, OuterVm>
+pub struct StateTransitionRunner<Stf, Sm, Da>
 where
     Da: DaService,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
     Sm: HierarchicalStorageManager<Da::Spec>,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
+    Stf: StateTransitionFunction<Da::Spec>,
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
@@ -69,16 +66,14 @@ where
 /// Initializes rollup genesis.
 /// Gets proper DA block and finalizes storage.
 /// Returns root hashes.
-pub async fn initialize_state<Stf, InnerVm, OuterVm, Da, Sm>(
+pub async fn initialize_state<Stf, Da, Sm>(
     stf: &Stf,
     storage_manager: &mut Sm,
     genesis_block: Da::FilteredBlock,
-    genesis_params: GenesisParams<Stf, InnerVm, OuterVm, Da::Spec>,
+    genesis_params: GenesisParams<Stf, Da::Spec>,
 ) -> anyhow::Result<Stf::StateRoot>
 where
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
+    Stf: StateTransitionFunction<Da::Spec>,
     Da: DaService,
     Sm: HierarchicalStorageManager<
         Da::Spec,
@@ -114,24 +109,16 @@ where
     Ok(genesis_state_root)
 }
 
-impl<Stf, Sm, Da, InnerVm, OuterVm> StateTransitionRunner<Stf, Sm, Da, InnerVm, OuterVm>
+impl<Stf, Sm, Da> StateTransitionRunner<Stf, Sm, Da>
 where
     Da: DaService<Error = anyhow::Error>,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
     Sm: HierarchicalStorageManager<
         Da::Spec,
         LedgerChangeSet = SchemaBatch,
         LedgerState = DeltaReader,
     >,
     Sm::StfState: Clone,
-    Stf: StateTransitionFunction<
-        InnerVm,
-        OuterVm,
-        Da::Spec,
-        PreState = Sm::StfState,
-        ChangeSet = Sm::StfChangeSet,
-    >,
+    Stf: StateTransitionFunction<Da::Spec, PreState = Sm::StfState, ChangeSet = Sm::StfChangeSet>,
 {
     /// Creates a new [`StateTransitionRunner`].
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]

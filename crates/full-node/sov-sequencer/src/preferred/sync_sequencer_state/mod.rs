@@ -109,7 +109,7 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         data: SerializedProofWithDetailsBytes,
         reason: &'static str,
     },
-    TriggerBatchProductionIfConvenient {
+    TriggerBatchProduction {
         reason: &'static str,
     },
     SimpleStateUpdate {

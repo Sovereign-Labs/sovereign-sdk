@@ -24,7 +24,7 @@ pub fn main() {
         Runtime<_>,
     > = StfBlueprint::new();
 
-    let stf_verifier = StfVerifier::<_, _, _, _, _>::new(stf, MockDaVerifier {});
+    let stf_verifier = StfVerifier::new(stf, MockDaVerifier {});
 
     stf_verifier
         .run_block(guest, storage)

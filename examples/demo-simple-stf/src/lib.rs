@@ -7,7 +7,6 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::stf::GenesisParams as GenesisParamsTrait;
 use sov_rollup_interface::stf::{ApplySlotOutput, BatchReceipt, StateTransitionFunction};
-use sov_rollup_interface::zk::Zkvm;
 
 /// An implementation of the [`StateTransitionFunction`]
 /// that is specifically designed to check if someone knows a preimage of a specific hash.
@@ -49,9 +48,7 @@ impl GenesisParamsTrait for GenesisParams {
     }
 }
 
-impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
-    for CheckHashPreimageStf
-{
+impl<Da: DaSpec> StateTransitionFunction<Da> for CheckHashPreimageStf {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
     type StateRoot = Root;
 
@@ -96,7 +93,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         _slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [Da::BlobTransaction]>,
         _execution_context: sov_rollup_interface::stf::ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self> {
+    ) -> ApplySlotOutput<Da, Self> {
         let mut receipts = vec![];
         for blob in relevant_blobs.batch_blobs {
             let data = blob.verified_data();
@@ -123,7 +120,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             });
         }
 
-        ApplySlotOutput::<InnerVm, OuterVm, Da, Self> {
+        ApplySlotOutput::<Da, Self> {
             state_root: Root([]),
             change_set: (),
             proof_receipts: vec![],

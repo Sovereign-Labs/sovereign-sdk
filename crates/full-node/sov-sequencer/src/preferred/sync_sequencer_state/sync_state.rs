@@ -327,9 +327,8 @@ where
                 data,
                 reason,
             } => self.process_proof_blob(blob_id, data, reason).await,
-            Message::TriggerBatchProductionIfConvenient { reason } => {
-                self.process_trigger_batch_production_if_convenient(reason)
-                    .await;
+            Message::TriggerBatchProduction { reason } => {
+                self.process_trigger_batch_production(reason).await;
             }
             Message::SimpleStateUpdate { info } => {
                 let slot_number = info.slot_number;
@@ -864,14 +863,13 @@ where
             .await;
     }
 
-    async fn process_trigger_batch_production_if_convenient(&mut self, reason: &'static str) {
+    async fn process_trigger_batch_production(&mut self, reason: &'static str) {
         // We don't run force_overwrite_state() here.
         // This is mostly fine, mainly the API state will be out of date until we've
         // finished sending our batches.
         // Adding parallel state update handling is not worth the complexity right now.
-
         let mut inner = self.get_inner_with_timing(reason).await;
-        inner.trigger_batch_production_if_convenient().await;
+        inner.trigger_batch_production().await;
     }
 
     async fn process_accept_tx(

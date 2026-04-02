@@ -191,12 +191,7 @@ impl<RT: Runtime<S>, S: Spec, Sm: ForklessStorageManager> Drop for TestRunner<RT
 }
 
 /// The output of the apply slot function that uses the test spec and da spec.
-pub type TestApplySlotOutput<RT, S> = ApplySlotOutput<
-    <S as Spec>::InnerZkvm,
-    <S as Spec>::OuterZkvm,
-    <S as Spec>::Da,
-    TestStfBlueprint<RT, S>,
->;
+pub type TestApplySlotOutput<RT, S> = ApplySlotOutput<<S as Spec>::Da, TestStfBlueprint<RT, S>>;
 
 /// The output of the runner
 pub struct RunnerOutput<S: Spec> {

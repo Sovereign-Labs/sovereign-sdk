@@ -295,9 +295,9 @@ impl BlobsCache {
     /// Fetch all proofs that need to be played at the start of the batch with the given sequence number.
     pub fn proofs_for_replay(
         &self,
-        batch_sequence_number: SequenceNumber,
+        target_batch_sequence_number: SequenceNumber,
     ) -> Vec<PreferredProofToReplay> {
-        self.sanity_check_batch_sequence_number_is_in_range(batch_sequence_number);
+        self.sanity_check_batch_sequence_number_is_in_range(target_batch_sequence_number);
 
         let mut output = Vec::new();
         // Given the sequence number of a batch, we want to return all proofs with sequence numbers between the previous batch and the requested batch.
@@ -306,11 +306,11 @@ impl BlobsCache {
                 ReadBlob::Batch(batch) => {
                     // Since we're looking for all proofs in between two batches, we either need to return (if the batch has the sequence number we're looking for)
                     // or we need to reset our output (since the proofs we've already seen would have been handled during processing of the batch we just hit).
-                    if batch.sequence_number == batch_sequence_number {
+                    if batch.sequence_number == target_batch_sequence_number {
                         break;
                     }
                     output.retain(|p: &PreferredProofToReplay| {
-                        p.sequence_number > batch_sequence_number
+                        p.sequence_number > batch.sequence_number
                     });
                 }
                 ReadBlob::Proof {
@@ -320,10 +320,10 @@ impl BlobsCache {
                 } => {
                     // We might have some proofs in cache that come *after* the in-progress batch
                     // If we've passed the requested batch number, we're done.
-                    if *sequence_number > batch_sequence_number {
+                    if *sequence_number > target_batch_sequence_number {
                         break;
                     }
-                    assert_ne!(*sequence_number, batch_sequence_number, "A proof sequence number {sequence_number} was provided to proof_for_replay, which must have a batch sequence number. This is a bug, please report it.");
+                    assert_ne!(*sequence_number, target_batch_sequence_number, "A proof sequence number {sequence_number} was provided to proof_for_replay, which must have a batch sequence number. This is a bug, please report it.");
                     // It it's a proof, just push it to our current output.
                     output.push(PreferredProofToReplay {
                         sequence_number: *sequence_number,
@@ -335,7 +335,7 @@ impl BlobsCache {
         assert!(
             output
                 .last()
-                .map(|p| p.sequence_number == batch_sequence_number.saturating_sub(1))
+                .map(|p| p.sequence_number == target_batch_sequence_number.saturating_sub(1))
                 .unwrap_or(true),
             "The last proof in the list should be the one before the sequence number"
         );
