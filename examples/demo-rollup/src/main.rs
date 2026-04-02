@@ -39,10 +39,6 @@ struct Args {
     #[arg(long, default_value = "../test-data/genesis/demo/mock")]
     genesis_config_dir: PathBuf,
 
-    /// Listen address for Prometheus exporter.
-    #[arg(long, default_value = "127.0.0.1:9845")]
-    prometheus_exporter_bind: String,
-
     /// Stops the rollup at a given height.
     #[arg(long, default_value = None)]
     stop_at_rollup_height: Option<u64>,
@@ -77,8 +73,6 @@ async fn main() {
 
 async fn run() -> anyhow::Result<()> {
     let args = Args::parse();
-    prometheus_exporter::start(args.prometheus_exporter_bind.parse()?)
-        .context("Prometheus exporter start failed")?;
 
     rustls::crypto::ring::default_provider()
         .install_default()
