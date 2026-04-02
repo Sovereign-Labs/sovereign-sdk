@@ -167,9 +167,8 @@ impl StorableMockDaLayer {
         // Acquire a single DB connection via transaction upfront. This avoids
         // repeated pool checkout/checkin per query and guarantees the connection
         // is available for all operations within this block production.
-        let txn = self
-            .conn
-            .begin()
+        let conn = &self.conn;
+        let txn = retry_db(|| async { Ok(conn.begin().await?) })
             .await
             .context("begin transaction for produce_block")?;
 
