@@ -1,0 +1,48 @@
+# P1 — Wallet connect, fees, and contract inspection
+# Aligned with docs/rpc_priority_sorted.md P1 tier.
+# Each line is a regex fragment; the runner joins them with | and wraps in ^(...)$
+#
+# P1 is additive: run with --profile p1 to gate on these tests
+# in addition to the P0 scope.
+
+# eth_chainId (priority P1 #1)
+eth_chainId/get-chain-id
+
+# net_version (priority P1 #2)
+net_version/get-network-id
+
+# eth_feeHistory (priority P1 #5)
+eth_feeHistory/fee-history
+
+# eth_getCode (priority P1 #6)
+eth_getCode/get-code
+eth_getCode/get-code-unknown-account
+# Excluding eip7702 — not supported
+# eth_getCode/get-code-eip7702-delegation
+
+# eth_getStorageAt (priority P1 #7)
+eth_getStorageAt/get-storage
+eth_getStorageAt/get-storage-unknown-account
+eth_getStorageAt/get-storage-invalid-key
+eth_getStorageAt/get-storage-invalid-key-too-large
+
+# eth_getBlockReceipts (priority P1 #8)
+eth_getBlockReceipts/.*
+
+# eth_getBlockTransactionCountByNumber (priority P1 #9)
+eth_getBlockTransactionCountByNumber/.*
+
+# eth_getBlockTransactionCountByHash (priority P1 #10)
+eth_getBlockTransactionCountByHash/.*
+
+# eth_createAccessList (not explicitly tiered, but useful)
+eth_createAccessList/create-al-value-transfer
+eth_createAccessList/create-al-contract
+eth_createAccessList/create-al-contract-eip1559
+eth_createAccessList/create-al-abi-revert
+
+# eth_getTransactionByBlockHashAndIndex
+eth_getTransactionByBlockHashAndIndex/get-block-n
+
+# eth_getTransactionByBlockNumberAndIndex
+eth_getTransactionByBlockNumberAndIndex/get-block-n

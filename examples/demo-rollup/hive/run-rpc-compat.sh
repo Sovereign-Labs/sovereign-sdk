@@ -15,7 +15,7 @@ and prints a compact summary.
 Options:
   --build-image            Build sov-demo-rollup-hive image before running Hive
   --tag <suffix>           Result directory suffix (default: run)
-  --profile <name>         Built-in profile: full|p0|p0-nonhistorical (default: full)
+  --profile <name>         Built-in profile: full|p0|p0-nonhistorical|p1 (default: full)
   --sim <name>             Hive simulator (default: ethereum/rpc-compat)
   --client <name>          Hive client (default: sov-demo-rollup)
   --limit <regex>          Optional Hive --sim.limit regex (overrides --profile)
@@ -35,7 +35,9 @@ EOF
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SDK_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-P0_SCOPE_FILE="${SCRIPT_DIR}/p0-nonhistorical-tests.regex"
+P0_SCOPE_FILE="${SCRIPT_DIR}/p0-tests.regex"
+P0_NH_SCOPE_FILE="${SCRIPT_DIR}/p0-nonhistorical-tests.regex"
+P1_SCOPE_FILE="${SCRIPT_DIR}/p1-tests.regex"
 
 BUILD_IMAGE=0
 RUN_TAG="run"
@@ -113,35 +115,52 @@ while (($# > 0)); do
   esac
 done
 
+load_scope_file() {
+  local file="$1"
+  if [[ ! -f "${file}" ]]; then
+    log "Missing scope file: ${file}"
+    exit 1
+  fi
+  local terms
+  terms="$(
+    awk '
+      /^[[:space:]]*(#|$)/ { next }
+      { out = (out == "" ? $0 : out "|" $0) }
+      END { print out }
+    ' "${file}"
+  )"
+  if [[ -z "${terms}" ]]; then
+    log "Scope file is empty: ${file}"
+    exit 1
+  fi
+  PROFILE_SCOPE_REGEX="^(${terms})$"
+}
+
 if [[ -z "${SIM_LIMIT}" ]]; then
   case "${PROFILE}" in
     full)
       ;;
-    p0|p0-nonhistorical)
-      # P0 non-historical smoke surface: basic network/transaction correctness,
-      # intentionally excluding fixture-history dependent reads.
-      # rpc-compat's simulator-level filtering is too coarse for method subsets,
-      # so this profile runs the full suite and evaluates pass/fail only for the
-      # scoped P0 test names listed in ${P0_SCOPE_FILE}.
-      if [[ ! -f "${P0_SCOPE_FILE}" ]]; then
-        log "Missing P0 scope file: ${P0_SCOPE_FILE}"
-        exit 1
-      fi
-      P0_SCOPE_TERMS="$(
-        awk '
-          /^[[:space:]]*(#|$)/ { next }
-          { out = (out == "" ? $0 : out "|" $0) }
-          END { print out }
-        ' "${P0_SCOPE_FILE}"
-      )"
-      if [[ -z "${P0_SCOPE_TERMS}" ]]; then
-        log "P0 scope file is empty: ${P0_SCOPE_FILE}"
-        exit 1
-      fi
-      PROFILE_SCOPE_REGEX="^(${P0_SCOPE_TERMS})$"
+    p0)
+      load_scope_file "${P0_SCOPE_FILE}"
+      ;;
+    p0-nonhistorical)
+      load_scope_file "${P0_NH_SCOPE_FILE}"
+      ;;
+    p1)
+      # P1 is additive: combine P0 + P1 scope files.
+      load_scope_file "${P0_SCOPE_FILE}"
+      P0_TERMS="${PROFILE_SCOPE_REGEX}"
+      load_scope_file "${P1_SCOPE_FILE}"
+      P1_TERMS="${PROFILE_SCOPE_REGEX}"
+      # Strip anchors and merge
+      P0_INNER="${P0_TERMS#^(}"
+      P0_INNER="${P0_INNER%)$}"
+      P1_INNER="${P1_TERMS#^(}"
+      P1_INNER="${P1_INNER%)$}"
+      PROFILE_SCOPE_REGEX="^(${P0_INNER}|${P1_INNER})$"
       ;;
     *)
-      log "Unknown profile: ${PROFILE} (expected full|p0|p0-nonhistorical)"
+      log "Unknown profile: ${PROFILE} (expected full|p0|p0-nonhistorical|p1)"
       exit 1
       ;;
   esac
