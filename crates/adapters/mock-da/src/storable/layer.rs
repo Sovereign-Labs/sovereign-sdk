@@ -12,6 +12,8 @@ use std::ops::Range;
 use std::sync::Arc;
 use tokio::sync::{broadcast, watch, Mutex};
 
+use std::future::Future;
+
 use crate::config::{GENESIS_BLOCK, GENESIS_HEADER};
 use crate::storable::entity;
 use crate::storable::entity::blobs::Entity as Blobs;
@@ -121,22 +123,13 @@ impl StorableMockDaLayer {
             anyhow::bail!("Due to database limitation cannot produce anymore blocks: {} is more than max supported height {}", self.next_height, i32::MAX);
         }
 
-        let prev_block_hash = if self.next_height > 1 {
-            let block = BlockHeaders::find()
-                .filter(block_headers::Column::Height.eq(self.next_height - 1))
-                .one(&self.conn)
-                .await?
-                .expect("Previous block is missing from the database");
-            let hash: [u8; 32] = block.hash.try_into().map_err(|e: Vec<u8>| {
-                anyhow::anyhow!(
-                    "BlockHash should be 32 bytes long in database, but it is {}",
-                    e.len()
-                )
-            })?;
-            hash
-        } else {
-            GENESIS_HEADER.hash.0
-        };
+        // Read previous block hash from in-memory watch channel instead of querying DB.
+        // `head_header_sender` always holds the latest produced header (or genesis at startup).
+        assert_eq!(
+            self.head_header_sender.borrow().height.checked_add(1),
+            Some(self.next_height as u64)
+        );
+        let prev_block_hash = self.head_header_sender.borrow().hash.0;
 
         let blobs_for_hash = Blobs::find()
             .filter(blobs::Column::BlockHeight.eq(self.next_height + self.delay_blobs_by))
