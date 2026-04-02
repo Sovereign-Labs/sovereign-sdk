@@ -1826,3 +1826,54 @@ async fn rpc2_015_paymaster_estimate_send_affordability_consistency() -> anyhow:
 
     Ok(())
 }
+
+/// RPC2-016: eth_getStorageAt must reject an invalid (non-hex) storage key with -32602.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_016_get_storage_at_rejects_invalid_key() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let http = Client::new();
+    let address = "0xaa00000000000000000000000000000000000000";
+
+    // "0xZZ" is not valid hex — the RPC layer should reject it before hitting storage.
+    let response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_getStorageAt",
+        json!([address, "0xZZ", "latest"]),
+    )
+    .await?;
+
+    let code = rpc_error_code_from_response(&response, "eth_getStorageAt");
+    assert_eq!(
+        code, -32602,
+        "eth_getStorageAt with a non-hex key should return -32602 (invalid params), got: {response}"
+    );
+
+    Ok(())
+}
+
+/// RPC2-017: eth_getStorageAt must reject a storage key longer than 32 bytes with -32602.
+#[tokio::test(flavor = "multi_thread")]
+async fn rpc2_017_get_storage_at_rejects_too_large_key() -> anyhow::Result<()> {
+    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
+    let http = Client::new();
+    let address = "0xaa00000000000000000000000000000000000000";
+
+    // 33 bytes (66 hex chars + 0x prefix) — one byte over the 32-byte limit.
+    let key_33_bytes = "0x00000000000000000000000000000000000000000000000000000000000000000";
+    let response = rpc_call(
+        &http,
+        rollup.http_addr,
+        "eth_getStorageAt",
+        json!([address, key_33_bytes, "latest"]),
+    )
+    .await?;
+
+    let code = rpc_error_code_from_response(&response, "eth_getStorageAt");
+    assert_eq!(
+        code, -32602,
+        "eth_getStorageAt with a 33-byte key should return -32602 (invalid params), got: {response}"
+    );
+
+    Ok(())
+}
