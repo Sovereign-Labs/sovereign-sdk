@@ -4643,7 +4643,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-demo-prover-guest-celestia-nomt-risc0"
+name = "sov-demo-prover-guest-celestia-risc0"
 version = "0.3.0"
 dependencies = [
  "demo-stf",

@@ -3937,7 +3937,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-demo-prover-guest-mock-nomt-risc0"
+name = "sov-demo-prover-guest-mock-risc0"
 version = "0.3.0"
 dependencies = [
  "demo-stf",

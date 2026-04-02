@@ -6665,7 +6665,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-demo-prover-guest-celestia-nomt-sp1"
+name = "sov-demo-prover-guest-celestia-sp1"
 version = "0.3.0"
 dependencies = [
  "demo-stf",
