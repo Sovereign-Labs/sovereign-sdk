@@ -225,7 +225,12 @@ impl StorableMockDaLayer {
         // Meaning that "chain head - blocks to finalization" has moved beyond genesis block.
         if next_finalized_height > 0 && next_finalized_height > self.last_finalized_height {
             self.last_finalized_height = next_finalized_height;
-            finalized_height::update_value(&self.conn, self.last_finalized_height).await?;
+            let lfh = self.last_finalized_height;
+            retry_db(|| async {
+                finalized_height::update_value(conn, lfh).await?;
+                Ok(())
+            })
+            .await?;
             let finalized_header = self.get_header_at(next_finalized_height).await?;
             tracing::trace!(
                 header = %finalized_header,
@@ -311,7 +316,13 @@ impl StorableMockDaLayer {
         );
         let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_batch_blob(self.next_height as i32, batch_data, sender);
-        blob.insert(&self.conn).await?;
+        let conn = &self.conn;
+        retry_db(|| async {
+            let blob = blob.clone();
+            blob.insert(conn).await?;
+            Ok(())
+        })
+        .await?;
         let include_at = self.next_height + self.delay_blobs_by;
         tracing::debug!(
             %hash,
@@ -339,7 +350,13 @@ impl StorableMockDaLayer {
         );
         let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_proof_blob(self.next_height as i32, proof_data, sender);
-        blob.insert(&self.conn).await?;
+        let conn = &self.conn;
+        retry_db(|| async {
+            let blob = blob.clone();
+            blob.insert(conn).await?;
+            Ok(())
+        })
+        .await?;
         tracing::trace!(
             %hash,
             %sender,
@@ -519,15 +536,24 @@ impl StorableMockDaLayer {
             );
         }
 
-        Blobs::delete_many()
-            .filter(blobs::Column::BlockHeight.gt(height))
-            .exec(&self.conn)
-            .await?;
+        let conn = &self.conn;
+        retry_db(|| async {
+            Blobs::delete_many()
+                .filter(blobs::Column::BlockHeight.gt(height))
+                .exec(conn)
+                .await?;
+            Ok(())
+        })
+        .await?;
 
-        BlockHeaders::delete_many()
-            .filter(block_headers::Column::Height.gt(height))
-            .exec(&self.conn)
-            .await?;
+        retry_db(|| async {
+            BlockHeaders::delete_many()
+                .filter(block_headers::Column::Height.gt(height))
+                .exec(conn)
+                .await?;
+            Ok(())
+        })
+        .await?;
 
         let past_next_height = self.next_height;
         self.next_height = height + 1;
