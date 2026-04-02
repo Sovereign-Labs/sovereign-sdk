@@ -25,11 +25,17 @@ fn downconvert_to_3_0(value: &mut serde_json::Value) {
                     *v = serde_json::Value::String("3.0.3".to_string());
                 }
             }
-            // Remove `type: "null"` entries from oneOf arrays
+            // Convert 3.1 `type: "null"` in oneOf to 3.0 `nullable: true`
             if let Some(serde_json::Value::Array(one_of)) = map.get_mut("oneOf") {
-                one_of.retain(|item| {
-                    !matches!(item.get("type"), Some(serde_json::Value::String(t)) if t == "null")
+                let had_null = one_of.iter().any(|item| {
+                    matches!(item.get("type"), Some(serde_json::Value::String(t)) if t == "null")
                 });
+                if had_null {
+                    one_of.retain(|item| {
+                        !matches!(item.get("type"), Some(serde_json::Value::String(t)) if t == "null")
+                    });
+                    map.insert("nullable".to_string(), serde_json::Value::Bool(true));
+                }
             }
             // Recurse
             for v in map.values_mut() {
