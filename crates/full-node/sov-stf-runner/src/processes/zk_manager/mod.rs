@@ -186,12 +186,6 @@ where
             });
         }
 
-        // Start proving the next block right away... for now.
-        self.proofs_to_create
-            .oldest_mut()
-            .prove_any_unproven_blocks(prover_service)
-            .await;
-
         let num_proofs_to_create = self.proofs_to_create.current_proof_jump();
 
         // If we've covered enough blocks for the aggregate proof, generate and submit it to DA
