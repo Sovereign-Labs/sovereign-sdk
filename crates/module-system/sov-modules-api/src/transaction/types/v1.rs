@@ -1,5 +1,7 @@
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
-use crate::transaction::{Credentials, Transaction, TransactionCallable, TxDetails};
+use crate::transaction::{
+    Credentials, Transaction, TransactionCallable, TxDetails, UnsignedTransactionV1,
+};
 use crate::{CryptoSpecExt, GasMeter, GasSpec, Multisig, Spec, TxHash};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -88,6 +90,37 @@ pub struct Version1<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     pub details: TxDetails<S>,
 }
 
+impl<Call, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
+    /// Computes the multisig credential address from the transaction's multisig parameters.
+    /// This is the single source of truth for the derivation used in both signing and verification.
+    pub fn credential_address(&self) -> S::Address {
+        let all_keys: Vec<_> = self
+            .signatures
+            .iter()
+            .map(|s| s.pub_key.clone())
+            .chain(self.unused_pub_keys.iter().cloned())
+            .collect();
+        Multisig::new(self.min_signers, all_keys)
+            .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
+            .into()
+    }
+
+    /// Extracts the unsigned V1 transaction data from this signed envelope.
+    /// The `R` type parameter is needed to match the `UnsignedTransactionV1<R, S>` type;
+    /// it is inferred from context when called from `Transaction<R, S, C>::to_unsigned_transaction()`.
+    pub fn to_unsigned_v1<R: TransactionCallable<Call = Call>>(&self) -> UnsignedTransactionV1<R, S>
+    where
+        Call: Clone,
+    {
+        UnsignedTransactionV1 {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            credential_address: self.credential_address(),
+        }
+    }
+}
+
 impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
     /// Signs the transaction with the given key but does not add the signature to the list in the transaction.
     #[cfg(feature = "native")]
@@ -102,14 +135,21 @@ impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
         self.add_signature(signature, key.pub_key())
     }
 
-    /// Serializes only the `UnsignedTransaction` part of the transaction and appens the chain_hash
+    /// Serializes the versioned unsigned transaction and appends the chain_hash, producing the
+    /// bytes to be signed. The output is identical to
+    /// `borsh(UnsignedTransaction::V1(UnsignedTransactionV1{...})) || chain_hash`.
     pub fn serialize_for_signing(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(64); // Preallocate a little capacity to avoid excessive reallocations
+        let credential_address = self.credential_address();
+        let mut out = Vec::with_capacity(128);
+        // V1 enum discriminant
+        out.push(1u8);
         BorshSerialize::serialize(&self.runtime_call, &mut out)
             .expect("Serialization to vec is infallible");
         BorshSerialize::serialize(&self.uniqueness, &mut out)
             .expect("Serialization to vec is infallible");
         BorshSerialize::serialize(&self.details, &mut out)
+            .expect("Serialization to vec is infallible");
+        BorshSerialize::serialize(&credential_address, &mut out)
             .expect("Serialization to vec is infallible");
         out.extend_from_slice(chain_hash);
         out

@@ -21,7 +21,7 @@ pub use types::{
     v0::Version0,
     v1::{PubKeyAndSignature, Version1},
 };
-pub use unsigned::UnsignedTransaction;
+pub use unsigned::{UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1};
 
 use crate::capabilities::UniquenessData;
 use crate::{
@@ -98,14 +98,18 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         <S::CryptoSpec as CryptoSpec>::Hasher::digest(&data).into()
     }
 
-    /// Creates a new signed transaction using the provided private key.
+    /// Creates a new signed V0 transaction using the provided private key.
     pub fn new_signed_tx(
         priv_key: &C::PrivateKey,
         chain_hash: &[u8; 32],
-        unsigned_tx: UnsignedTransaction<R, S>,
+        unsigned_tx: UnsignedTransactionV0<R, S>,
     ) -> Self {
-        let mut utx_bytes: Vec<u8> = Vec::new();
-        BorshSerialize::serialize(&unsigned_tx, &mut utx_bytes).unwrap();
+        let versioned = UnsignedTransaction::<R, S>::V0(UnsignedTransactionV0 {
+            runtime_call: unsigned_tx.runtime_call.clone(),
+            uniqueness: unsigned_tx.uniqueness,
+            details: unsigned_tx.details.clone(),
+        });
+        let mut utx_bytes = borsh::to_vec(&versioned).unwrap();
         utx_bytes.extend_from_slice(chain_hash);
 
         let pub_key = priv_key.pub_key();
@@ -301,19 +305,19 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         Ok(())
     }
 
-    /// Converts the transaction to an unsigned transaction.
+    /// Converts the transaction to a versioned unsigned transaction.
+    /// For V0, this extracts the common fields. For V1, this also computes the
+    /// `credential_address` from the multisig parameters.
     pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self {
-            Transaction::V0(inner) => UnsignedTransaction::new_with_details(
-                inner.runtime_call.clone(),
-                inner.uniqueness,
-                inner.details.clone(),
-            ),
-            Transaction::V1(inner) => UnsignedTransaction::new_with_details(
-                inner.runtime_call.clone(),
-                inner.uniqueness,
-                inner.details.clone(),
-            ),
+            Transaction::V0(inner) => {
+                UnsignedTransaction::V0(UnsignedTransactionV0::new_with_details(
+                    inner.runtime_call.clone(),
+                    inner.uniqueness,
+                    inner.details.clone(),
+                ))
+            }
+            Transaction::V1(inner) => UnsignedTransaction::V1(inner.to_unsigned_v1::<R>()),
         }
     }
 }
