@@ -22,6 +22,8 @@ pub trait TestSpec:
     + 'static
     + borsh::BorshSerialize
     + borsh::BorshDeserialize
+    + serde::Serialize
+    + serde::de::DeserializeOwned
     + Clone
     + PartialEq
     + Eq
@@ -137,7 +139,17 @@ impl Message for ActualMessage {
     type Data = u32;
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
+#[derive(
+    Default,
+    PartialEq,
+    Eq,
+    Clone,
+    Debug,
+    borsh::BorshSerialize,
+    borsh::BorshDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 struct ActualSpec;
 
 impl TestSpec for ActualSpec {
