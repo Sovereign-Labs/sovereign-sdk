@@ -4,7 +4,7 @@ use rand::prelude::{SliceRandom, SmallRng};
 use rand::{Rng, RngCore, SeedableRng};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Database, DatabaseConnection, EntityTrait, QueryFilter,
-    QueryOrder, QuerySelect,
+    QueryOrder, QuerySelect, TransactionTrait,
 };
 use sha2::Digest;
 use sov_rollup_interface::common::{HexHash, HexString};
@@ -12,6 +12,7 @@ use std::ops::Range;
 use std::sync::Arc;
 use tokio::sync::{broadcast, watch, Mutex};
 
+use anyhow::Context;
 use std::future::Future;
 
 use crate::config::{GENESIS_BLOCK, GENESIS_HEADER};
@@ -50,6 +51,10 @@ const DB_RETRY_BASE_DELAY_MS: u64 = 50;
 
 /// Retries a database operation with exponential backoff.
 /// Handles transient SQLite errors (SQLITE_CANTOPEN, SQLITE_BUSY) that occur under contention.
+///
+/// Only use for idempotent operations (reads, upserts, conditional deletes).
+/// Do NOT use for plain inserts — they can commit despite returning a transient error,
+/// causing a UNIQUE constraint violation on retry.
 async fn retry_db<T, F, Fut>(f: F) -> anyhow::Result<T>
 where
     F: Fn() -> Fut,
@@ -159,17 +164,23 @@ impl StorableMockDaLayer {
             anyhow::bail!("Due to database limitation cannot produce anymore blocks: {} is more than max supported height {}", self.next_height, i32::MAX);
         }
 
-        let conn = &self.conn;
+        // Acquire a single DB connection via transaction upfront. This avoids
+        // repeated pool checkout/checkin per query and guarantees the connection
+        // is available for all operations within this block production.
+        let txn = self
+            .conn
+            .begin()
+            .await
+            .context("begin transaction for produce_block")?;
+
         let prev_block_hash = if self.next_height > 1 {
             let prev_height = self.next_height - 1;
-            let block = retry_db(|| async {
-                Ok(BlockHeaders::find()
-                    .filter(block_headers::Column::Height.eq(prev_height))
-                    .one(conn)
-                    .await?
-                    .expect("Previous block is missing from the database"))
-            })
-            .await?;
+            let block = BlockHeaders::find()
+                .filter(block_headers::Column::Height.eq(prev_height))
+                .one(&txn)
+                .await
+                .context("get prev block hash")?
+                .expect("Previous block is missing from the database");
             let hash: [u8; 32] = block.hash.try_into().map_err(|e: Vec<u8>| {
                 anyhow::anyhow!(
                     "BlockHash should be 32 bytes long in database, but it is {}",
@@ -181,19 +192,17 @@ impl StorableMockDaLayer {
             GENESIS_HEADER.hash.0
         };
         let blob_height = self.next_height + self.delay_blobs_by;
-        let blobs_for_hash = retry_db(|| async {
-            Ok(Blobs::find()
-                .filter(blobs::Column::BlockHeight.eq(blob_height))
-                .select_only()
-                .column(blobs::Column::Id)
-                .column(blobs::Column::Hash)
-                .column(blobs::Column::Sender)
-                .column(blobs::Column::Namespace)
-                .into_model::<blobs::BlobHashData>()
-                .all(conn)
-                .await?)
-        })
-        .await?;
+        let blobs_for_hash = Blobs::find()
+            .filter(blobs::Column::BlockHeight.eq(blob_height))
+            .select_only()
+            .column(blobs::Column::Id)
+            .column(blobs::Column::Hash)
+            .column(blobs::Column::Sender)
+            .column(blobs::Column::Namespace)
+            .into_model::<blobs::BlobHashData>()
+            .all(&txn)
+            .await
+            .context("get blobs for block hash")?;
         let blobs_count = blobs_for_hash.len();
         tracing::trace!(
             blobs_count,
@@ -211,13 +220,11 @@ impl StorableMockDaLayer {
             time: timestamp,
         };
 
-        let new_head_clone = new_head.clone();
-        retry_db(|| async {
-            let block_model = block_headers::ActiveModel::from(new_head_clone.clone());
-            block_model.insert(conn).await?;
-            Ok(())
-        })
-        .await?;
+        let block_model = block_headers::ActiveModel::from(new_head.clone());
+        block_model
+            .insert(&txn)
+            .await
+            .context("insert block_header")?;
         let _ = self.head_header_sender.send_replace(new_head);
         tracing::debug!(
             blobs_count,
@@ -235,15 +242,30 @@ impl StorableMockDaLayer {
             .checked_sub(self.blocks_to_finality.saturating_add(1))
             .unwrap_or_default();
         // Meaning that "chain head - blocks to finalization" has moved beyond genesis block.
-        if next_finalized_height > 0 && next_finalized_height > self.last_finalized_height {
+        let finalized_header = if next_finalized_height > 0
+            && next_finalized_height > self.last_finalized_height
+        {
             self.last_finalized_height = next_finalized_height;
-            let lfh = self.last_finalized_height;
-            retry_db(|| async {
-                finalized_height::update_value(conn, lfh).await?;
-                Ok(())
-            })
-            .await?;
-            let finalized_header = self.get_header_at(next_finalized_height).await?;
+            finalized_height::update_value(&txn, self.last_finalized_height)
+                .await
+                .context("update finalized_height")?;
+            let header = BlockHeaders::find()
+                .filter(block_headers::Column::Height.eq(next_finalized_height))
+                .one(&txn)
+                .await
+                .context("get finalized header")?
+                .map(MockBlockHeader::from)
+                .expect("Finalized block header not found");
+            Some(header)
+        } else {
+            None
+        };
+
+        txn.commit()
+            .await
+            .context("commit produce_block transaction")?;
+
+        if let Some(finalized_header) = finalized_header {
             tracing::trace!(
                 header = %finalized_header,
                 "Submitting finalized header at"
@@ -328,13 +350,7 @@ impl StorableMockDaLayer {
         );
         let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_batch_blob(self.next_height as i32, batch_data, sender);
-        let conn = &self.conn;
-        retry_db(|| async {
-            let blob = blob.clone();
-            blob.insert(conn).await?;
-            Ok(())
-        })
-        .await?;
+        blob.insert(&self.conn).await.context("insert batch blob")?;
         let include_at = self.next_height + self.delay_blobs_by;
         tracing::debug!(
             %hash,
@@ -362,13 +378,7 @@ impl StorableMockDaLayer {
         );
         let start = std::time::Instant::now();
         let (blob, hash) = blobs::build_proof_blob(self.next_height as i32, proof_data, sender);
-        let conn = &self.conn;
-        retry_db(|| async {
-            let blob = blob.clone();
-            blob.insert(conn).await?;
-            Ok(())
-        })
-        .await?;
+        blob.insert(&self.conn).await.context("insert proof blob")?;
         tracing::trace!(
             %hash,
             %sender,
