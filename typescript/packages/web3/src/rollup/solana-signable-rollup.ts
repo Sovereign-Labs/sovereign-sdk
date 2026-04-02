@@ -212,6 +212,29 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
+   * Signs an unsigned transaction using Solana offchain simple signing.
+   * Returns the signed transaction in the same format as standard rollup.
+   */
+  private async signWithSolanaSimple(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    signer: Signer,
+  ): Promise<Transaction<RuntimeCall>> {
+    const [jsonBytes, pubkey] = await Promise.all([
+      this.createSolanaJsonBytes(unsignedTx),
+      signer.publicKey(),
+    ]);
+    const signature = await signer.sign(jsonBytes);
+
+    const context = {
+      unsignedTx,
+      sender: pubkey,
+      signature,
+      rollup: this.inner,
+    };
+    return this.typeBuilder.transaction(context);
+  }
+
+  /**
    * Signs an unsigned transaction using Solana offchain simple signing and submits it.
    * Returns the transaction result in the same format as standard rollup.
    */
@@ -236,6 +259,38 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     const response = await this.submitSolanaMessage(solanaMessage);
     return this.buildTransactionResult(response, unsignedTx, pubkey, signature);
+  }
+
+  /**
+   * Signs an unsigned transaction using Solana spec-compliant signing.
+   * Returns the signed transaction in the same format as standard rollup.
+   */
+  private async signWithSolanaSpec(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    signer: Signer,
+  ): Promise<Transaction<RuntimeCall>> {
+    const [jsonBytes, pubkey, chainHash] = await Promise.all([
+      this.createSolanaJsonBytes(unsignedTx),
+      signer.publicKey(),
+      this.inner.chainHash(),
+    ]);
+
+    // Create preamble and combine with message
+    const preamble = createSolanaPreamble(pubkey, chainHash, jsonBytes.length);
+    const signedMessageWithPreamble = new Uint8Array(
+      preamble.length + jsonBytes.length,
+    );
+    signedMessageWithPreamble.set(preamble, 0);
+    signedMessageWithPreamble.set(jsonBytes, preamble.length);
+    const signature = await signer.sign(signedMessageWithPreamble);
+
+    const context = {
+      unsignedTx,
+      sender: pubkey,
+      signature,
+      rollup: this.inner,
+    };
+    return this.typeBuilder.transaction(context);
   }
 
   /**
@@ -317,6 +372,34 @@ export class SolanaSignableRollup<RuntimeCall> {
         );
         return this.signWithSolanaSpecAndSubmit(unsignedTx, params.signer);
       }
+      default:
+        throw new Error(`Unsupported authenticator: ${authenticator}`);
+    }
+  }
+
+  /**
+   * Signs an unsigned transaction using the specified authenticator.
+   * Creates a signature by combining the serialized unsigned transaction with the chain hash,
+   * then constructs a fully signed transaction.
+   *
+   * @param unsignedTx - The unsigned transaction to sign.
+   * @param params - Parameters including signer and authenticator type.
+   * @param params.signer - The signer to use for signing the transaction.
+   * @param params.authenticator - The authenticator type to use.
+   * @returns A promise that resolves to the signed transaction.
+   */
+  async signTransaction(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    params: { signer: Signer; authenticator: Authenticator },
+  ): Promise<Transaction<RuntimeCall>> {
+    const authenticator = params.authenticator;
+    switch (authenticator) {
+      case "standard":
+        return this.inner.signTransaction(unsignedTx, params.signer);
+      case "solanaSimple":
+        return this.signWithSolanaSimple(unsignedTx, params.signer);
+      case "solana":
+        return this.signWithSolanaSpec(unsignedTx, params.signer);
       default:
         throw new Error(`Unsupported authenticator: ${authenticator}`);
     }
