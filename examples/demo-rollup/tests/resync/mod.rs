@@ -271,36 +271,35 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
             .context("Sync 1")?;
     }
 
-    // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
-    // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
-        std::fs::remove_dir_all(rollup_storage_path.path().join(path))?;
+    // Next, delete everything except the DA database and preferred sequencer DB.
+    // Resync again to verify that this doesn't interfere.
+    let keep_prefixes = ["mock_da.sqlite", "preferred_sequencer"];
+    for entry in std::fs::read_dir(rollup_storage_path.path())? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if keep_prefixes.iter().any(|p| name_str.starts_with(p)) {
+            continue;
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
+        }
     }
     // sanity check
-    let mut remaining_paths: HashSet<_> = std::fs::read_dir(rollup_storage_path.path())?
+    let remaining_paths: HashSet<_> = std::fs::read_dir(rollup_storage_path.path())?
         .filter_map(Result::ok)
         .map(|entry| entry.file_name().to_string_lossy().into_owned())
         .collect();
     assert!(
-        remaining_paths.remove("mock_da.sqlite"),
+        remaining_paths.contains("mock_da.sqlite"),
         "mock_da.sqlite must be present"
     );
     assert!(
-        remaining_paths.remove("preferred_sequencer"),
+        remaining_paths.contains("preferred_sequencer"),
         "preferred_sequencer must be present"
-    );
-
-    // Sometimes the rollup leaves behind the sqlite WAL, check for this as part of the sanity check
-    let optional_files: HashSet<&str> = ["mock_da.sqlite-wal", "mock_da.sqlite-shm"]
-        .into_iter()
-        .collect();
-    let remaining_str_paths: HashSet<&str> = remaining_paths.iter().map(|s| s.as_str()).collect();
-    assert!(
-        remaining_str_paths.is_subset(&optional_files),
-        "Unexpected files found: {:?}",
-        remaining_str_paths
-            .difference(&optional_files)
-            .collect::<Vec<_>>()
     );
 
     {

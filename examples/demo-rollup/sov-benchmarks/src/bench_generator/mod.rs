@@ -224,7 +224,6 @@ mod tests {
         HighLevelZkGenesisConfig, MinimalZkGenesisConfig,
     };
     use sov_test_utils::runtime::sov_bank::CallMessageDiscriminants as BankDiscriminants;
-    use sov_test_utils::MockZkvm;
     use sov_transaction_generator::generators::bank::BankMessageGenerator;
     use sov_transaction_generator::generators::basic::BasicBankHarness;
     use sov_transaction_generator::Percent;
