@@ -49,7 +49,7 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
         preconfigured_router_layers(
             Router::new()
                 .route(
-                    "/rollup/addresses/:address/dedup",
+                    "/rollup/addresses/{address}/dedup",
                     get(
                         |Path(address): Path<String>, State(state): State<Self>| async move {
                             match Self::handler(address, state.state()) {
@@ -170,7 +170,7 @@ impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
         preconfigured_router_layers(
             Router::new()
                 .route(
-                    "/rollup/addresses/:credential_id/dedup",
+                    "/rollup/addresses/{credential_id}/dedup",
                     get(
                         |Path(credential_id): Path<String>,
                          State(state): State<Self>,

@@ -146,15 +146,15 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .route("/sequencer/txs", axum::routing::post(Self::axum_accept_tx))
             .route("/sequencer/ready", axum::routing::get(Self::axum_get_ready))
             .route(
-                "/sequencer/txs/:tx_hash/status",
+                "/sequencer/txs/{tx_hash}/status",
                 axum::routing::get(Self::axum_get_tx_status),
             )
             .route(
-                "/sequencer/txs/:tx_hash",
+                "/sequencer/txs/{tx_hash}",
                 axum::routing::get(Self::axum_get_tx),
             )
             .route(
-                "/sequencer/txs/:tx_hash/ws",
+                "/sequencer/txs/{tx_hash}/ws",
                 axum::routing::get(Self::axum_get_tx_ws),
             )
             .route(
@@ -170,7 +170,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 axum::routing::get(Self::axum_ws_submit_tx),
             )
             .route(
-                "/sequencer/unstable/events/:eventId",
+                "/sequencer/unstable/events/{eventId}",
                 axum::routing::get(Self::axum_get_event),
             )
             .route(

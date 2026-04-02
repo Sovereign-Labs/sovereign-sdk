@@ -186,7 +186,7 @@ where
         axum::Router::new()
             .route("/", get(Self::get_slot))
             .nest(
-                "/batches/:batchOffset",
+                "/batches/{batchOffset}",
                 Self::router_batch(state.clone()).layer(middleware::from_fn_with_state(
                     state.clone(),
                     Self::resolve_batch_offset,
@@ -197,7 +197,7 @@ where
 
     fn router_batch(state: LedgerState<T>) -> axum::Router<LedgerState<T>> {
         axum::Router::new().route("/", get(Self::get_batch)).nest(
-            "/txs/:txOffset",
+            "/txs/{txOffset}",
             Self::router_tx(state.clone()).layer(middleware::from_fn_with_state(
                 state.clone(),
                 Self::resolve_tx_offset,
@@ -210,7 +210,7 @@ where
             .route("/", get(Self::get_tx))
             .route("/events", get(Self::get_tx_events))
             .nest(
-                "/events/:eventOffset",
+                "/events/{eventOffset}",
                 Self::router_event().layer(middleware::from_fn_with_state(
                     state,
                     Self::resolve_event_offset,

@@ -112,7 +112,8 @@ components:
           title: "Boolean"
         - type: array
           title: "Array"
-          items: {}
+          items:
+            x-stainless-any: true
         - type: object
           title: "Object"
           additionalProperties: true
