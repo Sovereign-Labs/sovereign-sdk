@@ -90,7 +90,6 @@ Now run the demo-rollup full node, as shown below. You will see it consuming blo
 # Make sure you're still in the examples/demo-rollup directory and `make build` has been executed before
 $ ./../../target/debug/sov-demo-rollup --da-layer celestia --rollup-config-path demo_rollup_config.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 2025-03-07T13:13:20.453543Z  INFO sov_modules_rollup_blueprint::native_only::logging: Open Telemetry exporter is not enabled
-2025-03-07T13:13:20.466160Z  INFO prometheus_exporter: exporting metrics to http://127.0.0.1:9845/metrics
 2025-03-07T13:13:20.466922Z  INFO sov_demo_rollup: Running demo rollup with prover config prover_config_disc=None
 2025-03-07T13:13:20.467830Z DEBUG sov_demo_rollup: Starting rollup on mock DA config_path="mock_rollup_config.toml"
 2025-03-07T13:13:20.469909Z  INFO sov_stf_runner::config: Parsing rollup configuration file path="mock_rollup_config.toml" size_in_bytes=2714 line_count=66
@@ -370,7 +369,7 @@ It is possible to run several nodes and sequencers on the same host. But this re
 6. Run second node:
 
 ```
-cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia --prometheus-exporter-bind=127.0.0.1:9846 
+cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 ```
 
 Note that it uses newly generated config and also passes a different option for prometheus exporter.

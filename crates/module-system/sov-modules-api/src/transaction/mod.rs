@@ -34,6 +34,11 @@ mod tests;
 mod types;
 mod unsigned;
 
+/// Re-exports for V1 (multisig) transaction constants.
+pub mod v1 {
+    pub use super::types::v1::MAX_SIGNERS;
+}
+
 /// Structures that implement this trait represent a call message that can be included in a
 /// transaction.
 /// By default, this is blanket-derived on anything implementing the `Runtime` trait, implementing

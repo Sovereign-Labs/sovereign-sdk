@@ -25,15 +25,3 @@ pub static SP1_GUEST_CELESTIA_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
         env!("CARGO_MANIFEST_DIR")
     ))
 });
-pub static SP1_GUEST_MOCK_NOMT_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
-    load_elf(&format!(
-        "{}/guest-mock-nomt/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-demo-prover-guest-mock-nomt-sp1",
-        env!("CARGO_MANIFEST_DIR")
-    ))
-});
-pub static SP1_GUEST_CELESTIA_NOMT_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
-    load_elf(&format!(
-        "{}/guest-celestia-nomt/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-demo-prover-guest-celestia-nomt-sp1",
-        env!("CARGO_MANIFEST_DIR")
-    ))
-});

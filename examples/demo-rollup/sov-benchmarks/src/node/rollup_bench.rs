@@ -5,12 +5,10 @@ use std::env;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::MultiAddressEvmSolana;
 use sov_benchmarks::node::{assert_batch_receipts, generate_transfers, prefill_state};
-use sov_benchmarks::{setup_with_runner, BenchSpec, NomtBenchSpec};
+use sov_benchmarks::{setup_with_runner, NomtBenchSpec};
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::Spec;
-use sov_test_utils::storage::{
-    ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
-};
+use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
 use sov_test_utils::MockZkvm;
 
 fn run_spec<S, Sm>(c: &mut Criterion, name: &str, senders_count: u64, bench_after_blocks: u64)
@@ -66,12 +64,6 @@ fn stf_apply_slot_bench(c: &mut Criterion) {
         bench_after_blocks * senders_count
     );
 
-    run_spec::<BenchSpec<MockZkvm>, SimpleJmtStorageManager<_>>(
-        c,
-        "jmt",
-        senders_count,
-        bench_after_blocks,
-    );
     run_spec::<NomtBenchSpec, SimpleStorageManager<_>>(
         c,
         "nomt",

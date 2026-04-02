@@ -4,7 +4,7 @@ set -euo pipefail
 GENESIS_JSON="${HIVE_GENESIS_PATH:-/genesis.json}"
 GENESIS_TEMPLATE_DIR="${SOV_HIVE_GENESIS_TEMPLATE_DIR:-/opt/sov/hive/genesis-template}"
 GENESIS_OUTPUT_DIR="${SOV_HIVE_GENESIS_OUTPUT_DIR:-/tmp/sov-hive-genesis}"
-ROLLUP_CONFIG_PATH="${SOV_HIVE_ROLLUP_CONFIG_PATH:-/opt/sov/hive/mock_nomt_rollup_config.toml}"
+ROLLUP_CONFIG_PATH="${SOV_HIVE_ROLLUP_CONFIG_PATH:-/opt/sov/hive/mock_rollup_config.toml}"
 ROLLUP_BIN="${SOV_HIVE_ROLLUP_BIN:-/opt/sov/bin/sov-demo-rollup}"
 GENESIS_ADAPTER_BIN="${SOV_HIVE_GENESIS_ADAPTER_BIN:-/opt/sov/bin/sov-hive-genesis-adapter}"
 SERVICES_BIN="${SOV_HIVE_SERVICES_BIN:-/opt/sov/hive/hive_services.py}"
@@ -73,10 +73,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-echo "Starting sov-demo-rollup backend (mock DA + NOMT) on :${BACKEND_RPC_PORT}" >&2
+echo "Starting sov-demo-rollup backend (mock DA) on :${BACKEND_RPC_PORT}" >&2
 "${ROLLUP_BIN}" \
   --da-layer mock \
-  --storage nomt \
   --rollup-config-path "${ROLLUP_CONFIG_RUNTIME_PATH}" \
   --genesis-config-dir "${GENESIS_OUTPUT_DIR}" &
 ROLLUP_PID=$!
