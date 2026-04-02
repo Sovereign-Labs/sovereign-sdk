@@ -27,7 +27,7 @@ serde = { workspace = true, features = [
     "derive",
 ] }
 sha2 = { workspace = true }
-sp1-lib = { git = "https://github.com/citizen-stig/sp1", rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
+sp1-lib = { git = "https://github.com/citizen-stig/sp1", default-features = false, rev = "5b6143d9038b440ae295708207f008044d97c6e5" }
 
 sov-rollup-interface = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
