@@ -85,6 +85,61 @@ The script prints:
 - **Top failing method buckets**: grouped by RPC method
 - **Profile-scoped totals** (when using `--profile p0`): pass/fail for just the P0 test set
 
+## Interpreting Results
+
+### Important: all tests run, but not all are evaluated
+
+Hive's `ethereum/rpc-compat` simulator does not support fine-grained test filtering. When using `--profile p0`, the runner executes the **full suite** (all ~200 tests) but only evaluates pass/fail against the P0 scope defined in `p0-nonhistorical-tests.regex`. Tests outside the scope still run and their failures appear in the logs, but they do not affect the exit code.
+
+### Summarize results with `summarize-results.py`
+
+Use the included script to get a readable breakdown:
+
+```bash
+# P0 scoped summary (only tests in the P0 scope)
+python3 examples/demo-rollup/hive/summarize-results.py <run-dir> \
+    --scope examples/demo-rollup/hive/p0-nonhistorical-tests.regex
+
+# Full suite summary (all tests)
+python3 examples/demo-rollup/hive/summarize-results.py <run-dir>
+```
+
+The output has two sections:
+1. **Summary** — per-method pass/fail bullets showing every test case
+2. **Failure details** — for each failing test: the JSON-RPC request sent, the response received, and a diff against the expected response
+
+### Run directory structure
+
+Each run directory contains:
+
+```
+full-<timestamp>-<tag>/
+  hive.json                  # Hive version metadata
+  runner.log                 # Captured stdout/stderr from the Hive process
+  <suite-id>.json            # Machine-readable test results (used by summarize-results.py)
+  details/
+    <suite-id>-0.log         # Combined log of all test request/response pairs
+  sov-demo-rollup/
+    client-<id>.log          # Container stdout/stderr from sov-demo-rollup
+```
+
+### Reading raw test logs
+
+The result JSON stores byte offsets (`log.begin`/`log.end`) into the details log file for each test case. To extract the raw log for a specific test without the summary script:
+
+```bash
+# Find the details log
+DETAILS=$(ls <run-dir>/details/*.log)
+
+# Extract bytes for a specific test (offsets from the result JSON)
+dd if="$DETAILS" bs=1 skip=<begin> count=$((end - begin)) 2>/dev/null
+```
+
+Each test entry in the details log shows:
+- `>>` — the JSON-RPC request sent to the client
+- `<<` — the response received
+- A diff showing `--` (what the client returned) vs `++` (what the test expected)
+
 ## Manual Container Testing
 
 You can run the container directly (without Hive) to verify the image is operational.
@@ -121,14 +176,9 @@ In another terminal:
 curl -s -X POST http://localhost:8545 \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","method":"eth_chainId","params":[],"id":1}'
-
-# Check syncing status
-curl -s -X POST http://localhost:8545 \
-  -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"eth_syncing","params":[],"id":1}'
 ```
 
-Both should return valid JSON-RPC responses with `"jsonrpc":"2.0"` and a `"result"` field.
+It should return valid JSON-RPC responses with `"jsonrpc":"2.0"` and a `"result"` field.
 
 ## Debugging
 
@@ -211,3 +261,5 @@ curl -s -X POST http://127.0.0.1:8545 \
 | `wait_for_rpc.py`              | Readiness probe for backend RPC                          |
 | `enode.sh`                     | Stub for Hive's peer discovery protocol                  |
 | `mock_nomt_rollup_config.toml` | Rollup config for NOMT-backed mock DA                    |
+| `summarize-results.py`         | Human-readable test result summary with failure details  |
+| `p0-nonhistorical-tests.regex` | P0 scope: test name patterns for the phase-1 gate        |

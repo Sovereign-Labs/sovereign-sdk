@@ -5,8 +5,6 @@
 # Network identity
 eth_chainId/get-chain-id
 net_version/get-network-id
-eth_syncing/check-syncing
-
 # Transaction submission
 eth_sendRawTransaction/.*
 
