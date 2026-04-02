@@ -245,9 +245,10 @@ pub fn create_mock_rollup_builder(
 // SP1 network proving path setup (demo-stf Runtime)
 
 fn sp1_genesis_paths() -> GenesisPaths {
-    let dir: &dyn AsRef<Path> = &"../test-data/genesis/integration-tests/";
-    let mut paths = GenesisPaths::from_dir(dir.as_ref());
-    paths.chain_state_genesis_path = dir.as_ref().join("chain_state_zk.json");
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    let dir = Path::new(manifest_dir).join("../../test-data/genesis/integration-tests");
+    let mut paths = GenesisPaths::from_dir(&dir);
+    paths.chain_state_genesis_path = dir.join("chain_state_zk.json");
     paths
 }
 
@@ -261,11 +262,17 @@ pub fn create_sp1_rollup_builder(
             .expect("Failed to create demo-stf genesis config");
     let postgres_config = make_postgres_config(db_connection_url);
 
+    // SP1 network proving takes ~10s per proof. With aggregated_proof_block_jump=3,
+    // each batch takes ~30s. Use 10s block time so the prover can keep pace with DA.
+    let block_producing_config = BlockProducingConfig::Periodic {
+        block_time_ms: 10_000,
+    };
+
     RollupBuilder::<NetworkProvingBlueprint>::new_with_storage_path(
         GenesisSource::CustomParams(GenesisParams {
             runtime: genesis_config,
         }),
-        DEFAULT_BLOCK_PRODUCING_CONFIG,
+        block_producing_config,
         DEFAULT_FINALIZATION_BLOCKS,
         StoragePath::Buf(storage_path),
         false,
@@ -277,6 +284,7 @@ pub fn create_sp1_rollup_builder(
             minimum_profit_per_tx: 0,
             postgres_config,
             batch_execution_time_limit_millis: 400,
+            disable_state_root_consistency_checks: true,
             ..Default::default()
         });
         config.aggregated_proof_block_jump = 3;

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use clap::Parser;
 use sov_modules_api::prelude::tracing;
 use sov_modules_rollup_blueprint::FullNodeBlueprint;
-use sov_soak_testing::{MockRollupBlueprint, NetworkProvingBlueprint, RollupProverConfig};
+use sov_soak_testing::RollupProverConfig;
 use sov_test_utils::test_rollup::RollupBuilder;
 use tokio::signal::unix::SignalKind;
 

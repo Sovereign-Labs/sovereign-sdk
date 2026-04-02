@@ -49,6 +49,8 @@ impl ZkvmNetwork for SP1Network {
         let mut stdin = SP1Stdin::new();
         stdin.write(item);
 
+        eprintln!("[sp1-network] Submitting proof request to SP1 network");
+        let start = std::time::Instant::now();
         let request_id = self
             .prover
             .prove(&self.pk, stdin)
@@ -56,6 +58,8 @@ impl ZkvmNetwork for SP1Network {
             .skip_simulation(true)
             .request()
             .await?;
+        let elapsed_ms = start.elapsed().as_millis();
+        eprintln!("[sp1-network] SP1 network accepted proof request (elapsed={elapsed_ms}ms, request_id={request_id})");
 
         Ok(request_id)
     }
@@ -68,7 +72,11 @@ impl ZkvmNetwork for SP1Network {
         }
 
         match maybe_proof {
-            Some(proof) => Ok(Some(bincode::serialize(&proof)?)),
+            Some(proof) => {
+                let proof_bytes = bincode::serialize(&proof)?;
+                eprintln!("[sp1-network] SP1 network proof completed (handle={handle}, proof_bytes={})", proof_bytes.len());
+                Ok(Some(proof_bytes))
+            }
             None => Ok(None),
         }
     }
