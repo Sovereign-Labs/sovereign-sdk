@@ -9,8 +9,8 @@ use sov_cli::NodeClient;
 use sov_db::test_utils::CrashLocation;
 use sov_db::test_utils::CRASH_ENV_NAME;
 use sov_demo_rollup::mock_da_risc0_host_args;
-use sov_demo_rollup::MockNomtDemoRollup;
-use sov_demo_rollup::MockNomtRollupSpec;
+use sov_demo_rollup::MockDemoRollup;
+use sov_demo_rollup::MockRollupSpec;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
@@ -31,7 +31,7 @@ use tokio::time::Duration;
 async fn start_node(
     location: Arc<TempDir>,
     da_layer: Arc<RwLock<StorableMockDaLayer>>,
-) -> TestRollup<MockNomtDemoRollup<Native>> {
+) -> TestRollup<MockDemoRollup<Native>> {
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
         // Actual block production is configured in the da_layer
@@ -134,9 +134,8 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
     let da_service = StorableMockDaService::from_config(mock_da_config, shutdown_receiver).await;
     let da_layer = da_service.da_layer();
 
-    let key_and_address =
-        read_private_key::<MockNomtRollupSpec<Native>>("tx_signer_private_key.json");
-    let receiver_addr = random_address::<MockNomtRollupSpec<Native>>();
+    let key_and_address = read_private_key::<MockRollupSpec<Native>>("tx_signer_private_key.json");
+    let receiver_addr = random_address::<MockRollupSpec<Native>>();
 
     // Start the rollup for the first time, and after some transactions are received, crash it.
     {
@@ -246,8 +245,8 @@ fn random_address<S: Spec>() -> <S as Spec>::Address {
 
 async fn send_txs_in_background(
     start_generation: u64,
-    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
-    key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
+    receiver: <MockRollupSpec<Native> as Spec>::Address,
+    key_and_address: PrivateKeyAndAddress<MockRollupSpec<Native>>,
     max_nb_of_txs: u64,
     client: NodeClient,
 ) {
@@ -265,15 +264,15 @@ async fn send_txs_in_background(
 
 async fn send_txs(
     start_generation: u64,
-    receiver: <MockNomtRollupSpec<Native> as Spec>::Address,
-    key_and_address: PrivateKeyAndAddress<MockNomtRollupSpec<Native>>,
+    receiver: <MockRollupSpec<Native> as Spec>::Address,
+    key_and_address: PrivateKeyAndAddress<MockRollupSpec<Native>>,
     max_nb_of_txs: u64,
     client: NodeClient,
 ) {
     let api_client = client.client.clone();
     let mut nb_of_txs = 0;
     loop {
-        let tx = build_transfer_token_tx_with_generation::<MockNomtRollupSpec<Native>>(
+        let tx = build_transfer_token_tx_with_generation::<MockRollupSpec<Native>>(
             &key_and_address.private_key,
             config_gas_token_id(),
             receiver,
@@ -297,7 +296,7 @@ async fn send_txs(
 }
 
 async fn subscribe_to_bank_events(
-    test_rollup: &TestRollup<MockNomtDemoRollup<Native>>,
+    test_rollup: &TestRollup<MockDemoRollup<Native>>,
 ) -> BoxStream<'static, anyhow::Result<types::LedgerEvent>> {
     test_rollup
         .api_client()

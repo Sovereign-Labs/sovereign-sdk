@@ -33,7 +33,7 @@ use sov_state::{
 };
 use sov_stf_runner::RollupConfig;
 
-use sov_demo_rollup::{CelestiaNomtDemoRollup, MockNomtDemoRollup};
+use sov_demo_rollup::{CelestiaDemoRollup, MockDemoRollup};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -99,11 +99,11 @@ struct Args {
     report_out: Option<PathBuf>,
 }
 
-type OldSpec = <MockNomtDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
-type NewSpec = <CelestiaNomtDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
+type OldSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
+type NewSpec = <CelestiaDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 type Hasher = <<OldSpec as Spec>::CryptoSpec as sov_modules_api::CryptoSpec>::Hasher;
 type OldStorage = <OldSpec as Spec>::Storage;
-type MockNomtStorageManager = NomtStorageManager<MockDaSpec, Hasher, OldStorage>;
+type MockStorageManager = NomtStorageManager<MockDaSpec, Hasher, OldStorage>;
 type OldChainState = sov_chain_state::ChainState<OldSpec>;
 type OldSlotInformation = sov_chain_state::SlotInformation<OldSpec>;
 type NewSlotInformation = sov_chain_state::SlotInformation<NewSpec>;
@@ -232,7 +232,7 @@ struct MigrationSession {
     db_path: PathBuf,
     runtime: Runtime<OldSpec>,
     module_discriminants: ModuleDiscriminants,
-    storage_manager: MockNomtStorageManager,
+    storage_manager: MockStorageManager,
     storage: OldStorage,
     ledger_db: LedgerDb,
     head_slot_number: SlotNumber,
@@ -525,7 +525,7 @@ fn prepare_migration_session(
 
     let runtime = Runtime::<OldSpec>::default();
     let module_discriminants = ModuleDiscriminants::from_runtime(&runtime);
-    let storage_manager = MockNomtStorageManager::new(storage_config, false)
+    let storage_manager = MockStorageManager::new(storage_config, false)
         .with_context(|| format!("failed to open storage manager at {}", db_path.display()))?;
 
     let (storage, ledger_reader) = storage_manager

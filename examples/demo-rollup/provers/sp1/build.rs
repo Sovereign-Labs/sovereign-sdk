@@ -25,20 +25,6 @@ fn main() -> anyhow::Result<()> {
     build_program_with_args(
         "./guest-celestia",
         BuildArgs {
-            features: features.clone(),
-            ..Default::default()
-        },
-    );
-    build_program_with_args(
-        "./guest-mock-nomt",
-        BuildArgs {
-            features: features.clone(),
-            ..Default::default()
-        },
-    );
-    build_program_with_args(
-        "./guest-celestia-nomt",
-        BuildArgs {
             features,
             ..Default::default()
         },
