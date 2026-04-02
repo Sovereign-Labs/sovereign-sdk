@@ -1,3 +1,6 @@
+# 2026-04-02
+- #2682 Upgrades axum from 0.7 tp 0.8. Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
+
 # 2026-03-30
 - #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
 - #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
