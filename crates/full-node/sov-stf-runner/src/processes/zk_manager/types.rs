@@ -97,14 +97,16 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
             return;
         }
 
-        let mut submissions = Vec::new();
-        for proof in self.block_proof_info.iter_mut() {
-            let mut prev_status = BlockProofStatus::Submitted;
-            std::mem::swap(&mut prev_status, &mut proof.status);
-            if let BlockProofStatus::Waiting(witness) = prev_status {
-                submissions.push(witness);
-            }
-        }
+        let submissions: Vec<_> = self
+            .block_proof_info
+            .iter_mut()
+            .filter_map(|proof| {
+                match std::mem::replace(&mut proof.status, BlockProofStatus::Submitted) {
+                    BlockProofStatus::Waiting(w) => Some(w),
+                    BlockProofStatus::Submitted => None,
+                }
+            })
+            .collect();
 
         let futs = submissions.into_iter().map(|mut witness| async {
             loop {
