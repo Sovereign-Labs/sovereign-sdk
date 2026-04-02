@@ -561,23 +561,23 @@ impl StorableMockDaLayer {
         }
 
         let conn = &self.conn;
-        retry_db(|| async {
-            Blobs::delete_many()
-                .filter(blobs::Column::BlockHeight.gt(height))
-                .exec(conn)
-                .await?;
-            Ok(())
-        })
-        .await?;
+        let txn = retry_db(|| async { Ok(conn.begin().await?) })
+            .await
+            .context("begin transaction for rewind")?;
 
-        retry_db(|| async {
-            BlockHeaders::delete_many()
-                .filter(block_headers::Column::Height.gt(height))
-                .exec(conn)
-                .await?;
-            Ok(())
-        })
-        .await?;
+        Blobs::delete_many()
+            .filter(blobs::Column::BlockHeight.gt(height))
+            .exec(&txn)
+            .await
+            .context("delete blobs above rewind height")?;
+
+        BlockHeaders::delete_many()
+            .filter(block_headers::Column::Height.gt(height))
+            .exec(&txn)
+            .await
+            .context("delete block_headers above rewind height")?;
+
+        txn.commit().await.context("commit rewind transaction")?;
 
         let past_next_height = self.next_height;
         self.next_height = height + 1;
