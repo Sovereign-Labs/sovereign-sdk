@@ -8,20 +8,15 @@ use demo_stf::MultiAddressEvmSolana;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::{
-    AggregatedProofPublicData, CodeCommitmentHash, Spec, StateTransitionPublicData, Storage,
-};
+use sov_modules_api::{AggregatedProofPublicData, Spec, StateTransitionPublicData, Storage};
 use sov_rollup_interface::execution_mode::Native;
-use sov_rollup_interface::zk::aggregated_proof::common::{
-    AggregatedProofWitness, DeferredProofInput,
-};
+use sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
-use sov_sp1_adapter::host::SP1Host;
+use sov_rollup_interface::zk::ZkVerifier;
+use sov_sp1_adapter::host::SP1AggregationHost;
 use sov_sp1_adapter::SP1;
-use sov_sp1_adapter::{BlockHeaderWithProof, SP1MethodId, SP1Verifier};
-use sp1_sdk::prelude::{include_elf, Elf, HashableKey};
-use sp1_sdk::SP1VerifyingKey;
+use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
+use sp1_sdk::prelude::{include_elf, Elf};
 
 const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 const JUMP: usize = 3;
@@ -48,7 +43,7 @@ fn main() -> anyhow::Result<()> {
 
     let verification_key = SP1MethodId(saved_inner_vk_bytes()?);
 
-    let mut prover = SP1Host::new(&AGGREGATION_ELF);
+    let mut prover = SP1AggregationHost::new(&AGGREGATION_ELF, verification_key)?;
 
     let proof_batches = raw_proofs
         .chunks(JUMP)
@@ -56,8 +51,7 @@ fn main() -> anyhow::Result<()> {
         .collect::<Vec<_>>();
 
     let num_outer_proofs = proof_batches.len();
-
-    let mut previous_outer_proof: Option<SerializedAggregatedProof> = None;
+    let code_commitment = prover.code_commitment()?;
 
     for (batch_index, proof_batch) in proof_batches.into_iter().enumerate() {
         println!(
@@ -71,12 +65,9 @@ fn main() -> anyhow::Result<()> {
             batch_state_roots(&proof_batch)
                 .context("Failed to derive expected state roots from the current proof batch")?;
 
-        let (outer_proof_bytes, code_commitment) = create_agg_proof(
-            &mut prover,
-            &verification_key,
-            proof_batch,
-            previous_outer_proof.take(),
-        )?;
+        let outer_proof_bytes = SerializedAggregatedProof {
+            raw_aggregated_proof: prover.run::<MockDaSpec>(proof_batch)?,
+        };
 
         let public_data: AggregatedProofPublicData<
             <S as Spec>::Address,
@@ -103,73 +94,11 @@ fn main() -> anyhow::Result<()> {
             "Outer proof {} final_state_root does not match the last inner proof final_state_root",
             batch_index + 1
         );
-
-        previous_outer_proof = Some(outer_proof_bytes);
     }
 
     println!("[host] verified outer proof(s) in {:?}", start.elapsed());
 
     Ok(())
-}
-
-fn create_agg_proof(
-    agg_host: &mut SP1Host<'static>,
-    verification_key: &SP1MethodId,
-    raw_proofs: Vec<BlockHeaderWithProof<MockDaSpec>>,
-    previous_outer_proof_serialized: Option<SerializedAggregatedProof>,
-) -> anyhow::Result<(SerializedAggregatedProof, SP1MethodId)> {
-    ensure!(
-        !raw_proofs.is_empty(),
-        "At least one proof file is required"
-    );
-
-    let aggregation_code_commitment = agg_host.code_commitment()?;
-    let aggregation_vk: SP1VerifyingKey = bincode::deserialize(&aggregation_code_commitment.0)
-        .context("Failed to deserialize aggregation SP1VerifyingKey")?;
-    let aggregation_vk_hash = aggregation_vk.hash_u32();
-
-    let prev_outer_proof_witness =
-        if let Some(previous_outer_proof_serialized) = previous_outer_proof_serialized {
-            let witness = agg_host.add_aggregated_proof(
-                &previous_outer_proof_serialized,
-                &aggregation_code_commitment,
-            )?;
-            Some(witness)
-        } else {
-            None
-        };
-
-    let mut proof_inputs = Vec::with_capacity(raw_proofs.len());
-
-    for block_header_with_proof in raw_proofs {
-        let public_values =
-            agg_host.add_inner_proof(&block_header_with_proof.proof, verification_key)?;
-
-        let deferred_proof_input = DeferredProofInput::<MockDaSpec> {
-            public_values,
-            da_block_header: block_header_with_proof.da_block_header,
-        };
-
-        proof_inputs.push(deferred_proof_input);
-    }
-
-    let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
-
-    let witness = AggregatedProofWitness {
-        proof_inputs,
-        outer_vkey_hash,
-        prev_outer_proof_witness,
-    };
-
-    agg_host.add_hint(witness);
-
-    let outer_proof_bytes = agg_host.run(true)?;
-    Ok((
-        SerializedAggregatedProof {
-            raw_aggregated_proof: outer_proof_bytes,
-        },
-        aggregation_code_commitment,
-    ))
 }
 
 fn proofs() -> Vec<BlockHeaderWithProof<MockDaSpec>> {

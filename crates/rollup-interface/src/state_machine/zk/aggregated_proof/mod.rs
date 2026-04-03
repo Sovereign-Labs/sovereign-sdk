@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::{StateTransitionPublicData, ZkVerifier};
 use crate::common::SlotNumber;
 use crate::da::DaSpec;
+use crate::zk::SerializedInnerProof;
 
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
 pub struct BlockProof<Address, Da: DaSpec, Root> {
@@ -185,4 +186,13 @@ impl<Vm: ZkVerifier> AggregateProofVerifier<Vm> {
 
         Ok(public_data)
     }
+}
+
+/// A DA block header bundled with its corresponding serialized proof.
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+pub struct BlockHeaderWithProof<Da: crate::da::DaSpec> {
+    /// The DA layer block header associated with this proof.
+    pub da_block_header: Da::BlockHeader,
+    /// The serialized proof bytes.
+    pub proof: SerializedInnerProof,
 }
