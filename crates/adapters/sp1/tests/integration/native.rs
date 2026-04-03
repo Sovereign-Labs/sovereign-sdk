@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{Proof, ZkvmGuest, ZkvmHost};
-use sov_sp1_adapter::host::SP1Host;
+use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
+use sov_sp1_adapter::host::{MockSp1Prover, SP1Host};
 use sp1_build::BuildArgs;
-use sp1_sdk::{SP1Proof, SP1PublicValues};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct TestStruct {
@@ -52,24 +51,10 @@ fn build_fibonacci_elf() {
 fn test_fibonnaci_host() {
     let fibonacci_elf = include_bytes!("../../test_data/riscv64im-succinct-zkvm-elf");
 
-    let mut host = SP1Host::new(fibonacci_elf);
+    let mut host = MockSp1Prover::new(fibonacci_elf);
+
     // Give the input 7 to the fibonnaci program
     host.add_hint(7u32);
-    let proof = host.run(false);
-    assert!(proof.is_ok());
-    if let Ok(output) = proof {
-        // The fibonnaci program we have hardcoded here outputs the n-1th and nth fibonnaci numbers
-        let data: Proof<SP1Proof, SP1PublicValues> = bincode::deserialize(&output).unwrap();
-        match data {
-            Proof::PublicData(mut pv) => {
-                let a = pv.read::<u32>();
-                let b = pv.read::<u32>();
-                assert_eq!(a, 7);
-                assert_eq!(b, 13);
-            }
-            _ => panic!("Expected public data"),
-        }
-    } else {
-        unreachable!()
-    }
+    let proof = host.run().unwrap();
+    host.verify(&proof).unwrap();
 }
