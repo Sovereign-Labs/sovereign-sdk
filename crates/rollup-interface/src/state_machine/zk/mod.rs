@@ -113,12 +113,9 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
         &self,
     ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment>;
 
-    /// Run the guest in the true zk environment using the provided hints.
-    ///
-    /// This runs the guest binary compiled for the zkVM target, optionally
-    /// creating a SNARK of correct execution. Running the true guest binary comes
-    /// with some mild performance overhead, but it is orders of magnitude less expensive than generating a proof.
-    fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>>;
+    /// Run the guest in the true zk environment using the provided hints
+    /// and generate a SNARK of correct execution.
+    fn run(&mut self) -> anyhow::Result<Vec<u8>>;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code

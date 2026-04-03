@@ -95,16 +95,9 @@ impl ZkvmHost for Risc0Host<'static> {
             .expect("Risc0 hint serialization is infallible");
     }
 
-    fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let proof = if with_proof {
-            let receipt = self.run()?;
-            Proof::<Receipt, Option<Journal>>::Full(receipt)
-        } else {
-            let session = self.run_without_proving()?;
-            let data = session.journal;
-            Proof::<Receipt, Option<Journal>>::PublicData(data)
-        };
-
+    fn run(&mut self) -> anyhow::Result<Vec<u8>> {
+        let receipt = self.run()?;
+        let proof = Proof::<Receipt, Option<Journal>>::Full(receipt);
         Ok(bincode::serialize(&proof)?)
     }
 

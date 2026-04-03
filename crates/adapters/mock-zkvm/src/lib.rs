@@ -156,7 +156,7 @@ mod tests {
         vm.add_hint(&pub_data);
         vm.make_proof();
 
-        let proof = vm.run(false).unwrap();
+        let proof = vm.run().unwrap();
         let verified_pub_data =
             MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default())?;
 

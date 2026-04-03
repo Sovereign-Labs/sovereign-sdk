@@ -23,7 +23,7 @@ type ProofInput = StateTransitionWitnessWithAddress<
 #[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
     let (host, code_commitment) = TestHost::new().await;
-    let proof_data = generate_proofs(true, &host).await;
+    let proof_data = generate_proofs(&host).await;
     let proofs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("test_data")
@@ -46,11 +46,10 @@ async fn test_save_proofs() {
 #[cfg_attr(skip_guest_build, ignore)]
 async fn test_proof_generation() {
     let (host, _) = TestHost::new().await;
-    let _ = generate_proofs(false, &host).await;
+    let _ = generate_proofs(&host).await;
 }
 
 async fn generate_proofs(
-    with_proof: bool,
     host: &TestHost,
 ) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
@@ -66,7 +65,7 @@ async fn generate_proofs(
             prover_address,
         };
 
-        let raw_inner_proof = host.run(data, with_proof).await;
+        let raw_inner_proof = host.run(data).await;
         proofs.push(BlockHeaderWithProof {
             da_block_header,
             proof: SerializedInnerProof { raw_inner_proof },
@@ -100,19 +99,12 @@ impl TestHost {
         (Self { host, mock_host }, code_commitment)
     }
 
-    async fn run(&self, data: ProofInput, with_proof: bool) -> Vec<u8> {
-        let mut host = self.host.clone();
+    async fn run(&self, data: ProofInput) -> Vec<u8> {
         let mut mock_host = self.mock_host.clone();
         tokio::task::spawn_blocking(move || -> Vec<u8> {
-            if with_proof {
-                host.add_hint(data);
-                host.run(with_proof)
-                    .expect("Prover should run successfully")
-            } else {
-                mock_host.add_hint(data);
-                mock_host.run().unwrap();
-                Default::default()
-            }
+            mock_host.add_hint(data);
+            mock_host.run().unwrap();
+            Default::default()
         })
         .await
         .unwrap()
