@@ -270,9 +270,16 @@ where
 {
     async fn get_state_map_items_route(
         State(state): State<Self>,
-        accessor: ApiStateAccessor<M::Spec>,
-        Query(pagination): Query<sov_rest_utils::Pagination<String>>,
+        pagination_opt: Option<Query<sov_rest_utils::Pagination<String>>>,
+        historical_height_opt: Option<Query<HeightParam>>,
     ) -> ApiResult<sov_rest_utils::PaginatedResponse<StateItemContents<K, V>, String>> {
+        if historical_height_opt.is_some() {
+            return Err(sov_rest_utils::errors::not_implemented_501());
+        }
+
+        let pagination = pagination_opt
+            .map(|Query(pagination)| pagination)
+            .unwrap_or_default();
         let prefix = Prefix::new(
             state.module_discriminant,
             state.state_item_info.item_discriminant,
@@ -280,15 +287,23 @@ where
         let state_map =
             NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix.clone(), Codec::default());
         let slot_prefix = SlotKey::singleton(&prefix);
+        let accessor = state
+            .api_state
+            .build_api_state_accessor(None)
+            .map_err(|e| {
+                sov_rest_utils::errors::internal_server_error_response_500(format!(
+                    "Failed to build current state accessor: {e}"
+                ))
+            })?;
 
-        let iter = accessor
-            .iter_values_with_prefix(N::NAMESPACE, slot_prefix)
+        let entries = accessor
+            .current_values_with_prefix(N::NAMESPACE, &slot_prefix)
             .map_err(|e| {
                 sov_rest_utils::errors::internal_server_error_response_500(format!(
                     "Failed to iterate map: {e}"
                 ))
             })?;
-        let iter = iter.ok_or_else(|| sov_rest_utils::errors::not_implemented_501())?;
+        let entries = entries.ok_or_else(|| sov_rest_utils::errors::not_implemented_501())?;
 
         let cursor_key = match &pagination.selection {
             sov_rest_utils::PageSelection::First => None,
@@ -316,8 +331,9 @@ where
 
         let limit = pagination.size as usize;
         let mut items = Vec::with_capacity(limit);
+        let mut last_included_cursor = None;
 
-        for (slot_key, slot_value) in iter {
+        for (slot_key, slot_value) in entries {
             let key_bytes = slot_key.without_prefix();
 
             // Skip entries up to and including the cursor
@@ -325,6 +341,14 @@ where
                 if key_bytes <= cursor_bytes.as_slice() {
                     continue;
                 }
+            }
+
+            if items.len() == limit {
+                return Ok(sov_rest_utils::PaginatedResponse {
+                    items,
+                    next_cursor: last_included_cursor,
+                }
+                .into());
             }
 
             let key: K = state_map
@@ -351,15 +375,7 @@ where
                 key: key.clone(),
                 value,
             });
-
-            if items.len() >= limit {
-                let next_cursor = key.to_string();
-                return Ok(sov_rest_utils::PaginatedResponse {
-                    items,
-                    next_cursor: Some(next_cursor),
-                }
-                .into());
-            }
+            last_included_cursor = Some(key.to_string());
         }
 
         Ok(sov_rest_utils::PaginatedResponse {

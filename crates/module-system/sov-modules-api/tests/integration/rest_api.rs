@@ -3,7 +3,8 @@ use std::fmt::Display;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
+use serde_json::json;
 use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::rest::{ApiState, HasRestApi};
@@ -12,6 +13,7 @@ use sov_modules_api::{
     StateCheckpoint, StateValue, TxState,
 };
 use sov_test_utils::TestSpec;
+use unwrap_infallible::UnwrapInfallible;
 use utoipa::openapi::path::ParameterIn;
 use utoipa::openapi::PathItemType;
 
@@ -179,8 +181,8 @@ async fn rest_api_routes() {
     // 2. Module details
     // 3-4. State values
     // 5-6. Vec: info and item
-    // 7-8. Map: info and item
-    let expected_paths_count = 8;
+    // 7-9. Map: info, collection, and item
+    let expected_paths_count = 9;
     println!("spec.paths.paths: {:#?}", spec.paths.paths);
     assert_eq!(expected_paths_count, spec.paths.paths.len());
     for (path, item) in spec.paths.paths {
@@ -233,4 +235,117 @@ async fn rest_api_routes() {
         };
         assert!(success_condition, "Failed querying URL {url} | {status}");
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn state_map_items_route_lists_current_checkpoint_state() {
+    let module_name = "my-foo-module";
+    let mut runtime = MyRuntime::<TestSpec>::default();
+    let storage_manager = sov_test_utils::storage::SimpleStorageManager::new();
+    let storage = storage_manager.create_storage();
+    let mut checkpoint = StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+    runtime
+        .my_foo_module
+        .mapping
+        .set(&1, &10, &mut checkpoint)
+        .unwrap_infallible();
+    runtime
+        .my_foo_module
+        .mapping
+        .set(&2, &20, &mut checkpoint)
+        .unwrap_infallible();
+
+    let (_sender, receiver) = tokio::sync::watch::channel(Arc::new(
+        ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint),
+    ));
+    let state = ApiState::build(
+        Arc::new(()),
+        receiver,
+        Arc::new(MockKernel::default()),
+        None,
+    );
+    let router = runtime.rest_api(state);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let rest_address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    let client = Client::new();
+    let base_url = format!("http://{rest_address}/modules/{module_name}/state/mapping/items");
+
+    let response = client.get(&base_url).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = response.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({
+            "items": [
+                { "key": 1, "value": 10 },
+                { "key": 2, "value": 20 }
+            ],
+            "next_cursor": null
+        })
+    );
+
+    let first_page = client
+        .get(&base_url)
+        .query(&[("page", "first"), ("page[size]", "1")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first_page.status(), StatusCode::OK);
+    let first_page_body: serde_json::Value = first_page.json().await.unwrap();
+    assert_eq!(
+        first_page_body,
+        json!({
+            "items": [{ "key": 1, "value": 10 }],
+            "next_cursor": "1"
+        })
+    );
+
+    let second_page = client
+        .get(&base_url)
+        .query(&[("page", "next"), ("page[cursor]", "1"), ("page[size]", "1")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(second_page.status(), StatusCode::OK);
+    let second_page_body: serde_json::Value = second_page.json().await.unwrap();
+    assert_eq!(
+        second_page_body,
+        json!({
+            "items": [{ "key": 2, "value": 20 }],
+            "next_cursor": null
+        })
+    );
+
+    let exact_page = client
+        .get(&base_url)
+        .query(&[("page", "first"), ("page[size]", "2")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(exact_page.status(), StatusCode::OK);
+    let exact_page_body: serde_json::Value = exact_page.json().await.unwrap();
+    assert_eq!(
+        exact_page_body,
+        json!({
+            "items": [
+                { "key": 1, "value": 10 },
+                { "key": 2, "value": 20 }
+            ],
+            "next_cursor": null
+        })
+    );
+
+    let historical_response = client
+        .get(&base_url)
+        .query(&[("page", "first"), ("rollup_height", "0")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(historical_response.status(), StatusCode::NOT_IMPLEMENTED);
 }

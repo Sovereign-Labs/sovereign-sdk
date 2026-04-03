@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use super::FinalizedSlotPolicy;
@@ -312,25 +312,87 @@ impl<S: Spec> ApiStateAccessor<S>
 where
     S::Storage: NativeStorage,
 {
-    /// Iterate over all values with the given prefix in the specified namespace.
-    /// Returns `None` if the storage backend does not support prefix iteration.
-    pub fn iter_values_with_prefix(
+    /// Collect the current visible values with the given prefix in the specified
+    /// namespace.
+    ///
+    /// Values are merged using the same precedence as point reads:
+    /// local writes, checkpoint writes, uncommitted changes, then storage.
+    ///
+    /// Returns `None` if the underlying storage does not support prefix
+    /// iteration, because in that case the full key set is not discoverable.
+    pub fn current_values_with_prefix(
         &self,
         namespace: Namespace,
-        prefix: SlotKey,
-    ) -> anyhow::Result<Option<Box<dyn Iterator<Item = (SlotKey, SlotValue)> + '_>>> {
+        prefix: &SlotKey,
+    ) -> anyhow::Result<Option<Vec<(SlotKey, SlotValue)>>> {
         let storage = self.checkpoint_and_read_txn.state_checkpoint.storage();
+        let maybe_storage_iter: Option<Box<dyn Iterator<Item = (SlotKey, SlotValue)> + '_>> =
+            match namespace {
+                Namespace::User => storage
+                    .maybe_iter_user_values_with_prefix(prefix.clone())?
+                    .map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>),
+                Namespace::Kernel => storage
+                    .maybe_iter_kernel_values_with_prefix(prefix.clone())?
+                    .map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>),
+                Namespace::Accessory => return Ok(None),
+            };
+        let Some(storage_iter) = maybe_storage_iter else {
+            return Ok(None);
+        };
+
+        let mut merged = BTreeMap::<SlotKey, Option<SlotValue>>::new();
+        let matches_prefix = |key: &SlotKey| key.as_ref().starts_with(prefix.as_ref());
+
         match namespace {
             Namespace::User => {
-                let iter = storage.maybe_iter_user_values_with_prefix(prefix)?;
-                Ok(iter.map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>))
+                for (key, value) in &self.local_user_writes {
+                    if matches_prefix(key) {
+                        merged.insert(key.clone(), value.clone());
+                    }
+                }
             }
             Namespace::Kernel => {
-                let iter = storage.maybe_iter_kernel_values_with_prefix(prefix)?;
-                Ok(iter.map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>))
+                for (key, value) in &self.local_kernel_writes {
+                    if matches_prefix(key) {
+                        merged.insert(key.clone(), value.clone());
+                    }
+                }
             }
-            Namespace::Accessory => Ok(None),
+            Namespace::Accessory => {
+                for (key, value) in &self.local_accessory_writes {
+                    if matches_prefix(key) {
+                        merged.insert(key.clone(), value.value.clone());
+                    }
+                }
+            }
         }
+
+        for ((key, entry_namespace), value) in self.checkpoint_and_read_txn.read_txn.iter() {
+            if *entry_namespace == namespace && matches_prefix(key) {
+                merged.entry(key.clone()).or_insert_with(|| value.clone());
+            }
+        }
+
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let Some(iter) = changes.maybe_iter_prefix(namespace, prefix) {
+                for (key, value) in iter {
+                    if matches_prefix(&key) {
+                        merged.entry(key).or_insert(value);
+                    }
+                }
+            }
+        }
+
+        for (key, value) in storage_iter {
+            merged.entry(key).or_insert(Some(value));
+        }
+
+        Ok(Some(
+            merged
+                .into_iter()
+                .filter_map(|(key, value)| value.map(|value| (key, value)))
+                .collect(),
+        ))
     }
 }
 

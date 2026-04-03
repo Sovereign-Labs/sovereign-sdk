@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     marker::PhantomData,
     sync::Arc,
 };
@@ -303,6 +303,44 @@ impl<H: Digest<OutputSize = typenum::U32> + Send + Sync + 'static> StateGetter
         if let Some(changes) = self.changes.as_mut() {
             changes.retain(|change| change.rollup_height <= rollup_height.get());
         }
+    }
+
+    fn maybe_iter_prefix(
+        &self,
+        namespace: Namespace,
+        prefix: &SlotKey,
+    ) -> Option<Box<dyn Iterator<Item = (SlotKey, Option<SlotValue>)> + '_>> {
+        let mut merged = BTreeMap::<SlotKey, Option<SlotValue>>::new();
+
+        for change_set in self.changes.iter().flatten() {
+            match namespace {
+                Namespace::User => {
+                    for (key, value) in change_set.user.get_writes() {
+                        if key.as_ref().starts_with(prefix.as_ref()) {
+                            merged.entry(key.clone()).or_insert_with(|| value.cloned());
+                        }
+                    }
+                }
+                Namespace::Kernel => {
+                    for (key, value) in change_set.kernel.get_writes() {
+                        if key.as_ref().starts_with(prefix.as_ref()) {
+                            merged.entry(key.clone()).or_insert_with(|| value.cloned());
+                        }
+                    }
+                }
+                Namespace::Accessory => {
+                    for (key, write) in &change_set.accessory {
+                        if key.as_ref().starts_with(prefix.as_ref()) {
+                            merged
+                                .entry(key.clone())
+                                .or_insert_with(|| write.value.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(Box::new(merged.into_iter()))
     }
 
     fn latest_rollup_height(&self) -> Option<sov_rollup_interface::common::RollupHeight> {

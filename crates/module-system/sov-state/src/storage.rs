@@ -257,6 +257,19 @@ pub trait StateGetter: core::fmt::Debug + Send + Sync {
     /// This is a permanent change to the getter that cannot be undone except by creating a new `StateGetter` from the original source.
     fn ignore_changes_after_height(&mut self, rollup_height: RollupHeight);
 
+    /// Iterate over the values currently present under the given prefix.
+    ///
+    /// This is optional because some implementations only support point
+    /// lookups. Returned values include tombstones so callers can suppress
+    /// shadowed storage entries.
+    fn maybe_iter_prefix(
+        &self,
+        _namespace: Namespace,
+        _prefix: &SlotKey,
+    ) -> Option<Box<dyn Iterator<Item = (SlotKey, Option<SlotValue>)> + '_>> {
+        None
+    }
+
     /// Get the latest rollup height available in the getter.
     fn latest_rollup_height(&self) -> Option<RollupHeight>;
 
