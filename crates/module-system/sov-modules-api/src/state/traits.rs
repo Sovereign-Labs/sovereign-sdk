@@ -541,8 +541,9 @@ impl<T: AccessoryStateWriter> StateWriter<Accessory> for T {
 pub trait ProvenStateAccessor<N: ProvableCompileTimeNamespace>: StateReaderAndWriter<N> {
     /// The underlying storage whose proof is returned
     type Proof;
-    /// Fetch the value with the requested key and provide a proof of its presence/absence.
-    fn get_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>>
+    /// Fetch the value with the requested key and provide a proof of its presence/absence against the latest state root. Historical proofs are not supported,
+    /// so queries against an archival state accessor will still return the latest state root.
+    fn get_global_latest_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>>
     where
         Self: StateReaderAndWriter<N>,
         N: ProvableCompileTimeNamespace;

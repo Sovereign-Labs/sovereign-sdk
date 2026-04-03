@@ -19,6 +19,7 @@ use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
+use sov_state::{Storage, StorageProof};
 use std::ops::DerefMut;
 use tracing::trace;
 
@@ -133,6 +134,27 @@ where
             .unwrap_or_default();
 
         Ok(storage_slot.to_be_bytes::<32>().into())
+    }
+
+    // /// Returns merkle proofs of storage slots
+    // #[rpc_method(name = "ext_getStorageProof")]
+    // pub fn get_storage_proof(&self, address: Address, index: U256, block_id: Option<BlockId>, state: &mut ApiStateAccessor<S>) -> RpcResult<StorageProof<<S::Storage as Storage>::Proof>> {
+    //     let mut state = self.resolve_state_for_block_id(block_id, state)?;
+    //     let Some(proof) = self.account_storage.get_with_proof(&(&address, &index), state.deref_mut()) else {
+    //         return Err(EthApiError::StorageProofNotFound.into());
+    //     };
+    //     Ok(proof)
+    // }
+
+    /// Returns merkle proofs of storage slots
+    #[rpc_method(name = "ext_getStorageProof")]
+    pub fn get_storage_proof(&self, address: Address, index: U256, state: &mut ApiStateAccessor<S>) -> RpcResult<StorageProof<<S::Storage as Storage>::Proof>> {
+        // let mut state = self.resolve_state_for_block_id(block_id, state)?;
+        let Some(proof) = self.account_storage.get_with_proof(&(&address, &index), state) else {
+            return Err(EthApiError::StorageProofNotFound.into());
+        };
+        println!("proof: {}", serde_json::to_string(&proof).unwrap());
+        Ok(proof)
     }
 
     /// Handler for: `eth_getTransactionCount`

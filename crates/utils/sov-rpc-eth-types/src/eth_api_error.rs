@@ -83,6 +83,9 @@ pub enum EthApiError {
     /// Invalid block count
     #[error("invalid block count: {0}")]
     InvalidBlockCount(u64),
+    /// Thrown when a storage proof is not found
+    #[error("storage proof not found")]
+    StorageProofNotFound,
     /// Any other error
     #[error("{0}")]
     Other(Box<dyn ToRpcError>),
@@ -117,6 +120,7 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             EthApiError::InvalidBlockCount(_) => invalid_params_rpc_err(error.to_string()),
             EthApiError::UnknownBlock
             | EthApiError::UnknownTxIndex(_)
+            | EthApiError::StorageProofNotFound
             | EthApiError::PrunedHistoryUnavailable => {
                 rpc_error_with_code(EthRpcErrorCode::ResourceNotFound.code(), error.to_string())
             }

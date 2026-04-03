@@ -251,7 +251,7 @@ mod proofs {
         where
             W: ProvenStateAccessor<N>,
         {
-            state.get_with_proof(self.slot_key())
+            state.get_global_latest_with_proof(self.slot_key())
         }
 
         pub fn verify_proof<S: Spec>(
