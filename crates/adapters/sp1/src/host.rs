@@ -1,5 +1,7 @@
 //! Implementation of the SP1 host for the Sovereign ZkvmHost trait.
 
+use crate::guest::SP1Guest;
+use crate::SP1MethodId;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::reexports::anyhow;
@@ -10,10 +12,8 @@ use sov_rollup_interface::zk::aggregated_proof::{BlockHeaderWithProof, CodeCommi
 use sov_rollup_interface::zk::ZkvmHost;
 use sp1_sdk::blocking::ProveRequest;
 use sp1_sdk::blocking::{CpuProver, MockProver, Prover, ProverClient};
-use sp1_sdk::{HashableKey, ProvingKey, SP1Proof, SP1ProvingKey, SP1Stdin};
-
-use crate::guest::SP1Guest;
-use crate::SP1MethodId;
+use sp1_sdk::ProvingKey;
+use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 
 /// SP1 host that produces aggregated (outer) proofs by recursively verifying
 /// a batch of inner state-transition proofs inside an SP1 guest program.
@@ -47,8 +47,8 @@ impl SP1AggregationHost {
     }
 
     /// Returns the code commitment (verifying key) of the aggregation program.
-    pub fn code_commitment(&self) -> anyhow::Result<SP1MethodId> {
-        Ok(self.code_commitment.clone())
+    pub fn code_commitment(&self) -> SP1MethodId {
+        self.code_commitment.clone()
     }
 
     /// Generates a compressed aggregation proof over the supplied inner

@@ -51,7 +51,7 @@ fn main() -> anyhow::Result<()> {
         .collect::<Vec<_>>();
 
     let num_outer_proofs = proof_batches.len();
-    let code_commitment = prover.code_commitment()?;
+    let code_commitment = prover.code_commitment();
 
     for (batch_index, proof_batch) in proof_batches.into_iter().enumerate() {
         println!(
