@@ -220,7 +220,7 @@ where
     let proving_start = std::time::Instant::now();
     let result = match config {
         RollupProverConfigDiscriminants::Skip => Ok(Vec::default()),
-        RollupProverConfigDiscriminants::Execute | RollupProverConfigDiscriminants::Prove => {
+        RollupProverConfigDiscriminants::Prove => {
             info!("Generating proof with {}", std::any::type_name::<InnerVm>());
             vm.run()
         }

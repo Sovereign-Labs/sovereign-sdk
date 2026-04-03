@@ -1233,7 +1233,7 @@ pub fn get_appropriate_rollup_prover_config<S: Spec>(
     if skip_guest_build == "1" {
         RollupProverConfig::Skip
     } else {
-        RollupProverConfig::Execute(host_args)
+        RollupProverConfig::Prove(host_args)
     }
 }
 

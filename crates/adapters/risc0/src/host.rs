@@ -1,7 +1,7 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
-use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Journal, Receipt, Session};
-use sov_rollup_interface::zk::{Proof, ZkvmHost};
+use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Receipt, Session};
+use sov_rollup_interface::zk::ZkvmHost;
 
 use crate::guest::Risc0Guest;
 use crate::Risc0MethodId;
@@ -43,7 +43,7 @@ impl<'a> Risc0Host<'a> {
 
     /// Run a computation in the zkVM without generating a receipt.
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
-    pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
+    fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let mut env = add_benchmarking_callbacks(ExecutorEnvBuilder::default());
         #[cfg(feature = "bincode")]
         env.write_slice(&[self.env.len() as u32]);
@@ -96,9 +96,8 @@ impl ZkvmHost for Risc0Host<'static> {
     }
 
     fn run(&mut self) -> anyhow::Result<Vec<u8>> {
-        let receipt = self.run()?;
-        let proof = Proof::<Receipt, Option<Journal>>::Full(receipt);
-        Ok(bincode::serialize(&proof)?)
+        let receipt = Risc0Host::run(self)?;
+        Ok(bincode::serialize(&receipt)?)
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{

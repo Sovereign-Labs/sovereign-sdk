@@ -22,7 +22,7 @@ type ProofInput = StateTransitionWitnessWithAddress<
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
-    let (host, code_commitment) = TestHost::new().await;
+    let (host, code_commitment) = TestHost::new(true).await;
     let proof_data = generate_proofs(&host).await;
     let proofs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -45,13 +45,11 @@ async fn test_save_proofs() {
 #[tokio::test(flavor = "multi_thread")]
 #[cfg_attr(skip_guest_build, ignore)]
 async fn test_proof_generation() {
-    let (host, _) = TestHost::new().await;
+    let (host, _) = TestHost::new(false).await;
     let _ = generate_proofs(&host).await;
 }
 
-async fn generate_proofs(
-    host: &TestHost,
-) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
+async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
 
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
@@ -80,10 +78,11 @@ async fn generate_proofs(
 struct TestHost {
     host: SP1Host<'static>,
     mock_host: MockSp1Prover,
+    with_proof: bool,
 }
 
 impl TestHost {
-    async fn new() -> (Self, SP1MethodId) {
+    async fn new(with_proof: bool) -> (Self, SP1MethodId) {
         let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
         let host_clone = host.clone();
         let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
@@ -96,18 +95,35 @@ impl TestHost {
 
         let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF);
 
-        (Self { host, mock_host }, code_commitment)
+        (
+            Self {
+                host,
+                mock_host,
+                with_proof,
+            },
+            code_commitment,
+        )
     }
 
     async fn run(&self, data: ProofInput) -> Vec<u8> {
-        let mut mock_host = self.mock_host.clone();
-        tokio::task::spawn_blocking(move || -> Vec<u8> {
-            mock_host.add_hint(data);
-            mock_host.run().unwrap();
-            Default::default()
-        })
-        .await
-        .unwrap()
+        if self.with_proof {
+            let mut host = self.host.clone();
+            tokio::task::spawn_blocking(move || -> Vec<u8> {
+                host.add_hint(data);
+                host.run().expect("Prover should run successfully")
+            })
+            .await
+            .unwrap()
+        } else {
+            let mut mock_host = self.mock_host.clone();
+            tokio::task::spawn_blocking(move || -> Vec<u8> {
+                mock_host.add_hint(data);
+                mock_host.run().unwrap();
+                Default::default()
+            })
+            .await
+            .unwrap()
+        }
     }
 }
 
