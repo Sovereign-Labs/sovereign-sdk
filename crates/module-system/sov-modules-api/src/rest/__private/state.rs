@@ -23,7 +23,10 @@ use serde::Serialize;
 use sov_rest_utils::errors::not_found_404;
 use sov_rest_utils::{ApiResult, ErrorObject, Path, Query};
 use sov_rollup_interface::common::SlotNumber;
-use sov_state::{CompileTimeNamespace, Kernel, Namespace, StateCodec, StateItemCodec};
+use sov_state::{
+    CompileTimeNamespace, Kernel, Namespace, NativeStorage, SlotKey, StateCodec, StateItemCodec,
+    StateItemDecoder, StateItemEncoder,
+};
 use unwrap_infallible::UnwrapInfallible;
 
 use super::types::StateItemContents;
@@ -32,7 +35,7 @@ use crate::map::NamespacedStateMap;
 use crate::rest::{json_obj, StatusCode};
 use crate::value::NamespacedStateValue;
 use crate::vec::NamespacedStateVec;
-use crate::{ApiStateAccessor, ModuleInfo, StateReader, VersionedStateValue};
+use crate::{ApiStateAccessor, ModuleInfo, Spec, StateReader, VersionedStateValue};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -253,6 +256,120 @@ where
     }
 }
 
+impl<N, M, K, V, Codec> StateItemRestApiImpl<M, NamespacedStateMap<N, K, V, Codec>>
+where
+    N: CompileTimeNamespace,
+    M: ModuleSendSync,
+    <M::Spec as Spec>::Storage: NativeStorage,
+    ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
+    K: Serialize + serde::de::DeserializeOwned + FromStr + Display + Clone,
+    V: Serialize,
+    Codec: StateCodec,
+    Codec::KeyCodec: StateItemCodec<K>,
+    Codec::ValueCodec: StateItemCodec<V>,
+{
+    async fn get_state_map_items_route(
+        State(state): State<Self>,
+        accessor: ApiStateAccessor<M::Spec>,
+        Query(pagination): Query<sov_rest_utils::Pagination<String>>,
+    ) -> ApiResult<sov_rest_utils::PaginatedResponse<StateItemContents<K, V>, String>> {
+        let prefix = Prefix::new(
+            state.module_discriminant,
+            state.state_item_info.item_discriminant,
+        );
+        let state_map =
+            NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix.clone(), Codec::default());
+        let slot_prefix = SlotKey::singleton(&prefix);
+
+        let iter = accessor
+            .iter_values_with_prefix(N::NAMESPACE, slot_prefix)
+            .map_err(|e| {
+                sov_rest_utils::errors::internal_server_error_response_500(format!(
+                    "Failed to iterate map: {e}"
+                ))
+            })?;
+        let iter = iter.ok_or_else(|| sov_rest_utils::errors::not_implemented_501())?;
+
+        let cursor_key = match &pagination.selection {
+            sov_rest_utils::PageSelection::First => None,
+            sov_rest_utils::PageSelection::Next { cursor } => {
+                let key = K::from_str(cursor).map_err(|_| {
+                    sov_rest_utils::errors::bad_request_400(
+                        "Invalid cursor",
+                        "Failed to parse page cursor as map key",
+                    )
+                })?;
+                Some(key)
+            }
+            sov_rest_utils::PageSelection::Last => {
+                return Err(sov_rest_utils::errors::bad_request_400(
+                    "Unsupported pagination",
+                    "page=last is not supported for map iteration",
+                ));
+            }
+        };
+
+        // Encode the cursor key for byte-level comparison
+        let cursor_key_bytes: Option<Vec<u8>> = cursor_key
+            .as_ref()
+            .map(|k| state_map.codec().key_codec().encode_to_vec(k));
+
+        let limit = pagination.size as usize;
+        let mut items = Vec::with_capacity(limit);
+
+        for (slot_key, slot_value) in iter {
+            let key_bytes = slot_key.without_prefix();
+
+            // Skip entries up to and including the cursor
+            if let Some(ref cursor_bytes) = cursor_key_bytes {
+                if key_bytes <= cursor_bytes.as_slice() {
+                    continue;
+                }
+            }
+
+            let key: K = state_map
+                .codec()
+                .key_codec()
+                .try_decode(key_bytes)
+                .map_err(|_| {
+                    sov_rest_utils::errors::internal_server_error_response_500(
+                        "Failed to decode map key",
+                    )
+                })?;
+
+            let value: V = state_map
+                .codec()
+                .value_codec()
+                .try_decode(slot_value.value())
+                .map_err(|_| {
+                    sov_rest_utils::errors::internal_server_error_response_500(
+                        "Failed to decode map value",
+                    )
+                })?;
+
+            items.push(StateItemContents::MapElement {
+                key: key.clone(),
+                value,
+            });
+
+            if items.len() >= limit {
+                let next_cursor = key.to_string();
+                return Ok(sov_rest_utils::PaginatedResponse {
+                    items,
+                    next_cursor: Some(next_cursor),
+                }
+                .into());
+            }
+        }
+
+        Ok(sov_rest_utils::PaginatedResponse {
+            items,
+            next_cursor: None,
+        }
+        .into())
+    }
+}
+
 impl<M, V, Codec> StateItemRestApiImpl<M, VersionedStateValue<V, Codec>>
 where
     M: ModuleSendSync,
@@ -282,6 +399,7 @@ impl<N, M, K, V, Codec> StateItemRestApi
 where
     N: CompileTimeNamespace,
     M: ModuleSendSync,
+    <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Display + FromStr + Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + 'static,
     V: Serialize + Clone + Send + Sync + 'static,
@@ -292,6 +410,7 @@ where
     fn state_item_rest_api(&self) -> axum::Router<()> {
         axum::Router::new()
             .route("/", get(Self::get_state_map_route))
+            .route("/items", get(Self::get_state_map_items_route))
             .route("/items/:key", get(Self::get_state_map_item_route))
             .with_state(self.clone())
     }

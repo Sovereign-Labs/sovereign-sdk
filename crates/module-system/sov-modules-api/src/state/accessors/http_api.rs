@@ -308,6 +308,33 @@ impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
 }
 
 #[cfg(feature = "native")]
+impl<S: Spec> ApiStateAccessor<S>
+where
+    S::Storage: NativeStorage,
+{
+    /// Iterate over all values with the given prefix in the specified namespace.
+    /// Returns `None` if the storage backend does not support prefix iteration.
+    pub fn iter_values_with_prefix(
+        &self,
+        namespace: Namespace,
+        prefix: SlotKey,
+    ) -> anyhow::Result<Option<Box<dyn Iterator<Item = (SlotKey, SlotValue)> + '_>>> {
+        let storage = self.checkpoint_and_read_txn.state_checkpoint.storage();
+        match namespace {
+            Namespace::User => {
+                let iter = storage.maybe_iter_user_values_with_prefix(prefix)?;
+                Ok(iter.map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>))
+            }
+            Namespace::Kernel => {
+                let iter = storage.maybe_iter_kernel_values_with_prefix(prefix)?;
+                Ok(iter.map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>))
+            }
+            Namespace::Accessory => Ok(None),
+        }
+    }
+}
+
+#[cfg(feature = "native")]
 const _: () = {
     use sov_state::{NativeStorage, ProvableCompileTimeNamespace, StorageProof};
 
