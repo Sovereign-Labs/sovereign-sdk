@@ -81,7 +81,7 @@ pub enum MockCodeCommitmentError {
 
 /// A helper type capable of simulating invalid proofs.
 #[derive(Serialize, Deserialize)]
-struct Inner {
+struct MockProof {
     /// Is proof valid.
     is_valid: bool,
     /// Public input.
@@ -103,7 +103,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
         serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let Inner {
+        let MockProof {
             is_valid,
             pub_data: input,
         } = bincode::deserialize(serialized_proof)?;

@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::notifier::NotificationManager;
-use crate::{Inner, MockCodeCommitment, MockZkGuest};
+use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
 
 /// A mock implementing the zkVM trait.
@@ -40,7 +40,7 @@ impl MockZkvmHost {
     /// Create a proof for MockZkvm
     pub fn create_serialized_proof<T: Serialize>(is_valid: bool, transition: T) -> Vec<u8> {
         let data = bincode::serialize(&transition).unwrap();
-        bincode::serialize(&Inner {
+        bincode::serialize(&MockProof {
             is_valid,
             pub_data: data,
         })
@@ -73,7 +73,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
             self.notification_manager.wait();
         }
         let data = self.committed_data.pop_front().unwrap_or_default();
-        Ok(bincode::serialize(&Inner {
+        Ok(bincode::serialize(&MockProof {
             is_valid: true,
             pub_data: data,
         })?)

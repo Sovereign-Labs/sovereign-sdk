@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
-use crate::{Inner, MockZkGuest};
+use crate::{MockProof, MockZkGuest};
 
 struct MockNetworkProof {
     proof_bytes: Vec<u8>,
@@ -80,7 +80,7 @@ impl sov_rollup_interface::zk::ZkvmNetwork for MockZkvmNetwork {
         item: &T,
     ) -> anyhow::Result<Self::ProofHandle> {
         let data = bincode::serialize(item).unwrap();
-        let proof_bytes = bincode::serialize(&Inner {
+        let proof_bytes = bincode::serialize(&MockProof {
             is_valid: true,
             pub_data: data,
         })?;
