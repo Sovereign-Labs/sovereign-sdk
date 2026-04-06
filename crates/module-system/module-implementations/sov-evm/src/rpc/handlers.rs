@@ -155,7 +155,7 @@ where
         let storage = state.storage();
         let account_slot_key =  self.account_storage.slot_key(&(&address, &index));
         let accessory_block_numbers_key = self.block_numbers.slot_key();
-        let (proof, accessory_values, root_hash) = storage.get_with_proof::<User>(account_slot_key, Some(vec![accessory_block_numbers_key]), None)
+        let (proof, accessory_values, root_hash) = storage.get_with_proof::<User>(account_slot_key, Some(vec![accessory_block_numbers_key]))
             .inspect_err(|err| tracing::error!(error = ?err, "Error getting storage proof"))
             .map_err(|_|EthApiError::StorageProofNotFound)?;
 

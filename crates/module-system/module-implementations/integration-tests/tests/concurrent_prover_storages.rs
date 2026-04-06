@@ -472,7 +472,6 @@ enum ValueNamespace {
 /// Checks that given storage can see all expected values for a given key.
 /// The first element in expected_values is supposed to be rollup_height == 0
 /// Last element checked against "last" version (None parameter)
-/// get_with_proof is also checked for User and Kernel namespaces.
 fn assert_values<S: NativeStorage>(
     storage: &S,
     key: &SlotKey,
@@ -486,23 +485,12 @@ fn assert_values<S: NativeStorage>(
                 let just_value = storage
                     .get_historical::<Kernel>(key, version, &witness_stub)
                     .unwrap();
-                let with_proof = storage
-                    .get_with_proof::<Kernel>(key.clone(), None, version)
-                    .ok()
-                    .and_then(|with_proof| with_proof.0.value);
-                // Assume that proof and the rest are correct
-                assert_eq!(just_value, with_proof);
                 just_value
             }
             ValueNamespace::StateUser => {
                 let just_value = storage
                     .get_historical::<User>(key, version, &witness_stub)
                     .unwrap();
-                let with_proof = storage
-                    .get_with_proof::<User>(key.clone(), None, version)
-                    .ok()
-                    .and_then(|with_proof| with_proof.0.value);
-                assert_eq!(just_value, with_proof);
                 just_value
             }
             ValueNamespace::Accessory => storage.get_accessory_historical(key, version).unwrap(),

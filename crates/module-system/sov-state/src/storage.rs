@@ -376,7 +376,6 @@ pub trait NativeStorage: Storage {
         &self,
         key: SlotKey,
         accessory_keys: Option<Vec<SlotKey>>,
-        slot_number: Option<SlotNumber>,
     ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)>;
 
     /// Get the *global* root hash of the tree at the requested version.

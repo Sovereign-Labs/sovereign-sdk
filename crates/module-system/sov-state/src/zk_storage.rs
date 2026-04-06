@@ -224,7 +224,6 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
         &self,
         _key: SlotKey,
         _accessory_keys: Option<Vec<SlotKey>>,
-        _version: Option<SlotNumber>,
     ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
         unimplemented!("The ZkStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }

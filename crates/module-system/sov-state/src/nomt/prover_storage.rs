@@ -744,7 +744,6 @@ where
         &self,
         proven_key: SlotKey,
         accessory_keys: Option<Vec<SlotKey>>,
-        slot_number: Option<SlotNumber>, // TODO: Remove this parameter
     ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
         let namespace = N::PROVABLE_NAMESPACE;
         // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
