@@ -321,8 +321,10 @@ const _: () = {
     {
         type Proof = <<S as Spec>::Storage as Storage>::Proof;
 
-        fn get_global_latest_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>> {
-            
+        fn get_global_latest_with_proof(
+            &mut self,
+            key: SlotKey,
+        ) -> Option<StorageProof<Self::Proof>> {
             match self.storage().get_with_proof::<N>(key, None) {
                 Ok(storage_proof) => Some(storage_proof.0),
                 Err(err) => {

@@ -130,7 +130,6 @@ impl HistoricalStateReader {
             .map(|v| v.unwrap_or(SlotNumber::GENESIS))
     }
 
-
     /// The latest root hash available. This is the newer of the value from the newest delta in memory and the value from the underlying db.
     pub fn latest_root_unbound(&self) -> anyhow::Result<Option<SchemaValue>> {
         let reader = &self.root_hash_reader;

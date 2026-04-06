@@ -481,18 +481,12 @@ fn assert_values<S: NativeStorage>(
     let witness_stub = S::Witness::default();
     let get_value = |version: Option<SlotNumber>| -> Option<SlotValue> {
         match namespace {
-            ValueNamespace::StateKernel => {
-                let just_value = storage
-                    .get_historical::<Kernel>(key, version, &witness_stub)
-                    .unwrap();
-                just_value
-            }
-            ValueNamespace::StateUser => {
-                let just_value = storage
-                    .get_historical::<User>(key, version, &witness_stub)
-                    .unwrap();
-                just_value
-            }
+            ValueNamespace::StateKernel => storage
+                .get_historical::<Kernel>(key, version, &witness_stub)
+                .unwrap(),
+            ValueNamespace::StateUser => storage
+                .get_historical::<User>(key, version, &witness_stub)
+                .unwrap(),
             ValueNamespace::Accessory => storage.get_accessory_historical(key, version).unwrap(),
         }
     };

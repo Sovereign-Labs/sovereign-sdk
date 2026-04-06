@@ -336,6 +336,13 @@ pub trait Storage: Clone + core::fmt::Debug {
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)>;
 }
 
+type MaybeVec<T> = Option<Vec<Option<T>>>;
+type ProofOutput<S> = (
+    StorageProof<<S as Storage>::Proof>,
+    MaybeVec<SlotValue>,
+    <S as Storage>::Root,
+);
+
 #[cfg(feature = "native")]
 /// A [`Storage`] that is suitable for use in native execution environments
 /// (outside of the zkVM).
@@ -376,7 +383,7 @@ pub trait NativeStorage: Storage {
         &self,
         key: SlotKey,
         accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)>;
+    ) -> anyhow::Result<ProofOutput<Self>>;
 
     /// Get the *global* root hash of the tree at the requested version.
     /// Returns an error if storage is empty or the requests version is not yet available.

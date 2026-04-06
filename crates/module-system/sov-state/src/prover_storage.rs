@@ -491,12 +491,14 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         &self,
         key: SlotKey,
         accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
+    ) -> anyhow::Result<(
+        StorageProof<Self::Proof>,
+        Option<Vec<Option<SlotValue>>>,
+        Self::Root,
+    )> {
         let version_to_use = match self.get_version_to_use(None) {
             None => {
-                anyhow::bail!(
-                    "Proof is not available. Empty storage",
-                )
+                anyhow::bail!("Proof is not available. Empty storage",)
             }
             Some(v) => v,
         };

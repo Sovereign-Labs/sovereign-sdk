@@ -23,7 +23,10 @@ use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
-    Accessory, CompileTimeNamespace, Kernel, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf, NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace, ProvableNamespace, SlotKey, SlotValue, StateAccesses, StateRoot, StateUpdate, Storage, StorageProof, StorageRoot, User, Witness
+    Accessory, CompileTimeNamespace, Kernel, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
+    NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace, ProvableNamespace,
+    SlotKey, SlotValue, StateAccesses, StateRoot, StateUpdate, Storage, StorageProof, StorageRoot,
+    User, Witness,
 };
 
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
@@ -343,10 +346,12 @@ where
         self.materialize_changes_with_version(state_update, version)
     }
 
-
     /// Get the latest root hash available in the live db. This could be the newest root hash from the underlying db, or the root hash from the latest delta in memory - whichever is newer.
     fn latest_root_unbound(&self) -> Option<StorageRoot<S>> {
-        self.historical_state.latest_root_unbound().expect("Error reading from database").map(|v| borsh::from_slice(&v).expect("Error deserializing root hash"))
+        self.historical_state
+            .latest_root_unbound()
+            .expect("Error reading from database")
+            .map(|v| borsh::from_slice(&v).expect("Error deserializing root hash"))
     }
 }
 
@@ -689,7 +694,6 @@ where
             .expect("Issue with underlying database")
     }
 
-
     fn get_historical<N: ProvableCompileTimeNamespace>(
         &self,
         key: &SlotKey,
@@ -736,7 +740,7 @@ where
     // Note that in this function, we always the use the "unbound" methods to read from storage. Recall that the standard readers attempt to preserve the illusion that the storage holds a point-in-time snapshot,
     // so they fall back to archival state if the underlying DB has changed. But NOMT doesn't have an archival tree to make merkle proofs against, so this behavior would break consistency.
     // The "unbound" methods bypass this behavior and always show the newest available value (either a value from the in-memory deltas in the storage, or - if it's newer - the value from the underlying database).
-    // 
+    //
     // Aside: Why do we need to fetch the root hash twice?
     // If we only fetch once, there's a subtle race condition. With a single read, one or the other of these interleavings is possible: (Read_rocksdb_value-> (other thread)commit_rocksdb -> Read_rocksdb_root) or (Read_rocksdb_root-> (other thread)commit_rocksdb -> Read_rocksdb_value)
     // In either case, the value we read from RocksDB will be inconsistent with the root hash we fetched from RocksDB. By reading the root hash before and after the value and cross-checking, we eliminate this possibility.
@@ -744,10 +748,17 @@ where
         &self,
         proven_key: SlotKey,
         accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
+    ) -> anyhow::Result<(
+        StorageProof<Self::Proof>,
+        Option<Vec<Option<SlotValue>>>,
+        Self::Root,
+    )> {
         let namespace = N::PROVABLE_NAMESPACE;
         // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
-        let pre_fetch_state_root = self.latest_root_unbound().ok_or(anyhow::anyhow!("Latest root hash not found"))?.namespace_root(namespace);
+        let pre_fetch_state_root = self
+            .latest_root_unbound()
+            .ok_or(anyhow::anyhow!("Latest root hash not found"))?
+            .namespace_root(namespace);
         // Read the value from the newest delta or the live table, whichever is newer.
         let value = match namespace {
             ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
@@ -763,7 +774,9 @@ where
             accessory_values = Some(accessory_values_vec);
         }
         // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
-        let post_fetch_state_root = self.latest_root_unbound().ok_or(anyhow::anyhow!("Latest root hash not found"))?;
+        let post_fetch_state_root = self
+            .latest_root_unbound()
+            .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
         let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
 
         let session = match namespace {
@@ -775,20 +788,27 @@ where
                 .begin_kernel_session_without_witness()?,
         };
 
-        if pre_fetch_state_root != post_fetch_state_root_namespace  || &post_fetch_state_root_namespace != session.prev_root().as_ref() {
-            anyhow::bail!("State root mismatch between pre-fetch and post-fetch"); // TODO: This should become a retry
+        if pre_fetch_state_root != post_fetch_state_root_namespace
+            || post_fetch_state_root_namespace != session.prev_root().as_ref()
+        {
+            anyhow::bail!("State root mismatch between pre-fetch and post-fetch");
+            // TODO: This should become a retry
         }
 
         let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
         let path_proof = session.prove(key_path)?;
         let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
 
-        Ok((StorageProof {
-            key: proven_key,
-            value,
-            proof: NomtMultiProof(multi_proof),
-            namespace,
-        }, accessory_values, post_fetch_state_root))
+        Ok((
+            StorageProof {
+                key: proven_key,
+                value,
+                proof: NomtMultiProof(multi_proof),
+                namespace,
+            },
+            accessory_values,
+            post_fetch_state_root,
+        ))
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {

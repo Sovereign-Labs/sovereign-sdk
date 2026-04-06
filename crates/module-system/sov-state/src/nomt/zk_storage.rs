@@ -211,7 +211,11 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         &self,
         _key: SlotKey,
         _accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
+    ) -> anyhow::Result<(
+        StorageProof<Self::Proof>,
+        Option<Vec<Option<SlotValue>>>,
+        Self::Root,
+    )> {
         unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
