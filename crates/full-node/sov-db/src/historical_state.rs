@@ -130,6 +130,14 @@ impl HistoricalStateReader {
             .map(|v| v.unwrap_or(SlotNumber::GENESIS))
     }
 
+
+    /// The latest root hash available. This is the newer of the value from the newest delta in memory and the value from the underlying db.
+    pub fn latest_root_unbound(&self) -> anyhow::Result<Option<SchemaValue>> {
+        let reader = &self.root_hash_reader;
+        let last_root_hash_entry = reader.get_largest::<StateRootHashes>()?;
+        Ok(last_root_hash_entry.map(|(_, root)| root))
+    }
+
     /// Get an optional value from the database, given a version and a key hash.
     pub fn get_user_value_option_by_key(&self, key: &SlotKey) -> anyhow::Result<Option<SlotValue>> {
         self.user.get_latest_borrowed(key)

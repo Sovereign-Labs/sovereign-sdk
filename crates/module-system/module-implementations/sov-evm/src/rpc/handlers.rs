@@ -17,13 +17,24 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::rest::utils::errors::internal_server_error_500;
+use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
-use sov_state::{Storage, StorageProof};
+use sov_state::{NativeStorage, Storage, StorageProof};
 use std::ops::DerefMut;
 use tracing::trace;
+use sov_modules_api::state::PinnedCacheAccessor;
 
 use crate::Evm;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GetProofResponse<S: Spec> {
+    pub proof: StorageProof<<S::Storage as Storage>::Proof>,
+    pub state_root: <S::Storage as Storage>::Root,
+    /// The ethereum block which contains the state root as its storage root. 
+    /// Note that since state roots are delayed, this is *not* the same as the block number which would have viewed the state root as its storage root.
+    pub state_root_block_number: u64,
+}
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -136,25 +147,24 @@ where
         Ok(storage_slot.to_be_bytes::<32>().into())
     }
 
-    // /// Returns merkle proofs of storage slots
-    // #[rpc_method(name = "ext_getStorageProof")]
-    // pub fn get_storage_proof(&self, address: Address, index: U256, block_id: Option<BlockId>, state: &mut ApiStateAccessor<S>) -> RpcResult<StorageProof<<S::Storage as Storage>::Proof>> {
-    //     let mut state = self.resolve_state_for_block_id(block_id, state)?;
-    //     let Some(proof) = self.account_storage.get_with_proof(&(&address, &index), state.deref_mut()) else {
-    //         return Err(EthApiError::StorageProofNotFound.into());
-    //     };
-    //     Ok(proof)
-    // }
 
     /// Returns merkle proofs of storage slots
     #[rpc_method(name = "ext_getStorageProof")]
-    pub fn get_storage_proof(&self, address: Address, index: U256, state: &mut ApiStateAccessor<S>) -> RpcResult<StorageProof<<S::Storage as Storage>::Proof>> {
-        // let mut state = self.resolve_state_for_block_id(block_id, state)?;
+    pub fn get_storage_proof(&self, address: Address, index: U256, state: &mut ApiStateAccessor<S>) -> RpcResult<GetProofResponse<S>> {
         let Some(proof) = self.account_storage.get_with_proof(&(&address, &index), state) else {
             return Err(EthApiError::StorageProofNotFound.into());
         };
+        let key = self.block_numbers.slot_key();
+        let block_number = state.storage().get_accessory(&key).unwrap_or_default();
+        let block_number = *self.block_numbers.decode_unwrap(&block_number).end(); // .checked_add(1).unwrap(); // Add 1 because block N has the hash of the *previous* state transition included
+        let block_number = block_number.saturating_add(config_value!("STATE_ROOT_DELAY_BLOCKS")); // Add state root delay blocks to get the state root for the block number
+        let state_root: <<S as Spec>::Storage as Storage>::Root = state.storage().get_latest_root_hash().inspect_err(|err| tracing::error!(error = ?err, "Error getting latest root hash to serve storage proof request")).map_err(|_|EthApiError::StorageProofNotFound)?;
         println!("proof: {}", serde_json::to_string(&proof).unwrap());
-        Ok(proof)
+        Ok(GetProofResponse {
+            proof,
+            state_root,
+            state_root_block_number: block_number,
+        })
     }
 
     /// Handler for: `eth_getTransactionCount`

@@ -87,6 +87,7 @@ impl<T> InfallibleKernelStateAccessor for T where
 {
 }
 
+/// A trait that allows access to the pinned cache and storage of a state accessor.
 pub trait PinnedCacheAccessor<S: Spec> {
     /// Returns a mutable reference to the pinned cache backing this accessor, if any exists.
     fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache>;
