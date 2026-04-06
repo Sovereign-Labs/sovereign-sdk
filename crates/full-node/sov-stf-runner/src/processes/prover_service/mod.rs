@@ -32,8 +32,6 @@ where
 pub enum RollupProverConfig<Vm: Zkvm> {
     /// Skip proving.
     Skip,
-    /// Run the rollup verifier in a zkVM executor.
-    Execute(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
     /// Run the rollup verifier and create a SNARK of execution.
     Prove(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
 }
@@ -41,7 +39,7 @@ pub enum RollupProverConfig<Vm: Zkvm> {
 impl<Vm: Zkvm> RollupProverConfig<Vm> {
     /// Returns `true` if witness generation is needed for this prover configuration.
     ///
-    /// Only [`Execute`](Self::Execute) and [`Prove`](Self::Prove) require witness data;
+    /// Only [`Prove`](Self::Prove) requires witness data;
     /// [`Skip`](Self::Skip) does not run the verifier, so recording witness hints is wasted work.
     pub fn needs_witness(&self) -> bool {
         !matches!(self, Self::Skip)
@@ -57,8 +55,6 @@ impl<Vm: Zkvm> RollupProverConfig<Vm> {
 pub enum RollupProverConfigDiscriminants {
     /// Skip proving.
     Skip,
-    /// Run the rollup verifier in a zkVM executor.
-    Execute,
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
 }
@@ -73,7 +69,6 @@ impl<Vm: Zkvm> From<RollupProverConfig<Vm>> for RollupProverConfigDiscriminants 
     fn from(value: RollupProverConfig<Vm>) -> Self {
         match value {
             RollupProverConfig::Prove(_) => RollupProverConfigDiscriminants::Prove,
-            RollupProverConfig::Execute(_) => RollupProverConfigDiscriminants::Execute,
             RollupProverConfig::Skip => RollupProverConfigDiscriminants::Skip,
         }
     }
@@ -87,7 +82,6 @@ impl RollupProverConfigDiscriminants {
     ) -> RollupProverConfig<Vm> {
         match self {
             RollupProverConfigDiscriminants::Skip => RollupProverConfig::Skip,
-            RollupProverConfigDiscriminants::Execute => RollupProverConfig::Execute(host_args),
             RollupProverConfigDiscriminants::Prove => RollupProverConfig::Prove(host_args),
         }
     }
@@ -103,9 +97,6 @@ impl<Vm: Zkvm> RollupProverConfig<Vm> {
     ) {
         match self {
             RollupProverConfig::Skip => (Default::default(), RollupProverConfigDiscriminants::Skip),
-            RollupProverConfig::Execute(host_args) => {
-                (host_args, RollupProverConfigDiscriminants::Execute)
-            }
             RollupProverConfig::Prove(host_args) => {
                 (host_args, RollupProverConfigDiscriminants::Prove)
             }
