@@ -375,8 +375,9 @@ pub trait NativeStorage: Storage {
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         key: SlotKey,
+        accessory_keys: Option<Vec<SlotKey>>,
         slot_number: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>>;
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)>;
 
     /// Get the *global* root hash of the tree at the requested version.
     /// Returns an error if storage is empty or the requests version is not yet available.

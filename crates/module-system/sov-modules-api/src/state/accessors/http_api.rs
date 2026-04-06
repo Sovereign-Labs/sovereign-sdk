@@ -323,8 +323,8 @@ const _: () = {
 
         fn get_global_latest_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>> {
             
-            match self.storage().get_with_proof::<N>(key, None) {
-                Ok(storage_proof) => Some(storage_proof),
+            match self.storage().get_with_proof::<N>(key, None, None) {
+                Ok(storage_proof) => Some(storage_proof.0),
                 Err(err) => {
                     tracing::error!(error = ?err, "Error requesting storage proof");
                     None

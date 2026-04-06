@@ -490,8 +490,9 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         key: SlotKey,
+        accessory_keys: Option<Vec<SlotKey>>,
         version: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>> {
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
         let version_to_use = match self.get_version_to_use(version) {
             None => {
                 anyhow::bail!(
@@ -501,15 +502,26 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             }
             Some(v) => v,
         };
+        let mut accessory_values = None;
+        if let Some(accessory_keys) = accessory_keys {
+            let mut accessory_values_vec = Vec::with_capacity(accessory_keys.len());
+            for key in accessory_keys {
+                let value = self.get_accessory_historical(&key, version)?;
+                accessory_values_vec.push(value);
+            }
+            accessory_values = Some(accessory_values_vec);
+        }
         let namespace = N::PROVABLE_NAMESPACE;
-        Ok(match namespace {
+        let root = self.get_root_hash(version_to_use)?;
+        let proof = match namespace {
             ProvableNamespace::User => {
                 self.get_with_proof_namespace::<DBUserNamespace>(namespace, key, version_to_use)
             }
             ProvableNamespace::Kernel => {
                 self.get_with_proof_namespace::<DBKernelNamespace>(namespace, key, version_to_use)
             }
-        })
+        };
+        Ok((proof, accessory_values, root))
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {

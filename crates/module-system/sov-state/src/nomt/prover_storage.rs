@@ -716,6 +716,8 @@ where
         Ok(self.read_value::<Accessory>(key, version)?)
     }
 
+    // Fetch the requested key with proof. Atomically retrieve the values of any provided accessory keys at the same storage version.
+    //
     // This method is complicated because NOMT only maintains the live version of the merkle tree
     //
     // We want to ensure that the merkle proof we fetch (from NOMT) and the value (from RocksDB) are consistent. But RocksDB and NOMT commit at slightly different times.
@@ -740,19 +742,30 @@ where
     // In either case, the value we read from RocksDB will be inconsistent with the root hash we fetched from RocksDB. By reading the root hash before and after the value and cross-checking, we eliminate this possibility.
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
-        key: SlotKey,
+        proven_key: SlotKey,
+        accessory_keys: Option<Vec<SlotKey>>,
         slot_number: Option<SlotNumber>, // TODO: Remove this parameter
-    ) -> anyhow::Result<StorageProof<Self::Proof>> {
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, Option<Vec<Option<SlotValue>>>, Self::Root)> {
         let namespace = N::PROVABLE_NAMESPACE;
         // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
         let pre_fetch_state_root = self.latest_root_unbound().ok_or(anyhow::anyhow!("Latest root hash not found"))?.namespace_root(namespace);
         // Read the value from the newest delta or the live table, whichever is newer.
         let value = match namespace {
-            ProvableNamespace::User => self.read_value_unbound::<User>(&key),
-            ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&key),
+            ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
+            ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
         };
+        let mut accessory_values = None;
+        if let Some(accessory_keys) = accessory_keys {
+            let mut accessory_values_vec = Vec::with_capacity(accessory_keys.len());
+            for key in accessory_keys {
+                let value = self.read_value_unbound::<Accessory>(&key);
+                accessory_values_vec.push(value);
+            }
+            accessory_values = Some(accessory_values_vec);
+        }
         // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
-        let post_fetch_state_root = self.latest_root_unbound().ok_or(anyhow::anyhow!("Latest root hash not found"))?.namespace_root(namespace);
+        let post_fetch_state_root = self.latest_root_unbound().ok_or(anyhow::anyhow!("Latest root hash not found"))?;
+        let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
 
         let session = match namespace {
             ProvableNamespace::User => self
@@ -763,20 +776,20 @@ where
                 .begin_kernel_session_without_witness()?,
         };
 
-        if pre_fetch_state_root != post_fetch_state_root  || &post_fetch_state_root != session.prev_root().as_ref() {
+        if pre_fetch_state_root != post_fetch_state_root_namespace  || &post_fetch_state_root_namespace != session.prev_root().as_ref() {
             anyhow::bail!("State root mismatch between pre-fetch and post-fetch"); // TODO: This should become a retry
         }
 
-        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+        let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
         let path_proof = session.prove(key_path)?;
         let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
 
-        Ok(StorageProof {
-            key,
+        Ok((StorageProof {
+            key: proven_key,
             value,
             proof: NomtMultiProof(multi_proof),
             namespace,
-        })
+        }, accessory_values, post_fetch_state_root))
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {

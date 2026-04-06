@@ -487,9 +487,9 @@ fn assert_values<S: NativeStorage>(
                     .get_historical::<Kernel>(key, version, &witness_stub)
                     .unwrap();
                 let with_proof = storage
-                    .get_with_proof::<Kernel>(key.clone(), version)
+                    .get_with_proof::<Kernel>(key.clone(), None, version)
                     .ok()
-                    .and_then(|with_proof| with_proof.value);
+                    .and_then(|with_proof| with_proof.0.value);
                 // Assume that proof and the rest are correct
                 assert_eq!(just_value, with_proof);
                 just_value
@@ -499,9 +499,9 @@ fn assert_values<S: NativeStorage>(
                     .get_historical::<User>(key, version, &witness_stub)
                     .unwrap();
                 let with_proof = storage
-                    .get_with_proof::<User>(key.clone(), version)
+                    .get_with_proof::<User>(key.clone(), None, version)
                     .ok()
-                    .and_then(|with_proof| with_proof.value);
+                    .and_then(|with_proof| with_proof.0.value);
                 assert_eq!(just_value, with_proof);
                 just_value
             }
