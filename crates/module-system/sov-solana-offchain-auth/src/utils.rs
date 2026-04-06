@@ -28,11 +28,12 @@ pub fn make_multisig_preamble_for_message(
     chain_hash: &[u8; 32],
     message_length: u16,
 ) -> Vec<u8> {
+    use crate::authentication::{PREAMBLE_FIXED_LEN, PUBKEY_LEN};
     assert!(
         pubkeys.len() >= 2 && pubkeys.len() <= 255,
         "multisig preamble requires 2..=255 signers"
     );
-    let mut header = Vec::with_capacity(53 + 32 * pubkeys.len());
+    let mut header = Vec::with_capacity(PREAMBLE_FIXED_LEN + PUBKEY_LEN * pubkeys.len());
     // Signing domain (pre-defined constant)
     header.extend(b"\xffsolana offchain");
     // Header version (only 0 is valid)

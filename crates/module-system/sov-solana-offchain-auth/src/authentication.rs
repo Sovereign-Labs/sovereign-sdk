@@ -211,24 +211,31 @@ pub struct SolanaOffchainSpecCompliantMultisigMessage<S: Spec> {
 }
 
 // Preamble field sizes, per the Solana offchain message spec.
+/// See <https://docs.anza.xyz/proposals/off-chain-message-signing#message-preamble>
 const SIGNING_DOMAIN_LEN: usize = 16;
 const HEADER_VERSION_LEN: usize = 1;
 const APPLICATION_DOMAIN_LEN: usize = 32;
 const MESSAGE_FORMAT_LEN: usize = 1;
 const SIGNER_COUNT_LEN: usize = 1;
-const PUBKEY_LEN: usize = 32;
+pub(crate) const PUBKEY_LEN: usize = 32;
 const MESSAGE_LENGTH_LEN: usize = 2;
 
 /// The sum of all fixed-size preamble fields (everything except the variable-length signers array).
-const PREAMBLE_FIXED_LEN: usize = SIGNING_DOMAIN_LEN
+pub(crate) const PREAMBLE_FIXED_LEN: usize = SIGNING_DOMAIN_LEN
     + HEADER_VERSION_LEN
     + APPLICATION_DOMAIN_LEN
     + MESSAGE_FORMAT_LEN
     + SIGNER_COUNT_LEN
     + MESSAGE_LENGTH_LEN;
 
-/// The preamble/header required for signing solana offchain messages, supporting a single signer.
-/// See <https://docs.anza.xyz/proposals/off-chain-message-signing#message-preamble>
+// Derived offsets within the preamble (cumulative).
+const HEADER_VERSION_OFFSET: usize = SIGNING_DOMAIN_LEN;
+const APPLICATION_DOMAIN_OFFSET: usize = HEADER_VERSION_OFFSET + HEADER_VERSION_LEN;
+const MESSAGE_FORMAT_OFFSET: usize = APPLICATION_DOMAIN_OFFSET + APPLICATION_DOMAIN_LEN;
+const SIGNER_COUNT_OFFSET: usize = MESSAGE_FORMAT_OFFSET + MESSAGE_FORMAT_LEN;
+const SIGNERS_START: usize = SIGNER_COUNT_OFFSET + SIGNER_COUNT_LEN;
+
+/// The preamble/header required for signing solana offchain messages, see above for spec link.
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct RawSolanaOffchainMessagePreamble {
     pub signing_domain: [u8; SIGNING_DOMAIN_LEN],
@@ -294,13 +301,6 @@ fn parse_and_validate_multisig_preamble(
     data: &[u8],
     actual_message_length: usize,
 ) -> Result<ParsedMultisigPreamble, FatalError> {
-    // Field offsets within the preamble (cumulative).
-    const HEADER_VERSION_OFFSET: usize = SIGNING_DOMAIN_LEN;
-    const APPLICATION_DOMAIN_START: usize = HEADER_VERSION_OFFSET + HEADER_VERSION_LEN;
-    const MESSAGE_FORMAT_OFFSET: usize = APPLICATION_DOMAIN_START + APPLICATION_DOMAIN_LEN;
-    const SIGNER_COUNT_OFFSET: usize = MESSAGE_FORMAT_OFFSET + MESSAGE_FORMAT_LEN;
-    const SIGNERS_START: usize = SIGNER_COUNT_OFFSET + SIGNER_COUNT_LEN;
-
     let min_multisig_preamble = preamble_len(2);
     if data.len() < min_multisig_preamble {
         return Err(FatalError::DeserializationFailed(
@@ -321,9 +321,9 @@ fn parse_and_validate_multisig_preamble(
         )));
     }
 
-    let application_domain_end = APPLICATION_DOMAIN_START + APPLICATION_DOMAIN_LEN;
+    let application_domain_end = APPLICATION_DOMAIN_OFFSET + APPLICATION_DOMAIN_LEN;
     let application_domain: [u8; APPLICATION_DOMAIN_LEN] = data
-        [APPLICATION_DOMAIN_START..application_domain_end]
+        [APPLICATION_DOMAIN_OFFSET..application_domain_end]
         .try_into()
         .unwrap();
 
@@ -607,19 +607,14 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
     // 0x80 → Multisig simple message (discriminator prefix)
     // Anything else → Simple message (JSON, typically starts with '{')
     if raw_tx[BORSH_VEC_LEN_PREFIX] == SPEC_COMPLIANT_DISCRIMINATOR {
-        // signer_count sits after the borsh Vec<u8> length prefix (4 bytes) plus the fixed
-        // preamble fields before the signers array.
-        const SIGNER_COUNT_OFFSET: usize = BORSH_VEC_LEN_PREFIX
-            + SIGNING_DOMAIN_LEN
-            + HEADER_VERSION_LEN
-            + APPLICATION_DOMAIN_LEN
-            + MESSAGE_FORMAT_LEN;
-        if raw_tx.len() <= SIGNER_COUNT_OFFSET {
+        // signer_count sits after the borsh Vec<u8> length prefix plus the preamble offset.
+        const RAW_TX_SIGNER_COUNT_OFFSET: usize = BORSH_VEC_LEN_PREFIX + SIGNER_COUNT_OFFSET;
+        if raw_tx.len() <= RAW_TX_SIGNER_COUNT_OFFSET {
             return Err(FatalError::DeserializationFailed(
                 "Message too short to read signer count".to_string(),
             ));
         }
-        if raw_tx[SIGNER_COUNT_OFFSET] > 1 {
+        if raw_tx[RAW_TX_SIGNER_COUNT_OFFSET] > 1 {
             unpack_spec_compliant_multisig_message(raw_tx)
         } else {
             unpack_spec_compliant_message(raw_tx)
@@ -707,19 +702,18 @@ fn unpack_multisig_simple_message<S: Spec>(
     })
 }
 
+type SignaturesAndUnusedKeys<C> = (
+    SafeVec<PubKeyAndSignature<C>, MAX_SIGNERS>,
+    SafeVec<<C as CryptoSpec>::PublicKey, MAX_SIGNERS>,
+);
+
 /// Uses the signer bitfield to pair each signature with its corresponding preamble pubkey,
 /// and collects the remaining pubkeys as unused.
 fn pair_signatures_with_preamble_pubkeys<S: Spec>(
     preamble_signers: &[[u8; 32]],
     signatures: &SafeVec<<S::CryptoSpec as CryptoSpec>::Signature, MAX_SIGNERS>,
     signer_bitfield: u32,
-) -> Result<
-    (
-        SafeVec<PubKeyAndSignature<S::CryptoSpec>, MAX_SIGNERS>,
-        SafeVec<<S::CryptoSpec as CryptoSpec>::PublicKey, MAX_SIGNERS>,
-    ),
-    FatalError,
-> {
+) -> Result<SignaturesAndUnusedKeys<S::CryptoSpec>, FatalError> {
     let signer_count = preamble_signers.len();
 
     // Validate bitfield: no out-of-range bits set
@@ -774,13 +768,13 @@ fn unpack_spec_compliant_multisig_message<S: Spec>(
         borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     let data = &envelope.signed_message_with_preamble;
-    if data.len() < 51 {
+    if data.len() < (SIGNER_COUNT_OFFSET + 1) {
         return Err(FatalError::DeserializationFailed(
             "Message too short for multisig preamble".to_string(),
         ));
     }
 
-    let signer_count = data[50];
+    let signer_count = data[SIGNER_COUNT_OFFSET];
     let preamble_size = preamble_len(signer_count);
     if data.len() < preamble_size {
         return Err(FatalError::DeserializationFailed(format!(
