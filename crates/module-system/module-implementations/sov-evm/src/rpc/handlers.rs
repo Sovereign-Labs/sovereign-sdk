@@ -20,7 +20,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::utils::errors::internal_server_error_500;
 use sov_modules_api::{ApiStateAccessor, Spec, VersionReader};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
-use sov_state::{NativeStorage, Storage, StorageProof};
+use sov_state::{NativeStorage, Storage, StorageProof, User};
 use std::ops::DerefMut;
 use tracing::trace;
 use sov_modules_api::state::PinnedCacheAccessor;
@@ -151,18 +151,28 @@ where
     /// Returns merkle proofs of storage slots
     #[rpc_method(name = "ext_getStorageProof")]
     pub fn get_storage_proof(&self, address: Address, index: U256, state: &mut ApiStateAccessor<S>) -> RpcResult<GetProofResponse<S>> {
-        let Some(proof) = self.account_storage.get_with_proof(&(&address, &index), state) else {
-            return Err(EthApiError::StorageProofNotFound.into());
-        };
-        let key = self.block_numbers.slot_key();
-        let block_number = state.storage().get_accessory(&key).unwrap_or_default();
-        let block_number = *self.block_numbers.decode_unwrap(&block_number).end(); // .checked_add(1).unwrap(); // Add 1 because block N has the hash of the *previous* state transition included
+
+        let storage = state.storage();
+        let account_slot_key =  self.account_storage.slot_key(&(&address, &index));
+        let accessory_block_numbers_key = self.block_numbers.slot_key();
+        let (proof, accessory_values, root_hash) = storage.get_with_proof::<User>(account_slot_key, Some(vec![accessory_block_numbers_key]), None)
+            .inspect_err(|err| tracing::error!(error = ?err, "Error getting storage proof"))
+            .map_err(|_|EthApiError::StorageProofNotFound)?;
+
+        let accessory_values_vec  = accessory_values
+            .expect("NativeStorage broke its API contract; returned None for accessory values when Some were provided"); // Error 1: None return type for accessory values
+        let block_number_slot_value = accessory_values_vec
+            .first()
+            .expect("NativeStorage broke its API contract; returned empty accessory values when non-empty accessory values were provided") // Error 2: Empty accessory values
+            .as_ref()
+            .expect("evm.block_numbers returned None at the latest height. This is a bug, block numbers must always be set."); // Error 3: Slot key isn't set
+        
+        let block_number = *self.block_numbers.decode_unwrap(&block_number_slot_value).end(); 
         let block_number = block_number.saturating_add(config_value!("STATE_ROOT_DELAY_BLOCKS")); // Add state root delay blocks to get the state root for the block number
-        let state_root: <<S as Spec>::Storage as Storage>::Root = state.storage().get_latest_root_hash().inspect_err(|err| tracing::error!(error = ?err, "Error getting latest root hash to serve storage proof request")).map_err(|_|EthApiError::StorageProofNotFound)?;
         println!("proof: {}", serde_json::to_string(&proof).unwrap());
         Ok(GetProofResponse {
             proof,
-            state_root,
+            state_root: root_hash,
             state_root_block_number: block_number,
         })
     }
