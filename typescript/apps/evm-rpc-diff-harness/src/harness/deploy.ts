@@ -25,7 +25,7 @@ export interface SendTransactionResult {
 
 const DEPLOY_TX_GAS_LIMIT = 8_000_000n;
 const CONTRACT_TX_GAS_LIMIT = 3_000_000n;
-const VALUE_TX_GAS_LIMIT = 21_000n;
+const GAS_ESTIMATE_BUFFER = 2n;
 
 function parseArtifact(json: string): ContractArtifact {
   const artifact = JSON.parse(json) as {
@@ -442,7 +442,8 @@ export async function sendContractTransactionWithFallback(
   contractAddress: string,
   method: string,
   args: unknown[],
-  value?: bigint
+  value?: bigint,
+  gasLimit?: bigint
 ): Promise<SendTransactionResult> {
   const contract = new Contract(contractAddress, artifact.abi, runtime.wallet);
   const data = contract.interface.encodeFunctionData(method, args);
@@ -450,7 +451,7 @@ export async function sendContractTransactionWithFallback(
     to: contractAddress,
     data,
     value,
-    gasLimit: CONTRACT_TX_GAS_LIMIT
+    gasLimit: gasLimit ?? CONTRACT_TX_GAS_LIMIT
   });
 }
 
@@ -459,10 +460,15 @@ export async function sendValueTransactionWithFallback(
   to: string,
   value: bigint
 ): Promise<SendTransactionResult> {
+  const estimated = await runtime.provider.estimateGas({
+    to,
+    value,
+    from: runtime.wallet.address
+  });
   return sendTransactionWithFallback(runtime.wallet, {
     to,
     value,
-    gasLimit: VALUE_TX_GAS_LIMIT
+    gasLimit: estimated * GAS_ESTIMATE_BUFFER
   });
 }
 
