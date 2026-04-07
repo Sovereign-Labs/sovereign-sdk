@@ -94,7 +94,8 @@ install-cargo-tools:  ## Installs all necessary cargo helpers
 install-risc0-toolchain:  ## install risc0 toolchain
 	curl -L https://risczero.com/install | bash
 	~/.risc0/bin/rzup install cargo-risczero 3.0.5
-	~/.risc0/bin/rzup install rust 1.89.0
+	~/.risc0/bin/rzup install r0vm 3.0.5
+	~/.risc0/bin/rzup install rust 1.91.1
 	~/.risc0/bin/rzup install cpp 2024.1.5
 	@echo "Risc0 toolchain version:"
 	cargo +risc0 --version
