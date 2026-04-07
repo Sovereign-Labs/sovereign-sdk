@@ -336,6 +336,7 @@ pub trait Storage: Clone + core::fmt::Debug {
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)>;
 }
 
+#[cfg(feature = "native")]
 type ProofOutput<S> = (
     StorageProof<<S as Storage>::Proof>,
     SlotNumber,
