@@ -93,7 +93,6 @@ const EXCESS_BLOB_GAS: u64 = 0;
 const BLOB_GAS_PRICE: u128 = 0;
 
 /// The sov-evm module provides compatibility with the EVM.
-#[allow(dead_code)]
 #[derive(Clone, ModuleInfo)]
 pub struct Evm<S: Spec> {
     /// The ID of the evm module.
@@ -117,6 +116,7 @@ pub struct Evm<S: Spec> {
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
 
     /// A set of addresses that are allowed to deploy new contracts
+    #[allow(dead_code)]
     #[state]
     pub(crate) contract_creation_allowlist: StateMap<Address, (), BcsCodec>,
 
