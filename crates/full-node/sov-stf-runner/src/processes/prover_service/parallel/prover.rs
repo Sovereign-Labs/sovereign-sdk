@@ -200,7 +200,7 @@ where
         // `add_hint`  should take witness instead of the public input.
         outer_vm.add_hint(public_data);
         let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof: outer_vm.run(false)?,
+            raw_aggregated_proof: outer_vm.run()?,
         };
 
         for slot_hash in block_header_hashes {
@@ -220,16 +220,9 @@ where
     let proving_start = std::time::Instant::now();
     let result = match config {
         RollupProverConfigDiscriminants::Skip => Ok(Vec::default()),
-        RollupProverConfigDiscriminants::Execute => {
-            info!(
-                "Executing in VM without constructing proof using {}",
-                std::any::type_name::<InnerVm>()
-            );
-            vm.run(false)
-        }
         RollupProverConfigDiscriminants::Prove => {
             info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-            vm.run(true)
+            vm.run()
         }
     };
     sov_metrics::track_metrics(|tracker| {

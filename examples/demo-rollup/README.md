@@ -60,8 +60,6 @@ There are multiple options available:
 By default, demo-rollup disables proving. If you want to enable proving, several options are available:
 
 - `export SOV_PROVER_MODE=skip` Skips verification logic.
-- `export SOV_PROVER_MODE=simulate` Run the rollup verification logic inside the current process.
-- `export SOV_PROVER_MODE=execute` Run the rollup verifier in a zkVM executor.
 - `export SOV_PROVER_MODE=prove` Run the rollup verifier and create a SNARK of execution.
 
 (!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`), only `SOV_PROVER_MODE=skip` will work, otherwise error about missing binary occurs.
@@ -77,7 +75,7 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 ```shell,test-ci
 $ cd examples/demo-rollup/
 $ export RISC0_DEV_MODE=true
-$ export SOV_PROVER_MODE=execute
+$ export SOV_PROVER_MODE=prove
 $ make build
 ```
 

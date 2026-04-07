@@ -62,9 +62,9 @@ impl<S: Spec, R: Recipient<S>> HasCustomRestApi for Mailbox<S, R> {
     fn custom_rest_api(&self, state: ApiState<S>) -> axum::Router<()> {
         axum::Router::new()
             .route("/nonce", get(Self::get_nonce))
-            .route("/recipient-ism/:address", get(Self::get_recipient_ism))
+            .route("/recipient-ism/{address}", get(Self::get_recipient_ism))
             .route(
-                "/recipient-ism/:address/validators_and_threshold",
+                "/recipient-ism/{address}/validators_and_threshold",
                 get(Self::get_recipient_ism_validators_and_threshold),
             )
             .route("/quote-dispatch", get(Self::query_quote_dispatch))

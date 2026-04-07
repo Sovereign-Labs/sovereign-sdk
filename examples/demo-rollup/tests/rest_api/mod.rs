@@ -242,18 +242,9 @@ async fn check_state_vec(client: &demo_stf_json_client::Client) -> anyhow::Resul
     let value_1_json = state_vec_element_1.clone().value;
     let value_last_json = state_vec_element_last.clone().value;
 
-    match (value_0_json, value_1_json, value_last_json) {
-        (
-            RuntimeAnyJsonValue::Number(value_0),
-            RuntimeAnyJsonValue::Number(value_1),
-            RuntimeAnyJsonValue::Number(value_last),
-        ) => {
-            assert_eq!(0.0, value_0);
-            assert_eq!(1.0, value_1);
-            assert_eq!(7.0, value_last);
-        }
-        (_, _, _) => panic!("Incorrect type returned in vector"),
-    }
+    assert_eq!(value_0_json, 0);
+    assert_eq!(value_1_json, 1);
+    assert_eq!(value_last_json, 7);
 
     let state_vec_out_of_bounds = client
         .synthetic_load_very_large_vec_get_state_vec_element(u32::MAX as u64, None, None)

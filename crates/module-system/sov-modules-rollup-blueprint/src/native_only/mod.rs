@@ -559,6 +559,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     start_zk_workflow_in_background(
                         prover_service,
                         rollup_config.proof_manager.aggregated_proof_block_jump,
+                        rollup_config.proof_manager.eager_proof_submission,
                         proof_sender,
                         genesis_state_root,
                         stf_info_receiver,

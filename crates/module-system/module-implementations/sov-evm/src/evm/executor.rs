@@ -59,7 +59,6 @@ pub fn transact_commit<DB: Database<Error = E> + TryDatabaseCommit<Error = E>, E
 }
 
 #[cfg(feature = "native")]
-#[allow(dead_code)]
 pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
     db: DB,
     block_env: &'a BlockEnv,

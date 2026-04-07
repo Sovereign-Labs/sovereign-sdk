@@ -197,12 +197,8 @@ impl ZkvmHost for SP1Host<'static> {
         self.stdin.write(&item);
     }
 
-    fn run(&mut self, with_proof: bool) -> anyhow::Result<Vec<u8>> {
-        let output = if with_proof {
-            self.run_helper()?
-        } else {
-            anyhow::bail!("SP1Host supports only full proofs")
-        };
+    fn run(&mut self) -> anyhow::Result<Vec<u8>> {
+        let output = self.run_helper()?;
         Ok(bincode::serialize(&output)?)
     }
 

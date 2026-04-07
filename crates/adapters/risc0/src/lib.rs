@@ -6,14 +6,10 @@
 use crypto::{Risc0PublicKey, Risc0Signature};
 use risc0_zkvm::sha::Digest;
 #[cfg(not(target_os = "zkvm"))]
-use risc0_zkvm::Journal;
-#[cfg(not(target_os = "zkvm"))]
 use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "zkvm"))]
-use sov_rollup_interface::zk::Proof;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
 
@@ -97,14 +93,9 @@ impl ZkVerifier for Risc0Verifier {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: Proof<Receipt, Option<Journal>> = bincode::deserialize(serialized_proof)?;
-        match proof {
-            Proof::PublicData(_) => anyhow::bail!("Risc0Verifier supports only full proofs"),
-            Proof::Full(receipt) => {
-                receipt.verify(code_commitment.0)?;
-                Ok(bincode::deserialize(&receipt.journal.bytes)?)
-            }
-        }
+        let receipt: Receipt = bincode::deserialize(serialized_proof)?;
+        receipt.verify(code_commitment.0)?;
+        Ok(bincode::deserialize(&receipt.journal.bytes)?)
     }
 }
 
