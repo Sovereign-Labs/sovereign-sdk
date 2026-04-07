@@ -144,7 +144,12 @@ async function stopProcess(child: ReturnType<typeof spawn>): Promise<void> {
 async function main(): Promise<void> {
   const configuredAnvilUrl = process.env.ANVIL_RPC_URL ?? DEFAULT_ANVIL_URL;
   const { rpcUrl: anvilUrl, host: anvilHost, port: anvilPort } = resolveAnvilBinding(configuredAnvilUrl);
-  const rollupUrl = process.env.ROLLUP_RPC_URL ?? anvilUrl;
+  if (!process.env.ROLLUP_RPC_URL) {
+    throw new Error(
+      "ROLLUP_RPC_URL is required. Set it to the rollup RPC endpoint you want to compare against anvil."
+    );
+  }
+  const rollupUrl = process.env.ROLLUP_RPC_URL;
   const privateKey = normalizePrivateKey(process.env.TEST_PRIVATE_KEY ?? DEFAULT_ANVIL_PK);
   const verboseAnvilLogs = parseBooleanFlag(process.env.ANVIL_VERBOSE_LOGS);
   const logCollector = createAnvilLogCollector(verboseAnvilLogs, DEFAULT_ANVIL_LOG_TAIL_LINES);
