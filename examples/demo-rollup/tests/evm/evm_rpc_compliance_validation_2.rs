@@ -1861,7 +1861,7 @@ async fn rpc2_017_get_storage_at_rejects_too_large_key() -> anyhow::Result<()> {
     let address = "0xaa00000000000000000000000000000000000000";
 
     // 33 bytes (66 hex chars + 0x prefix) — one byte over the 32-byte limit.
-    let key_33_bytes = "0x00000000000000000000000000000000000000000000000000000000000000000";
+    let key_33_bytes = "0x000000000000000000000000000000000000000000000000000000000000000000";
     let response = rpc_call(
         &http,
         rollup.http_addr,
