@@ -122,7 +122,9 @@ async fn test_crash_before_commiting_live() -> anyhow::Result<()> {
 }
 
 // This test checks whether rollup can recover from different kinds of crashes, see `CommitFaultInjectionLocation` enum.
-async fn test_start_stop_with_crash(crash_moment: CommitFaultInjectionLocation) -> anyhow::Result<()> {
+async fn test_start_stop_with_crash(
+    crash_moment: CommitFaultInjectionLocation,
+) -> anyhow::Result<()> {
     let temp_dir: Arc<TempDir> = Arc::new(tempfile::tempdir()?);
 
     let mut mock_da_config = MockDaConfig::instant_with_sender(MockAddress::new([0; 32]));
