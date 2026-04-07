@@ -102,6 +102,7 @@ function isNonceConflictMessage(message: string): boolean {
     normalized.includes("nonce too low") ||
     normalized.includes("nonce has already been used") ||
     normalized.includes("nonce is too low") ||
+    normalized.includes("bad nonce") ||
     normalized.includes("replacement transaction underpriced") ||
     normalized.includes("already known")
   );
