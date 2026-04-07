@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::ops::Range;
 
 use axum::extract::{Request, State, WebSocketUpgrade};
-use axum::http::StatusCode;
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -69,6 +69,37 @@ fn get_path_number(path_map: &PathMap, key: &str) -> Result<u64, Response> {
     }
 }
 
+/// Middleware that stamps `Cache-Control: no-store` on every response.
+/// Applied to live endpoints whose content changes with every block, where
+/// serving stale data (wrong balances, missed confirmations) is actively
+/// harmful.
+async fn set_no_store(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+/// Middleware that stamps `Cache-Control: public, max-age=31536000` on
+/// successful (2xx) responses, but only when the header is not already set.
+/// Applied to historical endpoints whose content is immutable once written.
+/// Skips error responses per maintainer guidance: only 2xx should be cached.
+/// The "already set" check lets [`LedgerRoutes::get_slot`] stamp a more
+/// specific value (e.g. adding `immutable`) without being overwritten.
+async fn set_cache_forever(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    if response.status().is_success() && !response.headers().contains_key(header::CACHE_CONTROL) {
+        let mut response = response;
+        response.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000"),
+        );
+        return response;
+    }
+    response
+}
+
 /// Use [`LedgerRoutes::axum_router`] to instantiate an [`axum::Router`] for
 /// a specific [`LedgerStateProvider`].
 ///
@@ -109,9 +140,10 @@ where
             shutdown_receiver,
         };
         let routes = axum::Router::<LedgerState<T>>::new()
+            // Live endpoint: content changes every block, must never be cached.
             .route(
                 "/aggregated-proofs/latest",
-                get(Self::get_latest_aggregated_proof),
+                get(Self::get_latest_aggregated_proof).layer(middleware::from_fn(set_no_store)),
             )
             .route(
                 "/aggregated-proofs/latest/ws",
@@ -123,50 +155,94 @@ where
                 "/slots/latest/events/ws",
                 get(Self::subscribe_to_slot_events),
             )
+            // Live: returns the current chain head, changes with every block.
             .nest(
                 "/slots/latest",
-                Self::router_slot(state.clone()).route_layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    Self::resolve_latest_slot,
-                )),
+                Self::router_slot(state.clone())
+                    .route_layer(middleware::from_fn_with_state(
+                        state.clone(),
+                        Self::resolve_latest_slot,
+                    ))
+                    .route_layer(middleware::from_fn(set_no_store)),
             )
+            // Live: returns the latest finalized slot, advances over time.
             .nest(
                 "/slots/finalized",
-                Self::router_slot(state.clone()).route_layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    Self::resolve_finalized_slot,
-                )),
+                Self::router_slot(state.clone())
+                    .route_layer(middleware::from_fn_with_state(
+                        state.clone(),
+                        Self::resolve_finalized_slot,
+                    ))
+                    .route_layer(middleware::from_fn(set_no_store)),
             )
+            // Historical: get_slot sets the exact Cache-Control value itself
+            // based on finality_status and whether the request was hash- or
+            // height-based. cache_forever_layer provides the fallback for
+            // sub-resources (e.g. /slots/:slotId/events) that don't set their
+            // own header.
+            // TODO: sub-resources of a pending slot (e.g. /slots/:slotId/events,
+            // /slots/:slotId/batches/...) currently inherit public,max-age=31536000
+            // from cache_forever_layer without checking the parent slot's
+            // finality_status. A proper fix requires propagating finality_status
+            // into sub-resource handlers, which is a follow-up improvement.
             .nest(
                 "/slots/:slotId",
-                Self::router_slot(state.clone()).route_layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    Self::resolve_slot_id,
-                )),
+                Self::router_slot(state.clone())
+                    .route_layer(middleware::from_fn_with_state(
+                        state.clone(),
+                        Self::resolve_slot_id,
+                    ))
+                    .route_layer(middleware::from_fn(set_cache_forever)),
             )
+            // Historical: batches are immutable once written.
+            // TODO: BatchResponse has no finality_status field, so pending
+            // batches are cached the same as finalized ones. Fixing this
+            // requires adding finality_status to BatchResponse in
+            // rollup-interface, which is a follow-up improvement.
             .nest(
                 "/batches/:batchId",
-                Self::router_batch(state.clone()).route_layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    Self::resolve_batch_id,
-                )),
+                Self::router_batch(state.clone())
+                    .route_layer(middleware::from_fn_with_state(
+                        state.clone(),
+                        Self::resolve_batch_id,
+                    ))
+                    .route_layer(middleware::from_fn(set_cache_forever)),
             )
+            // Historical: transactions are immutable once written.
+            // TODO: same finality_status caveat as batches above.
             .nest(
                 "/txs/:txId",
-                Self::router_tx(state.clone()).route_layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    Self::resolve_tx_id,
-                )),
+                Self::router_tx(state.clone())
+                    .route_layer(middleware::from_fn_with_state(
+                        state.clone(),
+                        Self::resolve_tx_id,
+                    ))
+                    .route_layer(middleware::from_fn(set_cache_forever)),
             )
-            .route("/events", get(Self::list_events))
-            .route("/events/counts", get(Self::get_event_key_counts))
-            .route("/events/latest", get(Self::get_latest_event))
+            // Live: paginated event list grows as new events are appended.
+            .route(
+                "/events",
+                get(Self::list_events).layer(middleware::from_fn(set_no_store)),
+            )
+            // Live: aggregate count changes with every new event.
+            .route(
+                "/events/counts",
+                get(Self::get_event_key_counts).layer(middleware::from_fn(set_no_store)),
+            )
+            // Live: returns the current latest event, changes with every block.
+            .route(
+                "/events/latest",
+                get(Self::get_latest_event).layer(middleware::from_fn(set_no_store)),
+            )
+            // Historical: a specific event by ID is immutable once written.
             .nest(
                 "/events/:eventId",
-                Self::router_event().route_layer(middleware::from_fn_with_state(
-                    state,
-                    Self::resolve_event_id,
-                )),
+                Self::router_event()
+                    .route_layer(middleware::from_fn_with_state(
+                        state,
+                        Self::resolve_event_id,
+                    ))
+                    .route_layer(middleware::from_fn(set_cache_forever)),
             );
         preconfigured_router_layers(axum::Router::<LedgerState<T>>::new().nest("/ledger", routes))
     }
@@ -232,7 +308,10 @@ where
         State(state): State<LedgerState<T>>,
         include_children_opt: Option<Query<IncludeChildren>>,
         Extension(slot_number): Extension<SlotNumber>,
-    ) -> ApiResult<Slot<B, TxReceipt, E>> {
+        // Only present when routed via /slots/:slotId. Absent for /slots/latest
+        // and /slots/finalized, whose no_store_layer handles caching instead.
+        slot_requested_by_hash: Option<Extension<SlotRequestedByHash>>,
+    ) -> Response {
         match state
             .ledger
             .get_slot_by_number::<B, TxReceipt, RuntimeEventResponse<E>>(
@@ -241,9 +320,31 @@ where
             )
             .await
         {
-            Ok(Some(slot_response)) => Ok(Slot::new(slot_response).into()),
-            Ok(None) => Err(errors::not_found_404("Slot", slot_number)),
-            Err(err) => Err(errors::database_error_response_500(err)),
+            Ok(Some(slot_response)) => {
+                let finality_status = slot_response.finality_status;
+                let mut response = axum::Json(Slot::new(slot_response)).into_response();
+                // Set Cache-Control only when accessed via /slots/:slotId.
+                // The value depends on two signals:
+                // 1. finality_status: pending slots must not be cached because
+                //    they can still be reorged.
+                // 2. Whether the request used a hash or a height: `immutable`
+                //    is only safe for content-addressed (hash) URLs, not for
+                //    height-based ones where a reorg could change the content
+                //    at that height.
+                if let Some(Extension(SlotRequestedByHash(is_hash))) = slot_requested_by_hash {
+                    let cache_value = match (finality_status, is_hash) {
+                        (FinalityStatus::Finalized, true) => "public, max-age=31536000, immutable",
+                        (FinalityStatus::Finalized, false) => "public, max-age=31536000",
+                        (FinalityStatus::Pending, _) => "no-store",
+                    };
+                    response
+                        .headers_mut()
+                        .insert(header::CACHE_CONTROL, HeaderValue::from_static(cache_value));
+                }
+                response
+            }
+            Ok(None) => errors::not_found_404("Slot", slot_number),
+            Err(err) => errors::database_error_response_500(err),
         }
     }
 
@@ -453,7 +554,14 @@ where
         mut request: Request,
         next: Next,
     ) -> Result<Response, Response> {
-        let identifier = match get_path_item(&path_values, "slotId")? {
+        let number_or_hash = get_path_item(&path_values, "slotId")?;
+        // Record whether this request used a hash before consuming the value.
+        // get_slot reads this to decide whether `immutable` is safe to include
+        // in the Cache-Control header. `immutable` is only valid for
+        // content-addressed (hash) URLs; height-based URLs must not carry it
+        // because a reorg can change the slot at a given height.
+        let is_hash = matches!(number_or_hash, NumberOrHash::Hash(_));
+        let identifier = match number_or_hash {
             NumberOrHash::Number(number) => {
                 SlotIdentifier::Number(SlotNumber::new_dangerous(number))
             }
@@ -474,7 +582,9 @@ where
             // can remove this workaround and do the right thing.
             .ok_or_else(|| not_found_404("Slot", "unknown"))?;
 
-        request.extensions_mut().insert(rollup_height);
+        let ext = request.extensions_mut();
+        ext.insert(rollup_height);
+        ext.insert(SlotRequestedByHash(is_hash));
         Ok(next.run(request).await)
     }
 
@@ -886,6 +996,13 @@ impl NumberOrHash {
         }
     }
 }
+
+/// Stored in request extensions by [`LedgerRoutes::resolve_slot_id`] to
+/// record whether the client addressed the slot by content hash (`true`) or
+/// by height number (`false`). Read by [`LedgerRoutes::get_slot`] to decide
+/// whether the `immutable` Cache-Control directive is safe to include.
+#[derive(Clone, Copy)]
+struct SlotRequestedByHash(bool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(

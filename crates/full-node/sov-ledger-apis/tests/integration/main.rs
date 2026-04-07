@@ -411,6 +411,145 @@ async fn get_latest_aggregated_proof() {
     });
 }
 
+/// Live endpoint: the latest slot advances with every block, must never be cached.
+#[tokio::test(flavor = "multi_thread")]
+async fn cache_control_get_latest_slot() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    let response = ledger_service
+        .axum_client
+        .get_latest_slot(None)
+        .await
+        .unwrap();
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .map(|v| v.to_str().unwrap()),
+        Some("no-store"),
+        "latest slot is live data, must not be cached"
+    );
+}
+
+/// Historical endpoint (finalized slot, addressed by number): safe to cache
+/// publicly but NOT immutably, because a reorg could change the slot at that height.
+#[tokio::test(flavor = "multi_thread")]
+async fn cache_control_get_slot_by_number_finalized() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    // Slot 0 is finalized by default (get_latest_finalized_slot_number returns GENESIS=0).
+    let response = ledger_service
+        .axum_client
+        .get_slot_by_id(&IntOrHash::Integer(0), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .map(|v| v.to_str().unwrap()),
+        Some("public, max-age=31536000"),
+        "finalized slot addressed by number must be publicly cached but not immutable"
+    );
+}
+
+/// Historical endpoint (finalized slot, addressed by hash): safe to cache with
+/// `immutable` because the hash uniquely identifies the content — it can never change.
+#[tokio::test(flavor = "multi_thread")]
+async fn cache_control_get_slot_by_hash_finalized() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    let client = &ledger_service.axum_client;
+    // Obtain the finalized slot's hash via a first request, then re-request by hash.
+    let hash = client
+        .get_finalized_slot(None)
+        .await
+        .unwrap()
+        .into_inner()
+        .hash;
+    let by_hash = client
+        .get_slot_by_id(&IntOrHash::Hash(hash), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        by_hash
+            .headers()
+            .get("cache-control")
+            .map(|v| v.to_str().unwrap()),
+        Some("public, max-age=31536000, immutable"),
+        "finalized slot addressed by hash must be immutably cached"
+    );
+}
+
+/// Historical endpoint (pending slot, addressed by number): must NOT be cached
+/// because a reorg can change or remove a pending slot.
+#[tokio::test(flavor = "multi_thread")]
+async fn cache_control_get_slot_by_number_pending() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    // Slot 1 is pending (the complex dataset has 2 slots; only slot 0 is finalized).
+    let response = ledger_service
+        .axum_client
+        .get_slot_by_id(&IntOrHash::Integer(1), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .map(|v| v.to_str().unwrap()),
+        Some("no-store"),
+        "pending slot must not be cached"
+    );
+}
+
+/// Live endpoint: the finalized slot advances over time, must never be cached.
+#[tokio::test(flavor = "multi_thread")]
+async fn cache_control_get_finalized_slot() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    let response = ledger_service
+        .axum_client
+        .get_finalized_slot(None)
+        .await
+        .unwrap();
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .map(|v| v.to_str().unwrap()),
+        Some("no-store"),
+        "finalized slot is live data (advances over time), must not be cached"
+    );
+}
+
+/// 404 responses from historical endpoints must not carry a Cache-Control
+/// header — only successful (2xx) responses are safe to cache.
+#[tokio::test(flavor = "multi_thread")]
+async fn cache_control_slot_not_found_has_no_cache_header() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    let result = ledger_service
+        .axum_client
+        .get_slot_by_id(&IntOrHash::Integer(999999), None)
+        .await;
+    let error_response = match result {
+        Err(sov_api_spec::client::Error::ErrorResponse(r)) => r,
+        other => panic!("expected ErrorResponse, got {:?}", other),
+    };
+    assert_eq!(error_response.status().as_u16(), 404);
+    assert!(
+        error_response.headers().get("cache-control").is_none(),
+        "404 response must not carry a Cache-Control header"
+    );
+}
+
 mod utils {
     use super::*;
 
