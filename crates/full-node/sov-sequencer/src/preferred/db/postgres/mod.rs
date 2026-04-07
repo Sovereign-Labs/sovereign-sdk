@@ -11,7 +11,7 @@ use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
 use anyhow::Context;
-use axum::async_trait;
+use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;

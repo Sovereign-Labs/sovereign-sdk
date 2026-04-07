@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use axum::async_trait;
+use async_trait::async_trait;
 use rockbound::{gen_rocksdb_options, SchemaBatch};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;

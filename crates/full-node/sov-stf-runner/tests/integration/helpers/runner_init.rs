@@ -2,7 +2,7 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use crate::helpers::hash_stf::HashStf;
-use axum::async_trait;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use rockbound::SchemaBatch;
