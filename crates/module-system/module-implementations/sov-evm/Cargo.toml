@@ -86,7 +86,6 @@ bytes = { workspace = true }
 secp256k1 = { workspace = true, features = ["rand"] }
 jsonschema = { workspace = true }
 bincode = { workspace = true }
-reth-ethereum-primitives = { workspace = true, features = ["serde", "serde-bincode-compat"] }
 
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
