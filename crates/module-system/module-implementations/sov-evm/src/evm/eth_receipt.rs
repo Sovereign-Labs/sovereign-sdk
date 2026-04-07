@@ -243,23 +243,6 @@ mod tests {
         receipt: EthReceipt,
     }
 
-    /// Wrapper that serializes [`reth_ethereum_primitives::Receipt`] through reth's adapter.
-    #[serde_as]
-    #[derive(Debug, serde::Serialize, serde::Deserialize, PartialEq)]
-    struct RethWrapper {
-        #[serde_as(as = "reth_ethereum_primitives::serde_bincode_compat::Receipt<'_>")]
-        receipt: reth_ethereum_primitives::Receipt,
-    }
-
-    fn make_reth_receipt(r: &EthReceipt) -> reth_ethereum_primitives::Receipt {
-        reth_ethereum_primitives::Receipt {
-            tx_type: r.tx_type,
-            success: r.success,
-            cumulative_gas_used: r.cumulative_gas_used,
-            logs: r.logs.clone(),
-        }
-    }
-
     /// Test cases with enough variability to catch serialization mismatches.
     fn test_receipts() -> Vec<(&'static str, EthReceipt)> {
         vec![
@@ -330,90 +313,11 @@ mod tests {
         ]
     }
 
-    /// Verify that our local adapter produces byte-identical output to reth's adapter.
-    #[test]
-    fn local_and_reth_adapters_produce_identical_bytes() {
-        for (name, receipt) in test_receipts() {
-            let local_bytes = bincode::serialize(&LocalWrapper {
-                receipt: receipt.clone(),
-            })
-            .unwrap();
-            let reth_bytes = bincode::serialize(&RethWrapper {
-                receipt: make_reth_receipt(&receipt),
-            })
-            .unwrap();
-            assert_eq!(
-                local_bytes, reth_bytes,
-                "Serialization mismatch for case: {name}"
-            );
-        }
-    }
-
-    /// Verify reth-serialized bytes can be deserialized by our local adapter.
-    #[test]
-    fn reth_bytes_deserialize_with_local_adapter() {
-        for (name, receipt) in test_receipts() {
-            let reth_bytes = bincode::serialize(&RethWrapper {
-                receipt: make_reth_receipt(&receipt),
-            })
-            .unwrap();
-            let deserialized: LocalWrapper =
-                bincode::deserialize(&reth_bytes).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to deserialize reth bytes with local adapter for case {name}: {e}"
-                    )
-                });
-            assert_eq!(
-                deserialized.receipt, receipt,
-                "Round-trip mismatch for case: {name}"
-            );
-        }
-    }
-
-    /// Verify local-serialized bytes can be deserialized by reth's adapter.
-    #[test]
-    fn local_bytes_deserialize_with_reth_adapter() {
-        for (name, receipt) in test_receipts() {
-            let local_bytes = bincode::serialize(&LocalWrapper {
-                receipt: receipt.clone(),
-            })
-            .unwrap();
-            let deserialized: RethWrapper =
-                bincode::deserialize(&local_bytes).unwrap_or_else(|e| {
-                    panic!(
-                        "Failed to deserialize local bytes with reth adapter for case {name}: {e}"
-                    )
-                });
-            assert_eq!(
-                deserialized.receipt,
-                make_reth_receipt(&receipt),
-                "Round-trip mismatch for case: {name}"
-            );
-        }
-    }
-
     /// Golden snapshot test: hardcoded bytes that must never change.
-    /// These were captured from reth_ethereum_primitives::serde_bincode_compat::Receipt
+    /// These were captured from reth_ethereum_primitives v1.9.0 serde_bincode_compat::Receipt
     /// serialized with bincode 1.x. If this test fails, state deserialization is broken.
     #[test]
     fn golden_snapshot_bytes() {
-        // Generate expected bytes from reth for each case and assert stability
-        for (name, receipt) in test_receipts() {
-            let expected = bincode::serialize(&RethWrapper {
-                receipt: make_reth_receipt(&receipt),
-            })
-            .unwrap();
-            let actual = bincode::serialize(&LocalWrapper {
-                receipt: receipt.clone(),
-            })
-            .unwrap();
-            assert_eq!(
-                actual, expected,
-                "Golden snapshot mismatch for case: {name}\n  expected: {expected:02x?}\n  actual:   {actual:02x?}"
-            );
-        }
-
-        // Additionally verify against hardcoded snapshots to catch reth upstream changes
         let snapshots = golden_snapshots();
         for (name, receipt) in test_receipts() {
             let actual = bincode::serialize(&LocalWrapper {
@@ -429,7 +333,24 @@ mod tests {
                 .unwrap_or_else(|e| panic!("Invalid hex in golden snapshot for case {name}: {e}"));
             assert_eq!(
                 actual, expected,
-                "Hardcoded golden snapshot mismatch for case: {name}"
+                "Golden snapshot mismatch for case: {name}"
+            );
+        }
+    }
+
+    /// Golden snapshot round-trip: verify hardcoded bytes deserialize back correctly.
+    #[test]
+    fn golden_snapshot_roundtrip() {
+        let snapshots = golden_snapshots();
+        for (name, receipt) in test_receipts() {
+            let (_, hex_bytes) = snapshots.iter().find(|(n, _)| *n == name).unwrap();
+            let bytes = hex::decode(hex_bytes).unwrap();
+            let deserialized: LocalWrapper = bincode::deserialize(&bytes).unwrap_or_else(|e| {
+                panic!("Failed to deserialize golden snapshot for case {name}: {e}")
+            });
+            assert_eq!(
+                deserialized.receipt, receipt,
+                "Round-trip mismatch for case: {name}"
             );
         }
     }
