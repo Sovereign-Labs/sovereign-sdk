@@ -12057,8 +12057,6 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "reth-ethereum-primitives",
- "reth-primitives",
- "reth-primitives-traits",
  "revm",
  "revm-database-interface",
  "revm-inspectors",
