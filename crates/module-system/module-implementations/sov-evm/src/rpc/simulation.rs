@@ -405,8 +405,6 @@ pub(crate) fn get_cfg_env_template() -> CfgEnv {
 
 #[cfg(test)]
 mod tests {
-    use sov_modules_api::macros::config_value;
-
     use super::*;
 
     #[test]
