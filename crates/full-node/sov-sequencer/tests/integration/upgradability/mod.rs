@@ -85,7 +85,7 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         None,
         finalization_blocks,
     )
-        .await;
+    .await;
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
     let api_client = test_rollup.api_client().clone();
@@ -130,7 +130,10 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     };
 
     let pattern = "The requested stop_height";
-    assert!(err.to_string().contains(pattern), "Error: '{err}' does not contain expected pattern: '{pattern}'");
+    assert!(
+        err.to_string().contains(pattern),
+        "Error: '{err}' does not contain expected pattern: '{pattern}'"
+    );
 }
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
@@ -145,7 +148,7 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         Some(stop_at_height),
         finalization_blocks,
     )
-        .await;
+    .await;
 
     let expected_error = format!(
         "The preferred sequencer has reached the stop height {} and is no longer accepting transactions.",
@@ -254,7 +257,7 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
         Some(stop_at_height),
         finalization_blocks,
     )
-        .await;
+    .await;
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     // This is for make rollup operational, so rollup will give out slot notifications.
@@ -308,7 +311,7 @@ async fn check_start_at(finalization_blocks: u32) {
         Some(stop_at_height),
         finalization_blocks,
     )
-        .await;
+    .await;
 
     let client = test_rollup.client.clone();
 
@@ -333,8 +336,8 @@ async fn check_start_at(finalization_blocks: u32) {
             last_height = height;
         }
     })
-        .await
-        .unwrap();
+    .await
+    .unwrap();
 
     assert_eq!(last_height, stop_at_height);
 
@@ -457,7 +460,7 @@ async fn create_test_rollup(
             stop_at_rollup_height,
             finalization_blocks,
         )
-            .await,
+        .await,
         admin,
     )
 }
