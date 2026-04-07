@@ -95,24 +95,28 @@ where
         verifier: &Verifier<Da>,
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
         let block_header_hash = state_transition_info.da_block_header().hash();
-        let mut tracker = self.tracker.write().await;
 
-        if let Some(status) = tracker.get(&block_header_hash) {
-            return match status {
-                NetworkProverStatus::Submitted { .. } => {
-                    Err(ProverServiceError::Other(anyhow::anyhow!(
-                        "Proof generation for {} still in progress",
-                        block_header_hash,
-                    )))
-                }
-                NetworkProverStatus::Proved(_) => Err(ProverServiceError::Other(anyhow::anyhow!(
-                    "Witness for block_header_hash {}, submitted multiple times.",
-                    block_header_hash,
-                ))),
-                NetworkProverStatus::Err(e) => {
-                    Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
-                }
-            };
+        {
+            let tracker = self.tracker.read().await;
+            if let Some(status) = tracker.get(&block_header_hash) {
+                return match status {
+                    NetworkProverStatus::Submitted { .. } => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Proof generation for {} still in progress",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Proved(_) => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Witness for block_header_hash {}, submitted multiple times.",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Err(e) => {
+                        Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
+                    }
+                };
+            }
         }
 
         let slot_number = state_transition_info.slot_number;
@@ -164,10 +168,13 @@ where
             block_header_hash
         );
 
-        tracker.insert(
-            block_header_hash,
-            NetworkProverStatus::Submitted { handle, metadata },
-        );
+        {
+            let mut tracker = self.tracker.write().await;
+            tracker.insert(
+                block_header_hash,
+                NetworkProverStatus::Submitted { handle, metadata },
+            );
+        }
 
         Ok(ProofProcessingStatus::ProvingInProgress)
     }

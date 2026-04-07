@@ -96,29 +96,36 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
         if self.is_ready {
             return;
         }
-        for proof in self.block_proof_info.iter_mut() {
-            let mut prev_status = BlockProofStatus::Submitted;
-            std::mem::swap(&mut prev_status, &mut proof.status);
-            if let BlockProofStatus::Waiting(mut witness) = prev_status {
-                // TODO: Add backoff on proof submission attempts
-                //  <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/446>
-                loop {
-                    let status = prover_service
-                        .prove(witness)
-                        .await
-                        .expect("The proof submission should succeed");
 
-                    // Stop the runner loop until prover is ready.
-                    match status {
-                        ProofProcessingStatus::ProvingInProgress => break,
-                        ProofProcessingStatus::Busy(data) => {
-                            witness = data;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
+        let submissions: Vec<_> = self
+            .block_proof_info
+            .iter_mut()
+            .filter_map(|proof| {
+                match std::mem::replace(&mut proof.status, BlockProofStatus::Submitted) {
+                    BlockProofStatus::Waiting(w) => Some(w),
+                    BlockProofStatus::Submitted => None,
+                }
+            })
+            .collect();
+
+        let futs = submissions.into_iter().map(|mut witness| async {
+            loop {
+                let status = prover_service
+                    .prove(witness)
+                    .await
+                    .expect("The proof submission should succeed");
+
+                match status {
+                    ProofProcessingStatus::ProvingInProgress => break,
+                    ProofProcessingStatus::Busy(data) => {
+                        witness = data;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                 }
             }
-        }
+        });
+        futures::future::join_all(futs).await;
+
         self.is_ready = true;
     }
 

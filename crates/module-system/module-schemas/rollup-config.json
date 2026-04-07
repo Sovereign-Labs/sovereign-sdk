@@ -655,6 +655,11 @@
           "format": "uint",
           "minimum": 1.0
         },
+        "eager_proof_submission": {
+          "description": "When true, proofs are submitted as each block arrives. When false, submission is deferred until the batch is full, then submitted concurrently.",
+          "default": true,
+          "type": "boolean"
+        },
         "max_number_of_transitions_in_db": {
           "description": "A number of state transition info entries are allowed to be stored in the database. When the number is exceeded, older entries are removed.",
           "type": "integer",
