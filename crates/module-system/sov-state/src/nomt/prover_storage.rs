@@ -4,6 +4,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use nomt::hasher::BinaryHasher;
@@ -30,6 +31,31 @@ use crate::{
 };
 
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
+
+#[derive(Debug)]
+enum GetWithProofError {
+    StateRootMismatch,
+    Other(anyhow::Error),
+}
+
+impl core::fmt::Display for GetWithProofError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StateRootMismatch => {
+                write!(f, "State root mismatch between pre-fetch and post-fetch")
+            }
+            Self::Other(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for GetWithProofError {}
+
+impl From<anyhow::Error> for GetWithProofError {
+    fn from(err: anyhow::Error) -> Self {
+        Self::Other(err)
+    }
+}
 
 /// A [`Storage`] implementation to be used by the prover in a native execution based on NOMT.
 pub struct NomtProverStorage<S: MerkleProofSpec, K>
@@ -359,6 +385,89 @@ where
                     borsh::from_slice(&root).expect("Error deserializing root hash"),
                 )
             })
+    }
+
+    // Fetch the requested key with proof. Atomically retrieve the values of any provided accessory keys at the same storage version.
+    //
+    // This is a single attempt at the latest-state algorithm. The public `get_with_proof`
+    // wrapper retries only `StateRootMismatch`, which is the transient case caused by NOMT and
+    // RocksDB committing slightly out of phase. All other failures are returned immediately.
+    //
+    // NOMT only maintains the live version of the merkle tree
+    //
+    // We want to ensure that the merkle proof we fetch (from NOMT) and the value (from RocksDB) are consistent. But RocksDB and NOMT commit at slightly different times.
+    // So, what we do is...
+    // 1. Fetch the root hash from RocksDB at the latest version.
+    // 2. Read the value from RocksDB
+    // 3. Fetch the root hash from RocksDB again.
+    // 4. Open a NOMT session (which locks NOMT and prevents any commits)
+    // 5. Compare NOMT's state root with the ones we fetched from RocksDB. If they don't match, GOTO 1.
+    // 6. Generate the merkle proof
+    // 7. (Implicit) unlock NOMT by dropping the session.
+    //
+    // This algorithm guarantees that NOMT and RocksDB are consistent, since the root hash at the time of the RocksDB read is known (we checked both before and after the read) and we've
+    // compared that it matches the NOMT root.
+    //
+    // Note that in this function, we always the use the "unbound" methods to read from storage. Recall that the standard readers attempt to preserve the illusion that the storage holds a point-in-time snapshot,
+    // so they fall back to archival state if the underlying DB has changed. But NOMT doesn't have an archival tree to make merkle proofs against, so this behavior would break consistency.
+    // The "unbound" methods bypass this behavior and always show the newest available value (either a value from the in-memory deltas in the storage, or - if it's newer - the value from the underlying database).
+    //
+    // Aside: Why do we need to fetch the root hash twice?
+    // If we only fetch once, there's a subtle race condition. With a single read, one or the other of these interleavings is possible: (Read_rocksdb_value-> (other thread)commit_rocksdb -> Read_rocksdb_root) or (Read_rocksdb_root-> (other thread)commit_rocksdb -> Read_rocksdb_value)
+    // In either case, the value we read from RocksDB will be inconsistent with the root hash we fetched from RocksDB. By reading the root hash before and after the value and cross-checking, we eliminate this possibility.
+    fn get_with_proof_once<N: ProvableCompileTimeNamespace>(
+        &self,
+        proven_key: SlotKey,
+    ) -> Result<(StorageProof<NomtMultiProof>, SlotNumber, StorageRoot<S>), GetWithProofError> {
+        let namespace = N::PROVABLE_NAMESPACE;
+        // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
+        let (committed_slot_number, pre_fetch_state_root) =
+            self.latest_root_and_version_unbound().ok_or_else(|| {
+                GetWithProofError::Other(anyhow::anyhow!("Latest root hash not found"))
+            })?;
+        let pre_fetch_state_root = pre_fetch_state_root.namespace_root(namespace);
+        // Read the value from the newest delta or the live table, whichever is newer.
+        let value = match namespace {
+            ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
+            ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
+        };
+        // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
+        let (_, post_fetch_state_root) = self
+            .latest_root_and_version_unbound()
+            .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
+        let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
+
+        let session = match namespace {
+            ProvableNamespace::User => self
+                .state_session_builder
+                .begin_user_session_without_witness()
+                .map_err(GetWithProofError::from)?,
+            ProvableNamespace::Kernel => self
+                .state_session_builder
+                .begin_kernel_session_without_witness()
+                .map_err(GetWithProofError::from)?,
+        };
+
+        if pre_fetch_state_root != post_fetch_state_root_namespace
+            || post_fetch_state_root_namespace != session.prev_root().as_ref()
+        {
+            return Err(GetWithProofError::StateRootMismatch);
+        }
+
+        let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
+        let path_proof = session.prove(key_path).map_err(GetWithProofError::from)?;
+        let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
+
+        Ok((
+            StorageProof {
+                key: proven_key,
+                value,
+                proof: NomtMultiProof(multi_proof),
+                namespace,
+            },
+            committed_slot_number,
+            post_fetch_state_root,
+        ))
     }
 }
 
@@ -727,81 +836,45 @@ where
         Ok(self.read_value::<Accessory>(key, version)?)
     }
 
-    // Fetch the requested key with proof. Atomically retrieve the values of any provided accessory keys at the same storage version.
-    //
-    // This method is complicated because NOMT only maintains the live version of the merkle tree
-    //
-    // We want to ensure that the merkle proof we fetch (from NOMT) and the value (from RocksDB) are consistent. But RocksDB and NOMT commit at slightly different times.
-    // So, what we do is...
-    // 1. Fetch the root hash from RocksDB at the latest version.
-    // 2. Read the value from RocksDB
-    // 3. Fetch the root hash from RocksDB again.
-    // 4. Open a NOMT session (which locks NOMT and prevents any commits)
-    // 5. Compare NOMT's state root with the ones we fetched from RocksDB. If they don't match, GOTO 1.
-    // 6. Generate the merkle proof
-    // 7. (Implicit) unlock NOMT by dropping the session.
-    //
-    // This algorithm guarantees that NOMT and RocksDB are consistent, since the root hash at the time of the RocksDB read is known (we checked both before and after the read) and we've
-    // compared that it matches the NOMT root.
-    //
-    // Note that in this function, we always the use the "unbound" methods to read from storage. Recall that the standard readers attempt to preserve the illusion that the storage holds a point-in-time snapshot,
-    // so they fall back to archival state if the underlying DB has changed. But NOMT doesn't have an archival tree to make merkle proofs against, so this behavior would break consistency.
-    // The "unbound" methods bypass this behavior and always show the newest available value (either a value from the in-memory deltas in the storage, or - if it's newer - the value from the underlying database).
-    //
-    // Aside: Why do we need to fetch the root hash twice?
-    // If we only fetch once, there's a subtle race condition. With a single read, one or the other of these interleavings is possible: (Read_rocksdb_value-> (other thread)commit_rocksdb -> Read_rocksdb_root) or (Read_rocksdb_root-> (other thread)commit_rocksdb -> Read_rocksdb_value)
-    // In either case, the value we read from RocksDB will be inconsistent with the root hash we fetched from RocksDB. By reading the root hash before and after the value and cross-checking, we eliminate this possibility.
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         proven_key: SlotKey,
     ) -> anyhow::Result<(StorageProof<Self::Proof>, SlotNumber, Self::Root)> {
-        let namespace = N::PROVABLE_NAMESPACE;
-        // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
-        let (committed_slot_number, pre_fetch_state_root) = self
-            .latest_root_and_version_unbound()
-            .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
-        let pre_fetch_state_root = pre_fetch_state_root.namespace_root(namespace);
-        // Read the value from the newest delta or the live table, whichever is newer.
-        let value = match namespace {
-            ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
-            ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
-        };
-        // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
-        let (_, post_fetch_state_root) = self
-            .latest_root_and_version_unbound()
-            .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
-        let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
+        // Keep the retry budget well under the RPC's 500ms target while avoiding hammering the
+        // DB under sustained write pressure. In practice one blocked attempt often lands after the
+        // in-flight commit finishes, so a few short retries are enough for the transient mismatch.
+        const RETRY_DEADLINE: Duration = Duration::from_millis(375);
+        const RETRY_BACKOFFS_MS: [u64; 3] = [2, 10, 25];
 
-        let session = match namespace {
-            ProvableNamespace::User => self
-                .state_session_builder
-                .begin_user_session_without_witness()?,
-            ProvableNamespace::Kernel => self
-                .state_session_builder
-                .begin_kernel_session_without_witness()?,
-        };
+        let start = Instant::now();
+        let mut attempts = 0;
 
-        if pre_fetch_state_root != post_fetch_state_root_namespace
-            || post_fetch_state_root_namespace != session.prev_root().as_ref()
-        {
-            anyhow::bail!("State root mismatch between pre-fetch and post-fetch");
-            // TODO: This should become a retry
+        loop {
+            attempts += 1;
+            match self.get_with_proof_once::<N>(proven_key.clone()) {
+                Ok(result) => return Ok(result),
+                Err(GetWithProofError::Other(err)) => return Err(err),
+                Err(GetWithProofError::StateRootMismatch) => {
+                    let Some(backoff_ms) = RETRY_BACKOFFS_MS.get(attempts - 1).copied() else {
+                        anyhow::bail!(
+                            "State root mismatch between pre-fetch and post-fetch after {attempts} attempts over {:?}",
+                            start.elapsed()
+                        );
+                    };
+
+                    let elapsed = start.elapsed();
+                    if elapsed >= RETRY_DEADLINE {
+                        anyhow::bail!(
+                            "State root mismatch between pre-fetch and post-fetch after {attempts} attempts over {:?}",
+                            elapsed
+                        );
+                    }
+
+                    let remaining = RETRY_DEADLINE.saturating_sub(elapsed);
+                    std::thread::sleep(Duration::from_millis(backoff_ms).min(remaining));
+                }
+            }
         }
-
-        let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
-        let path_proof = session.prove(key_path)?;
-        let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
-
-        Ok((
-            StorageProof {
-                key: proven_key,
-                value,
-                proof: NomtMultiProof(multi_proof),
-                namespace,
-            },
-            committed_slot_number,
-            post_fetch_state_root,
-        ))
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
@@ -929,7 +1002,7 @@ mod tests {
     use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
     use sov_rollup_interface::storage::HierarchicalStorageManager;
 
-    use super::NomtProverStorage;
+    use super::{GetWithProofError, NomtProverStorage};
     use crate::cache::{OrderedReadsAndWrites, StateAccesses};
     use crate::storage::{NativeStorage, StateUpdate, Storage};
     use crate::{DefaultStorageSpec, SlotKey, SlotValue, User};
@@ -937,11 +1010,14 @@ mod tests {
     type TestStorage = NomtProverStorage<DefaultStorageSpec<Sha256>, MockHash>;
     type TestStorageManager = NomtStorageManager<MockDaSpec, Sha256, TestStorage>;
 
-    type StorageProofResult = anyhow::Result<(
-        crate::StorageProof<<TestStorage as Storage>::Proof>,
-        sov_rollup_interface::common::SlotNumber,
-        <TestStorage as Storage>::Root,
-    )>;
+    type StorageProofResult = Result<
+        (
+            crate::StorageProof<<TestStorage as Storage>::Proof>,
+            sov_rollup_interface::common::SlotNumber,
+            <TestStorage as Storage>::Root,
+        ),
+        GetWithProofError,
+    >;
 
     fn test_db_config(path: std::path::PathBuf) -> RollupDbConfig {
         RollupDbConfig {
@@ -1022,8 +1098,9 @@ mod tests {
         expected_value: &SlotValue,
         expected_root: <TestStorage as Storage>::Root,
     ) {
-        let (proof, slot_number, root_hash) =
-            storage.get_with_proof::<User>(user_key.clone()).unwrap();
+        let (proof, slot_number, root_hash) = storage
+            .get_with_proof_once::<User>(user_key.clone())
+            .unwrap();
 
         assert_eq!(slot_number, storage.latest_version_unbound());
         assert_eq!(root_hash, expected_root);
@@ -1176,8 +1253,9 @@ mod tests {
     // `latest_version() < latest_version_unbound()` assertion validate the test's setup
     // assumptions: finalization is paused at the intended spot, `get_with_proof` is blocked by
     // that in-flight finalization, and the handle is actually stale once the commit completes.
-    // The real method-level correctness check is the post-release `State root mismatch` result,
-    // which would be a bug if `get_with_proof` ever turned into a successful proof or some
+    // The real method-level correctness check is the post-release
+    // `GetWithProofError::StateRootMismatch` result, which would be a bug if `get_with_proof`
+    // ever turned into a successful proof or some
     // unrelated error here.
     fn run_get_with_proof_while_finalize_is_paused<F>(
         location: CommitFaultInjectionLocation,
@@ -1200,7 +1278,7 @@ mod tests {
             let user_key = user_key.clone();
             move || {
                 proof_started_tx.send(()).unwrap();
-                let result = storage.get_with_proof::<User>(user_key);
+                let result = storage.get_with_proof_once::<User>(user_key);
                 proof_done_tx.send(result).unwrap();
             }
         });
@@ -1288,8 +1366,8 @@ mod tests {
             "get_with_proof should observe a root mismatch once the paused commit finishes",
         );
         assert!(
-            err.to_string().contains("State root mismatch"),
-            "unexpected error after releasing paused commit: {err:#}"
+            matches!(err, GetWithProofError::StateRootMismatch),
+            "unexpected error after releasing paused commit: {err:?}"
         );
     }
 
