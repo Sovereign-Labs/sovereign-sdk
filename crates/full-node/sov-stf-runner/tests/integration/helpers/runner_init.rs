@@ -288,6 +288,7 @@ pub async fn initialize_runner(
         let handle = start_zk_workflow_in_background::<_>(
             prover_service,
             rollup_config.proof_manager.aggregated_proof_block_jump,
+            rollup_config.proof_manager.eager_proof_submission,
             Box::new(MockProofSender {
                 da: da_service.clone(),
             }),
