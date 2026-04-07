@@ -111,13 +111,15 @@ where
         // Ledger
         tracing::trace!("Committing Ledger DB...");
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
+            .inject_fault_if_configured();
         let ledger_commit = self.commit_ledger(&ledger)?;
 
         // Accessory
         tracing::trace!("Commiting Accessory DB...");
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingAccessory.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
+            .inject_fault_if_configured();
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 

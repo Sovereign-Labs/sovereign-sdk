@@ -1,5 +1,8 @@
 use std::cmp::max;
 use std::collections::HashSet;
+#[cfg(any(test, feature = "test-utils"))]
+use std::sync::{Condvar, LazyLock, Mutex};
+use std::time::Duration;
 
 use jmt::{JellyfishMerkleTree, KeyHash, SimpleHasher};
 use rand::{Rng, SeedableRng};
@@ -291,56 +294,249 @@ fn is_version_selected_for_key(
 
 use strum::{Display, EnumString};
 
-/// This environment variable sets the crash location for rollup and is used only in tests.
-pub const CRASH_ENV_NAME: &str = "SOV_CRASH_ON_COMMIT";
+/// This environment variable selects a fault injection location that should panic and is used only
+/// in tests.
+pub const CRASH_ON_COMMIT_ENV_NAME: &str = "SOV_CRASH_ON_COMMIT";
+/// This environment variable configures a sleep fault in the form `LOCATION:TIME_MS`.
+pub const SLEEP_ON_COMMIT_MS_ENV_NAME: &str = "SOV_SLEEP_ON_COMMIT_MS";
 
-/// The crash location.
+/// A commit lifecycle location where a test-only fault can be injected.
 #[derive(Debug, Clone, Display, EnumString, Eq, PartialEq)]
-pub enum CrashLocation {
-    /// Rollup crashes before committing the kernel.
+pub enum CommitFaultInjectionLocation {
+    /// Inject an action before committing the kernel NOMT state.
     BeforeCommittingKernelNomt,
-    /// Rollup crashes before committing the user nomt.
+    /// Inject an action before committing the user NOMT state.
     BeforeCommittingUserNomt,
-    /// Rollup crashes before committing the ledger.
+    /// Inject an action before committing the ledger.
     BeforeCommittingLedger,
-    /// Rollup crashes before committing the accessory.
+    /// Inject an action before committing the accessory state.
     BeforeCommittingAccessory,
-    /// Rollup crashes before committing the the archival db.
+    /// Inject an action before committing the archival db.
     BeforeCommittingArchival,
-    /// Rollup crashes before committing the the live db.
+    /// Inject an action before committing the live db.
     BeforeCommittingLive,
 }
 
-impl CrashLocation {
-    /// Sets `CRASH_ENV_NAME` to `self`.
+#[cfg(any(test, feature = "test-utils"))]
+#[derive(Debug, Default)]
+struct CommitFaultWaitState {
+    armed_location: Option<CommitFaultInjectionLocation>,
+    reached: bool,
+    released: bool,
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+static COMMIT_FAULT_WAIT_GATE: LazyLock<(Mutex<CommitFaultWaitState>, Condvar)> =
+    LazyLock::new(|| (Mutex::new(CommitFaultWaitState::default()), Condvar::new()));
+
+impl CommitFaultInjectionLocation {
+    /// Sets the crash env var to `self`.
     pub fn set_crash_env(&self) {
-        std::env::set_var(CRASH_ENV_NAME, self.to_string());
+        std::env::set_var(CRASH_ON_COMMIT_ENV_NAME, self.to_string());
     }
 
-    /// if `CRASH_ENV_NAME` is set to self, the method will panic.
-    pub fn crash_if_env_set(&self) {
-        if self.is_crash_env_set() {
-            tracing::error!("{CRASH_ENV_NAME} is set to: {self}, crashing the node");
-            panic!("{CRASH_ENV_NAME} is set to: {self}, crashing the node");
+    /// Sets the sleep env var to `LOCATION:TIME_MS`.
+    pub fn set_sleep_env(&self, ms: u64) {
+        std::env::set_var(SLEEP_ON_COMMIT_MS_ENV_NAME, format!("{self}:{ms}"));
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    /// Arms the in-process wait gate for this location.
+    pub fn arm_wait_gate(&self) {
+        let (lock, _) = &*COMMIT_FAULT_WAIT_GATE;
+        let mut state = lock.lock().expect("Commit fault wait gate lock poisoned");
+        assert!(
+            state.armed_location.is_none(),
+            "Commit fault wait gate is already armed for {:?}",
+            state.armed_location
+        );
+        *state = CommitFaultWaitState {
+            armed_location: Some(self.clone()),
+            reached: false,
+            released: false,
+        };
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    /// Waits for the in-process wait gate for this location to be reached.
+    pub fn wait_until_wait_gate_reached(&self, timeout: Duration) -> bool {
+        let (lock, cv) = &*COMMIT_FAULT_WAIT_GATE;
+        let state = lock.lock().expect("Commit fault wait gate lock poisoned");
+        assert_eq!(
+            state.armed_location.as_ref(),
+            Some(self),
+            "Commit fault wait gate is not armed for {self}"
+        );
+        let (state, _) = cv
+            .wait_timeout_while(state, timeout, |state| !state.reached)
+            .expect("Commit fault wait gate lock poisoned");
+        state.reached
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    /// Releases the in-process wait gate for this location and waits until it is cleared.
+    pub fn release_wait_gate(&self) {
+        let (lock, cv) = &*COMMIT_FAULT_WAIT_GATE;
+        let mut state = lock.lock().expect("Commit fault wait gate lock poisoned");
+        assert_eq!(
+            state.armed_location.as_ref(),
+            Some(self),
+            "Commit fault wait gate is not armed for {self}"
+        );
+        assert!(
+            state.reached,
+            "Commit fault wait gate for {self} was not reached"
+        );
+        state.released = true;
+        cv.notify_all();
+        while state.armed_location.is_some() {
+            state = cv
+                .wait(state)
+                .expect("Commit fault wait gate lock poisoned");
         }
     }
 
-    /// Returns true if `SOV_CRASH_ON_COMMIT` is set to this crash location.
+    /// If a fault is configured for `self`, this method injects it.
+    pub fn inject_fault_if_configured(&self) {
+        #[cfg(any(test, feature = "test-utils"))]
+        self.block_on_wait_gate_if_armed();
+
+        if self.is_crash_env_set() {
+            tracing::error!("{CRASH_ON_COMMIT_ENV_NAME} is set to: {self}, crashing the node");
+            panic!("{CRASH_ON_COMMIT_ENV_NAME} is set to: {self}, crashing the node");
+        }
+
+        if let Some(duration) = self.sleep_duration_from_env() {
+            tracing::warn!(
+                location = %self,
+                sleep_ms = duration.as_millis(),
+                "{SLEEP_ON_COMMIT_MS_ENV_NAME} matched; pausing before commit"
+            );
+            std::thread::sleep(duration);
+        }
+    }
+
+    /// Returns true if the crash env var is set to this location.
     ///
     /// # Panics
-    /// Panics if `SOV_CRASH_ON_COMMIT` is set to a value that cannot be parsed as a `CrashLocation`.
+    /// Panics if the env var is set to a value that cannot be parsed as a
+    /// `CommitFaultInjectionLocation`.
     pub fn is_crash_env_set(&self) -> bool {
         if !cfg!(debug_assertions) {
             return false;
         }
-        match std::env::var(CRASH_ENV_NAME) {
+        match std::env::var(CRASH_ON_COMMIT_ENV_NAME) {
             Ok(env) => {
-                let crash_location: CrashLocation = env.parse().unwrap_or_else(|e| {
-                    panic!("Failed to parse {CRASH_ENV_NAME}={env:?} as CrashLocation: {e}")
+                let injection_location: CommitFaultInjectionLocation =
+                    env.parse().unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to parse {CRASH_ON_COMMIT_ENV_NAME}={env:?} as CommitFaultInjectionLocation: {e}"
+                    )
                 });
-                &crash_location == self
+                &injection_location == self
             }
             Err(_) => false,
         }
+    }
+
+    fn sleep_duration_from_env(&self) -> Option<Duration> {
+        if !cfg!(debug_assertions) {
+            return None;
+        }
+
+        match std::env::var(SLEEP_ON_COMMIT_MS_ENV_NAME) {
+            Ok(env) => {
+                let (location, sleep_ms) = env.split_once(':').unwrap_or_else(|| {
+                    panic!(
+                        "Failed to parse {SLEEP_ON_COMMIT_MS_ENV_NAME}={env:?} as LOCATION:TIME_MS"
+                    )
+                });
+
+                let injection_location: CommitFaultInjectionLocation =
+                    location.parse().unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to parse location in {SLEEP_ON_COMMIT_MS_ENV_NAME}={env:?} as CommitFaultInjectionLocation: {e}"
+                        )
+                    });
+                if &injection_location != self {
+                    return None;
+                }
+
+                let sleep_ms = sleep_ms.parse::<u64>().unwrap_or_else(|e| {
+                    panic!(
+                        "Failed to parse duration in {SLEEP_ON_COMMIT_MS_ENV_NAME}={env:?} as u64: {e}"
+                    )
+                });
+                Some(Duration::from_millis(sleep_ms))
+            }
+            Err(_) => None,
+        }
+    }
+
+    #[cfg(any(test, feature = "test-utils"))]
+    fn block_on_wait_gate_if_armed(&self) {
+        let (lock, cv) = &*COMMIT_FAULT_WAIT_GATE;
+        let mut state = lock.lock().expect("Commit fault wait gate lock poisoned");
+        if state.armed_location.as_ref() != Some(self) {
+            return;
+        }
+
+        state.reached = true;
+        cv.notify_all();
+        while !state.released {
+            state = cv
+                .wait(state)
+                .expect("Commit fault wait gate lock poisoned");
+        }
+
+        *state = CommitFaultWaitState::default();
+        cv.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod commit_fault_injection_tests {
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    use super::{
+        CommitFaultInjectionLocation, CRASH_ON_COMMIT_ENV_NAME, SLEEP_ON_COMMIT_MS_ENV_NAME,
+    };
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn inject_fault_if_configured_sleeps_when_configured() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var(CRASH_ON_COMMIT_ENV_NAME);
+        std::env::remove_var(SLEEP_ON_COMMIT_MS_ENV_NAME);
+
+        CommitFaultInjectionLocation::BeforeCommittingLedger.set_sleep_env(20);
+
+        let start = Instant::now();
+        CommitFaultInjectionLocation::BeforeCommittingLedger.inject_fault_if_configured();
+        assert!(start.elapsed() >= Duration::from_millis(20));
+
+        std::env::remove_var(CRASH_ON_COMMIT_ENV_NAME);
+        std::env::remove_var(SLEEP_ON_COMMIT_MS_ENV_NAME);
+    }
+
+    #[test]
+    fn inject_fault_if_configured_crash_takes_precedence_over_sleep() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        std::env::remove_var(CRASH_ON_COMMIT_ENV_NAME);
+        std::env::remove_var(SLEEP_ON_COMMIT_MS_ENV_NAME);
+
+        let location = CommitFaultInjectionLocation::BeforeCommittingLedger;
+        location.set_crash_env();
+        location.set_sleep_env(20);
+
+        let result = std::panic::catch_unwind(|| {
+            location.inject_fault_if_configured();
+        });
+        assert!(result.is_err());
+
+        std::env::remove_var(CRASH_ON_COMMIT_ENV_NAME);
+        std::env::remove_var(SLEEP_ON_COMMIT_MS_ENV_NAME);
     }
 }

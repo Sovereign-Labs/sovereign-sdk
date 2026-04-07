@@ -315,7 +315,8 @@ impl FlatStateDb {
 
         // Write archival db batches.
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingArchival.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingArchival
+            .inject_fault_if_configured();
         self.archival_db.write_db_batch(archival_db_batch)?;
 
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
@@ -325,7 +326,8 @@ impl FlatStateDb {
         // Write live db batch.
         if is_commit {
             #[cfg(feature = "test-utils")]
-            crate::test_utils::CrashLocation::BeforeCommittingLive.crash_if_env_set();
+            crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLive
+                .inject_fault_if_configured();
             self.live_db.write_db_batch(live_db_batch)?;
         }
 
@@ -500,7 +502,7 @@ impl CacheForVersionedDB<NomtStateValues<KernelNamespace>> for DbCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::CrashLocation;
+    use crate::test_utils::CommitFaultInjectionLocation;
     use sov_db_types::{SlotKey, SlotValue};
     use std::{collections::HashMap, panic::AssertUnwindSafe, vec};
     use tempfile::TempDir;
@@ -509,12 +511,12 @@ mod tests {
 
     #[test]
     fn test_rollback_crash_before_commiting_archival() -> anyhow::Result<()> {
-        test_rollback(CrashLocation::BeforeCommittingArchival, 0)
+        test_rollback(CommitFaultInjectionLocation::BeforeCommittingArchival, 0)
     }
 
     #[test]
     fn test_rollback_crash_before_committing_live() -> anyhow::Result<()> {
-        test_rollback(CrashLocation::BeforeCommittingLive, 1)
+        test_rollback(CommitFaultInjectionLocation::BeforeCommittingLive, 1)
     }
 
     fn assert_key_value(
@@ -538,7 +540,10 @@ mod tests {
 
     // This test commits data for version 0 of the rollup state and panics at various points during the commit for version 1.
     // Afterward, it checks whether the rollback logic correctly reverted the archival state.
-    fn test_rollback(crash_location: CrashLocation, archival_version: u64) -> anyhow::Result<()> {
+    fn test_rollback(
+        injection_location: CommitFaultInjectionLocation,
+        archival_version: u64,
+    ) -> anyhow::Result<()> {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
         let data = data_to_insert_per_version();
@@ -566,7 +571,7 @@ mod tests {
         }
 
         unlock_dbs(&tempdir);
-        crash_location.set_crash_env();
+        injection_location.set_crash_env();
 
         // Crash during commit of version 1.
         {

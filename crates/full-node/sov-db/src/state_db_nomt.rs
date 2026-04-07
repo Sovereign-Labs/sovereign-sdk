@@ -45,14 +45,16 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let StateOverlay { user, kernel } = overlay;
         // 1.
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingKernelNomt.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingKernelNomt
+            .inject_fault_if_configured();
 
         // 2.
         let write_kernel = self.commit_kernel(kernel)?;
 
         // 3.
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingUserNomt.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingUserNomt
+            .inject_fault_if_configured();
 
         // 4.
         let write_user = self.commit_user(user)?;
