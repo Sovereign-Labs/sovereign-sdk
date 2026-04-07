@@ -972,7 +972,7 @@ const checks: CheckDefinition[] = [
   {
     name: "C.eth_estimateGas_viem",
     library: "viem",
-    rpcMethods: ["eth_estimateGas"],
+    rpcMethods: ["eth_estimateGas", "eth_sendRawTransaction"],
     runEndpoint: async (runtime, context) => {
       // Estimate gas for setSimpleValue, then send with estimate + 10%
       const estimateSimpleA = await runtime.viemClient.estimateContractGas({
