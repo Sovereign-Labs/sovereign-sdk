@@ -159,19 +159,28 @@ where
         let accessory_block_numbers_key = self.block_numbers.slot_key();
         let (proof, slot_number, root_hash) = storage
             .get_with_proof::<User>(account_slot_key)
-            .inspect_err(|err| tracing::error!(error = ?err, "Error getting storage proof"))
-            .map_err(|_| EthApiError::StorageProofNotFound)?;
+            .map_err(|err| {
+                tracing::warn!(error = ?err, "Error getting storage proof after retries");
+                into_rpc_error(err)
+            })?;
 
         let accessory_values =
             storage.get_accessory_unbound(accessory_block_numbers_key, Some(slot_number));
-        let block_number_slot_value = accessory_values.as_ref().expect("evm.block_numbers returned None at the latest height. This is a bug, block numbers must always be set.");
+        let Some(block_number_slot_value) = accessory_values.as_ref() else {
+            tracing::error!(
+                %slot_number,
+                "Missing evm.block_numbers while building storage proof response"
+            );
+            return Err(into_rpc_error(format!(
+                "evm.block_numbers returned None at slot {slot_number}. This is a bug, block numbers must always be set."
+            )));
+        };
 
         let block_number = *self
             .block_numbers
             .decode_unwrap(block_number_slot_value)
             .end();
         let block_number = block_number.saturating_add(config_value!("STATE_ROOT_DELAY_BLOCKS")); // Add state root delay blocks to get the state root for the block number
-        println!("proof: {}", serde_json::to_string(&proof).unwrap());
         Ok(GetProofResponse {
             proof,
             state_root: root_hash,
