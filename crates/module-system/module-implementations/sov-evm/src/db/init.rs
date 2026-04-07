@@ -1,7 +1,7 @@
 use super::{DbAccount, EvmDb};
 use alloy_primitives::{Address, Bytes, B256};
-use reth_primitives::Bytecode;
 use revm::state::AccountInfo;
+use revm::state::Bytecode;
 use sov_modules_api::StateReader;
 use sov_modules_api::{Spec, StateAccessor};
 use sov_state::User;
