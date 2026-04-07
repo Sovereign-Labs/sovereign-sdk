@@ -41,6 +41,9 @@ proptest = { workspace = true }
 test-strategy = { workspace = true }
 sha2 = { workspace = true }
 serde_json = { workspace = true }
+sov-db = { workspace = true, features = ["test-utils"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+tempfile = { workspace = true }
 
 [features]
 arbitrary = [

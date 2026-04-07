@@ -917,3 +917,559 @@ impl sov_metrics::Metric for NomtProverComputeStateResult {
         write!(buffer, "{name},with_witness={with_witness} user_reads={user_reads},user_writes={user_writes},kernel_reads={kernel_reads},kernel_writes={kernel_writes}")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use sha2::Sha256;
+    use sov_db::config::RollupDbConfig;
+    use sov_db::storage_manager::NomtStorageManager;
+    use sov_db::test_utils::CommitFaultInjectionLocation;
+    use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
+    use sov_rollup_interface::storage::HierarchicalStorageManager;
+
+    use super::NomtProverStorage;
+    use crate::cache::{OrderedReadsAndWrites, StateAccesses};
+    use crate::storage::{NativeStorage, StateUpdate, Storage};
+    use crate::{DefaultStorageSpec, SlotKey, SlotValue, User};
+
+    type TestStorage = NomtProverStorage<DefaultStorageSpec<Sha256>, MockHash>;
+    type TestStorageManager = NomtStorageManager<MockDaSpec, Sha256, TestStorage>;
+
+    type StorageProofResult = anyhow::Result<(
+        crate::StorageProof<<TestStorage as Storage>::Proof>,
+        sov_rollup_interface::common::SlotNumber,
+        <TestStorage as Storage>::Root,
+    )>;
+
+    fn test_db_config(path: std::path::PathBuf) -> RollupDbConfig {
+        RollupDbConfig {
+            path,
+            ledger_db_path: None,
+            state_cache_size: Some(1_000_000),
+            user_commit_concurrency: Some(2),
+            user_hashtable_buckets: Some(if cfg!(debug_assertions) {
+                500
+            } else {
+                1_000_000
+            }),
+            user_preallocate_ht: Some(false),
+            user_page_cache_size: Some(16),
+            user_leaf_cache_size: Some(16),
+            user_page_cache_upper_levels: None,
+            kernel_commit_concurrency: Some(2),
+            kernel_hashtable_buckets: None,
+            kernel_preallocate_ht: Some(false),
+            kernel_page_cache_size: Some(16),
+            kernel_leaf_cache_size: Some(16),
+            kernel_page_cache_upper_levels: None,
+            pruner_block_interval: None,
+            pruner_versions_to_keep: Some(20),
+            pruner_max_batch_size: None,
+        }
+    }
+
+    // Writes a block to the storage manager and finalizes it if requested.
+    fn write_block(
+        storage_manager: &mut TestStorageManager,
+        prev_root: <TestStorage as Storage>::Root,
+        da_header: &MockBlockHeader,
+        user_key: &SlotKey,
+        accessory_key: &SlotKey,
+        value: &SlotValue,
+        finalize: bool,
+    ) -> <TestStorage as Storage>::Root {
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(da_header).unwrap();
+        let (expected_root, mut state_update) = stf_storage
+            .compute_state_update(
+                StateAccesses {
+                    user: OrderedReadsAndWrites {
+                        ordered_reads: Vec::new(),
+                        ordered_writes: vec![(user_key.clone(), Some(value.clone()))],
+                    },
+                    kernel: OrderedReadsAndWrites {
+                        ordered_reads: Vec::new(),
+                        ordered_writes: vec![(user_key.clone(), Some(value.clone()))],
+                    },
+                },
+                &Default::default(),
+                prev_root,
+                None,
+            )
+            .unwrap();
+        state_update.add_accessory_item(accessory_key.clone(), Some(value.clone()));
+
+        storage_manager
+            .save_change_set(
+                da_header,
+                stf_storage.materialize_changes(state_update),
+                Default::default(),
+            )
+            .unwrap();
+
+        if finalize {
+            storage_manager.finalize(da_header).unwrap();
+        }
+
+        expected_root
+    }
+
+    fn assert_proof_matches_storage_and_accessory(
+        storage: &TestStorage,
+        user_key: &SlotKey,
+        accessory_key: &SlotKey,
+        expected_value: &SlotValue,
+        expected_root: <TestStorage as Storage>::Root,
+    ) {
+        let (proof, slot_number, root_hash) =
+            storage.get_with_proof::<User>(user_key.clone()).unwrap();
+
+        assert_eq!(slot_number, storage.latest_version_unbound());
+        assert_eq!(root_hash, expected_root);
+        assert_eq!(proof.value, Some(expected_value.clone()));
+        assert_eq!(
+            TestStorage::open_proof(root_hash, proof.clone()).unwrap(),
+            (user_key.clone(), Some(expected_value.clone()))
+        );
+        assert_eq!(
+            storage.get_accessory_unbound(accessory_key.clone(), Some(slot_number)),
+            Some(expected_value.clone())
+        );
+    }
+
+    #[test]
+    fn get_with_proof_reads_overlay_latest_user_and_accessory_state_across_multiple_blocks() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager =
+            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+        let mut prev_root = TestStorage::PRE_GENESIS_ROOT;
+
+        for height in 1..=3 {
+            let da_header = MockBlockHeader::from_height(height);
+            let expected_value = SlotValue::from(vec![height as u8]);
+            let expected_root = write_block(
+                &mut storage_manager,
+                prev_root,
+                &da_header,
+                &user_key,
+                &accessory_key,
+                &expected_value,
+                false, // don't finalize any blocks so that the overlay is newer than the DB
+            );
+
+            let (overlay_storage, _ledger_storage) =
+                storage_manager.create_state_after(&da_header).unwrap();
+            assert_proof_matches_storage_and_accessory(
+                &overlay_storage,
+                &user_key,
+                &accessory_key,
+                &expected_value,
+                expected_root,
+            );
+
+            prev_root = expected_root;
+        }
+    }
+
+    #[test]
+    fn get_with_proof_reads_latest_committed_state_from_stale_storage() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager =
+            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let (stale_storage, _ledger_storage) =
+            storage_manager.create_state_after(&first_header).unwrap();
+
+        let second_header = MockBlockHeader::from_height(2);
+        let second_value = SlotValue::from(vec![2]);
+        let expected_root = write_block(
+            &mut storage_manager,
+            first_root,
+            &second_header,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            true, // finalize blocks so that the DB gets newer than the "stale" storage overlay
+        );
+
+        assert!(stale_storage.latest_version() < stale_storage.latest_version_unbound());
+        assert_proof_matches_storage_and_accessory(
+            &stale_storage,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            expected_root,
+        );
+    }
+
+    /// This is the positive control for the normal committed-state path after block `N+1`
+    /// finishes finalizing and we reopen storage at that new head. The
+    /// `latest_version() == latest_version_unbound()` assertion checks that this handle is
+    /// genuinely fresh rather than exercising stale-storage fallback behavior. The shared helper
+    /// then verifies the full success path: `get_with_proof` returns the expected root and value,
+    /// the proof opens successfully against that root, and accessory state at the returned slot
+    /// matches the proven user value.
+    #[test]
+    fn get_with_proof_reads_latest_committed_state_from_fresh_storage() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager =
+            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let second_header = MockBlockHeader::from_height(2);
+        let second_value = SlotValue::from(vec![2]);
+        let expected_root = write_block(
+            &mut storage_manager,
+            first_root,
+            &second_header,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            true,
+        );
+
+        let (fresh_storage, _ledger_storage) =
+            storage_manager.create_state_after(&second_header).unwrap();
+        assert_eq!(
+            fresh_storage.latest_version(),
+            fresh_storage.latest_version_unbound()
+        );
+        assert_proof_matches_storage_and_accessory(
+            &fresh_storage,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            expected_root,
+        );
+    }
+
+    // These paused-finalization tests have two kinds of assertions.
+    // `wait_until_wait_gate_reached`, the short `recv_timeout(...).is_err()` check, and the final
+    // `latest_version() < latest_version_unbound()` assertion validate the test's setup
+    // assumptions: finalization is paused at the intended spot, `get_with_proof` is blocked by
+    // that in-flight finalization, and the handle is actually stale once the commit completes.
+    // The real method-level correctness check is the post-release `State root mismatch` result,
+    // which would be a bug if `get_with_proof` ever turned into a successful proof or some
+    // unrelated error here.
+    fn run_get_with_proof_while_finalize_is_paused<F>(
+        location: CommitFaultInjectionLocation,
+        storage: &TestStorage,
+        user_key: &SlotKey,
+        finish_finalize: F,
+    ) -> StorageProofResult
+    where
+        F: FnOnce(),
+    {
+        assert!(
+            location.wait_until_wait_gate_reached(Duration::from_secs(5)),
+            "timed out waiting for commit to pause at {location}"
+        );
+
+        let (proof_started_tx, proof_started_rx) = std::sync::mpsc::channel();
+        let (proof_done_tx, proof_done_rx) = std::sync::mpsc::channel();
+        let proof_thread = std::thread::spawn({
+            let storage = storage.clone();
+            let user_key = user_key.clone();
+            move || {
+                proof_started_tx.send(()).unwrap();
+                let result = storage.get_with_proof::<User>(user_key);
+                proof_done_tx.send(result).unwrap();
+            }
+        });
+
+        proof_started_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("timed out waiting for proof request to start");
+        assert!(
+            proof_done_rx
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "get_with_proof unexpectedly finished while commit was paused at {location}"
+        );
+
+        location.release_wait_gate();
+        finish_finalize();
+        let result = proof_done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("timed out waiting for blocked proof request to finish");
+        proof_thread.join().unwrap();
+        result
+    }
+
+    fn run_paused_finalize_and_get_proof_result(
+        location: CommitFaultInjectionLocation,
+    ) -> (TestStorage, SlotKey, StorageProofResult) {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager =
+            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let (stale_storage, _ledger_storage) =
+            storage_manager.create_state_after(&first_header).unwrap();
+
+        location.arm_wait_gate();
+
+        let second_header = MockBlockHeader::from_height(2);
+        let commit_thread = std::thread::spawn({
+            let user_key = user_key.clone();
+            let accessory_key = accessory_key.clone();
+            move || {
+                write_block(
+                    &mut storage_manager,
+                    first_root,
+                    &second_header,
+                    &user_key,
+                    &accessory_key,
+                    &SlotValue::from(vec![2]),
+                    true,
+                )
+            }
+        });
+
+        let result = run_get_with_proof_while_finalize_is_paused(
+            location,
+            &stale_storage,
+            &user_key,
+            move || {
+                commit_thread.join().unwrap();
+            },
+        );
+
+        assert!(stale_storage.latest_version() < stale_storage.latest_version_unbound());
+        (stale_storage, accessory_key, result)
+    }
+
+    fn assert_stale_storage_blocks_then_observes_root_mismatch(
+        location: CommitFaultInjectionLocation,
+    ) {
+        let (_stale_storage, _accessory_key, result) =
+            run_paused_finalize_and_get_proof_result(location);
+        let err = result.expect_err(
+            "get_with_proof should observe a root mismatch once the paused commit finishes",
+        );
+        assert!(
+            err.to_string().contains("State root mismatch"),
+            "unexpected error after releasing paused commit: {err:#}"
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_accessory() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingAccessory,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_ledger() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingLedger,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_archival() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingArchival,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_kernel_nomt() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingKernelNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_user_nomt() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingUserNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_does_not_return_inconsistent_success_for_stale_storage_while_commit_is_paused_before_live(
+    ) {
+        let (stale_storage, accessory_key, result) = run_paused_finalize_and_get_proof_result(
+            CommitFaultInjectionLocation::BeforeCommittingLive,
+        );
+        if let Ok((proof, slot_number, root_hash)) = result {
+            assert_eq!(slot_number, stale_storage.latest_version_unbound());
+            let (_, opened_value) =
+                TestStorage::open_proof(root_hash, proof.clone()).expect("proof should verify");
+            assert_eq!(opened_value, proof.value);
+            assert_eq!(
+                stale_storage.get_accessory_unbound(accessory_key, Some(slot_number)),
+                proof.value
+            );
+        }
+    }
+
+    fn run_paused_finalize_and_get_overlay_proof_result(
+        location: CommitFaultInjectionLocation,
+    ) -> (
+        TestStorage,
+        SlotKey,
+        SlotKey,
+        SlotValue,
+        <TestStorage as Storage>::Root,
+        StorageProofResult,
+    ) {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager =
+            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let second_header = MockBlockHeader::from_height(2);
+        let expected_value = SlotValue::from(vec![2]);
+        let expected_root = write_block(
+            &mut storage_manager,
+            first_root,
+            &second_header,
+            &user_key,
+            &accessory_key,
+            &expected_value,
+            false,
+        );
+        let (overlay_storage, _ledger_storage) =
+            storage_manager.create_state_after(&second_header).unwrap();
+
+        location.arm_wait_gate();
+
+        let finalize_thread = std::thread::spawn(move || storage_manager.finalize(&second_header));
+
+        let result = run_get_with_proof_while_finalize_is_paused(
+            location,
+            &overlay_storage,
+            &user_key,
+            move || {
+                finalize_thread.join().unwrap().unwrap();
+            },
+        );
+
+        (
+            overlay_storage,
+            user_key,
+            accessory_key,
+            expected_value,
+            expected_root,
+            result,
+        )
+    }
+
+    fn assert_overlay_storage_blocks_then_observes_consistent_success(
+        location: CommitFaultInjectionLocation,
+    ) {
+        let (overlay_storage, user_key, accessory_key, expected_value, expected_root, result) =
+            run_paused_finalize_and_get_overlay_proof_result(location);
+        let (proof, slot_number, root_hash) =
+            result.expect("get_with_proof should succeed once the paused commit finishes");
+
+        assert_eq!(slot_number, overlay_storage.latest_version_unbound());
+        assert_eq!(root_hash, expected_root);
+        assert_eq!(proof.value, Some(expected_value.clone()));
+        assert_eq!(
+            TestStorage::open_proof(root_hash, proof.clone()).unwrap(),
+            (user_key, Some(expected_value.clone()))
+        );
+        assert_eq!(
+            overlay_storage.get_accessory_unbound(accessory_key, Some(slot_number)),
+            Some(expected_value)
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_archival() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingArchival,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_accessory() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingAccessory,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_ledger() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingLedger,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_kernel_nomt() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingKernelNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_user_nomt() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingUserNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_live() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingLive,
+        );
+    }
+}
