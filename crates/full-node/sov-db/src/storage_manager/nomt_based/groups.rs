@@ -100,6 +100,10 @@ where
                 },
         } = group;
 
+        // ======================= DANGER ZONE ======================
+        // The commit order here is relied on by NomtProverStorage::get_with_proof
+        // If you change the order, you'll need to update merkle proof generation.
+
         // NOMT
         tracing::trace!("Commiting NOMT DBs...");
         let merklized_commit = self.merklized_state.commit(state)?;
@@ -135,6 +139,8 @@ where
             );
             self.flat_state.commit(historical_state)?
         };
+
+        // ======================= END DANGER ZONE ======================
 
         // Metrics
         let merklized_commit_from_caller = merklized_commit.total;

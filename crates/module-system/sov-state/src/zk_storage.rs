@@ -223,12 +223,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
     fn get_with_proof<N: crate::namespaces::ProvableCompileTimeNamespace>(
         &self,
         _key: SlotKey,
-        _accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(
-        StorageProof<Self::Proof>,
-        Option<Vec<Option<SlotValue>>>,
-        Self::Root,
-    )> {
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, SlotNumber, Self::Root)> {
         unimplemented!("The ZkStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
 
@@ -268,6 +263,14 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for ZkStorage<S> {
 
     fn get_unbound<N: crate::CompileTimeNamespace>(&self, _key: SlotKey) -> Option<SlotValue> {
         unimplemented!("The ZkStorage does not support `get_unbound`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
+    }
+
+    fn get_accessory_unbound(
+        &self,
+        _key: SlotKey,
+        _max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue> {
+        unimplemented!("The ZkStorage does not support `get_accessory_unbound`! The NativeStorage trait is only implemented to allow for the use of the ZkStorage in tests.");
     }
 
     fn maybe_iter_user_values_with_prefix(

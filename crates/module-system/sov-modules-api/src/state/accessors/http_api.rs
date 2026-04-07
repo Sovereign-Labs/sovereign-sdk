@@ -325,7 +325,7 @@ const _: () = {
             &mut self,
             key: SlotKey,
         ) -> Option<StorageProof<Self::Proof>> {
-            match self.storage().get_with_proof::<N>(key, None) {
+            match self.storage().get_with_proof::<N>(key) {
                 Ok(storage_proof) => Some(storage_proof.0),
                 Err(err) => {
                     tracing::error!(error = ?err, "Error requesting storage proof");

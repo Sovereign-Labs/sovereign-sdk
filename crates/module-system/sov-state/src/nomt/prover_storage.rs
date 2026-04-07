@@ -158,6 +158,8 @@ where
             && version_to_use == self.latest_version()
     }
 
+    /// Reads the latest value for the given key without trying to preserve the illusion that this `Storage` instance is backed by a snapshot.
+    /// If the underlying DB has advanced beyond the snapshot, this method will read from the live DB.
     fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
         match N::NAMESPACE {
             Namespace::User => self
@@ -347,11 +349,16 @@ where
     }
 
     /// Get the latest root hash available in the live db. This could be the newest root hash from the underlying db, or the root hash from the latest delta in memory - whichever is newer.
-    fn latest_root_unbound(&self) -> Option<StorageRoot<S>> {
+    fn latest_root_and_version_unbound(&self) -> Option<(SlotNumber, StorageRoot<S>)> {
         self.historical_state
-            .latest_root_unbound()
+            .latest_root_and_version_unbound()
             .expect("Error reading from database")
-            .map(|v| borsh::from_slice(&v).expect("Error deserializing root hash"))
+            .map(|(version, root)| {
+                (
+                    version,
+                    borsh::from_slice(&root).expect("Error deserializing root hash"),
+                )
+            })
     }
 }
 
@@ -747,35 +754,21 @@ where
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         proven_key: SlotKey,
-        accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(
-        StorageProof<Self::Proof>,
-        Option<Vec<Option<SlotValue>>>,
-        Self::Root,
-    )> {
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, SlotNumber, Self::Root)> {
         let namespace = N::PROVABLE_NAMESPACE;
         // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
-        let pre_fetch_state_root = self
-            .latest_root_unbound()
-            .ok_or(anyhow::anyhow!("Latest root hash not found"))?
-            .namespace_root(namespace);
+        let (committed_slot_number, pre_fetch_state_root) = self
+            .latest_root_and_version_unbound()
+            .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
+        let pre_fetch_state_root = pre_fetch_state_root.namespace_root(namespace);
         // Read the value from the newest delta or the live table, whichever is newer.
         let value = match namespace {
             ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
             ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
         };
-        let mut accessory_values = None;
-        if let Some(accessory_keys) = accessory_keys {
-            let mut accessory_values_vec = Vec::with_capacity(accessory_keys.len());
-            for key in accessory_keys {
-                let value = self.read_value_unbound::<Accessory>(&key);
-                accessory_values_vec.push(value);
-            }
-            accessory_values = Some(accessory_values_vec);
-        }
         // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
-        let post_fetch_state_root = self
-            .latest_root_unbound()
+        let (_, post_fetch_state_root) = self
+            .latest_root_and_version_unbound()
             .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
         let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
 
@@ -806,7 +799,7 @@ where
                 proof: NomtMultiProof(multi_proof),
                 namespace,
             },
-            accessory_values,
+            committed_slot_number,
             post_fetch_state_root,
         ))
     }
@@ -849,6 +842,17 @@ where
 
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
         self.read_value_unbound::<N>(&key)
+    }
+
+    fn get_accessory_unbound(
+        &self,
+        key: SlotKey,
+        max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue> {
+        self.accessory
+            .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
+            .expect("Unable to read from AccessoryDb")
+            .map(Into::into)
     }
 
     fn maybe_iter_user_values_with_prefix(

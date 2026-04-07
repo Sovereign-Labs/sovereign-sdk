@@ -490,27 +490,13 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         key: SlotKey,
-        accessory_keys: Option<Vec<SlotKey>>,
-    ) -> anyhow::Result<(
-        StorageProof<Self::Proof>,
-        Option<Vec<Option<SlotValue>>>,
-        Self::Root,
-    )> {
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, SlotNumber, Self::Root)> {
         let version_to_use = match self.get_version_to_use(None) {
             None => {
                 anyhow::bail!("Proof is not available. Empty storage",)
             }
             Some(v) => v,
         };
-        let mut accessory_values = None;
-        if let Some(accessory_keys) = accessory_keys {
-            let mut accessory_values_vec = Vec::with_capacity(accessory_keys.len());
-            for key in accessory_keys {
-                let value = self.get_accessory_historical(&key, Some(version_to_use))?;
-                accessory_values_vec.push(value);
-            }
-            accessory_values = Some(accessory_values_vec);
-        }
         let namespace = N::PROVABLE_NAMESPACE;
         let root = self.get_root_hash(version_to_use)?;
         let proof = match namespace {
@@ -521,7 +507,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 self.get_with_proof_namespace::<DBKernelNamespace>(namespace, key, version_to_use)
             }
         };
-        Ok((proof, accessory_values, root))
+        Ok((proof, version_to_use, root))
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
@@ -558,6 +544,17 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
+    }
+
+    fn get_accessory_unbound(
+        &self,
+        key: SlotKey,
+        max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue> {
+        self.accessory_db
+            .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
+            .expect("Unable to read from AccessoryDb")
+            .map(Into::into)
     }
 
     // JMT doesn't currently support iter_with_prefix, so we return None.

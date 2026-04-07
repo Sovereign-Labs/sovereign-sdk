@@ -157,18 +157,14 @@ where
         let storage = state.storage();
         let account_slot_key = self.account_storage.slot_key(&(&address, &index));
         let accessory_block_numbers_key = self.block_numbers.slot_key();
-        let (proof, accessory_values, root_hash) = storage
-            .get_with_proof::<User>(account_slot_key, Some(vec![accessory_block_numbers_key]))
+        let (proof, slot_number, root_hash) = storage
+            .get_with_proof::<User>(account_slot_key)
             .inspect_err(|err| tracing::error!(error = ?err, "Error getting storage proof"))
             .map_err(|_| EthApiError::StorageProofNotFound)?;
 
-        let accessory_values_vec  = accessory_values
-            .expect("NativeStorage broke its API contract; returned None for accessory values when Some were provided"); // Error 1: None return type for accessory values
-        let block_number_slot_value = accessory_values_vec
-            .first()
-            .expect("NativeStorage broke its API contract; returned empty accessory values when non-empty accessory values were provided") // Error 2: Empty accessory values
-            .as_ref()
-            .expect("evm.block_numbers returned None at the latest height. This is a bug, block numbers must always be set."); // Error 3: Slot key isn't set
+        let accessory_values =
+            storage.get_accessory_unbound(accessory_block_numbers_key, Some(slot_number));
+        let block_number_slot_value = accessory_values.as_ref().expect("evm.block_numbers returned None at the latest height. This is a bug, block numbers must always be set.");
 
         let block_number = *self
             .block_numbers

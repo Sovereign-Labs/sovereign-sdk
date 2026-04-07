@@ -336,10 +336,9 @@ pub trait Storage: Clone + core::fmt::Debug {
     ) -> anyhow::Result<(SlotKey, Option<SlotValue>)>;
 }
 
-type MaybeVec<T> = Option<Vec<Option<T>>>;
 type ProofOutput<S> = (
     StorageProof<<S as Storage>::Proof>,
-    MaybeVec<SlotValue>,
+    SlotNumber,
     <S as Storage>::Root,
 );
 
@@ -382,7 +381,6 @@ pub trait NativeStorage: Storage {
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         key: SlotKey,
-        accessory_keys: Option<Vec<SlotKey>>,
     ) -> anyhow::Result<ProofOutput<Self>>;
 
     /// Get the *global* root hash of the tree at the requested version.
@@ -404,6 +402,13 @@ pub trait NativeStorage: Storage {
     }
     /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
+
+    /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
+    fn get_accessory_unbound(
+        &self,
+        key: SlotKey,
+        max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue>;
 
     /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
     fn maybe_iter_user_values_with_prefix(
