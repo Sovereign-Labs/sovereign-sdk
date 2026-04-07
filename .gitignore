@@ -1,12 +1,10 @@
 demo-rollup-readme.sh
-/target
+target
 lcov.info
 
 rustc-ice*
 
 .idea/
-
-target/
 
 .DS_Store
 

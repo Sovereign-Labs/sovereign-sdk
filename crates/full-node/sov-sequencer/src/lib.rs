@@ -14,7 +14,7 @@ pub mod test_stateless;
 
 use std::sync::Arc;
 
-use axum::async_trait;
+use async_trait::async_trait;
 #[cfg(feature = "test-utils")]
 pub use common::ForcedTxBatchNotification;
 #[cfg(feature = "test-utils")]

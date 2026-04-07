@@ -22,6 +22,7 @@ sov-kernels = { path = "../../../../../crates/module-system/sov-kernels" }
 sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true, features = [
     "sp1",
 ] }
+sha2 = { version = "0.10", default-features = false }
 
 [patch.crates-io]
 sha2-v0-9-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.9.9-sp1-6.0.0" }

@@ -8,6 +8,7 @@ use std::error::Error;
 use std::fmt::Debug;
 
 use axum::extract::FromRequestParts;
+use axum::extract::OptionalFromRequestParts;
 use axum::http::request::Parts;
 use axum::http::{StatusCode, Uri};
 use serde::de::DeserializeOwned;
@@ -49,12 +50,30 @@ impl<T: DeserializeOwned> Query<T> {
     }
 }
 
-#[axum::async_trait]
-impl<S, T: DeserializeOwned> FromRequestParts<S> for Query<T> {
+impl<S: Send + Sync, T: DeserializeOwned> FromRequestParts<S> for Query<T> {
     type Rejection = ErrorObject;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         Self::try_from_uri(&parts.uri)
+    }
+}
+
+/// Allows `Option<Query<T>>` as a handler parameter in axum 0.8+.
+/// Deserialization failures return `None` (not an error) to preserve
+/// compatibility with handlers that use multiple `Option<Query<T>>`
+/// extractors sharing the same query string — each expects different
+/// parameters, so a parse failure for one should not reject the request.
+impl<S: Send + Sync, T: DeserializeOwned> OptionalFromRequestParts<S> for Query<T> {
+    type Rejection = ErrorObject;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        if parts.uri.query().is_none() {
+            return Ok(None);
+        }
+        Ok(Self::try_from_uri(&parts.uri).ok())
     }
 }
 
@@ -64,7 +83,6 @@ impl<S, T: DeserializeOwned> FromRequestParts<S> for Query<T> {
 #[derive(Debug, derive_more::Deref)]
 pub struct Path<T>(pub T);
 
-#[axum::async_trait]
 impl<S, T> FromRequestParts<S> for Path<T>
 where
     axum::extract::Path<T>: FromRequestParts<S>,
@@ -74,7 +92,9 @@ where
     type Rejection = ErrorObject;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        match axum::extract::Path::from_request_parts(parts, state).await {
+        match <axum::extract::Path<T> as FromRequestParts<S>>::from_request_parts(parts, state)
+            .await
+        {
             Ok(query) => Ok(Path(query.0)),
             Err(err) => Err(ErrorObject {
                 status: StatusCode::BAD_REQUEST,
@@ -121,7 +141,7 @@ mod tests {
                     status: StatusCode::BAD_REQUEST,
                     message: "Invalid query string".to_string(),
                     details: json_obj!({
-                        "error": "u128 is not supported"
+                        "error": "unsupported: u128 is not supported"
                     }),
                 }
             );
@@ -139,7 +159,7 @@ mod tests {
                     status: StatusCode::BAD_REQUEST,
                     message: "Invalid query string".to_string(),
                     details: json_obj!({
-                        "error": "invalid digit found in string"
+                        "error": "integer: invalid digit found in string"
                     }),
                 }
             );

@@ -40,6 +40,14 @@ pub(crate) const SENDER_PRIV_KEY: &str =
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 pub(crate) const SECONDARY_SENDER_PRIV_KEY: &str =
     "0x96eeea10d406ba7d4e74f7bb9e71b6378165162e4e42fd31c937f7728bbaa7b2";
+/// Hardhat #1: 0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+/// Not in any genesis → starts with zero EVM balance, not covered by selective paymaster.
+pub(crate) const AFFORDABILITY_SIGNER_PRIV_KEY: &str =
+    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+/// Hardhat #4: 0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65
+/// Not in any genesis → starts with zero EVM balance, covered by selective paymaster.
+pub(crate) const PAYMASTER_SIGNER_PRIV_KEY: &str =
+    "0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a";
 
 pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
     max_log_limit: 20000,
@@ -51,7 +59,6 @@ pub(crate) const PAYER_SOV_BANK_BALANCE: u128 = 5_000_000_000_000_000;
 pub(crate) const HIGH_PRIORITY_FEE_PER_GAS: u128 = 1;
 pub(crate) const MAX_POLL_ATTEMPTS: usize = 100;
 pub(crate) const POLL_INTERVAL_MS: u64 = 25;
-pub(crate) const INVALID_PARAMS_CODE: i64 = -32602;
 pub(crate) const INSUFFICIENT_FUNDS_ERROR: &str = "insufficient funds for gas * price + value";
 pub(crate) const FEE_CAP_TOO_LOW_ERROR: &str = "max fee per gas less than block base fee";
 
@@ -61,11 +68,14 @@ pub(crate) async fn start_node(
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
+    ideal_lag: u64,
 ) -> TestRollup<MockDemoRollup<Native>> {
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new(
         test_genesis_source(sov_modules_api::OperatingMode::Zk),
         BlockProducingConfig::Periodic {
+            // The lowest possible time is 1 second,
+            // as subscription tests require new block to have increased timestamp in seconds.
             block_time_ms: 1_000,
         },
         finalization_blocks,
@@ -79,6 +89,9 @@ pub(crate) async fn start_node(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = extension;
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = ideal_lag;
+        }
     })
     .start()
     .await
@@ -291,7 +304,7 @@ pub(crate) fn assert_invalid_params(response: &Value) {
     let error = rpc_error_object(response, "assert_invalid_params");
     assert_eq!(
         rpc_error_code(error),
-        INVALID_PARAMS_CODE,
+        jsonrpsee::types::error::INVALID_PARAMS_CODE as i64,
         "expected JSON-RPC invalid params code"
     );
 }
@@ -412,9 +425,24 @@ pub async fn setup_test_rollup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
+    setup_test_rollup_with_ideal_lag(finalization_blocks, extension, 3).await
+}
+
+pub async fn setup_test_rollup_with_ideal_lag(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    ideal_lag: u64,
+) -> TestRollup<MockDemoRollup<Native>> {
     let host_args = mock_da_risc0_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, finalization_blocks, Some(extension), None).await
+    start_node(
+        config,
+        finalization_blocks,
+        Some(extension),
+        None,
+        ideal_lag,
+    )
+    .await
 }
 
 pub async fn setup_test_rollup_with_paymaster(
@@ -429,7 +457,7 @@ pub async fn setup_test_rollup_with_paymaster(
     RollupBuilder::new(
         sov_test_utils::test_rollup::GenesisSource::Paths(paths),
         BlockProducingConfig::Periodic {
-            block_time_ms: 1_000,
+            block_time_ms: sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
         },
         finalization_blocks,
     )
@@ -441,6 +469,41 @@ pub async fn setup_test_rollup_with_paymaster(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = Some(extension);
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 1;
+        }
+    })
+    .start()
+    .await
+    .unwrap()
+}
+
+pub async fn setup_test_rollup_with_selective_paymaster(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+) -> TestRollup<MockDemoRollup<Native>> {
+    let mut paths = crate::test_helpers::test_genesis_paths(sov_modules_api::OperatingMode::Zk);
+    paths.paymaster_genesis_path =
+        std::path::PathBuf::from("../test-data/genesis/integration-tests/paymaster_selective.json");
+
+    RollupBuilder::new(
+        sov_test_utils::test_rollup::GenesisSource::Paths(paths),
+        BlockProducingConfig::Periodic {
+            block_time_ms: sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
+        },
+        finalization_blocks,
+    )
+    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .set_config(|c| {
+        c.max_concurrent_blobs = 65536;
+        c.rollup_prover_config = None;
+        c.aggregated_proof_block_jump = 5;
+        c.max_infos_in_db = 30;
+        c.max_channel_size = 20;
+        c.extension = Some(extension);
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     })
     .start()
     .await
@@ -498,15 +561,37 @@ pub(crate) async fn call_all_endpoints(
         None => tx_count(client, signer.address(), "latest").await.unwrap(),
     };
 
+    let max_fee = match request.gas_price.or(request.max_fee_per_gas) {
+        Some(fee) => fee,
+        None => {
+            // Mirror simulation endpoints: when no fee is specified, use the current base fee.
+            let gas_price: U256 = client
+                .ws
+                .request("eth_gasPrice", rpc_params![])
+                .await
+                .unwrap();
+            gas_price.to::<u128>()
+        }
+    };
+
+    // When gas is omitted, mirror what a real user would do: use the estimateGas result.
+    let gas_limit = match request.gas {
+        Some(g) => g,
+        None => match &estimate_gas {
+            Ok(estimated) => estimated.to::<u64>(),
+            Err(_) => 1_000_000,
+        },
+    };
+
     let raw_tx = raw_signed_eip1559(
         signer,
         chain_id.to::<u64>(),
         nonce,
-        request.gas.unwrap_or(1_000_000),
+        gas_limit,
         request.to.unwrap_or(TxKind::Create),
         request.value.unwrap_or(U256::ZERO),
         request.input.input.clone().unwrap_or_default(),
-        request.gas_price.or(request.max_fee_per_gas).unwrap_or(0),
+        max_fee,
         request.max_priority_fee_per_gas.unwrap_or(0),
     )
     .await
@@ -529,8 +614,18 @@ pub async fn setup_with_simple_storage(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
-    let test_rollup = setup_test_rollup(finalization_blocks, extension).await;
-    test_rollup.wait_for_rollup_height_advance_by(10).await;
+    setup_with_simple_storage_with_ideal_lag(finalization_blocks, extension, 3).await
+}
+
+pub async fn setup_with_simple_storage_with_ideal_lag(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    ideal_lag: u64,
+) -> (TestRollup<MockDemoRollup<Native>>, SimpleStorageClient, u64) {
+    let test_rollup =
+        setup_test_rollup_with_ideal_lag(finalization_blocks, extension, ideal_lag).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
     let simple_storage = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
     (test_rollup, simple_storage, config_value!("CHAIN_ID"))
 }

@@ -89,6 +89,7 @@ async fn create_test_rollup(
         preferred_config.maximum_future_nonce_delta = maximum_future_nonce_delta;
         preferred_config.future_nonce_transaction_timeout_millis =
             future_nonce_transaction_timeout_millis;
+        preferred_config.ideal_lag_behind_finalized_slot = 3;
         c.sequencer_config = SequencerKindConfig::Preferred(preferred_config);
     })
     .set_da_config(|c| {

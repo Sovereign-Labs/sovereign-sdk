@@ -90,7 +90,6 @@ Now run the demo-rollup full node, as shown below. You will see it consuming blo
 # Make sure you're still in the examples/demo-rollup directory and `make build` has been executed before
 $ ./../../target/debug/sov-demo-rollup --da-layer celestia --rollup-config-path demo_rollup_config.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 2025-03-07T13:13:20.453543Z  INFO sov_modules_rollup_blueprint::native_only::logging: Open Telemetry exporter is not enabled
-2025-03-07T13:13:20.466160Z  INFO prometheus_exporter: exporting metrics to http://127.0.0.1:9845/metrics
 2025-03-07T13:13:20.466922Z  INFO sov_demo_rollup: Running demo rollup with prover config prover_config_disc=None
 2025-03-07T13:13:20.467830Z DEBUG sov_demo_rollup: Starting rollup on mock DA config_path="mock_rollup_config.toml"
 2025-03-07T13:13:20.469909Z  INFO sov_stf_runner::config: Parsing rollup configuration file path="mock_rollup_config.toml" size_in_bytes=2714 line_count=66
@@ -251,19 +250,24 @@ Import a transaction from a JSON file at the provided path
 Usage: sov-cli transactions import from-file <COMMAND>
 
 Commands:
-  bank                 A subcommand for the `Bank` module
-  sequencer-registry   A subcommand for the `SequencerRegistry` module
-  operator-incentives  A subcommand for the `OperatorIncentives` module
-  attester-incentives  A subcommand for the `AttesterIncentives` module
-  prover-incentives    A subcommand for the `ProverIncentives` module
-  accounts             A subcommand for the `Accounts` module
-  uniqueness           A subcommand for the `Uniqueness` module
-  chain-state          A subcommand for the `ChainState` module
-  blob-storage         A subcommand for the `BlobStorage` module
-  paymaster            A subcommand for the `Paymaster` module
-  access-pattern       A subcommand for the `AccessPattern` module
-  synthetic-load       A subcommand for the `SyntheticLoad` module
-  help                 Print this message or the help of the given subcommand(s)
+  bank                      A subcommand for the `Bank` module
+  sequencer-registry        A subcommand for the `SequencerRegistry` module
+  operator-incentives       A subcommand for the `OperatorIncentives` module
+  attester-incentives       A subcommand for the `AttesterIncentives` module
+  prover-incentives         A subcommand for the `ProverIncentives` module
+  accounts                  A subcommand for the `Accounts` module
+  uniqueness                A subcommand for the `Uniqueness` module
+  chain-state               A subcommand for the `ChainState` module
+  blob-storage              A subcommand for the `BlobStorage` module
+  paymaster                 A subcommand for the `Paymaster` module
+  revenue-share             A subcommand for the `RevenueShare` module
+  mailbox                   A subcommand for the `Mailbox` module
+  interchain-gas-paymaster  A subcommand for the `InterchainGasPaymaster` module
+  merkle-tree-hook          A subcommand for the `MerkleTreeHook` module
+  warp                      A subcommand for the `Warp` module
+  access-pattern            A subcommand for the `AccessPattern` module
+  synthetic-load            A subcommand for the `SyntheticLoad` module
+  help                      Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help  Print help
@@ -286,7 +290,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x4982c5078a9a2ebd1e064a184837553c1d92ea31a44b85c9ba5854ad923080b2",
+  "chain_hash": "0x6ac7496d0e70518f8368d4771e5cd3cf056e9653987ce89e5c47e01d415fbcd3",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
@@ -365,7 +369,7 @@ It is possible to run several nodes and sequencers on the same host. But this re
 6. Run second node:
 
 ```
-cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia --prometheus-exporter-bind=127.0.0.1:9846 
+cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 ```
 
 Note that it uses newly generated config and also passes a different option for prometheus exporter.

@@ -22,7 +22,7 @@ fn make_new_prover() -> TestProver {
     let inner_vm = MockZkvmHost::new();
     let outer_vm = MockZkvmHost::new_non_blocking();
 
-    let prover_config = RollupProverConfigDiscriminants::Execute;
+    let prover_config = RollupProverConfigDiscriminants::Prove;
     let da_verifier = MockDaVerifier::default();
     TestProver {
         prover_service: ParallelProverService::new(

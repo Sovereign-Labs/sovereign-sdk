@@ -229,6 +229,7 @@ async fn start_stop_empty(
                 c.rollup_prover_config = Some(rollup_prover_config.clone());
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
+                    sequencer_conf.ideal_lag_behind_finalized_slot = 3;
                 }
                 c.aggregated_proof_block_jump = 10;
             })
@@ -368,6 +369,7 @@ async fn start_stop_under_load(
                 c.rollup_prover_config = Some(rollup_prover_config.clone());
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
+                    sequencer_conf.ideal_lag_behind_finalized_slot = 3;
                 }
                 c.aggregated_proof_block_jump = 10;
             })
@@ -559,6 +561,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         // Since we have the prover enabled, we need to disable state root consistency checks.
         if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
             sequencer_conf.disable_state_root_consistency_checks = true;
+            sequencer_conf.ideal_lag_behind_finalized_slot = 3;
         }
         c.aggregated_proof_block_jump = jump_size;
     })
@@ -715,6 +718,9 @@ async fn check_with_increasing_stf_infos(
         c.aggregated_proof_block_jump = aggregated_proof_jump;
         c.max_channel_size = max_channel_size;
         c.max_infos_in_db = max_infos_in_db;
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     });
 
     let mut last_processed_slot_number = 0;

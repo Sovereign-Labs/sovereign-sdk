@@ -6,7 +6,6 @@
 use std::fmt;
 use std::fmt::Debug;
 
-use anyhow::Error;
 use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
@@ -27,9 +26,6 @@ pub mod network;
 pub mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
-/// TODO: When there's a nice representation of SP1VerifyingKey that can be compiled in SP1, we can use that.
-/// e.g. If SP1VerifyingKey is moved to a crate that can be compiled in an SP1 program.
-///
 ///
 /// Use the [`ZkvmHost::code_commitment`](sov_rollup_interface::zk::ZkvmHost) method to get the MethodId for a given binary.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -130,28 +126,8 @@ impl ZkVerifier for SP1Verifier {
 #[cfg(not(target_os = "zkvm"))]
 pub fn decode_sp1_proof(
     serialized_proof: &[u8],
-) -> Result<sp1_sdk::SP1ProofWithPublicValues, Error> {
-    match bincode::deserialize::<
-        sov_rollup_interface::zk::Proof<
-            sp1_sdk::SP1ProofWithPublicValues,
-            sp1_sdk::SP1PublicValues,
-        >,
-    >(serialized_proof)?
-    {
-        sov_rollup_interface::zk::Proof::Full(proof) => Ok(proof),
-        sov_rollup_interface::zk::Proof::PublicData(_) => {
-            anyhow::bail!("SP1Verifier supports only full proofs")
-        }
-    }
-}
-
-/// A DA block header bundled with its corresponding serialized proof.
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-pub struct BlockHeaderWithProof<Da: sov_rollup_interface::da::DaSpec> {
-    /// The DA layer block header associated with this proof.
-    pub da_block_header: Da::BlockHeader,
-    /// The serialized proof bytes.
-    pub proof: Vec<u8>,
+) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+    Ok(bincode::deserialize(serialized_proof)?)
 }
 
 #[cfg(test)]

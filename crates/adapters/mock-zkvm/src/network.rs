@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 
-use crate::{Empty, Inner, MockZkGuest, Proof};
+use crate::{MockProof, MockZkGuest};
 
 struct MockNetworkProof {
     proof_bytes: Vec<u8>,
@@ -80,10 +80,10 @@ impl sov_rollup_interface::zk::ZkvmNetwork for MockZkvmNetwork {
         item: &T,
     ) -> anyhow::Result<Self::ProofHandle> {
         let data = bincode::serialize(item).unwrap();
-        let proof_bytes = bincode::serialize(&Proof::<Empty, Inner>::PublicData(Inner {
+        let proof_bytes = bincode::serialize(&MockProof {
             is_valid: true,
             pub_data: data,
-        }))?;
+        })?;
 
         let handle = self.next_handle.fetch_add(1, Ordering::Relaxed);
         let mut proofs = self.proofs.lock().unwrap();
@@ -104,5 +104,13 @@ impl sov_rollup_interface::zk::ZkvmNetwork for MockZkvmNetwork {
             Some(_) => Ok(None),
             None => anyhow::bail!("unknown proof handle: {handle}"),
         }
+    }
+
+    fn code_commitment(
+        &self,
+    ) -> anyhow::Result<
+        <<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment,
+    >{
+        Ok(crate::MockCodeCommitment::default())
     }
 }

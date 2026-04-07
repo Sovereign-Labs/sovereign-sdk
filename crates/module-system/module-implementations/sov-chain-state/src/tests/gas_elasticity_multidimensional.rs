@@ -1,4 +1,5 @@
 use sov_modules_api::{Amount, Gas, GasArray, GasPrice, GasSpec, Spec};
+use sov_rollup_interface::common::RollupHeight;
 use sov_test_utils::TestSpec;
 
 use crate::{BlockGasInfo, ChainState};
@@ -20,7 +21,7 @@ fn test_helper(gas_used: &<TestSpec as Spec>::Gas) -> <<TestSpec as Spec>::Gas a
 
     parent_gas_info.update_gas_used(*gas_used);
 
-    ChainState::<TestSpec>::compute_base_fee_per_gas(parent_gas_info, 1)
+    ChainState::<TestSpec>::compute_base_fee_per_gas(parent_gas_info, RollupHeight::GENESIS, 1)
 }
 
 /// Checks that the `base_fee_per_gas` does not change when the gas used is the same as the gas target.

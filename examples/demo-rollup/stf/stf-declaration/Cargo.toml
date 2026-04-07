@@ -1,0 +1,96 @@
+[package]
+name = "demo-stf-declaration"
+version = "0.3.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sov-accounts = { workspace = true }
+sov-address = { workspace = true, features = ["evm"] }
+sov-attester-incentives = { workspace = true }
+sov-bank = { workspace = true }
+sov-blob-storage = { workspace = true }
+sov-capabilities = { workspace = true }
+sov-chain-state = { workspace = true }
+sov-evm = { workspace = true }
+sov-hyperlane-integration = { workspace = true, features = ["evm"] }
+sov-revenue-share = { workspace = true }
+sov-kernels = { workspace = true }
+sov-modules-api = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true }
+sov-operator-incentives = { workspace = true }
+sov-paymaster = { workspace = true }
+sov-prover-incentives = { workspace = true }
+sov-rollup-apis = { workspace = true, optional = true }
+sov-rollup-interface = { workspace = true }
+sov-sequencer-registry = { workspace = true }
+sov-state = { workspace = true }
+sov-synthetic-load = { workspace = true }
+sov-test-modules = { workspace = true }
+sov-test-utils = { workspace = true, optional = true }
+sov-uniqueness = { workspace = true }
+
+anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+borsh = { workspace = true, features = ["derive"] }
+clap = { workspace = true, features = ["derive"], optional = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["alloc", "derive"] }
+strum = { workspace = true, features = ["derive"] }
+
+[features]
+default = []
+native = [
+	"clap",
+	"jsonrpsee",
+	"sov-accounts/native",
+	"sov-address/native",
+	"sov-attester-incentives/native",
+	"sov-bank/native",
+	"sov-blob-storage/native",
+	"sov-capabilities/native",
+	"sov-chain-state/native",
+	"sov-evm/native",
+	"sov-hyperlane-integration/native",
+	"sov-revenue-share/native",
+	"sov-kernels/native",
+	"sov-modules-api/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-operator-incentives/native",
+	"sov-paymaster/native",
+	"sov-prover-incentives/native",
+	"sov-rollup-apis",
+	"sov-rollup-interface/native",
+	"sov-sequencer-registry/native",
+	"sov-state/native",
+	"sov-synthetic-load/native",
+	"sov-test-modules/native",
+	"sov-uniqueness/native",
+]
+arbitrary = [
+	"dep:arbitrary",
+	"sov-accounts/arbitrary",
+	"sov-address/arbitrary",
+	"sov-bank/arbitrary",
+	"sov-evm/arbitrary",
+	"sov-modules-api/arbitrary",
+	"sov-paymaster/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-sequencer-registry/arbitrary",
+	"sov-state/arbitrary",
+	"sov-test-utils?/arbitrary",
+	"sov-uniqueness/arbitrary",
+	"sov-hyperlane-integration/arbitrary"
+]
+test-utils = [
+    "native",
+    "sov-test-utils",
+]

@@ -10,7 +10,6 @@ use anyhow::{bail, Context};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
-use demo_stf_json_client::types::RuntimeAnyJsonValue;
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
 use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
@@ -88,15 +87,8 @@ async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
         .unwrap()
         .into_inner();
 
-    match &*response {
-        RuntimeAnyJsonValue::Object(inner) => {
-            let state_value = inner.get("value").unwrap();
-            println!("State value: {state_value:?}");
-            let heavy_vec = state_value.as_array().expect("HeavyVec is not an array");
-            assert_eq!(heavy_vec.len(), expected as usize);
-        }
-        _ => panic!("Getting SyntheticLoad state value returned unexpected JSON shape."),
-    }
+    println!("State value: {:?}", response.value);
+    assert_eq!(response.value.len(), expected as usize);
 }
 
 async fn start_rollup(
@@ -119,6 +111,7 @@ async fn start_rollup(
             if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
+                seq_config.ideal_lag_behind_finalized_slot = 3;
             }
         })
         .start(),
@@ -272,7 +265,15 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
     // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
         std::fs::remove_dir_all(rollup_storage_path.path().join(path))?;
     }
     // sanity check

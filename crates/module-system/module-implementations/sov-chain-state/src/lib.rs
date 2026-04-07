@@ -617,12 +617,13 @@ impl<S: Spec> ChainState<S> {
             self.gas_info
                 .get(&stale_rollup_height, state)?
                 .unwrap_or(BlockGasInfo::new(
-                    S::initial_gas_limit(),
+                    S::gas_limit_for_height(stale_rollup_height),
                     S::initial_base_fee_per_gas(),
                 ));
 
         Ok(Self::compute_base_fee_per_gas(
             prev_gas_info,
+            stale_rollup_height,
             provisional_visible_height_increase,
         ))
     }

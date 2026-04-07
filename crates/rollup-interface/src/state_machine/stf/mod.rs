@@ -30,7 +30,7 @@ use super::optimistic::Attestation;
 use crate::common::{HexHash, RollupHeight};
 use crate::da::{DaSpec, RelevantBlobIters};
 use crate::zk::aggregated_proof::{AggregatedProofPublicData, SerializedAggregatedProof};
-use crate::zk::{StateTransitionPublicData, Zkvm};
+use crate::zk::StateTransitionPublicData;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
@@ -333,12 +333,7 @@ pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
 
 /// The result of applying a slot to current state.
 #[allow(type_alias_bounds)]
-pub type ApplySlotOutput<
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    Da: DaSpec,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da>,
-> = ApplySlotOutputInner<
+pub type ApplySlotOutput<Da: DaSpec, Stf: StateTransitionFunction<Da>> = ApplySlotOutputInner<
     Stf::StateRoot,
     Stf::ChangeSet,
     BatchReceipt<Stf::BatchReceiptContents, Stf::TxReceiptContents>,
@@ -346,7 +341,6 @@ pub type ApplySlotOutput<
     Stf::Witness,
 >;
 
-// TODO(@preston-evans98): update spec with simplified API
 /// State transition function defines business logic that responsible for changing state.
 /// Terminology:
 ///  - state root: root hash of state merkle tree
@@ -354,10 +348,8 @@ pub type ApplySlotOutput<
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
 ///
-/// The STF is generic over a DA layer and two `Zkvm`s. The `InnerVm` is used to prove individual slots,
-/// while the `OuterVm` is used to generate recursive proofs over multiple slots. The two VMs *may* be set to be
-/// the  same type.
-pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
+/// The STF is generic over a DA layer specification.
+pub trait StateTransitionFunction<Da: DaSpec> {
     /// Root hash of state merkle tree
     type StateRoot: Serialize
         + DeserializeOwned
@@ -429,7 +421,7 @@ pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
         slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self>;
+    ) -> ApplySlotOutput<Da, Self>;
 }
 
 /// The parameters for the genesis block.

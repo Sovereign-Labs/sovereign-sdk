@@ -2,6 +2,7 @@ use std::{net::IpAddr, num::NonZero};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::common::RollupHeight;
 
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -343,6 +344,24 @@ pub struct SovRateLimiterConfig<Address: Copy> {
     pub default_limits: Limits,
     pub address_custom_limits: Vec<(Address, Limits)>,
     pub ip_custom_limits: Vec<(IpAddr, Limits)>,
+    /// Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.
+    ///
+    /// This height is used to statically compute the gas limit for the rate limiter. (If this value is less than or equal to CHANGE_GAS_LIMIT_AFTER_HEIGHT in constants.toml,
+    /// the gas limit will *always* be computed using the initial gas limit for rate limiting. If it is greater, the gas limit will be computed using the updated gas limit.)
+    /// Even after rate limiting based on gas is enabled, you can safely change this param at any time since it only impacts off-chain code.
+    #[serde(
+        default = "default_height_for_gas_limit_computation",
+        skip_serializing_if = "height_is_max"
+    )]
+    pub height_for_gas_limit_computation: RollupHeight,
+}
+
+fn default_height_for_gas_limit_computation() -> RollupHeight {
+    RollupHeight::MAX
+}
+
+fn height_is_max(height: &RollupHeight) -> bool {
+    *height == RollupHeight::MAX
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]

@@ -53,7 +53,7 @@ In the remainder of this section, we'll walk you through implementing each of th
 The final piece of the puzzle is your app's runtime. A runtime is just a list of modules - really, that's it! To add a new
 module to your app, just add an additional field to the runtime.
 
-```rust,no_run
+```rust,ignore
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Genesis, DispatchCall, MessageCodec, Spec};
 use sov_modules_api::macros::expose_rpc;

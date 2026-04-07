@@ -11,18 +11,14 @@ use alloy_rpc_types::{
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
-use revm::context::result::{ExecutionResult, ResultAndState};
+use revm::context::result::ExecutionResult;
 use revm::Database;
-use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
-use sov_rpc_eth_types::{
-    EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
-};
-use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
+use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use std::ops::DerefMut;
 use tracing::trace;
 
@@ -307,7 +303,27 @@ where
     }
 
     /// Handler for: `eth_call`
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    ///
+    /// Simulates a transaction without committing state changes.
+    ///
+    /// # Affordability checks
+    ///
+    /// No balance check is performed when fee fields are omitted (the common case).
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) hardcodes `gas_price = 0`,
+    /// making revm's upfront-cost formula evaluate to zero so any account can call.
+    /// When `value > 0`, revm still verifies the caller holds at least `value`.
+    ///
+    /// **Desired behaviour** (matching geth): when the caller explicitly provides
+    /// `gasPrice > 0` or `maxFeePerGas > 0`, enforce `gas_limit * gas_price + value
+    /// <= balance` and return `InsufficientFunds` on failure. This is not yet
+    /// implemented — see the divergence note on [`prepare_call_env`](crate::helpers::prepare_call_env).
+    ///
+    /// This differs from `eth_estimateGas`, which runs a paymaster-aware
+    /// affordability preflight in `sov-ethereum` (see `estimate_gas.rs`).
+    ///
+    /// References:
+    /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
+    /// - Reth `call`: <https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-eth-api/src/helpers/call.rs>
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,
@@ -330,6 +346,20 @@ where
     }
 
     /// Handler for: `eth_createAccessList`
+    ///
+    /// Generates an EIP-2930 access list by running the transaction with an
+    /// [`AccessListInspector`]. Affordability semantics are identical to `eth_call`:
+    /// no balance check when fee fields are omitted, because
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) sets `gas_price = 0`.
+    /// This matches geth's `AccessList()` path which also uses zero-fee defaults.
+    ///
+    /// Note: EIP-2930 (<https://eips.ethereum.org/EIPS/eip-2930>) defines the access
+    /// list *transaction type*; the `eth_createAccessList` RPC method itself is a
+    /// client-level addition defined in `execution-apis`
+    /// (<https://github.com/ethereum/execution-apis>).
+    ///
+    /// See [`prepare_call_env`](crate::helpers::prepare_call_env) for the full
+    /// affordability analysis and current divergence from geth.
     #[rpc_method(name = "eth_createAccessList")]
     pub fn eth_create_access_list(
         &self,
@@ -584,112 +614,6 @@ where
         };
 
         Ok(state)
-    }
-
-    /// Runs gas estimation logic for `eth_estimateGas`.
-    ///
-    /// This is a library method called by `sov-ethereum`'s RPC handler, which
-    /// wraps it with paymaster-aware affordability checks.
-    pub fn eth_estimate_gas_helper(
-        &self,
-        request: TransactionRequest,
-        block_id: Option<BlockId>,
-        state_overrides: Option<StateOverride>,
-        block_overrides: Option<Box<BlockOverrides>>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U64> {
-        trace!(
-            ?block_id,
-            method = "eth_estimateGas",
-            "EVM module JSON-RPC request"
-        );
-
-        // Add 1,000 bytes to account for all Transaction fields besides calldata.
-        let tx_size = request
-            .input
-            .input()
-            .as_ref()
-            .map(|input| input.len())
-            .unwrap_or(0)
-            .saturating_add(1000);
-
-        let (block_env, mut maybe_archival_state, cfg) =
-            self.resolve_simulation_context_for_block_id(block_id, state)?;
-        let multiplier = self
-            .fee_multiplier(maybe_archival_state.deref_mut())
-            .map_err(into_rpc_error)?;
-
-        let ResultAndState {
-            result,
-            state: changes,
-        } = self.call_with_context(
-            request,
-            block_env,
-            maybe_archival_state,
-            &cfg,
-            state_overrides,
-            block_overrides,
-        )?;
-
-        let (gas_used, logs) = match result {
-            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
-            ExecutionResult::Revert { output, .. } => {
-                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
-            }
-            ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
-            }
-        };
-
-        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
-        // This intentionally includes override-based hypothetical state, because estimateGas
-        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
-        self.db(state)
-            .try_commit(changes)
-            .expect("Gas meter is initialized with INF");
-
-        // Charge for logs storage in the receipt.
-        // Other receipt fields are small and covered by the constant margin.
-        let logs_size = self
-            .receipts
-            .codec()
-            .value_codec()
-            .encode_to_vec(&logs)
-            .len();
-        let logs_size =
-            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        charge_write(
-            state,
-            Accessory::NAMESPACE,
-            &self.receipts.slot_key(&u64::MAX),
-            logs_size,
-        )
-        .map_err(into_rpc_error)?;
-
-        let gas_meter = state
-            .try_as_basic_gas_meter()
-            .expect("ApiState has BasicGasMeter");
-
-        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        let gas_used =
-            u32::try_from(gas_used).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        gas_meter
-            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
-            .expect("Gas meter is initialized with INF");
-
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-
-        // The real tx path multiplies gas_limit by 100 when fee check is inactive.
-        // Divide the estimate so the returned value is the gas_limit the user should set.
-        let adjusted = total_gas_used.div_ceil(multiplier.as_u64());
-
-        Ok(U64::from(super::apply_margins(adjusted)?))
     }
 }
 
