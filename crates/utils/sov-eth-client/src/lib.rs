@@ -346,30 +346,3 @@ impl SimpleStorageClient {
         self.send_tx(tx).await.unwrap()
     }
 }
-
-#[tokio::test]
-async fn do_throwaway() -> Result<(), Box<dyn std::error::Error>> {
-    use alloy::providers::ProviderBuilder;
-    use alloy::signers::local::PrivateKeySigner;
-    use alloy_primitives::U256;
-    use reqwest::Url;
-    use sov_evm_test_utils::SimpleStorage;
-
-    const PRIVATE_KEY: &str = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
-    let signer: PrivateKeySigner = PRIVATE_KEY.parse()?;
-    let provider = ProviderBuilder::new()
-        .wallet(signer)
-        .connect_http(Url::parse("http://127.0.0.1:12346/rpc")?);
-
-    let contract = SimpleStorage::deploy(provider.clone()).await?;
-    let address = contract.address();
-
-    contract
-        .set(U256::from(123u64))
-        .send()
-        .await?
-        .get_receipt()
-        .await?;
-    panic!("Set value to 123 at address {address}");
-    Ok(())
-}
