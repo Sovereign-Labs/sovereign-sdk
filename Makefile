@@ -9,6 +9,13 @@ PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
 ALL_DIRS := $(PROVER_DIRS) \
 						crates/module-system/module-implementations/extern/hyperlane-solana-register/solana
 
+DATA_DIRS := ./crates/module-system/sov-modules-macros/data \
+             ./crates/module-system/sov-solana-offchain-auth/data \
+             ./crates/module-system/hyperlane/data \
+             ./crates/full-node/sov-stf-runner/data \
+             ./crates/full-node/sov-metrics/data \
+             ./examples/demo-rollup/data
+
 # We run `cargo hack` with the `--partition 1/1` by default, but overrides allow
 # CI to parallelize checks.
 CARGO_HACK_PARTITION_N ?= 1
@@ -50,6 +57,11 @@ total-clean:
     	(cargo clean --manifest-path "$$dir/Cargo.toml"); \
     done;
 	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
+	rm -rf typescript/node_modules
+	cargo clean --manifest-path crates/full-node/sov-aggregated-proof/Cargo.toml
+	@for dir in $(DATA_DIRS); do \
+		rm -rf "$$dir"; \
+	done;
 
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
