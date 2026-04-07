@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use celestia_types::{DataAvailabilityHeader, ExtendedHeader, ValidateBasicWithAppVersion};
+use celestia_types::{DataAvailabilityHeader, ExtendedHeader, ValidateBasic};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, Time};
 pub use tendermint::block::Header as TendermintHeader;
@@ -13,7 +13,7 @@ use tendermint_proto::google::protobuf::Timestamp;
 pub use tendermint_proto::v0_38 as celestia_tm_version;
 use tendermint_proto::Protobuf;
 
-use crate::types::{TmHash, ValidationError, APP_VERSION};
+use crate::types::{TmHash, ValidationError};
 
 pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
@@ -207,7 +207,7 @@ impl CelestiaHeader {
     ///  - Hash of [`DataAvailabilityHeader`] matches `header.data_hash`.
     ///    This binds [`DataAvailabilityHeader::row_roots`] and column roots to the signed header.
     pub(crate) fn validate_dah(&self) -> Result<(), ValidationError> {
-        self.dah.validate_basic(APP_VERSION)?;
+        self.dah.validate_basic()?;
         let data_hash = self
             .header
             .data_hash

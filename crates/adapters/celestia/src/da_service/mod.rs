@@ -14,7 +14,6 @@ use crate::metrics::full::{
 use crate::metrics::RollupNamespace;
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof, NamespaceRelevantData, TmHash,
-    APP_VERSION,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{self, BlobProof};
@@ -112,7 +111,7 @@ impl CelestiaService {
             // TODO: Follow up: Better error when switched to `thiserror`.
             anyhow::bail!("Signer must be set for submitting blobs");
         };
-        let blob = JsonBlob::new(namespace, blob.to_vec(), Some(signer.0), APP_VERSION)
+        let blob = JsonBlob::new(namespace, blob.to_vec(), Some(signer.0))
             .expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
         tracing::debug!(
@@ -287,9 +286,7 @@ impl CelestiaService {
         tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
         let result = tokio::time::timeout(
             self.request_timeout,
-            client
-                .share()
-                .get_namespace_data(height, APP_VERSION, namespace),
+            client.share().get_namespace_data(height, namespace),
         )
         .await;
         let is_success = matches!(result, Ok(Ok(_)));
