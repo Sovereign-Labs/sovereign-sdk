@@ -17,12 +17,23 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::state::PinnedCacheAccessor;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
+use sov_state::{NativeStorage, Storage, StorageProof, User};
 use std::ops::DerefMut;
 use tracing::trace;
 
 use crate::Evm;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GetProofResponse<S: Spec> {
+    pub proof: StorageProof<<S::Storage as Storage>::Proof>,
+    pub state_root: <S::Storage as Storage>::Root,
+    /// The ethereum block which contains the state root as its storage root.
+    /// Note that since state roots are delayed, this is *not* the same as the block number which would have viewed the state root as its storage root.
+    pub state_root_block_number: u64,
+}
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -133,6 +144,48 @@ where
             .unwrap_or_default();
 
         Ok(storage_slot.to_be_bytes::<32>().into())
+    }
+
+    /// Returns merkle proofs of storage slots
+    #[rpc_method(name = "ext_getStorageProof", blocking)]
+    pub fn get_storage_proof(
+        &self,
+        address: Address,
+        index: U256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<GetProofResponse<S>> {
+        let storage = state.storage();
+        let account_slot_key = self.account_storage.slot_key(&(&address, &index));
+        let accessory_block_numbers_key = self.block_numbers.slot_key();
+        let (proof, slot_number, root_hash) = storage
+            .get_with_proof::<User>(account_slot_key)
+            .map_err(|err| {
+                tracing::warn!(error = ?err, "Error getting storage proof after retries");
+                into_rpc_error(err)
+            })?;
+
+        let accessory_values =
+            storage.get_accessory_unbound(accessory_block_numbers_key, Some(slot_number));
+        let Some(block_number_slot_value) = accessory_values.as_ref() else {
+            tracing::error!(
+                %slot_number,
+                "Missing evm.block_numbers while building storage proof response. This is a bug, block numbers must always be set."
+            );
+            return Err(into_rpc_error(format!(
+                "evm.block_numbers returned None at slot {slot_number}."
+            )));
+        };
+
+        let block_number = *self
+            .block_numbers
+            .decode_unwrap(block_number_slot_value)
+            .end();
+        let block_number = block_number.saturating_add(config_value!("STATE_ROOT_DELAY_BLOCKS")); // Add state root delay blocks to get the state root for the block number
+        Ok(GetProofResponse {
+            proof,
+            state_root: root_hash,
+            state_root_block_number: block_number,
+        })
     }
 
     /// Handler for: `eth_getTransactionCount`

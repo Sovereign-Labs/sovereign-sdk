@@ -45,14 +45,16 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let StateOverlay { user, kernel } = overlay;
         // 1.
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingKernelNomt.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingKernelNomt
+            .inject_fault_if_configured();
 
         // 2.
         let write_kernel = self.commit_kernel(kernel)?;
 
         // 3.
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingUserNomt.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingUserNomt
+            .inject_fault_if_configured();
 
         // 4.
         let write_user = self.commit_user(user)?;
@@ -202,6 +204,10 @@ where
             let snapshots = self.all_snapshots.read().expect("Snapshots lock poisoned");
             for overlay_ref in &self.relevant_snapshot_refs {
                 let Some(state_overlay) = snapshots.get(overlay_ref) else {
+                    // Note: This assumption does not hold when the underlying chain can fork. The snapshot might have been fresh but discarded
+                    // because a different fork was committed. In this case, the session we create here will *not* match the `HistoricalStateReader`,
+                    // since that uses RocksDB changesets whose references are held in the storage itself.  In other words,
+                    // forking can break the consistency of `Storage` snapshots **on abandoned forks.**
                     tracing::debug!(
                         "Cannot find snapshot from reference, assuming it has been committed"
                     );

@@ -791,7 +791,7 @@ where
     /// # Arguments
     /// * `t` - Timeout duration
     /// * `expected_panic_substring` - String that must appear in the panic message
-    ///   (e.g., `CrashLocation` variant name)
+    ///   (e.g., `CommitFaultInjectionLocation` variant name)
     ///
     /// # Errors
     /// - If the task doesn't crash within the timeout

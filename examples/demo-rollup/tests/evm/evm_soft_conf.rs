@@ -14,7 +14,7 @@ async fn evm_test_soft_confirmations() -> anyhow::Result<()> {
     // Test: Pause the sequencer and verify that the transaction receipt has no assigned block hash,
     // since the block hash is not yet known.
     {
-        test_rollup.pause_preferred_batches().await;
+        test_rollup.pause_preferred_batches_and_wait().await?;
 
         // Verify the `pending_block and latest_block`` assertions before inserting the transaction.
         {

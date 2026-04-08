@@ -321,29 +321,14 @@ const _: () = {
     {
         type Proof = <<S as Spec>::Storage as Storage>::Proof;
 
-        fn get_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>> {
-            // In this case, we need to use an exact slot number rather than an approximate one - otherwise
-            // the returned merkle proof will be useless.
-
-            // Temporarily give access to all visible slot numbers for the purpose of retrieving the mapping between true and visible slots.
-            // We'll set the value back to more scoped permissions at the end of this function
-            let safe_true_slot_number_to_use = self.safe_true_slot_number_to_use;
-            self.safe_true_slot_number_to_use = None;
-            let slot_num = match self.state_to_access {
-                StateToAccess::RollupHeight(rollup_height) => self
-                    .kernel
-                    .clone()
-                    .true_slot_number_at_historical_height(rollup_height, self),
-                StateToAccess::TrueSlotNumber(slot_number, _) => Some(slot_number),
-            };
-            // We set the permissions back to the original value here
-            self.safe_true_slot_number_to_use = safe_true_slot_number_to_use;
-            let slot_num = slot_num?;
-
-            match self.storage().get_with_proof::<N>(key, Some(slot_num)) {
-                Ok(storage_proof) => Some(storage_proof),
+        fn get_global_latest_with_proof(
+            &mut self,
+            key: SlotKey,
+        ) -> Option<StorageProof<Self::Proof>> {
+            match self.storage().get_with_proof::<N>(key) {
+                Ok(storage_proof) => Some(storage_proof.0),
                 Err(err) => {
-                    tracing::debug!(error = ?err, "Error requesting storage proof");
+                    tracing::error!(error = ?err, "Error requesting storage proof");
                     None
                 }
             }

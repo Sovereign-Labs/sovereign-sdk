@@ -12775,8 +12775,10 @@ dependencies = [
  "sov-db",
  "sov-db-types",
  "sov-metrics",
+ "sov-mock-da",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "tempfile",
  "test-strategy",
  "tracing",
 ]
