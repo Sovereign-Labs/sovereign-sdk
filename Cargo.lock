@@ -7266,7 +7266,6 @@ dependencies = [
  "alloy-primitives",
  "alloy-rlp",
  "alloy-serde",
- "arbitrary",
  "derive_more 2.0.1",
  "serde",
  "thiserror 2.0.17",
@@ -8280,16 +8279,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proptest-arbitrary-interop"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1981e49bd2432249da8b0e11e5557099a8e74690d6b94e721f7dc0bb7f3555f"
-dependencies = [
- "arbitrary",
- "proptest",
-]
-
-[[package]]
 name = "proptest-derive"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9036,10 +9025,8 @@ dependencies = [
  "alloy-eip2124",
  "alloy-hardforks",
  "alloy-primitives",
- "arbitrary",
  "auto_impl",
  "once_cell",
- "rustc-hash 2.1.1",
 ]
 
 [[package]]
@@ -9053,13 +9040,9 @@ dependencies = [
  "alloy-rlp",
  "alloy-rpc-types-eth",
  "alloy-serde",
- "arbitrary",
- "modular-bitfield",
  "reth-codecs",
  "reth-primitives-traits",
- "reth-zstd-compressors",
  "serde",
- "serde_with",
 ]
 
 [[package]]
@@ -9097,7 +9080,6 @@ version = "1.9.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
 dependencies = [
  "alloy-consensus",
- "c-kzg",
  "once_cell",
  "reth-ethereum-forks",
  "reth-ethereum-primitives",
@@ -9117,23 +9099,17 @@ dependencies = [
  "alloy-rlp",
  "alloy-rpc-types-eth",
  "alloy-trie",
- "arbitrary",
  "auto_impl",
- "byteorder",
  "bytes",
  "derive_more 2.0.1",
- "modular-bitfield",
  "once_cell",
  "op-alloy-consensus",
- "proptest",
- "proptest-arbitrary-interop",
  "reth-codecs",
  "revm-bytecode",
  "revm-primitives",
  "revm-state",
  "secp256k1 0.30.0",
  "serde",
- "serde_with",
  "thiserror 2.0.17",
 ]
 
@@ -9986,9 +9962,6 @@ name = "rustc-hash"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
-dependencies = [
- "rand 0.8.5",
-]
 
 [[package]]
 name = "rustc-hex"
@@ -11967,7 +11940,6 @@ dependencies = [
  "alloy-primitives",
  "arbitrary",
  "rand_chacha 0.3.1",
- "reth-primitives",
  "revm",
  "secp256k1 0.30.0",
  "sha2 0.10.9",
@@ -11980,9 +11952,7 @@ name = "sov-eth-dev-signer"
 version = "0.3.0"
 dependencies = [
  "alloy-consensus",
- "alloy-rpc-types",
- "reth-primitives",
- "revm",
+ "alloy-primitives",
  "secp256k1 0.30.0",
  "thiserror 2.0.17",
 ]
@@ -13251,7 +13221,6 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "borsh",
- "reth-primitives",
  "schemars 0.8.22",
  "secp256k1 0.30.0",
  "serde",
