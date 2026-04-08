@@ -1,8 +1,7 @@
-target
+**/target
 .github
 .idea
 .vscode
 
-# Guest artifacts are enormous and not needed when SKIP_GUEST_BUILD=1.
-examples/demo-rollup/provers/sp1/guest-mock
-examples/demo-rollup/provers/sp1/guest-celestia
+# Runtime data not needed for builds
+examples/demo-rollup/data

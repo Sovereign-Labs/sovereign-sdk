@@ -1,0 +1,45 @@
+# P0 non-historical — smoke subset of P0 that does NOT depend on fixture history.
+# Covers empty/notfound/unknown-account semantics only.
+# Each line is a regex fragment; the runner joins them with | and wraps in ^(...)$
+# Source: docs/rpc_priority_sorted.md P0 tier, filtered to non-historical tests.
+
+# eth_blockNumber (priority P0 #2)
+eth_blockNumber/simple-test
+
+# eth_getTransactionCount (priority P0 #3)
+eth_getTransactionCount/get-nonce-unknown-account
+
+# eth_getLogs — error/validation tests only (priority P0 #4)
+eth_getLogs/filter-error-future-block-range
+eth_getLogs/filter-error-invalid-blockHash-and-range
+eth_getLogs/filter-error-reversed-block-range
+
+# eth_getTransactionReceipt — empty/notfound (priority P0 #5)
+eth_getTransactionReceipt/get-empty-tx
+eth_getTransactionReceipt/get-notfound-tx
+
+# eth_getTransactionByHash — empty/notfound (priority P0 #6)
+eth_getTransactionByHash/get-empty-tx
+eth_getTransactionByHash/get-notfound-tx
+
+# eth_estimateGas (priority P0 #8)
+eth_estimateGas/estimate-simple-transfer
+
+# eth_getBalance — unknown account only (priority P0 #9)
+eth_getBalance/get-balance-unknown-account
+
+# eth_getBlockByHash — empty/notfound (priority P0 #1)
+eth_getBlockByHash/get-block-by-empty-hash
+eth_getBlockByHash/get-block-by-notfound-hash
+
+# eth_getBlockByNumber — notfound (priority P0 #1)
+eth_getBlockByNumber/get-block-notfound
+
+# eth_getBlockReceipts — empty/future/notfound
+eth_getBlockReceipts/get-block-receipts-empty
+eth_getBlockReceipts/get-block-receipts-future
+eth_getBlockReceipts/get-block-receipts-not-found
+
+# eth_sendRawTransaction — EIP-1559 variants only
+eth_sendRawTransaction/send-dynamic-fee-transaction
+eth_sendRawTransaction/send-dynamic-fee-access-list-transaction

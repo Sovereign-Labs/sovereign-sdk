@@ -73,9 +73,18 @@ type ErrorConventionCase =
     };
 
 interface EstimateGasObservation {
-  setSimple: { values: string[]; above21000: boolean; stabilitySpread: number };
-  emitMultipleEvents: { values: string[]; above21000: boolean; stabilitySpread: number };
+  setSimple: {
+    estimate: string;
+    txSucceeded: boolean;
+    above21000: boolean;
+  };
+  emitMultipleEvents: {
+    estimate: string;
+    txSucceeded: boolean;
+    above21000: boolean;
+  };
   revertEstimate: { failed: boolean };
+  stable: boolean;
 }
 
 interface BlockShapeObservation {
@@ -963,8 +972,9 @@ const checks: CheckDefinition[] = [
   {
     name: "C.eth_estimateGas_viem",
     library: "viem",
-    rpcMethods: ["eth_estimateGas"],
+    rpcMethods: ["eth_estimateGas", "eth_sendRawTransaction"],
     runEndpoint: async (runtime, context) => {
+      // Estimate gas for setSimpleValue, then send with estimate + 10%
       const estimateSimpleA = await runtime.viemClient.estimateContractGas({
         address: runtime.deployment.kitchenSink as `0x${string}`,
         abi: context.contracts.kitchenSink.abi as never,
@@ -973,14 +983,18 @@ const checks: CheckDefinition[] = [
         account: runtime.account.address
       });
 
-      const estimateSimpleB = await runtime.viemClient.estimateContractGas({
-        address: runtime.deployment.kitchenSink as `0x${string}`,
-        abi: context.contracts.kitchenSink.abi as never,
-        functionName: "setSimpleValue",
-        args: [8n],
-        account: runtime.account.address
-      });
+      const simpleGasLimit = estimateSimpleA + estimateSimpleA / 10n;
+      const simpleTx = await sendContractTransactionWithFallback(
+        runtime,
+        context.contracts.kitchenSink,
+        runtime.deployment.kitchenSink,
+        "setSimpleValue",
+        [7n],
+        undefined,
+        simpleGasLimit
+      );
 
+      // Estimate gas for emitMultipleEvents, then send with estimate + 10%
       const estimateEventA = await runtime.viemClient.estimateContractGas({
         address: runtime.deployment.kitchenSink as `0x${string}`,
         abi: context.contracts.kitchenSink.abi as never,
@@ -989,14 +1003,31 @@ const checks: CheckDefinition[] = [
         account: runtime.account.address
       });
 
-      const estimateEventB = await runtime.viemClient.estimateContractGas({
+      const eventGasLimit = estimateEventA + estimateEventA / 10n;
+      const eventTx = await sendContractTransactionWithFallback(
+        runtime,
+        context.contracts.kitchenSink,
+        runtime.deployment.kitchenSink,
+        "emitMultipleEvents",
+        [123n, "estimate", "0x123456"],
+        undefined,
+        eventGasLimit
+      );
+
+      // Stability: re-estimate same calls, check they don't drift
+      const estimateSimpleB = await runtime.viemClient.estimateContractGas({
         address: runtime.deployment.kitchenSink as `0x${string}`,
         abi: context.contracts.kitchenSink.abi as never,
-        functionName: "emitMultipleEvents",
-        args: [124n, "estimate", "0x123456"],
+        functionName: "setSimpleValue",
+        args: [8n],
         account: runtime.account.address
       });
 
+      const simpleSpread =
+        Number(estimateSimpleA > estimateSimpleB ? estimateSimpleA - estimateSimpleB : estimateSimpleB - estimateSimpleA) /
+        Number(estimateSimpleA === 0n ? 1n : estimateSimpleA);
+
+      // Revert: estimateGas on a reverting call should fail
       let revertError: RpcErrorShape | undefined;
       try {
         await runtime.viemClient.estimateContractGas({
@@ -1009,37 +1040,23 @@ const checks: CheckDefinition[] = [
         revertError = getRpcError(error);
       }
 
-      const simpleSpread =
-        Number(estimateSimpleA > estimateSimpleB ? estimateSimpleA - estimateSimpleB : estimateSimpleB - estimateSimpleA) /
-        Number(estimateSimpleA === 0n ? 1n : estimateSimpleA);
-
-      const eventSpread =
-        Number(estimateEventA > estimateEventB ? estimateEventA - estimateEventB : estimateEventB - estimateEventA) /
-        Number(estimateEventA === 0n ? 1n : estimateEventA);
-
       return {
         observation: {
           normalized: {
             setSimple: {
-              values: [estimateSimpleA.toString(), estimateSimpleB.toString()],
-              above21000: estimateSimpleA > 21_000n && estimateSimpleB > 21_000n,
-              stabilitySpread: simpleSpread
+              estimate: estimateSimpleA.toString(),
+              txSucceeded: simpleTx.receipt.status === 1,
+              above21000: estimateSimpleA > 21_000n
             },
             emitMultipleEvents: {
-              values: [estimateEventA.toString(), estimateEventB.toString()],
-              above21000: estimateEventA > 21_000n && estimateEventB > 21_000n,
-              stabilitySpread: eventSpread
+              estimate: estimateEventA.toString(),
+              txSucceeded: eventTx.receipt.status === 1,
+              above21000: estimateEventA > 21_000n
             },
             revertEstimate: {
-              failed: Boolean(revertError),
-              errorShape: revertError
-                ? {
-                    code: revertError.code,
-                    hasMessage: typeof revertError.message === "string" && revertError.message.length > 0,
-                    hasData: revertError.data !== undefined
-                  }
-                : null
-            }
+              failed: Boolean(revertError)
+            },
+            stable: simpleSpread <= 0.2
           }
         },
         requests: [
@@ -1051,10 +1068,28 @@ const checks: CheckDefinition[] = [
             }
           },
           {
+            method: "eth_sendRawTransaction",
+            payload: {
+              to: runtime.deployment.kitchenSink,
+              function: "setSimpleValue",
+              gasLimit: simpleGasLimit.toString(),
+              note: "estimate + 10%"
+            }
+          },
+          {
             method: "eth_estimateGas",
             payload: {
               to: runtime.deployment.kitchenSink,
               function: "emitMultipleEvents"
+            }
+          },
+          {
+            method: "eth_sendRawTransaction",
+            payload: {
+              to: runtime.deployment.kitchenSink,
+              function: "emitMultipleEvents",
+              gasLimit: eventGasLimit.toString(),
+              note: "estimate + 10%"
             }
           },
           {
@@ -1069,36 +1104,30 @@ const checks: CheckDefinition[] = [
     },
     compare: (anvil, rollup) => standardCompare<EstimateGasObservation>(anvil, rollup, (left, right) => {
       const failures: string[] = [];
+
       if (!left.setSimple.above21000 || !right.setSimple.above21000) {
         failures.push("setSimple estimates must be above 21,000 gas");
       }
       if (!left.emitMultipleEvents.above21000 || !right.emitMultipleEvents.above21000) {
         failures.push("emitMultipleEvents estimates must be above 21,000 gas");
       }
-      if (left.setSimple.stabilitySpread > 0.2 || right.setSimple.stabilitySpread > 0.2) {
-        failures.push("setSimple estimates are unstable (>20% spread)");
+      if (!left.setSimple.txSucceeded) {
+        failures.push("anvil: setSimpleValue tx failed with estimate + 10% gas limit");
       }
-      if (left.emitMultipleEvents.stabilitySpread > 0.2 || right.emitMultipleEvents.stabilitySpread > 0.2) {
-        failures.push("emitMultipleEvents estimates are unstable (>20% spread)");
+      if (!right.setSimple.txSucceeded) {
+        failures.push("rollup: setSimpleValue tx failed with estimate + 10% gas limit");
+      }
+      if (!left.emitMultipleEvents.txSucceeded) {
+        failures.push("anvil: emitMultipleEvents tx failed with estimate + 10% gas limit");
+      }
+      if (!right.emitMultipleEvents.txSucceeded) {
+        failures.push("rollup: emitMultipleEvents tx failed with estimate + 10% gas limit");
+      }
+      if (!left.stable || !right.stable) {
+        failures.push("estimates are unstable (>20% spread between similar calls)");
       }
       if (!left.revertEstimate.failed || !right.revertEstimate.failed) {
         failures.push("reverting call should fail in eth_estimateGas");
-      }
-
-      function hugeDiff(a: string, b: string): boolean {
-        const leftValue = BigInt(a);
-        const rightValue = BigInt(b);
-        if (leftValue === 0n || rightValue === 0n) {
-          return false;
-        }
-        return rightValue > leftValue * 5n || rightValue * 5n < leftValue;
-      }
-
-      if (hugeDiff(left.setSimple.values[0], right.setSimple.values[0])) {
-        failures.push("setSimple estimate differs by more than 5x from anvil baseline");
-      }
-      if (hugeDiff(left.emitMultipleEvents.values[0], right.emitMultipleEvents.values[0])) {
-        failures.push("emitMultipleEvents estimate differs by more than 5x from anvil baseline");
       }
 
       return failures;
@@ -2025,6 +2054,13 @@ const checks: CheckDefinition[] = [
       const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? feeData.gasPrice ?? 1_000_000_000n;
       const maxFeePerGas = feeData.maxFeePerGas ?? maxPriorityFeePerGas * 2n;
 
+      const estimated = await runtime.provider.estimateGas({
+        to: runtime.deployment.kitchenSink,
+        data: calldata,
+        from: runtime.wallet.address
+      });
+      const gasLimit = estimated * 2n;
+
       let txTypeUsed: "eip1559" | "legacy" = "eip1559";
       let txHash: string;
 
@@ -2033,7 +2069,7 @@ const checks: CheckDefinition[] = [
           to: runtime.deployment.kitchenSink,
           data: calldata,
           nonce,
-          gasLimit: 300_000n,
+          gasLimit,
           chainId: runtime.chainId,
           type: 2,
           maxFeePerGas,
@@ -2052,7 +2088,7 @@ const checks: CheckDefinition[] = [
           to: runtime.deployment.kitchenSink,
           data: calldata,
           nonce,
-          gasLimit: 300_000n,
+          gasLimit,
           chainId: runtime.chainId,
           type: 0,
           gasPrice

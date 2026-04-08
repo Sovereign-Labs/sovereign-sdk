@@ -1,0 +1,75 @@
+# P0 — Block-tag and pending semantics (highest ROI)
+# Aligned with docs/rpc_priority_sorted.md P0 tier.
+# Each line is a regex fragment; the runner joins them with | and wraps in ^(...)$
+#
+# Includes all available hive rpc-compat tests for P0-priority methods.
+# Tests that currently fail indicate what needs fixing — they are intentionally in scope.
+
+# eth_getBlockByNumber + eth_getBlockByHash (priority P0 #1)
+eth_getBlockByNumber/.*
+eth_getBlockByHash/.*
+
+# eth_blockNumber (priority P0 #2)
+eth_blockNumber/.*
+
+# eth_getTransactionCount (priority P0 #3)
+eth_getTransactionCount/get-nonce
+eth_getTransactionCount/get-nonce-unknown-account
+# Excluding eip7702 — not supported
+# eth_getTransactionCount/get-nonce-eip7702-account
+
+# eth_getLogs (priority P0 #4)
+eth_getLogs/.*
+
+# eth_getTransactionReceipt (priority P0 #5)
+eth_getTransactionReceipt/get-empty-tx
+eth_getTransactionReceipt/get-notfound-tx
+eth_getTransactionReceipt/get-dynamic-fee
+eth_getTransactionReceipt/get-access-list
+eth_getTransactionReceipt/get-legacy-receipt
+eth_getTransactionReceipt/get-legacy-contract
+eth_getTransactionReceipt/get-legacy-input
+# Excluding eip7702 / blob — not supported
+# eth_getTransactionReceipt/get-setcode-tx
+# eth_getTransactionReceipt/get-blob-tx
+
+# eth_getTransactionByHash (priority P0 #6)
+eth_getTransactionByHash/get-empty-tx
+eth_getTransactionByHash/get-notfound-tx
+eth_getTransactionByHash/get-dynamic-fee
+eth_getTransactionByHash/get-access-list
+eth_getTransactionByHash/get-legacy-tx
+eth_getTransactionByHash/get-legacy-create
+eth_getTransactionByHash/get-legacy-input
+# Excluding eip7702 / blob — not supported
+# eth_getTransactionByHash/get-setcode-tx
+# eth_getTransactionByHash/get-blob-tx
+
+# eth_call (priority P0 #7)
+eth_call/call-contract
+eth_call/call-callenv
+eth_call/call-callenv-options-eip1559
+eth_call/call-revert-abi-error
+eth_call/call-revert-abi-panic
+# Excluding eip7702 — not supported
+# eth_call/call-eip7702-delegation
+
+# eth_estimateGas (priority P0 #8)
+eth_estimateGas/estimate-simple-transfer
+eth_estimateGas/estimate-successful-call
+eth_estimateGas/estimate-failed-call
+eth_estimateGas/estimate-call-abi-error
+# Excluding eip4844 / eip7702 — not supported
+# eth_estimateGas/estimate-with-eip4844
+# eth_estimateGas/estimate-with-eip7702
+
+# eth_getBalance (priority P0 #9)
+eth_getBalance/.*
+
+# eth_sendRawTransaction
+eth_sendRawTransaction/send-dynamic-fee-transaction
+eth_sendRawTransaction/send-dynamic-fee-access-list-transaction
+eth_sendRawTransaction/send-legacy-transaction
+eth_sendRawTransaction/send-access-list-transaction
+# Excluding blob — not supported
+# eth_sendRawTransaction/send-blob-tx

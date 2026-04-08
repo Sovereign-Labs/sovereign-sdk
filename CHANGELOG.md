@@ -1,4 +1,5 @@
 # 2026-04-08
+- #2686 Updates hive testing suite and simplifies analysis
 - #2704 Replaces `reth`-related crates. No breakage is intended.
 
 # 2026-04-02
