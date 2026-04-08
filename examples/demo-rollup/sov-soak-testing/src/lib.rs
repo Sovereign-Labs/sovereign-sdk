@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
+use async_trait::async_trait;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::verifier::CelestiaSpec;
@@ -9,7 +10,6 @@ use sov_mock_da::{BlockProducingConfig, MockDaSpec};
 use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec, MockZkvmNetwork};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
-use async_trait::async_trait;
 use sov_modules_api::{Amount, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{
@@ -19,13 +19,13 @@ use sov_paymaster::{
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::CryptoSpec;
-use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::DefaultStorageSpec;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::SequencerKindConfig;
+pub use sov_soak_testing_lib::*;
 use sov_sp1_adapter::network::SP1Network;
 use sov_sp1_adapter::SP1;
-pub use sov_soak_testing_lib::*;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_state::Storage;
 use sov_stf_runner::processes::NetworkProverService;
 pub use sov_stf_runner::processes::RollupProverConfig;
@@ -82,8 +82,10 @@ pub type MockDemoRollupSpec = ConfigurableSpec<
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
 // SP1 network proving types — uses demo-stf Runtime with the existing guest-mock ELF
-type SP1NativeStorage =
-    NomtProverStorage<DefaultStorageSpec<<sov_sp1_adapter::SP1CryptoSpec as CryptoSpec>::Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+type SP1NativeStorage = NomtProverStorage<
+    DefaultStorageSpec<<sov_sp1_adapter::SP1CryptoSpec as CryptoSpec>::Hasher>,
+    <MockDaSpec as DaSpec>::SlotHash,
+>;
 pub type SP1Spec = ConfigurableSpec<
     MockDaSpec,
     SP1,

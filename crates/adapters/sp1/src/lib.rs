@@ -37,23 +37,6 @@ impl Debug for SP1MethodId {
     }
 }
 
-/// Compute the code commitment (verifying key) for a guest ELF binary.
-///
-/// The verifying key is deterministic — it depends only on the ELF, not on the
-/// prover backend (CPU, GPU, or network).
-#[cfg(feature = "native")]
-pub fn code_commitment_from_elf(elf: &[u8]) -> anyhow::Result<SP1MethodId> {
-    use sp1_sdk::blocking::{Prover, ProverClient};
-
-    let prover = ProverClient::builder().cpu().build();
-    let pk = prover
-        .setup(elf.into())
-        .map_err(|e| anyhow::anyhow!("SP1 setup failed: {e}"))?;
-    Ok(SP1MethodId(bincode::serialize(
-        sp1_sdk::ProvingKey::verifying_key(&pk),
-    )?))
-}
-
 /// The cryptographic primitives provided by SP1.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Copy, JsonSchema)]
 pub struct SP1CryptoSpec;

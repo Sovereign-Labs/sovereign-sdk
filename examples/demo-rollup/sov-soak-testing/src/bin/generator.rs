@@ -5,8 +5,8 @@ use sov_bank::Bank;
 use sov_modules_api::prelude::tracing;
 use sov_modules_api::{EncodeCall, Runtime, Spec};
 use sov_soak_testing::{
-    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SP1RT, SP1Spec,
-    SoakTestRunner, TestRT, ValidityProfile,
+    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SP1Spec, SoakTestRunner,
+    TestRT, ValidityProfile, SP1RT,
 };
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::TestSpec;
