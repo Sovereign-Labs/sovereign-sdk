@@ -190,21 +190,61 @@ pub struct SolanaOffchainSimpleMultisigMessage<S: Spec> {
     pub min_signers: u8,
 }
 
-/// The length of a preamble with a single 32-byte signer. This is just the sum of the lengths of
-/// the byte fields/arrays of the struct below.
-pub const PREAMBLE_LEN: usize = 85;
+/// The envelope for a multisig spec-compliant solana offchain message.
+/// All pubkeys are embedded in the preamble (part of the signed bytes). The envelope carries only
+/// signatures, a bitfield mapping each signature to its pubkey in the preamble, and the threshold.
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct SolanaOffchainSpecCompliantMultisigMessage<S: Spec> {
+    /// Preamble (with all N pubkeys) followed by JSON-serialized `SolanaOffchainUnsignedTransactionV1`.
+    pub signed_message_with_preamble: Vec<u8>,
+    /// One signature per signer, ordered to match set bits in `signer_bitfield` from LSB to MSB.
+    #[borsh(bound(
+        serialize = "<S::CryptoSpec as CryptoSpec>::Signature: BorshSerialize",
+        deserialize = "<S::CryptoSpec as CryptoSpec>::Signature: BorshDeserialize",
+    ))]
+    pub signatures: SafeVec<<S::CryptoSpec as CryptoSpec>::Signature, MAX_SIGNERS>,
+    /// Bitfield marking which pubkeys in the preamble have corresponding signatures.
+    /// Bit `i` (0-indexed from LSB) = 1 means the `i`-th preamble pubkey signed.
+    pub signer_bitfield: u32,
+    /// Minimum number of signers required for the multisig (the K in K-of-N).
+    pub min_signers: u8,
+}
 
-/// The preamble/header required for signing solana offchain messages, supporting a single signer.
+// Preamble field sizes, per the Solana offchain message spec.
 /// See <https://docs.anza.xyz/proposals/off-chain-message-signing#message-preamble>
+const SIGNING_DOMAIN_LEN: usize = 16;
+const HEADER_VERSION_LEN: usize = 1;
+const APPLICATION_DOMAIN_LEN: usize = 32;
+const MESSAGE_FORMAT_LEN: usize = 1;
+const SIGNER_COUNT_LEN: usize = 1;
+pub(crate) const PUBKEY_LEN: usize = 32;
+const MESSAGE_LENGTH_LEN: usize = 2;
+
+/// The sum of all fixed-size preamble fields (everything except the variable-length signers array).
+pub(crate) const PREAMBLE_FIXED_LEN: usize = SIGNING_DOMAIN_LEN
+    + HEADER_VERSION_LEN
+    + APPLICATION_DOMAIN_LEN
+    + MESSAGE_FORMAT_LEN
+    + SIGNER_COUNT_LEN
+    + MESSAGE_LENGTH_LEN;
+
+// Derived offsets within the preamble (cumulative).
+const HEADER_VERSION_OFFSET: usize = SIGNING_DOMAIN_LEN;
+const APPLICATION_DOMAIN_OFFSET: usize = HEADER_VERSION_OFFSET + HEADER_VERSION_LEN;
+const MESSAGE_FORMAT_OFFSET: usize = APPLICATION_DOMAIN_OFFSET + APPLICATION_DOMAIN_LEN;
+const SIGNER_COUNT_OFFSET: usize = MESSAGE_FORMAT_OFFSET + MESSAGE_FORMAT_LEN;
+const SIGNERS_START: usize = SIGNER_COUNT_OFFSET + SIGNER_COUNT_LEN;
+
+/// The preamble/header required for signing solana offchain messages, see above for spec link.
 #[derive(BorshSerialize, BorshDeserialize)]
 pub struct RawSolanaOffchainMessagePreamble {
-    pub signing_domain: [u8; 16],
+    pub signing_domain: [u8; SIGNING_DOMAIN_LEN],
     pub header_version: u8,
-    pub application_domain: [u8; 32],
+    pub application_domain: [u8; APPLICATION_DOMAIN_LEN],
     pub message_format: u8,
     pub signer_count: u8,
-    pub signer: [u8; 32],
-    pub message_length: [u8; 2],
+    pub signer: [u8; PUBKEY_LEN],
+    pub message_length: [u8; MESSAGE_LENGTH_LEN],
 }
 
 impl RawSolanaOffchainMessagePreamble {
@@ -244,6 +284,98 @@ impl RawSolanaOffchainMessagePreamble {
     }
 }
 
+/// Computes the total preamble length for `signer_count` signers.
+fn preamble_len(signer_count: u8) -> usize {
+    PREAMBLE_FIXED_LEN + PUBKEY_LEN * signer_count as usize
+}
+
+/// Parsed result of a multisig preamble (signer_count >= 2).
+struct ParsedMultisigPreamble {
+    application_domain: [u8; 32],
+    signers: Vec<[u8; 32]>,
+}
+
+/// Parses a Solana offchain message preamble with multiple signers.
+/// Validates all fields and returns the parsed data.
+fn parse_and_validate_multisig_preamble(
+    data: &[u8],
+    actual_message_length: usize,
+) -> Result<ParsedMultisigPreamble, FatalError> {
+    let min_multisig_preamble = preamble_len(2);
+    if data.len() < min_multisig_preamble {
+        return Err(FatalError::DeserializationFailed(
+            "Preamble too short for multisig".to_string(),
+        ));
+    }
+
+    if data[0..SIGNING_DOMAIN_LEN] != *b"\xffsolana offchain" {
+        return Err(FatalError::DeserializationFailed(
+            "Invalid Solana signing domain in preamble".to_string(),
+        ));
+    }
+
+    let header_version = data[HEADER_VERSION_OFFSET];
+    if header_version != 0 && header_version != 1 {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Invalid header version in preamble: only versions 0 and 1 are supported, but version {header_version} was provided"
+        )));
+    }
+
+    let application_domain_end = APPLICATION_DOMAIN_OFFSET + APPLICATION_DOMAIN_LEN;
+    let application_domain: [u8; APPLICATION_DOMAIN_LEN] = data
+        [APPLICATION_DOMAIN_OFFSET..application_domain_end]
+        .try_into()
+        .unwrap();
+
+    let message_format = data[MESSAGE_FORMAT_OFFSET];
+    if message_format != 0 {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Invalid message format in preamble: only format 0 is supported, but format {message_format} was provided"
+        )));
+    }
+
+    let signer_count = data[SIGNER_COUNT_OFFSET];
+    if signer_count < 2 || signer_count as usize > MAX_SIGNERS {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Invalid signer count in multisig preamble: expected 2..={MAX_SIGNERS}, got {signer_count}"
+        )));
+    }
+
+    let total_preamble = preamble_len(signer_count);
+    if data.len() < total_preamble {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Preamble too short: need {total_preamble} bytes for {signer_count} signers, got {}",
+            data.len()
+        )));
+    }
+
+    let mut signers = Vec::with_capacity(signer_count as usize);
+    for i in 0..signer_count as usize {
+        let start = SIGNERS_START + i * PUBKEY_LEN;
+        let signer: [u8; PUBKEY_LEN] = data[start..start + PUBKEY_LEN].try_into().unwrap();
+        signers.push(signer);
+    }
+
+    let msg_len_offset = SIGNERS_START + signer_count as usize * PUBKEY_LEN;
+    let message_length = u16::from_le_bytes(
+        data[msg_len_offset..msg_len_offset + MESSAGE_LENGTH_LEN]
+            .try_into()
+            .unwrap(),
+    );
+
+    if message_length as usize != actual_message_length {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Message length mismatch: expected {message_length}, got {actual_message_length}"
+        )));
+    }
+
+    Ok(ParsedMultisigPreamble {
+        application_domain,
+        signers,
+    })
+}
+
+#[derive(Debug)]
 enum UnpackedSolanaMessage<S: Spec> {
     V0 {
         pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey,
@@ -258,6 +390,7 @@ enum UnpackedSolanaMessage<S: Spec> {
         min_signers: u8,
         chain_hash: [u8; 32],
         signed_bytes: Vec<u8>,
+        json_start: usize,
     },
 }
 
@@ -268,8 +401,12 @@ impl<S: Spec> UnpackedSolanaMessage<S> {
                 signed_bytes,
                 json_start,
                 ..
+            }
+            | UnpackedSolanaMessage::V1 {
+                signed_bytes,
+                json_start,
+                ..
             } => &signed_bytes[*json_start..],
-            UnpackedSolanaMessage::V1 { signed_bytes, .. } => signed_bytes,
         }
     }
 
@@ -458,7 +595,8 @@ fn verify_multisig_commitment<S: Spec>(
 
 fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage<S>, FatalError> {
     // First 4 bytes are the length of the Vec<u8> as u32 (borsh encoding)
-    if raw_tx.len() < 5 {
+    const BORSH_VEC_LEN_PREFIX: usize = 4;
+    if raw_tx.len() < BORSH_VEC_LEN_PREFIX + 1 {
         return Err(FatalError::DeserializationFailed(
             "Message too short".to_string(),
         ));
@@ -468,9 +606,20 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
     // 0xff → Spec-compliant message (preamble starts with \xffsolana offchain)
     // 0x80 → Multisig simple message (discriminator prefix)
     // Anything else → Simple message (JSON, typically starts with '{')
-    if raw_tx[4] == SPEC_COMPLIANT_DISCRIMINATOR {
-        unpack_spec_compliant_message(raw_tx)
-    } else if raw_tx[4] == MULTISIG_SIMPLE_DISCRIMINATOR {
+    if raw_tx[BORSH_VEC_LEN_PREFIX] == SPEC_COMPLIANT_DISCRIMINATOR {
+        // signer_count sits after the borsh Vec<u8> length prefix plus the preamble offset.
+        const RAW_TX_SIGNER_COUNT_OFFSET: usize = BORSH_VEC_LEN_PREFIX + SIGNER_COUNT_OFFSET;
+        if raw_tx.len() <= RAW_TX_SIGNER_COUNT_OFFSET {
+            return Err(FatalError::DeserializationFailed(
+                "Message too short to read signer count".to_string(),
+            ));
+        }
+        if raw_tx[RAW_TX_SIGNER_COUNT_OFFSET] > 1 {
+            unpack_spec_compliant_multisig_message(raw_tx)
+        } else {
+            unpack_spec_compliant_message(raw_tx)
+        }
+    } else if raw_tx[BORSH_VEC_LEN_PREFIX] == MULTISIG_SIMPLE_DISCRIMINATOR {
         unpack_multisig_simple_message(raw_tx)
     } else {
         unpack_simple_message(raw_tx)
@@ -480,25 +629,26 @@ fn unpack_solana_message<S: Spec>(raw_tx: &[u8]) -> Result<UnpackedSolanaMessage
 fn unpack_spec_compliant_message<S: Spec>(
     raw_tx: &[u8],
 ) -> Result<UnpackedSolanaMessage<S>, FatalError> {
+    let single_key_preamble_len = preamble_len(1);
+
     let envelope: SolanaOffchainSpecCompliantMessage<S> =
         borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
-    if envelope.signed_message_with_preamble.len() < PREAMBLE_LEN {
+    if envelope.signed_message_with_preamble.len() < single_key_preamble_len {
         return Err(FatalError::DeserializationFailed(
             "Message too short for preamble".to_string(),
         ));
     }
 
     let preamble: RawSolanaOffchainMessagePreamble =
-        borsh::from_slice(&envelope.signed_message_with_preamble[0..PREAMBLE_LEN])
+        borsh::from_slice(&envelope.signed_message_with_preamble[0..single_key_preamble_len])
             .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
-    // Unwrap: we just checked that `envelope.signed_message_with_preamble.len()` >= `PREAMBLE_LEN`,
-    // so this can't underflow
+    // Unwrap: we just checked the length is >= single_key_preamble_len, so this can't underflow
     let actual_message_length = envelope
         .signed_message_with_preamble
         .len()
-        .checked_sub(PREAMBLE_LEN)
+        .checked_sub(single_key_preamble_len)
         .unwrap();
     preamble.validate(actual_message_length)?;
 
@@ -510,7 +660,7 @@ fn unpack_spec_compliant_message<S: Spec>(
         signature: envelope.signature,
         chain_hash: preamble.application_domain,
         signed_bytes: envelope.signed_message_with_preamble,
-        json_start: PREAMBLE_LEN,
+        json_start: single_key_preamble_len,
     })
 }
 
@@ -548,6 +698,107 @@ fn unpack_multisig_simple_message<S: Spec>(
         min_signers: msg.min_signers,
         chain_hash: msg.chain_hash,
         signed_bytes,
+        json_start: 0,
+    })
+}
+
+type SignaturesAndUnusedKeys<C> = (
+    SafeVec<PubKeyAndSignature<C>, MAX_SIGNERS>,
+    SafeVec<<C as CryptoSpec>::PublicKey, MAX_SIGNERS>,
+);
+
+/// Uses the signer bitfield to pair each signature with its corresponding preamble pubkey,
+/// and collects the remaining pubkeys as unused.
+fn pair_signatures_with_preamble_pubkeys<S: Spec>(
+    preamble_signers: &[[u8; 32]],
+    signatures: &SafeVec<<S::CryptoSpec as CryptoSpec>::Signature, MAX_SIGNERS>,
+    signer_bitfield: u32,
+) -> Result<SignaturesAndUnusedKeys<S::CryptoSpec>, FatalError> {
+    let signer_count = preamble_signers.len();
+
+    // Validate bitfield: no out-of-range bits set
+    let valid_bits_mask = (1u32 << signer_count) - 1;
+    if signer_bitfield & !valid_bits_mask != 0 {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Signer bitfield has bits set beyond signer_count ({signer_count})"
+        )));
+    }
+
+    // Validate bitfield popcount matches number of signatures
+    let expected_sig_count = signer_bitfield.count_ones() as usize;
+    if expected_sig_count != signatures.len() {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Signer bitfield popcount ({expected_sig_count}) doesn't match signature count ({})",
+            signatures.len()
+        )));
+    }
+
+    let mut paired = Vec::with_capacity(expected_sig_count);
+    let mut unused = Vec::with_capacity(signer_count - expected_sig_count);
+    let mut sig_idx = 0;
+
+    for (i, signer_bytes) in preamble_signers.iter().enumerate() {
+        let pub_key: <S::CryptoSpec as CryptoSpec>::PublicKey = borsh::from_slice(signer_bytes)
+            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+        if signer_bitfield & (1 << i) != 0 {
+            paired.push(PubKeyAndSignature {
+                signature: signatures[sig_idx].clone(),
+                pub_key,
+            });
+            sig_idx += 1;
+        } else {
+            unused.push(pub_key);
+        }
+    }
+
+    let paired = paired
+        .try_into()
+        .map_err(|_| FatalError::DeserializationFailed("Too many signatures".to_string()))?;
+    let unused = unused
+        .try_into()
+        .map_err(|_| FatalError::DeserializationFailed("Too many unused pubkeys".to_string()))?;
+    Ok((paired, unused))
+}
+
+fn unpack_spec_compliant_multisig_message<S: Spec>(
+    raw_tx: &[u8],
+) -> Result<UnpackedSolanaMessage<S>, FatalError> {
+    let envelope: SolanaOffchainSpecCompliantMultisigMessage<S> =
+        borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+
+    let data = &envelope.signed_message_with_preamble;
+    if data.len() < (SIGNER_COUNT_OFFSET + 1) {
+        return Err(FatalError::DeserializationFailed(
+            "Message too short for multisig preamble".to_string(),
+        ));
+    }
+
+    let signer_count = data[SIGNER_COUNT_OFFSET];
+    let preamble_size = preamble_len(signer_count);
+    if data.len() < preamble_size {
+        return Err(FatalError::DeserializationFailed(format!(
+            "Message too short for preamble with {signer_count} signers"
+        )));
+    }
+
+    let actual_message_length = data.len() - preamble_size;
+    let preamble =
+        parse_and_validate_multisig_preamble(&data[..preamble_size], actual_message_length)?;
+
+    let (signatures, unused_pub_keys) = pair_signatures_with_preamble_pubkeys::<S>(
+        &preamble.signers,
+        &envelope.signatures,
+        envelope.signer_bitfield,
+    )?;
+
+    Ok(UnpackedSolanaMessage::V1 {
+        signatures,
+        unused_pub_keys,
+        min_signers: envelope.min_signers,
+        chain_hash: preamble.application_domain,
+        signed_bytes: envelope.signed_message_with_preamble,
+        json_start: preamble_size,
     })
 }
 
@@ -805,6 +1056,7 @@ pub mod test {
             min_signers,
             chain_hash,
             signed_bytes,
+            json_start,
         } = &unpacked
         else {
             panic!("Expected Multisig variant");
@@ -815,6 +1067,7 @@ pub mod test {
         assert_eq!(unused_pub_keys.as_ref(), &[pubkey3]);
         assert_eq!(*min_signers, 2);
         assert_eq!(*chain_hash, TEST_CHAIN_HASH);
+        assert_eq!(*json_start, 0);
         // signed_bytes should be the JSON only (discriminator stripped)
         assert_eq!(signed_bytes, json_message);
         assert_eq!(unpacked.json_bytes(), json_message);
@@ -851,5 +1104,141 @@ pub mod test {
         let result = unpack_solana_message::<TestSpec>(&serialized);
         assert!(result.is_err());
         assert!(matches!(result, Err(FatalError::DeserializationFailed(_))));
+    }
+
+    #[test]
+    fn test_unpack_spec_compliant_multisig_message() {
+        use crate::utils::make_multisig_preamble_for_message;
+
+        let json_message = b"{\"test\":\"abcd\"}";
+        let message_len = json_message.len() as u16;
+
+        let pubkey1 = Ed25519PrivateKey::generate().pub_key();
+        let pubkey2 = Ed25519PrivateKey::generate().pub_key();
+        let pubkey3 = Ed25519PrivateKey::generate().pub_key();
+        let sig1: Ed25519Signature = [1u8; 64].as_slice().try_into().unwrap();
+        let sig3: Ed25519Signature = [3u8; 64].as_slice().try_into().unwrap();
+
+        let preamble = make_multisig_preamble_for_message(
+            &[*pubkey1.bytes(), *pubkey2.bytes(), *pubkey3.bytes()],
+            &TEST_CHAIN_HASH,
+            message_len,
+        );
+
+        let mut signed_message = preamble.clone();
+        signed_message.extend_from_slice(json_message);
+
+        // Signers 0 and 2 signed (bitfield = 0b101 = 5), signer 1 did not
+        let envelope = SolanaOffchainSpecCompliantMultisigMessage::<TestSpec> {
+            signed_message_with_preamble: signed_message.clone(),
+            signatures: vec![sig1.clone(), sig3.clone()].try_into().unwrap(),
+            signer_bitfield: 0b101,
+            min_signers: 2,
+        };
+
+        let serialized = borsh::to_vec(&envelope).unwrap();
+        let unpacked = unpack_solana_message::<TestSpec>(&serialized).unwrap();
+
+        let UnpackedSolanaMessage::V1 {
+            signatures,
+            unused_pub_keys,
+            min_signers,
+            chain_hash,
+            signed_bytes,
+            json_start,
+        } = &unpacked
+        else {
+            panic!("Expected Multisig variant");
+        };
+
+        // Signatures should be paired with pubkeys 0 and 2 (matching bitfield order)
+        assert_eq!(signatures.len(), 2);
+        assert_eq!(signatures[0].pub_key, pubkey1);
+        assert_eq!(signatures[0].signature, sig1);
+        assert_eq!(signatures[1].pub_key, pubkey3);
+        assert_eq!(signatures[1].signature, sig3);
+
+        // Pubkey 1 is unused
+        assert_eq!(unused_pub_keys.as_ref(), &[pubkey2]);
+
+        assert_eq!(*min_signers, 2);
+        assert_eq!(*chain_hash, TEST_CHAIN_HASH);
+        assert_eq!(*json_start, preamble.len());
+        assert_eq!(*signed_bytes, signed_message);
+        assert_eq!(unpacked.json_bytes(), json_message);
+    }
+
+    #[test]
+    fn test_spec_compliant_multisig_bitfield_popcount_mismatch() {
+        use crate::utils::make_multisig_preamble_for_message;
+
+        let json_message = b"{\"test\":\"abcd\"}";
+        let pubkey1 = Ed25519PrivateKey::generate().pub_key();
+        let pubkey2 = Ed25519PrivateKey::generate().pub_key();
+        let sig1: Ed25519Signature = [1u8; 64].as_slice().try_into().unwrap();
+
+        let preamble = make_multisig_preamble_for_message(
+            &[*pubkey1.bytes(), *pubkey2.bytes()],
+            &TEST_CHAIN_HASH,
+            json_message.len() as u16,
+        );
+
+        let mut signed_message = preamble;
+        signed_message.extend_from_slice(json_message);
+
+        // 1 signature but bitfield says 2 signers (0b11)
+        let envelope = SolanaOffchainSpecCompliantMultisigMessage::<TestSpec> {
+            signed_message_with_preamble: signed_message,
+            signatures: vec![sig1].try_into().unwrap(),
+            signer_bitfield: 0b11,
+            min_signers: 2,
+        };
+
+        let serialized = borsh::to_vec(&envelope).unwrap();
+        let result = unpack_solana_message::<TestSpec>(&serialized);
+        let Err(FatalError::DeserializationFailed(err_msg)) = result else {
+            panic!("Expected DeserializationFailed, got: {result:?}");
+        };
+        assert!(
+            err_msg.contains("popcount"),
+            "Expected popcount mismatch error, got: {err_msg}"
+        );
+    }
+
+    #[test]
+    fn test_spec_compliant_multisig_bitfield_out_of_range() {
+        use crate::utils::make_multisig_preamble_for_message;
+
+        let json_message = b"{\"test\":\"abcd\"}";
+        let pubkey1 = Ed25519PrivateKey::generate().pub_key();
+        let pubkey2 = Ed25519PrivateKey::generate().pub_key();
+        let sig1: Ed25519Signature = [1u8; 64].as_slice().try_into().unwrap();
+
+        let preamble = make_multisig_preamble_for_message(
+            &[*pubkey1.bytes(), *pubkey2.bytes()],
+            &TEST_CHAIN_HASH,
+            json_message.len() as u16,
+        );
+
+        let mut signed_message = preamble;
+        signed_message.extend_from_slice(json_message);
+
+        // Bit 2 is set but there are only 2 signers (indices 0 and 1)
+        let envelope = SolanaOffchainSpecCompliantMultisigMessage::<TestSpec> {
+            signed_message_with_preamble: signed_message,
+            signatures: vec![sig1].try_into().unwrap(),
+            signer_bitfield: 0b100,
+            min_signers: 1,
+        };
+
+        let serialized = borsh::to_vec(&envelope).unwrap();
+        let result = unpack_solana_message::<TestSpec>(&serialized);
+        let Err(FatalError::DeserializationFailed(err_msg)) = result else {
+            panic!("Expected DeserializationFailed, got: {result:?}");
+        };
+        assert!(
+            err_msg.contains("bits set beyond"),
+            "Expected out-of-range bitfield error, got: {err_msg}"
+        );
     }
 }

@@ -3,6 +3,7 @@
 #![allow(clippy::match_same_arms)]
 
 pub(crate) mod conversions;
+pub(crate) mod eth_receipt;
 /// EVM execution utilities
 pub mod executor;
 pub(crate) mod primitive_types;
