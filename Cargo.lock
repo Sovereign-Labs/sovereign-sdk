@@ -7269,7 +7269,6 @@ dependencies = [
  "arbitrary",
  "derive_more 2.0.1",
  "serde",
- "serde_with",
  "thiserror 2.0.17",
 ]
 
@@ -12056,9 +12055,6 @@ dependencies = [
  "jsonschema",
  "proptest",
  "rand 0.8.5",
- "reth-ethereum-primitives",
- "reth-primitives",
- "reth-primitives-traits",
  "revm",
  "revm-database-interface",
  "revm-inspectors",

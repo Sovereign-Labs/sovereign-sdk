@@ -32,7 +32,7 @@ sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }
 sov-value-setter = { workspace = true }
 sov-evm = { workspace = true, features = ["native"] }
-reth-primitives = { workspace = true }
+reth-primitives = { workspace = true, features = ["std"] }
 sov-address = { workspace = true, features = ["evm"] }
 sov-rollup-interface = { workspace = true }
 sov-kernels = { workspace = true }

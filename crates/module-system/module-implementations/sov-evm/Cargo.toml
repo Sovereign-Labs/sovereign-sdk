@@ -47,13 +47,13 @@ schemars = { workspace = true }
 tracing = { workspace = true }
 
 alloy-eips = { workspace = true, features = ["std"] }
-# `rlp` feature implicitly enabled via `reth-` crates, but this allows us to explicitly access Error type from there
 alloy-primitives = { workspace = true, default-features = false, features = [
 	"rlp",
 ] }
 alloy-consensus = { workspace = true, features = [
 	"serde",
 	"serde-bincode-compat",
+	"k256",
 ] }
 alloy-rlp = { workspace = true }
 
@@ -68,12 +68,6 @@ revm = { workspace = true, features = [
 	"std",
 ] }
 revm-database-interface = { workspace = true }
-reth-ethereum-primitives = { workspace = true, features = [
-	"serde",
-	"serde-bincode-compat",
-] }
-reth-primitives = { workspace = true }
-reth-primitives-traits = { workspace = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
 sov-rpc-eth-types = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
@@ -107,7 +101,6 @@ arbitrary = [
 	"alloy-eips/arbitrary",
 	"alloy-primitives/arbitrary",
 	"alloy-rpc-types?/arbitrary",
-	"reth-primitives/arbitrary",
 	"revm/arbitrary",
 	"sov-address/arbitrary",
 	"sov-evm/arbitrary",
@@ -119,8 +112,6 @@ arbitrary = [
 	"sov-bank/arbitrary",
 	"sov-uniqueness/arbitrary",
 	"alloy-consensus/arbitrary",
-	"reth-primitives-traits/arbitrary",
-	"reth-ethereum-primitives/arbitrary",
 	"sov-evm-test-utils/arbitrary"
 ]
 native = [
@@ -130,8 +121,6 @@ native = [
 	"dep:rand",
 	"revm-inspectors",
 	"alloy-primitives/std",
-	"reth-primitives/std",
-	"reth-ethereum-primitives/std",
 	"dep:sov-rpc-eth-types",
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
