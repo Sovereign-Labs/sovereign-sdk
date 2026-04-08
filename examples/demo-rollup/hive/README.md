@@ -67,7 +67,7 @@ bash examples/demo-rollup/hive/run-rpc-compat.sh \
 | Flag              | Description                           | Default                |
 |-------------------|---------------------------------------|------------------------|
 | `--build-image`   | Build the Docker image before running | off                    |
-| `--profile`       | `full`, `p0`, or `p0-nonhistorical`   | `full`                 |
+| `--profile`       | `full`, `p0`, `p0-nonhistorical`, or `p1` | `full`            |
 | `--tag`           | Suffix for the results directory      | `run`                  |
 | `--exit-on-fail`  | Exit non-zero on test failures        | off                    |
 | `--hive-dir`      | Path to Hive repo                     | `$HOME/workspace/hive` |
