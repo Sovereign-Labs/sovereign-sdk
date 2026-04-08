@@ -1,4 +1,4 @@
--- Prevent duplicate event rows from retry logic (run_with_retries!)h" that crashes on replay.
+-- Prevent duplicate event rows from retry logic (run_with_retries!) that crashes on replay.
 
 -- Step 1: Remove duplicate transaction rows that may already exist from retry behavior.
 -- For each (sequence_number, index_in_batch) group, keep only the row with the lowest event_id.
