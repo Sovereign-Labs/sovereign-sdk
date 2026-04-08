@@ -636,26 +636,6 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
     let mut expected_batch: Vec<BlobRecord> = Vec::new();
     let mut expected_proof: Vec<BlobRecord> = Vec::new();
 
-    // Generates a deterministic payload seeded by (ns_idx, client_idx, share_version, round).
-    fn make_payload(
-        size: usize,
-        ns_idx: usize,
-        client_idx: usize,
-        share_version: u8,
-        round: usize,
-    ) -> Vec<u8> {
-        let mut seed = [0u8; 32];
-        seed[0] = ns_idx as u8;
-        seed[1] = client_idx as u8;
-        seed[2] = share_version;
-        seed[3] = round as u8;
-        seed[4] = (size & 0xff) as u8;
-        seed[5] = ((size >> 8) & 0xff) as u8;
-        let mut payload = vec![0u8; size];
-        rand::rngs::SmallRng::from_seed(seed).fill_bytes(&mut payload);
-        payload
-    }
-
     // 2 rounds: each round, each of 5 clients submits 10 blobs
     // (v0 + v1 for each of 5 namespaces).
     for round in 0..2usize {
@@ -667,15 +647,24 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
             let mut proof_records = Vec::new();
 
             for (ns_idx, ns) in ALL_NAMESPACES.iter().enumerate() {
+                let seq_base = round * 2;
+                let data_a =
+                    deterministic_payload(128, ns_idx, client_idx, SubmissionKind::Batch, seq_base);
+                let data_b = deterministic_payload(
+                    128,
+                    ns_idx,
+                    client_idx,
+                    SubmissionKind::Batch,
+                    seq_base + 1,
+                );
+
                 // V0 blob (unsigned)
-                let v0_data = make_payload(128, ns_idx, client_idx, 0, round);
                 let v0_blob =
-                    celestia_types::Blob::new(*ns, v0_data, None).context("v0 blob creation")?;
+                    celestia_types::Blob::new(*ns, data_a, None).context("v0 blob creation")?;
                 blobs_to_submit.push(v0_blob);
 
                 // V1 blob (signed)
-                let v1_data = make_payload(128, ns_idx, client_idx, 1, round);
-                let v1_blob = celestia_types::Blob::new(*ns, v1_data.clone(), Some(signer.0))
+                let v1_blob = celestia_types::Blob::new(*ns, data_b.clone(), Some(signer.0))
                     .context("v1 blob creation")?;
 
                 // Only v1 blobs in batch/proof namespaces are expected in output.
@@ -683,13 +672,13 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
                     batch_records.push(BlobRecord {
                         sender: *signer,
                         hash: HexHash::new(*v1_blob.commitment.hash()),
-                        payload: v1_data,
+                        payload: data_b,
                     });
                 } else if *ns == NS_PROOF {
                     proof_records.push(BlobRecord {
                         sender: *signer,
                         hash: HexHash::new(*v1_blob.commitment.hash()),
-                        payload: v1_data,
+                        payload: data_b,
                     });
                 }
                 blobs_to_submit.push(v1_blob);
