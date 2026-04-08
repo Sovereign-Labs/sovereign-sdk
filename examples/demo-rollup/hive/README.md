@@ -260,6 +260,6 @@ curl -s -X POST http://127.0.0.1:8545 \
 | `hive_services.py`             | RPC proxy (8545) + Engine API stub (8551)                |
 | `wait_for_rpc.py`              | Readiness probe for backend RPC                          |
 | `enode.sh`                     | Stub for Hive's peer discovery protocol                  |
-| `mock_nomt_rollup_config.toml` | Rollup config for NOMT-backed mock DA                    |
+| `mock_rollup_config.toml`      | Rollup config for NOMT-backed mock DA                    |
 | `summarize-results.py`         | Human-readable test result summary with failure details  |
 | `p0-nonhistorical-tests.regex` | P0 scope: test name patterns for the phase-1 gate        |
