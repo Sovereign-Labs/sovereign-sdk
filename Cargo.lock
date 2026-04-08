@@ -6756,27 +6756,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
 
 [[package]]
-name = "modular-bitfield"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a53d79ba8304ac1c4f9eb3b9d281f21f7be9d4626f72ce7df4ad8fbde4f38a74"
-dependencies = [
- "modular-bitfield-impl",
- "static_assertions",
-]
-
-[[package]]
-name = "modular-bitfield-impl"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a7d5f7076603ebc68de2dc6a650ec331a062a13abaa346975be747bbfa4b789"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "module-template"
 version = "0.3.0"
 dependencies = [
@@ -7254,22 +7233,6 @@ name = "oorandom"
 version = "11.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
-
-[[package]]
-name = "op-alloy-consensus"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e42e9de945efe3c2fbd207e69720c9c1af2b8caa6872aee0e216450c25a3ca70"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-serde",
- "derive_more 2.0.1",
- "serde",
- "thiserror 2.0.17",
-]
 
 [[package]]
 name = "opaque-debug"
@@ -8966,128 +8929,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "reth-codecs"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-genesis",
- "alloy-primitives",
- "alloy-trie",
- "bytes",
- "modular-bitfield",
- "op-alloy-consensus",
- "reth-codecs-derive",
- "reth-zstd-compressors",
- "serde",
-]
-
-[[package]]
-name = "reth-codecs-derive"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
-name = "reth-consensus"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-consensus",
- "alloy-primitives",
- "auto_impl",
- "reth-execution-types",
- "reth-primitives-traits",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "reth-errors"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "reth-consensus",
- "reth-execution-errors",
- "reth-storage-errors",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "reth-ethereum-forks"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-eip2124",
- "alloy-hardforks",
- "alloy-primitives",
- "auto_impl",
- "once_cell",
-]
-
-[[package]]
-name = "reth-ethereum-primitives"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-rpc-types-eth",
- "alloy-serde",
- "reth-codecs",
- "reth-primitives-traits",
- "serde",
-]
-
-[[package]]
-name = "reth-execution-errors"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-evm",
- "alloy-primitives",
- "alloy-rlp",
- "nybbles",
- "reth-storage-errors",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "reth-execution-types"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-consensus",
- "alloy-eips",
- "alloy-evm",
- "alloy-primitives",
- "derive_more 2.0.1",
- "reth-ethereum-primitives",
- "reth-primitives-traits",
- "reth-trie-common",
- "revm",
-]
-
-[[package]]
-name = "reth-primitives"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-consensus",
- "once_cell",
- "reth-ethereum-forks",
- "reth-ethereum-primitives",
- "reth-primitives-traits",
- "reth-static-file-types",
-]
-
-[[package]]
 name = "reth-primitives-traits"
 version = "1.9.0"
 source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
@@ -9097,82 +8938,15 @@ dependencies = [
  "alloy-genesis",
  "alloy-primitives",
  "alloy-rlp",
- "alloy-rpc-types-eth",
  "alloy-trie",
  "auto_impl",
  "bytes",
  "derive_more 2.0.1",
  "once_cell",
- "op-alloy-consensus",
- "reth-codecs",
  "revm-bytecode",
  "revm-primitives",
  "revm-state",
- "secp256k1 0.30.0",
- "serde",
  "thiserror 2.0.17",
-]
-
-[[package]]
-name = "reth-prune-types"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-primitives",
- "derive_more 2.0.1",
- "strum 0.27.2",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "reth-static-file-types"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-primitives",
- "derive_more 2.0.1",
- "serde",
- "strum 0.27.2",
-]
-
-[[package]]
-name = "reth-storage-errors"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-eips",
- "alloy-primitives",
- "alloy-rlp",
- "derive_more 2.0.1",
- "reth-primitives-traits",
- "reth-prune-types",
- "reth-static-file-types",
- "revm-database-interface",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "reth-trie-common"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "alloy-consensus",
- "alloy-primitives",
- "alloy-rlp",
- "alloy-trie",
- "derive_more 2.0.1",
- "itertools 0.14.0",
- "nybbles",
- "reth-primitives-traits",
- "revm-database",
-]
-
-[[package]]
-name = "reth-zstd-compressors"
-version = "1.9.0"
-source = "git+https://github.com/paradigmxyz/reth?tag=v1.9.0#84785f025eac5eed123997454998db77a299e1e5"
-dependencies = [
- "zstd",
 ]
 
 [[package]]
@@ -11807,7 +11581,6 @@ dependencies = [
  "jsonrpsee",
  "rand 0.8.5",
  "reqwest",
- "reth-primitives",
  "risc0",
  "rockbound",
  "rustls 0.23.31",
@@ -12750,7 +12523,6 @@ dependencies = [
  "derive-new",
  "jsonrpsee-core",
  "jsonrpsee-types",
- "reth-errors",
  "reth-primitives-traits",
  "revm",
  "serde",
