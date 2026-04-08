@@ -19,6 +19,7 @@ serde = { workspace = true, default-features = false, features = [
     "derive",
 ] }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 derivative = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 rand = { workspace = true }

@@ -12888,6 +12888,7 @@ name = "sov-soak-testing"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "borsh",
  "clap",
  "demo-stf",

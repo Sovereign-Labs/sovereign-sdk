@@ -9,7 +9,7 @@ use sov_mock_da::{BlockProducingConfig, MockDaSpec};
 use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec, MockZkvmNetwork};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::prelude::axum::async_trait;
+use async_trait::async_trait;
 use sov_modules_api::{Amount, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{
@@ -17,9 +17,10 @@ use sov_paymaster::{
     SafeVec,
 };
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::CryptoSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::SequencerKindConfig;
 use sov_sp1_adapter::network::SP1Network;
@@ -81,8 +82,17 @@ pub type MockDemoRollupSpec = ConfigurableSpec<
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
 // SP1 network proving types — uses demo-stf Runtime with the existing guest-mock ELF
-pub type SP1Spec =
-    ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Native>;
+type SP1NativeStorage =
+    NomtProverStorage<DefaultStorageSpec<<sov_sp1_adapter::SP1CryptoSpec as CryptoSpec>::Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+pub type SP1Spec = ConfigurableSpec<
+    MockDaSpec,
+    SP1,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    sov_sp1_adapter::SP1CryptoSpec,
+    SP1NativeStorage,
+>;
 pub type SP1RT = demo_stf::runtime::Runtime<SP1Spec>;
 
 generate_runtime! {
@@ -141,9 +151,10 @@ impl ProverFactory<SP1Spec> for NetworkProverFactory {
 pub type NetworkProvingBlueprint = RtAgnosticBlueprint<
     SP1Spec,
     SP1RT,
-    sov_db::storage_manager::NativeStorageManager<
+    sov_db::storage_manager::NomtStorageManager<
         MockDaSpec,
-        <SP1Spec as Spec>::Storage,
+        <sov_sp1_adapter::SP1CryptoSpec as CryptoSpec>::Hasher,
+        SP1NativeStorage,
     >,
     NetworkProverFactory,
 >;
@@ -249,6 +260,7 @@ fn sp1_genesis_paths() -> GenesisPaths {
     let dir = Path::new(manifest_dir).join("../../test-data/genesis/integration-tests");
     let mut paths = GenesisPaths::from_dir(&dir);
     paths.chain_state_genesis_path = dir.join("chain_state_zk.json");
+    paths.paymaster_genesis_path = dir.join("paymaster_with_payer.json");
     paths
 }
 
@@ -283,12 +295,15 @@ pub fn create_sp1_rollup_builder(
         config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
             minimum_profit_per_tx: 0,
             postgres_config,
-            batch_execution_time_limit_millis: 400,
+            batch_execution_time_limit_millis: 11_000,
             disable_state_root_consistency_checks: true,
             ..Default::default()
         });
         config.aggregated_proof_block_jump = 3;
         config.axum_port = axum_port;
+        // With 10s block time and finalization_blocks=5, DA finalization takes ~50s.
+        // The default 60s is too tight — bump to 120s to avoid spurious timeouts.
+        config.blob_processing_timeout_secs = 120;
     })
 }
 
