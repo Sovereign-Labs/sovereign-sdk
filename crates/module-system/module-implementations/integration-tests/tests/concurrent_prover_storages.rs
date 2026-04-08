@@ -481,11 +481,10 @@ enum ValueNamespace {
     Accessory,
 }
 
-
 /// Checks that given storage can see all expected values for a given key.
 /// The first element in expected_values is supposed to be rollup_height == 0
 /// Last element checked against "last" version (None parameter)
-/// 
+///
 /// If with_proof is true, then the value should be checked against get_with_proof. Note that
 /// get_with_proof only supports non-stale versions, so `with_proof` should only be true if `version` is None
 /// and the storage we're comparing against isn't stale (where stale means that a newer storage version has been committed)
@@ -519,8 +518,7 @@ fn assert_values_maybe_with_proof<S: NativeStorage>(
                 }
                 ValueNamespace::Accessory => {}
             }
-             
-        } 
+        }
         value
     };
     let last_value = expected_values.last().unwrap_or(&None).clone();
