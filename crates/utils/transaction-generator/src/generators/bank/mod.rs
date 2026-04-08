@@ -2,11 +2,11 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use sov_bank::{Amount, CallMessage, CallMessageDiscriminants, Coins, TokenId};
 use sov_modules_api::prelude::arbitrary;
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::Spec;
 use strum::VariantArray;
 use tracing::{trace, warn};

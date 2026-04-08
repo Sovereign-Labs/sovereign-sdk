@@ -179,7 +179,7 @@ pub struct TestRunner<
     checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     /// The corresponding receiving end of the channel.
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
-    axum_server: axum_server::Handle,
+    axum_server: axum_server::Handle<std::net::SocketAddr>,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
 }

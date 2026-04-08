@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_provider::Provider;
 use sov_demo_rollup::mock_da_risc0_host_args;
-use sov_demo_rollup::MockNomtDemoRollup;
+use sov_demo_rollup::MockDemoRollup;
 use sov_evm::execution_config::EvmExecutionConfigContents;
 use sov_evm_test_utils::SimpleStorage;
 use sov_mock_da::BlockProducingConfig;
@@ -24,7 +24,7 @@ pub(crate) async fn start_node_with_execution_config(
     _rollup_prover_config: RollupProverConfig<Risc0>,
     location: TempDir,
     exec_config_path: PathBuf,
-) -> TestRollup<MockNomtDemoRollup<Native>> {
+) -> TestRollup<MockDemoRollup<Native>> {
     let storage_path = StoragePath::Tmp(std::sync::Arc::new(location));
     // Don't provide a prover since the EVM is not currently provable
     RollupBuilder::new_with_storage_path_and_exec_config(
