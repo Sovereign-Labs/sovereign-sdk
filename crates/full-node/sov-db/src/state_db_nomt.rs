@@ -207,7 +207,7 @@ where
                     // Note: This assumption does not hold when the underlying chain can fork. The snapshot might have been fresh but discarded
                     // because a different fork was committed. In this case, the session we create here will *not* match the `HistoricalStateReader`,
                     // since that uses RocksDB changesets whose references are held in the storage itself.  In other words,
-                    // forking can break the consistency of `Storage` snapshots on abandoned forks.
+                    // forking can break the consistency of `Storage` snapshots **on abandoned forks.**
                     tracing::debug!(
                         "Cannot find snapshot from reference, assuming it has been committed"
                     );

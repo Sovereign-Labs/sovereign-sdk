@@ -421,7 +421,7 @@ where
     ) -> Result<(StorageProof<NomtMultiProof>, SlotNumber, StorageRoot<S>), GetWithProofError> {
         let namespace = N::PROVABLE_NAMESPACE;
         // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
-        let (committed_slot_number, pre_fetch_state_root) =
+        let (_, pre_fetch_state_root) =
             self.latest_root_and_version_unbound().ok_or_else(|| {
                 GetWithProofError::Other(anyhow::anyhow!("Latest root hash not found"))
             })?;
@@ -432,11 +432,12 @@ where
             ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
         };
         // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
-        let (_, post_fetch_state_root) = self
+        let (committed_slot_number, post_fetch_state_root) = self
             .latest_root_and_version_unbound()
             .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
         let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
 
+        let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
         let session = match namespace {
             ProvableNamespace::User => self
                 .state_session_builder
@@ -454,8 +455,8 @@ where
             return Err(GetWithProofError::StateRootMismatch);
         }
 
-        let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
         let path_proof = session.prove(key_path).map_err(GetWithProofError::from)?;
+        drop(session);
         let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
 
         Ok((
@@ -1019,33 +1020,6 @@ mod tests {
         GetWithProofError,
     >;
 
-    fn test_db_config(path: std::path::PathBuf) -> RollupDbConfig {
-        RollupDbConfig {
-            path,
-            ledger_db_path: None,
-            state_cache_size: Some(1_000_000),
-            user_commit_concurrency: Some(2),
-            user_hashtable_buckets: Some(if cfg!(debug_assertions) {
-                500
-            } else {
-                1_000_000
-            }),
-            user_preallocate_ht: Some(false),
-            user_page_cache_size: Some(16),
-            user_leaf_cache_size: Some(16),
-            user_page_cache_upper_levels: None,
-            kernel_commit_concurrency: Some(2),
-            kernel_hashtable_buckets: None,
-            kernel_preallocate_ht: Some(false),
-            kernel_page_cache_size: Some(16),
-            kernel_leaf_cache_size: Some(16),
-            kernel_page_cache_upper_levels: None,
-            pruner_block_interval: None,
-            pruner_versions_to_keep: Some(20),
-            pruner_max_batch_size: None,
-        }
-    }
-
     // Writes a block to the storage manager and finalizes it if requested.
     fn write_block(
         storage_manager: &mut TestStorageManager,
@@ -1118,8 +1092,11 @@ mod tests {
     #[test]
     fn get_with_proof_reads_overlay_latest_user_and_accessory_state_across_multiple_blocks() {
         let tmpdir = tempfile::tempdir().unwrap();
-        let mut storage_manager =
-            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
         let user_key = SlotKey::from_slice(b"user-counter");
         let accessory_key = SlotKey::from_slice(b"accessory-counter");
         let mut prev_root = TestStorage::PRE_GENESIS_ROOT;
@@ -1154,8 +1131,11 @@ mod tests {
     #[test]
     fn get_with_proof_reads_latest_committed_state_from_stale_storage() {
         let tmpdir = tempfile::tempdir().unwrap();
-        let mut storage_manager =
-            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
         let user_key = SlotKey::from_slice(b"user-counter");
         let accessory_key = SlotKey::from_slice(b"accessory-counter");
 
@@ -1205,8 +1185,11 @@ mod tests {
     #[test]
     fn get_with_proof_reads_latest_committed_state_from_fresh_storage() {
         let tmpdir = tempfile::tempdir().unwrap();
-        let mut storage_manager =
-            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
         let user_key = SlotKey::from_slice(b"user-counter");
         let accessory_key = SlotKey::from_slice(b"accessory-counter");
 
@@ -1306,8 +1289,11 @@ mod tests {
         location: CommitFaultInjectionLocation,
     ) -> (TestStorage, SlotKey, StorageProofResult) {
         let tmpdir = tempfile::tempdir().unwrap();
-        let mut storage_manager =
-            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
         let user_key = SlotKey::from_slice(b"user-counter");
         let accessory_key = SlotKey::from_slice(b"accessory-counter");
 
@@ -1435,8 +1421,11 @@ mod tests {
         StorageProofResult,
     ) {
         let tmpdir = tempfile::tempdir().unwrap();
-        let mut storage_manager =
-            TestStorageManager::new(test_db_config(tmpdir.path().to_path_buf()), false).unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
         let user_key = SlotKey::from_slice(b"user-counter");
         let accessory_key = SlotKey::from_slice(b"accessory-counter");
 

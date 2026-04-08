@@ -147,7 +147,7 @@ where
     }
 
     /// Returns merkle proofs of storage slots
-    #[rpc_method(name = "ext_getStorageProof")]
+    #[rpc_method(name = "ext_getStorageProof", blocking)]
     pub fn get_storage_proof(
         &self,
         address: Address,
@@ -169,10 +169,10 @@ where
         let Some(block_number_slot_value) = accessory_values.as_ref() else {
             tracing::error!(
                 %slot_number,
-                "Missing evm.block_numbers while building storage proof response"
+                "Missing evm.block_numbers while building storage proof response. This is a bug, block numbers must always be set."
             );
             return Err(into_rpc_error(format!(
-                "evm.block_numbers returned None at slot {slot_number}. This is a bug, block numbers must always be set."
+                "evm.block_numbers returned None at slot {slot_number}."
             )));
         };
 
