@@ -51,7 +51,8 @@ expression: config
     "aggregated_proof_block_jump": 22,
     "prover_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
     "max_number_of_transitions_in_db": 1025,
-    "max_number_of_transitions_in_memory": 768
+    "max_number_of_transitions_in_memory": 768,
+    "eager_proof_submission": true
   },
   "sequencer": {
     "automatic_batch_production": true,
