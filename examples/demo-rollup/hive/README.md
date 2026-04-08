@@ -89,7 +89,7 @@ The script prints:
 
 ### Important: all tests run, but not all are evaluated
 
-Hive's `ethereum/rpc-compat` simulator does not support fine-grained test filtering. When using `--profile p0`, the runner executes the **full suite** (all ~200 tests) but only evaluates pass/fail against the P0 scope defined in `p0-nonhistorical-tests.regex`. Tests outside the scope still run and their failures appear in the logs, but they do not affect the exit code.
+Hive's `ethereum/rpc-compat` simulator does not support fine-grained test filtering. When using a scoped profile (e.g. `--profile p0`), the runner executes the **full suite** (all ~200 tests) but only evaluates pass/fail against the scope defined in the corresponding regex file (e.g. `p0-tests.regex`). Tests outside the scope still run and their failures appear in the logs, but they do not affect the exit code.
 
 ### Summarize results with `summarize-results.py`
 
