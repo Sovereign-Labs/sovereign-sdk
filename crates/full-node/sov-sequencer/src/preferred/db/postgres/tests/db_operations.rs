@@ -226,6 +226,73 @@ fn assert_replica_disallowed(
     }
 }
 
+/// Reproduces the poison transaction crash loop:
+/// When `add_tx` is called twice for the same (sequence_number, index_in_batch)
+/// — which happens when `run_with_retries!` retries after a successful-but-unacknowledged
+/// write — the events table silently stores duplicate rows. On batch replay, the second
+/// copy of the transaction fails `check_generation_uniqueness` because the first copy
+/// already marked it as seen, crashing the node.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_duplicate_add_tx_creates_poison_batch() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let db = &mut DB::new(
+        &postgres,
+        String::from("node_id_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+    db.maybe_update_leader().await.unwrap();
+
+    let sequence_number = 1;
+    let batch_to_store = batch_to_store(sequence_number);
+
+    db.as_mut()
+        .begin_rollup_block(batch_to_store)
+        .await
+        .unwrap();
+
+    let tx_data = FullyBakedTx::new(vec![1, 2, 3]);
+    let tx_hash = TxHash::new([0xf1; 32]);
+
+    // First add_tx — simulates the original write that succeeded at the Postgres level
+    db.as_mut()
+        .add_tx(sequence_number, 0, tx_data.clone(), tx_hash)
+        .await
+        .unwrap();
+
+    // Second add_tx with identical arguments — simulates the retry after a connection drop.
+    // This SHOULD fail or be a no-op, but currently succeeds and creates a duplicate row.
+    db.as_mut()
+        .add_tx(sequence_number, 0, tx_data.clone(), tx_hash)
+        .await
+        .unwrap();
+
+    db.as_mut()
+        .end_rollup_block(batch_to_store)
+        .await
+        .unwrap();
+
+    // Read the batch back — this is what replay_soft_confirmations_on_top_of_node_state does
+    let data = db.as_mut().current_data().await.unwrap();
+    let ReadBlob::Batch(batch) = &data.completed_blobs[0] else {
+        panic!("Expected a batch blob");
+    };
+
+    // THE BUG: the batch now contains 2 copies of the same transaction.
+    // Replay will execute the first copy (marking the tx hash as seen),
+    // then crash on the second copy with CheckUniquenessFailed.
+    assert_eq!(
+        batch.txs.len(),
+        1,
+        "Batch should contain exactly 1 transaction, but contains {} \
+         (duplicate rows in events table due to non-idempotent add_tx retry)",
+        batch.txs.len()
+    );
+}
+
 fn batch_to_store(sequence_number: SequenceNumber) -> BatchToStore {
     BatchToStore {
         blob_id: 42,
