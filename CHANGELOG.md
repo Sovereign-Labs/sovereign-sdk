@@ -1,3 +1,6 @@
+# 2026-04-08
+- #2686 Updates hive testing suite and simplifies analysis
+
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
 
