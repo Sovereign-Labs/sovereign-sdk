@@ -1,6 +1,4 @@
--- Prevent duplicate event rows from retry logic (run_with_retries!).
--- When a write succeeds at Postgres but the connection drops before acknowledgement,
--- the retry inserts a second identical row, creating a "poison batch" that crashes on replay.
+-- Prevent duplicate event rows from retry logic (run_with_retries!)h" that crashes on replay.
 
 -- Step 1: Remove duplicate transaction rows that may already exist from retry behavior.
 -- For each (sequence_number, index_in_batch) group, keep only the row with the lowest event_id.
