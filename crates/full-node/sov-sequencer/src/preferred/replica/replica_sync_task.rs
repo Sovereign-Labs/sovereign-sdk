@@ -189,13 +189,13 @@ mod tests {
     use crate::preferred::db::postgres::PostgresBackend;
     use crate::preferred::db::BatchToStore;
     use crate::preferred::db::DbBackend;
-    use sqlx::postgres::PgPoolOptions;
     use sov_full_node_configs::sequencer::ConfiguredNodeRole;
     use sov_modules_api::FullyBakedTx;
     use sov_modules_api::TxHash;
     use sov_modules_api::VisibleSlotNumber;
     use sov_test_utils::postgres::config_from_postgres_container;
     use sov_test_utils::postgres::{create_postgres_container, CreatePostgresError};
+    use sqlx::postgres::PgPoolOptions;
     use std::net::Ipv4Addr;
     use std::net::SocketAddr;
     use std::sync::atomic::Ordering;
