@@ -140,6 +140,8 @@ impl RlpEncodableReceipt for EthReceipt {
     }
 }
 
+/// Encodes the receipt in EIP-2718 "network" format, which excludes the bloom filter.
+/// The bloom is omitted because it can be recomputed from the logs; this matches reth's behavior.
 impl Encodable2718 for EthReceipt {
     fn encode_2718_len(&self) -> usize {
         (!self.tx_type.is_legacy() as usize)
@@ -177,6 +179,8 @@ pub mod serde_bincode_compat {
         logs: Cow<'a, Vec<Log>>,
     }
 
+    /// Custom deserializer that matches reth's bincode-compat encoding, which serializes
+    /// `TxType` as a `U8` (256-bit integer) rather than using `TxType`'s standard serde impl.
     fn deserialize_txtype<'de, D>(deserializer: D) -> Result<TxType, D::Error>
     where
         D: Deserializer<'de>,
