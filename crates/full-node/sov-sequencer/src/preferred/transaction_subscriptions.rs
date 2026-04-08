@@ -467,19 +467,13 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                 let timestamp_nanos = tx.body.as_ref().and_then(|body| {
                     get_maybe_timestamp_from_sequencing_data::<S, Rt>(body, false)
                 });
-                let tx_body = match tx.body {
-                    Some(body) => {
-                        if let Ok(body) = Rt::Auth::decode_serialized_tx(&body) {
-                            Some(
-                                serde_json::to_value(Rt::wrap_call(body))
-                                    .expect("Txs must be json serializable"),
-                            )
-                        } else {
-                            None
-                        }
-                    }
-                    None => None,
-                };
+                let tx_body = tx
+                    .body
+                    .and_then(|body| Rt::Auth::decode_serialized_tx(&body).ok())
+                    .map(|tx| {
+                        serde_json::to_value(Rt::wrap_call(tx))
+                            .expect("Txs must be json serializable")
+                    });
                 ApiAcceptedTx {
                     tx: tx_body,
                     id: HexString(tx.hash),
