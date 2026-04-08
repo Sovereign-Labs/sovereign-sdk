@@ -732,6 +732,11 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
     let key1 = Ed25519PrivateKey::generate();
     let key2 = Ed25519PrivateKey::generate();
     let key3 = Ed25519PrivateKey::generate();
+    // To update the TypeScript byte-compatibility test vectors in
+    // solana-signable-rollup.test.ts, run this test with --nocapture and copy the printed values.
+    println!("SPEC_KEY1_PRIV_HEX: {}", key1.as_hex());
+    println!("SPEC_KEY2_PRIV_HEX: {}", key2.as_hex());
+    println!("SPEC_KEY3_PRIV_HEX: {}", key3.as_hex());
     let pub1 = key1.pub_key();
     let pub2 = key2.pub_key();
     let pub3 = key3.pub_key();
@@ -774,9 +779,12 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
         create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address);
     let json_bytes = transfer_json.as_bytes();
 
-    // Build the multisig preamble with all 3 pubkeys
+    // Build the multisig preamble with a canonical signer ordering so the emitted payload
+    // matches the TypeScript client, which canonicalizes multisigPubkeys internally.
+    let mut preamble_pubkeys = vec![*pub1.bytes(), *pub2.bytes(), *pub3.bytes()];
+    preamble_pubkeys.sort();
     let preamble = make_multisig_preamble_for_message(
-        &[*pub1.bytes(), *pub2.bytes(), *pub3.bytes()],
+        &preamble_pubkeys,
         &RT::CHAIN_HASH,
         json_bytes.len() as u16,
     );
@@ -784,19 +792,42 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
     let mut signed_message_with_preamble = preamble;
     signed_message_with_preamble.extend_from_slice(json_bytes);
 
-    // Signers 1 and 3 sign the preamble+JSON (deliberately out of order to verify independence)
+    // Signers 1 and 3 sign the preamble+JSON. The envelope signatures must be ordered to match
+    // the set bits in signer_bitfield from lowest signer index to highest.
     let sig1 = key1.sign(&signed_message_with_preamble);
     let sig3 = key3.sign(&signed_message_with_preamble);
+    let mut signatures = Vec::with_capacity(2);
+    let mut signer_bitfield = 0u32;
+    for (idx, pubkey) in preamble_pubkeys.iter().enumerate() {
+        if pubkey == pub1.bytes() {
+            signatures.push(sig1.clone());
+            signer_bitfield |= 1 << idx;
+        } else if pubkey == pub3.bytes() {
+            signatures.push(sig3.clone());
+            signer_bitfield |= 1 << idx;
+        }
+    }
+    assert_eq!(signatures.len(), 2);
 
-    // Bitfield: signers 0 and 2 signed (0-indexed) → 0b101 = 5
     let multisig_msg = SolanaOffchainSpecCompliantMultisigMessage::<S> {
         signed_message_with_preamble,
-        signatures: vec![sig1, sig3].try_into().unwrap(),
-        signer_bitfield: 0b101,
+        signatures: signatures.try_into().unwrap(),
+        signer_bitfield,
         min_signers,
     };
 
     let raw_tx_bytes = borsh::to_vec(&multisig_msg).unwrap();
+    {
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob {
+                blob: raw_tx_bytes.clone(),
+            },
+        };
+        println!(
+            "MULTISIG_SPEC_POST_PAYLOAD: {}",
+            serde_json::to_string(&request).unwrap()
+        );
+    }
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),

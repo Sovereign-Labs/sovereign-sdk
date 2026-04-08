@@ -1,16 +1,15 @@
+import { sha256 } from "@noble/hashes/sha2";
 import SovereignClient from "@sovereign-sdk/client";
 import { JsSerializer } from "@sovereign-sdk/serializers";
-import type { Signer } from "@sovereign-sdk/signers";
 import { Ed25519Signer } from "@sovereign-sdk/signers";
 import { LedgerSolanaSigner } from "@sovereign-sdk/signers/ledger-solana";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
+import { describe, expect, it, vi } from "vitest";
 import demoRollupSchema from "../../../__fixtures__/demo-rollup-schema.json";
 import {
   SolanaSignableRollup,
-  createSolanaPreamble,
   createSolanaSignableRollup,
 } from "./solana-signable-rollup";
-import { StandardRollup } from "./standard-rollup";
 
 function createMockClient(overrides?: {
   chainId?: number;
@@ -426,15 +425,16 @@ describe("SolanaSignableRollup", () => {
     const signer2 = new Ed25519Signer(key2PrivHex);
     const signer3 = new Ed25519Signer(key3PrivHex);
 
-    const { bytesToHex, hexToBytes } = await import("@sovereign-sdk/utils");
-    const { sha256 } = await import("@noble/hashes/sha2");
-
     // Compute the multisig address from the 3 public keys.
     // Mirrors MultisigTransaction.getMultisigAddress() from @sovereign-sdk/multisig.
-    const pub1Hex = bytesToHex(await signer1.publicKey());
-    const pub2Hex = bytesToHex(await signer2.publicKey());
-    const pub3Hex = bytesToHex(await signer3.publicKey());
+    const pub1 = await signer1.publicKey();
+    const pub2 = await signer2.publicKey();
+    const pub3 = await signer3.publicKey();
+    const pub1Hex = bytesToHex(pub1);
+    const pub2Hex = bytesToHex(pub2);
+    const pub3Hex = bytesToHex(pub3);
     const minSigners = 2;
+    const multisigPubkeys = [pub1, pub2, pub3];
 
     const sortedPubKeys = [pub1Hex, pub2Hex, pub3Hex].sort();
     const pubKeyBytes = sortedPubKeys.map((pk) => Array.from(hexToBytes(pk)));
@@ -470,16 +470,18 @@ describe("SolanaSignableRollup", () => {
     };
 
     // Each signer signs independently (same order as Rust: key3, key1)
-    const signedTx3 = await rollup.signTransactionForMultisig(
-      unsignedTx,
-      signer3,
+    const signedTx3 = await rollup.signTransactionForMultisig(unsignedTx, {
+      signer: signer3,
+      authenticator: "solanaSimple",
       multisigAddress,
-    );
-    const signedTx1 = await rollup.signTransactionForMultisig(
-      unsignedTx,
-      signer1,
+      multisigPubkeys,
+    });
+    const signedTx1 = await rollup.signTransactionForMultisig(unsignedTx, {
+      signer: signer1,
+      authenticator: "solanaSimple",
       multisigAddress,
-    );
+      multisigPubkeys,
+    });
 
     // Build V1 transaction manually (avoids a cyclic dependency on @sovereign-sdk/multisig)
     const v0_3 = (signedTx3 as any).V0;
@@ -497,9 +499,186 @@ describe("SolanaSignableRollup", () => {
       },
     };
 
-    await rollup.submitMultisigTransaction(multisigV1 as any, multisigAddress);
+    await rollup.submitMultisigTransaction(multisigV1 as any, {
+      authenticator: "solanaSimple",
+      multisigAddress,
+      multisigPubkeys,
+    });
 
     const actualJson = JSON.stringify(capturedPayload);
+    expect(actualJson).toBe(expectedJson);
+  });
+
+  it("should delegate standard multisig signing and submission to the inner rollup", async () => {
+    const mockClient = createMockClient();
+
+    let capturedEndpoint: string | undefined;
+    mockClient.post = vi
+      .fn()
+      .mockImplementation((endpoint: string, options: any) => {
+        capturedEndpoint = endpoint;
+        return Promise.resolve({ id: "test-tx-hash" });
+      });
+
+    const rollup = await createSolanaSignableRollup({
+      client: mockClient,
+      getSerializer: () =>
+        createMockSerializer({
+          schema: { chain_data: { chain_id: 1, chain_name: "TestChain" } },
+        }),
+    });
+
+    const signer = createMockSigner();
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 0 },
+      details: {
+        max_priority_fee_bips: 0,
+        max_fee: "1000",
+        gas_limit: null,
+        chain_id: 1,
+      },
+    };
+
+    const signedTx = await rollup.signTransactionForMultisig(
+      unsignedTx as any,
+      {
+        signer,
+        authenticator: "standard",
+      },
+    );
+
+    expect(signedTx).toHaveProperty("V0");
+    expect(signer.sign).toHaveBeenCalledTimes(1);
+
+    await rollup.submitMultisigTransaction(
+      {
+        V1: {
+          ...unsignedTx,
+          signatures: [],
+          unused_pub_keys: [],
+          min_signers: 0,
+        },
+      } as any,
+      {
+        authenticator: "standard",
+      },
+    );
+
+    expect(capturedEndpoint).toBe("/sequencer/txs");
+  });
+
+  it("should match the Rust spec-compliant multisig request payload", async () => {
+    const key1PrivHex =
+      "d4ce78b7250da62754bd2b180aa95ecc63f2c79dd4a7cd1f104416e7039ae18b";
+    const key2PrivHex =
+      "1fdb54e03776d21349d68115151a29145ba89613dd7921604233f918b977c222";
+    const key3PrivHex =
+      "aa52d1811235c1c02cbbcf995b9dcabc7838a0931b12e97bf4eead7e0d573414";
+    const expectedJson =
+      '{"body":"SAIAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAxCC8hWZvytLdhSuQz4hCg8AU5iG9i7Lm5d3TsrXXseqIq7fXUxXzPzWMSb2MrMb3ZHejz5ys9PwFhFBce+qogqkMLj7Z4EBZpuFaeJrH3G98UiHtBd00SHZoG/4/YYGvLMBeyJydW50aW1lX2NhbGwiOnsiYmFuayI6eyJ0cmFuc2ZlciI6eyJ0byI6IjR6ZHdITmFFYTVucEh0UnRhWjNSTDFtNnJwdHVRWjZSQkxIRzZjQXlWSGpMIiwiY29pbnMiOnsiYW1vdW50IjoiNzAwMCIsInRva2VuX2lkIjoidG9rZW5fMW55bDBlMHl3ZXJhZ2ZzYXR5Z3QyNHptZDhqcnIydnF0dmRmcHR6amh4a2d1ejJ4eHgzdnMweTA3dTcifX19fSwidW5pcXVlbmVzcyI6eyJub25jZSI6MH0sImRldGFpbHMiOnsibWF4X3ByaW9yaXR5X2ZlZV9iaXBzIjowLCJtYXhfZmVlIjoiMTAwMDAwMDAwMDAwIiwiZ2FzX2xpbWl0IjpbMTAwMDAwMDAwMCwxMDAwMDAwMDAwXSwiY2hhaW5faWQiOjQzMjF9LCJjaGFpbl9uYW1lIjoiVGVzdENoYWluIiwibXVsdGlzaWdfaWQiOiI2NFN2N2tMZVl0VXpVdGNuTTZCQVlqQXY4WjY1R2c1aXVtUGRVZzVaTXRKbiIsInZlcnNpb24iOjF9AgAAAAksFU/XcuxSQ2WBYJoZiYQf3gikgQi3CctMHuYBX3wBukIMQPhO5X7IwojPw5NtfjrbQhBVCSaLMjP7Bvi6SAsNM01gzyzMZ00ySPuO1RnF5Y0bTEDd57o8GWNCOHyizwqygFn1pehUMpBAp5FMeI1Fz7ZRe7K7mHiu26MFwq8HBgAAAAI="}';
+
+    const mockClient = createMockClient({
+      chainId: 4321,
+      chainName: "TestChain",
+      chainHash:
+        "0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    });
+
+    let capturedPayload: any;
+    mockClient.post = vi
+      .fn()
+      .mockImplementation((path: string, options: any) => {
+        capturedPayload = options;
+        return Promise.resolve({ id: "test-tx-hash" });
+      });
+
+    const rollup = await createSolanaSignableRollup({
+      client: mockClient,
+      getSerializer: (schema: any) =>
+        ({
+          schema,
+        }) as any,
+    });
+
+    const signer1 = new Ed25519Signer(key1PrivHex);
+    const signer2 = new Ed25519Signer(key2PrivHex);
+    const signer3 = new Ed25519Signer(key3PrivHex);
+    const pub1 = await signer1.publicKey();
+    const pub2 = await signer2.publicKey();
+    const pub3 = await signer3.publicKey();
+    const pub1Hex = bytesToHex(pub1);
+    const pub2Hex = bytesToHex(pub2);
+    const pub3Hex = bytesToHex(pub3);
+    const minSigners = 2;
+    const multisigPubkeys = [pub1, pub2, pub3];
+
+    const sortedPubKeys = [pub1Hex, pub2Hex, pub3Hex].sort();
+    const pubKeyBytes = sortedPubKeys.map((pk) => Array.from(hexToBytes(pk)));
+    const borshData = new Uint8Array(1 + 4 + 3 * 32);
+    const dv = new DataView(borshData.buffer);
+    borshData[0] = minSigners;
+    dv.setUint32(1, 3, true);
+    pubKeyBytes.forEach((pk, i) => borshData.set(pk, 5 + i * 32));
+    const multisigAddress = sha256(borshData);
+
+    const unsignedTx = {
+      runtime_call: {
+        bank: {
+          transfer: {
+            to: "4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL",
+            coins: {
+              amount: "7000",
+              token_id:
+                "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7",
+            },
+          },
+        },
+      },
+      uniqueness: { nonce: 0 },
+      details: {
+        max_priority_fee_bips: 0,
+        max_fee: "100000000000",
+        gas_limit: [1000000000, 1000000000],
+        chain_id: 4321,
+      },
+    };
+
+    const signedTx3 = await rollup.signTransactionForMultisig(unsignedTx, {
+      signer: signer3,
+      authenticator: "solana",
+      multisigAddress,
+      multisigPubkeys,
+    });
+    const signedTx1 = await rollup.signTransactionForMultisig(unsignedTx, {
+      signer: signer1,
+      authenticator: "solana",
+      multisigAddress,
+      multisigPubkeys,
+    });
+
+    const v0_3 = (signedTx3 as any).V0;
+    const v0_1 = (signedTx1 as any).V0;
+
+    const multisigV1 = {
+      V1: {
+        ...unsignedTx,
+        signatures: [
+          { pub_key: v0_3.pub_key, signature: v0_3.signature },
+          { pub_key: v0_1.pub_key, signature: v0_1.signature },
+        ],
+        unused_pub_keys: [pub2Hex],
+        min_signers: minSigners,
+      },
+    };
+
+    await rollup.submitMultisigTransaction(multisigV1 as any, {
+      authenticator: "solana",
+      multisigAddress,
+      multisigPubkeys,
+    });
+
+    const actualJson = JSON.stringify(capturedPayload.body);
     expect(actualJson).toBe(expectedJson);
   });
 
@@ -604,44 +783,6 @@ describe("SolanaSignableRollup", () => {
       // Simple message starts with a length prefix (4 bytes) followed by the JSON message
       // It should NOT have the 0xff signing domain marker
       expect(decodedBody[0]).not.toBe(0xff);
-    });
-  });
-
-  describe("createSolanaPreamble", () => {
-    it("should create a valid preamble with correct structure", () => {
-      const pubkey = new Uint8Array(32).fill(1);
-      const chainHash = new Uint8Array(32).fill(2);
-      const messageLength = 100;
-
-      const preamble = createSolanaPreamble(pubkey, chainHash, messageLength);
-
-      // Check total length
-      expect(preamble.length).toBe(85);
-
-      // Check signing domain (first 16 bytes)
-      // First byte should be 0xff, followed by "solana offchain"
-      expect(preamble[0]).toBe(0xff);
-      const signingDomainText = new TextDecoder().decode(preamble.slice(1, 16));
-      expect(signingDomainText).toBe("solana offchain");
-
-      // Check header version
-      expect(preamble[16]).toBe(0);
-
-      // Check application domain (chain hash)
-      expect(preamble.slice(17, 49)).toEqual(chainHash);
-
-      // Check message format
-      expect(preamble[49]).toBe(0);
-
-      // Check signer count
-      expect(preamble[50]).toBe(1);
-
-      // Check signer (public key)
-      expect(preamble.slice(51, 83)).toEqual(pubkey);
-
-      // Check message length (little-endian u16)
-      const view = new DataView(preamble.buffer);
-      expect(view.getUint16(83, true)).toBe(messageLength);
     });
   });
 });
