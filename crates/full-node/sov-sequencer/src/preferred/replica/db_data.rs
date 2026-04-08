@@ -144,10 +144,11 @@ impl DbData {
 
 pub(crate) async fn rows(
     query_pool: &PgPool,
-    page_end: u64,
     current_event_id: u64,
+    target_event_id: u64,
+    page_size: usize,
 ) -> Result<Vec<PgRow>, sqlx::Error> {
-    // Query and process events for this page
+    // Fetch the next existing rows in event_id order rather than assuming ids are dense.
     sqlx::query(
         "SELECT e.event_id, e.sequence_number, e.index_in_batch, e.event_type, e.hash, COALESCE(e.data, p.borsh_value) AS data
         FROM events e
@@ -155,10 +156,12 @@ pub(crate) async fn rows(
           ON p.sequence_number = e.sequence_number
           AND e.event_type = 'new_proof'
         WHERE e.event_id >= $1 AND e.event_id <= $2
-        ORDER BY e.event_id ASC",
+        ORDER BY e.event_id ASC
+        LIMIT $3",
     )
     .bind(current_event_id as i64)
-    .bind(page_end as i64)
+    .bind(target_event_id as i64)
+    .bind(page_size as i64)
     .fetch_all(query_pool)
     .await
 }
