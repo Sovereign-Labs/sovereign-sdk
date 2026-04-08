@@ -10,17 +10,15 @@ async fn test_003_step1_deduplicates_transaction_events() {
         return;
     };
 
-    let keep_hash = vec![0x11; 32];
-    let keep_data = vec![0x21, 0x22];
-    let drop_hash = vec![0x12; 32];
-    let drop_data = vec![0x23, 0x24];
-    let control_same_batch_hash = vec![0x13; 32];
-    let control_same_batch_data = vec![0x25, 0x26];
-    let control_other_batch_hash = vec![0x14; 32];
-    let control_other_batch_data = vec![0x27, 0x28];
+    let tx_hash = vec![0x11; 32];
+    let tx_data = vec![0x21, 0x22];
+    let control_same_batch_hash = vec![0x12; 32];
+    let control_same_batch_data = vec![0x23, 0x24];
+    let control_other_batch_hash = vec![0x13; 32];
+    let control_other_batch_data = vec![0x25, 0x26];
 
-    let keep_id = insert_transaction_event(&pool, 7, 0, &keep_hash, &keep_data).await;
-    let drop_id = insert_transaction_event(&pool, 7, 0, &drop_hash, &drop_data).await;
+    let keep_id = insert_transaction_event(&pool, 7, 0, &tx_hash, &tx_data).await;
+    let drop_id = insert_transaction_event(&pool, 7, 0, &tx_hash, &tx_data).await;
     let control_same_batch_id = insert_transaction_event(
         &pool,
         7,
@@ -38,27 +36,16 @@ async fn test_003_step1_deduplicates_transaction_events() {
     )
     .await;
 
+    assert_eq!(count_transaction_events(&pool, 7, 0).await, 2);
+    assert_eq!(count_transaction_events(&pool, 7, 1).await, 1);
+    assert_eq!(count_transaction_events(&pool, 8, 0).await, 1);
+
     apply_003_migration(&pool).await;
 
-    let deduped_rows: Vec<(i64, Vec<u8>, Vec<u8>)> = sqlx::query_as(
-        "SELECT event_id, hash, data
-         FROM events
-         WHERE sequence_number = $1
-           AND event_type = 'transaction'
-           AND index_in_batch = $2
-         ORDER BY event_id",
-    )
-    .bind(7_i64)
-    .bind(0_i64)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-
-    assert_eq!(deduped_rows.len(), 1);
-    assert_eq!(deduped_rows[0].0, keep_id);
-    assert_eq!(deduped_rows[0].1, keep_hash);
-    assert_eq!(deduped_rows[0].2, keep_data);
-
+    assert_eq!(count_transaction_events(&pool, 7, 0).await, 1);
+    assert_eq!(count_transaction_events(&pool, 7, 1).await, 1);
+    assert_eq!(count_transaction_events(&pool, 8, 0).await, 1);
+    assert_eq!(count_event_by_id(&pool, keep_id).await, 1);
     assert_eq!(count_event_by_id(&pool, drop_id).await, 0);
     assert_eq!(count_event_by_id(&pool, control_same_batch_id).await, 1);
     assert_eq!(count_event_by_id(&pool, control_other_batch_id).await, 1);
@@ -70,70 +57,48 @@ async fn test_003_step2_deduplicates_non_transaction_events() {
         return;
     };
 
-    let batch_start_keep_data = vec![0x31, 0x32];
-    let batch_start_drop_data = vec![0x33, 0x34];
-    let batch_end_keep_data = vec![0x41, 0x42];
-    let batch_end_drop_data = vec![0x43, 0x44];
+    let batch_start_data = vec![0x31, 0x32];
+    let batch_end_data = vec![0x41, 0x42];
     let tx_hash = vec![0x51; 32];
     let tx_data = vec![0x61, 0x62];
 
     let batch_start_keep_id =
-        insert_non_transaction_event(&pool, 9, "batch_start", Some(&batch_start_keep_data)).await;
+        insert_non_transaction_event(&pool, 9, "batch_start", Some(&batch_start_data)).await;
     let batch_start_drop_id =
-        insert_non_transaction_event(&pool, 9, "batch_start", Some(&batch_start_drop_data)).await;
+        insert_non_transaction_event(&pool, 9, "batch_start", Some(&batch_start_data)).await;
     let batch_end_keep_id =
-        insert_non_transaction_event(&pool, 9, "batch_end", Some(&batch_end_keep_data)).await;
+        insert_non_transaction_event(&pool, 9, "batch_end", Some(&batch_end_data)).await;
     let batch_end_drop_id =
-        insert_non_transaction_event(&pool, 9, "batch_end", Some(&batch_end_drop_data)).await;
+        insert_non_transaction_event(&pool, 9, "batch_end", Some(&batch_end_data)).await;
     let new_proof_keep_id = insert_non_transaction_event(&pool, 10, "new_proof", None).await;
     let new_proof_drop_id = insert_non_transaction_event(&pool, 10, "new_proof", None).await;
     let tx_control_id = insert_transaction_event(&pool, 9, 0, &tx_hash, &tx_data).await;
 
+    assert_eq!(
+        count_non_transaction_events(&pool, 9, "batch_start").await,
+        2
+    );
+    assert_eq!(count_non_transaction_events(&pool, 9, "batch_end").await, 2);
+    assert_eq!(
+        count_non_transaction_events(&pool, 10, "new_proof").await,
+        2
+    );
+    assert_eq!(count_transaction_events(&pool, 9, 0).await, 1);
+
     apply_003_migration(&pool).await;
 
-    let batch_start_rows: Vec<(i64, Vec<u8>)> = sqlx::query_as(
-        "SELECT event_id, data
-         FROM events
-         WHERE sequence_number = $1
-           AND event_type = 'batch_start'
-         ORDER BY event_id",
-    )
-    .bind(9_i64)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    assert_eq!(batch_start_rows.len(), 1);
-    assert_eq!(batch_start_rows[0].0, batch_start_keep_id);
-    assert_eq!(batch_start_rows[0].1, batch_start_keep_data);
-
-    let batch_end_rows: Vec<(i64, Vec<u8>)> = sqlx::query_as(
-        "SELECT event_id, data
-         FROM events
-         WHERE sequence_number = $1
-           AND event_type = 'batch_end'
-         ORDER BY event_id",
-    )
-    .bind(9_i64)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    assert_eq!(batch_end_rows.len(), 1);
-    assert_eq!(batch_end_rows[0].0, batch_end_keep_id);
-    assert_eq!(batch_end_rows[0].1, batch_end_keep_data);
-
-    let new_proof_rows: Vec<i64> = sqlx::query_scalar(
-        "SELECT event_id
-         FROM events
-         WHERE sequence_number = $1
-           AND event_type = 'new_proof'
-         ORDER BY event_id",
-    )
-    .bind(10_i64)
-    .fetch_all(&pool)
-    .await
-    .unwrap();
-    assert_eq!(new_proof_rows, vec![new_proof_keep_id]);
-
+    assert_eq!(
+        count_non_transaction_events(&pool, 9, "batch_start").await,
+        1
+    );
+    assert_eq!(count_non_transaction_events(&pool, 9, "batch_end").await, 1);
+    assert_eq!(
+        count_non_transaction_events(&pool, 10, "new_proof").await,
+        1
+    );
+    assert_eq!(count_event_by_id(&pool, batch_start_keep_id).await, 1);
+    assert_eq!(count_event_by_id(&pool, batch_end_keep_id).await, 1);
+    assert_eq!(count_event_by_id(&pool, new_proof_keep_id).await, 1);
     assert_eq!(count_event_by_id(&pool, batch_start_drop_id).await, 0);
     assert_eq!(count_event_by_id(&pool, batch_end_drop_id).await, 0);
     assert_eq!(count_event_by_id(&pool, new_proof_drop_id).await, 0);
@@ -215,4 +180,37 @@ async fn count_event_by_id(pool: &PgPool, event_id: i64) -> i64 {
         .fetch_one(pool)
         .await
         .unwrap()
+}
+
+async fn count_transaction_events(pool: &PgPool, sequence_number: i64, index_in_batch: i64) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM events
+         WHERE sequence_number = $1
+           AND event_type = 'transaction'
+           AND index_in_batch = $2",
+    )
+    .bind(sequence_number)
+    .bind(index_in_batch)
+    .fetch_one(pool)
+    .await
+    .unwrap()
+}
+
+async fn count_non_transaction_events(
+    pool: &PgPool,
+    sequence_number: i64,
+    event_type: &str,
+) -> i64 {
+    sqlx::query_scalar(
+        "SELECT COUNT(*)
+         FROM events
+         WHERE sequence_number = $1
+           AND event_type = $2::event_type",
+    )
+    .bind(sequence_number)
+    .bind(event_type)
+    .fetch_one(pool)
+    .await
+    .unwrap()
 }
