@@ -354,7 +354,7 @@ codegen-units = 256
 [profile.dev.package.sov-modules-macros]
 # Set the optimization level to 3 for the sov-modules-macros crate. This
 # should reduce build times for other packages.
-opt-level = 1
+opt-level = 3
 
 [profile.release-with-opt-level-0]
 inherits = "release"
