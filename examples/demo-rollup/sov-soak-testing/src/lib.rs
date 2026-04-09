@@ -164,9 +164,12 @@ pub type NetworkProvingBlueprint = RtAgnosticBlueprint<
 // Mock path setup (TestRuntime)
 
 pub struct Setup {
+    /// A user who is pre-registered as a payer for [`Setup::sequencer`].
     #[allow(dead_code)]
     pub paymaster: TestUser<TestSpec>,
+    /// The pre-registered sequencer.
     pub sequencer: TestSequencer<TestSpec>,
+    /// The pre-registered prover.
     pub prover: TestProver<TestSpec>,
     #[allow(missing_docs)]
     pub genesis_config: GenesisConfig<TestSpec>,
