@@ -177,7 +177,6 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
         coins: Coins {
             amount,
-            // Use the gas token ID from the config (which is the pre-configured token)
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
@@ -456,7 +455,7 @@ fn create_multisig_transfer_tx_json(
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
-        UniquenessData::Generation(0),
+        UniquenessData::Nonce(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
     );
     let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV1::<RT, S> {
@@ -484,6 +483,11 @@ async fn test_submit_multisig_simple_message_transaction() {
     let key1 = Ed25519PrivateKey::generate();
     let key2 = Ed25519PrivateKey::generate();
     let key3 = Ed25519PrivateKey::generate();
+    // To update the TypeScript byte-compatibility test vectors in
+    // solana-signable-rollup.test.ts, run this test with --nocapture and copy the printed values.
+    println!("KEY1_PRIV_HEX: {}", key1.as_hex());
+    println!("KEY2_PRIV_HEX: {}", key2.as_hex());
+    println!("KEY3_PRIV_HEX: {}", key3.as_hex());
     let pub1 = key1.pub_key();
     let pub2 = key2.pub_key();
     let pub3 = key3.pub_key();
@@ -553,6 +557,17 @@ async fn test_submit_multisig_simple_message_transaction() {
     };
 
     let raw_tx_bytes = borsh::to_vec(&multisig_msg).unwrap();
+    {
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob {
+                blob: raw_tx_bytes.clone(),
+            },
+        };
+        println!(
+            "MULTISIG_POST_PAYLOAD: {}",
+            serde_json::to_string(&request).unwrap()
+        );
+    }
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),
@@ -717,6 +732,11 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
     let key1 = Ed25519PrivateKey::generate();
     let key2 = Ed25519PrivateKey::generate();
     let key3 = Ed25519PrivateKey::generate();
+    // To update the TypeScript byte-compatibility test vectors in
+    // solana-signable-rollup.test.ts, run this test with --nocapture and copy the printed values.
+    println!("SPEC_KEY1_PRIV_HEX: {}", key1.as_hex());
+    println!("SPEC_KEY2_PRIV_HEX: {}", key2.as_hex());
+    println!("SPEC_KEY3_PRIV_HEX: {}", key3.as_hex());
     let pub1 = key1.pub_key();
     let pub2 = key2.pub_key();
     let pub3 = key3.pub_key();
@@ -759,9 +779,12 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
         create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address);
     let json_bytes = transfer_json.as_bytes();
 
-    // Build the multisig preamble with all 3 pubkeys
+    // Build the multisig preamble with a canonical signer ordering so the emitted payload
+    // matches the TypeScript client, which canonicalizes multisigPubkeys internally.
+    let mut preamble_pubkeys = vec![*pub1.bytes(), *pub2.bytes(), *pub3.bytes()];
+    preamble_pubkeys.sort();
     let preamble = make_multisig_preamble_for_message(
-        &[*pub1.bytes(), *pub2.bytes(), *pub3.bytes()],
+        &preamble_pubkeys,
         &RT::CHAIN_HASH,
         json_bytes.len() as u16,
     );
@@ -769,19 +792,42 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
     let mut signed_message_with_preamble = preamble;
     signed_message_with_preamble.extend_from_slice(json_bytes);
 
-    // Signers 1 and 3 sign the preamble+JSON (deliberately out of order to verify independence)
+    // Signers 1 and 3 sign the preamble+JSON. The envelope signatures must be ordered to match
+    // the set bits in signer_bitfield from lowest signer index to highest.
     let sig1 = key1.sign(&signed_message_with_preamble);
     let sig3 = key3.sign(&signed_message_with_preamble);
+    let mut signatures = Vec::with_capacity(2);
+    let mut signer_bitfield = 0u32;
+    for (idx, pubkey) in preamble_pubkeys.iter().enumerate() {
+        if pubkey == pub1.bytes() {
+            signatures.push(sig1.clone());
+            signer_bitfield |= 1 << idx;
+        } else if pubkey == pub3.bytes() {
+            signatures.push(sig3.clone());
+            signer_bitfield |= 1 << idx;
+        }
+    }
+    assert_eq!(signatures.len(), 2);
 
-    // Bitfield: signers 0 and 2 signed (0-indexed) → 0b101 = 5
     let multisig_msg = SolanaOffchainSpecCompliantMultisigMessage::<S> {
         signed_message_with_preamble,
-        signatures: vec![sig1, sig3].try_into().unwrap(),
-        signer_bitfield: 0b101,
+        signatures: signatures.try_into().unwrap(),
+        signer_bitfield,
         min_signers,
     };
 
     let raw_tx_bytes = borsh::to_vec(&multisig_msg).unwrap();
+    {
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob {
+                blob: raw_tx_bytes.clone(),
+            },
+        };
+        println!(
+            "MULTISIG_SPEC_POST_PAYLOAD: {}",
+            serde_json::to_string(&request).unwrap()
+        );
+    }
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),
@@ -1016,14 +1062,14 @@ async fn test_submit_ledger_signed_multisig_transaction() {
     let message_str = bs58::encode(&signed_message_with_preamble).into_string();
     assert_eq!(
         message_str,
-        "5Xs1emFNEE4zJWJygV42AVRxrrX7VFcFdbRwYcBfd2rTjvHgWYLvUk24jtEX7MunW4fSHHw6Vt8R31Y8M93qM3FzT9afaiEHpmxbTrQ4W3VT1tQMPr5NSFMPPc3yUgbuAnooajsg5isEoTEG9vFM6iTPF6dLF3zQwj6Xtzy1TfiuPHoqhmEabcL8McDiQXmM7VSDd9J1PUZNoRX1NewzmdUcC3YTE57Piazi7S9DKfwjj1U8VxaNQ9aLgBrUQZG5Rhf5D97jqGZ8U7ry19sUx2vg9u8gFfAZJhxhHL5fSRtpAVWVKwrLHmYdriCDgEKgCq6nbcncfk4En16vPGcK2TuyyZtDQ3zjL5j5i1sL5ogyVK9MYQSMoQnaMjv1PyTX1nbMQDU8AuTD4MqE1Pvb4UWXXmtrFz7jYncoVv3k6QL65319wv7cYULfgwNQYygyvExfyxYoaxbwYyFgtvK8tyjqNaEn4KUmGVmucvnvpmy7kqd3pcxseuUM9aGPewt5YjrJL74aSo3LFSESA4XCdYijkxJE4FcFq6LFSuUb3WKS9wT4WifP6xh1DinbfV2MofSexGYuakybmg61AnCd5H8wZi612LmZgq3xQYGDvxaZc4hcap4Ex36VH8U3TFxCQpZLS48iZERgeZzYr5Xa9bDhb9HWAFY2dskJfma3EwfR3EfmeGLtRKmJC73bGhYvyTbL78LWASEzPfDqpszUVNBAsXVh3bZyqaqp5jcTuJFqwnunitnvpuGVN8RNWgh4x5jAuX7HPE5o2Z65r85EsDbwscXYCgo9cwAW8",
+        "A6sH1HqabEhAGQGYUgtarGjdDxcazsV4yHPicsZfiHDtN6kvfbHrUafGXwrTc52sHHTnd2yqsSvHbFPkBVgeqYZf3dWYeQJPDBL6wpCYdSd8pRseA2kRN9GB4kMHiZSujHzgQDC5dHgEFheGBSjwbCvGS6z6whMQ7b5Vi5vJkccMcojexkC9WRoGudKzbhAETrGgwQj2HAXSy822wrPVqYYELc6kWSLaFukqgJLKfxMrsJoaRs6mZfoAkSFEfSKpqLfzn3mLxoCren5X1V2afeMoYUke61W63WTKvgKMBLhLVJ2Qa3gfiJhCoHiqVcPLfaXQ8cQrpPijC5FPuDhBNJBpMSKcWCKbzAUeX8H4FEJMm5uXfuB72V3EXzTJRixsSQrvr7QY5eRkVeQzW5JXPxTgCtAJyr3zT5mMgtmzR3jGstgTXnwojNcbxvMJHxFVPefZXg3eK32CxcM5pmp43uL8nnXbYjbPAYBSupHbuDy34rAhZAt9gtoEVVqvFZo23HgVX8xFWK4XTv1n32s2DCQ3ZKA7v3hhBUe1DyUr5HeFZDqVjZZ7H9wopubLXLJHEMmVAxfp76NypBDhz5egqY3yEPbVfo4FANHWMqGBjv7fdsmq2HiLJwNXX5F9AdU89CDz3X2BaC9N5Q8YbWcXaVkNMc4nA3kzsDY61M21xRWWmxft1gxE39n6ebLWhwkCyEbHdWsmxXjWzAsxdz4LBeftRWMBWFYnpoHEUUFPwMAZAehEKAZH5tdm6NQUnqNSfCnngogLzTVDGq3mnT3mKspdit772k",
         "Multisig message bytes changed - re-sign on ledger and update the hardcoded signature"
     );
 
     // Ledger signs the full preamble+JSON (spec-compliant).
     // TODO: replace with actual Ledger signature after manual signing of `signed_message_with_preamble`.
     let ledger_signature: Ed25519Signature = bs58::decode(
-        "5VP3KWw8a2PrrhcU9QiHzULEjaExQ99c2Ke3hgrohHggpAeqJv2fL7MsHTHfQMC6sNpukJou2QswBEwukaQr25Ev",
+        "5oyT3854c58jCoxFhXxK4tNJ8qVHvFHemDNL36tAinQogSmDFFzpTodB5zeTk4jvuCtpgWjoXwCEfUnBnBkZ2zge",
     )
     .into_vec()
     .unwrap()

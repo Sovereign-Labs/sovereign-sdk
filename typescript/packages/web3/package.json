@@ -22,6 +22,7 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "devDependencies": {
+    "@noble/hashes": "^1.5.0",
     "@sovereign-sdk/types": "workspace:^",
     "tsup": "^8.3.0",
     "vitest": "4.0.7"
@@ -30,6 +31,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "bs58": "^6.0.0",
     "@sovereign-sdk/client": "0.1.0-alpha.39",
     "@sovereign-sdk/serializers": "workspace:^",
     "@sovereign-sdk/signers": "workspace:^",
