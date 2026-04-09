@@ -23,7 +23,7 @@ use uuid::Uuid;
 const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
 const VALIDATOR_TAG: &str = "v8.0.1-mocha";
 const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
-const BRIDGE_TAG: &str = "v0.30.0-mocha";
+const BRIDGE_TAG: &str = "v0.30.1-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
 const BRIDGE_RPC_PORT: u16 = 26658;
 

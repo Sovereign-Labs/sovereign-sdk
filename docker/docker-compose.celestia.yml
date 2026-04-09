@@ -15,7 +15,7 @@ services:
       - genesis:/genesis
 
   sequencer-0:
-    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.30.0-mocha
+    image: ghcr.io/sovereign-labs/celestia-bridge-devnet:v0.30.1-mocha
     hostname: sequencer-0
     depends_on:
       - validator
