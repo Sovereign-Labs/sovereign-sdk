@@ -1,6 +1,7 @@
 # 2026-04-08
 - #2695 adds a new `ext_getStorageProof` RPC endpoint to the EVM module
 - #2704 Replaces `reth`-related crates. No breakage is intended.
+- #2710 Marks demo-rollup's bank test as flaky.
 
 # 2026-04-02
 - #2682 Upgrades axum from 0.7 to 0.8. OpenAPI specs are now served as version 3.1.0 (previously 3.0.2). Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
