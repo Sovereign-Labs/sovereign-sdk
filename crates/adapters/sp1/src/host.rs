@@ -8,7 +8,9 @@ use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
     AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
 };
-use sov_rollup_interface::zk::aggregated_proof::{BlockHeaderWithProof, CodeCommitmentHash};
+use sov_rollup_interface::zk::aggregated_proof::{
+    BlockHeaderWithProof, CodeCommitmentHash, OuterZkvmHost,
+};
 use sov_rollup_interface::zk::ZkvmHost;
 use sp1_sdk::blocking::ProveRequest;
 use sp1_sdk::blocking::{CpuProver, MockProver, Prover, ProverClient};
@@ -268,5 +270,14 @@ impl MockSp1Prover {
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
         Ok((prover, pk))
+    }
+}
+
+impl OuterZkvmHost for SP1AggregationHost {
+    fn run<Da: DaSpec>(
+        &mut self,
+        proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
+    ) -> anyhow::Result<Vec<u8>> {
+        self.run(proofs_and_headers)
     }
 }
