@@ -21,7 +21,7 @@ use crate::test_helpers::DemoRollupSpec;
 type TestSpec = DemoRollupSpec;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
+async fn flaky_bank_tx_tests_periodic_da_instant_finality() -> anyhow::Result<()> {
     sov_test_utils::initialize_logging();
     inner(0).await
 }
