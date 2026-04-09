@@ -4,8 +4,8 @@
 set -euxo pipefail
 
 # Amount of bridge nodes to setup, taken from the first argument
-# or 10 if not provided
-BRIDGE_COUNT="${1:-10}"
+# or 7 if not provided
+BRIDGE_COUNT="${1:-7}"
 # a private local network
 P2P_NETWORK="private"
 # a validator node configuration directory
@@ -63,34 +63,29 @@ fund_bridge_nodes() {
   for node_idx in $(seq 0 "$last_node_idx"); do
     local bridge_name="bridge-$node_idx"
     local key_file="$CREDENTIALS_DIR/$bridge_name.key"
-    local addr_file="$CREDENTIALS_DIR/$bridge_name.addr"
+    local bridge_address
 
     # Generate key, if necessary, otherwise just add it to keystore
     if [ ! -e "$key_file" ]; then
-      # if key don't exist yet, then create and export it
-      # create a new key
-      echo "Creating a new keys for the $bridge_name"
-      celestia-appd keys add "$bridge_name" --keyring-backend "test"
-      # export it
+      echo "Creating new keys for $bridge_name"
+      # Create key and capture address from JSON output in one call
+      bridge_address=$(celestia-appd keys add "$bridge_name" --keyring-backend "test" --output json | jq -r '.address')
+      # Export armored key for bridge container import
       echo "password" | celestia-appd keys export "$bridge_name" --keyring-backend "test" > "$key_file"
       if [ ! -s "$key_file" ]; then
         echo "Exported key file for $bridge_name is empty: $key_file" >&2
         exit 1
       fi
-      # export associated address
-      node_address "$bridge_name" > "$addr_file"
     else
       if [ ! -s "$key_file" ]; then
         echo "Existing key file for $bridge_name is empty: $key_file" >&2
         exit 1
       fi
-      # otherwise, just import it
       echo "password" | celestia-appd keys import "$bridge_name" "$key_file" \
         --keyring-backend="test"
+      bridge_address=$(node_address "$bridge_name")
     fi
 
-    local bridge_address
-    bridge_address=$(node_address "$bridge_name")
     celestia-appd genesis add-genesis-account "$bridge_address" "$BRIDGE_COINS"
   done
   echo "Funded bridge nodes"
@@ -104,9 +99,8 @@ setup_private_validator() {
 
   # Initialize the validator
   celestia-appd init "$P2P_NETWORK" --chain-id "$P2P_NETWORK"
-  # Derive a new private key for the validator
-  celestia-appd keys add "$NODE_NAME" --keyring-backend="test"
-  validator_addr=$(node_address "$NODE_NAME")
+  # Derive a new private key for the validator and capture address from JSON output
+  validator_addr=$(celestia-appd keys add "$NODE_NAME" --keyring-backend="test" --output json | jq -r '.address')
   # Create a validator's genesis account for the genesis.json with an initial bag of coins
   celestia-appd genesis add-genesis-account "$validator_addr" "$VALIDATOR_COINS"
   # Generate a genesis transaction that creates a validator with a self-delegation

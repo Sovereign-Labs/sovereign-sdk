@@ -13,12 +13,12 @@ use celestia_types::consts::appconsts;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use rand::{RngCore, SeedableRng};
+use sov_metrics::MonitoringConfig;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 use tokio::task::JoinSet;
-use sov_metrics::MonitoringConfig;
 
 async fn collect_all_blobs_between(
     da_service: &CelestiaService,

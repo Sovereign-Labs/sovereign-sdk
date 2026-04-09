@@ -27,7 +27,7 @@ const BRIDGE_TAG: &str = "v0.30.1-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
 const BRIDGE_RPC_PORT: u16 = 26658;
 
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Clone)]
 pub struct CelestiaValidator;
@@ -229,7 +229,7 @@ impl CelestiaDevNode {
         Ok(stdout_trimmed)
     }
 
-    /// By default, celestia validator will pre-fund 10 keys. Index starts from 0.
+    /// By default, celestia validator will pre-fund 7 keys. Index starts from 0.
     pub async fn export_signer_key(&self, key_index: u8) -> anyhow::Result<String> {
         let key_name = format!("bridge-{key_index}");
         let command = vec![
