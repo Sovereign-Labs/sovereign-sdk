@@ -15,6 +15,15 @@ use crate::common::SlotNumber;
 use crate::da::DaSpec;
 use crate::zk::SerializedInnerProof;
 
+/// TODO
+pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
+    /// TODO
+    fn run<Da: DaSpec>(
+        &mut self,
+        proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
+    ) -> anyhow::Result<Vec<u8>>;
+}
+
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
 pub struct BlockProof<Address, Da: DaSpec, Root> {
     /// The raw proof bytes.

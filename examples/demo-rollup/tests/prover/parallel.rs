@@ -31,7 +31,7 @@ type TestParallelProverService = ParallelProverService<
 ///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
 ///   - Sufficient CPU resources for local proving
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
+//#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
 async fn test_parallel_proof_generation() {
     tracing_subscriber::fmt::init();
 
