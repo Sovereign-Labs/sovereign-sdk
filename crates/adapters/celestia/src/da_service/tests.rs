@@ -18,6 +18,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, Re
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 use tokio::task::JoinSet;
+use sov_metrics::MonitoringConfig;
 
 async fn collect_all_blobs_between(
     da_service: &CelestiaService,
@@ -593,6 +594,8 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
+    sov_test_utils::initialize_logging();
+
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let base_config = dev_node.get_config().await?;
 
@@ -611,6 +614,7 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
 
     // CelestiaService for reading/verifying (uses key 0).
     let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let _ = sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_rx.clone());
     let da_service = CelestiaService::new(base_config.clone(), rollup_params, shutdown_rx).await;
     let verifier = CelestiaVerifier::new(rollup_params);
 
