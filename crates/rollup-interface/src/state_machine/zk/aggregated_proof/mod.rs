@@ -30,11 +30,9 @@ pub struct BlockProof<Address, Da: DaSpec, Root> {
 pub struct CodeCommitmentHash(pub Vec<u8>);
 
 impl Default for CodeCommitmentHash {
-    /// Returns 32 zero bytes as the canonical hash for a default inner/outer
-    /// code commitment. This matches the placeholder value stored in the
-    /// `chain_state` genesis and the hashed default commitments produced by the
-    /// concrete adapters.
     fn default() -> Self {
+        // We use [0u8; 32] to match the placeholder value in the chain_state genesis.
+        // This remains the default until the full proof aggregation workflow is finalized.
         Self(vec![0u8; 32])
     }
 }
@@ -111,10 +109,6 @@ where
 {
     /// Constructs an [`AggregatedProofPublicData`] from a slice of [`BlockProof`] references,
     /// deriving initial/final fields from the first and last entries.
-    ///
-    /// Native mock aggregation paths synthesize public data directly, so they do
-    /// not have the recursive verifier hashes available here — both vkey hashes
-    /// are set to [`CodeCommitmentHash::default`].
     pub fn from_block_proofs(
         block_proofs: &[&BlockProof<Address, Da, Root>],
         genesis_state_root: Root,
@@ -136,8 +130,7 @@ where
             final_state_root: final_bp.st.final_state_root.clone(),
             initial_slot_hash: initial.st.slot_hash.clone(),
             final_slot_hash: final_bp.st.slot_hash.clone(),
-            // Mock/native aggregation synthesizes public data directly, so both
-            // commitments use the chain_state genesis placeholder hash here.
+            // This is used only for mock proving and matches the values in the chain_state genesis.
             inner_vkey_hash: CodeCommitmentHash::default(),
             outer_vk_hash: CodeCommitmentHash::default(),
         }
