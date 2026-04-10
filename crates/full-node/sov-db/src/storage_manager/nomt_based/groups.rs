@@ -13,7 +13,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
-use crate::config::RollupDbConfig;
+use crate::config::{RocksDbKind, RollupDbConfig};
 use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
@@ -51,16 +51,38 @@ where
         let ledger_db_path = config.ledger_db_path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
-        let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
-        let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
+        let merklized_state = Arc::new(NomtStateDb::<H>::new(config.clone())?);
+        let flat_state =
+            FlatStateDb::new_with_rollup_config(path.clone(), state_cache_size, Some(&config))?;
+        let ledger_db_options = config.get_rocksdb_options(RocksDbKind::Ledger);
         let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
-            LedgerDb::get_rockbound_options().default_setup_db(ledger_db_path)?
+            LedgerDb::get_rockbound_options().setup_db_with_options_and_cfs(
+                ledger_db_path,
+                &ledger_db_options,
+                |cf_name, builder| {
+                    config.customize_rocksdb_cf(RocksDbKind::Ledger, cf_name, None, builder);
+                },
+            )?
         } else {
-            LedgerDb::get_rockbound_options().default_setup_db_as_subdir(&path)?
+            LedgerDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
+                &path,
+                &ledger_db_options,
+                |cf_name, builder| {
+                    config.customize_rocksdb_cf(RocksDbKind::Ledger, cf_name, None, builder);
+                },
+            )?
         });
 
-        let accessory =
-            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_as_subdir(&path)?);
+        let accessory_db_options = config.get_rocksdb_options(RocksDbKind::Accessory);
+        let accessory = Arc::new(
+            AccessoryDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
+                &path,
+                &accessory_db_options,
+                |cf_name, builder| {
+                    config.customize_rocksdb_cf(RocksDbKind::Accessory, cf_name, None, builder);
+                },
+            )?,
+        );
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessary(

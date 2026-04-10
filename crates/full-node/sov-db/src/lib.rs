@@ -8,7 +8,7 @@
 #![deny(missing_docs)]
 
 pub use flat_db::DbCache;
-use rockbound::rocksdb::ColumnFamilyDescriptor;
+use rockbound::rocksdb::{self, ColumnFamilyDescriptor};
 use rockbound::{SchemaKey, SchemaValue};
 
 pub(crate) mod flat_db;
@@ -74,7 +74,24 @@ impl DbOptions {
         db_path: impl AsRef<std::path::Path>,
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
-        rockbound::DB::open(db_path.as_ref(), self.name, self.columns, &config)
+        self.setup_db_with_options_and_cfs(db_path, &config, |_, _| {})
+    }
+
+    /// Setup [`rockbound::DB`] at an explicit path with caller-provided DB options and
+    /// per-column-family customization.
+    pub fn setup_db_with_options_and_cfs(
+        self,
+        db_path: impl AsRef<std::path::Path>,
+        db_options: &rocksdb::Options,
+        customize_cf: impl FnMut(&str, &mut rockbound::CfDescriptorBuilder),
+    ) -> anyhow::Result<rockbound::DB> {
+        rockbound::DB::open_with_default_cfs(
+            db_path.as_ref(),
+            self.name,
+            self.columns,
+            db_options,
+            customize_cf,
+        )
     }
 
     /// Setup [`rockbound::DB`] with default options
@@ -85,6 +102,18 @@ impl DbOptions {
         let db_path = path.as_ref().join(self.path_suffix);
         self.default_setup_db(db_path)
     }
+
+    /// Setup [`rockbound::DB`] with caller-provided DB options and per-column-family
+    /// customization under the DB's subdirectory.
+    pub fn setup_db_as_subdir_with_options_and_cfs(
+        self,
+        path: impl AsRef<std::path::Path>,
+        db_options: &rocksdb::Options,
+        customize_cf: impl FnMut(&str, &mut rockbound::CfDescriptorBuilder),
+    ) -> anyhow::Result<rockbound::DB> {
+        let db_path = path.as_ref().join(self.path_suffix);
+        self.setup_db_with_options_and_cfs(db_path, db_options, customize_cf)
+    }
 }
 
 impl DbOptions<ColumnFamilyDescriptor> {
@@ -94,8 +123,18 @@ impl DbOptions<ColumnFamilyDescriptor> {
         path: impl AsRef<std::path::Path>,
     ) -> anyhow::Result<rockbound::DB> {
         let config = rocks_db_config::gen_rocksdb_options(&Default::default(), false);
+        self.setup_db_in_path_with_column_descriptors_with_options(path, &config)
+    }
+
+    /// Setup [`rockbound::DB`] with caller-provided DB options and explicit column family
+    /// descriptors.
+    pub fn setup_db_in_path_with_column_descriptors_with_options(
+        self,
+        path: impl AsRef<std::path::Path>,
+        db_options: &rocksdb::Options,
+    ) -> anyhow::Result<rockbound::DB> {
         let db_path = path.as_ref().join(self.path_suffix);
-        rockbound::DB::open_with_cfds(&config, db_path, self.name, self.columns)
+        rockbound::DB::open_with_cfds(db_options, db_path, self.name, self.columns)
     }
 }
 
