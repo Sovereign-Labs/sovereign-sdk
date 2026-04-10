@@ -4,7 +4,7 @@
 use crate::historical_state::{HistoricalStateReader, STATE_ROOT_HASH_SINGLETON};
 use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
-    config::{RocksDbKind, RollupDbConfig},
+    config::{RocksDbKind, RollupDbConfigWithCustomizations},
     historical_state::StateChanges,
     namespaces::{KernelNamespace, UserNamespace},
     rocks_db_config,
@@ -39,21 +39,21 @@ impl FlatStateDb {
 
     /// Create a new [`FlatStateDb`] from a path.
     pub fn new(path: std::path::PathBuf, cache_size: usize) -> anyhow::Result<Self> {
-        Self::new_with_rollup_config(path, cache_size, None)
+        Self::new_with_customizations(path, cache_size, None)
     }
 
     /// Create a new [`FlatStateDb`] from a path using RocksDB customizations from
-    /// [`RollupDbConfig`].
-    pub fn new_with_rollup_config(
+    /// [`RollupDbConfigWithCustomizations`].
+    pub(crate) fn new_with_customizations(
         path: std::path::PathBuf,
         cache_size: usize,
-        config: Option<&RollupDbConfig>,
+        custom_config: Option<&RollupDbConfigWithCustomizations>,
     ) -> anyhow::Result<Self> {
         let live_db = {
             let mut live_columns = vec![Self::default_cf_descriptor(
                 RocksDbKind::FlatStateLive,
                 StateRootHashes::table_name(),
-                config,
+                custom_config,
             )];
 
             VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_live_db_column_families_with(
@@ -64,7 +64,7 @@ impl FlatStateDb {
                         cf_name,
                         Some(versioned_kind),
                         builder,
-                        config,
+                        custom_config,
                     );
                 },
             )?;
@@ -76,13 +76,13 @@ impl FlatStateDb {
                         cf_name,
                         Some(versioned_kind),
                         builder,
-                        config,
+                        custom_config,
                     );
                 },
             )?;
 
-            let live_db_options = config
-                .map(|config| config.get_rocksdb_options(RocksDbKind::FlatStateLive))
+            let live_db_options = custom_config
+                .map(|custom_config| custom_config.get_rocksdb_options(RocksDbKind::FlatStateLive))
                 .unwrap_or_else(|| {
                     rocks_db_config::gen_rocksdb_options(&Default::default(), false)
                 });
@@ -101,7 +101,7 @@ impl FlatStateDb {
             let mut archival_columns = vec![Self::default_cf_descriptor(
                 RocksDbKind::FlatStateArchival,
                 StateRootHashes::table_name(),
-                config,
+                custom_config,
             )];
 
             VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_archival_db_column_families_with(
@@ -112,7 +112,7 @@ impl FlatStateDb {
                         cf_name,
                         Some(versioned_kind),
                         builder,
-                        config,
+                        custom_config,
                     );
                 },
             )?;
@@ -125,13 +125,13 @@ impl FlatStateDb {
                         cf_name,
                         Some(versioned_kind),
                         builder,
-                        config,
+                        custom_config,
                     );
                 },
             )?;
 
-            let archival_db_options = config
-                .map(|config| config.get_rocksdb_options(RocksDbKind::FlatStateArchival))
+            let archival_db_options = custom_config
+                .map(|custom_config| custom_config.get_rocksdb_options(RocksDbKind::FlatStateArchival))
                 .unwrap_or_else(|| {
                     rocks_db_config::gen_rocksdb_options(&Default::default(), false)
                 });
@@ -184,10 +184,10 @@ impl FlatStateDb {
     fn default_cf_descriptor(
         db_kind: RocksDbKind,
         cf_name: &'static str,
-        config: Option<&RollupDbConfig>,
+        custom_config: Option<&RollupDbConfigWithCustomizations>,
     ) -> ColumnFamilyDescriptor {
         default_cf_descriptor_with(cf_name, |cf_name, builder| {
-            Self::customize_cf(db_kind, cf_name, None, builder, config);
+            Self::customize_cf(db_kind, cf_name, None, builder, custom_config);
         })
     }
 
@@ -196,10 +196,10 @@ impl FlatStateDb {
         cf_name: &str,
         versioned_kind: Option<rockbound::VersionedColumnFamilyKind>,
         builder: &mut rockbound::CfDescriptorBuilder,
-        config: Option<&RollupDbConfig>,
+        custom_config: Option<&RollupDbConfigWithCustomizations>,
     ) {
-        if let Some(config) = config {
-            config.customize_rocksdb_cf(db_kind, cf_name, versioned_kind, builder);
+        if let Some(custom_config) = custom_config {
+            custom_config.customize_rocksdb_cf(db_kind, cf_name, versioned_kind, builder);
         }
     }
 

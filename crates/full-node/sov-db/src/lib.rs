@@ -79,7 +79,7 @@ impl DbOptions {
 
     /// Setup [`rockbound::DB`] at an explicit path with caller-provided DB options and
     /// per-column-family customization.
-    pub fn setup_db_with_options_and_cfs(
+    pub(crate) fn setup_db_with_options_and_cfs(
         self,
         db_path: impl AsRef<std::path::Path>,
         db_options: &rocksdb::Options,
@@ -105,7 +105,7 @@ impl DbOptions {
 
     /// Setup [`rockbound::DB`] with caller-provided DB options and per-column-family
     /// customization under the DB's subdirectory.
-    pub fn setup_db_as_subdir_with_options_and_cfs(
+    pub(crate) fn setup_db_as_subdir_with_options_and_cfs(
         self,
         path: impl AsRef<std::path::Path>,
         db_options: &rocksdb::Options,
@@ -128,7 +128,7 @@ impl DbOptions<ColumnFamilyDescriptor> {
 
     /// Setup [`rockbound::DB`] with caller-provided DB options and explicit column family
     /// descriptors.
-    pub fn setup_db_in_path_with_column_descriptors_with_options(
+    pub(crate) fn setup_db_in_path_with_column_descriptors_with_options(
         self,
         path: impl AsRef<std::path::Path>,
         db_options: &rocksdb::Options,

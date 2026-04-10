@@ -6,6 +6,10 @@ use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::CelestiaService;
+use sov_db::config::{
+    RocksDbKind, RocksdbCfCustomization, RocksdbOptionsCustomization, RollupDbConfig,
+    RollupDbConfigWithCustomizations, VersionedColumnFamilyKind,
+};
 use sov_demo_rollup::{
     celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, ExternalMockDemoRollup,
     MockDemoRollup,
@@ -150,6 +154,55 @@ fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfigDiscriminant
     } else {
         Ok(None)
     }
+}
+
+/// Example: tune the live flat-state RocksDB instance for a workload with frequent small writes.
+///
+/// Call this after loading `RollupDbConfig` and before constructing
+/// `NomtStorageManager::new_with_custom_config`.
+/// This example does all three of...
+/// - Setting db_wide options, setting cf-specific options, and setting table-specific options.
+#[allow(dead_code)]
+fn example_tune_live_nomt_table_for_small_writes(storage: RollupDbConfig) -> RollupDbConfigWithCustomizations {
+    RollupDbConfigWithCustomizations::new(storage)
+        .with_rocksdb_options(RocksdbOptionsCustomization::new(|db_kind, db_opts| {
+            if db_kind != RocksDbKind::FlatStateLive {
+                return;
+            }
+
+            // Keep background flushing steady so bursts of small writes do not stall as hard.
+            db_opts.set_bytes_per_sync(1 << 20);
+            db_opts.set_max_background_jobs(4);
+        }))
+        // Set some options at the cf and table levels. Note that this function is shared
+        // across all DBs, so you'll want to filter on db_kind if you need separate
+        // cf-level options for different DBs.
+        .with_rocksdb_cf_options(RocksdbCfCustomization::new(
+            |db_kind, _cf_name, versioned_kind, builder| {
+                // Apply these changes to the live nomt tables. We could also filter on
+                // cf_name if we wanted.
+                // Note that all 3 of db_kind, cf_name, and versioned_kind are provided to
+                // support easy filtering but can be safely ignored if you want to apply
+                // the changes indiscriminately.
+                if db_kind != RocksDbKind::FlatStateLive
+                    || versioned_kind != Some(VersionedColumnFamilyKind::Live)
+                {
+                    return;
+                }
+
+                // Set some options at the cf level.
+                let cf_opts = builder.options_mut();
+                cf_opts.set_write_buffer_size(8 * 1024 * 1024);
+                cf_opts.set_target_file_size_base(64 * 1024 * 1024);
+
+                // Set some options at the table level.
+                let table_opts = builder.block_based_table_options_mut();
+                table_opts.set_block_size(4 * 1024);
+                table_opts.set_cache_index_and_filter_blocks(true);
+                table_opts.set_pin_l0_filter_and_index_blocks_in_cache(true);
+                table_opts.set_whole_key_filtering(true);
+            },
+        ))
 }
 
 async fn new_rollup_with_celestia_da(
