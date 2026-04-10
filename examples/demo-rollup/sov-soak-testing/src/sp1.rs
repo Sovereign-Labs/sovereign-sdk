@@ -13,7 +13,6 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
@@ -79,7 +78,6 @@ impl ProverFactory<SP1Spec> for NetworkProverFactory {
             inner_vm,
             outer_vm,
             Default::default(),
-            CodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
             Duration::from_secs(600),
         )
