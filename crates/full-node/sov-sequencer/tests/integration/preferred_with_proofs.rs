@@ -233,12 +233,9 @@ async fn test_proof_blobs_survive_resync() -> anyhow::Result<()> {
     test_rollup.wait_for_sequencer_ready().await?;
     eprintln!("[test] Sequencer recovered from resync");
 
-    test_rollup.wait_for_node_synced().await?;
-    test_rollup.wait_for_sequencer_ready().await?;
-    eprintln!("[test] Sequencer recovered from resync");
-
     // Phase 3: Continue producing blocks and verify proofs keep landing.
-    // Re-subscribe since WebSocket connections may have broken during resync.
+    // Use the new rollup's client since the old one points to a dead port.
+    let client = test_rollup.api_client().clone();
     let mut slot_subscription = client.subscribe_slots().await?;
     let mut aggregated_proofs = client.subscribe_aggregated_proof().await?;
     let mut proofs_after_resync = 0usize;
