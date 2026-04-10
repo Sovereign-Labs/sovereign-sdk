@@ -112,7 +112,9 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
 /// must implement this so that the commitment can be reduced to a canonical
 /// [`CodeCommitmentHash`](aggregated_proof::CodeCommitmentHash) used as the common
 /// comparison form across native/zkvm boundaries.
-pub trait CodeCommitmentTrait {
+pub trait CodeCommitmentTrait:
+    Clone + Debug + Serialize + DeserializeOwned + Send + Sync + PartialEq + Eq
+{
     /// Returns the canonical [`CodeCommitmentHash`](aggregated_proof::CodeCommitmentHash)
     /// form of this commitment. Implementations that decode an opaque byte
     /// representation (e.g. SP1's serialized verifying key) may fail if the
@@ -124,15 +126,7 @@ pub trait CodeCommitmentTrait {
 /// Must support recursive proofs.
 pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// A commitment to the zkVM program which is being proven
-    type CodeCommitment: CodeCommitmentTrait
-        + Clone
-        + Debug
-        + Serialize
-        + DeserializeOwned
-        + Send
-        + Sync
-        + PartialEq
-        + Eq;
+    type CodeCommitment: CodeCommitmentTrait;
 
     /// Defines the cryptographic operations provided natively by the Zkvm.
     type CryptoSpec: CryptoSpec;
