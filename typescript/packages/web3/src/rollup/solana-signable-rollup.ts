@@ -1,6 +1,12 @@
 import type SovereignClient from "@sovereign-sdk/client";
 import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
-import type { Transaction, UnsignedTransaction } from "@sovereign-sdk/types";
+import type {
+  Transaction,
+  TransactionV1,
+  UnsignedTransaction,
+} from "@sovereign-sdk/types";
+import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
+import bs58 from "bs58";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
 import type { DeepPartial } from "../utils";
@@ -18,6 +24,12 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
     chain_name: string;
   };
 
+export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
+  SolanaOffchainUnsignedTransaction<RuntimeCall> & {
+    multisig_id: string;
+    version: number;
+  };
+
 export type SolanaOffchainSimpleMessage = {
   signed_message: Uint8Array;
   chain_hash: Uint8Array;
@@ -30,18 +42,59 @@ export type SolanaOffchainSpecCompliantMessage = {
   signature: Uint8Array;
 };
 
+export type SolanaOffchainSimpleMultisigMessage = {
+  /** Wire format: [0x80][JSON payload]. The 0x80 prefix is a parsing discriminator only. */
+  wire_bytes: Uint8Array;
+  chain_hash: Uint8Array;
+  signatures: Array<{ signature: Uint8Array; pub_key: Uint8Array }>;
+  unused_pub_keys: Uint8Array[];
+  min_signers: number;
+};
+
+export type SolanaOffchainSpecCompliantMultisigMessage = {
+  signed_message_with_preamble: Uint8Array;
+  signatures: Uint8Array[];
+  signer_bitfield: number;
+  min_signers: number;
+};
+
 export type Authenticator =
   | "standard"
   | "solanaSimple"
   | "solana"
   | "solanaAuto";
 
+export type SolanaMultisigAuthenticator = "solanaSimple" | "solana";
+
+type SolanaMultisigParams = {
+  multisigAddress: Uint8Array;
+  multisigPubkeys: Uint8Array[];
+};
+
+export type SolanaMultisigSubmitParams =
+  | {
+      authenticator: "standard";
+    }
+  | ({ authenticator: SolanaMultisigAuthenticator } & SolanaMultisigParams);
+
+export type SolanaMultisigSignParams = SolanaMultisigSubmitParams & {
+  signer: Signer;
+};
+
+/**
+ * Discriminator byte prepended to the wire bytes in the multisig simple format.
+ * Used only for borsh-level format routing — not part of the signed content.
+ * Matches `MULTISIG_SIMPLE_DISCRIMINATOR` on the Rust side.
+ */
+const MULTISIG_SIMPLE_DISCRIMINATOR = 0x80;
+
 // Borsh serialization constants
 const VEC_LENGTH_PREFIX_SIZE = 4;
 const CHAIN_HASH_SIZE = 32;
 const PUBKEY_SIZE = 32;
 const SIGNATURE_SIZE = 64;
-const PREAMBLE_LENGTH = 85;
+const MULTISIG_PREAMBLE_FIXED_LENGTH = 53;
+const MAX_MULTISIG_SIGNERS = 21; // TODO - is there any way we could get it from Rust rather than hard-coding here
 
 // Solana preamble constants
 const SIGNING_DOMAIN = new Uint8Array([
@@ -50,45 +103,61 @@ const SIGNING_DOMAIN = new Uint8Array([
 ]);
 const HEADER_VERSION = 0;
 const MESSAGE_FORMAT = 0;
-const SINGLE_SIGNER_COUNT = 1;
 
-/**
- * Creates a Solana offchain message preamble according to the spec.
- * See https://docs.anza.xyz/proposals/off-chain-message-signing#message-preamble
- */
-export function createSolanaPreamble(
-  pubkey: Uint8Array,
+function compareByteArrays(left: Uint8Array, right: Uint8Array): number {
+  const minLength = Math.min(left.length, right.length);
+
+  for (let i = 0; i < minLength; i++) {
+    if (left[i] !== right[i]) {
+      return left[i] - right[i];
+    }
+  }
+
+  return left.length - right.length;
+}
+
+function createSolanaPreamble(
+  pubkeys: Uint8Array[],
   chainHash: Uint8Array,
   messageLength: number,
 ): Uint8Array {
-  const preamble = new Uint8Array(PREAMBLE_LENGTH);
+  if (pubkeys.length < 1 || pubkeys.length > MAX_MULTISIG_SIGNERS) {
+    throw new Error(
+      `Invalid signer count: expected 1-${MAX_MULTISIG_SIGNERS} signers, got ${pubkeys.length}`,
+    );
+  }
+
+  const preamble = new Uint8Array(
+    MULTISIG_PREAMBLE_FIXED_LENGTH + pubkeys.length * PUBKEY_SIZE,
+  );
   let offset = 0;
 
-  // signing_domain: [u8; 16] = b"\xffsolana offchain"
   preamble.set(SIGNING_DOMAIN, offset);
   offset += 16;
 
-  // header_version: u8 = 0 (ASCII format, hw-wallet compatible)
   preamble[offset] = HEADER_VERSION;
   offset += 1;
 
-  // application_domain: [u8; 32] (chain_hash)
   preamble.set(chainHash, offset);
   offset += 32;
 
-  // message_format: u8 = 0 (ASCII format)
   preamble[offset] = MESSAGE_FORMAT;
   offset += 1;
 
-  // signer_count: u8 = 1 (single signer)
-  preamble[offset] = SINGLE_SIGNER_COUNT;
+  preamble[offset] = pubkeys.length;
   offset += 1;
 
-  // signer: [u8; 32] (public key)
-  preamble.set(pubkey, offset);
-  offset += 32;
+  for (const pubkey of pubkeys) {
+    if (pubkey.length !== PUBKEY_SIZE) {
+      throw new Error(
+        `Invalid public key length: expected ${PUBKEY_SIZE} bytes, got ${pubkey.length}`,
+      );
+    }
 
-  // message_length: [u8; 2] (little-endian u16)
+    preamble.set(pubkey, offset);
+    offset += PUBKEY_SIZE;
+  }
+
   new DataView(preamble.buffer, offset).setUint16(0, messageLength, true);
 
   return preamble;
@@ -152,6 +221,17 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
+   * Submits a Solana spec-compliant multisig message to the rollup.
+   */
+  private async submitSolanaSpecMultisigMessage(
+    solanaMessage: SolanaOffchainSpecCompliantMultisigMessage,
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    const serializedMessage =
+      this.serializeSolanaSpecMultisigMessage(solanaMessage);
+    return this.submitSerializedMessage(serializedMessage);
+  }
+
+  /**
    * Helper to build an unsigned transaction using the standard type builder.
    */
   private async buildUnsignedTransaction(
@@ -181,6 +261,59 @@ export class SolanaSignableRollup<RuntimeCall> {
       rollup: this.inner,
     });
     return { response, transaction };
+  }
+
+  /**
+   * Concatenates a Solana preamble with the message bytes it signs.
+   */
+  private combinePreambleAndMessage(
+    preamble: Uint8Array,
+    message: Uint8Array,
+  ): Uint8Array {
+    const signedMessage = new Uint8Array(preamble.length + message.length);
+    signedMessage.set(preamble, 0);
+    signedMessage.set(message, preamble.length);
+    return signedMessage;
+  }
+
+  /**
+   * Validates and canonicalizes the multisig pubkey list.
+   * The canonical order is lexicographic by raw pubkey bytes.
+   */
+  private canonicalizeMultisigPubkeys(
+    multisigPubkeys?: Uint8Array[],
+  ): Uint8Array[] {
+    if (!multisigPubkeys) {
+      throw new Error(
+        "multisigPubkeys is required for Solana multisig transactions",
+      );
+    }
+
+    if (
+      multisigPubkeys.length < 2 ||
+      multisigPubkeys.length > MAX_MULTISIG_SIGNERS
+    ) {
+      throw new Error(
+        `Invalid multisig signer count: expected 2-${MAX_MULTISIG_SIGNERS} signers, got ${multisigPubkeys.length}`,
+      );
+    }
+
+    const seenPubkeys = new Set<string>();
+    for (const pubkey of multisigPubkeys) {
+      if (pubkey.length !== PUBKEY_SIZE) {
+        throw new Error(
+          `Invalid public key length: expected ${PUBKEY_SIZE} bytes, got ${pubkey.length}`,
+        );
+      }
+
+      const pubkeyHex = bytesToHex(pubkey);
+      if (seenPubkeys.has(pubkeyHex)) {
+        throw new Error(`Duplicate multisig public key provided: ${pubkeyHex}`);
+      }
+      seenPubkeys.add(pubkeyHex);
+    }
+
+    return [...multisigPubkeys].sort(compareByteArrays);
   }
 
   /**
@@ -245,12 +378,15 @@ export class SolanaSignableRollup<RuntimeCall> {
     const chainHash = await this.inner.chainHash();
 
     // Create preamble and combine with message
-    const preamble = createSolanaPreamble(pubkey, chainHash, jsonBytes.length);
-    const signedMessageWithPreamble = new Uint8Array(
-      preamble.length + jsonBytes.length,
+    const preamble = createSolanaPreamble(
+      [pubkey],
+      chainHash,
+      jsonBytes.length,
     );
-    signedMessageWithPreamble.set(preamble, 0);
-    signedMessageWithPreamble.set(jsonBytes, preamble.length);
+    const signedMessageWithPreamble = this.combinePreambleAndMessage(
+      preamble,
+      jsonBytes,
+    );
     const signature = await signer.sign(signedMessageWithPreamble);
 
     // Build and submit result
@@ -348,6 +484,298 @@ export class SolanaSignableRollup<RuntimeCall> {
         return this.signWithSolanaSpecAndSubmit(unsignedTx, params.signer);
       default:
         throw new Error(`Unsupported authenticator: ${authenticator}`);
+    }
+  }
+
+  /**
+   * Creates V1 JSON bytes for a multisig transaction, including multisig_id and version.
+   * The resulting JSON is what each signer signs directly (no discriminator prefix).
+   */
+  private async createMultisigJsonBytes(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    multisigAddress: Uint8Array,
+  ): Promise<Uint8Array> {
+    const serializer = await this.inner.serializer();
+    const schema = serializer.schema;
+    const chainName = schema.chain_data.chain_name || "";
+
+    const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV1<RuntimeCall> = {
+      runtime_call: unsignedTx.runtime_call,
+      uniqueness: unsignedTx.uniqueness,
+      details: unsignedTx.details,
+      chain_name: chainName,
+      // Hardcoded to base58 encoding, only correct for rollups using Base58Address as their
+      // primary address type. Will be replaced with rollup-aware address formatting once the
+      // SDK supports flexible address encoding (see #2673).
+      multisig_id: bs58.encode(multisigAddress),
+      version: 1,
+    };
+
+    return new TextEncoder().encode(JSON.stringify(solanaUnsignedTx));
+  }
+
+  /**
+   * Creates the preamble+JSON bytes signed by every signer in a spec-compliant multisig flow.
+   */
+  private async createSpecCompliantMultisigSignedMessage(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    multisigAddress: Uint8Array,
+    multisigPubkeys: Uint8Array[],
+  ): Promise<Uint8Array> {
+    const jsonBytes = await this.createMultisigJsonBytes(
+      unsignedTx,
+      multisigAddress,
+    );
+    const chainHash = await this.inner.chainHash();
+    const preamble = createSolanaPreamble(
+      multisigPubkeys,
+      chainHash,
+      jsonBytes.length,
+    );
+
+    return this.combinePreambleAndMessage(preamble, jsonBytes);
+  }
+
+  /**
+   * Signs an unsigned transaction using Solana offchain simple multisig signing.
+   */
+  private async signForSolanaSimpleMultisig(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    signer: Signer,
+    multisigAddress: Uint8Array,
+    multisigPubkeys: Uint8Array[],
+  ): Promise<Transaction<RuntimeCall>> {
+    const pubkey = await signer.publicKey();
+    const signerPubkeyHex = bytesToHex(pubkey);
+    const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
+
+    if (!multisigPubkeyHexes.includes(signerPubkeyHex)) {
+      throw new Error(
+        `Signer public key ${signerPubkeyHex} is not present in multisigPubkeys`,
+      );
+    }
+
+    const jsonBytes = await this.createMultisigJsonBytes(
+      unsignedTx,
+      multisigAddress,
+    );
+
+    const signature = await signer.sign(jsonBytes);
+
+    return this.typeBuilder.transaction({
+      unsignedTx,
+      sender: pubkey,
+      signature,
+      rollup: this.inner,
+    });
+  }
+
+  /**
+   * Signs an unsigned transaction using the spec-compliant multisig preamble.
+   */
+  private async signForSolanaSpecMultisig(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    signer: Signer,
+    multisigAddress: Uint8Array,
+    multisigPubkeys: Uint8Array[],
+  ): Promise<Transaction<RuntimeCall>> {
+    const pubkey = await signer.publicKey();
+    const signerPubkeyHex = bytesToHex(pubkey);
+    const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
+
+    if (!multisigPubkeyHexes.includes(signerPubkeyHex)) {
+      throw new Error(
+        `Signer public key ${signerPubkeyHex} is not present in multisigPubkeys`,
+      );
+    }
+
+    const signedMessageWithPreamble =
+      await this.createSpecCompliantMultisigSignedMessage(
+        unsignedTx,
+        multisigAddress,
+        multisigPubkeys,
+      );
+    const signature = await signer.sign(signedMessageWithPreamble);
+
+    return this.typeBuilder.transaction({
+      unsignedTx,
+      sender: pubkey,
+      signature,
+      rollup: this.inner,
+    });
+  }
+
+  /**
+   * Signs an unsigned transaction for use in a Solana offchain multisig.
+   *
+   * `authenticator: "standard"` delegates directly to the wrapped standard rollup.
+   * `authenticator: "solanaSimple"` signs the V1 JSON payload directly.
+   * `authenticator: "solana"` signs the spec-compliant preamble+JSON bytes.
+   * Solana multisig authenticators treat `multisigPubkeys` as an unordered set and
+   * canonicalize it before signing.
+   */
+  async signTransactionForMultisig(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    params: SolanaMultisigSignParams,
+  ): Promise<Transaction<RuntimeCall>> {
+    switch (params.authenticator) {
+      case "standard":
+        return this.inner.signTransaction(unsignedTx, params.signer);
+      case "solanaSimple":
+        return this.signForSolanaSimpleMultisig(
+          unsignedTx,
+          params.signer,
+          params.multisigAddress,
+          this.canonicalizeMultisigPubkeys(params.multisigPubkeys),
+        );
+      case "solana":
+        return this.signForSolanaSpecMultisig(
+          unsignedTx,
+          params.signer,
+          params.multisigAddress,
+          this.canonicalizeMultisigPubkeys(params.multisigPubkeys),
+        );
+    }
+  }
+
+  /**
+   * Builds a spec-compliant multisig envelope from a V1 transaction and ordered multisig pubkeys.
+   */
+  private buildSpecCompliantMultisigEnvelope(
+    tx: TransactionV1<RuntimeCall>["V1"],
+    signedMessageWithPreamble: Uint8Array,
+    multisigPubkeys: Uint8Array[],
+  ): SolanaOffchainSpecCompliantMultisigMessage {
+    const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
+    const indexByPubkey = new Map<string, number>();
+
+    multisigPubkeyHexes.forEach((pubkeyHex, index) => {
+      indexByPubkey.set(pubkeyHex, index);
+    });
+
+    const accountedPubkeys = new Set<string>();
+    const signaturesByIndex = new Map<number, Uint8Array>();
+    let signerBitfield = 0;
+
+    for (const signer of tx.signatures) {
+      const signerIndex = indexByPubkey.get(signer.pub_key);
+      if (signerIndex === undefined) {
+        throw new Error(
+          `Signed pubkey ${signer.pub_key} is not present in multisigPubkeys`,
+        );
+      }
+      if (accountedPubkeys.has(signer.pub_key)) {
+        throw new Error(
+          `Duplicate signed pubkey in multisig transaction: ${signer.pub_key}`,
+        );
+      }
+
+      accountedPubkeys.add(signer.pub_key);
+      signaturesByIndex.set(signerIndex, hexToBytes(signer.signature));
+      signerBitfield = (signerBitfield | (1 << signerIndex)) >>> 0;
+    }
+
+    for (const unusedPubkey of tx.unused_pub_keys) {
+      if (!indexByPubkey.has(unusedPubkey)) {
+        throw new Error(
+          `Unused pubkey ${unusedPubkey} is not present in multisigPubkeys`,
+        );
+      }
+      if (accountedPubkeys.has(unusedPubkey)) {
+        throw new Error(
+          `Duplicate pubkey in multisig transaction payload: ${unusedPubkey}`,
+        );
+      }
+
+      accountedPubkeys.add(unusedPubkey);
+    }
+
+    if (accountedPubkeys.size !== multisigPubkeys.length) {
+      throw new Error(
+        "multisigPubkeys must contain every signer and unused pubkey exactly once",
+      );
+    }
+
+    const orderedSignatures = Array.from(signaturesByIndex.entries())
+      .sort(([leftIndex], [rightIndex]) => leftIndex - rightIndex)
+      .map(([, signature]) => signature);
+
+    return {
+      signed_message_with_preamble: signedMessageWithPreamble,
+      signatures: orderedSignatures,
+      signer_bitfield: signerBitfield,
+      min_signers: tx.min_signers,
+    };
+  }
+
+  /**
+   * Submits a multisig transaction using the Solana offchain simple multisig format.
+   *
+   * Accepts the V1 transaction produced by `MultisigTransaction.asTransaction()`.
+   * `authenticator: "standard"` delegates directly to the wrapped standard rollup.
+   * Solana authenticators rebuild the appropriate Solana multisig envelope and
+   * submit it to the Solana offchain endpoint.
+   */
+  async submitMultisigTransaction(
+    multisigTx: TransactionV1<RuntimeCall>,
+    params: SolanaMultisigSubmitParams,
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    const { V1: tx } = multisigTx;
+
+    const unsignedTx: UnsignedTransaction<RuntimeCall> = {
+      runtime_call: tx.runtime_call,
+      uniqueness: tx.uniqueness,
+      details: tx.details,
+    };
+
+    switch (params.authenticator) {
+      case "standard":
+        return this.inner.submitTransaction(
+          multisigTx as StandardRollupSpec<RuntimeCall>["Transaction"],
+        );
+      case "solanaSimple": {
+        this.canonicalizeMultisigPubkeys(params.multisigPubkeys);
+
+        const jsonBytes = await this.createMultisigJsonBytes(
+          unsignedTx,
+          params.multisigAddress,
+        );
+        const wireBytes = new Uint8Array(1 + jsonBytes.length);
+        wireBytes[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
+        wireBytes.set(jsonBytes, 1);
+
+        const chainHash = await this.inner.chainHash();
+        const serialized = this.serializeSolanaMultisigMessage({
+          wire_bytes: wireBytes,
+          chain_hash: chainHash,
+          signatures: tx.signatures.map((s) => ({
+            signature: hexToBytes(s.signature),
+            pub_key: hexToBytes(s.pub_key),
+          })),
+          unused_pub_keys: tx.unused_pub_keys.map((pk) => hexToBytes(pk)),
+          min_signers: tx.min_signers,
+        });
+
+        return this.submitSerializedMessage(serialized);
+      }
+      case "solana": {
+        const multisigPubkeys = this.canonicalizeMultisigPubkeys(
+          params.multisigPubkeys,
+        );
+        const signedMessageWithPreamble =
+          await this.createSpecCompliantMultisigSignedMessage(
+            unsignedTx,
+            params.multisigAddress,
+            multisigPubkeys,
+          );
+        const message = this.buildSpecCompliantMultisigEnvelope(
+          tx,
+          signedMessageWithPreamble,
+          multisigPubkeys,
+        );
+
+        return this.submitSolanaSpecMultisigMessage(message);
+      }
     }
   }
 
@@ -561,6 +989,144 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     // Serialize signature [u8; 64]
     buffer.set(message.signature, offset);
+
+    return buffer;
+  }
+
+  /**
+   * Serializes a SolanaOffchainSimpleMultisigMessage using borsh encoding.
+   * Layout matches the Rust struct:
+   *   [u32 LE: wire_bytes.len][wire_bytes]
+   *   [32 bytes: chain_hash]
+   *   [u32 LE: signatures.len]
+   *     for each: [64 bytes: signature][32 bytes: pub_key]
+   *   [u32 LE: unused_pub_keys.len]
+   *     for each: [32 bytes: pub_key]
+   *   [u8: min_signers]
+   */
+  private serializeSolanaMultisigMessage(
+    message: SolanaOffchainSimpleMultisigMessage,
+  ): Uint8Array {
+    if (message.chain_hash.length !== CHAIN_HASH_SIZE) {
+      throw new Error(
+        `Invalid chain hash length: expected ${CHAIN_HASH_SIZE} bytes, got ${message.chain_hash.length}`,
+      );
+    }
+
+    const sigCount = message.signatures.length;
+    const unusedCount = message.unused_pub_keys.length;
+
+    const totalSize =
+      VEC_LENGTH_PREFIX_SIZE +
+      message.wire_bytes.length +
+      CHAIN_HASH_SIZE +
+      VEC_LENGTH_PREFIX_SIZE +
+      sigCount * (SIGNATURE_SIZE + PUBKEY_SIZE) +
+      VEC_LENGTH_PREFIX_SIZE +
+      unusedCount * PUBKEY_SIZE +
+      1; // min_signers u8
+
+    const buffer = new Uint8Array(totalSize);
+    const view = new DataView(buffer.buffer);
+    let offset = 0;
+
+    // wire_bytes: Vec<u8>
+    view.setUint32(offset, message.wire_bytes.length, true);
+    offset += VEC_LENGTH_PREFIX_SIZE;
+    buffer.set(message.wire_bytes, offset);
+    offset += message.wire_bytes.length;
+
+    // chain_hash: [u8; 32]
+    buffer.set(message.chain_hash, offset);
+    offset += CHAIN_HASH_SIZE;
+
+    // signatures: Vec<PubKeyAndSignature>
+    view.setUint32(offset, sigCount, true);
+    offset += VEC_LENGTH_PREFIX_SIZE;
+    for (const sig of message.signatures) {
+      if (sig.signature.length !== SIGNATURE_SIZE) {
+        throw new Error(
+          `Invalid signature length: expected ${SIGNATURE_SIZE} bytes, got ${sig.signature.length}`,
+        );
+      }
+      if (sig.pub_key.length !== PUBKEY_SIZE) {
+        throw new Error(
+          `Invalid public key length: expected ${PUBKEY_SIZE} bytes, got ${sig.pub_key.length}`,
+        );
+      }
+      buffer.set(sig.signature, offset);
+      offset += SIGNATURE_SIZE;
+      buffer.set(sig.pub_key, offset);
+      offset += PUBKEY_SIZE;
+    }
+
+    // unused_pub_keys: Vec<PublicKey>
+    view.setUint32(offset, unusedCount, true);
+    offset += VEC_LENGTH_PREFIX_SIZE;
+    for (const pk of message.unused_pub_keys) {
+      if (pk.length !== PUBKEY_SIZE) {
+        throw new Error(
+          `Invalid public key length: expected ${PUBKEY_SIZE} bytes, got ${pk.length}`,
+        );
+      }
+      buffer.set(pk, offset);
+      offset += PUBKEY_SIZE;
+    }
+
+    // min_signers: u8
+    buffer[offset] = message.min_signers;
+
+    return buffer;
+  }
+
+  /**
+   * Serializes a SolanaOffchainSpecCompliantMultisigMessage using borsh encoding.
+   * Layout matches the Rust struct:
+   *   [u32 LE: signed_message_with_preamble.len][signed_message_with_preamble]
+   *   [u32 LE: signatures.len]
+   *     for each: [64 bytes: signature]
+   *   [u32 LE: signer_bitfield]
+   *   [u8: min_signers]
+   */
+  private serializeSolanaSpecMultisigMessage(
+    message: SolanaOffchainSpecCompliantMultisigMessage,
+  ): Uint8Array {
+    const sigCount = message.signatures.length;
+
+    const totalSize =
+      VEC_LENGTH_PREFIX_SIZE +
+      message.signed_message_with_preamble.length +
+      VEC_LENGTH_PREFIX_SIZE +
+      sigCount * SIGNATURE_SIZE +
+      4 +
+      1;
+
+    const buffer = new Uint8Array(totalSize);
+    const view = new DataView(buffer.buffer);
+    let offset = 0;
+
+    view.setUint32(offset, message.signed_message_with_preamble.length, true);
+    offset += VEC_LENGTH_PREFIX_SIZE;
+    buffer.set(message.signed_message_with_preamble, offset);
+    offset += message.signed_message_with_preamble.length;
+
+    view.setUint32(offset, sigCount, true);
+    offset += VEC_LENGTH_PREFIX_SIZE;
+    for (const signature of message.signatures) {
+      if (signature.length !== SIGNATURE_SIZE) {
+        throw new Error(
+          `Invalid signature length: expected ${SIGNATURE_SIZE} bytes, got ${signature.length}`,
+        );
+      }
+
+      buffer.set(signature, offset);
+      offset += SIGNATURE_SIZE;
+    }
+
+    view.setUint32(offset, message.signer_bitfield >>> 0, true);
+    offset += 4;
+
+    buffer[offset] = message.min_signers;
 
     return buffer;
   }

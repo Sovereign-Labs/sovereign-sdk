@@ -954,6 +954,8 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/TxHash"
+        tx:
+          description: Decoded transaction body as a JSON object. Omitted if the transaction could not be decoded.
         tx_number:
           type: integer
           format: uint64

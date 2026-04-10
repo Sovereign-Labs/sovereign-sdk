@@ -56,7 +56,6 @@ async fn test_network_proof_generation() {
         inner_vm,
         outer_vm,
         da_verifier,
-        Default::default(),
         prover_address,
         Duration::from_secs(600),
     );

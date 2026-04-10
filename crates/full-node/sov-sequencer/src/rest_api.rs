@@ -18,7 +18,7 @@ use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
@@ -498,7 +498,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             errors::database_error_500("Unable to retrieve transaction").into_response()
         })?;
         if let Some(tx) = tx {
-            let tx: ApiAcceptedTx<_> = tx.into();
+            let tx = ApiAcceptedTx::<_>::from_accepted_tx::<Seq::Rt, Seq::Spec>(tx);
             Ok(tx.into())
         } else {
             Err(errors::not_found_404("Transaction", tx_hash.0))
@@ -759,17 +759,22 @@ pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,
     /// Transaction body
-    pub tx: FullyBakedTx,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx: Option<serde_json::Value>,
     /// The confirmation data
     #[serde(flatten)]
     pub confirmation: Confirmation,
 }
 
-impl<C> From<AcceptedTx<C>> for ApiAcceptedTx<C> {
-    fn from(tx: AcceptedTx<C>) -> Self {
+impl<C> ApiAcceptedTx<C> {
+    /// Converts an [`AcceptedTx`] into an [`ApiAcceptedTx`].
+    pub fn from_accepted_tx<Rt: Runtime<S>, S: Spec>(tx: AcceptedTx<C>) -> Self {
+        let tx_json = Rt::Auth::decode_serialized_tx(&tx.tx).ok().map(|tx| {
+            serde_json::to_value(Rt::wrap_call(tx)).expect("Txs must be json serializable")
+        });
         Self {
             id: tx.tx_hash,
-            tx: tx.tx,
+            tx: tx_json,
             confirmation: tx.confirmation,
         }
     }

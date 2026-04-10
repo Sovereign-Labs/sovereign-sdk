@@ -33,7 +33,6 @@ fn make_network_prover(
             inner_vm.clone(),
             outer_vm.clone(),
             da_verifier,
-            Default::default(),
             vec![],
             outer_proof_timeout,
         ),

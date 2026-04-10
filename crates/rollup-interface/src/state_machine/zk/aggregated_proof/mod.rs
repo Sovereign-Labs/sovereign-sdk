@@ -26,10 +26,16 @@ pub struct BlockProof<Address, Da: DaSpec, Root> {
 }
 
 /// A code commitment hash used to identify ZK circuits (both inner and outer).
-#[derive(
-    Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Default,
-)]
+#[derive(Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
 pub struct CodeCommitmentHash(pub Vec<u8>);
+
+impl Default for CodeCommitmentHash {
+    fn default() -> Self {
+        // We use [0u8; 32] to match the placeholder value in the chain_state genesis.
+        // This remains the default until the full proof aggregation workflow is finalized.
+        Self(vec![0u8; 32])
+    }
+}
 
 impl CodeCommitmentHash {
     /// Creates a [`CodeCommitmentHash`] from a `[u32; 8]` array using big-endian byte order.
@@ -66,6 +72,12 @@ impl core::fmt::Display for CodeCommitmentHash {
     }
 }
 
+impl crate::zk::CodeCommitmentTrait for CodeCommitmentHash {
+    fn to_hash(&self) -> anyhow::Result<CodeCommitmentHash> {
+        Ok(self.clone())
+    }
+}
+
 /// Public data of an aggregated proof.
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
@@ -83,6 +95,8 @@ pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     pub initial_slot_hash: Da::SlotHash,
     /// The final slot hash of the aggregated proof.
     pub final_slot_hash: Da::SlotHash,
+    /// Inner verifying key hash of the aggregated proof circuit.
+    pub inner_vkey_hash: CodeCommitmentHash,
     /// Outer verifying key hash of the aggregated proof circuit.
     pub outer_vk_hash: CodeCommitmentHash,
     /// These are the addresses of the provers who proved individual blocks.
@@ -98,7 +112,6 @@ where
     pub fn from_block_proofs(
         block_proofs: &[&BlockProof<Address, Da, Root>],
         genesis_state_root: Root,
-        outer_vk_hash: CodeCommitmentHash,
     ) -> Self {
         let initial = block_proofs
             .first()
@@ -117,7 +130,9 @@ where
             final_state_root: final_bp.st.final_state_root.clone(),
             initial_slot_hash: initial.st.slot_hash.clone(),
             final_slot_hash: final_bp.st.slot_hash.clone(),
-            outer_vk_hash,
+            // This is used only for mock proving and matches the values in the chain_state genesis.
+            inner_vkey_hash: CodeCommitmentHash::default(),
+            outer_vk_hash: CodeCommitmentHash::default(),
         }
     }
 }
@@ -128,7 +143,7 @@ impl<Address, Da: DaSpec, Root: AsRef<[u8]>> core::fmt::Display
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "AggregatedProofPublicData(initial_slot_number: {}, final_slot_number: {}, genesis_state_root: {}, initial_state_root: 0x{}, final_state_root: 0x{}, initial_slot_hash: 0x{}, final_slot_hash: 0x{}, outer_vk_hash: {})",
+            "AggregatedProofPublicData(initial_slot_number: {}, final_slot_number: {}, genesis_state_root: {}, initial_state_root: 0x{}, final_state_root: 0x{}, initial_slot_hash: 0x{}, final_slot_hash: 0x{}, inner_vkey_hash: {}, outer_vk_hash: {})",
             self.initial_slot_number,
             self.final_slot_number,
             hex::encode(self.genesis_state_root.as_ref()),
@@ -136,6 +151,7 @@ impl<Address, Da: DaSpec, Root: AsRef<[u8]>> core::fmt::Display
             hex::encode(self.final_state_root.as_ref()),
             hex::encode(self.initial_slot_hash.as_ref()),
             hex::encode(self.final_slot_hash.as_ref()),
+            self.inner_vkey_hash,
             self.outer_vk_hash
         )
     }
