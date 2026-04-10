@@ -1,6 +1,7 @@
 [licenses]
 version = 2
 allow = [
+  "0BSD",
   "Apache-2.0",
   "MIT",
   "MIT-0",
