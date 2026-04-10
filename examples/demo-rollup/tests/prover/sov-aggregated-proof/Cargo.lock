@@ -8116,7 +8116,6 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-sp1-adapter",
- "sp1-sdk",
  "sp1-zkvm",
 ]
 

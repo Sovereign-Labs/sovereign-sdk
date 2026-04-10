@@ -61,7 +61,7 @@ total-clean:
 	rm -rf typescript/.turbo
 	rm -rf typescript/.cache
 	rm -rf typescript/packages/universal-wallet-wasm/target
-	cargo clean --manifest-path crates/full-node/sov-aggregated-proof/Cargo.toml
+	cargo clean --manifest-path examples/demo-rollup/tests/prover/sov-aggregated-proof/Cargo.toml
 	cargo clean --manifest-path python/py_sovereign_web3/rust/Cargo.toml
 	@for dir in $(DATA_DIRS); do \
 		rm -rf "$$dir"; \

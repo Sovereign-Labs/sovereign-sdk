@@ -7,7 +7,7 @@ publish = false
 [dependencies]
 bincode = { workspace = true }
 serde = { workspace = true }
-demo-stf = { path = "../../../../examples/demo-rollup/stf", default-features = false }
+demo-stf = { path = "../../../../stf", default-features = false }
 sha2 = { workspace = true }
 sp1-zkvm = { workspace = true }
 
