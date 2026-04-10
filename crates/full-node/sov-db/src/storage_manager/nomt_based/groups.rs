@@ -53,8 +53,11 @@ where
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
         let merklized_state = Arc::new(NomtStateDb::<H>::new(config.clone())?);
-        let flat_state =
-            FlatStateDb::new_with_customizations(path.clone(), state_cache_size, Some(&custom_config))?;
+        let flat_state = FlatStateDb::new_with_customizations(
+            path.clone(),
+            state_cache_size,
+            Some(&custom_config),
+        )?;
         let ledger_db_options = custom_config.get_rocksdb_options(RocksDbKind::Ledger);
         let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
             LedgerDb::get_rockbound_options().setup_db_with_options_and_cfs(

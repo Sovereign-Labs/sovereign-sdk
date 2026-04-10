@@ -131,7 +131,9 @@ impl FlatStateDb {
             )?;
 
             let archival_db_options = custom_config
-                .map(|custom_config| custom_config.get_rocksdb_options(RocksDbKind::FlatStateArchival))
+                .map(|custom_config| {
+                    custom_config.get_rocksdb_options(RocksDbKind::FlatStateArchival)
+                })
                 .unwrap_or_else(|| {
                     rocks_db_config::gen_rocksdb_options(&Default::default(), false)
                 });

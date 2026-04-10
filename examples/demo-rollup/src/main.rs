@@ -163,7 +163,9 @@ fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfigDiscriminant
 /// This example does all three of...
 /// - Setting db_wide options, setting cf-specific options, and setting table-specific options.
 #[allow(dead_code)]
-fn example_tune_live_nomt_table_for_small_writes(storage: RollupDbConfig) -> RollupDbConfigWithCustomizations {
+fn example_tune_live_nomt_table_for_small_writes(
+    storage: RollupDbConfig,
+) -> RollupDbConfigWithCustomizations {
     RollupDbConfigWithCustomizations::new(storage)
         .with_rocksdb_options(RocksdbOptionsCustomization::new(|db_kind, db_opts| {
             if db_kind != RocksDbKind::FlatStateLive {
