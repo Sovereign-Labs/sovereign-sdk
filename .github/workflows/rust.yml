@@ -256,6 +256,8 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
