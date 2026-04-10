@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::{RawTx, Runtime};
@@ -140,6 +142,150 @@ async fn flaky_test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<
         }
     }
     assert!(proofs > 1, "Expected at least 2 proofs, got {proofs}");
+
+    Ok(())
+}
+
+/// Reproduces sovereign-labs/sovereign-sdk#2558: proof blobs are discarded
+/// with SequenceNumberTooLow after a sequencer resync.
+///
+/// The test generates proofs, forces a resync by burst-producing DA blocks,
+/// then verifies that proofs continue to be generated and land on the ledger
+/// after the resync completes.
+///
+/// Run with `RUST_LOG=sov_blob_storage::capabilities=info` to see discard
+/// messages confirming the root cause.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_proof_blobs_survive_resync() -> anyhow::Result<()> {
+    let _log_guard = sov_test_utils::initialize_logging();
+    let (test_rollup, admin) = create_test_rollup_with_prover().await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    let client = test_rollup.api_client().clone();
+    let mut slot_subscription = client.subscribe_slots().await?;
+    let mut aggregated_proofs = client.subscribe_aggregated_proof().await?;
+
+    // Phase 1: Generate proofs until we have at least 2 visible on the ledger.
+    let mut proofs_before_resync = 0usize;
+    let mut tx_generation = 0u64;
+
+    for _ in 0..50 {
+        let tx = tx_set_value(&admin.private_key, tx_generation, tx_generation);
+        match client.send_raw_tx_to_sequencer(&tx).await {
+            Ok(_) => tx_generation += 1,
+            Err(_) => {}
+        }
+
+        test_rollup.da_service.produce_block_now().await?;
+        let _slot = slot_subscription.next().await.unwrap()?;
+
+        while let Ok(Some(Ok(_proof))) =
+            tokio::time::timeout(Duration::from_millis(150), aggregated_proofs.next()).await
+        {
+            proofs_before_resync += 1;
+        }
+
+        if proofs_before_resync >= 2 {
+            break;
+        }
+    }
+    assert!(
+        proofs_before_resync >= 2,
+        "Expected at least 2 proofs before resync, got {proofs_before_resync}"
+    );
+    eprintln!(
+        "[test] Phase 1 complete: {proofs_before_resync} proofs generated before resync"
+    );
+
+    // Phase 2: Force a resync by shutting down, producing DA blocks while
+    // offline, then restarting. This is deterministic and doesn't depend on
+    // timing — the node restarts behind DA and must resync.
+    let builder = test_rollup.shutdown().await?;
+    let rollup_storage_path = builder.storage_path();
+
+    // Produce blocks while the rollup is offline.
+    // The DA service persists in sqlite, so blocks accumulate while the node is down.
+    let da_for_offline = sov_mock_da::storable::StorableMockDaService::from_config(
+        sov_mock_da::MockDaConfig {
+            connection_string: sov_mock_da::MockDaConfig::sqlite_in_dir(rollup_storage_path.path())
+                .unwrap(),
+            sender_address: sov_mock_da::MockAddress::new([0; 32]),
+            finalization_blocks: 0,
+            block_producing: BlockProducingConfig::Manual,
+            da_layer: None,
+            randomization: None,
+            failure_behavior: Default::default(),
+        },
+        tokio::sync::watch::channel(()).1,
+    )
+    .await;
+    for _ in 0..20 {
+        da_for_offline.produce_block_now().await?;
+    }
+    drop(da_for_offline);
+    eprintln!("[test] Phase 2: produced 20 DA blocks while rollup was offline");
+
+    // Restart — the node will be behind DA and must resync.
+    let test_rollup = builder.start().await?;
+    test_rollup.wait_for_node_synced().await?;
+    test_rollup.wait_for_sequencer_ready().await?;
+    eprintln!("[test] Sequencer recovered from resync");
+
+    test_rollup.wait_for_node_synced().await?;
+    test_rollup.wait_for_sequencer_ready().await?;
+    eprintln!("[test] Sequencer recovered from resync");
+
+    // Phase 3: Continue producing blocks and verify proofs keep landing.
+    // Re-subscribe since WebSocket connections may have broken during resync.
+    let mut slot_subscription = client.subscribe_slots().await?;
+    let mut aggregated_proofs = client.subscribe_aggregated_proof().await?;
+    let mut proofs_after_resync = 0usize;
+
+    for i in 0..50 {
+        let tx = tx_set_value(&admin.private_key, tx_generation, tx_generation);
+        match client.send_raw_tx_to_sequencer(&tx).await {
+            Ok(_) => tx_generation += 1,
+            Err(e) => {
+                eprintln!("[test] Phase 3 tx submit failed (iter {i}): {e}");
+            }
+        }
+
+        test_rollup.da_service.produce_block_now().await?;
+        if slot_subscription.next().await.is_none() {
+            slot_subscription = client.subscribe_slots().await?;
+            continue;
+        }
+
+        while let Ok(Some(Ok(_proof))) =
+            tokio::time::timeout(Duration::from_millis(150), aggregated_proofs.next()).await
+        {
+            proofs_after_resync += 1;
+            eprintln!(
+                "[test] Proof {proofs_after_resync} arrived after resync (iter {i})"
+            );
+        }
+
+        if proofs_after_resync >= 2 {
+            break;
+        }
+    }
+
+    // If this assertion fails, proof blobs were likely discarded during resync.
+    // Run with RUST_LOG=sov_blob_storage::capabilities=info to see:
+    //   "Discarding blob ... reason=SequenceNumberTooLow"
+    assert!(
+        proofs_after_resync >= 2,
+        "Expected at least 2 proofs after resync, got {proofs_after_resync}. \
+         Proof blobs were likely discarded with SequenceNumberTooLow during resync \
+         (see sovereign-labs/sovereign-sdk#2558). \
+         Run with RUST_LOG=sov_blob_storage::capabilities=info to confirm."
+    );
+
+    eprintln!(
+        "[test] PASS: {proofs_after_resync} proofs after resync, {proofs_before_resync} before"
+    );
 
     Ok(())
 }
