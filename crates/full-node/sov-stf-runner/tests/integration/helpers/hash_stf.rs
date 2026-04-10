@@ -46,7 +46,7 @@ impl HashStf {
         let result = hasher.finalize();
 
         let hash_key = HashStf::hash_key();
-        let hash_value = SlotValue::from(result.as_slice().to_vec());
+        let hash_value = SlotValue::from(result.to_vec());
 
         let kernel_key = HashStf::kernel_key();
         let kernel_value = SlotValue::from(vec![0u8]); // Minimal kernel state marker
