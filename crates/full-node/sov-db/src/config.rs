@@ -7,11 +7,13 @@ use std::sync::Arc;
 use crate::rocks_db_config;
 use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
+type RocksdbOptionsCustomizationFn = dyn Fn(RocksDbKind, &mut rocksdb::Options) + Send + Sync;
+type RocksdbCfCustomizationFn = dyn Fn(RocksDbKind, &str, Option<VersionedColumnFamilyKind>, &mut CfDescriptorBuilder)
+    + Send
+    + Sync;
 #[derive(Clone)]
 /// Additional customization for a logical RocksDB instance.
-pub struct RocksdbOptionsCustomization(
-    Arc<dyn Fn(RocksDbKind, &mut rocksdb::Options) + Send + Sync>,
-);
+pub struct RocksdbOptionsCustomization(Arc<RocksdbOptionsCustomizationFn>);
 
 impl RocksdbOptionsCustomization {
     /// Create a new RocksDB options customizer.
@@ -47,13 +49,7 @@ pub enum RocksDbKind {
 
 #[derive(Clone)]
 /// Customization hook for column-family and table options.
-pub struct RocksdbCfCustomization(
-    Arc<
-        dyn Fn(RocksDbKind, &str, Option<VersionedColumnFamilyKind>, &mut CfDescriptorBuilder)
-            + Send
-            + Sync,
-    >,
-);
+pub struct RocksdbCfCustomization(Arc<RocksdbCfCustomizationFn>);
 
 impl RocksdbCfCustomization {
     /// Create a new column-family customization hook.
