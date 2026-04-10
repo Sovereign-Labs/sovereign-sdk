@@ -5,7 +5,6 @@ use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::Spec;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_sp1_adapter::host::SP1Host;
 use sov_sp1_adapter::SP1;
 use sov_stf_runner::processes::{
@@ -54,7 +53,6 @@ async fn test_parallel_proof_generation() {
         outer_vm,
         da_verifier,
         RollupProverConfigDiscriminants::Prove,
-        CodeCommitmentHash::default(),
         prover_address,
     );
 

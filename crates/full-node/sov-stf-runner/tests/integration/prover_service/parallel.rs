@@ -32,7 +32,6 @@ fn make_new_prover() -> TestProver {
             prover_config,
             num_threads,
             Default::default(),
-            Default::default(),
         ),
         inner_vm,
         num_worker_threads: num_threads,

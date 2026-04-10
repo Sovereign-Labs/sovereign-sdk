@@ -90,10 +90,14 @@ impl SP1AggregationHost {
         }
 
         let aggregation_vk_hash = self.aggregation_vk.hash_u32();
+        let inner_vk: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&self.inner_method_id.0)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize inner SP1VerifyingKey: {e}"))?;
+        let inner_vkey_hash = CodeCommitmentHash::from_u32_array(inner_vk.hash_u32());
         let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
 
         let witness = AggregatedProofWitness {
             proof_inputs,
+            inner_vkey_hash,
             outer_vkey_hash,
             prev_outer_proof_witness,
         };

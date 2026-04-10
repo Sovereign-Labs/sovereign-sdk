@@ -5,7 +5,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, CodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -55,7 +55,6 @@ pub(crate) struct NetworkProver<
     inner_vm: InnerVm::Network,
     outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
-    code_commitment: CodeCommitmentHash,
     outer_proof_timeout: std::time::Duration,
     phantom: PhantomData<Witness>,
 }
@@ -75,7 +74,6 @@ where
         prover_address: Address,
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
-        code_commitment: CodeCommitmentHash,
         outer_proof_timeout: std::time::Duration,
     ) -> Self {
         Self {
@@ -83,7 +81,6 @@ where
             inner_vm,
             outer_vm,
             tracker: tokio::sync::RwLock::new(HashMap::new()),
-            code_commitment,
             outer_proof_timeout,
             phantom: PhantomData,
         }
@@ -267,7 +264,6 @@ where
         let public_data = AggregatedProofPublicData::from_block_proofs(
             &block_proofs_data,
             genesis_state_root.clone(),
-            self.code_commitment.clone(),
         );
 
         tracing::trace!(%public_data, "generating aggregate proof");

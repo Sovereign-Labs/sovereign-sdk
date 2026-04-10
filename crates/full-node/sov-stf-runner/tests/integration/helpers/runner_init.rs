@@ -282,7 +282,6 @@ pub async fn initialize_runner(
                 verifier,
                 RollupProverConfigDiscriminants::Prove,
                 nb_of_prover_threads.unwrap(),
-                Default::default(),
                 MockAddress::new([0u8; 32]),
             );
         let handle = start_zk_workflow_in_background::<_>(

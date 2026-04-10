@@ -68,6 +68,17 @@ impl Zkvm for MockZkvm {
 )]
 pub struct MockCodeCommitment(pub [u8; 8]);
 
+impl sov_rollup_interface::zk::CodeCommitmentTrait for MockCodeCommitment {
+    fn to_hash(
+        &self,
+    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
+        // Pad the 8-byte mock commitment to 32 bytes to match the canonical hash layout.
+        let mut bytes = vec![0u8; 32];
+        bytes[..8].copy_from_slice(&self.0);
+        Ok(sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes))
+    }
+}
+
 /// An error that can occur when converting a byte vector to a `MockCodeCommitment`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum MockCodeCommitmentError {
