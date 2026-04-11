@@ -18,6 +18,9 @@ use sov_sp1_adapter::SP1;
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
 use sp1_sdk::prelude::{include_elf, Elf};
 
+// Must match `[package].name` in `provers/sp1/guest-aggregation-mock/Cargo.toml`.
+// The two crates live in separate workspaces, so a rename there will only surface
+// here as a missing-ELF error at build time.
 const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 const JUMP: usize = 3;
 

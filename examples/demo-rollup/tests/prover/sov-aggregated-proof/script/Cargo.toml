@@ -10,19 +10,16 @@ bincode = { workspace = true }
 demo-stf = { path = "../../../../stf", default-features = false, features = ["native"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-slop-algebra = "6.0.2"
+slop-algebra = { workspace = true }
 sp1-core-executor = { workspace = true }
-sp1-recursion-executor = "6.0.2"
+sp1-recursion-executor = { workspace = true }
 
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true }
 sov-rollup-interface = { workspace = true }
-
-sov-state = { workspace = true }
 sov-sp1-adapter = { workspace = true, features = ["native"] }
 sp1-sdk = { workspace = true, default-features = false, features = ["blocking"] }
 
 [build-dependencies]
 sp1-build = { workspace = true }
-sov-zkvm-utils = { workspace = true }
