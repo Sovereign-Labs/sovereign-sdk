@@ -51,10 +51,9 @@ fn build_fibonacci_elf() {
 fn test_fibonnaci_host() {
     let fibonacci_elf = include_bytes!("../../test_data/riscv64im-succinct-zkvm-elf");
 
-    let mut host = MockSp1Prover::new(fibonacci_elf);
+    let host = MockSp1Prover::new(fibonacci_elf).unwrap();
 
     // Give the input 7 to the fibonnaci program
-    host.add_hint(7u32);
-    let proof = host.run().unwrap();
+    let proof = host.add_hint_and_run(&7u32).unwrap();
     host.verify(&proof).unwrap();
 }

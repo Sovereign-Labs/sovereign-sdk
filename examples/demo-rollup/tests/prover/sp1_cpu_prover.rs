@@ -94,7 +94,8 @@ impl TestHost {
         .await
         .unwrap();
 
-        let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF);
+        let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
+            .expect("MockSp1Prover should be created successfully");
 
         (
             Self {
@@ -116,10 +117,9 @@ impl TestHost {
             .await
             .unwrap()
         } else {
-            let mut mock_host = self.mock_host.clone();
+            let mock_host = self.mock_host.clone();
             tokio::task::spawn_blocking(move || -> Vec<u8> {
-                mock_host.add_hint(data);
-                mock_host.run().unwrap();
+                mock_host.add_hint_and_run(&data).unwrap();
                 Default::default()
             })
             .await

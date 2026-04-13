@@ -217,54 +217,43 @@ impl ZkvmHost for SP1Host {
 /// but the proving pipeline needs to be exercised end-to-end.
 #[derive(Clone)]
 pub struct MockSp1Prover {
-    elf: &'static [u8],
-    stdin: SP1Stdin,
+    prover: MockProver,
+    pk: Arc<SP1ProvingKey>,
 }
 
 impl MockSp1Prover {
     /// Creates a new mock prover for the given guest ELF binary.
-    pub fn new(elf: &'static [u8]) -> Self {
-        Self {
-            elf,
-            stdin: SP1Stdin::new(),
-        }
+    pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
+        let prover = ProverClient::builder().mock().build();
+        let pk = prover
+            .setup(elf.into())
+            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+
+        Ok(Self {
+            prover: prover,
+            pk: Arc::new(pk),
+        })
     }
 
-    /// Writes a serializable hint value into the prover's stdin for the guest to read.
-    pub fn add_hint<T: Serialize>(&mut self, item: T) {
-        self.stdin.write(&item);
-    }
+    /// Writes `item` to the guest's stdin and generates a compressed mock proof.
+    pub fn add_hint_and_run<T: Serialize>(
+        &self,
+        item: &T,
+    ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(item);
 
-    /// Executes the guest program and generates a compressed mock proof.
-    pub fn run(&mut self) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-        let (prover, pk) = self.create_prover_and_pk()?;
-
-        let stdin = std::mem::take(&mut self.stdin);
-
-        let output = prover
-            .prove(&pk, stdin)
+        self.prover
+            .prove(&self.pk, stdin)
             .compressed()
             .run()
-            .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
-
-        Ok(output)
+            .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))
     }
 
     /// Verifies a mock proof against the program's verifying key.
     pub fn verify(&self, proof: &sp1_sdk::SP1ProofWithPublicValues) -> anyhow::Result<()> {
-        let (prover, pk) = self.create_prover_and_pk()?;
-
-        prover
-            .verify(proof, pk.verifying_key(), None)
+        self.prover
+            .verify(proof, self.pk.verifying_key(), None)
             .map_err(|e| anyhow::anyhow!("SP1 verification failed. Error: {:?}", e))
-    }
-
-    fn create_prover_and_pk(&self) -> anyhow::Result<(MockProver, SP1ProvingKey)> {
-        let prover = ProverClient::builder().mock().build();
-        let pk = prover
-            .setup(self.elf.into())
-            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
-
-        Ok((prover, pk))
     }
 }
