@@ -63,6 +63,7 @@ fund_bridge_nodes() {
   for node_idx in $(seq 0 "$last_node_idx"); do
     local bridge_name="bridge-$node_idx"
     local key_file="$CREDENTIALS_DIR/$bridge_name.key"
+    local addr_file="$CREDENTIALS_DIR/$bridge_name.addr"
     local bridge_address
 
     # Generate key, if necessary, otherwise just add it to keystore
@@ -76,6 +77,8 @@ fund_bridge_nodes() {
         echo "Exported key file for $bridge_name is empty: $key_file" >&2
         exit 1
       fi
+      # Write address file for use by other scripts (e.g. Makefile)
+      echo "$bridge_address" > "$addr_file"
     else
       if [ ! -s "$key_file" ]; then
         echo "Existing key file for $bridge_name is empty: $key_file" >&2
