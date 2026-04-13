@@ -11226,6 +11226,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-aggregated-proof"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "demo-stf",
+ "serde",
+ "serde_json",
+ "slop-algebra",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-sp1-adapter",
+ "sp1",
+ "sp1-core-executor",
+ "sp1-recursion-executor",
+ "sp1-sdk",
+]
+
+[[package]]
 name = "sov-api-spec"
 version = "0.3.0"
 dependencies = [

@@ -29,6 +29,7 @@ fn main() -> anyhow::Result<()> {
             ..Default::default()
         },
     );
+    build_program_with_args("./guest-aggregation-mock", BuildArgs::default());
 
     Ok(())
 }
