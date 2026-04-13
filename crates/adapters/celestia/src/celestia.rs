@@ -203,7 +203,7 @@ impl CelestiaHeader {
 
     /// Validates that [`DataAvailabilityHeader`] is correct and not malformed.
     /// This means:
-    ///  - Well-formed row_roots and column_roots for [`APP_VERSION`] being used.
+    ///  - Well-formed row_roots and column_roots.
     ///  - Hash of [`DataAvailabilityHeader`] matches `header.data_hash`.
     ///    This binds [`DataAvailabilityHeader::row_roots`] and column roots to the signed header.
     pub(crate) fn validate_dah(&self) -> Result<(), ValidationError> {
