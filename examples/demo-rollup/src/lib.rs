@@ -6,25 +6,24 @@
 
 use std::str::FromStr;
 
-// All DA rollup modules compile when their feature is enabled.
-// The types have distinct names so there are no conflicts.
-// The main binary uses priority (mock_da > mock_da_external > celestia_da)
-// to choose which one to run.
+// DA rollup modules compile when their feature is enabled.
+// mock_da compiles both in-process and external (RPC) mock variants;
+// the binary selects at runtime via --external.
 
 #[cfg(feature = "mock_da")]
 mod mock_rollup;
 #[cfg(feature = "mock_da")]
 pub use mock_rollup::*;
 
+#[cfg(feature = "mock_da")]
+mod external_mock_rollup;
+#[cfg(feature = "mock_da")]
+pub use external_mock_rollup::*;
+
 #[cfg(feature = "celestia_da")]
 mod celestia_rollup;
 #[cfg(feature = "celestia_da")]
 pub use celestia_rollup::*;
-
-#[cfg(feature = "mock_da_external")]
-mod external_mock_rollup;
-#[cfg(feature = "mock_da_external")]
-pub use external_mock_rollup::*;
 
 mod solana_offchain_endpoint;
 

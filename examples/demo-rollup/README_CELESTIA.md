@@ -84,11 +84,17 @@ $ make start
 
 ### Start the Rollup Full Node
 
+First, build the rollup with the `celestia_da` feature:
+
+```sh
+$ cargo build -p sov-demo-rollup --no-default-features --features celestia_da,mock_zkvm
+```
+
 Now run the demo-rollup full node, as shown below. You will see it consuming blocks from the Celestia node running inside Docker:
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-# Make sure you're still in the examples/demo-rollup directory and `make build` has been executed before
-$ ./../../target/debug/sov-demo-rollup --da-layer celestia --rollup-config-path demo_rollup_config.toml --genesis-config-dir ../test-data/genesis/demo/celestia
+# Make sure you're still in the examples/demo-rollup directory
+$ ./../../target/debug/sov-demo-rollup --rollup-config-path demo_rollup_config.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 2025-03-07T13:13:20.453543Z  INFO sov_modules_rollup_blueprint::native_only::logging: Open Telemetry exporter is not enabled
 2025-03-07T13:13:20.466922Z  INFO sov_demo_rollup: Running demo rollup with prover config prover_config_disc=None
 2025-03-07T13:13:20.467830Z DEBUG sov_demo_rollup: Starting rollup on mock DA config_path="mock_rollup_config.toml"
@@ -369,7 +375,7 @@ It is possible to run several nodes and sequencers on the same host. But this re
 6. Run second node:
 
 ```
-cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
+cargo run -p sov-demo-rollup --no-default-features --features celestia_da,mock_zkvm -- --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 ```
 
 Note that it uses newly generated config and also passes a different option for prometheus exporter.

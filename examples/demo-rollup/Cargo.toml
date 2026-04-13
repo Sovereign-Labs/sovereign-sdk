@@ -140,9 +140,8 @@ sov-zkvm-utils = { workspace = true }
 [features]
 default = ["mock_da", "mock_zkvm"]
 
-# DA layer features (enable exactly one)
+# DA layer features
 mock_da = ["sov-mock-da"]
-mock_da_external = ["sov-mock-da"]
 celestia_da = ["sov-celestia-adapter"]
 
 # ZKVM features (enable exactly one)
@@ -170,7 +169,6 @@ migration-script = [
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
-required-features = ["celestia_da"]
 
 [[bin]]
 name = "sov-demo-rollup"

@@ -18,9 +18,8 @@ use sov_stf_runner::processes::{RollupProverConfig, RollupProverConfigDiscrimina
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
 
-// DA priority: mock_da > mock_da_external > celestia_da
-// ZKVM priority: mock_zkvm > risc0 > sp1
-// When multiple features are enabled (e.g. --all-features), the highest priority wins.
+#[cfg(not(any(feature = "mock_da", feature = "celestia_da")))]
+compile_error!("At least one DA feature must be enabled: mock_da or celestia_da");
 
 /// Main demo runner. Initializes a DA chain, and starts a demo-rollup using the provided.
 /// If you're trying to sign or submit transactions to the rollup, the `sov-cli` binary
@@ -29,32 +28,31 @@ use tracing::debug;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The path to the rollup config.
-    #[cfg(any(feature = "mock_da", feature = "mock_da_external"))]
-    #[arg(long, default_value = "configs/mock_rollup_config.toml")]
-    rollup_config_path: String,
-
-    /// The path to the rollup config.
-    #[cfg(all(
-        feature = "celestia_da",
-        not(feature = "mock_da"),
-        not(feature = "mock_da_external")
-    ))]
-    #[arg(long, default_value = "configs/celestia_rollup_config.toml")]
+    #[cfg_attr(
+        feature = "mock_da",
+        arg(long, default_value = "configs/mock_rollup_config.toml")
+    )]
+    #[cfg_attr(
+        all(feature = "celestia_da", not(feature = "mock_da")),
+        arg(long, default_value = "configs/celestia_rollup_config.toml")
+    )]
     rollup_config_path: String,
 
     /// The path to the genesis configs.
-    #[cfg(any(feature = "mock_da", feature = "mock_da_external"))]
-    #[arg(long, default_value = "../test-data/genesis/demo/mock")]
+    #[cfg_attr(
+        feature = "mock_da",
+        arg(long, default_value = "../test-data/genesis/demo/mock")
+    )]
+    #[cfg_attr(
+        all(feature = "celestia_da", not(feature = "mock_da")),
+        arg(long, default_value = "../test-data/genesis/demo/celestia")
+    )]
     genesis_config_dir: PathBuf,
 
-    /// The path to the genesis configs.
-    #[cfg(all(
-        feature = "celestia_da",
-        not(feature = "mock_da"),
-        not(feature = "mock_da_external")
-    ))]
-    #[arg(long, default_value = "../test-data/genesis/demo/celestia")]
-    genesis_config_dir: PathBuf,
+    /// Use external mock DA (RPC client) instead of in-process mock DA.
+    #[cfg(feature = "mock_da")]
+    #[arg(long, default_value_t = false)]
+    external: bool,
 
     /// Stops the rollup at a given height.
     #[arg(long, default_value = None)]
@@ -103,39 +101,33 @@ async fn run() -> anyhow::Result<()> {
     {
         let prover_config =
             prover_config_disc.map(|config_disc| config_disc.into_config(zk::mock_da_host_args()));
-        let rollup = new_rollup_with_mock_da(
-            &GenesisPaths::from_dir(&args.genesis_config_dir),
-            rollup_config_path,
-            prover_config,
-            start_at_rollup_height,
-            stop_at_rollup_height,
-        )
-        .await
-        .context("Failed to initialize MockDa rollup")?;
-        rollup.run().await
+
+        if args.external {
+            let rollup = new_rollup_with_external_mock_da(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+                start_at_rollup_height,
+                stop_at_rollup_height,
+            )
+            .await
+            .context("Failed to initialize ExternalMockDa rollup")?;
+            return rollup.run().await;
+        } else {
+            let rollup = new_rollup_with_mock_da(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+                start_at_rollup_height,
+                stop_at_rollup_height,
+            )
+            .await
+            .context("Failed to initialize MockDa rollup")?;
+            return rollup.run().await;
+        }
     }
 
-    #[cfg(all(feature = "mock_da_external", not(feature = "mock_da")))]
-    {
-        let prover_config =
-            prover_config_disc.map(|config_disc| config_disc.into_config(zk::mock_da_host_args()));
-        let rollup = new_rollup_with_external_mock_da(
-            &GenesisPaths::from_dir(&args.genesis_config_dir),
-            rollup_config_path,
-            prover_config,
-            start_at_rollup_height,
-            stop_at_rollup_height,
-        )
-        .await
-        .context("Failed to initialize ExternalMockDa rollup")?;
-        rollup.run().await
-    }
-
-    #[cfg(all(
-        feature = "celestia_da",
-        not(feature = "mock_da"),
-        not(feature = "mock_da_external")
-    ))]
+    #[cfg(all(feature = "celestia_da", not(feature = "mock_da")))]
     {
         let prover_config =
             prover_config_disc.map(|config_disc| config_disc.into_config(zk::celestia_host_args()));
@@ -253,7 +245,7 @@ async fn new_rollup_with_mock_da(
         .await
 }
 
-#[cfg(all(feature = "mock_da_external", not(feature = "mock_da")))]
+#[cfg(feature = "mock_da")]
 async fn new_rollup_with_external_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
@@ -286,11 +278,7 @@ async fn new_rollup_with_external_mock_da(
         .await
 }
 
-#[cfg(all(
-    feature = "celestia_da",
-    not(feature = "mock_da"),
-    not(feature = "mock_da_external")
-))]
+#[cfg(all(feature = "celestia_da", not(feature = "mock_da")))]
 async fn new_rollup_with_celestia_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,

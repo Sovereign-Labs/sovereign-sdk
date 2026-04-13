@@ -1333,6 +1333,7 @@ dependencies = [
  "sov-synthetic-load",
  "sov-test-modules",
  "sov-uniqueness",
+ "sov-zkvm-utils",
  "tracing",
 ]
 

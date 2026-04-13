@@ -8,11 +8,6 @@ pub use sov_mock_zkvm::MockCodeCommitment;
 pub use sov_mock_zkvm::MockZkvm as OuterZkvm;
 pub use sov_mock_zkvm::MockZkvmHost as OuterZkvmHost;
 
-/// Creates the outer VM host.
-pub fn create_outer_vm() -> OuterZkvmHost {
-    OuterZkvmHost::new_non_blocking()
-}
-
 // ---------------------------------------------------------------------------
 // Inner ZKVM: mock (highest priority)
 // ---------------------------------------------------------------------------
@@ -23,13 +18,11 @@ mod inner {
     use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
     use sov_rollup_interface::zk::CryptoSpec;
 
-    /// The inner ZKVM type used in `ConfigurableSpec`.
+    #[allow(missing_docs)]
     pub type InnerZkvm = MockZkvm;
-
-    /// The cryptographic specification matching the inner ZKVM.
+    #[allow(missing_docs)]
     pub type InnerCryptoSpec = MockZkvmCryptoSpec;
-
-    /// Hasher derived from the inner crypto spec.
+    #[allow(missing_docs)]
     pub type Hasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 
     /// Returns host arguments for the mock inner ZKVM (unit type).
@@ -66,30 +59,18 @@ mod inner {
     use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
     use sov_rollup_interface::zk::CryptoSpec;
 
-    /// The inner ZKVM type used in `ConfigurableSpec`.
+    #[allow(missing_docs)]
     pub type InnerZkvm = Risc0;
-
-    /// The cryptographic specification matching the inner ZKVM.
+    #[allow(missing_docs)]
     pub type InnerCryptoSpec = Risc0CryptoSpec;
-
-    /// Hasher derived from the inner crypto spec.
+    #[allow(missing_docs)]
     pub type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
-
-    fn should_skip_guest_build() -> bool {
-        match std::env::var("SKIP_GUEST_BUILD")
-            .as_ref()
-            .map(|arg0: &String| String::as_str(arg0))
-        {
-            Ok("1") | Ok("true") | Ok("risc0") => true,
-            Ok("0") | Ok("false") | Ok(_) | Err(_) => false,
-        }
-    }
 
     /// Returns the risc0 host arguments for a rollup with mock DA.
     #[cfg(feature = "mock_da")]
     pub fn mock_da_host_args() -> Arc<&'static [u8]> {
-        if should_skip_guest_build() {
-            return Arc::new(vec![].leak());
+        if sov_zkvm_utils::should_skip_guest_build("risc0") {
+            return Arc::new(&[]);
         }
         Arc::new(risc0_prover::MOCK_DA_ELF)
     }
@@ -97,8 +78,8 @@ mod inner {
     /// Returns the risc0 host arguments for a rollup with celestia DA.
     #[cfg(feature = "celestia_da")]
     pub fn celestia_host_args() -> Arc<&'static [u8]> {
-        if should_skip_guest_build() {
-            return Arc::new(vec![].leak());
+        if sov_zkvm_utils::should_skip_guest_build("risc0") {
+            return Arc::new(&[]);
         }
         Arc::new(risc0_prover::ROLLUP_ELF)
     }
@@ -126,30 +107,18 @@ mod inner {
     use sov_sp1_adapter::host::SP1Host;
     use sov_sp1_adapter::{SP1CryptoSpec, SP1};
 
-    /// The inner ZKVM type used in `ConfigurableSpec`.
+    #[allow(missing_docs)]
     pub type InnerZkvm = SP1;
-
-    /// The cryptographic specification matching the inner ZKVM.
+    #[allow(missing_docs)]
     pub type InnerCryptoSpec = SP1CryptoSpec;
-
-    /// Hasher derived from the inner crypto spec.
+    #[allow(missing_docs)]
     pub type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
-
-    fn should_skip_guest_build() -> bool {
-        match std::env::var("SKIP_GUEST_BUILD")
-            .as_ref()
-            .map(|arg0: &String| String::as_str(arg0))
-        {
-            Ok("1") | Ok("true") | Ok("sp1") => true,
-            Ok("0") | Ok("false") | Ok(_) | Err(_) => false,
-        }
-    }
 
     /// Returns the sp1 host arguments for a rollup with mock DA.
     #[cfg(feature = "mock_da")]
     pub fn mock_da_host_args() -> Arc<&'static [u8]> {
-        if should_skip_guest_build() {
-            return Arc::new(vec![].leak());
+        if super::should_skip_guest_build("sp1") {
+            return Arc::new(&[]);
         }
         Arc::new(&sp1_prover::SP1_GUEST_MOCK_ELF)
     }
@@ -157,8 +126,8 @@ mod inner {
     /// Returns the sp1 host arguments for a rollup with celestia DA.
     #[cfg(feature = "celestia_da")]
     pub fn celestia_host_args() -> Arc<&'static [u8]> {
-        if should_skip_guest_build() {
-            return Arc::new(vec![].leak());
+        if super::should_skip_guest_build("sp1") {
+            return Arc::new(&[]);
         }
         Arc::new(&sp1_prover::SP1_GUEST_CELESTIA_ELF)
     }
@@ -174,6 +143,9 @@ mod inner {
         (SP1Host::new(*host_args), disc)
     }
 }
+
+#[cfg(not(any(feature = "mock_zkvm", feature = "risc0", feature = "sp1")))]
+compile_error!("At least one ZKVM feature must be enabled: mock_zkvm, risc0, or sp1");
 
 // Re-export the active inner ZKVM module
 pub use inner::*;

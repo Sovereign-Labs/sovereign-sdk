@@ -49,8 +49,30 @@ understand how to build your own state transition function, check out at the doc
 If you are looking for a simple rollup with minimal dependencies as a starting point, please have a look here:
 [sov-rollup-starter](https://github.com/Sovereign-Labs/sov-rollup-starter/)
 
-If you don't need ZK guest to be compiled, 
-for faster compilation time you can export `export SKIP_GUEST_BUILD=1`environment variable in each terminal you run.
+#### Feature flags
+
+The demo-rollup uses compile-time feature flags to select the DA layer and ZKVM:
+
+| Feature | Description |
+|---------|-------------|
+| `mock_da` (default) | Use mock DA (pass `--external` for RPC mode) |
+| `celestia_da` | Use Celestia DA |
+| `mock_zkvm` (default) | Use mock ZKVM (fastest compilation) |
+| `risc0` | Use Risc0 ZKVM |
+| `sp1` | Use SP1 ZKVM |
+
+Default features (`mock_da` + `mock_zkvm`) give the fastest compilation. To use a different DA or ZKVM:
+
+```sh
+# Build with Celestia DA
+cargo build -p sov-demo-rollup --no-default-features --features celestia_da,mock_zkvm
+
+# Build with SP1 ZKVM
+cargo build -p sov-demo-rollup --no-default-features --features mock_da,sp1
+```
+
+If you don't need ZK guest to be compiled,
+for faster compilation time you can export `export SKIP_GUEST_BUILD=1` environment variable in each terminal you run.
 There are multiple options available:
 - `export SKIP_GUEST_BUILD=1` or `export SKIP_GUEST_BUILD=true`: both guest VMs builds are skipped
 * `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 guest is built.
@@ -173,6 +195,7 @@ You'll need the `sov-cli` binary in order to create transactions. Build it with 
 
 ```bash,test-ci,bashtestmd:compare-output
 # Make sure you're still in `examples/demo-rollup`
+# sov-cli works with default features (mock_da). For Celestia, use --features celestia_da --no-default-features
 $ SKIP_GUEST_BUILD=1 cargo build --bin sov-cli
 $ ./../../target/debug/sov-cli --help
 Usage: sov-cli <COMMAND>

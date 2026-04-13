@@ -16,7 +16,9 @@ use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
-use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
+use sov_modules_rollup_blueprint::{
+    FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt, WalletBlueprint,
+};
 use sov_rollup_interface::da::DaSpec;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
@@ -183,3 +185,5 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         Ok(Self::ProofSender::new(sequence_number_provider))
     }
 }
+
+impl WalletBlueprint<Native> for MockDemoRollup<Native> {}
