@@ -83,21 +83,22 @@ struct TestHost {
 
 impl TestHost {
     async fn new(with_proof: bool) -> (Self, SP1MethodId) {
-        let (code_commitment, host) = tokio::task::spawn_blocking(move || {
+        let (code_commitment, host, mock_host) = tokio::task::spawn_blocking(move || {
             let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF)
                 .expect("SP1Host should be created successfully");
+
+            let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
+                .expect("MockSp1Prover should be created successfully");
 
             (
                 host.code_commitment()
                     .expect("SP1 code commitment should be created successfully"),
                 host,
+                mock_host,
             )
         })
         .await
         .unwrap();
-
-        let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
-            .expect("MockSp1Prover should be created successfully");
 
         (
             Self {
