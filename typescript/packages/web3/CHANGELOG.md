@@ -1,5 +1,11 @@
 # @sovereign-sdk/web3
 
+## 0.14.0
+
+### Minor Changes
+
+-   be66aa4: Add multisig signing support to SolanaSignableRollup. To use this, add transactions to the multisig using solanaSignableRollup.signTransactionForMultisig() and then call submitMultisigTransaction() with the result.
+
 ## 0.13.1
 
 ### Patch Changes
