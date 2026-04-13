@@ -97,10 +97,19 @@ where
                         });
                     }
 
-                    extend_pending_completed_proofs(
-                        &mut unprocessed_proofs,
-                        pending_completed_proofs,
-                    );
+                    // Drop pending proof blobs rather than carrying them forward.
+                    // These proofs are already on DA and will be processed by the
+                    // kernel when it reaches their DA heights. Carrying them with
+                    // stale sequence numbers into unprocessed_proofs blocks batch
+                    // production because they don't match the new batch numbering
+                    // after a resync (sovereign-labs/sovereign-sdk#2558).
+                    if !pending_completed_proofs.is_empty() {
+                        tracing::debug!(
+                            count = pending_completed_proofs.len(),
+                            "Dropping pending completed proofs during replay — \
+                             they are already on DA and will be processed by the kernel"
+                        );
+                    }
                     break (in_progress_batch, subscription, unprocessed_proofs);
                 }
                 Flow::Continue { completed_blobs } => completed_blobs,
@@ -296,14 +305,10 @@ where
     }
 }
 
-fn extend_pending_completed_proofs(
-    unprocessed_proofs: &mut BTreeMap<SequenceNumber, PreferredProofToReplay>,
-    pending_completed_proofs: Vec<PreferredProofToReplay>,
-) {
-    for proof in pending_completed_proofs {
-        unprocessed_proofs.insert(proof.sequence_number, proof);
-    }
-}
+// Note: extend_pending_completed_proofs was removed as part of the proof
+// resync fix (sovereign-labs/sovereign-sdk#2558). Pending proof blobs are now
+// dropped during replay rather than carried forward, since they're already on
+// DA and carrying them with stale sequence numbers blocks batch production.
 
 /// The sequencer number and node sequence number do not match.
 pub enum SequenceNumberMismatchError {

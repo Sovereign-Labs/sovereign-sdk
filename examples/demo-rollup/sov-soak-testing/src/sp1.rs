@@ -139,8 +139,8 @@ pub fn create_sp1_rollup_builder(
         });
         config.aggregated_proof_block_jump = 3;
         config.axum_port = axum_port;
-        // With 10s block time and finalization_blocks=5, DA finalization takes ~50s.
-        // The default 60s is too tight — bump to 120s to avoid spurious timeouts.
-        config.blob_processing_timeout_secs = 120;
+        // Proof blobs may take a while to be processed during resync catchup.
+        // 300s gives 15 minutes total (3 retries × 300s) for the node to catch up.
+        config.blob_processing_timeout_secs = 300;
     })
 }
