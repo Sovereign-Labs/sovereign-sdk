@@ -76,15 +76,15 @@ async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec
 // The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
 // To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
 struct TestHost {
-    host: SP1Host<'static>,
+    host: SP1Host,
     mock_host: MockSp1Prover,
     with_proof: bool,
 }
 
 impl TestHost {
     async fn new(with_proof: bool) -> (Self, SP1MethodId) {
-        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF)
-            .expect("SP1Host should be created successfully");
+        let host =
+            SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF).expect("SP1Host should be created successfully");
         let host_clone = host.clone();
         let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
             host_clone
@@ -110,8 +110,8 @@ impl TestHost {
         if self.with_proof {
             let mut host = self.host.clone();
             tokio::task::spawn_blocking(move || -> Vec<u8> {
-                host.add_hint(data);
-                host.run().expect("Prover should run successfully")
+                host.add_hint_and_run(&data)
+                    .expect("Prover should run successfully")
             })
             .await
             .unwrap()

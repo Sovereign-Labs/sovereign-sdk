@@ -25,7 +25,7 @@ use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 /// automatically chains proofs: the previous aggregation proof is fed back as
 /// a deferred proof input so the guest can verify continuity.
 pub struct SP1AggregationHost {
-    host: SP1Host<'static>,
+    host: SP1Host,
     aggregation_vk: sp1_sdk::SP1VerifyingKey,
     code_commitment: SP1MethodId,
     inner_method_id: SP1MethodId,
@@ -65,12 +65,14 @@ impl SP1AggregationHost {
             "At least one inner proof is required"
         );
 
+        let mut stdin = SP1Stdin::new();
+
         let prev_outer_proof_witness =
             if let Some(previous_outer_proof) = self.prev_agg_proof.as_ref() {
                 let serialized = bincode::serialize(previous_outer_proof)?;
-                let public_values = self
-                    .host
-                    .add_proof_helper(&serialized, &self.code_commitment)?;
+                let public_values =
+                    self.host
+                        .add_proof_helper(&mut stdin, &serialized, &self.code_commitment)?;
 
                 Some(PreviousOuterProofWitness { public_values })
             } else {
@@ -80,6 +82,7 @@ impl SP1AggregationHost {
         let mut proof_inputs = Vec::with_capacity(proofs_and_headers.len());
         for proof_and_header in proofs_and_headers {
             let public_values = self.host.add_proof_helper(
+                &mut stdin,
                 &proof_and_header.proof.raw_inner_proof,
                 &self.inner_method_id,
             )?;
@@ -104,9 +107,9 @@ impl SP1AggregationHost {
             prev_outer_proof_witness,
         };
 
-        self.host.add_hint(witness);
+        stdin.write(&witness);
 
-        let agg_proof = self.host.run_helper()?;
+        let agg_proof = self.host.run_helper(stdin)?;
         let serialized = bincode::serialize(&agg_proof)?;
         self.prev_agg_proof = Some(agg_proof);
 
@@ -115,37 +118,34 @@ impl SP1AggregationHost {
 }
 
 /// SP1 Host implementation.
-pub struct SP1Host<'host> {
-    elf: &'host [u8],
-    stdin: SP1Stdin,
-    prover: Arc<CpuProver>,
-    pk: SP1ProvingKey,
+pub struct SP1Host {
+    prover: CpuProver,
+    pk: Arc<SP1ProvingKey>,
 }
 
 /// Instantiate a new SP1 Host.
-impl<'host> SP1Host<'host> {
+impl SP1Host {
     /// Create a new SP1 Host.
-    pub fn new(elf: &'host [u8]) -> anyhow::Result<Self> {
+    pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
         let prover = ProverClient::builder().cpu().build();
         let pk = prover
             .setup(elf.into())
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
         Ok(Self {
-            elf,
-            stdin: SP1Stdin::new(),
-            prover: Arc::new(prover),
-            pk,
+            prover,
+            pk: Arc::new(pk),
         })
     }
 
     /// Create a new `Sp1Guest` that reads the provided hints
-    pub fn simulate_with_hints(&mut self) -> SP1Guest {
-        SP1Guest::with_hints(self.stdin.buffer.clone())
+    pub fn simulate_with_hints(stdin: SP1Stdin) -> SP1Guest {
+        SP1Guest::with_hints(stdin.buffer)
     }
 
     fn add_proof_helper(
-        &mut self,
+        &self,
+        stdin: &mut SP1Stdin,
         proof: &[u8],
         method_id: &SP1MethodId,
     ) -> anyhow::Result<Vec<u8>> {
@@ -157,14 +157,11 @@ impl<'host> SP1Host<'host> {
         let vk: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&method_id.0)
             .map_err(|e| anyhow::anyhow!("Failed to deserialize SP1VerifyingKey: {e}"))?;
 
-        self.stdin
-            .write_proof((**recursion_proof).clone(), vk.vk.clone());
+        stdin.write_proof((**recursion_proof).clone(), vk.vk.clone());
         Ok(proof.public_values.to_vec())
     }
 
-    fn run_helper(&mut self) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-        let stdin = std::mem::take(&mut self.stdin);
-
+    fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
         let output: sp1_sdk::SP1ProofWithPublicValues = self
             .prover
             .prove(&self.pk, stdin)
@@ -176,42 +173,40 @@ impl<'host> SP1Host<'host> {
     }
 }
 
-impl Clone for SP1Host<'_> {
+impl Clone for SP1Host {
     fn clone(&self) -> Self {
         Self {
-            elf: self.elf,
-            stdin: self.stdin.clone(),
             prover: self.prover.clone(),
             pk: self.pk.clone(),
         }
     }
 }
 
-impl core::fmt::Debug for SP1Host<'_> {
+impl core::fmt::Debug for SP1Host {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Sp1Host").finish()
     }
 }
 
-impl ZkvmHost for SP1Host<'static> {
+impl ZkvmHost for SP1Host {
     type HostArgs = &'static [u8];
     type Guest = SP1Guest;
 
     fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args).expect("Failed to create SP1Host")
+        Self::new(args).unwrap_or_else(|e| panic!("Failed to create SP1Host: {e:?}"))
     }
 
-    fn add_hint<T: Serialize>(&mut self, item: T) {
-        self.stdin.write(&item);
-    }
-
-    fn run(&mut self) -> anyhow::Result<Vec<u8>> {
-        let output = self.run_helper()?;
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(item);
+        let output = self.run_helper(stdin)?;
         Ok(bincode::serialize(&output)?)
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
-        Ok(crate::SP1MethodId(bincode::serialize(self.pk.verifying_key())?))
+        Ok(crate::SP1MethodId(bincode::serialize(
+            self.pk.verifying_key(),
+        )?))
     }
 }
 

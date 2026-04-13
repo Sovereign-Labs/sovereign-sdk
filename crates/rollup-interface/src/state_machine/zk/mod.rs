@@ -94,18 +94,15 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     #[cfg(feature = "native")]
     fn from_args(args: &Self::HostArgs) -> Self;
 
-    /// Give the guest a piece of advice non-deterministically
-    fn add_hint<T: Serialize>(&mut self, item: T);
-
     /// Returns a commitment to the program to be proven. This method does a lot of heavy cryptographic work - caller beware!
     #[cfg(feature = "native")]
     fn code_commitment(
         &self,
     ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment>;
 
-    /// Run the guest in the true zk environment using the provided hints
-    /// and generate a SNARK of correct execution.
-    fn run(&mut self) -> anyhow::Result<Vec<u8>>;
+    /// Provide a single non-deterministic advice item to the guest and
+    /// synchronously generate a SNARK of correct execution over that hint.
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>>;
 }
 
 /// A commitment to a zkVM program binary. Every concrete [`ZkVerifier::CodeCommitment`]
@@ -144,7 +141,7 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
 
 /// A network prover that can submit proofs asynchronously and poll for results.
 ///
-/// Unlike [`ZkvmHost`] which runs proofs synchronously via [`ZkvmHost::run`],
+/// Unlike [`ZkvmHost`] which runs proofs synchronously via [`ZkvmHost::add_hint_and_run`],
 /// a `ZkvmNetwork` submits proof requests to a remote proving service and returns
 /// a handle that can be polled for completion. This enables concurrent proof generation
 /// across multiple blocks.

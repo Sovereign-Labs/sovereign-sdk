@@ -1,6 +1,6 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
-use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Receipt, Session};
+use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Session};
 use sov_rollup_interface::zk::ZkvmHost;
 
 use crate::guest::Risc0Guest;
@@ -48,32 +48,18 @@ impl<'a> Risc0Host<'a> {
         #[cfg(feature = "bincode")]
         env.write_slice(&[self.env.len() as u32]);
         let env = env.write_slice(&self.env).build().unwrap();
+        self.env.clear();
         let mut executor = ExecutorImpl::from_elf(env, self.elf)?;
         executor.run()
     }
 
-    /// Run a computation in the zkvm and generate a receipt.
-    pub fn run(&mut self) -> anyhow::Result<Receipt> {
-        let session = self.run_without_proving()?;
-        Ok(session.prove()?.receipt)
+    fn replace_hints<T: serde::Serialize>(&mut self, item: &T) {
+        self.env.clear();
+        self.add_hint(item);
     }
 
-    /// Generate a Risc0Guest with provided hints
-    pub fn simulate_with_hints(&mut self) -> Risc0Guest {
-        Risc0Guest::with_hints(std::mem::take(&mut self.env))
-    }
-}
-
-impl ZkvmHost for Risc0Host<'static> {
-    type HostArgs = &'static [u8];
-
-    fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args)
-    }
-
-    type Guest = Risc0Guest;
-
-    fn add_hint<T: serde::Serialize>(&mut self, item: T) {
+    /// Push a non-deterministic hint into the zkvm environment.
+    pub fn add_hint<T: serde::Serialize>(&mut self, item: &T) {
         // We use the in-memory size of `item` as an indication of how much
         // space to reserve. This is in no way guaranteed to be exact, but
         // usually the in-memory size and serialized data size are quite close.
@@ -91,12 +77,29 @@ impl ZkvmHost for Risc0Host<'static> {
         }
 
         #[cfg(feature = "bincode")]
-        bincode::serialize_into(&mut self.env, &item)
+        bincode::serialize_into(&mut self.env, item)
             .expect("Risc0 hint serialization is infallible");
     }
 
-    fn run(&mut self) -> anyhow::Result<Vec<u8>> {
-        let receipt = Risc0Host::run(self)?;
+    /// Generate a Risc0Guest with provided hints
+    pub fn simulate_with_hints(&mut self) -> Risc0Guest {
+        Risc0Guest::with_hints(std::mem::take(&mut self.env))
+    }
+}
+
+impl ZkvmHost for Risc0Host<'static> {
+    type HostArgs = &'static [u8];
+
+    fn from_args(args: &Self::HostArgs) -> Self {
+        Self::new(args)
+    }
+
+    type Guest = Risc0Guest;
+
+    fn add_hint_and_run<T: serde::Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+        self.replace_hints(item);
+        let session = self.run_without_proving()?;
+        let receipt = session.prove()?.receipt;
         Ok(bincode::serialize(&receipt)?)
     }
 

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
+use sov_rollup_interface::zk::ZkvmGuest;
 use sov_sp1_adapter::host::{MockSp1Prover, SP1Host};
 use sp1_build::BuildArgs;
+use sp1_sdk::SP1Stdin;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct TestStruct {
@@ -11,9 +12,6 @@ struct TestStruct {
 
 #[test]
 fn test_hints_roundtrip() {
-    let fibonacci_elf = include_bytes!("../../test_data/riscv64im-succinct-zkvm-elf");
-    let mut host = SP1Host::new(fibonacci_elf).unwrap();
-
     let hint_a = TestStruct {
         ints: vec![1, 2, 3, 4, 5],
         string: "hello".to_string(),
@@ -23,10 +21,11 @@ fn test_hints_roundtrip() {
         string: "hello".to_string(),
     };
 
-    host.add_hint(&hint_a);
-    host.add_hint(&hint_b);
+    let mut stdin = SP1Stdin::new();
+    stdin.write(&hint_a);
+    stdin.write(&hint_b);
 
-    let guest = host.simulate_with_hints();
+    let guest = SP1Host::simulate_with_hints(stdin);
 
     let mut received;
     received = guest.read_from_host();

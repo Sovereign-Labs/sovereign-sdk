@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
@@ -8,7 +6,6 @@ use serde::Serialize;
 #[derive(Clone)]
 pub struct MockZkvmHost {
     notification_manager: NotificationManager,
-    committed_data: VecDeque<Vec<u8>>,
     wait_for_proof: bool,
 }
 
@@ -18,16 +15,14 @@ impl MockZkvmHost {
         Self {
             wait_for_proof: true,
             notification_manager: Default::default(),
-            committed_data: Default::default(),
         }
     }
 
-    /// Creates a new MockZkvm, the `ZkvmHost::run` will return immediately.
+    /// Creates a new MockZkvm, the `ZkvmHost::add_hint_and_run` will return immediately.
     pub fn new_non_blocking() -> Self {
         Self {
             wait_for_proof: false,
             notification_manager: Default::default(),
-            committed_data: Default::default(),
         }
     }
 
@@ -59,23 +54,18 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
 
     type HostArgs = ();
 
-    fn add_hint<T: Serialize>(&mut self, item: T) {
-        let data = bincode::serialize(&item).unwrap();
-        self.committed_data.push_back(data);
-    }
-
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
         Ok(MockCodeCommitment::default())
     }
 
-    fn run(&mut self) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+        let pub_data = bincode::serialize(item)?;
         if self.wait_for_proof {
             self.notification_manager.wait();
         }
-        let data = self.committed_data.pop_front().unwrap_or_default();
         Ok(bincode::serialize(&MockProof {
             is_valid: true,
-            pub_data: data,
+            pub_data,
         })?)
     }
 
