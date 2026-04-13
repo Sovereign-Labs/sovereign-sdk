@@ -156,6 +156,11 @@ async fn test_eth_send_raw_transaction() {
             serde_json::json!([tx_hash]),
         )
         .await;
+        assert!(
+            resp.get("error").is_none(),
+            "eth_getTransactionReceipt returned an error: {}",
+            resp["error"]
+        );
         if !resp["result"].is_null() {
             receipt = resp["result"].clone();
             break;
