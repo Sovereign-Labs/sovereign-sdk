@@ -2,7 +2,7 @@
 # Based on:
 # https://github.com/celestiaorg/celestia-app/blob/main/Dockerfile
 
-ARG CELESTIA_APP_TAG=v7.0.2-mocha
+ARG CELESTIA_APP_TAG=v8.0.1-mocha
 
 FROM ghcr.io/celestiaorg/celestia-app:${CELESTIA_APP_TAG} AS celestia-app
 
