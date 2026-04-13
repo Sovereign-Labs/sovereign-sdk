@@ -5,7 +5,7 @@ use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::TokenId;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::{mock_da_host_args, MockDemoRollup};
 use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::transaction::Transaction;
@@ -283,7 +283,7 @@ pub async fn start_test_rollup(
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         test_case.finalization_blocks,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;

@@ -83,7 +83,7 @@ struct TestHost {
 
 impl TestHost {
     async fn new(with_proof: bool) -> (Self, SP1MethodId) {
-        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
+        let host = SP1Host::new(*sp1_prover::SP1_GUEST_MOCK_ELF);
         let host_clone = host.clone();
         let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
             host_clone
@@ -93,7 +93,7 @@ impl TestHost {
         .await
         .unwrap();
 
-        let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF);
+        let mock_host = MockSp1Prover::new(*sp1_prover::SP1_GUEST_MOCK_ELF);
 
         (
             Self {

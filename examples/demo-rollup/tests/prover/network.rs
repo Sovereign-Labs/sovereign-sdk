@@ -37,7 +37,7 @@ type TestNetworkProverService = NetworkProverService<
 async fn test_network_proof_generation() {
     tracing_subscriber::fmt::init();
 
-    let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+    let elf: &[u8] = *sp1_prover::SP1_GUEST_MOCK_ELF;
     assert!(
         !elf.is_empty(),
         "SP1 guest ELF is empty — build the guest first"

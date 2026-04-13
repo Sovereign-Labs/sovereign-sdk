@@ -14,13 +14,13 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use sov_bank::config_gas_token_id;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::{mock_da_host_args, MockDemoRollup};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::{BlockProducingConfig, MockDaConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, PrivateKey, PublicKey, Spec};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
-use sov_risc0_adapter::Risc0;
+use sov_demo_rollup::InnerZkvm;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
@@ -194,7 +194,7 @@ fn initialize_logging_for_restart(collector: LogCollector, with_stdout: bool) {
 async fn start_stop_empty(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig<Risc0>,
+    rollup_prover_config: RollupProverConfig<InnerZkvm>,
     seed: u64,
     collector: &LogCollector,
 ) -> anyhow::Result<()> {
@@ -222,7 +222,7 @@ async fn start_stop_empty(
                 TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
                 finalization_blocks,
             )
-            .with_zkvm_host_args(mock_da_risc0_host_args())
+            .with_zkvm_host_args(mock_da_host_args())
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
@@ -325,7 +325,7 @@ async fn flaky_test_start_stop_optimistic_non_instant_finality() -> anyhow::Resu
 async fn start_stop_under_load(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig<Risc0>,
+    rollup_prover_config: RollupProverConfig<InnerZkvm>,
     seed: u64,
     collector: &LogCollector,
 ) -> anyhow::Result<()> {
@@ -362,7 +362,7 @@ async fn start_stop_under_load(
                 TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
                 finalization_blocks,
             )
-            .with_zkvm_host_args(mock_da_risc0_host_args())
+            .with_zkvm_host_args(mock_da_host_args())
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
@@ -553,7 +553,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
@@ -710,7 +710,7 @@ async fn check_with_increasing_stf_infos(
         BlockProducingConfig::Manual,
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());

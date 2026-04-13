@@ -14,7 +14,7 @@ use alloy_rpc_types_eth::TransactionInput;
 use core::net::SocketAddr;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
-use sov_demo_rollup::mock_da_risc0_host_args;
+use sov_demo_rollup::mock_da_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_demo_rollup::MockRollupSpec;
 use sov_full_node_configs::sequencer::Limits;
@@ -38,7 +38,7 @@ fn make_client_with_x_forwarded_for_header(http_addr: SocketAddr, priv_key: &str
 async fn setup_test_rollup(
     rate_limiter: SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>,
 ) -> TestRollup<MockDemoRollup<Native>> {
-    let host_args = mock_da_risc0_host_args();
+    let host_args = mock_da_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
     start_node(config, 0, Some(EVM_EXTENSION), Some(rate_limiter), 3).await
 }

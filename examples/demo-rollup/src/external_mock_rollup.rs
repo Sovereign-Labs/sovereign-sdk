@@ -9,7 +9,7 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::MockCodeCommitment;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::rest::StateUpdateReceiver;
@@ -18,9 +18,6 @@ use sov_modules_api::{NodeEndpoints, Spec, Storage, SyncStatus, ZkVerifier};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
-use sov_risc0_adapter::Risc0CryptoSpec;
 use sov_rollup_interface::da::DaSpec;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
@@ -30,19 +27,20 @@ use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
+use crate::zk::{self, InnerCryptoSpec, InnerZkvm, OuterZkvm, OuterZkvmHost};
 
-type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
+type Hasher = <InnerCryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
 pub type ExternalMockRollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
-    Risc0,
-    MockZkvm,
+    InnerZkvm,
+    OuterZkvm,
     MultiAddressEvmSolana,
     M,
-    Risc0CryptoSpec,
+    InnerCryptoSpec,
     NativeStorage,
 >;
 
@@ -154,21 +152,19 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        prover_config: RollupProverConfig<InnerZkvm>,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (host_args, prover_config_discriminant) = prover_config.split();
-        let inner_vm = Risc0Host::new(*host_args);
-
-        let outer_vm = MockZkvmHost::new_non_blocking();
+        let (inner_vm, prover_config_disc) = zk::create_inner_vm(prover_config);
+        let outer_vm = OuterZkvmHost::new_non_blocking();
         let da_verifier = Default::default();
 
         ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_discriminant,
+            prover_config_disc,
             rollup_config.proof_manager.prover_address,
         )
     }

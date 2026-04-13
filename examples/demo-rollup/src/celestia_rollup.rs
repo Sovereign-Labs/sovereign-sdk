@@ -9,7 +9,7 @@ use sov_celestia_adapter::CelestiaService;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::MockCodeCommitment;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::StateUpdateReceiver;
@@ -19,8 +19,6 @@ use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{
     FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt, WalletBlueprint,
 };
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::execution_mode::WitnessGeneration;
 use sov_rollup_interface::zk::CryptoSpec;
@@ -31,6 +29,7 @@ use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProv
 use sov_stf_runner::RollupConfig;
 
 use crate::solana_offchain_endpoint::solana_offchain_router;
+use crate::zk::{self, InnerCryptoSpec, InnerZkvm, OuterZkvm, OuterZkvmHost};
 use crate::{eth_dev_signer, ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
 /// Rollup with CelestiaDa
@@ -39,17 +38,17 @@ pub struct CelestiaDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
+type Hasher = <InnerCryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <CelestiaSpec as DaSpec>::SlotHash>;
 
 type CelestiaRollupSpec<M> = ConfigurableSpec<
     CelestiaSpec,
-    Risc0,
-    MockZkvm,
+    InnerZkvm,
+    OuterZkvm,
     MultiAddressEvmSolana,
     M,
-    Risc0CryptoSpec,
+    InnerCryptoSpec,
     NativeStorage,
 >;
 
@@ -162,14 +161,12 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        prover_config: RollupProverConfig<InnerZkvm>,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (elf, prover_config_disc) = prover_config.split();
-        let inner_vm = Risc0Host::new(*elf);
-
-        let outer_vm = MockZkvmHost::new_non_blocking();
+        let (inner_vm, prover_config_disc) = zk::create_inner_vm(prover_config);
+        let outer_vm = OuterZkvmHost::new_non_blocking();
 
         let rollup_params = RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,

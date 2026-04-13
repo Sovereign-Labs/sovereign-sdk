@@ -3,7 +3,7 @@ use crate::evm::evm_test_helper::start_node;
 use crate::evm::evm_test_helper::EVM_EXTENSION;
 use crate::evm::evm_test_helper::SENDER_PRIV_KEY;
 use alloy_rpc_types_eth::{BlockNumberOrTag, Filter};
-use sov_demo_rollup::mock_da_risc0_host_args;
+use sov_demo_rollup::mock_da_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_demo_rollup::MockRollupSpec;
 use sov_eth_client::SimpleStorageClient;
@@ -16,7 +16,7 @@ async fn setup_test_rollup() -> (
     SimpleStorageClient,
     alloy_primitives::Address,
 ) {
-    let host_args = mock_da_risc0_host_args();
+    let host_args = mock_da_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
     let test_rollup = start_node(config, 0, Some(EVM_EXTENSION), None, 3).await;
     test_rollup.wait_for_rollup_height_advance_by(10).await;

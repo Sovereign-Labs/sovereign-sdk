@@ -2,14 +2,14 @@ use std::path::PathBuf;
 
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::U256;
-use sov_demo_rollup::mock_da_risc0_host_args;
+use sov_demo_rollup::mock_da_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_evm::execution_config::EvmExecutionConfigContents;
 use sov_evm_test_utils::SimpleStorage;
 use sov_evm_test_utils::Submit;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
-use sov_risc0_adapter::Risc0;
+use sov_demo_rollup::InnerZkvm;
 use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
@@ -23,7 +23,7 @@ use crate::test_helpers::test_genesis_source;
 
 /// Starts test rollup node.  
 pub(crate) async fn start_node_with_ram_pinning(
-    _rollup_prover_config: RollupProverConfig<Risc0>,
+    _rollup_prover_config: RollupProverConfig<InnerZkvm>,
     location: TempDir,
     exec_config_path: PathBuf,
 ) -> TestRollup<MockDemoRollup<Native>> {
@@ -39,7 +39,7 @@ pub(crate) async fn start_node_with_ram_pinning(
         false,
         Some(exec_config_path),
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 32;
         c.rollup_prover_config = None; // reenable once sov-ethereum is compatible with proof blobs

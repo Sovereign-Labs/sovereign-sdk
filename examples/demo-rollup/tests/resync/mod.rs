@@ -12,12 +12,12 @@ use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::{mock_da_host_args, MockDemoRollup};
 use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{OperatingMode, RawTx, Runtime, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
-use sov_risc0_adapter::crypto::private_key::Risc0PrivateKey;
+use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_test_utils::logging::LogCollector;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
@@ -64,7 +64,7 @@ const CHECK_TRANSACTION_VALUE: u64 = 13;
 const DA_SLOTS_TO_GENERATE: u64 = 100;
 const FINALIZATION_SLOTS: u32 = 5;
 
-fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, generation: u64) -> RawTx {
+fn tx_set_value_for_check(key: Ed25519PrivateKey, value: u64, generation: u64) -> RawTx {
     let msg: RuntimeCall<DemoRollupSpec> =
         RuntimeCall::SyntheticLoad(sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
             number_of_new_values: value,
@@ -103,7 +103,7 @@ async fn start_rollup(
             StoragePath::Tmp(rollup_storage_path.clone()),
             false,
         )
-        .with_zkvm_host_args(mock_da_risc0_host_args())
+        .with_zkvm_host_args(mock_da_host_args())
         .set_config(|c| {
             c.rollup_prover_config = None;
             c.aggregated_proof_block_jump = 10;
