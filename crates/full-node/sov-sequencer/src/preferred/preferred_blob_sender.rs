@@ -1,13 +1,10 @@
 use sov_blob_sender::BlobExecutionStatus;
-use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
+use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend, InFlightBlobCounts};
 use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
-use std::{
-    path::Path,
-    sync::{atomic::AtomicUsize, Arc},
-};
+use std::{path::Path, sync::Arc};
 use tokio::sync::broadcast;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -22,7 +19,7 @@ use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
 pub struct PreferredBlobSender<Da: DaService> {
     inner: Option<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>,
-    nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
+    in_flight_counts: InFlightBlobCounts,
 }
 
 impl<Da: DaService> PreferredBlobSender<Da> {
@@ -37,12 +34,12 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let in_flight_counts = InFlightBlobCounts::default();
         match seq_role {
             SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica => Ok((
                 Self {
                     inner: None,
-                    nb_of_concurrent_blob_submissions,
+                    in_flight_counts,
                 },
                 None,
             )),
@@ -63,14 +60,14 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                     blob_processing_timeout,
                     Some(blobs_sender_channel),
                     blobs_to_send,
-                    nb_of_concurrent_blob_submissions.clone(),
+                    in_flight_counts.clone(),
                 )
                 .await?;
 
                 Ok((
                     Self {
                         inner: Some(inner),
-                        nb_of_concurrent_blob_submissions,
+                        in_flight_counts,
                     },
                     Some(blob_sender_handle),
                 ))
@@ -132,8 +129,8 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         Ok(())
     }
 
-    pub(crate) fn nb_of_in_flight_blobs(&self) -> Arc<AtomicUsize> {
-        self.nb_of_concurrent_blob_submissions.clone()
+    pub(crate) fn in_flight_counts(&self) -> InFlightBlobCounts {
+        self.in_flight_counts.clone()
     }
 
     pub(crate) async fn add_txs(&self, blob_id: BlobInternalId, tx_hashes: Arc<Vec<TxHash>>) {

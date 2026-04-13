@@ -3,8 +3,7 @@ mod in_flight_blob;
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
@@ -47,6 +46,52 @@ pub fn new_blob_id() -> BlobInternalId {
     uuid::Uuid::now_v7().as_u128()
 }
 
+/// Tracks the number of in-flight blob submissions, broken down by type (batch vs proof).
+///
+/// Uses a [`RwLock`] internally so that reads of both counters are consistent
+/// (no race between reading total and reading proofs).
+#[derive(Debug, Default, Clone)]
+pub struct InFlightBlobCounts {
+    inner: Arc<RwLock<InFlightBlobCountsInner>>,
+}
+
+#[derive(Debug, Default)]
+struct InFlightBlobCountsInner {
+    total: usize,
+    proofs: usize,
+}
+
+impl InFlightBlobCounts {
+    /// Increment the count. If `is_proof` is true, both the total and proof counts increase.
+    pub fn increment(&self, is_proof: bool) {
+        let mut inner = self.inner.write().expect("poisoned");
+        inner.total += 1;
+        if is_proof {
+            inner.proofs += 1;
+        }
+    }
+
+    /// Decrement the count. If `is_proof` is true, both the total and proof counts decrease.
+    pub fn decrement(&self, is_proof: bool) {
+        let mut inner = self.inner.write().expect("poisoned");
+        inner.total = inner.total.saturating_sub(1);
+        if is_proof {
+            inner.proofs = inner.proofs.saturating_sub(1);
+        }
+    }
+
+    /// Returns (total_blobs, total_proofs) as a consistent snapshot.
+    pub fn get(&self) -> (usize, usize) {
+        let inner = self.inner.read().expect("poisoned");
+        (inner.total, inner.proofs)
+    }
+
+    /// Total number of in-flight blobs (batches + proofs).
+    pub fn total(&self) -> usize {
+        self.inner.read().expect("poisoned").total
+    }
+}
+
 /// Hooks for [`BlobSender`] events.
 ///
 /// We guarantee at-least-once delivery of all events.
@@ -82,7 +127,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     shutdown_sender: watch::Sender<()>,
     da: Da,
     finalization_manager: FM,
-    nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
+    in_flight_counts: InFlightBlobCounts,
     blob_processing_timeout: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
     ledger_pool_interval: Duration,
@@ -104,7 +149,7 @@ where
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
-        nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
+        in_flight_counts: InFlightBlobCounts,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         Self::new_with_task_intervals(
             da,
@@ -116,7 +161,7 @@ where
             blob_sender_channel,
             LEDGER_POLL_INTERVAL,
             completed_blobs_to_send,
-            nb_of_concurrent_blob_submissions,
+            in_flight_counts,
         )
         .await
     }
@@ -131,7 +176,7 @@ where
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         ledger_pool_interval: Duration,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
-        nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
+        in_flight_counts: InFlightBlobCounts,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
@@ -163,7 +208,7 @@ where
             shutdown_sender,
             da,
             finalization_manager,
-            nb_of_concurrent_blob_submissions,
+            in_flight_counts,
             blob_processing_timeout,
             blob_sender_channel,
             ledger_pool_interval,
@@ -177,18 +222,12 @@ where
 
     /// Number of concurrent blob submissions in flight.
     pub fn nb_of_concurrent_blob_submissions(&self) -> usize {
-        self.nb_of_concurrent_blob_submissions
-            .load(Ordering::Relaxed)
+        self.in_flight_counts.total()
     }
 
-    /// Returns a handle to the (atomic) number of blob submissions currently in flight.
-    pub fn nb_of_in_flight_blobs_handle(&self) -> Arc<AtomicUsize> {
-        self.nb_of_concurrent_blob_submissions.clone()
-    }
-
-    fn inc_nb_of_concurrent_blob_submissions(&self) {
-        self.nb_of_concurrent_blob_submissions
-            .fetch_add(1, Ordering::Relaxed);
+    /// Returns a handle to the in-flight blob counts.
+    pub fn in_flight_counts(&self) -> InFlightBlobCounts {
+        self.in_flight_counts.clone()
     }
 
     /// Returns a reference to the [`BlobSenderHooks`] instance.
@@ -285,7 +324,7 @@ where
             db: self.db.clone(),
             hooks: self.hooks.clone(),
             in_flight_blobs: self.in_flight_blobs.clone(),
-            nb_of_concurrent_blob_submissions: self.nb_of_concurrent_blob_submissions.clone(),
+            in_flight_counts: self.in_flight_counts.clone(),
             blob_processing_timeout: self.blob_processing_timeout,
             ledger_pool_interval: self.ledger_pool_interval,
             blob_sender_channel: self.blob_sender_channel.clone(),
@@ -294,7 +333,7 @@ where
 
         let shutdown_receiver = self.shutdown_receiver.clone();
 
-        self.inc_nb_of_concurrent_blob_submissions();
+        self.in_flight_counts.increment(!is_batch);
         let handle = tokio::task::spawn({
             let state = task_state;
             let blob = blob.clone();
@@ -314,7 +353,7 @@ where
                         info!(%blob_id, "BlobSender: Shutting down task");
                     }
                 }
-                state.dec_nb_of_concurrent_blob_submissions();
+                state.in_flight_counts.decrement(!is_batch);
             }
         });
 
@@ -455,7 +494,7 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     db: Arc<BlobSenderDb>,
     hooks: Arc<dyn BlobSenderHooks<Da = Da::Spec>>,
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
-    nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
+    in_flight_counts: InFlightBlobCounts,
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
@@ -463,11 +502,6 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
 }
 
 impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
-    fn dec_nb_of_concurrent_blob_submissions(&self) {
-        self.nb_of_concurrent_blob_submissions
-            .fetch_sub(1, Ordering::Relaxed);
-    }
-
     async fn remove_blob_or_err(&self, blob_id: BlobInternalId) -> anyhow::Result<()> {
         let res = self.db.remove(blob_id).await;
         if let Err(err) = &res {
@@ -761,7 +795,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                     match blob_status.blob_selector_status {
                         Some(BlobSelectorStatus::Accepted)
                         | Some(BlobSelectorStatus::Discarded(
-                            BlobDiscardReason::SequenceNumberTooLow,
+                            BlobDiscardReason::SequenceNumberTooLow { .. },
                         )) => {
                             trace!(%blob_id, %receipt, ?blob_status, "Removing blob form the blob sender");
 

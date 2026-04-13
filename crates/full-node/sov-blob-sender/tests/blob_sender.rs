@@ -15,7 +15,6 @@ use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_test_utils::logging::LogCollector;
-use std::sync::atomic::AtomicUsize;
 use tempfile::TempDir;
 use tokio::sync::{broadcast, watch, RwLock};
 use tokio::task::JoinHandle;
@@ -327,7 +326,10 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
         Duration::from_secs(20),
         &deps,
         Some(status_sender),
-        BlobSelectorStatus::Discarded(BlobDiscardReason::SequenceNumberTooLow),
+        BlobSelectorStatus::Discarded(BlobDiscardReason::SequenceNumberTooLow {
+            found: 0,
+            expected: 1,
+        }),
     )
     .await;
     let nb_of_blobs = 1;
@@ -366,7 +368,7 @@ async fn blobs_with_seq_nr_too_low_are_not_resubmitted() -> anyhow::Result<()> {
             ) && matches!(
                 status.blob_selector_status,
                 Some(BlobSelectorStatus::Discarded(
-                    BlobDiscardReason::SequenceNumberTooLow
+                    BlobDiscardReason::SequenceNumberTooLow { .. }
                 ))
             )
         },
@@ -496,7 +498,6 @@ async fn create_blob_sender(
 
     let hooks = TestHooks {};
 
-    let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
         deps.da.clone(),
         finalization_manager,
@@ -507,7 +508,7 @@ async fn create_blob_sender(
         blob_status_sender,
         Duration::from_millis(1000),
         Default::default(),
-        nb_of_concurrent_blob_submissions,
+        Default::default(),
     )
     .await
     .unwrap();

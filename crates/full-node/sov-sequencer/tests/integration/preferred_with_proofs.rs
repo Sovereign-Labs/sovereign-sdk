@@ -173,9 +173,8 @@ async fn test_proof_blobs_survive_resync() -> anyhow::Result<()> {
 
     for _ in 0..50 {
         let tx = tx_set_value(&admin.private_key, tx_generation, tx_generation);
-        match client.send_raw_tx_to_sequencer(&tx).await {
-            Ok(_) => tx_generation += 1,
-            Err(_) => {}
+        if client.send_raw_tx_to_sequencer(&tx).await.is_ok() {
+            tx_generation += 1;
         }
 
         test_rollup.da_service.produce_block_now().await?;
@@ -195,9 +194,7 @@ async fn test_proof_blobs_survive_resync() -> anyhow::Result<()> {
         proofs_before_resync >= 2,
         "Expected at least 2 proofs before resync, got {proofs_before_resync}"
     );
-    eprintln!(
-        "[test] Phase 1 complete: {proofs_before_resync} proofs generated before resync"
-    );
+    eprintln!("[test] Phase 1 complete: {proofs_before_resync} proofs generated before resync");
 
     // Phase 2: Force a resync by shutting down, producing DA blocks while
     // offline, then restarting. This is deterministic and doesn't depend on
@@ -259,9 +256,7 @@ async fn test_proof_blobs_survive_resync() -> anyhow::Result<()> {
             tokio::time::timeout(Duration::from_millis(150), aggregated_proofs.next()).await
         {
             proofs_after_resync += 1;
-            eprintln!(
-                "[test] Proof {proofs_after_resync} arrived after resync (iter {i})"
-            );
+            eprintln!("[test] Proof {proofs_after_resync} arrived after resync (iter {i})");
         }
 
         if proofs_after_resync >= 2 {

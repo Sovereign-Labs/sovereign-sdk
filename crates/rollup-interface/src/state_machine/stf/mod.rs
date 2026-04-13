@@ -285,7 +285,8 @@ type ProofReceipts<Address, Da, StateRoot, StorageProof> =
 )]
 pub enum BlobDiscardReason {
     /// The sequencer sent a blob with an old sequencer number that we've already processed.
-    SequenceNumberTooLow,
+    #[allow(missing_docs)]
+    SequenceNumberTooLow { found: u64, expected: u64 },
     /// Sender doesn't have enough staked sequencer funds
     SenderInsufficientStake,
     /// The max amount of unregistered blobs allowed to be processed per slot

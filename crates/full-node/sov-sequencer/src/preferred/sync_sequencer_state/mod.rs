@@ -32,7 +32,7 @@ use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
 use sov_state::Storage;
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
+use std::sync::atomic::{AtomicU32, AtomicU64};
 use std::sync::Arc;
 pub(crate) use sync_state::*;
 use tokio::sync::broadcast;
@@ -168,7 +168,7 @@ pub(crate) fn create<S, Rt>(
     shutdown_sender: watch::Sender<()>,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
-    in_flight_blobs: Arc<AtomicUsize>,
+    in_flight_counts: sov_blob_sender::InFlightBlobCounts,
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
@@ -216,7 +216,7 @@ where
         executor_events_sender,
         sequence_number_of_open_batch: None,
         next_unassigned_sequence_number: sequence_number_of_next_blob,
-        in_flight_blobs,
+        in_flight_counts,
         has_finished_startup: false,
         metrics: Vec::with_capacity(128),
         is_ready,
