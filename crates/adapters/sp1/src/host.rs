@@ -1,5 +1,7 @@
 //! Implementation of the SP1 host for the Sovereign ZkvmHost trait.
 
+use std::sync::Arc;
+
 use crate::guest::SP1Guest;
 use crate::SP1MethodId;
 use serde::Serialize;
@@ -34,12 +36,12 @@ impl SP1AggregationHost {
     /// Creates a new aggregation host from the aggregation guest `elf` binary
     /// and the verifying key (`inner_method_id`) of the inner proof program.
     pub fn new(elf: &'static [u8], inner_method_id: SP1MethodId) -> anyhow::Result<Self> {
-        let host = SP1Host::new(elf);
-        let (_, pk) = host.create_prover_and_pk()?;
-        let code_commitment = SP1MethodId(bincode::serialize(pk.verifying_key())?);
+        let host = SP1Host::new(elf)?;
+        let aggregation_vk = host.pk.verifying_key().clone();
+        let code_commitment = SP1MethodId(bincode::serialize(&aggregation_vk)?);
         Ok(Self {
             host,
-            aggregation_vk: pk.verifying_key().clone(),
+            aggregation_vk,
             code_commitment,
             inner_method_id,
             prev_agg_proof: None,
@@ -116,30 +118,30 @@ impl SP1AggregationHost {
 pub struct SP1Host<'host> {
     elf: &'host [u8],
     stdin: SP1Stdin,
+    prover: Arc<CpuProver>,
+    pk: SP1ProvingKey,
 }
 
 /// Instantiate a new SP1 Host.
 impl<'host> SP1Host<'host> {
     /// Create a new SP1 Host.
-    pub fn new(elf: &'host [u8]) -> Self {
-        Self {
+    pub fn new(elf: &'host [u8]) -> anyhow::Result<Self> {
+        let prover = ProverClient::builder().cpu().build();
+        let pk = prover
+            .setup(elf.into())
+            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+
+        Ok(Self {
             elf,
             stdin: SP1Stdin::new(),
-        }
+            prover: Arc::new(prover),
+            pk,
+        })
     }
 
     /// Create a new `Sp1Guest` that reads the provided hints
     pub fn simulate_with_hints(&mut self) -> SP1Guest {
         SP1Guest::with_hints(self.stdin.buffer.clone())
-    }
-
-    fn create_prover_and_pk(&self) -> anyhow::Result<(CpuProver, SP1ProvingKey)> {
-        let prover = ProverClient::builder().cpu().build();
-        let pk = prover
-            .setup(self.elf.into())
-            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
-
-        Ok((prover, pk))
     }
 
     fn add_proof_helper(
@@ -163,9 +165,9 @@ impl<'host> SP1Host<'host> {
     fn run_helper(&mut self) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
         let stdin = std::mem::take(&mut self.stdin);
 
-        let (prover, pk) = self.create_prover_and_pk()?;
-        let output: sp1_sdk::SP1ProofWithPublicValues = prover
-            .prove(&pk, stdin)
+        let output: sp1_sdk::SP1ProofWithPublicValues = self
+            .prover
+            .prove(&self.pk, stdin)
             .compressed()
             .run()
             .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
@@ -179,6 +181,8 @@ impl Clone for SP1Host<'_> {
         Self {
             elf: self.elf,
             stdin: self.stdin.clone(),
+            prover: self.prover.clone(),
+            pk: self.pk.clone(),
         }
     }
 }
@@ -194,7 +198,7 @@ impl ZkvmHost for SP1Host<'static> {
     type Guest = SP1Guest;
 
     fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args)
+        Self::new(args).expect("Failed to create SP1Host")
     }
 
     fn add_hint<T: Serialize>(&mut self, item: T) {
@@ -207,8 +211,7 @@ impl ZkvmHost for SP1Host<'static> {
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
-        let (_, pk) = self.create_prover_and_pk()?;
-        Ok(crate::SP1MethodId(bincode::serialize(pk.verifying_key())?))
+        Ok(crate::SP1MethodId(bincode::serialize(self.pk.verifying_key())?))
     }
 }
 

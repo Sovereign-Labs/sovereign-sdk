@@ -11,7 +11,8 @@ struct TestStruct {
 
 #[test]
 fn test_hints_roundtrip() {
-    let mut host = SP1Host::new(&[]);
+    let fibonacci_elf = include_bytes!("../../test_data/riscv64im-succinct-zkvm-elf");
+    let mut host = SP1Host::new(fibonacci_elf).unwrap();
 
     let hint_a = TestStruct {
         ints: vec![1, 2, 3, 4, 5],

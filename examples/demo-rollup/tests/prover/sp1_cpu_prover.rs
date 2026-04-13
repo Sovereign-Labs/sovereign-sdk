@@ -83,7 +83,8 @@ struct TestHost {
 
 impl TestHost {
     async fn new(with_proof: bool) -> (Self, SP1MethodId) {
-        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
+        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF)
+            .expect("SP1Host should be created successfully");
         let host_clone = host.clone();
         let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
             host_clone
