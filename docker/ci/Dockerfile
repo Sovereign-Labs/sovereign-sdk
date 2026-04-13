@@ -86,8 +86,9 @@ SHELL ["/bin/bash", "-c"]
 RUN . /home/runner/.cargo/env \
     && curl -L https://risczero.com/install | bash \
     && export PATH="/home/runner/.risc0/bin:$PATH" \
-    && /home/runner/.risc0/bin/rzup install cargo-risczero 2.0.2 \
-    && /home/runner/.risc0/bin/rzup install rust 1.88.0 \
+    && /home/runner/.risc0/bin/rzup install cargo-risczero 3.0.5 \
+    && /home/runner/.risc0/bin/rzup install r0vm 3.0.5 \
+    && /home/runner/.risc0/bin/rzup install rust 1.91.1 \
     && /home/runner/.risc0/bin/rzup install cpp 2024.1.5 \
     && rm -rf /home/runner/.cargo/registry /home/runner/.cargo/git
 
