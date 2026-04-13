@@ -16,6 +16,7 @@
 
 - [What is This?](#what-is-this)
 - [Getting Started](#getting-started)
+    - [Feature flags](#feature-flags)
   - [Run a local DA layer instance](#run-a-local-da-layer-instance)
   - [Start the Rollup Full Node](#start-the-rollup-full-node)
   - [Sanity Check: Creating a Token](#sanity-check-creating-a-token)

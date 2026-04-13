@@ -112,7 +112,7 @@ async fn run() -> anyhow::Result<()> {
             )
             .await
             .context("Failed to initialize ExternalMockDa rollup")?;
-            return rollup.run().await;
+            rollup.run().await
         } else {
             let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
@@ -123,7 +123,7 @@ async fn run() -> anyhow::Result<()> {
             )
             .await
             .context("Failed to initialize MockDa rollup")?;
-            return rollup.run().await;
+            rollup.run().await
         }
     }
 
