@@ -563,3 +563,82 @@ jobs:
       - name: Run starter lint
         working-directory: ${{ runner.temp }}/rollup-starter
         run: make lint
+
+  # Compilation timing monitors — informational only, NOT in check-aggregate.
+  # These jobs run the same compilation as their counterparts but with --timings
+  # to produce per-crate timing data. They use separate cache tags to avoid
+  # interfering with production caches.
+
+  timing_check:
+    name: timing_check
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=timing-check-1-93
+    timeout-minutes: 60
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
+      - run: cargo switcheroo disable
+        shell: bash
+      - name: Compile with timings
+        run: |
+          SECONDS=0
+          cargo check --all-targets --all-features --timings
+          echo "WALL_CLOCK_SECONDS=$SECONDS" >> "$GITHUB_ENV"
+      - name: Print timing summary
+        run: python3 scripts/print_compile_timings.py timing_check
+
+  timing_nextest:
+    name: timing_nextest
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=timing-nextest-1-93
+    timeout-minutes: 60
+    env:
+      RISC0_DEV_MODE: "true"
+      SP1_PROVER: "mock"
+      RUST_BACKTRACE: 1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
+      - run: cargo switcheroo disable
+        shell: bash
+      - name: Build test binaries with timings
+        run: |
+          SECONDS=0
+          cargo build --tests --timings
+          echo "WALL_CLOCK_SECONDS=$SECONDS" >> "$GITHUB_ENV"
+      - name: Print timing summary
+        run: python3 scripts/print_compile_timings.py timing_nextest
+
+  timing_nextest_all_features:
+    name: timing_nextest_all_features
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-all-features-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=timing-nextest-all-features-1-93
+    timeout-minutes: 60
+    env:
+      RISC0_DEV_MODE: "true"
+      SP1_PROVER: "mock"
+      RUST_BACKTRACE: 1
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
+      - run: cargo switcheroo disable
+        shell: bash
+      - name: Build test binaries with timings (all features)
+        run: |
+          SECONDS=0
+          cargo build --tests --all-features --timings
+          echo "WALL_CLOCK_SECONDS=$SECONDS" >> "$GITHUB_ENV"
+      - name: Print timing summary
+        run: python3 scripts/print_compile_timings.py timing_nextest_all_features
