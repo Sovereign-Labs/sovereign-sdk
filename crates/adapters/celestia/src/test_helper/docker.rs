@@ -289,6 +289,7 @@ impl CelestiaDevNode {
             rpc_auth_token: None,
             grpc_url: Some(grpc_url),
             grpc_auth_token: None,
+            grpc_fallback_endpoints: Vec::new(),
             signer_private_key: Some(key_0),
             request_timeout_secs: default_request_timeout_seconds(),
             api_request_timeout_secs: default_api_request_timeout_secs(),
