@@ -116,5 +116,5 @@ RUN rm -rf /home/runner/.cargo/.global-cache
 
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
     PATH="/home/runner/.risc0/bin:/home/runner/.sp1/bin:/home/runner/.cargo/bin:${PATH}" \
-    RISC0_RUST_TOOLCHAIN_VERSION=1.88.0 \
+    RISC0_RUST_TOOLCHAIN_VERSION=1.91.1 \
     RISC0_CPP_TOOLCHAIN_VERSION=2024.1.5
