@@ -147,7 +147,6 @@ impl FilterQuery {
     }
 }
 
-#[axum::async_trait]
 impl<S> FromRequestParts<S> for FilterQuery
 where
     S: Send + Sync,

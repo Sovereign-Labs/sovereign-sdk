@@ -276,7 +276,7 @@ pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
                     },
                     Some(Ok(Message::Pong(data))) => {
                         // Client responded to our ping - verify it matches what we sent
-                        if awaiting_pong.is_some_and(|expected| data == expected) {
+                        if awaiting_pong.is_some_and(|expected| *data == expected) {
                             awaiting_pong = None;
                             trace!("Received valid pong from client");
                         } else {
@@ -410,7 +410,7 @@ pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
                 // Send a ping to check if the client is still alive
                 ping_counter = ping_counter.wrapping_add(1);
                 let ping_data = ping_counter.to_le_bytes();
-                if let Err(err) = socket.send(Message::Ping(ping_data.to_vec())).await {
+                if let Err(err) = socket.send(Message::Ping(ping_data.to_vec().into())).await {
                     warn!(?err, "Failed to send ping - disconnecting client");
                     break;
                 }
@@ -423,7 +423,7 @@ pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
     }
 
     tracing::trace!("Closing websocket subscription");
-    socket.close().await.ok();
+    socket.send(Message::Close(None)).await.ok();
 }
 
 /// Compresses bytes with gzip.
@@ -455,7 +455,7 @@ async fn send_compressed_batch<T: Serialize>(
 
     match compress_json(batch) {
         Ok(compressed) => {
-            if let Err(err) = socket.feed(Message::Binary(compressed)).await {
+            if let Err(err) = socket.feed(Message::Binary(compressed.into())).await {
                 warn!(?err, "WebSocket send error - disconnecting client");
                 return Err(());
             }
@@ -478,7 +478,7 @@ async fn feed_compressed_bytes(socket: &mut WebSocket, data: &[u8]) -> Result<()
 
     match compress_bytes(data) {
         Ok(compressed) => {
-            if let Err(err) = socket.feed(Message::Binary(compressed)).await {
+            if let Err(err) = socket.feed(Message::Binary(compressed.into())).await {
                 return Err(err.into());
             }
             Ok(())

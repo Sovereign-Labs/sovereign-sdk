@@ -9,7 +9,7 @@ use sov_state::{Kernel, User};
 use crate::transaction::{AuthenticatedTransactionData, ProverReward, RemainingFunds};
 use crate::{
     Amount, Context, Gas, InfallibleStateAccessor, OperatingMode, Rewards, Spec, StateAccessor,
-    StateReader, StateWriter,
+    StateReader, StateWriter, VersionReader,
 };
 
 /// Enforces gas limits and penalties for transactions.
@@ -105,7 +105,8 @@ pub trait GasEnforcer<S: Spec> {
         Accessor: StateReader<Kernel, Error = Infallible>
             + StateWriter<Kernel, Error = Infallible>
             + StateWriter<User, Error = Infallible>
-            + StateReader<User, Error = Infallible>,
+            + StateReader<User, Error = Infallible>
+            + VersionReader,
     >(
         &mut self,
         initial_escrow: Amount,

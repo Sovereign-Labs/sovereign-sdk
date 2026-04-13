@@ -73,7 +73,6 @@ tokio = { workspace = true, features = [
 tokio-stream = { workspace = true }
 tracing = { workspace = true }
 rockbound = { workspace = true, optional = true }
-prometheus_exporter = "0.8.5"
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 alloy = { workspace = true, features = ["genesis"] }
@@ -108,7 +107,6 @@ sov-evm-test-utils = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-blob-storage = { workspace = true }
 sov-synthetic-load = { workspace = true, features = ["native"] }
-reth-primitives = { workspace = true, default-features = false }
 futures = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }

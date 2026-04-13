@@ -21,6 +21,7 @@ sov-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-state = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
 
+async-trait = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 backon = { workspace = true }

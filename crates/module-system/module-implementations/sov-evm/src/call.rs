@@ -1,7 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256};
 use anyhow::ensure;
-use reth_primitives::TransactionSigned;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
@@ -30,7 +29,7 @@ use crate::sov_fee_and_gas_utils::project_receipt_gas_from_actual_fee;
 use crate::{
     gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
     ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
-    GasMeteringMode, PendingTransaction, RlpEvmTransaction,
+    GasMeteringMode, PendingTransaction, RlpEvmTransaction, TransactionSigned,
 };
 use anyhow::{bail, Context as _};
 
@@ -440,7 +439,7 @@ where
             "EVM transaction has been executed"
         );
 
-        let receipt = reth_primitives::Receipt {
+        let receipt = crate::evm::eth_receipt::EthReceipt {
             tx_type: tx.signed_transaction.tx_type(),
             success: is_success,
             cumulative_gas_used: previous_transaction_cumulative_gas_used

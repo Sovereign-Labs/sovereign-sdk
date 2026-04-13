@@ -20,7 +20,7 @@ pub const ID: i32 = 1;
 
 /// "upsert" the last finalized height
 pub async fn update_value(
-    db: &DatabaseConnection,
+    db: &impl sea_orm::ConnectionTrait,
     last_finalized_height: u32,
 ) -> Result<(), DbErr> {
     let insert_stmt = Entity::insert(ActiveModel {

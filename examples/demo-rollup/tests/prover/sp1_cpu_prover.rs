@@ -1,16 +1,16 @@
 use std::path::PathBuf;
 
+use super::{DefaultSpec, ProofStateRoot, ProofWitness};
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::{Spec, ZkVerifier};
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof;
+use sov_rollup_interface::zk::SerializedInnerProof;
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitnessWithAddress, ZkvmHost,
 };
-use sov_sp1_adapter::host::SP1Host;
-use sov_sp1_adapter::BlockHeaderWithProof;
+use sov_sp1_adapter::host::{MockSp1Prover, SP1Host};
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
-
-use super::{DefaultSpec, ProofStateRoot, ProofWitness};
 
 type ProofInput = StateTransitionWitnessWithAddress<
     <DefaultSpec as Spec>::Address,
@@ -22,18 +22,19 @@ type ProofInput = StateTransitionWitnessWithAddress<
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
-    let host = TestHost::new().await;
-    let proof_data = generate_proofs(true, &host).await;
+    let (host, code_commitment) = TestHost::new(true).await;
+    let proof_data = generate_proofs(&host).await;
     let proofs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("test_data")
         .join("tmp");
 
     std::fs::create_dir_all(&proofs_dir).unwrap();
-    std::fs::write(proofs_dir.join("inner_vk.bin"), host.verifying_key_bytes()).unwrap();
+    std::fs::write(proofs_dir.join("inner_vk.bin"), code_commitment.0.clone()).unwrap();
 
     for (i, data) in proof_data.into_iter().enumerate() {
-        let proof_public_data = host.verify(data.proof.clone()).await;
+        let proof_public_data =
+            verify(data.proof.raw_inner_proof.clone(), code_commitment.clone()).await;
         assert_eq!(proof_public_data.slot_hash, data.da_block_header.hash());
         let json = serde_json::to_string(&data).unwrap();
         std::fs::write(proofs_dir.join(format!("inner_{i}_proof.json")), &json).unwrap();
@@ -44,14 +45,11 @@ async fn test_save_proofs() {
 #[tokio::test(flavor = "multi_thread")]
 #[cfg_attr(skip_guest_build, ignore)]
 async fn test_proof_generation() {
-    let host = TestHost::new().await;
-    let _ = generate_proofs(false, &host).await;
+    let (host, _) = TestHost::new(false).await;
+    let _ = generate_proofs(&host).await;
 }
 
-async fn generate_proofs(
-    with_proof: bool,
-    host: &TestHost,
-) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
+async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
 
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
@@ -65,10 +63,10 @@ async fn generate_proofs(
             prover_address,
         };
 
-        let proof = host.run(data, with_proof).await;
+        let raw_inner_proof = host.run(data).await;
         proofs.push(BlockHeaderWithProof {
             da_block_header,
-            proof,
+            proof: SerializedInnerProof { raw_inner_proof },
         });
     }
 
@@ -79,11 +77,12 @@ async fn generate_proofs(
 // To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
 struct TestHost {
     host: SP1Host<'static>,
-    code_commitment: SP1MethodId,
+    mock_host: MockSp1Prover,
+    with_proof: bool,
 }
 
 impl TestHost {
-    async fn new() -> Self {
+    async fn new(with_proof: bool) -> (Self, SP1MethodId) {
         let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
         let host_clone = host.clone();
         let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
@@ -94,38 +93,49 @@ impl TestHost {
         .await
         .unwrap();
 
-        Self {
-            host,
+        let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF);
+
+        (
+            Self {
+                host,
+                mock_host,
+                with_proof,
+            },
             code_commitment,
+        )
+    }
+
+    async fn run(&self, data: ProofInput) -> Vec<u8> {
+        if self.with_proof {
+            let mut host = self.host.clone();
+            tokio::task::spawn_blocking(move || -> Vec<u8> {
+                host.add_hint(data);
+                host.run().expect("Prover should run successfully")
+            })
+            .await
+            .unwrap()
+        } else {
+            let mut mock_host = self.mock_host.clone();
+            tokio::task::spawn_blocking(move || -> Vec<u8> {
+                mock_host.add_hint(data);
+                mock_host.run().unwrap();
+                Default::default()
+            })
+            .await
+            .unwrap()
         }
     }
+}
 
-    async fn run(&self, data: ProofInput, with_proof: bool) -> Vec<u8> {
-        let mut host = self.host.clone();
-        tokio::task::spawn_blocking(move || -> Vec<u8> {
-            host.add_hint(data);
-            host.run(with_proof)
-                .expect("Prover should run successfully")
-        })
-        .await
-        .unwrap()
-    }
-
-    fn verifying_key_bytes(&self) -> Vec<u8> {
-        self.code_commitment.0.clone()
-    }
-
-    #[allow(dead_code)]
-    async fn verify(
-        &self,
-        proof: Vec<u8>,
-    ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-        let code_commitment = self.code_commitment.clone();
-        tokio::task::spawn_blocking(move || -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
+#[allow(dead_code)]
+async fn verify(
+    proof: Vec<u8>,
+    code_commitment: SP1MethodId,
+) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
+    tokio::task::spawn_blocking(move || -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
             SP1Verifier::verify(&proof, &code_commitment)
                 .expect("SP1 proof verification should succeed")
         })
         .await
         .unwrap()
-    }
 }

@@ -129,7 +129,11 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         panic!("The rollup should have stopped")
     };
 
-    assert!(err.to_string().contains("The requested stop_height"));
+    let pattern = "The requested stop_height";
+    assert!(
+        err.to_string().contains(pattern),
+        "Error: '{err}' does not contain expected pattern: '{pattern}'"
+    );
 }
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {

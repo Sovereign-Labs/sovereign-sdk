@@ -25,6 +25,8 @@ pub struct DeferredProofInput<Da: DaSpec> {
 pub struct AggregatedProofWitness<Da: DaSpec> {
     /// The inner proof inputs to be aggregated.
     pub proof_inputs: Vec<DeferredProofInput<Da>>,
+    /// The hash of the inner verification key used to verify the aggregated proofs.
+    pub inner_vkey_hash: CodeCommitmentHash,
     /// The hash of the outer verification key.
     pub outer_vkey_hash: CodeCommitmentHash,
     /// An optional previous outer proof witness for recursive aggregation.

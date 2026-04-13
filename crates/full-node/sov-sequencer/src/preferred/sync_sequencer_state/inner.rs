@@ -14,7 +14,7 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
-use crate::preferred::{comfortable_gas_limit, PreferredBlobToReplay};
+use crate::preferred::{comfortable_gas_limit_for_height, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
@@ -76,6 +76,8 @@ where
     pub(crate) shutdown_sender: watch::Sender<()>,
 
     pub(crate) executor: RollupBlockExecutor<S, Rt>,
+    /// The rollup height of the latest node checkpoint applied to this executor's storage.
+    pub(crate) executor_rebase_height: RollupHeight,
     pub(crate) latest_info: StateUpdateInfo<S::Storage>,
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
@@ -251,6 +253,7 @@ where
 
         // Replace known info
         self.latest_info = info.clone();
+        self.executor_rebase_height = new_executor.checkpoint.rollup_height_to_access();
 
         // Replace executor state
         self.executor.replace_state(new_executor).await;
@@ -325,10 +328,11 @@ where
         &mut self,
         remaining_slot_gas: <S as GasSpec>::Gas,
     ) {
+        let rollup_height = self.executor.checkpoint.rollup_height_to_access();
         // Check if we're close to the gas limit and close the batch if we are.
         // We want to close when gas used is at least 95% of the initial gas limit.
-        let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
-        let comfortable_gas_limit = comfortable_gas_limit::<S>();
+        let initial_gas_limit = <S as GasSpec>::gas_limit_for_height(rollup_height);
+        let comfortable_gas_limit = comfortable_gas_limit_for_height::<S>(rollup_height);
 
         let gas_used = initial_gas_limit
             .checked_sub(remaining_slot_gas)
@@ -396,6 +400,16 @@ where
             return;
         }
 
+        self.trigger_batch_production().await;
+    }
+
+    pub(crate) async fn trigger_batch_production(&mut self) {
+        if !self.seq_config.automatic_batch_production {
+            tracing::error!("Producing batch even though automatic batch production is disabled. This is probably a test bug");
+            #[cfg(debug_assertions)]
+            panic!("Producing batch even though automatic batch production is disabled. This is probably a test bug");
+        }
+
         if let Err(e) = self
             .try_to_create_and_start_batch_if_none_in_progress(true)
             .await
@@ -414,9 +428,7 @@ where
 
         // If the node is shutting down, we may not be able to terminate the batch. In that case, just return early.
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
-            info!(
-                "The sequencer is shutting down. Exiting trigger_batch_production_if_convenient."
-            );
+            info!("The sequencer is shutting down. Exiting trigger_batch_production.");
             return;
         }
 

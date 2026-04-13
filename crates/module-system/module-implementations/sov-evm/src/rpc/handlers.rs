@@ -17,12 +17,23 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::state::PinnedCacheAccessor;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
+use sov_state::{NativeStorage, Storage, StorageProof, User};
 use std::ops::DerefMut;
 use tracing::trace;
 
 use crate::Evm;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GetProofResponse<S: Spec> {
+    pub proof: StorageProof<<S::Storage as Storage>::Proof>,
+    pub state_root: <S::Storage as Storage>::Root,
+    /// The ethereum block which contains the state root as its storage root.
+    /// Note that since state roots are delayed, this is *not* the same as the block number which would have viewed the state root as its storage root.
+    pub state_root_block_number: u64,
+}
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -133,6 +144,48 @@ where
             .unwrap_or_default();
 
         Ok(storage_slot.to_be_bytes::<32>().into())
+    }
+
+    /// Returns merkle proofs of storage slots
+    #[rpc_method(name = "ext_getStorageProof", blocking)]
+    pub fn get_storage_proof(
+        &self,
+        address: Address,
+        index: U256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<GetProofResponse<S>> {
+        let storage = state.storage();
+        let account_slot_key = self.account_storage.slot_key(&(&address, &index));
+        let accessory_block_numbers_key = self.block_numbers.slot_key();
+        let (proof, slot_number, root_hash) = storage
+            .get_with_proof::<User>(account_slot_key)
+            .map_err(|err| {
+                tracing::warn!(error = ?err, "Error getting storage proof after retries");
+                into_rpc_error(err)
+            })?;
+
+        let accessory_values =
+            storage.get_accessory_unbound(accessory_block_numbers_key, Some(slot_number));
+        let Some(block_number_slot_value) = accessory_values.as_ref() else {
+            tracing::error!(
+                %slot_number,
+                "Missing evm.block_numbers while building storage proof response. This is a bug, block numbers must always be set."
+            );
+            return Err(into_rpc_error(format!(
+                "evm.block_numbers returned None at slot {slot_number}."
+            )));
+        };
+
+        let block_number = *self
+            .block_numbers
+            .decode_unwrap(block_number_slot_value)
+            .end();
+        let block_number = block_number.saturating_add(config_value!("STATE_ROOT_DELAY_BLOCKS")); // Add state root delay blocks to get the state root for the block number
+        Ok(GetProofResponse {
+            proof,
+            state_root: root_hash,
+            state_root_block_number: block_number,
+        })
     }
 
     /// Handler for: `eth_getTransactionCount`
@@ -303,7 +356,27 @@ where
     }
 
     /// Handler for: `eth_call`
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    ///
+    /// Simulates a transaction without committing state changes.
+    ///
+    /// # Affordability checks
+    ///
+    /// No balance check is performed when fee fields are omitted (the common case).
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) hardcodes `gas_price = 0`,
+    /// making revm's upfront-cost formula evaluate to zero so any account can call.
+    /// When `value > 0`, revm still verifies the caller holds at least `value`.
+    ///
+    /// **Desired behaviour** (matching geth): when the caller explicitly provides
+    /// `gasPrice > 0` or `maxFeePerGas > 0`, enforce `gas_limit * gas_price + value
+    /// <= balance` and return `InsufficientFunds` on failure. This is not yet
+    /// implemented — see the divergence note on [`prepare_call_env`](crate::helpers::prepare_call_env).
+    ///
+    /// This differs from `eth_estimateGas`, which runs a paymaster-aware
+    /// affordability preflight in `sov-ethereum` (see `estimate_gas.rs`).
+    ///
+    /// References:
+    /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
+    /// - Reth `call`: <https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-eth-api/src/helpers/call.rs>
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,
@@ -326,6 +399,20 @@ where
     }
 
     /// Handler for: `eth_createAccessList`
+    ///
+    /// Generates an EIP-2930 access list by running the transaction with an
+    /// [`AccessListInspector`]. Affordability semantics are identical to `eth_call`:
+    /// no balance check when fee fields are omitted, because
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) sets `gas_price = 0`.
+    /// This matches geth's `AccessList()` path which also uses zero-fee defaults.
+    ///
+    /// Note: EIP-2930 (<https://eips.ethereum.org/EIPS/eip-2930>) defines the access
+    /// list *transaction type*; the `eth_createAccessList` RPC method itself is a
+    /// client-level addition defined in `execution-apis`
+    /// (<https://github.com/ethereum/execution-apis>).
+    ///
+    /// See [`prepare_call_env`](crate::helpers::prepare_call_env) for the full
+    /// affordability analysis and current divergence from geth.
     #[rpc_method(name = "eth_createAccessList")]
     pub fn eth_create_access_list(
         &self,

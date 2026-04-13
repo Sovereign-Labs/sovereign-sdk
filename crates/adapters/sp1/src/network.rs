@@ -3,11 +3,11 @@
 //! Submits proof requests to the Succinct proving network and polls for results.
 
 use serde::Serialize;
-use sov_rollup_interface::zk::{Proof, ZkvmNetwork};
+use sov_rollup_interface::zk::{ZkVerifier, ZkvmGuest, ZkvmNetwork};
 use sp1_sdk::network::proto::auction_types::FulfillmentStatus;
 use sp1_sdk::network::{NetworkMode, B256};
 use sp1_sdk::prover::{ProveRequest, Prover};
-use sp1_sdk::{NetworkProver, ProverClient, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{NetworkProver, ProverClient, ProvingKey, SP1ProvingKey, SP1Stdin};
 
 use crate::guest::SP1Guest;
 
@@ -68,11 +68,16 @@ impl ZkvmNetwork for SP1Network {
         }
 
         match maybe_proof {
-            Some(proof) => Ok(Some(bincode::serialize(&Proof::<
-                _,
-                sp1_sdk::SP1PublicValues,
-            >::Full(proof))?)),
+            Some(proof) => Ok(Some(bincode::serialize(&proof)?)),
             None => Ok(None),
         }
+    }
+
+    fn code_commitment(
+        &self,
+    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment> {
+        Ok(crate::SP1MethodId(bincode::serialize(
+            self.pk.verifying_key(),
+        )?))
     }
 }

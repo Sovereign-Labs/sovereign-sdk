@@ -45,10 +45,7 @@ impl TestTokenName {
     /// Returns the ID of the token.
     pub fn id(&self) -> TokenId {
         let mut bytes: [u8; 32] =
-            <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher::digest(self.to_string())
-                .as_slice()
-                .try_into()
-                .unwrap();
+            <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher::digest(self.to_string()).into();
         bytes[31] = DEFAULT_TOKEN_DECIMALS;
         TokenId::from(bytes)
     }

@@ -4,12 +4,12 @@ use crate::TokenHolder;
 use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
 use axum::routing::get;
 use axum::Json;
-use derive_more::FromStr;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
 use sov_modules_api::prelude::{axum, serde_yaml, UnwrapInfallible};
 use sov_modules_api::rest::utils::{errors, ApiResult, Path, Query};
 use sov_modules_api::rest::{ApiState, HasCustomRestApi};
 use sov_modules_api::{ApiStateAccessor, Spec};
+use std::str::FromStr;
 
 /// Structure returned by the `balance_of` method.
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
@@ -105,18 +105,18 @@ impl<S: Spec> HasCustomRestApi for Bank<S> {
         axum::Router::new()
             .route("/tokens/gas_token", get(Self::route_gas_token))
             .route(
-                "/tokens/gas_token/balances/:holderStr",
+                "/tokens/gas_token/balances/{holderStr}",
                 get(Self::route_gas_token_balance),
             )
             .route(
-                "/tokens/:tokenId/balances/:holderStr",
+                "/tokens/{tokenId}/balances/{holderStr}",
                 get(Self::route_balance),
             )
             .route(
-                "/tokens/:tokenId/total-supply",
+                "/tokens/{tokenId}/total-supply",
                 get(Self::route_total_supply),
             )
-            .route("/tokens/:tokenId/admins", get(Self::route_admins))
+            .route("/tokens/{tokenId}/admins", get(Self::route_admins))
             .route("/tokens", get(Self::route_find_token_id))
             .with_state(state.with(self.clone()))
     }

@@ -1,4 +1,26 @@
+# 2026-04-08
+- #2695 adds a new `ext_getStorageProof` RPC endpoint to the EVM module
+- #2704 Replaces `reth`-related crates. No breakage is intended.
+- #2710 Marks demo-rollup's bank test as flaky.
+
+# 2026-04-02
+- #2682 Upgrades axum from 0.7 to 0.8. OpenAPI specs are now served as version 3.1.0 (previously 3.0.2). Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
+- #2683 Removes JMT based rollup from demo-rollup examples. JMT-based storage is still available in sov-state.
+
+# 2026-04-01
+- #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
+
+# 2026-03-30
+- #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
+- #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
+- #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
+- #2675 Upgrades `rockbound` version, with some dependency clean up. `prometheus_exporter` is removed from `demo-rollup`
+- #2671 Fixes API archival query race condition
+- #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
+- #2658 (Non-breaking) Add multisig support to the sov-solana-offchain-authenticator, but only when using simple signing (i.e. multisigs are not yet supported with Ledger wallets).
+
 # 2026-03-24
+- #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
 - #2631 Reorganize and extend demo-stf

@@ -12,7 +12,16 @@ use sov_modules_api::{
 use sov_state::ZkStorage;
 use sov_test_utils::ZkTestSpec;
 
-pub trait TestSpec: Default + std::fmt::Debug + Clone + PartialEq + Eq + 'static {
+pub trait TestSpec:
+    Default
+    + std::fmt::Debug
+    + Clone
+    + PartialEq
+    + Eq
+    + 'static
+    + serde::Serialize
+    + serde::de::DeserializeOwned
+{
     type Data: Data;
 }
 
@@ -116,7 +125,7 @@ struct Runtime<S: Spec, T: TestSpec> {
     pub first: my_module::QueryModule<S, T::Data>,
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug)]
+#[derive(Default, PartialEq, Eq, Clone, Debug, serde::Serialize, serde::Deserialize)]
 struct ActualSpec;
 
 impl TestSpec for ActualSpec {

@@ -15,7 +15,7 @@ use base64::Engine;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use secp256k1::{PublicKey, SecretKey};
+use secp256k1::SecretKey;
 use sov_api_spec::types as api_types;
 use sov_bank::config_gas_token_id;
 use sov_cli::NodeClient;
@@ -288,12 +288,8 @@ impl EvmAccount {
         Self(secret_key)
     }
 
-    fn public_key(&self) -> PublicKey {
-        PublicKey::from_secret_key(secp256k1::SECP256K1, &self.0)
-    }
-
     fn address(&self) -> Address {
-        reth_primitives::public_key_to_address(self.public_key())
+        Signer::new(self.0).address()
     }
 
     fn sign(&self, tx: TypedTransaction) -> RlpEvmTransaction {

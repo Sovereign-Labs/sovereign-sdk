@@ -1,42 +1,31 @@
-use std::marker::PhantomData;
-
 use crate::da::{BlockHeaderTrait, DaVerifier};
 use crate::stf::{ExecutionContext, StateTransitionFunction};
-use crate::zk::{StateTransitionPublicData, StateTransitionWitnessWithAddress, Zkvm, ZkvmGuest};
+use crate::zk::{StateTransitionPublicData, StateTransitionWitnessWithAddress, ZkvmGuest};
 
 /// Verifies a state transition.
-pub struct StateTransitionVerifier<ST, Da, InnerVm, OuterVm>
+pub struct StateTransitionVerifier<ST, Da>
 where
     Da: DaVerifier,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    ST: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
+    ST: StateTransitionFunction<Da::Spec>,
 {
     app: ST,
     da_verifier: Da,
-    phantom: PhantomData<(InnerVm, OuterVm)>,
 }
 
-impl<Stf, Da, InnerVm, OuterVm> StateTransitionVerifier<Stf, Da, InnerVm, OuterVm>
+impl<Stf, Da> StateTransitionVerifier<Stf, Da>
 where
     Da: DaVerifier,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
+    Stf: StateTransitionFunction<Da::Spec>,
 {
     /// Create a [`StateTransitionVerifier`]
     pub fn new(app: Stf, da_verifier: Da) -> Self {
-        Self {
-            app,
-            da_verifier,
-            phantom: Default::default(),
-        }
+        Self { app, da_verifier }
     }
 
     /// Verify the next block
-    pub fn run_block(
+    pub fn run_block<G: ZkvmGuest>(
         &self,
-        zkvm: InnerVm::Guest,
+        zkvm: G,
         pre_state: Stf::PreState,
     ) -> Result<(), Da::Error> {
         let data: StateTransitionWitnessWithAddress<Stf::Address, _, _, Da::Spec> =

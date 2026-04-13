@@ -16,17 +16,8 @@ pub use mock_rollup::*;
 mod celestia_rollup;
 pub use celestia_rollup::*;
 
-mod celestia_nomt_rollup;
-pub use celestia_nomt_rollup::*;
-
-mod mock_nomt_rollup;
-pub use mock_nomt_rollup::*;
-
 mod external_mock_rollup;
 pub use external_mock_rollup::*;
-
-mod external_mock_nomt_rollup;
-pub use external_mock_nomt_rollup::*;
 
 mod solana_offchain_endpoint;
 

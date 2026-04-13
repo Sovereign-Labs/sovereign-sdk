@@ -337,6 +337,13 @@ pub trait Storage: Clone + core::fmt::Debug {
 }
 
 #[cfg(feature = "native")]
+type ProofOutput<S> = (
+    StorageProof<<S as Storage>::Proof>,
+    SlotNumber,
+    <S as Storage>::Root,
+);
+
+#[cfg(feature = "native")]
 /// A [`Storage`] that is suitable for use in native execution environments
 /// (outside of the zkVM).
 pub trait NativeStorage: Storage {
@@ -375,8 +382,7 @@ pub trait NativeStorage: Storage {
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         key: SlotKey,
-        slot_number: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>>;
+    ) -> anyhow::Result<ProofOutput<Self>>;
 
     /// Get the *global* root hash of the tree at the requested version.
     /// Returns an error if storage is empty or the requests version is not yet available.
@@ -397,6 +403,13 @@ pub trait NativeStorage: Storage {
     }
     /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue>;
+
+    /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
+    fn get_accessory_unbound(
+        &self,
+        key: SlotKey,
+        max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue>;
 
     /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
     fn maybe_iter_user_values_with_prefix(

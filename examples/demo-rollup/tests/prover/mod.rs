@@ -3,26 +3,31 @@ use std::sync::Arc;
 
 use demo_stf::genesis_config::create_genesis_config;
 use demo_stf::runtime::Runtime;
+use sov_db::config::RollupDbConfig;
 use sov_db::schema::SchemaBatch;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
-use sov_modules_api::{OperatingMode, SlotData};
+use sov_modules_api::{CryptoSpec, OperatingMode, SlotData};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_sp1_adapter::SP1;
-use sov_state::ProverStorage;
+use sov_sp1_adapter::SP1CryptoSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_utils::generators::BlobBuildingCtx;
-use sov_test_utils::TestStorageSpec;
 use tempfile::TempDir;
 
 use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
 use crate::test_helpers::test_genesis_paths;
+
+type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
+type NativeStorage =
+    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
@@ -30,18 +35,18 @@ pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSp
     sov_mock_zkvm::MockZkvm,
     demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
-    sov_mock_zkvm::MockZkvmCryptoSpec,
+    SP1CryptoSpec,
+    NativeStorage,
 >;
 
 mod datagen;
 mod network;
+mod parallel;
 mod sp1_cpu_prover;
 
 pub(super) type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
-pub(super) type ProofStateRoot =
-    <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
-pub(super) type ProofWitness =
-    <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness;
+pub(super) type ProofStateRoot = <TestSTF as StateTransitionFunction<MockDaSpec>>::StateRoot;
+pub(super) type ProofWitness = <TestSTF as StateTransitionFunction<MockDaSpec>>::Witness;
 pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
 
 /// Executes the STF against mock DA blocks and produces per-block witnesses.
@@ -58,9 +63,11 @@ pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
         curr_sequence_number: Arc::new(AtomicU64::new(0)),
     };
 
-    let mut storage_manager =
-        NativeStorageManager::<MockDaSpec, ProverStorage<TestStorageSpec>>::new(temp_dir.path())
-            .expect("NativeStorageManager initialization has failed");
+    let mut storage_manager = NomtStorageManager::<MockDaSpec, Hasher, NativeStorage>::new(
+        RollupDbConfig::default_in_path(temp_dir.path().to_path_buf()),
+        true,
+    )
+    .expect("NomtStorageManager initialization has failed");
     let stf = TestSTF::new();
 
     let genesis_config = {

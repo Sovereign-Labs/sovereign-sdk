@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
@@ -10,7 +11,6 @@ use sov_mock_da::{MockDaSpec, MockHash};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
 use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier, Zkvm};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
@@ -19,13 +19,70 @@ use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, Sequencer
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
+
+/// Factory for creating a prover service within [`RtAgnosticBlueprint`].
+///
+/// Implement this trait to plug different prover backends (parallel, network, etc.)
+/// into the blueprint without reimplementing the entire [`FullNodeBlueprint`].
+#[async_trait]
+pub trait ProverFactory<S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>>:
+    Send + Sync + 'static
+{
+    /// The prover service type this factory creates.
+    type ProverService: ProverService<
+        StateRoot = <S::Storage as Storage>::Root,
+        Witness = <S::Storage as Storage>::Witness,
+        DaService = StorableMockDaService,
+        Verifier = <<MockZkvm as Zkvm>::Guest as ZkvmGuest>::Verifier,
+    >;
+
+    /// Create the prover service from the given config.
+    async fn create(
+        prover_config: RollupProverConfig<S::InnerZkvm>,
+        rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
+    ) -> Self::ProverService;
+}
+
+/// Default prover factory using local parallel proving.
+pub struct ParallelProverFactory<S>(PhantomData<S>);
+
+#[async_trait]
+impl<S> ProverFactory<S> for ParallelProverFactory<S>
+where
+    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
+{
+    type ProverService = ParallelProverService<
+        S::Address,
+        <S::Storage as Storage>::Root,
+        <S::Storage as Storage>::Witness,
+        StorableMockDaService,
+        S::InnerZkvm,
+        S::OuterZkvm,
+    >;
+
+    async fn create(
+        prover_config: RollupProverConfig<S::InnerZkvm>,
+        rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
+    ) -> Self::ProverService {
+        let (host_args, prover_config_disc) = prover_config.split();
+        let inner_vm = <S::InnerZkvm as Zkvm>::Host::from_args(&host_args);
+        let outer_vm = MockZkvmHost::new_non_blocking();
+
+        ParallelProverService::new_with_default_workers(
+            inner_vm,
+            outer_vm,
+            Default::default(),
+            prover_config_disc,
+            rollup_config.proof_manager.prover_address,
+        )
+    }
+}
 
 /// A basic, "vanilla" [`FullNodeBlueprint`] to be used for testing.
 ///
@@ -42,11 +99,15 @@ pub struct RtAgnosticBlueprint<
             MockHash,
         >,
     >,
+    Prover = ParallelProverFactory<S>,
     A = NoAdditionalApis,
 > {
-    phantom: PhantomData<(S, R, Manager, A)>,
+    phantom: PhantomData<(S, R, Manager, Prover, A)>,
 }
 
+impl<S: Spec, R: RuntimeTrait<S>, Manager, Prover> Default
+    for RtAgnosticBlueprint<S, R, Manager, Prover>
+{
 /// [`RtAgnosticBlueprint`] with the default NOMT storage manager and custom additional APIs.
 pub type RtAgnosticBlueprintWithApis<S, R, A> = RtAgnosticBlueprint<
     S,
@@ -70,11 +131,12 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager, A> Default for RtAgnosticBlueprint<S,
     }
 }
 
-impl<S, R, Manager, A> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, A>
+impl<S, R, Manager, Prover, A> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
     S: Spec + PluggableSpec,
     R: RuntimeTrait<S> + HasKernel<S> + HasCapabilities<S> + HasKernel<S>,
     Manager: Send + Sync + 'static,
+    Prover: Send + Sync + 'static,
     A: Send + Sync + 'static,
 {
     type Spec = S;
@@ -82,7 +144,7 @@ where
 }
 
 #[async_trait]
-impl<S, R, Manager, A> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, A>
+impl<S, R, Manager, Prover, A> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
     S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
@@ -97,20 +159,14 @@ where
             StfChangeSet = <S::Storage as Storage>::ChangeSet,
         >
         + StorageManagerInitializer<S, StorableMockDaService>,
+    Prover: ProverFactory<S>,
     A: AdditionalSequencerApis<S, R>,
 {
     type DaService = StorableMockDaService;
 
     type StorageManager = Manager;
 
-    type ProverService = ParallelProverService<
-        <Self::Spec as Spec>::Address,
-        <<Self::Spec as Spec>::Storage as Storage>::Root,
-        <<Self::Spec as Spec>::Storage as Storage>::Witness,
-        Self::DaService,
-        <Self::Spec as Spec>::InnerZkvm,
-        <Self::Spec as Spec>::OuterZkvm,
-    >;
+    type ProverService = <Prover as ProverFactory<S>>::ProverService;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
 
@@ -157,21 +213,7 @@ where
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (host_args, prover_config_disc) = prover_config.split();
-
-        let inner_vm = <S::InnerZkvm as Zkvm>::Host::from_args(&host_args);
-        let outer_vm = MockZkvmHost::new_non_blocking();
-
-        let da_verifier = Default::default();
-
-        ParallelProverService::new_with_default_workers(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            prover_config_disc,
-            CodeCommitmentHash::default(),
-            rollup_config.proof_manager.prover_address,
-        )
+        Prover::create(prover_config, rollup_config).await
     }
 
     fn create_storage_manager(

@@ -9,7 +9,8 @@ use std::sync::Arc;
 pub use generators::MessageGenerator;
 pub use interface::*;
 pub use rt_agnostic_blueprint::{
-    AdditionalSequencerApis, NoAdditionalApis, RtAgnosticBlueprint, RtAgnosticBlueprintWithApis,
+    AdditionalSequencerApis, NoAdditionalApis, ParallelProverFactory, ProverFactory,
+    RtAgnosticBlueprint, RtAgnosticBlueprintWithApis,
 };
 use serde::{Deserialize, Serialize};
 pub use sov_db::schema::SchemaBatch;

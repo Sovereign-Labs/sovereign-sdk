@@ -13,11 +13,13 @@ use cli::BenchRunnerCLI;
 use demo_stf::runtime::{GenesisConfig, Runtime, RuntimeCall};
 use helpers::{BatchReceiver, BatchSender};
 use humantime::Timestamp;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::{timestamp, TelegrafSocketConfig};
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::{CryptoSpec, Spec};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_rollup_interface::da::DaSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{MockDaSpec, RtAgnosticBlueprint};
 use sov_transaction_generator::generators::basic::{BasicChangeLogEntry, BasicClientConfig};
@@ -31,11 +33,11 @@ use crate::{mock_da_risc0_host_args, BenchRisc0Spec, DEFAULT_FINALIZATION_BLOCKS
 
 pub type S = BenchRisc0Spec;
 pub type RT = Runtime<S>;
-type JmtStorageManager = NativeStorageManager<
-    MockDaSpec,
-    ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
->;
-pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, JmtStorageManager>;
+type Hasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
+type BenchNativeStorage =
+    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+type BenchStorageManager = NomtStorageManager<MockDaSpec, Hasher, BenchNativeStorage>;
+pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, BenchStorageManager>;
 pub type BenchRollup = TestRollup<BenchBlueprint>;
 pub type BenchRollupBuilder = RollupBuilder<BenchBlueprint>;
 pub type BenchLogs = BasicChangeLogEntry<S>;

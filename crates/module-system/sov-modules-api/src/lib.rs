@@ -122,7 +122,7 @@ pub use sov_rollup_interface::zk::aggregated_proof::{
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::zk::HostArgs;
 pub use sov_rollup_interface::zk::{
-    CodeCommitmentFor, CryptoSpec, StateTransitionPublicData, ZkVerifier, Zkvm,
+    CodeCommitmentFor, CodeCommitmentTrait, CryptoSpec, StateTransitionPublicData, ZkVerifier, Zkvm,
 };
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::StateUpdateInfo;

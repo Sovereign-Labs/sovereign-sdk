@@ -2,20 +2,18 @@
 # Based on:
 # https://github.com/celestiaorg/celestia-app/blob/main/Dockerfile
 
-ARG CELESTIA_APP_TAG=v7.0.2-mocha
+ARG CELESTIA_APP_TAG=v8.0.1-mocha
 
 FROM ghcr.io/celestiaorg/celestia-app:${CELESTIA_APP_TAG} AS celestia-app
 
-FROM docker.io/alpine:3.20.1
+FROM docker.io/alpine:3.23
 
 ENV CELESTIA_HOME=/root
 
-RUN apk update && \
-    apk add --no-cache bash jq curl dasel && \
-    wget https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz && \
-    tar -xvf grpcurl_1.8.7_linux_x86_64.tar.gz && \
-    mv grpcurl /usr/local/bin && \
-    rm grpcurl_1.8.7_linux_x86_64.tar.gz
+RUN apk add --no-cache bash jq curl dasel && \
+    wget -O /tmp/grpcurl.tar.gz https://github.com/fullstorydev/grpcurl/releases/download/v1.9.3/grpcurl_1.9.3_linux_x86_64.tar.gz && \
+    tar -xf /tmp/grpcurl.tar.gz -C /usr/local/bin grpcurl && \
+    rm /tmp/grpcurl.tar.gz
 
 # Copy in the binary
 COPY --from=celestia-app /bin/celestia-appd /bin/celestia-appd

@@ -7,7 +7,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, CodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -36,7 +36,6 @@ pub(crate) struct Prover<Address, StateRoot, Witness, Da: DaService> {
     // and automatically terminate.
     // """
     pool: rayon::ThreadPool,
-    outer_vk_hash: CodeCommitmentHash,
     phantom: std::marker::PhantomData<(StateRoot, Witness, Da)>,
 }
 
@@ -48,13 +47,8 @@ where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
-    pub(crate) fn new(
-        prover_address: Address,
-        num_threads: usize,
-        outer_vk_hash: CodeCommitmentHash,
-    ) -> Self {
+    pub(crate) fn new(prover_address: Address, num_threads: usize) -> Self {
         Self {
-            outer_vk_hash,
             num_threads,
             pool: rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
@@ -192,7 +186,6 @@ where
         let public_data = AggregatedProofPublicData::from_block_proofs(
             &block_proofs_data,
             genesis_state_root.clone(),
-            self.outer_vk_hash.clone(),
         );
 
         trace!(%public_data, "generating aggregate proof");
@@ -200,7 +193,7 @@ where
         // `add_hint`  should take witness instead of the public input.
         outer_vm.add_hint(public_data);
         let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof: outer_vm.run(false)?,
+            raw_aggregated_proof: outer_vm.run()?,
         };
 
         for slot_hash in block_header_hashes {
@@ -220,16 +213,9 @@ where
     let proving_start = std::time::Instant::now();
     let result = match config {
         RollupProverConfigDiscriminants::Skip => Ok(Vec::default()),
-        RollupProverConfigDiscriminants::Execute => {
-            info!(
-                "Executing in VM without constructing proof using {}",
-                std::any::type_name::<InnerVm>()
-            );
-            vm.run(false)
-        }
         RollupProverConfigDiscriminants::Prove => {
             info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-            vm.run(true)
+            vm.run()
         }
     };
     sov_metrics::track_metrics(|tracker| {

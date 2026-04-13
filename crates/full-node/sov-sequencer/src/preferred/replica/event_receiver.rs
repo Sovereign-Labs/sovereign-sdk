@@ -10,6 +10,7 @@ use sov_rollup_interface::node::future_or_shutdown;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
+use sqlx::Row;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
@@ -294,22 +295,28 @@ impl EventReceiver {
         // After analyzing real-world workloads, we can revisit this optimization. Implementing it would only affect
         // the contents of this method and would not require significant refactoring.
         while current_event_id <= target_event_id {
-            let page_end = std::cmp::min(current_event_id + self.page_size as u64, target_event_id);
-
             trace!(
-                "Processing backfill page: events {} to {}",
+                "Processing backfill page starting at event {} up to {}",
                 current_event_id,
-                page_end
+                target_event_id
             );
 
             // Query and process events for this page
-            let db_rows = rows(&self.query_pool, page_end, current_event_id).await?;
+            let db_rows = rows(
+                &self.query_pool,
+                current_event_id,
+                target_event_id,
+                self.page_size,
+            )
+            .await?;
 
             if db_rows.is_empty() {
-                return Err(EventReceiverError::DbRowDoesNotExist(current_event_id));
+                return Err(EventReceiverError::DbRowDoesNotExist(target_event_id));
             }
 
+            let mut last_event_id = current_event_id;
             for row in db_rows {
+                last_event_id = row.get::<i64, _>("event_id") as u64;
                 let (event, event_type) = row_to_event(row)?;
 
                 if !(EventType::is_event_sequence_valid(prev_event_type, event_type)) {
@@ -323,7 +330,7 @@ impl EventReceiver {
                 prev_event_type = Some(event_type);
             }
 
-            current_event_id = page_end + 1;
+            current_event_id = last_event_id + 1;
         }
 
         Ok(prev_event_type)

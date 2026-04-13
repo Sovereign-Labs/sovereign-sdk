@@ -1,6 +1,7 @@
 [licenses]
 version = 2
 allow = [
+  "0BSD",
   "Apache-2.0",
   "MIT",
   "MIT-0",
@@ -17,7 +18,7 @@ allow = [
   "Apache-2.0 WITH LLVM-exception",
   "LicenseRef-Sovereign-Permissionless-Commercial-License",
   "Zlib",
-  "BSL-1.0",                                                # Relevant discussion: <https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/985#issuecomment-2242712349>.
+  "BSL-1.0",                                                # Boost Software License 1.0 — NOT Business Source License (BUSL-1.1). Relevant discussion: <https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/985#issuecomment-2242712349>.
 ]
 
 [[licenses.clarify]]
@@ -402,11 +403,6 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
-name = "sov-modules-schemas"
-expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
-license-files = []
-
-[[licenses.clarify]]
 name = "sov-soak-testing"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
@@ -418,11 +414,6 @@ license-files = []
 
 [[licenses.clarify]]
 name = "switcheroo"
-expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
-license-files = []
-
-[[licenses.clarify]]
-name = "sov-hyperlane-integration"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

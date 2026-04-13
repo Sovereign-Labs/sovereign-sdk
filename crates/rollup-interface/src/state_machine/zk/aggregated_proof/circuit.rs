@@ -29,36 +29,42 @@ type VerifyResult<Address, Da, Root> = VerifiedProofData<Address, <Da as DaSpec>
 /// Runs the aggregation circuit: reads a witness from the host, verifies inner
 /// proofs and an optional previous outer proof, checks DA and state-root
 /// continuity, then commits [`AggregatedProofPublicData`] as the public output.
-pub fn run_aggregation_program<Address, Da, Root, V, G>(
-    inner_vkey_hash: CodeCommitmentHash,
-    guest: G,
-) where
+pub fn run_aggregation_program<Address, Da, Root, V, G>(guest: G)
+where
     Address: Clone + Serialize + DeserializeOwned,
     Da: DaSpec,
     Root: Clone + Debug + PartialEq + Serialize + DeserializeOwned,
     V: ZkVerifier<CodeCommitment = CodeCommitmentHash>,
     G: ZkvmGuest<Verifier = V>,
 {
-    let witness = guest.read_from_host::<AggregatedProofWitness<Da>>();
-
-    let proof_inputs = witness.proof_inputs;
-    let outer_vkey_hash = witness.outer_vkey_hash;
-    let prev_outer_proof_witness = witness.prev_outer_proof_witness;
+    let AggregatedProofWitness {
+        proof_inputs,
+        inner_vkey_hash,
+        outer_vkey_hash,
+        prev_outer_proof_witness,
+    } = guest.read_from_host::<AggregatedProofWitness<Da>>();
 
     // Verify the previous aggregation proof if one exists. On the first aggregation
     // after genesis, there is no predecessor, the chain starts here.
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
-        V::verify::<AggregatedProofPublicData<Address, Da, Root>>(
+        let public_data = V::verify::<AggregatedProofPublicData<Address, Da, Root>>(
             &prev_outer_proof_witness.public_values,
             &outer_vkey_hash,
         )
-        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"))
+        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
+
+        assert_eq!(
+            public_data.inner_vkey_hash, inner_vkey_hash,
+            "Inner vkey hash changed between recursive aggregations"
+        );
+
+        public_data
     });
 
     let verified_proof_data: VerifyResult<Address, Da, Root> =
         verify_proof_chain::<Address, Da, Root, V>(
             proof_inputs,
-            inner_vkey_hash,
+            &inner_vkey_hash,
             previous_public_data.as_ref(),
         );
 
@@ -84,6 +90,7 @@ pub fn run_aggregation_program<Address, Da, Root, V, G>(
         final_state_root: final_boundary.state_root,
         initial_slot_hash: initial_boundary.slot_hash,
         final_slot_hash: final_boundary.slot_hash,
+        inner_vkey_hash,
         outer_vk_hash: outer_vkey_hash,
         rewarded_addresses,
     };
@@ -95,7 +102,7 @@ pub fn run_aggregation_program<Address, Da, Root, V, G>(
 
 fn verify_proof_chain<Address, Da, Root, V>(
     proof_inputs: Vec<DeferredProofInput<Da>>,
-    vkey_hash: CodeCommitmentHash,
+    vkey_hash: &CodeCommitmentHash,
     previous_agg_proof_public_data: Option<&AggregatedProofPublicData<Address, Da, Root>>,
 ) -> VerifyResult<Address, Da, Root>
 where
@@ -127,7 +134,7 @@ where
     for (index, proof_input) in proof_inputs.iter().enumerate() {
         let stf_public_data = V::verify::<StateTransitionPublicData<Address, Da, Root>>(
             &proof_input.public_values,
-            &vkey_hash,
+            vkey_hash,
         )
         .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 

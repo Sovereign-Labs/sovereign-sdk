@@ -100,6 +100,10 @@ where
                 },
         } = group;
 
+        // ======================= DANGER ZONE ======================
+        // The commit order here is relied on by NomtProverStorage::get_with_proof
+        // If you change the order, you'll need to update merkle proof generation.
+
         // NOMT
         tracing::trace!("Commiting NOMT DBs...");
         let merklized_commit = self.merklized_state.commit(state)?;
@@ -107,13 +111,15 @@ where
         // Ledger
         tracing::trace!("Committing Ledger DB...");
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
+            .inject_fault_if_configured();
         let ledger_commit = self.commit_ledger(&ledger)?;
 
         // Accessory
         tracing::trace!("Commiting Accessory DB...");
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingAccessory.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
+            .inject_fault_if_configured();
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 
@@ -135,6 +141,8 @@ where
             );
             self.flat_state.commit(historical_state)?
         };
+
+        // ======================= END DANGER ZONE ======================
 
         // Metrics
         let merklized_commit_from_caller = merklized_commit.total;

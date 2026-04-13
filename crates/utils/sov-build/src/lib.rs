@@ -18,12 +18,23 @@ use sov_modules_api::{DispatchCall, Spec};
 /// The `write_fn` closure receives a buffered writer for the temp file.
 /// After the closure returns, data is flushed, synced to disk, and the
 /// temp file is atomically renamed to `target`.
+///
+/// The temp file name includes PID and timestamp to avoid collisions when
+/// multiple build script invocations run concurrently (e.g. native vs zk mode).
 fn write_atomically<F>(target: &Path, write_fn: F) -> anyhow::Result<()>
 where
     F: FnOnce(&mut BufWriter<File>) -> anyhow::Result<()>,
 {
+    let unique_suffix = format!(
+        ".tmp.{}.{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
     let mut temp_os = target.as_os_str().to_os_string();
-    temp_os.push(".tmp");
+    temp_os.push(&unique_suffix);
     let temp_path = PathBuf::from(temp_os);
 
     let file = File::create(&temp_path)

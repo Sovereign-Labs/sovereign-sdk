@@ -16,7 +16,3 @@ sov-mock-zkvm = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-sp1-adapter = { workspace = true }
-
-[build-dependencies]
-bincode = { workspace = true }
-sp1-sdk = { workspace = true }

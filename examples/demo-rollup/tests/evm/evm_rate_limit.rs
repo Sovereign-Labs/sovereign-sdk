@@ -20,6 +20,7 @@ use sov_demo_rollup::MockRollupSpec;
 use sov_full_node_configs::sequencer::Limits;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
+use sov_rollup_interface::common::RollupHeight;
 use sov_sequencer::SovRateLimiterConfig;
 use sov_test_utils::test_rollup::get_appropriate_rollup_prover_config;
 use sov_test_utils::test_rollup::TestRollup;
@@ -52,6 +53,7 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         max_requests_per_second: 1,
         address_custom_limits: Vec::default(),
+        height_for_gas_limit_computation: RollupHeight::GENESIS,
         ip_custom_limits: Vec::default(),
     };
 

@@ -258,7 +258,7 @@ pub struct LedgerTestService {
     // Must be kept in scope during the test to avoid directory deletion.
     _dir: TempDir,
     /// An Axum server handle.
-    pub axum_handle: axum_server::Handle,
+    pub axum_handle: axum_server::Handle<std::net::SocketAddr>,
     /// An Axum client.
     pub axum_client: sov_api_spec::Client,
     /// Shutdown signal receiver to allow for clean shutdowns of the API.

@@ -3,11 +3,18 @@
 
 use std::collections::HashMap;
 
-use alloy_consensus::SignableTransaction;
-use alloy_consensus::{TxEip4844Variant, TypedTransaction};
-use reth_primitives::{sign_message, Transaction, TransactionSigned};
-use revm::primitives::{Address, B256};
+use alloy_consensus::crypto::secp256k1::{public_key_to_address, sign_message};
+use alloy_consensus::{
+    EthereumTxEnvelope, EthereumTypedTransaction, SignableTransaction, TxEip4844, TypedTransaction,
+};
+use alloy_primitives::{Address, B256};
 use secp256k1::{PublicKey, SecretKey};
+
+/// Signed ethereum transaction (EIP-2718 envelope).
+pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
+
+/// Unsigned ethereum transaction.
+type Transaction = EthereumTypedTransaction<TxEip4844>;
 
 /// Ethereum transaction signer.
 #[derive(Clone)]
@@ -40,17 +47,15 @@ impl Signer {
 
     /// Address
     pub fn address(&self) -> Address {
-        reth_primitives::public_key_to_address(self.public_key())
+        public_key_to_address(self.public_key())
     }
 
     /// Signs an ethereum transaction.
     pub fn sign_transaction(&self, request: TypedTransaction) -> Result<TransactionSigned, Error> {
-        let transaction =
-            to_primitive_transaction(request).ok_or(Error::InvalidTransactionRequest)?;
+        let transaction: Transaction = request.into();
         let tx_signature_hash = transaction.signature_hash();
         let sk = B256::from_slice(self.0.as_ref());
         let signature = sign_message(sk, tx_signature_hash).map_err(|_| Error::CouldNotSign)?;
-
         Ok(TransactionSigned::new_unhashed(transaction, signature))
     }
 }
@@ -86,18 +91,4 @@ impl Signers {
     pub fn addresses(&self) -> Vec<Address> {
         self.0.keys().cloned().collect()
     }
-}
-
-/// Converts a typed transaction request into a primitive transaction.
-fn to_primitive_transaction(tx_request: TypedTransaction) -> Option<Transaction> {
-    Some(match tx_request {
-        TypedTransaction::Legacy(tx) => Transaction::Legacy(tx),
-        TypedTransaction::Eip2930(tx) => Transaction::Eip2930(tx),
-        TypedTransaction::Eip1559(tx) => Transaction::Eip1559(tx),
-        TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844(tx)) => Transaction::Eip4844(tx),
-        TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844WithSidecar(tx)) => {
-            Transaction::Eip4844(tx.into())
-        }
-        TypedTransaction::Eip7702(tx) => Transaction::Eip7702(tx),
-    })
 }

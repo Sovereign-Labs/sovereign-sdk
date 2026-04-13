@@ -28,7 +28,7 @@ struct TestData {
     user: TestUser<S>,
 
     pub axum_addr: SocketAddr,
-    axum_server: axum_server::Handle,
+    axum_server: axum_server::Handle<std::net::SocketAddr>,
 
     sync_sender: watch::Sender<SyncStatus>,
 }
