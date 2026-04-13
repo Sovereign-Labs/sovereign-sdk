@@ -618,7 +618,7 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
     let da_service = CelestiaService::new(base_config.clone(), rollup_params, shutdown_rx).await;
     let verifier = CelestiaVerifier::new(rollup_params);
 
-    // Build 5 raw clients with different signers (keys 0–4).
+    // Build 6 raw clients with different signers (keys 1–6).
     let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
     let grpc_url = format!("http://127.0.0.1:{}", dev_node.validator_port_ipv4().await?);
 
