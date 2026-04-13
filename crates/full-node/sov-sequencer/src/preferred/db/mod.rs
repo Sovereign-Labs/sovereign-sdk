@@ -434,6 +434,15 @@ impl BlobsCache {
         self.in_progress_batch = None;
     }
 
+    /// Removes all proof entries from the cache, keeping batches intact.
+    /// Used during restart when the sequence counter is reset — stale proof
+    /// entries would collide with fresh sequence numbers assigned to new
+    /// batches and proofs.
+    pub fn remove_all_proofs(&mut self) {
+        self.proofs_and_completed_batches
+            .retain(|_, blob| matches!(blob, ReadBlob::Batch(_)));
+    }
+
     pub async fn insert_proof_blob(
         &mut self,
         blob_id: BlobInternalId,

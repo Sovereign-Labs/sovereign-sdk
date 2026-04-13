@@ -223,6 +223,7 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
             ?initial_status,
             "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
         );
+
         inner
             .executor_events_sender
             .flush_transactions_cache(info.next_tx_number)

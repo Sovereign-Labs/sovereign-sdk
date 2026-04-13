@@ -186,6 +186,7 @@ where
         self.in_flight_blobs.load(Ordering::Acquire)
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn overwrite_next_sequence_number_for_recovery(
         &mut self,
         sequence_number: SequenceNumber,

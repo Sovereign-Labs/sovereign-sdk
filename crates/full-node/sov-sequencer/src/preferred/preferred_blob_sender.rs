@@ -158,17 +158,19 @@ pub fn create_blobs_to_send(
                 blobs_to_send.push((BlobToSend::Batch { data }, blob_id));
             }
             ReadBlob::Proof {
-                data,
                 sequence_number,
                 blob_id,
                 ..
             } => {
+                // Don't re-dispatch proof blobs from DB on startup. They are
+                // already on DA from the previous run. Re-dispatching them with
+                // stale sequence numbers causes SequenceNumberTooLow discards
+                // after resync (sovereign-labs/sovereign-sdk#2558).
+                // New proofs will be generated fresh by the ZK proof manager.
                 debug!(
                     sequence_number,
-                    blob_id, "Dispatching proof blob for publishing"
+                    blob_id, "Skipping proof blob re-dispatch on startup"
                 );
-
-                blobs_to_send.push((BlobToSend::Proof { data: data.0 }, blob_id));
             }
         }
     }

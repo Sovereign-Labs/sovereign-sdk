@@ -813,11 +813,11 @@ where
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);
         let our_sequence_number = inner.next_unassigned_sequence_number;
 
-        if node_sequence_number > our_sequence_number {
-            inner
-                .overwrite_next_sequence_number_for_recovery(node_sequence_number)
-                .await;
-        }
+        // Note: we intentionally do NOT reset next_unassigned_sequence_number here.
+        // The counter is set during initialization (initialization.rs) to match the
+        // kernel's expected value. Overriding it during catchup would undo that fix,
+        // because the node processes old DA blocks and node_sequence_number temporarily
+        // reflects pre-restart values. See sovereign-labs/sovereign-sdk#2558.
 
         inner.latest_info = info.clone();
         // We update the API state, so users can query node state as it syncs.
