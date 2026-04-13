@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
@@ -7,11 +8,11 @@ use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
+    BlockProof, CodeCommitmentHash, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
-    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
-    ZkvmHost,
+    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
 };
 use tracing::{error, info, trace};
 
@@ -36,6 +37,7 @@ pub(crate) struct Prover<Address, StateRoot, Witness, Da: DaService> {
     // and automatically terminate.
     // """
     pool: rayon::ThreadPool,
+    outer_vk_hash: CodeCommitmentHash,
     phantom: std::marker::PhantomData<(StateRoot, Witness, Da)>,
 }
 
@@ -47,8 +49,13 @@ where
     StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
-    pub(crate) fn new(prover_address: Address, num_threads: usize) -> Self {
+    pub(crate) fn new(
+        prover_address: Address,
+        num_threads: usize,
+        outer_vk_hash: CodeCommitmentHash,
+    ) -> Self {
         Self {
+            outer_vk_hash,
             num_threads,
             pool: rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
@@ -156,18 +163,22 @@ where
         }
     }
 
-    pub(crate) fn create_aggregated_proof<OuterVm: ZkvmHost + 'static>(
+    pub(crate) fn create_aggregated_proof<OuterVm: OuterZkvmHost + 'static>(
         &self,
         mut outer_vm: OuterVm,
-        block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
+        block_header_hashes: &[<Da::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         assert!(!block_header_hashes.is_empty());
         let mut prover_state = self.prover_state.write().expect("Lock was poisoned");
 
-        let mut block_proofs_data = Vec::default();
+        let mut headers_with_block_proofs: Vec<(
+            <Da::Spec as DaSpec>::BlockHeader,
+            BlockProof<Address, Da::Spec, StateRoot>,
+        )> = Vec::default();
 
-        for slot_hash in block_header_hashes {
+        for block_header in block_header_hashes {
+            let slot_hash = &block_header.hash();
             let state = prover_state.get_prover_status(slot_hash);
 
             match state {
@@ -176,28 +187,23 @@ where
                 }
                 Some(ProverStatus::Proved(block_proof)) => {
                     assert_eq!(slot_hash, &block_proof.st.slot_hash);
-                    block_proofs_data.push(block_proof);
+                    headers_with_block_proofs.push((block_header.clone(), block_proof.clone()));
+
                 }
                 Some(ProverStatus::Err(e)) => return Err(anyhow::anyhow!(e.to_string())),
                 None => return Err(anyhow::anyhow!("Missing required proof of {:?}. Use the `prove` method to generate a proof of that block and try again.", slot_hash)),
             }
         }
 
-        let public_data = AggregatedProofPublicData::from_block_proofs(
-            &block_proofs_data,
-            genesis_state_root.clone(),
-        );
+        let raw_aggregated_proof =
+            outer_vm.run_xx(genesis_state_root.clone(), headers_with_block_proofs)?;
 
-        trace!(%public_data, "generating aggregate proof");
-        // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/316
-        // `add_hint`  should take witness instead of the public input.
-        outer_vm.add_hint(public_data);
         let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof: outer_vm.run()?,
+            raw_aggregated_proof,
         };
 
-        for slot_hash in block_header_hashes {
-            prover_state.remove(slot_hash);
+        for header in block_header_hashes {
+            prover_state.remove(&header.hash());
         }
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
     }
@@ -206,7 +212,7 @@ where
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
     config: RollupProverConfigDiscriminants,
-) -> anyhow::Result<Vec<u8>>
+) -> anyhow::Result<SerializedInnerProof>
 where
     InnerVm: Zkvm + 'static,
 {
@@ -238,5 +244,5 @@ where
             error!("Proof generation failed: {:?}", e);
         }
     }
-    result
+    result.map(|raw_inner_proof| SerializedInnerProof { raw_inner_proof })
 }

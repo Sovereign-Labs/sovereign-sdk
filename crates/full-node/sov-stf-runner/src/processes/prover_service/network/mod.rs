@@ -96,11 +96,11 @@ where
 
     async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
+        block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         self.prover
-            .create_aggregated_proof(block_header_hashes, genesis_state_root)
+            .create_aggregated_proof(block_headers, genesis_state_root)
             .await
     }
 }

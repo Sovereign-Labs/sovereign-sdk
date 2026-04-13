@@ -8,8 +8,8 @@ use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
-    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
-    ZkvmNetwork,
+    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    StateTransitionWitnessWithAddress, Zkvm, ZkvmNetwork,
 };
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -178,25 +178,27 @@ where
 
     pub(crate) async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
+        block_headers: &[<Da::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
-        assert!(!block_header_hashes.is_empty());
+        assert!(!block_headers.is_empty());
+
+        let block_header_hashes = block_headers.iter().map(|h| h.hash());
 
         let mut proof_statuses = self.tracker.write().await;
         // Phase 1: Poll all Submitted entries and transition them to Proved.
         // We only remove entries confirmed to be Submitted, so Proved/Err entries are untouched.
-        for slot_hash in block_header_hashes {
+        for slot_hash in block_header_hashes.clone() {
             // We want to only remove if we know the entry exists
             if !matches!(
-                proof_statuses.get(slot_hash),
+                proof_statuses.get(&slot_hash),
                 Some(NetworkProverStatus::Submitted { .. })
             ) {
                 continue;
             }
 
             let Some(NetworkProverStatus::Submitted { handle, metadata }) =
-                proof_statuses.remove(slot_hash)
+                proof_statuses.remove(&slot_hash)
             else {
                 unreachable!()
             };
@@ -204,7 +206,9 @@ where
             match self.inner_vm.poll(&handle).await {
                 Ok(Some(proof_bytes)) => {
                     let block_proof = BlockProof {
-                        proof: proof_bytes,
+                        proof: SerializedInnerProof {
+                            raw_inner_proof: proof_bytes,
+                        },
                         slot_number: metadata.slot_number,
                         st: metadata.st,
                     };
@@ -240,10 +244,10 @@ where
         let proof_statuses = proof_statuses.downgrade();
         // Phase 2: Collect all proved block proofs.
         let mut block_proofs_data = Vec::new();
-        for slot_hash in block_header_hashes {
-            match proof_statuses.get(slot_hash) {
+        for slot_hash in block_header_hashes.clone() {
+            match proof_statuses.get(&slot_hash) {
                 Some(NetworkProverStatus::Proved(block_proof)) => {
-                    assert_eq!(slot_hash, &block_proof.st.slot_hash);
+                    assert_eq!(&slot_hash, &block_proof.st.slot_hash);
                     block_proofs_data.push(block_proof);
                 }
                 Some(NetworkProverStatus::Err(e)) => {
@@ -300,7 +304,7 @@ where
 
         let mut tracker = self.tracker.write().await;
         for slot_hash in block_header_hashes {
-            tracker.remove(slot_hash);
+            tracker.remove(&slot_hash);
         }
 
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))

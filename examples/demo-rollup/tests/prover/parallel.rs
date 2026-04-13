@@ -4,15 +4,16 @@ use sov_mock_da::{MockDaService, MockDaSpec};
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::Spec;
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_sp1_adapter::host::SP1Host;
-use sov_sp1_adapter::SP1;
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
+use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
+use sov_sp1_adapter::{SP1MethodId, SP1};
 use sov_stf_runner::processes::{
     ParallelProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
     RollupProverConfigDiscriminants, StateTransitionInfo,
 };
 
 use super::{DefaultSpec, ProofStateRoot, ProofWitness};
+use sov_rollup_interface::zk::ZkvmHost;
 
 type TestParallelProverService = ParallelProverService<
     <DefaultSpec as Spec>::Address,
@@ -22,6 +23,10 @@ type TestParallelProverService = ParallelProverService<
     SP1,
     MockZkvm,
 >;
+
+//use sp1_sdk::prelude::{include_elf, Elf};
+
+//const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 
 /// Tests proof generation using the SP1 parallel (local CPU) prover service.
 ///
@@ -41,7 +46,25 @@ async fn test_parallel_proof_generation() {
         "SP1 guest ELF is empty — build the guest first"
     );
 
+    println!("X1");
+
     let inner_vm = SP1Host::new(elf);
+    let inner_vm_clone = inner_vm.clone();
+
+    println!("X2");
+
+    let code_commitment: SP1MethodId = tokio::task::spawn_blocking(move || -> SP1MethodId {
+        inner_vm_clone
+            .code_commitment()
+            .expect("SP1 code commitment should be created successfully")
+    })
+    .await
+    .unwrap();
+
+    println!("X3");
+
+    //let outer_vm = SP1AggregationHost::new(AGGREGATION_ELF, inner_method_id);
+
     // auto-complete outer proofs - real outer not supported yet
     let outer_vm = MockZkvmHost::new_non_blocking();
 
@@ -53,16 +76,18 @@ async fn test_parallel_proof_generation() {
         outer_vm,
         da_verifier,
         RollupProverConfigDiscriminants::Prove,
+        CodeCommitmentHash::default(),
         prover_address,
     );
 
     let (genesis_state_root, witnesses) = super::generate_witnesses().await;
+    println!("X6");
 
     // Submit all blocks to the parallel prover.
-    let mut block_hashes = Vec::new();
+    let mut block_headers = Vec::new();
     for (i, witness) in witnesses.into_iter().enumerate() {
-        let block_header_hash = witness.da_block_header.hash();
-        block_hashes.push(block_header_hash);
+        println!("X6 {i}");
+        block_headers.push(witness.da_block_header.clone());
 
         let slot_number = SlotNumber::new(i as u64 + 1);
         let state_transition_info = StateTransitionInfo::new(witness, slot_number);
@@ -83,13 +108,14 @@ async fn test_parallel_proof_generation() {
 
     tracing::info!(
         "All {} blocks submitted, waiting for proofs...",
-        block_hashes.len()
+        block_headers.len()
     );
 
+    println!("X7");
     // Poll until the aggregated proof is ready.
     let status = loop {
         match prover_service
-            .create_aggregated_proof(&block_hashes, &genesis_state_root)
+            .create_aggregated_proof(&block_headers, &genesis_state_root)
             .await
         {
             Ok(ProofAggregationStatus::Success(proof)) => break proof,

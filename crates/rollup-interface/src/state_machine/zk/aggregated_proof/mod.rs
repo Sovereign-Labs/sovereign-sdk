@@ -18,16 +18,30 @@ use crate::zk::SerializedInnerProof;
 /// TODO
 pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
     /// TODO
+    fn run_pub_data<T: Serialize>(&mut self, pub_data: T) -> anyhow::Result<Vec<u8>>;
+
+    /// TODO
     fn run<Da: DaSpec>(
         &mut self,
+
         proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
     ) -> anyhow::Result<Vec<u8>>;
+
+    ///
+    fn run_xx<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &mut self,
+        genesis_state_root: Root,
+        _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>> {
+        todo!("XXXXX")
+    }
 }
 
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
+#[derive(Clone)]
 pub struct BlockProof<Address, Da: DaSpec, Root> {
     /// The raw proof bytes.
-    pub proof: Vec<u8>,
+    pub proof: SerializedInnerProof,
     /// The slot number this proof covers.
     pub slot_number: SlotNumber,
     /// The state transition public data for this block.

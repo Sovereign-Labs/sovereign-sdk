@@ -8,6 +8,7 @@ use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
     AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
 };
+use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::aggregated_proof::{
     BlockHeaderWithProof, CodeCommitmentHash, OuterZkvmHost,
 };
@@ -24,6 +25,7 @@ use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 /// that covers one batch of inner proofs.  When called multiple times the host
 /// automatically chains proofs: the previous aggregation proof is fed back as
 /// a deferred proof input so the guest can verify continuity.
+#[derive(Clone)]
 pub struct SP1AggregationHost {
     host: SP1Host<'static>,
     aggregation_vk: sp1_sdk::SP1VerifyingKey,
@@ -274,10 +276,32 @@ impl MockSp1Prover {
 }
 
 impl OuterZkvmHost for SP1AggregationHost {
+    fn run_pub_data<T: serde::Serialize>(&mut self, _item: T) -> anyhow::Result<Vec<u8>> {
+        todo!()
+    }
+
     fn run<Da: DaSpec>(
         &mut self,
         proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
     ) -> anyhow::Result<Vec<u8>> {
+        self.run(proofs_and_headers)
+    }
+
+    ///
+    fn run_xx<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &mut self,
+        _genesis_state_root: Root,
+        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>> {
+        let mut proofs_and_headers: Vec<BlockHeaderWithProof<Da>> = Default::default();
+
+        for (header, proof) in headers_with_block_proofs {
+            proofs_and_headers.push(BlockHeaderWithProof {
+                da_block_header: header,
+                proof: proof.proof,
+            });
+        }
+
         self.run(proofs_and_headers)
     }
 }

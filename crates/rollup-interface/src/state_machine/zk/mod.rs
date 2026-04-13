@@ -19,6 +19,8 @@ use sov_universal_wallet::UniversalWallet;
 use crate as sov_rollup_interface; // Needed for UniversalWallet, as it requires global paths
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
+#[cfg(feature = "native")]
+use crate::zk::aggregated_proof::OuterZkvmHost;
 
 /// The `CryptoSpec` trait configures the cryptographic primitives used by a particular instance of a rollup.
 /// this trait implementation is meant to be provided by the `Zkvm`. module
@@ -57,6 +59,10 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
     /// The proof generator. Only available under the `"native"` feature.
     #[cfg(feature = "native")]
     type Host: ZkvmHost<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
+
+    /// TODO
+    #[cfg(feature = "native")]
+    type OuterHost: OuterZkvmHost;
 
     /// Network proving implementation for this Zkvm.
     /// Only available under the `"native"` feature.

@@ -1,6 +1,7 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
 use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Receipt, Session};
+use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
 use sov_rollup_interface::zk::ZkvmHost;
 
 use crate::guest::Risc0Guest;
@@ -104,5 +105,20 @@ impl ZkvmHost for Risc0Host<'static> {
         Ok(Risc0MethodId(
             risc0_zkvm::compute_image_id(self.elf)?.into(),
         ))
+    }
+}
+
+impl OuterZkvmHost for Risc0Host<'static> {
+    fn run_pub_data<T: serde::Serialize>(&mut self, _item: T) -> anyhow::Result<Vec<u8>> {
+        todo!()
+    }
+
+    fn run<Da: sov_rollup_interface::da::DaSpec>(
+        &mut self,
+        _proofs_and_headers: Vec<
+            sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof<Da>,
+        >,
+    ) -> anyhow::Result<Vec<u8>> {
+        todo!()
     }
 }

@@ -18,6 +18,7 @@ pub use network::MockZkvmNetwork;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
+use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::{CryptoSpec, Zkvm};
 
 use crate::crypto::{Ed25519PublicKey, Ed25519Signature};
@@ -58,6 +59,9 @@ impl Zkvm for MockZkvm {
 
     #[cfg(feature = "native")]
     type Host = crate::host::MockZkvmHost;
+
+    #[cfg(feature = "native")]
+    type OuterHost = crate::host::MockZkvmHost;
 
     #[cfg(feature = "native")]
     type Network = crate::network::MockZkvmNetwork;
