@@ -147,7 +147,11 @@ celestia_da = ["sov-celestia-adapter"]
 
 # ZKVM features (enable exactly one)
 mock_zkvm = []
-risc0 = ["sov-risc0-adapter", "risc0-prover"]
+risc0 = [
+	"sov-risc0-adapter",
+	"risc0-prover",
+	"sov-metrics/risc0"
+]
 sp1 = ["sov-sp1-adapter", "sp1-prover"]
 
 # Used for using different encoding between host and guest

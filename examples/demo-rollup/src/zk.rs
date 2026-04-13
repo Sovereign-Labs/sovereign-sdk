@@ -1,7 +1,7 @@
 //! Feature-gated inner ZKVM selection.
 //!
-//! Exactly one of `mock_zkvm`, `risc0`, or `sp1` features must be enabled.
-//! This module re-exports the selected inner ZKVM types under unified names.
+//! ZKVM priority: `mock_zkvm` > `risc0` > `sp1`.
+//! When multiple ZKVM features are enabled (e.g. `--all-features`), `mock_zkvm` wins.
 
 // Outer VM is always MockZkvm regardless of inner VM selection
 pub use sov_mock_zkvm::MockCodeCommitment;
@@ -14,7 +14,7 @@ pub fn create_outer_vm() -> OuterZkvmHost {
 }
 
 // ---------------------------------------------------------------------------
-// Inner ZKVM: mock
+// Inner ZKVM: mock (highest priority)
 // ---------------------------------------------------------------------------
 #[cfg(feature = "mock_zkvm")]
 mod inner {
@@ -56,9 +56,9 @@ mod inner {
 }
 
 // ---------------------------------------------------------------------------
-// Inner ZKVM: risc0
+// Inner ZKVM: risc0 (only when mock_zkvm is NOT enabled)
 // ---------------------------------------------------------------------------
-#[cfg(feature = "risc0")]
+#[cfg(all(feature = "risc0", not(feature = "mock_zkvm")))]
 mod inner {
     use std::sync::Arc;
 
@@ -116,9 +116,9 @@ mod inner {
 }
 
 // ---------------------------------------------------------------------------
-// Inner ZKVM: sp1
+// Inner ZKVM: sp1 (only when mock_zkvm and risc0 are NOT enabled)
 // ---------------------------------------------------------------------------
-#[cfg(feature = "sp1")]
+#[cfg(all(feature = "sp1", not(feature = "mock_zkvm"), not(feature = "risc0")))]
 mod inner {
     use std::sync::Arc;
 

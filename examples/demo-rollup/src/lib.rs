@@ -6,21 +6,10 @@
 
 use std::str::FromStr;
 
-// Ensure exactly one ZKVM feature is enabled at the lib level
-#[cfg(all(feature = "mock_zkvm", feature = "risc0"))]
-compile_error!("Both mock_zkvm and risc0 are enabled. Enable exactly one ZKVM feature.");
-#[cfg(all(feature = "mock_zkvm", feature = "sp1"))]
-compile_error!("Both mock_zkvm and sp1 are enabled. Enable exactly one ZKVM feature.");
-#[cfg(all(feature = "risc0", feature = "sp1"))]
-compile_error!("Both risc0 and sp1 are enabled. Enable exactly one ZKVM feature.");
-
-// Ensure exactly one DA feature is enabled
-#[cfg(all(feature = "mock_da", feature = "celestia_da"))]
-compile_error!("Both mock_da and celestia_da are enabled. Enable exactly one DA feature.");
-#[cfg(all(feature = "mock_da", feature = "mock_da_external"))]
-compile_error!("Both mock_da and mock_da_external are enabled. Enable exactly one DA feature.");
-#[cfg(all(feature = "mock_da_external", feature = "celestia_da"))]
-compile_error!("Both mock_da_external and celestia_da are enabled. Enable exactly one DA feature.");
+// All DA rollup modules compile when their feature is enabled.
+// The types have distinct names so there are no conflicts.
+// The main binary uses priority (mock_da > mock_da_external > celestia_da)
+// to choose which one to run.
 
 #[cfg(feature = "mock_da")]
 mod mock_rollup;
@@ -47,17 +36,17 @@ pub use zk::*;
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
 #[cfg(feature = "celestia_da")]
 pub const ROLLUP_BATCH_NAMESPACE: sov_celestia_adapter::types::Namespace =
-    sov_celestia_adapter::types::Namespace::const_v0(
-        sov_modules_api::macros::config_value!("BATCH_NAMESPACE"),
-    );
+    sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
+        "BATCH_NAMESPACE"
+    ));
 
 /// The rollup stores the zk proofs in the namespace b"sov-test-p" on Celestia.
 /// You can change this constant by modifying PROOF_NAMESPACE in constants.toml
 #[cfg(feature = "celestia_da")]
 pub const ROLLUP_PROOF_NAMESPACE: sov_celestia_adapter::types::Namespace =
-    sov_celestia_adapter::types::Namespace::const_v0(
-        sov_modules_api::macros::config_value!("PROOF_NAMESPACE"),
-    );
+    sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
+        "PROOF_NAMESPACE"
+    ));
 
 fn sequencer_type(
     config: &sov_full_node_configs::sequencer::SequencerConfig<impl Copy>,

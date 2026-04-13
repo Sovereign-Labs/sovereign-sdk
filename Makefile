@@ -69,6 +69,8 @@ total-clean:
 
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
+	@echo "Running demo-rollup SP1 prover tests..."
+	@cargo nextest run --no-fail-fast --status-level skip -p sov-demo-rollup --no-default-features --features mock_da,sp1
 
 test-all: ## Runs test suite using nextest, across the whole workspace
 	cargo switcheroo save _backup

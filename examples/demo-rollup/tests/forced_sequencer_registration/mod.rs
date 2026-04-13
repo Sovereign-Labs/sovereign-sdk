@@ -24,6 +24,7 @@ use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaSpec};
+use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
@@ -32,7 +33,6 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey as _;
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
 use sov_modules_macros::config_value;
-use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::ForcedTxBatchNotification;
 use sov_synthetic_load::CallMessage as SyntheticLoadCall;
@@ -687,8 +687,10 @@ async fn forced_txs_resync_test_case(
     let funded_key = Ed25519PrivateKey::generate();
     let funded_address = funded_key.pub_key().credential_id().into();
     let unfunded_key = Ed25519PrivateKey::generate();
-    let post_resync_recipient: <TestSpec as Spec>::Address =
-        Ed25519PrivateKey::generate().pub_key().credential_id().into();
+    let post_resync_recipient: <TestSpec as Spec>::Address = Ed25519PrivateKey::generate()
+        .pub_key()
+        .credential_id()
+        .into();
 
     let preferred_transfer = 50u128;
     let forced_transfer = 5u128;
