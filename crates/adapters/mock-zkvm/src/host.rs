@@ -99,8 +99,6 @@ impl sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost for MockZkvmHost 
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<Vec<u8>> {
         use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
-
-        use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
         use sov_rollup_interface::zk::ZkvmHost;
 
         let block_proofs_data = headers_with_block_proofs
@@ -111,7 +109,6 @@ impl sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost for MockZkvmHost 
         let public_data = AggregatedProofPublicData::from_block_proofs(
             block_proofs_data.as_slice(),
             genesis_state_root,
-            CodeCommitmentHash::default(),
         );
 
         self.add_hint(public_data);
