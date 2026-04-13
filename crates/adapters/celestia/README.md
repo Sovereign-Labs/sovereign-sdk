@@ -9,7 +9,7 @@ This code has not been audited, and may contain critical vulnerabilities. Do not
 
 ## Celestia Integration
 
-The current version of `sov-celestia-adapter` runs against celestia-node version `v0.30.0`.
+The current version of `sov-celestia-adapter` runs against celestia-node version `v0.30.1`.
 This is the version used on the `mocha` testnet as of Apr 10th, 2026.
 
 To set up Celestia nodes, please refer to the official documentation provided by Celestia, for example: 
@@ -159,14 +159,14 @@ Follow these steps (all paths are from root of the repo):
 
 1. **Update version tags in [`docker/Makefile`](../../../docker/Makefile)**:
    ```makefile
-   CELESTIA_DEVNET_VALIDATOR_TAG := v7.0.2-mocha  # Update this version
-   CELESTIA_DEVNET_BRIDGE_TAG := v0.29.1-mocha    # Update this version
+   CELESTIA_DEVNET_VALIDATOR_TAG := v8.0.1-mocha  # Update this version
+   CELESTIA_DEVNET_BRIDGE_TAG := v0.30.1-mocha    # Update this version
    ```
 
 2. **Update matching tags in `crates/adapters/celestia/src/test_helper/docker.rs`**:
    ```rust
-   const VALIDATOR_TAG: &str = "v7.0.2-mocha";
-   const BRIDGE_TAG: &str = "v0.29.1-mocha";
+   const VALIDATOR_TAG: &str = "v8.0.1-mocha";
+   const BRIDGE_TAG: &str = "v0.30.1-mocha";
    ```
 
 3. **Build the new docker images**:

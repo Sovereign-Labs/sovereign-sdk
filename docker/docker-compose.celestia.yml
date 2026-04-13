@@ -4,7 +4,7 @@ services:
     hostname: validator
     environment:
       NO_COLOR: 1
-    # uncomment to provide amount of sequencers to provision (default: 5)
+    # uncomment to provide amount of sequencers to provision (default: 7)
     # command: [ "/opt/entrypoint.sh", "2" ]
     ports:
       - "127.0.0.1:9090:9090"

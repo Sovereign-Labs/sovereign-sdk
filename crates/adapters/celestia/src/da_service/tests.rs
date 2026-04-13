@@ -594,8 +594,6 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
-    sov_test_utils::initialize_logging();
-
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let base_config = dev_node.get_config().await?;
 
@@ -643,7 +641,7 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
     // 2 rounds: each round, each of 6 clients submits 10 blobs
     // (v0 + v1 for each of 5 namespaces).
     for round in 0..2usize {
-        let mut join_set: JoinSet<anyhow::Result<Vec<BlobRecord>>> = JoinSet::new();
+        let mut join_set: JoinSet<anyhow::Result<()>> = JoinSet::new();
 
         for (client_idx, (client, signer)) in raw_clients.iter().enumerate() {
             let mut blobs_to_submit = Vec::new();
@@ -702,7 +700,7 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
                     .with_context(|| {
                         format!("submit_pay_for_blob failed for client {client_idx} round {round}")
                     })?;
-                Ok(Vec::new())
+                Ok(())
             });
         }
 
