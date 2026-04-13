@@ -11757,6 +11757,7 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.3.0"
 dependencies = [
+ "alloy",
  "alloy-consensus",
  "alloy-eips",
  "alloy-primitives",
@@ -11768,6 +11769,8 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "proptest",
+ "reqwest",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -11783,6 +11786,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-rest-utils",
+ "sov-rollup-interface",
  "sov-rpc-eth-types",
  "sov-sequencer",
  "sov-state",
@@ -11790,6 +11794,7 @@ dependencies = [
  "sov-test-utils",
  "sov-uniqueness",
  "strum 0.26.3",
+ "tempfile",
  "test-strategy",
  "thiserror 2.0.17",
  "tokio",

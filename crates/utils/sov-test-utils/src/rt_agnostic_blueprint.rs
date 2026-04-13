@@ -105,9 +105,6 @@ pub struct RtAgnosticBlueprint<
     phantom: PhantomData<(S, R, Manager, Prover, A)>,
 }
 
-impl<S: Spec, R: RuntimeTrait<S>, Manager, Prover> Default
-    for RtAgnosticBlueprint<S, R, Manager, Prover>
-{
 /// [`RtAgnosticBlueprint`] with the default NOMT storage manager and custom additional APIs.
 pub type RtAgnosticBlueprintWithApis<S, R, A> = RtAgnosticBlueprint<
     S,
@@ -120,10 +117,13 @@ pub type RtAgnosticBlueprintWithApis<S, R, A> = RtAgnosticBlueprint<
             MockHash,
         >,
     >,
+    ParallelProverFactory<S>,
     A,
 >;
 
-impl<S: Spec, R: RuntimeTrait<S>, Manager, A> Default for RtAgnosticBlueprint<S, R, Manager, A> {
+impl<S: Spec, R: RuntimeTrait<S>, Manager, Prover, A> Default
+    for RtAgnosticBlueprint<S, R, Manager, Prover, A>
+{
     fn default() -> Self {
         Self {
             phantom: PhantomData,
@@ -131,7 +131,8 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager, A> Default for RtAgnosticBlueprint<S,
     }
 }
 
-impl<S, R, Manager, Prover, A> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover, A>
+impl<S, R, Manager, Prover, A> RollupBlueprint<Native>
+    for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
     S: Spec + PluggableSpec,
     R: RuntimeTrait<S> + HasKernel<S> + HasCapabilities<S> + HasKernel<S>,
@@ -144,7 +145,8 @@ where
 }
 
 #[async_trait]
-impl<S, R, Manager, Prover, A> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover, A>
+impl<S, R, Manager, Prover, A> FullNodeBlueprint<Native>
+    for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
     S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
