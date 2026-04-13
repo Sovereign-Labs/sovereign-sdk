@@ -16,9 +16,7 @@ use sov_rollup_interface::zk::ZkVerifier;
 use sov_sp1_adapter::host::SP1AggregationHost;
 use sov_sp1_adapter::SP1;
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
-use sp1_sdk::prelude::{include_elf, Elf};
 
-const AGGREGATION_ELF: Elf = include_elf!("sov-aggregated-proof-program");
 const JUMP: usize = 3;
 
 type S = ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Native>;
@@ -31,7 +29,7 @@ fn main() -> anyhow::Result<()> {
         "At least one proof file is required"
     );
     ensure!(
-        raw_proofs.len() % JUMP == 0,
+        raw_proofs.len().is_multiple_of(JUMP),
         "Expected the number of inner proofs ({}) to be divisible by jump ({JUMP})",
         raw_proofs.len()
     );
@@ -41,9 +39,15 @@ fn main() -> anyhow::Result<()> {
         raw_proofs.len()
     );
 
+    let aggregation_elf: &'static [u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+    ensure!(
+        !aggregation_elf.is_empty(),
+        "SP1 aggregation guest ELF is empty — build the guest first"
+    );
+
     let verification_key = SP1MethodId(saved_inner_vk_bytes()?);
 
-    let mut prover = SP1AggregationHost::new(&AGGREGATION_ELF, verification_key)?;
+    let mut prover = SP1AggregationHost::new(aggregation_elf, verification_key)?;
 
     let proof_batches = raw_proofs
         .chunks(JUMP)
@@ -124,12 +128,7 @@ fn saved_inner_vk_bytes() -> anyhow::Result<Vec<u8>> {
 }
 
 fn data_dir() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_dir = manifest_dir
-        .parent()
-        .expect("script crate must live under the sov-aggregated-proof workspace root");
-
-    workspace_dir.join("data")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data")
 }
 
 fn read_saved_proof(file_path: &Path) -> anyhow::Result<BlockHeaderWithProof<MockDaSpec>> {
@@ -155,6 +154,7 @@ fn deserialize_pub_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> anyhow::
     bincode::deserialize(data).context("Failed to deserialize public data")
 }
 
+#[allow(clippy::type_complexity)]
 fn batch_state_roots(
     proof_batch: &[BlockHeaderWithProof<MockDaSpec>],
 ) -> anyhow::Result<(

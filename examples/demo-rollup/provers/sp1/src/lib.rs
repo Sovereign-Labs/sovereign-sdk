@@ -25,3 +25,9 @@ pub static SP1_GUEST_CELESTIA_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
         env!("CARGO_MANIFEST_DIR")
     ))
 });
+pub static SP1_GUEST_AGGREGATION_MOCK_ELF: LazyLock<&'static [u8]> = LazyLock::new(|| {
+    load_elf(&format!(
+        "{}/guest-aggregation-mock/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-aggregated-proof-program",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+});
