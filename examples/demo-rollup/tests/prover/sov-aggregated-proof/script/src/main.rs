@@ -29,7 +29,7 @@ fn main() -> anyhow::Result<()> {
         "At least one proof file is required"
     );
     ensure!(
-        raw_proofs.len() % JUMP == 0,
+        raw_proofs.len().is_multiple_of(JUMP),
         "Expected the number of inner proofs ({}) to be divisible by jump ({JUMP})",
         raw_proofs.len()
     );
@@ -154,6 +154,7 @@ fn deserialize_pub_data<T: serde::de::DeserializeOwned>(data: &[u8]) -> anyhow::
     bincode::deserialize(data).context("Failed to deserialize public data")
 }
 
+#[allow(clippy::type_complexity)]
 fn batch_state_roots(
     proof_batch: &[BlockHeaderWithProof<MockDaSpec>],
 ) -> anyhow::Result<(
