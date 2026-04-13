@@ -284,7 +284,7 @@ where
             state.state_item_info.item_discriminant,
         );
         let state_map =
-            NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix.clone(), Codec::default());
+            NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix, Codec::default());
         let slot_prefix = SlotKey::singleton(&prefix);
         let accessor = state
             .api_state
@@ -302,7 +302,7 @@ where
                     "Failed to iterate map: {e}"
                 ))
             })?;
-        let entries = entries.ok_or_else(|| sov_rest_utils::errors::not_implemented_501())?;
+        let entries = entries.ok_or_else(sov_rest_utils::errors::not_implemented_501)?;
 
         let cursor_key = match &pagination.selection {
             sov_rest_utils::PageSelection::First => None,
