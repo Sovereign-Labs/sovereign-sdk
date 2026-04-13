@@ -22,6 +22,16 @@ grpc_url = "http://127.0.0.1:9090"
 # For QuickNode, use X-token header.
 #grpc_auth_token = ""
 
+# Optional fallback gRPC endpoints for blob submission.
+# Used alongside grpc_url for failover. Each entry has a mandatory url
+# and an optional token (sent as x-token metadata).
+#[[da.grpc_fallback_endpoints]]
+#url = "http://fallback1:9090"
+#token = "secret-token"
+#
+#[[da.grpc_fallback_endpoints]]
+#url = "http://fallback2:9090"
+
 # The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
 # If not specified in the config, will be pulled from `SOV_CELESTIA_SIGNER_KEY` environment variable.
 # Can be exported from celestia-appd:
