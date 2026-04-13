@@ -1,7 +1,13 @@
 .PHONY: help
 
+PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
+               examples/demo-rollup/provers/risc0/guest-celestia \
+               examples/demo-rollup/provers/sp1/guest-mock \
+               examples/demo-rollup/provers/sp1/guest-celestia \
+
 # Absolutely all dirs
-ALL_DIRS := crates/module-system/module-implementations/extern/hyperlane-solana-register/solana
+ALL_DIRS := $(PROVER_DIRS) \
+						crates/module-system/module-implementations/extern/hyperlane-solana-register/solana
 
 DATA_DIRS := ./crates/module-system/sov-modules-macros/data \
              ./crates/module-system/sov-solana-offchain-auth/data \
@@ -34,6 +40,13 @@ build: ## Build the project
 
 clean: ## Cleans compiled
 	@cargo clean
+
+check-provers:   ## cargo check in non attached crates
+	@set -e; for dir in $(PROVER_DIRS); do \
+		echo "$$(date) Running cargo fmt + check in $$dir"; \
+		cargo fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
+		cargo check --all-targets --all-features --manifest-path "$$dir/Cargo.toml"; \
+	done
 
 total-clean: clean
 total-clean:
@@ -190,6 +203,7 @@ mini-ci: ## Runs multiple checks that can most often fail CI as a single command
 	$(MAKE) test
 	$(MAKE) doctest
 	$(MAKE) docs-generate
+	$(MAKE) check-provers
 	cargo switcheroo set _backup
 
 start-obs: ## Start docker containers needed for observability stack: influxdb, grafana, etc
