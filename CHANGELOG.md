@@ -1,3 +1,6 @@
+# 2026-04-13
+- #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
+
 # 2026-04-08
 - #2695 adds a new `ext_getStorageProof` RPC endpoint to the EVM module
 - #2704 Replaces `reth`-related crates. No breakage is intended.
