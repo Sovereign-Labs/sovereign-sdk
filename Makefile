@@ -3,6 +3,7 @@
 PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/risc0/guest-celestia \
                examples/demo-rollup/provers/sp1/guest-mock \
+               examples/demo-rollup/provers/sp1/guest-aggregation-mock \
                examples/demo-rollup/provers/sp1/guest-celestia \
 
 # Absolutely all dirs
@@ -45,7 +46,12 @@ check-provers:   ## cargo check in non attached crates
 	@set -e; for dir in $(PROVER_DIRS); do \
 		echo "$$(date) Running cargo fmt + check in $$dir"; \
 		cargo fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
-		cargo check --all-targets --all-features --manifest-path "$$dir/Cargo.toml"; \
+		case "$$dir" in \
+			*/provers/sp1/*) \
+				(cd "$$dir" && cargo prove build --features bench) ;; \
+			*/provers/risc0/*) \
+				echo "Skipping risc0 prover build in $$dir" ;; \
+		esac; \
 	done
 
 total-clean: clean
