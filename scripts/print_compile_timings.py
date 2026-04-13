@@ -65,8 +65,8 @@ def main():
         name = u.get("name", "?")
         version = u.get("version", "?")
         duration = u.get("duration", 0)
-        rmeta = u.get("rmeta_time", 0)
-        codegen = duration - rmeta if rmeta else 0
+        rmeta = u.get("rmeta_time")
+        codegen = duration - rmeta if rmeta is not None else 0
         target = u.get("target", "")
         lines.append(
             f"| {i + 1:>3} | {name:<40} | {version:<10} | {duration:>8.1f}s | {codegen:>8.1f}s | {target} |"
