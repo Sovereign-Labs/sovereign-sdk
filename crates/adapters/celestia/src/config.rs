@@ -219,6 +219,9 @@ impl CelestiaConfig {
             builder = builder.rpc_auth_token(rpc_auth_token);
         }
         // Submission section.
+        if self.grpc_url.is_none() && !self.grpc_fallback_endpoints.is_empty() {
+            anyhow::bail!("`grpc_fallback_endpoints` requires `grpc_url` to be set");
+        }
         if let Some(grpc_url) = &self.grpc_url {
             let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
@@ -492,6 +495,22 @@ mod tests {
         assert!(debug_output.contains("REDACTED"));
         assert!(debug_output.contains("http://fallback1:9090"));
         assert!(debug_output.contains("http://fallback2:9090"));
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_fallback_endpoints_without_grpc_url() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.grpc_fallback_endpoints = vec![GrpcEndpointConfig {
+            url: "http://fallback:9090".to_string(),
+            token: None,
+        }];
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`grpc_fallback_endpoints` requires `grpc_url` to be set"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
