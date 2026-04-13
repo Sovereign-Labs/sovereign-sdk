@@ -5,7 +5,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, CodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
@@ -55,7 +55,6 @@ pub(crate) struct NetworkProver<
     inner_vm: InnerVm::Network,
     outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
-    code_commitment: CodeCommitmentHash,
     outer_proof_timeout: std::time::Duration,
     phantom: PhantomData<Witness>,
 }
@@ -75,7 +74,6 @@ where
         prover_address: Address,
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
-        code_commitment: CodeCommitmentHash,
         outer_proof_timeout: std::time::Duration,
     ) -> Self {
         Self {
@@ -83,7 +81,6 @@ where
             inner_vm,
             outer_vm,
             tracker: tokio::sync::RwLock::new(HashMap::new()),
-            code_commitment,
             outer_proof_timeout,
             phantom: PhantomData,
         }
@@ -95,24 +92,28 @@ where
         verifier: &Verifier<Da>,
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
         let block_header_hash = state_transition_info.da_block_header().hash();
-        let mut tracker = self.tracker.write().await;
 
-        if let Some(status) = tracker.get(&block_header_hash) {
-            return match status {
-                NetworkProverStatus::Submitted { .. } => {
-                    Err(ProverServiceError::Other(anyhow::anyhow!(
-                        "Proof generation for {} still in progress",
-                        block_header_hash,
-                    )))
-                }
-                NetworkProverStatus::Proved(_) => Err(ProverServiceError::Other(anyhow::anyhow!(
-                    "Witness for block_header_hash {}, submitted multiple times.",
-                    block_header_hash,
-                ))),
-                NetworkProverStatus::Err(e) => {
-                    Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
-                }
-            };
+        {
+            let tracker = self.tracker.read().await;
+            if let Some(status) = tracker.get(&block_header_hash) {
+                return match status {
+                    NetworkProverStatus::Submitted { .. } => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Proof generation for {} still in progress",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Proved(_) => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Witness for block_header_hash {}, submitted multiple times.",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Err(e) => {
+                        Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
+                    }
+                };
+            }
         }
 
         let slot_number = state_transition_info.slot_number;
@@ -164,10 +165,13 @@ where
             block_header_hash
         );
 
-        tracker.insert(
-            block_header_hash,
-            NetworkProverStatus::Submitted { handle, metadata },
-        );
+        {
+            let mut tracker = self.tracker.write().await;
+            tracker.insert(
+                block_header_hash,
+                NetworkProverStatus::Submitted { handle, metadata },
+            );
+        }
 
         Ok(ProofProcessingStatus::ProvingInProgress)
     }
@@ -260,7 +264,6 @@ where
         let public_data = AggregatedProofPublicData::from_block_proofs(
             &block_proofs_data,
             genesis_state_root.clone(),
-            self.code_commitment.clone(),
         );
 
         tracing::trace!(%public_data, "generating aggregate proof");

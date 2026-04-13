@@ -167,6 +167,8 @@ pub mod third_test_module {
     pub trait ModuleThreeStorable:
         borsh::BorshSerialize
         + borsh::BorshDeserialize
+        + serde::Serialize
+        + serde::de::DeserializeOwned
         + UniversalWallet
         + schemars::JsonSchema
         + core::fmt::Debug

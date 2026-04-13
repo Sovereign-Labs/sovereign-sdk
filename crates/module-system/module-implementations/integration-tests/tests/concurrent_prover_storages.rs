@@ -204,39 +204,42 @@ where
         root_1,
     );
     let storage_2 = storage_manager.create_prover_storage();
-    let assert_storage_2 = || {
+    let assert_storage_2 = |with_proof: bool| {
         let version = storage_2.latest_version();
         assert_eq!(version.get(), 0);
         let _span =
             tracing::debug_span!("asserting", storage = "2", version = %version.get()).entered();
         tracing::info!("assert start");
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_2,
             &the_user_key,
             expected_user_values_2.clone(),
             ValueNamespace::StateUser,
+            with_proof,
         );
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_2,
             &the_kernel_key,
             expected_kernel_values_2.clone(),
             ValueNamespace::StateKernel,
+            with_proof,
         );
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_2,
             &the_accessory_key,
             expected_accessory_values_2.clone(),
             ValueNamespace::Accessory,
+            with_proof,
         );
         assert_root_hashes(&storage_2, vec![root_1]);
         tracing::info!("assert done");
     };
     assert_storage_1();
-    assert_storage_2();
+    assert_storage_2(true);
     storage_manager.commit_change_set(change_set_2, root_2);
     tracing::info!("commited storage 2");
     assert_storage_1();
-    assert_storage_2();
+    assert_storage_2(false);
 
     // Storage at version 3
     let storage_3 = storage_manager.create_prover_storage();
@@ -248,41 +251,44 @@ where
         root_2,
     );
     let storage_3 = storage_manager.create_prover_storage();
-    let assert_storage_3 = || {
+    let assert_storage_3 = |with_proof: bool| {
         let version = storage_3.latest_version();
         assert_eq!(version.get(), 1);
         let _span =
             tracing::debug_span!("asserting", storage = "3", version = %version.get()).entered();
         tracing::info!("assert start");
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_3,
             &the_user_key,
             expected_user_values_3.clone(),
             ValueNamespace::StateUser,
+            with_proof,
         );
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_3,
             &the_kernel_key,
             expected_kernel_values_3.clone(),
             ValueNamespace::StateKernel,
+            with_proof,
         );
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_3,
             &the_accessory_key,
             expected_accessory_values_3.clone(),
             ValueNamespace::Accessory,
+            with_proof,
         );
         assert_root_hashes(&storage_3, vec![root_1, root_2]);
         tracing::info!("assert done");
     };
     assert_storage_1();
-    assert_storage_2();
-    assert_storage_3();
+    assert_storage_2(false);
+    assert_storage_3(true);
     storage_manager.commit_change_set(change_set_3, root_3);
     tracing::info!("commited storage 3");
     assert_storage_1();
-    assert_storage_2();
-    assert_storage_3();
+    assert_storage_2(false);
+    assert_storage_3(false);
 
     // Storage at version 4
     let storage_4 = storage_manager.create_prover_storage();
@@ -294,62 +300,68 @@ where
         root_3,
     );
     let storage_4 = storage_manager.create_prover_storage();
-    let assert_storage_4 = || {
+    let assert_storage_4 = |with_proof: bool| {
         let version = storage_4.latest_version();
         assert_eq!(version.get(), 2);
         let _span =
             tracing::debug_span!("asserting", storage = "4", version = %version.get()).entered();
         tracing::info!("assert start");
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_4,
             &the_user_key,
             expected_user_values_4.clone(),
             ValueNamespace::StateUser,
+            with_proof,
         );
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_4,
             &the_kernel_key,
             expected_kernel_values_4.clone(),
             ValueNamespace::StateKernel,
+            with_proof,
         );
-        assert_values(
+        assert_values_maybe_with_proof(
             &storage_4,
             &the_accessory_key,
             expected_accessory_values_4.clone(),
             ValueNamespace::Accessory,
+            with_proof,
         );
         assert_root_hashes(&storage_4, vec![root_1, root_2, root_3]);
         tracing::info!("assert done");
     };
     assert_storage_1();
-    assert_storage_2();
-    assert_storage_3();
-    assert_storage_4();
+    assert_storage_2(false);
+    assert_storage_3(false);
+    assert_storage_4(true);
     storage_manager.commit_change_set(change_set_4, root_4);
     tracing::info!("commited storage 4");
     assert_storage_1();
-    assert_storage_2();
-    assert_storage_3();
-    assert_storage_4();
+    assert_storage_2(false);
+    assert_storage_3(false);
+    assert_storage_4(false);
     // Check that all previous values are available
     let storage_5 = storage_manager.create_prover_storage();
-    assert_values(
+    assert_values_maybe_with_proof(
         &storage_5,
         &the_user_key,
         expected_user_values_5.clone(),
         ValueNamespace::StateUser,
+        true,
     );
-    assert_values(
+    assert_values_maybe_with_proof(
         &storage_5,
         &the_kernel_key,
         expected_kernel_values_5.clone(),
         ValueNamespace::StateKernel,
+        true,
     );
-    assert_values(
+    assert_values_maybe_with_proof(
         &storage_5,
         &the_accessory_key,
         expected_accessory_values_5.clone(),
         ValueNamespace::Accessory,
+        true,
     );
     assert_root_hashes(&storage_5, vec![root_1, root_2, root_3, root_4]);
 }
@@ -472,41 +484,42 @@ enum ValueNamespace {
 /// Checks that given storage can see all expected values for a given key.
 /// The first element in expected_values is supposed to be rollup_height == 0
 /// Last element checked against "last" version (None parameter)
-/// get_with_proof is also checked for User and Kernel namespaces.
-fn assert_values<S: NativeStorage>(
+///
+/// If with_proof is true, then the value should be checked against get_with_proof. Note that
+/// get_with_proof only supports non-stale versions, so `with_proof` should only be true if `version` is None
+/// and the storage we're comparing against isn't stale (where stale means that a newer storage version has been committed)
+fn assert_values_maybe_with_proof<S: NativeStorage>(
     storage: &S,
     key: &SlotKey,
     expected_values: Vec<Option<SlotValue>>,
     namespace: ValueNamespace,
+    with_proof: bool,
 ) {
     let witness_stub = S::Witness::default();
     let get_value = |version: Option<SlotNumber>| -> Option<SlotValue> {
-        match namespace {
-            ValueNamespace::StateKernel => {
-                let just_value = storage
-                    .get_historical::<Kernel>(key, version, &witness_stub)
-                    .unwrap();
-                let with_proof = storage
-                    .get_with_proof::<Kernel>(key.clone(), version)
-                    .ok()
-                    .and_then(|with_proof| with_proof.value);
-                // Assume that proof and the rest are correct
-                assert_eq!(just_value, with_proof);
-                just_value
-            }
-            ValueNamespace::StateUser => {
-                let just_value = storage
-                    .get_historical::<User>(key, version, &witness_stub)
-                    .unwrap();
-                let with_proof = storage
-                    .get_with_proof::<User>(key.clone(), version)
-                    .ok()
-                    .and_then(|with_proof| with_proof.value);
-                assert_eq!(just_value, with_proof);
-                just_value
-            }
+        let value = match namespace {
+            ValueNamespace::StateKernel => storage
+                .get_historical::<Kernel>(key, version, &witness_stub)
+                .unwrap(),
+            ValueNamespace::StateUser => storage
+                .get_historical::<User>(key, version, &witness_stub)
+                .unwrap(),
             ValueNamespace::Accessory => storage.get_accessory_historical(key, version).unwrap(),
+        };
+        if with_proof && version.is_none() {
+            match namespace {
+                ValueNamespace::StateKernel => {
+                    let proof = storage.get_with_proof::<Kernel>(key.clone()).unwrap();
+                    assert_eq!(proof.0.value, value);
+                }
+                ValueNamespace::StateUser => {
+                    let proof = storage.get_with_proof::<User>(key.clone()).unwrap();
+                    assert_eq!(proof.0.value, value);
+                }
+                ValueNamespace::Accessory => {}
+            }
         }
+        value
     };
     let last_value = expected_values.last().unwrap_or(&None).clone();
 
@@ -541,6 +554,18 @@ fn assert_values<S: NativeStorage>(
         get_value(Some(SlotNumber::MAX)),
         "Future version(u64::MAX) should not be available",
     );
+}
+
+/// Checks that given storage can see all expected values for a given key.
+/// The first element in expected_values is supposed to be rollup_height == 0
+/// Last element checked against "last" version (None parameter)
+fn assert_values<S: NativeStorage>(
+    storage: &S,
+    key: &SlotKey,
+    expected_values: Vec<Option<SlotValue>>,
+    namespace: ValueNamespace,
+) {
+    assert_values_maybe_with_proof(storage, key, expected_values, namespace, false);
 }
 
 fn assert_root_hashes<S: NativeStorage>(storage: &S, expected_root_hashes: Vec<S::Root>) {

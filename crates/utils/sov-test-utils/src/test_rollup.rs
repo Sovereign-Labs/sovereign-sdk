@@ -373,6 +373,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_number_of_transitions_in_db: NonZero::new(self.config.max_infos_in_db).unwrap(),
                 max_number_of_transitions_in_memory: NonZero::new(self.config.max_channel_size)
                     .unwrap(),
+                eager_proof_submission: true,
             },
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,
@@ -790,7 +791,7 @@ where
     /// # Arguments
     /// * `t` - Timeout duration
     /// * `expected_panic_substring` - String that must appear in the panic message
-    ///   (e.g., `CrashLocation` variant name)
+    ///   (e.g., `CommitFaultInjectionLocation` variant name)
     ///
     /// # Errors
     /// - If the task doesn't crash within the timeout
@@ -1233,7 +1234,7 @@ pub fn get_appropriate_rollup_prover_config<S: Spec>(
     if skip_guest_build == "1" {
         RollupProverConfig::Skip
     } else {
-        RollupProverConfig::Execute(host_args)
+        RollupProverConfig::Prove(host_args)
     }
 }
 

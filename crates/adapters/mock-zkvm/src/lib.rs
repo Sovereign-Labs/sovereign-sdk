@@ -18,7 +18,7 @@ pub use network::MockZkvmNetwork;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
-use sov_rollup_interface::zk::{CryptoSpec, Proof, Zkvm};
+use sov_rollup_interface::zk::{CryptoSpec, Zkvm};
 
 use crate::crypto::{Ed25519PublicKey, Ed25519Signature};
 
@@ -68,6 +68,17 @@ impl Zkvm for MockZkvm {
 )]
 pub struct MockCodeCommitment(pub [u8; 8]);
 
+impl sov_rollup_interface::zk::CodeCommitmentTrait for MockCodeCommitment {
+    fn to_hash(
+        &self,
+    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
+        // Pad the 8-byte mock commitment to 32 bytes to match the canonical hash layout.
+        let mut bytes = vec![0u8; 32];
+        bytes[..8].copy_from_slice(&self.0);
+        Ok(sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes))
+    }
+}
+
 /// An error that can occur when converting a byte vector to a `MockCodeCommitment`.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum MockCodeCommitmentError {
@@ -79,13 +90,9 @@ pub enum MockCodeCommitmentError {
     },
 }
 
-/// A type that is impossible to instantiate.
-#[derive(Serialize, Deserialize)]
-enum Empty {}
-
 /// A helper type capable of simulating invalid proofs.
 #[derive(Serialize, Deserialize)]
-struct Inner {
+struct MockProof {
     /// Is proof valid.
     is_valid: bool,
     /// Public input.
@@ -107,19 +114,14 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
         serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: Proof<Empty, Inner> = bincode::deserialize(serialized_proof)?;
-        match proof {
-            Proof::PublicData(Inner {
-                is_valid,
-                pub_data: input,
-            }) => {
-                if is_valid {
-                    Ok(bincode::deserialize(&input)?)
-                } else {
-                    anyhow::bail!("Proof is not valid")
-                }
-            }
-            Proof::Full(_) => unimplemented!("MockZkVerifier doesn't support full zk proofs"),
+        let MockProof {
+            is_valid,
+            pub_data: input,
+        } = bincode::deserialize(serialized_proof)?;
+        if is_valid {
+            Ok(bincode::deserialize(&input)?)
+        } else {
+            anyhow::bail!("Proof is not valid")
         }
     }
 }
@@ -156,7 +158,7 @@ mod tests {
         vm.add_hint(&pub_data);
         vm.make_proof();
 
-        let proof = vm.run(false).unwrap();
+        let proof = vm.run().unwrap();
         let verified_pub_data =
             MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default())?;
 

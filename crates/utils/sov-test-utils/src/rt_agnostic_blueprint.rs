@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
@@ -10,7 +11,6 @@ use sov_mock_da::{MockDaSpec, MockHash};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
 use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier, Zkvm};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
@@ -19,7 +19,6 @@ use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, Sequencer
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
 use sov_sequencer::ProofBlobSender;
 use sov_state::nomt::prover_storage::NomtProverStorage;
@@ -80,7 +79,6 @@ where
             outer_vm,
             Default::default(),
             prover_config_disc,
-            CodeCommitmentHash::default(),
             rollup_config.proof_manager.prover_address,
         )
     }

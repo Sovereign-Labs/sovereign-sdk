@@ -477,7 +477,7 @@ where
         Codec::KeyCodec: EncodeLike<Kq, K>,
         W: ProvenStateAccessor<N>,
     {
-        state.get_with_proof(self.slot_key(key))
+        state.get_global_latest_with_proof(self.slot_key(key))
     }
 
     pub fn verify_proof<S: crate::Spec>(

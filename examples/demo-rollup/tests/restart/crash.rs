@@ -6,8 +6,8 @@ use sov_api_spec::types;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
-use sov_db::test_utils::CrashLocation;
-use sov_db::test_utils::CRASH_ENV_NAME;
+use sov_db::test_utils::CommitFaultInjectionLocation;
+use sov_db::test_utils::CRASH_ON_COMMIT_ENV_NAME;
 use sov_demo_rollup::mock_da_risc0_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_demo_rollup::MockRollupSpec;
@@ -66,7 +66,7 @@ async fn start_node(
 async fn test_crash_before_commiting_kernel_nomt() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeCommittingKernelNomt),
+        test_start_stop_with_crash(CommitFaultInjectionLocation::BeforeCommittingKernelNomt),
     )
     .await
     .unwrap()
@@ -76,7 +76,7 @@ async fn test_crash_before_commiting_kernel_nomt() -> anyhow::Result<()> {
 async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeCommittingUserNomt),
+        test_start_stop_with_crash(CommitFaultInjectionLocation::BeforeCommittingUserNomt),
     )
     .await
     .unwrap()
@@ -86,7 +86,7 @@ async fn test_crash_before_commiting_user_nomt() -> anyhow::Result<()> {
 async fn test_crash_before_commiting_ledger() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeCommittingLedger),
+        test_start_stop_with_crash(CommitFaultInjectionLocation::BeforeCommittingLedger),
     )
     .await?
 }
@@ -95,7 +95,7 @@ async fn test_crash_before_commiting_ledger() -> anyhow::Result<()> {
 async fn test_crash_before_commiting_accessory() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeCommittingAccessory),
+        test_start_stop_with_crash(CommitFaultInjectionLocation::BeforeCommittingAccessory),
     )
     .await
     .unwrap()
@@ -105,7 +105,7 @@ async fn test_crash_before_commiting_accessory() -> anyhow::Result<()> {
 async fn test_crash_before_commiting_archival() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeCommittingArchival),
+        test_start_stop_with_crash(CommitFaultInjectionLocation::BeforeCommittingArchival),
     )
     .await
     .unwrap()
@@ -115,14 +115,16 @@ async fn test_crash_before_commiting_archival() -> anyhow::Result<()> {
 async fn test_crash_before_commiting_live() -> anyhow::Result<()> {
     tokio::time::timeout(
         Duration::from_secs(120),
-        test_start_stop_with_crash(CrashLocation::BeforeCommittingLive),
+        test_start_stop_with_crash(CommitFaultInjectionLocation::BeforeCommittingLive),
     )
     .await
     .unwrap()
 }
 
-// This test checks whether rollup can recover from different kinds of crashes, see `CrashLocation` enum.
-async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Result<()> {
+// This test checks whether rollup can recover from different kinds of crashes, see `CommitFaultInjectionLocation` enum.
+async fn test_start_stop_with_crash(
+    crash_moment: CommitFaultInjectionLocation,
+) -> anyhow::Result<()> {
     let temp_dir: Arc<TempDir> = Arc::new(tempfile::tempdir()?);
 
     let mut mock_da_config = MockDaConfig::instant_with_sender(MockAddress::new([0; 32]));
@@ -180,7 +182,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
             );
         }
 
-        // Verify the crash was due to the expected CrashLocation panic, not some other bug.
+        // Verify the crash was due to the expected CommitFaultInjectionLocation panic, not some other bug.
         test_rollup
             .wait_for_rollup_to_crash_with_expected_panic(
                 Duration::from_secs(30),
@@ -191,7 +193,7 @@ async fn test_start_stop_with_crash(crash_moment: CrashLocation) -> anyhow::Resu
 
     // Give the OS time to clean up file handles after the crash.
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-    std::env::remove_var(CRASH_ENV_NAME);
+    std::env::remove_var(CRASH_ON_COMMIT_ENV_NAME);
     unlock_dbs(&temp_dir);
 
     // Start the rollup with the existing DBs and check whether it is able to receive transactions.
@@ -283,7 +285,7 @@ async fn send_txs(
         // It's fine not to check the result here — it will be verified later via subscription.
         let res = api_client.send_tx_to_sequencer(&tx).await;
 
-        if res.is_err() && std::env::var(CRASH_ENV_NAME).is_ok() {
+        if res.is_err() && std::env::var(CRASH_ON_COMMIT_ENV_NAME).is_ok() {
             return;
         }
 

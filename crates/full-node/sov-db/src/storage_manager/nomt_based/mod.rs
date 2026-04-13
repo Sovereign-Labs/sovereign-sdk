@@ -19,7 +19,7 @@ use sov_rollup_interface::reexports::digest;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use crate::accessory_db::AccessoryDb;
-use crate::config::RollupDbConfig;
+use crate::config::{RollupDbConfig, RollupDbConfigWithCustomizations};
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::metrics::nomt::StorageManagerFinalizationMetric;
 use crate::state_db_nomt::{NomtSessionBuilder, StateOverlay};
@@ -194,6 +194,15 @@ where
     /// for ZK proving. When enabled, pinned cache is disabled since it bypasses witness
     /// recording.
     pub fn new(config: RollupDbConfig, witness_generation: bool) -> anyhow::Result<Self> {
+        Self::new_with_custom_config(config.into(), witness_generation)
+    }
+
+    /// Create a new [` NomtStorageManager`] with runtime-only RocksDB customization.
+    pub fn new_with_custom_config(
+        custom_config: RollupDbConfigWithCustomizations,
+        witness_generation: bool,
+    ) -> anyhow::Result<Self> {
+        let config = custom_config.config();
         let pruner_block_interval = config.get_pruner_interval();
         let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
         let pruner_max_batch_size = config.get_pruner_max_batch_size();
@@ -201,7 +210,7 @@ where
             pruner_versions_to_keep >= 1,
             "Pruner versions to keep should be at least 1, got {pruner_versions_to_keep}",
         );
-        let db_group = DbGroup::new(config)?;
+        let db_group = DbGroup::new(custom_config)?;
         db_group.update_ledger_finalized_height()?;
 
         Ok(Self {

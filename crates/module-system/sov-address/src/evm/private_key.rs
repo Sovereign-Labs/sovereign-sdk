@@ -97,7 +97,7 @@ impl serde::Serialize for EthereumPrivateKey {
             use serde::ser::SerializeTuple;
             let bytes = self.signing_key.to_bytes();
             let mut seq = serializer.serialize_tuple(32)?;
-            for byte in bytes.as_slice() {
+            for byte in &bytes {
                 seq.serialize_element(byte)?;
             }
             seq.end()

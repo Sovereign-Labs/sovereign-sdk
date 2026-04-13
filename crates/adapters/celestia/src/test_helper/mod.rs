@@ -4,7 +4,6 @@ pub(crate) mod serialization;
 
 use celestia_types::nmt::Namespace;
 
-use crate::types::APP_VERSION;
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::RollupParams;
 
@@ -32,6 +31,5 @@ pub(crate) fn blob_from_data(
     data: Vec<u8>,
     signer: &CelestiaAddress,
 ) -> anyhow::Result<celestia_types::Blob> {
-    celestia_types::blob::Blob::new(namespace, data, Some(signer.0), APP_VERSION)
-        .map_err(Into::into)
+    celestia_types::blob::Blob::new(namespace, data, Some(signer.0)).map_err(Into::into)
 }

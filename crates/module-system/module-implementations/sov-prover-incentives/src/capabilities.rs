@@ -3,7 +3,7 @@ use std::cmp::max;
 use sov_bank::{config_gas_token_id, Amount, Coins, IntoPayable};
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
-    AggregatedProofPublicData, Gas, GasSpec, GetGasPrice, InvalidProofError,
+    AggregatedProofPublicData, CodeCommitmentTrait, Gas, GasSpec, GetGasPrice, InvalidProofError,
     SerializedAggregatedProof, Spec, StateReader, Storage, TxState, VersionReader, ZkVerifier,
     Zkvm,
 };
@@ -143,6 +143,28 @@ impl<S: Spec> ProverIncentives<S> {
                 ));
             }
         };
+
+        // Bind the inner circuit: the aggregation program reads `inner_vkey_hash`
+        // from host advice, so without this check a prover could verify inner
+        // proofs against an arbitrary inner VK. The outer VK proof alone no
+        // longer transitively pins the inner circuit.
+        let inner_code_commitment = self
+            .chain_state
+            .inner_code_commitment(state)
+            .map_err(Into::<anyhow::Error>::into)?
+            .expect("The inner code commitment should be set at genesis");
+
+        if inner_code_commitment.to_hash()? != public_outputs.inner_vkey_hash {
+            tracing::debug!(
+                slashing_reason = ?SlashingReason::IncorrectInnerVkeyHash,
+                "Slashing prover"
+            );
+            self.slash_prover(prover_address, state)?;
+            return Err(ProcessProofError::ProverSlashedNoRevert(format!(
+                "Invalid output {}",
+                SlashingReason::IncorrectInnerVkeyHash
+            )));
+        }
 
         if let Some(slashing_reason) = self
             .check_proof_outputs(&public_outputs, state)

@@ -26,6 +26,7 @@ sov-modules-api = { workspace = true }
 sov-state = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 axum = { workspace = true }
 base64 = { workspace = true }
 tokio-stream = { workspace = true }

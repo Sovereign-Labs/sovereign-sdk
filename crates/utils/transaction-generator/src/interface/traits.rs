@@ -4,9 +4,9 @@ use std::collections::HashSet;
 use std::hash::Hash;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use sov_bank::TokenId;
 use sov_modules_api::prelude::arbitrary::{self, Arbitrary};
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::prelude::tokio::task::JoinSet;
 use sov_modules_api::{DispatchCall, Module, Spec};
 

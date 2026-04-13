@@ -211,8 +211,8 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
     let state = AppState { da_service };
 
     Router::new()
-        .route("/blocks/:height", get(get_block_at_handler))
-        .route("/block-headers/:height", get(get_block_header_at_handler))
+        .route("/blocks/{height}", get(get_block_at_handler))
+        .route("/block-headers/{height}", get(get_block_header_at_handler))
         .route(
             "/finalized-block-header",
             get(get_last_finalized_block_header_handler),
@@ -225,7 +225,7 @@ pub(crate) fn create_router(da_service: StorableMockDaService) -> Router {
         .route("/extraction-proof", post(get_extraction_proof_handler))
         .route("/send-transaction", post(send_transaction_handler))
         .route("/send-proof", post(send_proof_handler))
-        .route("/proofs/:height", get(get_proofs_at_handler))
+        .route("/proofs/{height}", get(get_proofs_at_handler))
         .route("/signer", get(get_signer_handler))
         .route(
             "/approximate-block-time",

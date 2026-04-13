@@ -10,7 +10,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{CryptoSpec, SerializedInnerProof, ZkVerifier};
+use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -34,6 +34,22 @@ pub struct SP1MethodId(pub Vec<u8>);
 impl Debug for SP1MethodId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_tuple("SP1MethodId").field(&self.0).finish()
+    }
+}
+
+#[cfg(not(target_os = "zkvm"))]
+impl sov_rollup_interface::zk::CodeCommitmentTrait for SP1MethodId {
+    fn to_hash(
+        &self,
+    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
+        use sp1_sdk::HashableKey;
+        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&self.0)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize SP1VerifyingKey: {e}"))?;
+        Ok(
+            sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(
+                verifying_key.hash_u32(),
+            ),
+        )
     }
 }
 
@@ -127,27 +143,7 @@ impl ZkVerifier for SP1Verifier {
 pub fn decode_sp1_proof(
     serialized_proof: &[u8],
 ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-    match bincode::deserialize::<
-        sov_rollup_interface::zk::Proof<
-            sp1_sdk::SP1ProofWithPublicValues,
-            sp1_sdk::SP1PublicValues,
-        >,
-    >(serialized_proof)?
-    {
-        sov_rollup_interface::zk::Proof::Full(proof) => Ok(proof),
-        sov_rollup_interface::zk::Proof::PublicData(_) => {
-            anyhow::bail!("SP1Verifier supports only full proofs")
-        }
-    }
-}
-
-/// A DA block header bundled with its corresponding serialized proof.
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-pub struct BlockHeaderWithProof<Da: sov_rollup_interface::da::DaSpec> {
-    /// The DA layer block header associated with this proof.
-    pub da_block_header: Da::BlockHeader,
-    /// The serialized proof bytes.
-    pub proof: SerializedInnerProof,
+    Ok(bincode::deserialize(serialized_proof)?)
 }
 
 #[cfg(test)]

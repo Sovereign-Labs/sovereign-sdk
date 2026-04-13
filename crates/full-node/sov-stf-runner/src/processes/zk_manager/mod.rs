@@ -26,6 +26,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     prover_service: Ps,
     proofs_to_create: UnAggregatedProofList<Ps>,
     aggregated_proof_block_jump: NonZero<usize>,
+    eager_proof_submission: bool,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
     genesis_state_root: Ps::StateRoot,
@@ -42,6 +43,7 @@ where
     pub fn new(
         prover_service: Ps,
         aggregated_proof_block_jump: NonZero<usize>,
+        eager_proof_submission: bool,
         proof_sender: Box<dyn ProofSender>,
         genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
@@ -51,6 +53,7 @@ where
             prover_service,
             proofs_to_create: UnAggregatedProofList::new(),
             aggregated_proof_block_jump,
+            eager_proof_submission,
             proof_sender,
             backoff_policy: ExponentialBuilder::default()
                 .with_min_delay(Duration::from_secs(BACKOFF_POLICY_MIN_DELAY))
@@ -186,11 +189,12 @@ where
             });
         }
 
-        // Start proving the next block right away... for now.
-        self.proofs_to_create
-            .oldest_mut()
-            .prove_any_unproven_blocks(prover_service)
-            .await;
+        if self.eager_proof_submission {
+            self.proofs_to_create
+                .oldest_mut()
+                .prove_any_unproven_blocks(prover_service)
+                .await;
+        }
 
         let num_proofs_to_create = self.proofs_to_create.current_proof_jump();
 

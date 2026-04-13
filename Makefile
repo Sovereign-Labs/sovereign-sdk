@@ -3,11 +3,19 @@
 PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/risc0/guest-celestia \
                examples/demo-rollup/provers/sp1/guest-mock \
+               examples/demo-rollup/provers/sp1/guest-aggregation-mock \
                examples/demo-rollup/provers/sp1/guest-celestia \
 
 # Absolutely all dirs
 ALL_DIRS := $(PROVER_DIRS) \
 						crates/module-system/module-implementations/extern/hyperlane-solana-register/solana
+
+DATA_DIRS := ./crates/module-system/sov-modules-macros/data \
+             ./crates/module-system/sov-solana-offchain-auth/data \
+             ./crates/module-system/hyperlane/data \
+             ./crates/full-node/sov-stf-runner/data \
+             ./crates/full-node/sov-metrics/data \
+             ./examples/demo-rollup/data
 
 # We run `cargo hack` with the `--partition 1/1` by default, but overrides allow
 # CI to parallelize checks.
@@ -38,7 +46,12 @@ check-provers:   ## cargo check in non attached crates
 	@set -e; for dir in $(PROVER_DIRS); do \
 		echo "$$(date) Running cargo fmt + check in $$dir"; \
 		cargo fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
-		cargo check --all-targets --all-features --manifest-path "$$dir/Cargo.toml"; \
+		case "$$dir" in \
+			*/provers/sp1/*) \
+				(cd "$$dir" && cargo prove build --features bench) ;; \
+			*/provers/risc0/*) \
+				echo "Skipping risc0 prover build in $$dir" ;; \
+		esac; \
 	done
 
 total-clean: clean
@@ -50,6 +63,15 @@ total-clean:
     	(cargo clean --manifest-path "$$dir/Cargo.toml"); \
     done;
 	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
+	rm -rf typescript/node_modules
+	rm -rf typescript/.turbo
+	rm -rf typescript/.cache
+	rm -rf typescript/packages/universal-wallet-wasm/target
+	cargo clean --manifest-path examples/demo-rollup/tests/prover/sov-aggregated-proof/Cargo.toml
+	cargo clean --manifest-path python/py_sovereign_web3/rust/Cargo.toml
+	@for dir in $(DATA_DIRS); do \
+		rm -rf "$$dir"; \
+	done;
 
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
@@ -93,8 +115,9 @@ install-cargo-tools:  ## Installs all necessary cargo helpers
 
 install-risc0-toolchain:  ## install risc0 toolchain
 	curl -L https://risczero.com/install | bash
-	~/.risc0/bin/rzup install cargo-risczero 2.0.2
-	~/.risc0/bin/rzup install rust 1.88.0
+	~/.risc0/bin/rzup install cargo-risczero 3.0.5
+	~/.risc0/bin/rzup install r0vm 3.0.5
+	~/.risc0/bin/rzup install rust 1.91.1
 	~/.risc0/bin/rzup install cpp 2024.1.5
 	@echo "Risc0 toolchain version:"
 	cargo +risc0 --version

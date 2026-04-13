@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use super::eth_receipt::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
+use super::eth_receipt::EthReceipt;
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::{
     serde_bincode_compat::Header as HeaderBincodeCompat,
@@ -14,7 +16,6 @@ use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
 use derive_more::{Deref, DerefMut};
 use derive_new::new;
-use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 use sov_rollup_interface::da::Time;
@@ -249,7 +250,7 @@ impl SyntheticBlockWithoutRootsAndBloom {
     pub fn finish_and_seal(
         mut self,
         transactions: Vec<TxSignedAndRecovered>,
-        receipts: &[reth_primitives::Receipt],
+        receipts: &[EthReceipt],
     ) -> (SealedSynthetic, Vec<TxSignedAndRecovered>) {
         assert_eq!(
             transactions.len(),
@@ -490,7 +491,7 @@ pub struct Receipt {
     #[serde_as(as = "ReceiptBincodeCompat")]
     #[deref]
     #[deref_mut]
-    pub receipt: reth_primitives::Receipt,
+    pub receipt: EthReceipt,
     /// tx hash
     pub transaction_hash: TxHash,
     /// tx index

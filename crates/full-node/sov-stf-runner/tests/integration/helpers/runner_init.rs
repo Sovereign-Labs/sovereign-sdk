@@ -2,7 +2,7 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use crate::helpers::hash_stf::HashStf;
-use axum::async_trait;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use rockbound::SchemaBatch;
@@ -282,12 +282,12 @@ pub async fn initialize_runner(
                 verifier,
                 RollupProverConfigDiscriminants::Prove,
                 nb_of_prover_threads.unwrap(),
-                Default::default(),
                 MockAddress::new([0u8; 32]),
             );
         let handle = start_zk_workflow_in_background::<_>(
             prover_service,
             rollup_config.proof_manager.aggregated_proof_block_jump,
+            rollup_config.proof_manager.eager_proof_submission,
             Box::new(MockProofSender {
                 da: da_service.clone(),
             }),
@@ -416,6 +416,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             prover_address: MockAddress::new([0u8; 32]),
             max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
             max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
+            eager_proof_submission: true,
         },
         sequencer: SequencerConfig {
             automatic_batch_production: true,
