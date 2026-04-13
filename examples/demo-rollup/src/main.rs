@@ -220,7 +220,6 @@ fn example_tune_live_nomt_table_for_small_writes(
         ))
 }
 
-async fn new_rollup_with_celestia_da(
 #[cfg(feature = "mock_da")]
 async fn new_rollup_with_mock_da(
     rt_genesis_paths: &GenesisPaths,
