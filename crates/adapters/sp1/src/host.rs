@@ -230,7 +230,7 @@ impl MockSp1Prover {
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
         Ok(Self {
-            prover: prover,
+            prover,
             pk: Arc::new(pk),
         })
     }
