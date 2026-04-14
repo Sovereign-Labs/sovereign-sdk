@@ -42,7 +42,7 @@ class Serializer:
         """
         ...
 
-    def serialize_unsigned_tx(self, unsigned_tx: "UnsignedTransaction") -> bytes:
+    def serialize_unsigned_tx(self, unsigned_tx: "UnsignedTransactionV0") -> bytes:
         """Serialize an unsigned transaction.
 
         Args:
@@ -159,8 +159,8 @@ class UniquenessData:
         """
         ...
 
-class UnsignedTransaction:
-    """Unsigned transaction with runtime call and details."""
+class UnsignedTransactionV0:
+    """V0 unsigned transaction with runtime call and details."""
 
     def __init__(
         self,
@@ -168,7 +168,7 @@ class UnsignedTransaction:
         details: TxDetails,
         uniqueness: Optional[UniquenessData] = None,
     ) -> None:
-        """Create unsigned transaction.
+        """Create V0 unsigned transaction.
 
         Args:
             runtime_call: Runtime call data as dictionary
