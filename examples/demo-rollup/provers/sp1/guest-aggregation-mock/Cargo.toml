@@ -38,3 +38,9 @@ lto = true
 
 [profile.release.build-override]
 opt-level = 3
+
+[features]
+default = []
+bench = [
+    "sov-modules-api/bench",
+]

@@ -6148,6 +6148,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
+ "sov-metrics",
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",
  "toml",
@@ -6323,6 +6324,7 @@ dependencies = [
  "serde_with",
  "sov-db-types",
  "sov-metrics",
+ "sov-modules-macros",
  "sov-rollup-interface",
 ]
 
