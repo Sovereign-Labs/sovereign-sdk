@@ -155,6 +155,9 @@ celestia-logs:
 build:
 	cargo build --bins
 
+build-celestia:
+	cargo build --bins --no-default-features --features celestia_da,mock_zkvm
+
 test-create-token: check-sov-cli
 test-create-token:
 	$(SOV_CLI_REL_PATH) node set-url http://127.0.0.1:12346

@@ -168,10 +168,22 @@ lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's no
 	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty -- -A clippy::too_many_arguments
 
 check-features: ## Checks that project compiles with all combinations of features.
-	cargo hack check --feature-powerset --exclude-features default --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	cargo hack check --feature-powerset --exclude-features default --exclude sov-demo-rollup --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	$(MAKE) check-demo-rollup-features
 
 check-features-default-targets:
-	cargo hack check --feature-powerset --exclude-features default --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	cargo hack check --feature-powerset --exclude-features default --exclude sov-demo-rollup --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	$(MAKE) check-demo-rollup-features
+
+check-demo-rollup-features: ## Checks demo-rollup compiles with each meaningful DA+ZKVM combination.
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --no-default-features --features mock_da,mock_zkvm
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --no-default-features --features celestia_da,mock_zkvm
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --no-default-features --features mock_da,risc0
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --no-default-features --features mock_da,sp1
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --no-default-features --features celestia_da,risc0
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --no-default-features --features celestia_da,sp1
+	SKIP_GUEST_BUILD=1 cargo check -p sov-demo-rollup --all-targets --all-features
 
 check-constant-overriding-is-disabled-in-release-mode:
 	# Passes in release mode...

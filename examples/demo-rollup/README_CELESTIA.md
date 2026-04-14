@@ -67,11 +67,11 @@ If you are looking for a simple rollup with minimal dependencies as a starting p
 $ echo $MY_PERSONAL_GITHUB_TOKEN | docker login ghcr.io -u $MY_GITHUB_USERNAME --password-stdin
 ```
 
-3. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!), and compile the application:
+3. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!), and compile the application with the Celestia DA feature:
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
-$ make build
+$ make build-celestia
 ```
 
 4. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
@@ -83,12 +83,6 @@ $ make start
 ```
 
 ### Start the Rollup Full Node
-
-First, build the rollup with the `celestia_da` feature:
-
-```sh
-$ cargo build -p sov-demo-rollup --no-default-features --features celestia_da,mock_zkvm
-```
 
 Now run the demo-rollup full node, as shown below. You will see it consuming blocks from the Celestia node running inside Docker:
 

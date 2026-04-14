@@ -9,9 +9,12 @@ pub use sov_mock_zkvm::MockZkvm as OuterZkvm;
 pub use sov_mock_zkvm::MockZkvmHost as OuterZkvmHost;
 
 // ---------------------------------------------------------------------------
-// Inner ZKVM: mock (highest priority)
+// Inner ZKVM: mock (highest priority, and ultimate fallback if nothing is set)
 // ---------------------------------------------------------------------------
-#[cfg(feature = "mock_zkvm")]
+#[cfg(any(
+    feature = "mock_zkvm",
+    all(not(feature = "risc0"), not(feature = "sp1"))
+))]
 mod inner {
     use std::sync::Arc;
 
@@ -117,7 +120,7 @@ mod inner {
     /// Returns the sp1 host arguments for a rollup with mock DA.
     #[cfg(feature = "mock_da")]
     pub fn mock_da_host_args() -> Arc<&'static [u8]> {
-        if super::should_skip_guest_build("sp1") {
+        if sov_zkvm_utils::should_skip_guest_build("sp1") {
             return Arc::new(&[]);
         }
         Arc::new(&sp1_prover::SP1_GUEST_MOCK_ELF)
@@ -126,7 +129,7 @@ mod inner {
     /// Returns the sp1 host arguments for a rollup with celestia DA.
     #[cfg(feature = "celestia_da")]
     pub fn celestia_host_args() -> Arc<&'static [u8]> {
-        if super::should_skip_guest_build("sp1") {
+        if sov_zkvm_utils::should_skip_guest_build("sp1") {
             return Arc::new(&[]);
         }
         Arc::new(&sp1_prover::SP1_GUEST_CELESTIA_ELF)
@@ -144,8 +147,6 @@ mod inner {
     }
 }
 
-#[cfg(not(any(feature = "mock_zkvm", feature = "risc0", feature = "sp1")))]
-compile_error!("At least one ZKVM feature must be enabled: mock_zkvm, risc0, or sp1");
-
-// Re-export the active inner ZKVM module
+// Re-export the active inner ZKVM module.
+// Falls back to mock_zkvm if no ZKVM feature is explicitly set (see `mod inner` above).
 pub use inner::*;

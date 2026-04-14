@@ -78,6 +78,7 @@ secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 alloy = { workspace = true, features = ["genesis"] }
 alloy-primitives = { workspace = true }
 alloy-rlp = { workspace = true }
+sov-zkvm-utils = { workspace = true }
 
 
 [dev-dependencies]
@@ -154,7 +155,7 @@ risc0 = [
 sp1 = ["sov-sp1-adapter", "sp1-prover"]
 
 # Used for using different encoding between host and guest
-bincode = ["risc0-prover/bincode", "sov-risc0-adapter/bincode"]
+bincode = ["risc0", "risc0-prover/bincode", "sov-risc0-adapter/bincode"]
 migration-script = [
     "dep:sov-blob-storage",
     "dep:rockbound",
