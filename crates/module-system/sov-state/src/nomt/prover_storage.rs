@@ -537,21 +537,7 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
     let mut finished = session.finish(accesses)?;
     if write_witness {
         let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
-        let nomt::Witness {
-            path_proofs,
-            operations: nomt::WitnessedOperations { .. },
-        } = nomt_witness;
-        // Note, we discard `p.path`, but maybe there's a way to use to have more efficient verification?
-        let mut path_proofs_inner = path_proofs.into_iter().map(|p| p.inner).collect::<Vec<_>>();
-
-        // Sort them as required by
-        // Note that the path proofs produced within a crate::witness::Witness are not guaranteed to be ordered,
-        // so the input should be sorted lexicographically by the terminal path prior to calling this function.
-        // https://github.com/thrumdev/nomt/issues/904
-        path_proofs_inner.sort_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
-
-        let multi_proof = MultiProof::from_path_proofs(path_proofs_inner);
-        witness.add_hint(&multi_proof);
+        witness.add_hint(&nomt_witness);
     }
     Ok(finished)
 }

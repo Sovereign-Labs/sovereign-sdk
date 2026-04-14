@@ -49,6 +49,30 @@ async fn test_proof_generation() {
     let _ = generate_proofs(&host).await;
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_mock_proof_public_data_matches_witnesses() {
+    let (host, _) = TestHost::new(false).await;
+    let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
+    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
+
+    for witness in witnesses {
+        let expected_initial_state_root = witness.initial_state_root.clone();
+        let expected_final_state_root = witness.final_state_root.clone();
+        let expected_slot_hash = witness.da_block_header.hash();
+
+        let public_data = host
+            .run_mock_public_data(ProofInput {
+                stf_witness: witness,
+                prover_address,
+            })
+            .await;
+
+        assert_eq!(public_data.initial_state_root, expected_initial_state_root);
+        assert_eq!(public_data.final_state_root, expected_final_state_root);
+        assert_eq!(public_data.slot_hash, expected_slot_hash);
+    }
+}
+
 async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
 
@@ -128,6 +152,25 @@ impl TestHost {
             .await
             .unwrap()
         }
+    }
+
+    async fn run_mock_public_data(
+        &self,
+        data: ProofInput,
+    ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
+        tokio::task::spawn_blocking(move || {
+            let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
+                .expect("MockSp1Prover should be created successfully");
+
+            let proof = mock_host
+                .add_hint_and_run(&data)
+                .expect("Mock prover should run successfully");
+
+            bincode::deserialize(proof.public_values.as_slice())
+                .expect("Mock proof public values should deserialize")
+        })
+        .await
+        .unwrap()
     }
 }
 

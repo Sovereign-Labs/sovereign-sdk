@@ -1,13 +1,11 @@
 //! ZK Verifier part of the NOMT based Storage implementation
 use std::marker::PhantomData;
 
-use nomt_core::hasher::BinaryHasher;
-use nomt_core::proof::MultiProof;
-use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
+use nomt_core::trie::Node;
 #[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::reexports::digest::Digest;
 
+use super::{replay_state_update_witness, NomtStateProof};
 use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
@@ -37,70 +35,8 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         array_witness: &S::Witness,
         prev_root: Node,
     ) -> anyhow::Result<Node> {
-        let OrderedReadsAndWrites {
-            ordered_reads: state_reads,
-            ordered_writes: state_writes,
-        } = state_accesses;
-
-        let multi_proof: MultiProof = array_witness.get_hint();
-        let verified_multi_proof = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
-            &multi_proof,
-            prev_root,
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to verify multi proof: {:?}", e))?;
-
-        for (key, value) in state_reads {
-            let key_hash: KeyPath = S::Hasher::digest(key.as_ref()).into();
-            match value {
-                None => {
-                    if !verified_multi_proof
-                        .confirm_nonexistence(&key_hash)
-                        .map_err(|e| anyhow::anyhow!("Failed to confirm non-existence: {:?}", e))?
-                    {
-                        anyhow::bail!("Failed to verify non-existence of key: {:?}", key);
-                    }
-                }
-                Some(node_leaf) => {
-                    let authenticated_write = node_leaf.combine_val_hash_and_size();
-                    let value_hash = S::Hasher::digest(&authenticated_write).into();
-                    let leaf = LeafData {
-                        key_path: key_hash,
-                        value_hash,
-                    };
-                    if !verified_multi_proof
-                        .confirm_value(&leaf)
-                        .map_err(|e| anyhow::anyhow!("Failed to confirm value: {:?}", e))?
-                    {
-                        anyhow::bail!("Failed to verify inclusion of key: {:?}", key);
-                    }
-                }
-            }
-        }
-
-        let mut updates = state_writes
-            .into_iter()
-            .map(|(key, value)| {
-                (
-                    S::Hasher::digest(key.as_ref()).into(),
-                    value.map(|slot_value| {
-                        // Authenticated write is hash of a combination of size and orignal value hash.
-                        S::Hasher::digest(slot_value.combine_val_hash_and_size::<S::Hasher>())
-                            .into()
-                    }),
-                )
-            })
-            .collect::<Vec<(KeyPath, Option<ValueHash>)>>();
-
-        // Sort them by key hash, as required by [`nomt_core::proof::verify_multi_proof_update`]
-        updates.sort_by(|a, b| a.0.cmp(&b.0));
-
-        nomt_core::proof::verify_multi_proof_update::<BinaryHasher<S::Hasher>>(
-            &verified_multi_proof,
-            updates,
-        )
-        .map_err(|e| anyhow::anyhow!("Failed to verify update: {:?}", e))
-        // Note: we don't check exhaustion of the proof
-        // because it does not impact the correctness of the guest, only performance.
+        let state_proof: NomtStateProof = array_witness.get_hint();
+        replay_state_update_witness::<S>(&state_accesses, &state_proof, prev_root)
     }
 }
 

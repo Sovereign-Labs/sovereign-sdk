@@ -468,25 +468,34 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                     return value.map(SlotValue::size);
                 }
                 // Assuming the value isn't in pinned cache, check the uncommited changes next.
-                let maybe_leaf = match uncomitted_changes {
+                let (maybe_leaf, should_record_read) = match uncomitted_changes {
                     Some(uncomitted_changes) => {
                         let maybe_value = uncomitted_changes.get_leaf(N::PROVABLE_NAMESPACE, key);
                         if let MaybePresentValue::Present(value) = maybe_value {
-                            value
+                            (value, false)
                         } else {
-                            storage.get_leaf::<N>(key, witness)
+                            let maybe_leaf = storage.get_leaf::<N>(key, witness);
+                            metric.storage_read_size =
+                                Some(maybe_leaf.as_ref().map(|leaf| leaf.leaf.size).unwrap_or(0));
+                            (maybe_leaf, true)
                         }
                     }
-                    None => storage.get_leaf::<N>(key, witness),
+                    None => {
+                        let maybe_leaf = storage.get_leaf::<N>(key, witness);
+                        metric.storage_read_size =
+                            Some(maybe_leaf.as_ref().map(|leaf| leaf.leaf.size).unwrap_or(0));
+                        (maybe_leaf, true)
+                    }
                 };
                 let size = maybe_leaf.as_ref().map(|leaf| leaf.leaf.size);
-                metric.storage_read_size = Some(size.unwrap_or(0)); // For the metric, use "Some" to indicate that we hit storage even if the value is None
-                Self::add_read(
-                    key.clone(),
-                    maybe_leaf,
-                    &mut self.revertable_ordered_reads,
-                    &mut self.cache,
-                );
+                if should_record_read {
+                    Self::add_read(
+                        key.clone(),
+                        maybe_leaf,
+                        &mut self.revertable_ordered_reads,
+                        &mut self.cache,
+                    );
+                }
                 size
             }
         }
@@ -542,7 +551,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                     if let MaybePresentValue::Present(value) =
                         Self::check_pinned_cache_static(&self.pinned_cache, key)
                     {
-                        return Ok(value.cloned());
+                        return Ok((value.cloned(), false));
                     }
                     match uncomitted_changes {
                         // NATIVE only: we might have some intermediate state that isn't yet in storage (this could be state from an optimistic execution, or uncomitted state from the sequencer).
@@ -551,19 +560,19 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                             if let MaybePresentValue::Present(value) =
                                 uncomitted_changes.get(N::NAMESPACE, key)
                             {
-                                value
+                                (value, false)
                             } else {
                                 let value = storage.get::<N>(key, witness);
                                 metric.storage_read_size =
                                     Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
-                                value
+                                (value, true)
                             }
                         }
                         None => {
                             let value = storage.get::<N>(key, witness);
                             metric.storage_read_size =
                                 Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
-                            value
+                            (value, true)
                         }
                     }
                 })
@@ -589,7 +598,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
             key,
             storage,
             witness,
-            |key, witness, _args, _metric| Ok::<_, Infallible>(storage.get::<N>(key, witness)),
+            |key, witness, _args, _metric| Ok::<_, Infallible>((storage.get::<N>(key, witness), true)),
             (),
             metric,
         )
@@ -607,7 +616,8 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         metric: &mut StateAccessMetric,
     ) -> Result<Option<SlotValue>, E>
     where
-        F: Fn(&SlotKey, &S::Witness, Args, &mut StateAccessMetric) -> Result<Option<SlotValue>, E>,
+        F: Fn(&SlotKey, &S::Witness, Args, &mut StateAccessMetric)
+            -> Result<(Option<SlotValue>, bool), E>,
     {
         if let Some(access) = cache.get_mut(key) {
             match access {
@@ -616,6 +626,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 } => match node.value.clone() {
                     ReadType::GetSizeValueNotFetched => {
                         let slot_value = fetch_fn(key, witness, args, metric)?
+                            .0
                             // This unwrap is justified because in the `ReadType::GetSizeValueFetched` branch,
                             // we inserted `Some(slot_value)`.
                             .unwrap_or_else(|| {
@@ -639,12 +650,14 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
                 Access::Write { modified, .. } => Ok(modified.clone()),
             }
         } else {
-            let storage_value = fetch_fn(key, witness, args, metric)?;
-            let read = storage_value.clone().map(|v| NodeLeafAndMaybeValue {
-                leaf: NodeLeaf::make_leaf::<S::Hasher>(&v),
-                value: ReadType::Read(v),
-            });
-            Self::add_read(key.clone(), read, revertable_ordered_reads, cache);
+            let (storage_value, should_record_read) = fetch_fn(key, witness, args, metric)?;
+            if should_record_read {
+                let read = storage_value.clone().map(|v| NodeLeafAndMaybeValue {
+                    leaf: NodeLeaf::make_leaf::<S::Hasher>(&v),
+                    value: ReadType::Read(v),
+                });
+                Self::add_read(key.clone(), read, revertable_ordered_reads, cache);
+            }
             Ok(storage_value)
         }
     }
@@ -671,7 +684,7 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
              metric: &mut StateAccessMetric| {
                 let value = storage.get_historical::<N>(key, version, witness)?;
                 metric.storage_read_size = Some(value.as_ref().map(|v| v.size()).unwrap_or(0));
-                Ok(value)
+                Ok((value, true))
             },
             version,
             metric,
@@ -785,12 +798,73 @@ pub struct StateAccesses {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "native")]
+    use sov_metrics::StateAccessMetric;
 
     // Testing `ProvableStorageCache` requires higher-level types from `sov-modules-api`.
     // While adding `sov-modules-api` as a dev-dependency is an option, we chose to place the relevant tests directly in `sov-modules-api` for the following reasons:
     // 1. The tests rely on concepts and types that are more closely related to `sov-modules-api`.
     // 2. The `UniversalStateAccessor` trait is sealed and cannot be exported from `sov-modules-api`.
     use super::*;
+
+    #[cfg(feature = "native")]
+    #[derive(Clone, Debug)]
+    struct MockStateGetter {
+        key: SlotKey,
+        value: Option<SlotValue>,
+    }
+
+    #[cfg(feature = "native")]
+    impl MockStateGetter {
+        fn new(key: SlotKey, value: Option<SlotValue>) -> Self {
+            Self { key, value }
+        }
+    }
+
+    #[cfg(feature = "native")]
+    impl crate::StateGetter for MockStateGetter {
+        fn get_leaf(
+            &self,
+            namespace: crate::ProvableNamespace,
+            key: &SlotKey,
+        ) -> crate::sequencer_state::MaybePresentValue<NodeLeafAndMaybeValue> {
+            if namespace == crate::ProvableNamespace::User && key == &self.key {
+                crate::sequencer_state::MaybePresentValue::Present(
+                    self.value
+                        .clone()
+                        .map(NodeLeafAndMaybeValue::new_read::<sha2::Sha256>),
+                )
+            } else {
+                crate::sequencer_state::MaybePresentValue::Absent
+            }
+        }
+
+        fn get(
+            &self,
+            namespace: crate::Namespace,
+            key: &SlotKey,
+        ) -> crate::sequencer_state::MaybePresentValue<SlotValue> {
+            if namespace == crate::Namespace::User && key == &self.key {
+                crate::sequencer_state::MaybePresentValue::Present(self.value.clone())
+            } else {
+                crate::sequencer_state::MaybePresentValue::Absent
+            }
+        }
+
+        fn ignore_changes_after_height(
+            &mut self,
+            _rollup_height: sov_rollup_interface::common::RollupHeight,
+        ) {
+        }
+
+        fn latest_rollup_height(&self) -> Option<sov_rollup_interface::common::RollupHeight> {
+            None
+        }
+
+        fn box_clone(&self) -> Box<dyn crate::StateGetter> {
+            Box::new(self.clone())
+        }
+    }
 
     pub fn create_key(key: u8) -> SlotKey {
         SlotKey::from_slice(&[key, 0, 0])
@@ -874,5 +948,39 @@ mod tests {
             let writes = cache_log.take_writes();
             assert_eq!(writes.len(), 0);
         }
+    }
+
+    #[cfg(feature = "native")]
+    #[test]
+    fn test_uncommitted_reads_are_not_recorded_as_db_reads() {
+        let key = create_key(1);
+        let value = create_value(2).unwrap();
+        let uncommitted_changes: Option<Box<dyn crate::StateGetter>> =
+            Some(Box::new(MockStateGetter::new(
+                key.clone(),
+                Some(value.clone()),
+            )));
+        let storage = crate::ZkStorage::<crate::DefaultStorageSpec<sha2::Sha256>>::new();
+        let witness = Default::default();
+
+        let mut cache = ProvableStorageCache::<crate::User>::default();
+        let mut metric = StateAccessMetric::placeholder();
+        assert_eq!(
+            cache.get_or_fetch(&uncommitted_changes, &key, &storage, &witness, &mut metric),
+            Some(value.clone())
+        );
+        let accesses = cache.to_ordered_writes_and_reads();
+        assert!(accesses.ordered_reads.is_empty());
+        assert!(accesses.ordered_writes.is_empty());
+
+        let mut cache = ProvableStorageCache::<crate::User>::default();
+        let mut metric = StateAccessMetric::placeholder();
+        assert_eq!(
+            cache.get_size_or_fetch(&uncommitted_changes, &key, &storage, &witness, &mut metric),
+            Some(value.size())
+        );
+        let accesses = cache.to_ordered_writes_and_reads();
+        assert!(accesses.ordered_reads.is_empty());
+        assert!(accesses.ordered_writes.is_empty());
     }
 }

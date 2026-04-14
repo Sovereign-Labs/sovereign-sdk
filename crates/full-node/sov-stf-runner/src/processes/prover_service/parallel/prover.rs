@@ -14,6 +14,7 @@ use sov_rollup_interface::zk::{
     SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
 };
+use std::fmt::Debug;
 use std::sync::mpsc;
 use tracing::{error, info, trace};
 
@@ -46,7 +47,7 @@ where
     Da: DaService,
     Address:
         BorshSerialize + Serialize + DeserializeOwned + AsRef<[u8]> + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static + Debug,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     pub(crate) fn new(prover_address: Address, num_threads: usize) -> Self {
@@ -110,8 +111,20 @@ where
                 prover_address: self.prover_address.clone(),
             };
 
+            println!("");
+            println!("====");
+
+            println!(
+                "Inside P service: init: {:?} final: {:?}",
+                data.stf_witness.initial_state_root, data.stf_witness.final_state_root
+            );
+            println!("====");
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
+
+                    println!("");
+                    println!("Inside P service: init: {:?} final: {:?}", data.stf_witness.initial_state_root, data.stf_witness.final_state_root);
+
                     let proof = make_inner_proof::<InnerVm>(inner_vm, &data, config);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");

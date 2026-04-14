@@ -10,6 +10,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
+use std::fmt::Debug;
 
 use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
@@ -18,7 +19,7 @@ use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTrans
 pub struct ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address: Serialize + DeserializeOwned,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Debug,
     Witness: Serialize + DeserializeOwned,
     Da: DaService,
     InnerVm: Zkvm,
@@ -38,7 +39,7 @@ impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static + Debug,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
     InnerVm: Zkvm,
@@ -93,8 +94,15 @@ impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm> ProverService
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    StateRoot:
-        BorshSerialize + Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: BorshSerialize
+        + Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + Send
+        + Sync
+        + 'static
+        + Debug,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
     InnerVm: Zkvm + 'static,
