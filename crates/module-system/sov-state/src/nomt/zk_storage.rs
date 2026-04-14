@@ -138,30 +138,46 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
                     .inner
                     .verify::<BinaryHasher<S::Hasher>>(path.path.path(), prev_root)
                     .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
-                Ok((verified, Vec::<(KeyPath, Option<ValueHash>)>::new()))
+                Ok((
+                    verified,
+                    path.path.depth() as usize,
+                    truncate_key_path(path.path.raw_path(), path.path.depth() as usize),
+                    Vec::<(KeyPath, Option<ValueHash>)>::new(),
+                ))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
         verified_paths.sort_by(|a, b| a.0.path().cmp(b.0.path()));
 
+        let mut path_index_by_prefix = BTreeMap::new();
+        let mut path_depths_desc = Vec::new();
+        for (index, (_, depth, prefix, _)) in verified_paths.iter().enumerate() {
+            if path_index_by_prefix
+                .insert((*depth, *prefix), index)
+                .is_some()
+            {
+                anyhow::bail!("Duplicate NOMT path proof prefix");
+            }
+            path_depths_desc.push(*depth);
+        }
+        path_depths_desc.sort_unstable();
+        path_depths_desc.dedup();
+        path_depths_desc.reverse();
+
         for (key, value) in witnessed_writes {
-            let matching_index = verified_paths
+            let matching_index = path_depths_desc
                 .iter()
-                .enumerate()
-                .filter_map(|(index, (verified, _))| {
-                    verified
-                        .confirm_nonexistence(&key)
-                        .ok()
-                        .map(|_| (index, verified.path().len()))
+                .find_map(|depth| {
+                    path_index_by_prefix
+                        .get(&(*depth, truncate_key_path(key, *depth)))
+                        .copied()
                 })
-                .max_by_key(|(_, path_len)| *path_len)
-                .map(|(index, _)| index)
                 .ok_or_else(|| anyhow::anyhow!("No NOMT path proof covers write key {:?}", key))?;
 
-            verified_paths[matching_index].1.push((key, value));
+            verified_paths[matching_index].3.push((key, value));
         }
 
         let mut updates = Vec::new();
-        for (verified, writes) in verified_paths {
+        for (verified, _, _, writes) in verified_paths {
             if !writes.is_empty() {
                 updates.push(PathUpdate {
                     inner: verified,
@@ -173,6 +189,25 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         nomt_core::proof::verify_update::<BinaryHasher<S::Hasher>>(prev_root, &updates)
             .map_err(|e| anyhow::anyhow!("Failed to verify update: {:?}", e))
     }
+}
+
+fn truncate_key_path(mut key: KeyPath, depth: usize) -> KeyPath {
+    debug_assert!(depth <= 256);
+
+    let full_bytes = depth / 8;
+    let partial_bits = depth % 8;
+
+    if full_bytes < key.len() {
+        if partial_bits == 0 {
+            key[full_bytes..].fill(0);
+        } else {
+            let keep_mask = u8::MAX << (8 - partial_bits);
+            key[full_bytes] &= keep_mask;
+            key[full_bytes + 1..].fill(0);
+        }
+    }
+
+    key
 }
 
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
