@@ -11,8 +11,8 @@ use sov_test_utils::MessageGenerator;
 
 type S = super::DefaultSpec;
 
-pub const DEFAULT_BLOCKS: u64 = 3;
-const DEFAULT_TXNS_PER_BLOCK: u64 = 2;
+pub const DEFAULT_BLOCKS: u64 = 1;
+const DEFAULT_TXNS_PER_BLOCK: u64 = 0;
 
 pub async fn get_blocks_from_da(mode: BlobBuildingCtx) -> anyhow::Result<Vec<MockBlock>> {
     let txns_per_block = match env::var("SOV_BENCH_TXNS_PER_BLOCK") {
