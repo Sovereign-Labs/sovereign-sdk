@@ -32,7 +32,7 @@ async fn start_node_with_genesis(
 
     // Shared DA layer so blobs submitted by the sequencer are visible to the block producer.
     let da_layer = Arc::new(tokio::sync::RwLock::new(
-        StorableMockDaLayer::new_in_memory(1)
+        StorableMockDaLayer::new_in_memory(finalization_blocks)
             .await
             .expect("create in-memory DA layer"),
     ));
