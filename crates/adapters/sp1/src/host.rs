@@ -1,6 +1,6 @@
 //! Implementation of the SP1 host for the Sovereign ZkvmHost trait.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::guest::SP1Guest;
 use crate::SP1MethodId;
@@ -10,6 +10,7 @@ use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
     AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
 };
+use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::aggregated_proof::{
     BlockHeaderWithProof, CodeCommitmentHash, OuterZkvmHost,
 };
@@ -26,12 +27,17 @@ use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 /// that covers one batch of inner proofs.  When called multiple times the host
 /// automatically chains proofs: the previous aggregation proof is fed back as
 /// a deferred proof input so the guest can verify continuity.
+#[derive(Clone)]
 pub struct SP1AggregationHost {
+    inner: Arc<Inner>,
+}
+
+struct Inner {
     host: SP1Host,
     aggregation_vk: sp1_sdk::SP1VerifyingKey,
     code_commitment: SP1MethodId,
     inner_method_id: SP1MethodId,
-    prev_agg_proof: Option<sp1_sdk::SP1ProofWithPublicValues>,
+    prev_agg_proof: Mutex<Option<sp1_sdk::SP1ProofWithPublicValues>>,
 }
 
 impl SP1AggregationHost {
@@ -42,24 +48,26 @@ impl SP1AggregationHost {
         let aggregation_vk = host.pk.verifying_key().clone();
         let code_commitment = SP1MethodId(bincode::serialize(&aggregation_vk)?);
         Ok(Self {
-            host,
-            aggregation_vk,
-            code_commitment,
-            inner_method_id,
-            prev_agg_proof: None,
+            inner: Arc::new(Inner {
+                host,
+                aggregation_vk,
+                code_commitment,
+                inner_method_id,
+                prev_agg_proof: Mutex::new(None),
+            }),
         })
     }
 
     /// Returns the code commitment (verifying key) of the aggregation program.
     pub fn code_commitment(&self) -> SP1MethodId {
-        self.code_commitment.clone()
+        self.inner.code_commitment.clone()
     }
 
     /// Generates a compressed aggregation proof over the supplied inner
     /// `proofs_and_headers`.  If a previous aggregation proof exists it is
     /// included as a deferred proof input for recursive verification.
     pub fn run<Da: DaSpec>(
-        &mut self,
+        &self,
         proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
     ) -> anyhow::Result<Vec<u8>> {
         anyhow::ensure!(
@@ -69,24 +77,31 @@ impl SP1AggregationHost {
 
         let mut stdin = SP1Stdin::new();
 
-        let prev_outer_proof_witness =
-            if let Some(previous_outer_proof) = self.prev_agg_proof.as_ref() {
-                let serialized = bincode::serialize(previous_outer_proof)?;
-                let public_values =
-                    self.host
-                        .add_proof_helper(&mut stdin, &serialized, &self.code_commitment)?;
+        let mut prev_agg_proof = self
+            .inner
+            .prev_agg_proof
+            .lock()
+            .map_err(|e| anyhow::anyhow!("prev_agg_proof mutex poisoned: {e}"))?;
 
-                Some(PreviousOuterProofWitness { public_values })
-            } else {
-                None
-            };
+        let prev_outer_proof_witness = if let Some(previous_outer_proof) = prev_agg_proof.as_ref() {
+            let serialized = bincode::serialize(previous_outer_proof)?;
+            let public_values = self.inner.host.add_proof_helper(
+                &mut stdin,
+                &serialized,
+                &self.inner.code_commitment,
+            )?;
+
+            Some(PreviousOuterProofWitness { public_values })
+        } else {
+            None
+        };
 
         let mut proof_inputs = Vec::with_capacity(proofs_and_headers.len());
         for proof_and_header in proofs_and_headers {
-            let public_values = self.host.add_proof_helper(
+            let public_values = self.inner.host.add_proof_helper(
                 &mut stdin,
                 &proof_and_header.proof.raw_inner_proof,
-                &self.inner_method_id,
+                &self.inner.inner_method_id,
             )?;
             let proof_input = DeferredProofInput::<Da> {
                 public_values,
@@ -96,9 +111,10 @@ impl SP1AggregationHost {
             proof_inputs.push(proof_input);
         }
 
-        let aggregation_vk_hash = self.aggregation_vk.hash_u32();
-        let inner_vk: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&self.inner_method_id.0)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize inner SP1VerifyingKey: {e}"))?;
+        let aggregation_vk_hash = self.inner.aggregation_vk.hash_u32();
+        let inner_vk: sp1_sdk::SP1VerifyingKey =
+            bincode::deserialize(&self.inner.inner_method_id.0)
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize inner SP1VerifyingKey: {e}"))?;
         let inner_vkey_hash = CodeCommitmentHash::from_u32_array(inner_vk.hash_u32());
         let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
 
@@ -111,9 +127,9 @@ impl SP1AggregationHost {
 
         stdin.write(&witness);
 
-        let agg_proof = self.host.run_helper(stdin)?;
+        let agg_proof = self.inner.host.run_helper(stdin)?;
         let serialized = bincode::serialize(&agg_proof)?;
-        self.prev_agg_proof = Some(agg_proof);
+        *prev_agg_proof = Some(agg_proof);
 
         Ok(serialized)
     }
@@ -261,10 +277,22 @@ impl MockSp1Prover {
 }
 
 impl OuterZkvmHost for SP1AggregationHost {
-    fn run<Da: DaSpec>(
+    ///
+    fn run_xx<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
         &mut self,
-        proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
+        _genesis_state_root: Root,
+        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<Vec<u8>> {
+        let mut proofs_and_headers: Vec<BlockHeaderWithProof<Da>> = Default::default();
+
+        for (header, proof) in headers_with_block_proofs {
+            proofs_and_headers.push(BlockHeaderWithProof {
+                da_block_header: header,
+                proof: proof.proof,
+            });
+        }
+
+        println!("SP1AggregationHost::run_xx");
         self.run(proofs_and_headers)
     }
 }

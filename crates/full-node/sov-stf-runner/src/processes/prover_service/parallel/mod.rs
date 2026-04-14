@@ -25,7 +25,7 @@ where
     OuterVm: Zkvm,
 {
     inner_vm: InnerVm::Host,
-    outer_vm: OuterVm::Host,
+    outer_vm: OuterVm::OuterHost,
     prover_config: RollupProverConfigDiscriminants,
 
     prover_state: Prover<Address, StateRoot, Witness, Da>,
@@ -48,7 +48,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         inner_vm: InnerVm::Host,
-        outer_vm: OuterVm::Host,
+        outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
         config: RollupProverConfigDiscriminants,
         num_threads: usize,
@@ -68,7 +68,7 @@ where
     /// Creates a new prover.
     pub fn new_with_default_workers(
         inner_vm: InnerVm::Host,
-        outer_vm: OuterVm::Host,
+        outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
         config: RollupProverConfigDiscriminants,
         prover_address: Address,
@@ -131,12 +131,12 @@ where
 
     async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
+        block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         self.prover_state.create_aggregated_proof(
             self.outer_vm.clone(),
-            block_header_hashes,
+            block_headers,
             genesis_state_root,
         )
     }

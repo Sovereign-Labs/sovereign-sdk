@@ -114,6 +114,9 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
     type Host = crate::host::SP1Host;
 
     #[cfg(feature = "native")]
+    type OuterHost = crate::host::SP1AggregationHost;
+
+    #[cfg(feature = "native")]
     type Network = crate::network::SP1Network;
 }
 

@@ -37,12 +37,15 @@ where
     V: ZkVerifier<CodeCommitment = CodeCommitmentHash>,
     G: ZkvmGuest<Verifier = V>,
 {
+    println!("run_aggregation_program --- 1");
     let AggregatedProofWitness {
         proof_inputs,
         inner_vkey_hash,
         outer_vkey_hash,
         prev_outer_proof_witness,
     } = guest.read_from_host::<AggregatedProofWitness<Da>>();
+
+    println!("run_aggregation_program 2");
 
     // Verify the previous aggregation proof if one exists. On the first aggregation
     // after genesis, there is no predecessor, the chain starts here.
@@ -61,12 +64,15 @@ where
         public_data
     });
 
+    println!("run_aggregation_program 3");
+
     let verified_proof_data: VerifyResult<Address, Da, Root> =
         verify_proof_chain::<Address, Da, Root, V>(
             proof_inputs,
             &inner_vkey_hash,
             previous_public_data.as_ref(),
         );
+    println!("run_aggregation_program 4");
 
     let VerifiedProofData {
         initial_boundary,
@@ -94,6 +100,8 @@ where
         outer_vk_hash: outer_vkey_hash,
         rewarded_addresses,
     };
+
+    println!("run_aggregation_program 5");
 
     // Commit the aggregated public data as this program's public output.
     // This is what external verifiers (and the next recursive aggregation) will see.

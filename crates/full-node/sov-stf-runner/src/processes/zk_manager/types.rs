@@ -138,7 +138,7 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
         let agg_proof_hashes: Vec<_> = self
             .block_proof_info
             .iter()
-            .map(|info| info.hash.clone())
+            .map(|info| info.header.clone())
             .collect();
 
         loop {
@@ -165,7 +165,7 @@ pub(crate) struct BlockProofInfo<Ps: ProverService> {
     /// The current status of the proof for this block
     pub status: BlockProofStatus<ProverStateTransitionInfo<Ps>>,
     /// The hash of this block
-    pub hash: <<Ps::DaService as DaService>::Spec as DaSpec>::SlotHash,
+    pub header: <<Ps::DaService as DaService>::Spec as DaSpec>::BlockHeader,
 
     /// The size of any public data needed to verify a proof of this block, in bytes
     pub public_data_size: u64,

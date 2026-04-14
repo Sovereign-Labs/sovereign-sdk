@@ -1,6 +1,7 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
 use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Session};
+use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
 use sov_rollup_interface::zk::ZkvmHost;
 
 use crate::guest::Risc0Guest;
@@ -109,3 +110,5 @@ impl ZkvmHost for Risc0Host<'static> {
         ))
     }
 }
+
+impl OuterZkvmHost for Risc0Host<'static> {}

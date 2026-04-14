@@ -1,6 +1,8 @@
 use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
@@ -71,5 +73,27 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
 
     fn from_args(_args: &Self::HostArgs) -> Self {
         Self::default()
+    }
+}
+
+impl sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost for MockZkvmHost {
+    fn run_xx<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &mut self,
+        genesis_state_root: Root,
+        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>> {
+        use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
+
+        let block_proofs_data = headers_with_block_proofs
+            .iter()
+            .map(|(_, bp)| bp)
+            .collect::<Vec<_>>();
+
+        let public_data = AggregatedProofPublicData::from_block_proofs(
+            block_proofs_data.as_slice(),
+            genesis_state_root,
+        );
+
+        <Self as sov_rollup_interface::zk::ZkvmHost>::add_hint_and_run(self, &public_data)
     }
 }
