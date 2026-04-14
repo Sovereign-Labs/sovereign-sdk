@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 demo-stf = { path = "../../../stf", default-features = false }
-sp1-zkvm = "6.0.2"
+sp1-zkvm = "6.1.0"
 
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da", default-features = false }
 sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm", default-features = false }
@@ -38,3 +38,9 @@ lto = true
 
 [profile.release.build-override]
 opt-level = 3
+
+[features]
+default = []
+bench = [
+    "sov-modules-api/bench",
+]

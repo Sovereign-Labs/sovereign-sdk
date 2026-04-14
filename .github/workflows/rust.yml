@@ -100,7 +100,7 @@ jobs:
 
   check:
     name: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -178,7 +178,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-all-targets-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-all-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -209,7 +209,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-default-targets-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-default-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -544,7 +544,7 @@ jobs:
   rollup_starter_lint:
     name: rollup_starter_lint
     if: ${{ github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=rollup-starter-1-93
     timeout-minutes: 90
     env:
       RUSTFLAGS: "-D warnings"
