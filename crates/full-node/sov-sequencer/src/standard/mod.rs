@@ -34,7 +34,6 @@ use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::num::NonZero;
 use std::path::Path;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{watch, Mutex};
@@ -159,7 +158,6 @@ where
             "Standard sequencer require DaService to be configured with submitting support",
         )?;
 
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let (blob_sender, blob_sender_handle) = BlobSender::new(
             da,
             ledger_db.clone(),
@@ -169,7 +167,7 @@ where
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),
-            nb_of_concurrent_blob_submissions,
+            Default::default(),
         )
         .await?;
 

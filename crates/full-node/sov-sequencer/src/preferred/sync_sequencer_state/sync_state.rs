@@ -856,6 +856,7 @@ where
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
         let sequence_number = inner.take_sequence_number_for_proof();
+        tracing::info!("Took sequence number {sequence_number} for proof blob {blob_id}");
         let proof_bytes =
             proof_bytes(&data.0, sequence_number).expect("Serialization to vec is infallible");
         inner

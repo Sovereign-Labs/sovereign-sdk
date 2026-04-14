@@ -16,7 +16,6 @@ use sov_rollup_interface::{StateUpdateInfo, TxHash};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::path::Path;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use tokio::sync::{watch, Mutex};
 use tokio::task::JoinHandle;
@@ -79,7 +78,6 @@ where
             )));
         let tx_status_manager = TxStatusManager::default();
 
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
         let seq = Self {
             inner: inner.into(),
             blob_sender: Arc::new(Mutex::new(
@@ -92,7 +90,7 @@ where
                     Duration::from_secs(config.blob_processing_timeout_secs),
                     None,
                     Default::default(),
-                    nb_of_concurrent_blob_submissions,
+                    Default::default(),
                 )
                 .await?
                 .0,

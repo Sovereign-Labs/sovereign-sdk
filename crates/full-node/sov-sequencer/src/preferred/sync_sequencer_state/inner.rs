@@ -36,7 +36,7 @@ use sov_state::pinned_cache::PinnedCache;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use tokio::sync::{oneshot, watch};
 use tracing::{debug, info, warn};
@@ -48,6 +48,10 @@ const COMFORTABLE_SIZE_LIMIT_MULTIPLIER: u64 = 99;
 const COMFORTABLE_SIZE_LIMIT_DIVISOR: u64 = 100;
 
 const COMFORTABLE_IN_FLIGHT_BLOBS: usize = 5;
+/// The minimum number of batches that have to be in flight for the sequencer to consider it *un*comfortable to produce a new batch.
+/// Without this value, the seuqencer will skip batch production when there are only proofs in flight, and since proofs aren't processed
+/// until the next batch arrives this creates a deadlock.
+const COMFORTABLE_IN_FLIGHT_BATCHES: usize = 2;
 
 const METRICS_BATCH_SIZE: usize = 32;
 
@@ -82,7 +86,7 @@ where
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
     pub(crate) is_ready: Result<(), SequencerNotReadyDetails>,
-    pub(crate) in_flight_blobs: Arc<AtomicUsize>,
+    pub(crate) in_flight_counts: sov_blob_sender::InFlightBlobCounts,
     pub(crate) executor_events_sender: ExecutorEventsSender<S, Rt>,
     // We track two sequence numbers: the sequence number of the current open batch, and the next unassigned sequence number.
     // This is because we might need to assign a sequence number to some proofs while a batch is in progress,
@@ -183,7 +187,7 @@ where
     Rt: Runtime<S>,
 {
     pub(crate) fn nb_of_concurrent_blob_submissions(&self) -> usize {
-        self.in_flight_blobs.load(Ordering::Acquire)
+        self.in_flight_counts.total()
     }
 
     pub(crate) async fn overwrite_next_sequence_number_for_recovery(
@@ -391,11 +395,15 @@ where
             return;
         }
 
-        let in_flight_blobs = self.in_flight_blobs.load(Ordering::Relaxed);
-        if in_flight_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS {
-            tracing::trace!(
+        let (in_flight_blobs, in_flight_proofs) = self.in_flight_counts.get();
+        let in_flight_batches = in_flight_blobs.saturating_sub(in_flight_proofs);
+        if in_flight_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS
+            && in_flight_batches >= COMFORTABLE_IN_FLIGHT_BATCHES
+        {
+            tracing::info!(
                 current_in_flight = %in_flight_blobs,
                 max_comfortable = %COMFORTABLE_IN_FLIGHT_BLOBS,
+                current_sequence_number_of_open_batch = %self.sequence_number_of_open_batch.unwrap_or(0),
                 "Skipping batch production due too many in flight blobs");
             return;
         }

@@ -678,7 +678,10 @@ impl<S: Spec> BlobStorage<S> {
                     discarded_blobs,
                     preferred_sender,
                     blob.id,
-                    BlobDiscardReason::SequenceNumberTooLow,
+                    BlobDiscardReason::SequenceNumberTooLow {
+                        found: blob.inner.sequence_number(),
+                        expected: next_sequence_number,
+                    },
                 );
                 false
             }
