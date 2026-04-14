@@ -10,33 +10,47 @@ use crate::{
     Amount, CryptoSpecExt, Multisig, Spec,
 };
 
-/// An unsent transaction with the required data to be submitted to the DA layer
+/// V0 unsigned transaction (single-sig). This is the consumer-facing builder type used
+/// to construct transactions before signing.
 #[derive(
     derive_more::Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet,
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
+pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     /// The runtime call
+    #[borsh(bound(
+        serialize = "R::Call: BorshSerialize",
+        deserialize = "R::Call: BorshDeserialize",
+    ))]
     pub runtime_call: R::Call,
     /// The uniqueness identifier
     pub uniqueness: UniquenessData,
     /// Data related to fees and gas handling.
     pub details: TxDetails<S>,
 }
-// Manually implemented to ensure correct trait bounds for the same reason as for `Transaction`
-// above
-impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
+
+// Manually implemented to ensure correct trait bounds (derive would require R: Clone/PartialEq)
+impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV0<R, S> {
+    fn clone(&self) -> Self {
+        Self {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+        }
+    }
+}
+impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV0<R, S> {
     fn eq(&self, other: &Self) -> bool {
         self.runtime_call == other.runtime_call
             && self.uniqueness == other.uniqueness
             && self.details == other.details
     }
 }
-impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
+impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV0<R, S> {}
 
 #[cfg(feature = "native")]
-impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
-    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
+impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
+    /// Signs the [`UnsignedTransactionV0`] and returns the resulting [`Transaction`].
     pub fn sign(
         self,
         private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
@@ -48,8 +62,8 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     }
 }
 
-impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
-    /// Creates a new [`UnsignedTransaction`] with the given arguments.
+impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
+    /// Creates a new [`UnsignedTransactionV0`] with the given arguments.
     pub const fn new(
         runtime_call: R::Call,
         chain_id: u64,
@@ -83,7 +97,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         }
     }
 
-    /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
+    /// Creates a new [`Transaction`] from this [`UnsignedTransactionV0`] when given a signature
     /// and a public key.
     pub fn to_signed_tx<C: CryptoSpecExt>(
         self,

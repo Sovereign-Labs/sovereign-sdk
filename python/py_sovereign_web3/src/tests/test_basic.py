@@ -2,7 +2,7 @@ import base64
 import requests
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from sovereign_web3 import Serializer, UnsignedTransaction, TxDetails
+from sovereign_web3 import Serializer, UnsignedTransactionV0, TxDetails
 
 
 def test_basic_transaction_submission():
@@ -26,7 +26,7 @@ def test_basic_transaction_submission():
         }
     }
     details = TxDetails(chain_id=4321)
-    unsigned_tx = UnsignedTransaction(runtime_call=call, details=details)
+    unsigned_tx = UnsignedTransactionV0(runtime_call=call, details=details)
     tx_bytes = unsigned_tx.bytes_for_signing(serializer)
 
     # sign tx

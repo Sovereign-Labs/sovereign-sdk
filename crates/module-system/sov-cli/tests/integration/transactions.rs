@@ -6,7 +6,7 @@ use sov_cli::workflows::transactions::{TransactionLoadWorkflow, TransactionWorkf
 use sov_cli::UnsignedTransactionWithoutUniqueness;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
 use sov_modules_api::{
     Amount, CryptoSpec, DispatchCall, MeteredBorshDeserialize, PrivateKey, Spec,
 };
@@ -95,7 +95,7 @@ fn transaction_is_serialized_correctly() {
         let tx_p = Transaction::<Runtime, TestSpec>::new_signed_tx(
             &key,
             &chain_hash,
-            UnsignedTransaction::new(
+            UnsignedTransactionV0::new(
                 runtime_call.clone(),
                 chain_id,
                 max_priority_fee_bips,
