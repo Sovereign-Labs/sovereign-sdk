@@ -566,12 +566,13 @@ jobs:
 
   # Compilation timing monitors — informational only, NOT in check-aggregate.
   # These jobs run the same compilation as their counterparts but with --timings
-  # to produce per-crate timing data. They use separate cache tags to avoid
-  # interfering with production caches.
+  # to produce per-crate timing data. They share the same cache tags as their
+  # counterparts so they see a realistic incremental cache state (and to avoid
+  # paying for duplicate 300GB cache volumes).
 
   timing_check:
     name: timing_check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=timing-check-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -594,7 +595,7 @@ jobs:
 
   timing_nextest:
     name: timing_nextest
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=timing-nextest-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -620,7 +621,7 @@ jobs:
 
   timing_nextest_all_features:
     name: timing_nextest_all_features
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-all-features-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=timing-nextest-all-features-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
