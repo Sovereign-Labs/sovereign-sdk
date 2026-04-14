@@ -283,6 +283,8 @@ impl OuterZkvmHost for SP1AggregationHost {
         _genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<Vec<u8>> {
+        println!("SP1AggregationHost::run_xx");
+
         let mut proofs_and_headers: Vec<BlockHeaderWithProof<Da>> = Default::default();
 
         for (header, proof) in headers_with_block_proofs {

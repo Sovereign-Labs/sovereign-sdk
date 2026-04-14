@@ -146,6 +146,11 @@ where
         )
         .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
+        println!(
+            "Inside proof {:?} {:?}",
+            stf_public_data.initial_state_root, stf_public_data.final_state_root
+        );
+
         let current_slot_number = SlotNumber::new(proof_input.da_block_header.height());
 
         // Verify DA block hash-chain continuity: each block's prev_hash must equal

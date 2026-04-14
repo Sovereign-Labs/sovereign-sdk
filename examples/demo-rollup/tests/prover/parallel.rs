@@ -100,7 +100,11 @@ async fn test_parallel_proof_generation() {
     // Submit all blocks to the parallel prover.
     let mut block_headers = Vec::new();
     for (i, witness) in witnesses.into_iter().enumerate() {
-        println!("X6 {i}");
+        println!("");
+        println!(
+            "X6 initial: {i} final: {:?} {:?}",
+            witness.initial_state_root, witness.final_state_root
+        );
         block_headers.push(witness.da_block_header.clone());
 
         let slot_number = SlotNumber::new(i as u64 + 1);

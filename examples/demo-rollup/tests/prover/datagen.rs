@@ -11,7 +11,7 @@ use sov_test_utils::MessageGenerator;
 
 type S = super::DefaultSpec;
 
-pub const DEFAULT_BLOCKS: u64 = 3;
+pub const DEFAULT_BLOCKS: u64 = 2;
 const DEFAULT_TXNS_PER_BLOCK: u64 = 2;
 
 pub async fn get_blocks_from_da(mode: BlobBuildingCtx) -> anyhow::Result<Vec<MockBlock>> {
