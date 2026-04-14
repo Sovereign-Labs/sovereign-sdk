@@ -87,7 +87,7 @@ impl TestHost {
             let host = SP1Host::new(*sp1_prover::SP1_GUEST_MOCK_ELF)
                 .expect("SP1Host should be created successfully");
 
-            let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
+            let mock_host = MockSp1Prover::new(*sp1_prover::SP1_GUEST_MOCK_ELF)
                 .expect("MockSp1Prover should be created successfully");
 
             (

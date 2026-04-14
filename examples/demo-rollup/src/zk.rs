@@ -139,11 +139,12 @@ mod inner {
     pub fn create_inner_vm(
         prover_config: sov_stf_runner::processes::RollupProverConfig<InnerZkvm>,
     ) -> (
-        SP1Host<'static>,
+        SP1Host,
         sov_stf_runner::processes::RollupProverConfigDiscriminants,
     ) {
         let (host_args, disc) = prover_config.split();
-        (SP1Host::new(*host_args), disc)
+        let host = SP1Host::new(*host_args).expect("SP1Host should be created successfully");
+        (host, disc)
     }
 }
 
