@@ -118,10 +118,12 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
 
     // Mirror `examples/test-data/genesis/integration-tests/evm.json`: tests cross-check
     // `gas_used_ratio` against the block header, so the block gas limit must match.
-    let mut evm_chain_spec = EvmChainSpec::default();
-    evm_chain_spec.block_gas_limit = 100_000_000_000;
-    evm_chain_spec.tx_gas_limit = Some(30_000_000);
-    evm_chain_spec.hardforks = vec![(0, SpecId::CANCUN)];
+    let evm_chain_spec = EvmChainSpec {
+        block_gas_limit: 100_000_000_000,
+        tx_gas_limit: Some(30_000_000),
+        hardforks: vec![(0, SpecId::CANCUN)],
+        ..EvmChainSpec::default()
+    };
 
     let evm_config = EvmGenesisConfig::<EvmTestSpec> {
         accounts: default_funded_evm_accounts(&opts)
@@ -154,7 +156,7 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
                     authorized_sequencers: AuthorizedSequencers::All,
                     authorized_updaters: SafeVec::new(),
                 },
-                sequencers_to_register: [seq_da_address.clone()]
+                sequencers_to_register: [seq_da_address]
                     .as_ref()
                     .try_into()
                     .expect("single sequencer fits in SafeVec"),
@@ -191,7 +193,7 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
                         authorized_sequencers: AuthorizedSequencers::All,
                         authorized_updaters: SafeVec::new(),
                     },
-                    sequencers_to_register: [seq_da_address.clone()]
+                    sequencers_to_register: [seq_da_address]
                         .as_ref()
                         .try_into()
                         .expect("single sequencer fits in SafeVec"),
