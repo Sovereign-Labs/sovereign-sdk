@@ -59,7 +59,6 @@ sov-kernels = { workspace = true, features = ["native"] }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
 
-# Integration test dependencies
 alloy = { workspace = true, features = ["signers"] }
 reqwest = { workspace = true, features = ["json"] }
 schemars = { workspace = true }
