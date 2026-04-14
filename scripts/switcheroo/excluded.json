@@ -1,0 +1,10 @@
+[
+	"scripts/switcheroo",
+	"crates/universal-wallet/fuzz",
+	"crates/utils/sov-evm-soak-testing",
+	"examples/demo-rollup/stf/demo-stf-json-client",
+	"examples/demo-rollup/sov-soak-testing",
+	"examples/demo-rollup/tests/prover/sov-aggregated-proof",
+	"examples/demo-rollup/provers/risc0",
+	"examples/demo-rollup/provers/sp1"
+]

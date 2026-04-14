@@ -1,7 +1,9 @@
 [
 	"crates/full-node/sov-ethereum",
 	"crates/full-node/sov-eth-dev-signer",
-	"crates/utils/sov-evm-soak-testing",
-	"crates/utils/sov-evm-test-utils",
+	"crates/full-node/sov-eth-dev-generator",
+	"crates/utils/sov-rpc-eth-types",
+	"crates/utils/sov-eth-client",
+	"crates/module-system/sov-eip712-auth",
 	"crates/module-system/module-implementations/sov-evm"
 ]

@@ -194,8 +194,21 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      # CI always operates on the entire workspace
-      - run: cargo switcheroo disable
+      # Fail fast if a workspace crate is missing from every preset and from
+      # the exclusion list — prevents silent gaps in feature-powerset coverage.
+      - name: Check preset coverage
+        run: ./scripts/check_preset_coverage.sh
+        shell: bash
+      # Compose the set of crates we ship (excludes demo-rollup binary,
+      # benchmarks, soak-testing, and fuzzing to keep the feature-powerset
+      # search space manageable).
+      - name: Compose default-members for hack
+        run: |
+          cargo switcheroo set default
+          cargo switcheroo add zkvms
+          cargo switcheroo add ethereum
+          cargo switcheroo add celestia
+          cargo switcheroo add demo-stf
         shell: bash
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
@@ -225,8 +238,21 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      # CI always operates on the entire workspace
-      - run: cargo switcheroo disable
+      # Fail fast if a workspace crate is missing from every preset and from
+      # the exclusion list — prevents silent gaps in feature-powerset coverage.
+      - name: Check preset coverage
+        run: ./scripts/check_preset_coverage.sh
+        shell: bash
+      # Compose the set of crates we ship (excludes demo-rollup binary,
+      # benchmarks, soak-testing, and fuzzing to keep the feature-powerset
+      # search space manageable).
+      - name: Compose default-members for hack
+        run: |
+          cargo switcheroo set default
+          cargo switcheroo add zkvms
+          cargo switcheroo add ethereum
+          cargo switcheroo add celestia
+          cargo switcheroo add demo-stf
         shell: bash
       - name: cargo hack
         run: make check-features-default-targets

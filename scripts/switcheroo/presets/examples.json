@@ -3,5 +3,5 @@
 	"examples/demo-rollup/rest-api-load-testing",
 	"examples/demo-rollup/sov-benchmarks",
 	"examples/demo-simple-stf",
-	"crates/utils/sov-soak-lib"
+	"crates/utils/sov-soak-testing-lib"
 ]
