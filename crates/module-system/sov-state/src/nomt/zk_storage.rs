@@ -105,44 +105,64 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
             }
         }
 
-        let mut writes_by_path = vec![Vec::<(KeyPath, Option<ValueHash>)>::new(); nomt_witness.path_proofs.len()];
-
+        let mut witnessed_writes = BTreeMap::new();
         for write in nomt_witness.operations.writes {
             let Some(expected_value) = expected_writes.remove(&write.key) else {
                 anyhow::bail!("Unexpected or duplicate NOMT write witness entry");
             };
-            let Some(path_writes) = writes_by_path.get_mut(write.path_index) else {
-                anyhow::bail!("NOMT write witness path index out of bounds");
+            if write.value != expected_value {
+                anyhow::bail!(
+                    "Mismatched NOMT write witness value for key {:?}: witness={:?}, expected={:?}",
+                    write.key,
+                    write.value,
+                    expected_value
+                );
+            }
+            if witnessed_writes
+                .insert(write.key, expected_value)
+                .is_some()
+            {
+                anyhow::bail!("Duplicate NOMT write witness entry");
             };
-            path_writes.push((write.key, expected_value));
         }
 
         if !expected_writes.is_empty() {
             anyhow::bail!("Missing NOMT write witness entries");
         }
 
-        let mut path_entries = nomt_witness
+        let mut verified_paths = nomt_witness
             .path_proofs
             .into_iter()
-            .enumerate()
-            .map(|(index, path)| {
-                (
-                    path,
-                    std::mem::take(&mut writes_by_path[index]),
-                )
+            .map(|path| {
+                let verified = path
+                    .inner
+                    .verify::<BinaryHasher<S::Hasher>>(path.path.path(), prev_root)
+                    .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
+                Ok((verified, Vec::<(KeyPath, Option<ValueHash>)>::new()))
             })
-            .collect::<Vec<_>>();
-        path_entries.sort_by(|a, b| a.0.path.path().cmp(b.0.path.path()));
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        verified_paths.sort_by(|a, b| a.0.path().cmp(b.0.path()));
+
+        for (key, value) in witnessed_writes {
+            let matching_index = verified_paths
+                .iter()
+                .enumerate()
+                .filter_map(|(index, (verified, _))| {
+                    verified
+                        .confirm_nonexistence(&key)
+                        .ok()
+                        .map(|_| (index, verified.path().len()))
+                })
+                .max_by_key(|(_, path_len)| *path_len)
+                .map(|(index, _)| index)
+                .ok_or_else(|| anyhow::anyhow!("No NOMT path proof covers write key {:?}", key))?;
+
+            verified_paths[matching_index].1.push((key, value));
+        }
 
         let mut updates = Vec::new();
-        for (path, mut writes) in path_entries {
-            let verified = path
-                .inner
-                .verify::<BinaryHasher<S::Hasher>>(path.path.path(), prev_root)
-                .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
-
+        for (verified, writes) in verified_paths {
             if !writes.is_empty() {
-                writes.sort_by(|a, b| a.0.cmp(&b.0));
                 updates.push(PathUpdate {
                     inner: verified,
                     ops: writes,
