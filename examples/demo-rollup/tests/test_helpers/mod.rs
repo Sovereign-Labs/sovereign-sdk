@@ -8,20 +8,20 @@ use sov_address::EthereumAddress;
 use sov_address::FromVmAddress;
 use sov_bank::Coins;
 use sov_bank::TokenId;
-use sov_demo_rollup::MockDemoRollup;
 use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::Base58Address;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
 use sov_modules_api::Spec;
-use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_test_utils::default_test_tx_details;
 use sov_test_utils::test_rollup::GenesisSource;
 use sov_test_utils::test_signed_transaction;
-pub type DemoRollupSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
+
+#[cfg(feature = "mock_da")]
+pub type DemoRollupSpec = <sov_demo_rollup::MockDemoRollup<sov_modules_api::execution_mode::Native>
+    as sov_modules_rollup_blueprint::RollupBlueprint<sov_modules_api::execution_mode::Native>>::Spec;
 
 pub fn test_genesis_source<S: Spec>(operating_mode: OperatingMode) -> GenesisSource<S, Runtime<S>>
 where
