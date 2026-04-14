@@ -621,7 +621,7 @@ jobs:
 
   timing_nextest_all_features:
     name: timing_nextest_all_features
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-all-features-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
