@@ -1,3 +1,6 @@
+#[cfg(feature = "local")]
+use std::str::FromStr;
+
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
 use sov_evm::{Evm, EvmAuthenticatorInput};
 use sov_mock_da::storable::StorableMockDaService;
@@ -7,6 +10,7 @@ use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{NodeEndpoints, RawTx, SequencerType, Spec};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
+use sov_paymaster::Paymaster;
 use sov_rollup_interface::execution_mode::Native;
 use sov_sequencer::Sequencer;
 use sov_stf_runner::RollupConfig;
@@ -27,9 +31,10 @@ pub type EvmTestSpec = ConfigurableSpec<
 
 generate_runtime! {
     name: TestRuntime,
-    modules: [evm: Evm<S>],
+    modules: [evm: Evm<S>, paymaster: Paymaster<S>],
     operating_mode: OperatingMode::Optimistic,
     minimal_genesis_config_type: sov_test_utils::runtime::genesis::optimistic::MinimalOptimisticGenesisConfig<S>,
+    gas_enforcer: paymaster: Paymaster<S>,
     runtime_trait_impl_bounds: [S::Address: FromVmAddress<EthereumAddress>],
     kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
     auth_type: sov_evm::EvmAuthenticator<S, Self>,
@@ -82,7 +87,12 @@ where
 
         let eth_rpc_config = sov_ethereum::EthRpcConfig {
             #[cfg(feature = "local")]
-            eth_signer: sov_ethereum::Signers::new(vec![]),
+            eth_signer: sov_ethereum::Signers::new(vec![secp256k1::SecretKey::from_str(
+                // Hardhat #0 — SENDER_PRIV_KEY without the leading `0x` so eth_accounts /
+                // eth_sendTransaction work in tests that exercise the local signer path.
+                "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            )
+            .expect("valid hardhat private key")]),
             extension: rollup_config.extension_or_panic(),
             sequencer_rollup_address: rollup_config.sequencer.rollup_address,
             sequencer_da_address,

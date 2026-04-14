@@ -1,35 +1,9 @@
-mod evm_account_abstraction;
-mod evm_balances;
-mod evm_basefee;
-mod evm_block_by_number_hash;
-mod evm_block_hash;
-mod evm_block_number;
-mod evm_block_pinned_state_reads;
-mod evm_call;
-mod evm_call_fee_fields;
-mod evm_contract_creation_allowlist;
-mod evm_effective_gas_price;
-mod evm_fee_history;
-mod evm_gas_estimation;
-mod evm_get_transaction_count;
-mod evm_logs;
-mod evm_logs_validation;
-mod evm_max_fee_validation;
-mod evm_no_gas_limit;
-mod evm_oog_error;
+// Smoke tests for the integrated demo-rollup EVM wiring. The full EVM test suite
+// lives in `crates/full-node/sov-ethereum/tests/integration/`. The two tests kept
+// here exercise the realistic, full-runtime path (with bank, paymaster, hyperlane,
+// etc.) to guard against integration regressions that the sov-ethereum-only test
+// runtime cannot catch.
+
 mod evm_paymaster_balance_check;
-mod evm_publish_reverted_txs;
-mod evm_ram_pinning;
-mod evm_rate_limit;
 mod evm_rpc;
-mod evm_rpc_compliance_validation;
-mod evm_rpc_compliance_validation_2;
-mod evm_simulation_and_send_consistency;
-mod evm_soft_conf;
-mod evm_subscribe;
 pub(crate) mod evm_test_helper;
-mod evm_timestamp;
-mod evm_tracing;
-mod evm_tx;
-mod evm_tx_type;
-mod evm_ws_watch;
