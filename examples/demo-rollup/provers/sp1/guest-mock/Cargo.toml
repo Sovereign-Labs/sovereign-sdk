@@ -9,7 +9,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { version = "1.0.95" }
-sp1-zkvm = { version = "6.0.2" }
+sp1-zkvm = { version = "6.1.0" }
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1" }
