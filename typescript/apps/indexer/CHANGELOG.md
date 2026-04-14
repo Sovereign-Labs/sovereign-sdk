@@ -1,5 +1,12 @@
 # @sovereign-sdk/indexer
 
+## 0.4.22
+
+### Patch Changes
+
+-   Updated dependencies [be66aa4]
+    -   @sovereign-sdk/web3@0.14.0
+
 ## 0.4.21
 
 ### Patch Changes

@@ -41,7 +41,7 @@ async fn test_parallel_proof_generation() {
         "SP1 guest ELF is empty — build the guest first"
     );
 
-    let inner_vm = SP1Host::new(elf);
+    let inner_vm = SP1Host::new(elf).expect("SP1Host should be created successfully");
     // auto-complete outer proofs - real outer not supported yet
     let outer_vm = MockZkvmHost::new_non_blocking();
 

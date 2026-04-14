@@ -111,7 +111,7 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
     type Verifier = SP1Verifier;
 
     #[cfg(feature = "native")]
-    type Host = crate::host::SP1Host<'static>;
+    type Host = crate::host::SP1Host;
 
     #[cfg(feature = "native")]
     type Network = crate::network::SP1Network;

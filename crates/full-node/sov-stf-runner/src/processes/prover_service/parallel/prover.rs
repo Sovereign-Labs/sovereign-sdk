@@ -68,7 +68,7 @@ where
         &self,
         state_transition_info: StateTransitionInfo<StateRoot, Witness, <Da as DaService>::Spec>,
         config: RollupProverConfigDiscriminants,
-        mut inner_vm: InnerVm::Host,
+        inner_vm: InnerVm::Host,
         verifier: Arc<Verifier<Da>>,
     ) -> Result<
         ProofProcessingStatus<StateRoot, Witness, <Da as DaService>::Spec>,
@@ -108,11 +108,9 @@ where
                 prover_address: self.prover_address.clone(),
             };
 
-            inner_vm.add_hint(&data);
-
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = make_inner_proof::<InnerVm>(inner_vm, config);
+                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data, config);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -190,10 +188,10 @@ where
 
         trace!(%public_data, "generating aggregate proof");
         // TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/316
-        // `add_hint`  should take witness instead of the public input.
-        outer_vm.add_hint(public_data);
+        // Pass the witness here instead of the public input so the guest can
+        // recompute the public data.
         let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof: outer_vm.run()?,
+            raw_aggregated_proof: outer_vm.add_hint_and_run(&public_data)?,
         };
 
         for slot_hash in block_header_hashes {
@@ -205,6 +203,7 @@ where
 
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
+    hint: &impl Serialize,
     config: RollupProverConfigDiscriminants,
 ) -> anyhow::Result<Vec<u8>>
 where
@@ -215,7 +214,7 @@ where
         RollupProverConfigDiscriminants::Skip => Ok(Vec::default()),
         RollupProverConfigDiscriminants::Prove => {
             info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-            vm.run()
+            vm.add_hint_and_run(hint)
         }
     };
     sov_metrics::track_metrics(|tracker| {
