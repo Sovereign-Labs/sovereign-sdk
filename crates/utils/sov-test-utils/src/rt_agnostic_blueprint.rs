@@ -20,7 +20,7 @@ use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
-use sov_sequencer::ProofBlobSender;
+use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
@@ -85,6 +85,9 @@ where
 }
 
 /// A basic, "vanilla" [`FullNodeBlueprint`] to be used for testing.
+///
+/// The `A` parameter allows injecting additional sequencer APIs (e.g., EVM's `eth_*`
+/// methods). It defaults to [`NoAdditionalApis`], which returns empty endpoints.
 pub struct RtAgnosticBlueprint<
     S: Spec,
     R: RuntimeTrait<S>,
@@ -97,12 +100,29 @@ pub struct RtAgnosticBlueprint<
         >,
     >,
     Prover = ParallelProverFactory<S>,
+    A = NoAdditionalApis,
 > {
-    phantom: PhantomData<(S, R, Manager, Prover)>,
+    phantom: PhantomData<(S, R, Manager, Prover, A)>,
 }
 
-impl<S: Spec, R: RuntimeTrait<S>, Manager, Prover> Default
-    for RtAgnosticBlueprint<S, R, Manager, Prover>
+/// [`RtAgnosticBlueprint`] with the default NOMT storage manager and custom additional APIs.
+pub type RtAgnosticBlueprintWithApis<S, R, A> = RtAgnosticBlueprint<
+    S,
+    R,
+    NomtStorageManager<
+        MockDaSpec,
+        <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+        NomtProverStorage<
+            DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>,
+            MockHash,
+        >,
+    >,
+    ParallelProverFactory<S>,
+    A,
+>;
+
+impl<S: Spec, R: RuntimeTrait<S>, Manager, Prover, A> Default
+    for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 {
     fn default() -> Self {
         Self {
@@ -111,19 +131,22 @@ impl<S: Spec, R: RuntimeTrait<S>, Manager, Prover> Default
     }
 }
 
-impl<S, R, Manager, Prover> RollupBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover>
+impl<S, R, Manager, Prover, A> RollupBlueprint<Native>
+    for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
     S: Spec + PluggableSpec,
     R: RuntimeTrait<S> + HasKernel<S> + HasCapabilities<S> + HasKernel<S>,
     Manager: Send + Sync + 'static,
     Prover: Send + Sync + 'static,
+    A: Send + Sync + 'static,
 {
     type Spec = S;
     type Runtime = R;
 }
 
 #[async_trait]
-impl<S, R, Manager, Prover> FullNodeBlueprint<Native> for RtAgnosticBlueprint<S, R, Manager, Prover>
+impl<S, R, Manager, Prover, A> FullNodeBlueprint<Native>
+    for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
     S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
@@ -139,6 +162,7 @@ where
         >
         + StorageManagerInitializer<S, StorableMockDaService>,
     Prover: ProverFactory<S>,
+    A: AdditionalSequencerApis<S, R>,
 {
     type DaService = StorableMockDaService;
 
@@ -209,6 +233,24 @@ where
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(proof_blob_sender))
     }
+
+    async fn sequencer_additional_apis<Seq>(
+        &self,
+        sequencer: Seq,
+        rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        sequencer_da_address: <<Self::Spec as Spec>::Da as sov_rollup_interface::da::DaSpec>::Address,
+    ) -> anyhow::Result<NodeEndpoints>
+    where
+        Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
+    {
+        A::create(
+            sequencer,
+            rollup_config,
+            shutdown_receiver,
+            sequencer_da_address,
+        )
+    }
 }
 
 trait StorageManagerInitializer<S: Spec, Da: DaService>: Sized {
@@ -247,5 +289,45 @@ impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
         witness_generation: bool,
     ) -> anyhow::Result<Self> {
         NomtStorageManager::new(config.storage.clone(), witness_generation)
+    }
+}
+
+/// Trait for injecting additional sequencer HTTP/RPC endpoints into
+/// [`RtAgnosticBlueprint`]. Implement this and pass as the 4th generic parameter `A`.
+pub trait AdditionalSequencerApis<S: Spec<Da = MockDaSpec>, R: RuntimeTrait<S>>:
+    Default + Send + Sync + 'static
+{
+    /// Creates additional [`NodeEndpoints`] for the sequencer.
+    ///
+    /// The returned endpoints will be merged into the sequencer's API surface.
+    fn create<Seq>(
+        sequencer: Seq,
+        rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        sequencer_da_address: <MockDaSpec as sov_rollup_interface::da::DaSpec>::Address,
+    ) -> anyhow::Result<NodeEndpoints>
+    where
+        Seq: Sequencer<Spec = S, Rt = R, Da = StorableMockDaService>;
+}
+
+/// Default implementation of [`AdditionalSequencerApis`] that returns empty endpoints.
+#[derive(Default)]
+pub struct NoAdditionalApis;
+
+impl<S, R> AdditionalSequencerApis<S, R> for NoAdditionalApis
+where
+    S: Spec<Da = MockDaSpec>,
+    R: RuntimeTrait<S>,
+{
+    fn create<Seq>(
+        _sequencer: Seq,
+        _rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
+        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        _sequencer_da_address: <MockDaSpec as sov_rollup_interface::da::DaSpec>::Address,
+    ) -> anyhow::Result<NodeEndpoints>
+    where
+        Seq: Sequencer<Spec = S, Rt = R, Da = StorableMockDaService>,
+    {
+        Ok(NodeEndpoints::default())
     }
 }
