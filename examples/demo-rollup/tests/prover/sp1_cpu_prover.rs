@@ -76,24 +76,29 @@ async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec
 // The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
 // To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
 struct TestHost {
-    host: SP1Host<'static>,
+    host: SP1Host,
     mock_host: MockSp1Prover,
     with_proof: bool,
 }
 
 impl TestHost {
     async fn new(with_proof: bool) -> (Self, SP1MethodId) {
-        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
-        let host_clone = host.clone();
-        let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
-            host_clone
-                .code_commitment()
-                .expect("SP1 code commitment should be created successfully")
+        let (code_commitment, host, mock_host) = tokio::task::spawn_blocking(move || {
+            let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF)
+                .expect("SP1Host should be created successfully");
+
+            let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
+                .expect("MockSp1Prover should be created successfully");
+
+            (
+                host.code_commitment()
+                    .expect("SP1 code commitment should be created successfully"),
+                host,
+                mock_host,
+            )
         })
         .await
         .unwrap();
-
-        let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF);
 
         (
             Self {
@@ -109,16 +114,15 @@ impl TestHost {
         if self.with_proof {
             let mut host = self.host.clone();
             tokio::task::spawn_blocking(move || -> Vec<u8> {
-                host.add_hint(data);
-                host.run().expect("Prover should run successfully")
+                host.add_hint_and_run(&data)
+                    .expect("Prover should run successfully")
             })
             .await
             .unwrap()
         } else {
-            let mut mock_host = self.mock_host.clone();
+            let mock_host = self.mock_host.clone();
             tokio::task::spawn_blocking(move || -> Vec<u8> {
-                mock_host.add_hint(data);
-                mock_host.run().unwrap();
+                mock_host.add_hint_and_run(&data).unwrap();
                 Default::default()
             })
             .await

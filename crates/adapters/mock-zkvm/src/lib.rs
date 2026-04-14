@@ -155,10 +155,8 @@ mod tests {
         };
 
         let mut vm = MockZkvmHost::new();
-        vm.add_hint(&pub_data);
         vm.make_proof();
-
-        let proof = vm.run().unwrap();
+        let proof = vm.add_hint_and_run(&pub_data).unwrap();
         let verified_pub_data =
             MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default())?;
 
