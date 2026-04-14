@@ -64,6 +64,14 @@ impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
 
 // Getters on the enum for version-agnostic field access
 impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
+    /// Serializes the versioned unsigned transaction and appends the chain hash,
+    /// producing the bytes used for signing and signature verification.
+    pub fn serialized_with_chain_hash(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        let mut serialized_tx = borsh::to_vec(self).expect("Serialization to vec is infallible");
+        serialized_tx.extend_from_slice(chain_hash);
+        serialized_tx
+    }
+
     /// Returns a reference to the runtime call.
     pub fn runtime_call(&self) -> &R::Call {
         match self {
