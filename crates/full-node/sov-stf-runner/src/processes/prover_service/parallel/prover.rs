@@ -166,10 +166,7 @@ where
         let headers_with_block_proofs = {
             let prover_state = self.prover_state.read().expect("Lock was poisoned");
 
-            let mut headers_with_block_proofs: Vec<(
-                <Da::Spec as DaSpec>::BlockHeader,
-                BlockProof<Address, Da::Spec, StateRoot>,
-            )> = Vec::with_capacity(block_headers.len());
+            let mut headers_with_block_proofs = Vec::with_capacity(block_headers.len());
 
             for block_header in block_headers {
                 let slot_hash = &block_header.hash();
