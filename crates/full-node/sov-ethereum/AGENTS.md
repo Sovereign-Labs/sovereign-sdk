@@ -109,10 +109,16 @@ Prioritize static checks that map to real client breakage:
 
 ## Fast Commands
 
+The EVM integration suite lives in `crates/full-node/sov-ethereum/tests/integration/`
+and runs under `-p sov-ethereum`. Two smoke tests (`evm_rpc`,
+`evm_paymaster_balance_check`) remain in `examples/demo-rollup/tests/evm/` to
+exercise the full production runtime.
+
 ```bash
 SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_logs
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_subscribe
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_ws_watch
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_tx
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_logs
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_subscribe
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_ws_watch
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_tx
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_rpc
 ```
