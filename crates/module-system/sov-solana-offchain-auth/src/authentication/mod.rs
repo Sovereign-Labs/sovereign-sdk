@@ -309,7 +309,7 @@ where
         ));
     }
 
-    verify_chain_id(&unsigned_tx.details, raw_tx_hash)?;
+    verify_chain_id(unsigned_tx.details(), raw_tx_hash)?;
 
     // Verify signatures (branches internally for single-sig vs multisig)
     verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;
@@ -317,20 +317,20 @@ where
     // Build authorization data (branches internally for single-sig vs multisig)
     let authorization_data = build_auth_data::<S>(
         &unpacked_message,
-        unsigned_tx.uniqueness,
+        unsigned_tx.uniqueness(),
         raw_tx_hash,
         state,
     )?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,
-        authenticated_tx: unsigned_tx.details.into(),
+        authenticated_tx: unsigned_tx.details().clone().into(),
     };
 
     Ok((
         tx_and_raw_hash,
         authorization_data,
-        unsigned_tx.runtime_call,
+        unsigned_tx.runtime_call().clone(),
     ))
 }
 
