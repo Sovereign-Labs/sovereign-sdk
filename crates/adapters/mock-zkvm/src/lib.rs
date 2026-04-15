@@ -60,6 +60,9 @@ impl Zkvm for MockZkvm {
     type Host = crate::host::MockZkvmHost;
 
     #[cfg(feature = "native")]
+    type OuterHost = crate::host::MockZkvmHost;
+
+    #[cfg(feature = "native")]
     type Network = crate::network::MockZkvmNetwork;
 }
 /// A mock commitment to a particular zkVM program.

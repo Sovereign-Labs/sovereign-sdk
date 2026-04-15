@@ -1,6 +1,7 @@
 # 2026-04-13
 - #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
 - #2725 splits demo rollup for DA and ZKVM features
+- #2735 Internal change: moves EVM RPC tests to sov-ethereum from sov-demo-rollup
 
 # 2026-04-08
 - #2695 adds a new `ext_getStorageProof` RPC endpoint to the EVM module

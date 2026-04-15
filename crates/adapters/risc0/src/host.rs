@@ -1,10 +1,13 @@
 //! This module implements the [`ZkvmHost`] trait for the RISC0 VM.
 
-use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Session};
-use sov_rollup_interface::zk::ZkvmHost;
-
 use crate::guest::Risc0Guest;
 use crate::Risc0MethodId;
+use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Session};
+use serde::Serialize;
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::BlockProof;
+use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
+use sov_rollup_interface::zk::ZkvmHost;
 
 /// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
 /// provided to its execution.
@@ -107,5 +110,15 @@ impl ZkvmHost for Risc0Host<'static> {
         Ok(Risc0MethodId(
             risc0_zkvm::compute_image_id(self.elf)?.into(),
         ))
+    }
+}
+
+impl OuterZkvmHost for Risc0Host<'static> {
+    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &self,
+        _genesis_state_root: Root,
+        _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>> {
+        unimplemented!("Proof aggregation not supported for Risc0")
     }
 }

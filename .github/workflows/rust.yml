@@ -91,6 +91,7 @@ jobs:
       - validate-packages-to-publish-yml
       - cargo-switcheroo-default
       - check-web3-js-sdk-integration
+      - check-demo-rollup-phantom-dapp-e2e
     steps:
       - name: Compute whether the needed jobs succeeded or failed
         uses: re-actors/alls-green@release/v1
@@ -100,7 +101,7 @@ jobs:
 
   check:
     name: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -178,7 +179,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-all-targets-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-all-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -209,7 +210,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-default-targets-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-default-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -544,7 +545,7 @@ jobs:
   rollup_starter_lint:
     name: rollup_starter_lint
     if: ${{ github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=rollup-starter-1-93
     timeout-minutes: 90
     env:
       RUSTFLAGS: "-D warnings"
@@ -563,3 +564,41 @@ jobs:
       - name: Run starter lint
         working-directory: ${{ runner.temp }}/rollup-starter
         run: make lint
+
+  check-demo-rollup-phantom-dapp-e2e:
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    needs:
+      - check
+    timeout-minutes: 60
+    env:
+      SP1_SKIP_PROGRAM_BUILD: "true"
+      SKIP_GUEST_BUILD: "1"
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ./typescript/package.json
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20.x
+          cache: "pnpm"
+          cache-dependency-path: typescript/pnpm-lock.yaml
+      # CI always operates on the entire workspace
+      - run: cargo switcheroo disable
+        shell: bash
+      - name: Run Phantom dapp e2e against demo-rollup
+        run: bash ./scripts/ci_demo_rollup_phantom_dapp_e2e.sh
+      - name: Upload Phantom e2e artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phantom-dapp-e2e-artifacts
+          path: |
+            typescript/examples/phantom/playwright-report/
+            typescript/examples/phantom/test-results/
+            examples/demo-rollup/demo_rollup_log.log
+          retention-days: 7

@@ -176,13 +176,13 @@ where
         if first_height_unproven.saturating_add(self.proofs_to_create.current_proof_jump() as u64)
             <= stf_info.slot_number
         {
-            let block_hash = stf_info.da_block_header().hash();
+            let block_header = stf_info.da_block_header().clone();
             // Save the transition for later proving. This is temporarily redundant
             // since we always just try to prove blocks right away (because we don't have fee
             // estimates for proving built out yet).
             self.proofs_to_create.append(BlockProofInfo {
                 status: BlockProofStatus::Waiting(stf_info),
-                hash: block_hash,
+                header: block_header,
                 // TODO(@preston-evans98): estimate public data size. This requires a new API on the `prover_service`.
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/440>
                 public_data_size: 0,

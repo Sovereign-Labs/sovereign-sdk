@@ -37,6 +37,7 @@ macro_rules! generate_runtime_without_capabilities {
             ::sov_modules_api::macros::RuntimeRestApi,
             ::sov_modules_api::macros::UniversalWallet,
         )]
+        #[::sov_modules_api::macros::expose_rpc]
         pub struct $id<S: ::sov_modules_api::Spec>  where
         $($runtime_trait_impl_bounds)*
         {
@@ -163,7 +164,7 @@ macro_rules! generate_runtime_without_capabilities {
 
                 ::sov_modules_api::NodeEndpoints {
                     axum_router,
-                    jsonrpsee_module: ::sov_modules_api::prelude::jsonrpsee::RpcModule::new(()),
+                    jsonrpsee_module: get_rpc_methods(api_state),
                     background_handles: Vec::new(),
                 }
             }

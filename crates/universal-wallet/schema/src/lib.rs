@@ -35,6 +35,8 @@ pub extern crate bech32;
 /// This annotation may only be applied to fields, not items.
 ///
 /// ```rust
+/// # pub extern crate sov_universal_wallet;
+/// # mod sov_rollup_interface { pub use crate::sov_universal_wallet; }
 /// use sov_rollup_interface::sov_universal_wallet::schema::{Schema, safe_string::SafeString};
 /// use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 ///
@@ -61,6 +63,8 @@ pub extern crate bech32;
 /// or when you want to override the default schema for a type in a particular context.
 ///
 /// ```rust
+/// # pub extern crate sov_universal_wallet;
+/// # mod sov_rollup_interface { pub use crate::sov_universal_wallet; }
 /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
 ///
 /// // A foreign type that doesn't derive UniversalWallet
@@ -84,6 +88,8 @@ pub extern crate bech32;
 /// use `#[sov_wallet(hidden)]` instead.
 ///
 /// ```rust
+/// # pub extern crate sov_universal_wallet;
+/// # mod sov_rollup_interface { pub use crate::sov_universal_wallet; }
 /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
 /// #[derive(UniversalWallet, borsh::BorshSerialize)]
 /// pub struct File {
@@ -107,6 +113,8 @@ pub extern crate bech32;
 ///    fixed-point number.
 ///
 /// ```rust
+/// # pub extern crate sov_universal_wallet;
+/// # mod sov_rollup_interface { pub use crate::sov_universal_wallet; }
 /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
 /// #[derive(UniversalWallet, borsh::BorshSerialize)]
 /// pub struct Coins {
@@ -138,6 +146,8 @@ pub extern crate bech32;
 /// This annotation may only be applied to fields, not items. The field must have type `[u8;N]` or `Vec<u8>` to use this attribute.
 ///
 /// ```rust
+/// # pub extern crate sov_universal_wallet;
+/// # mod sov_rollup_interface { pub use crate::sov_universal_wallet; }
 /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
 ///
 /// fn prefix() -> &'static str {
