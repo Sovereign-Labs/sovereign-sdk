@@ -85,6 +85,14 @@
 - #2682 Upgrades axum from 0.7 to 0.8. OpenAPI specs are now served as version 3.1.0 (previously 3.0.2). Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
 - #2683 Removes JMT based rollup from demo-rollup examples. JMT-based storage is still available in sov-state.
 
+# MULTISIG UPGRADE
+Temporary section for maintaining breaking changes from individual PRs, which will be consolidated into a single changelog entry when the feature branch is merged into `dev`.
+- #2688 **Breaking change(code, state, consensus)**: The transaction formats have changed in this version. This is a consensus breaking change and requires coordinating an upgrade using `--stop-at-rollup-height`, and using sov-rollup-manager for full resyncs from this point onwards for existing rollups. This fixes Credential ID malleability that allowed the same set of signed bytes to be replayed for different credentials, across V0 and V1 (multisig) transactions and with different V1 multisig parameters.
+  * The on-chain transaction data has changed, and multisig transactions now explicitly include the multisig id as part of the signed bytes.
+  * Previous signatures are no longer valid. Clients will need to upgrade to our latest SDKs to be able to sign transactions in the new format.
+  * The `UnsignedTransaction` type, and multiple member methods of `Transaction`, have changed. Our client SDKs have been updated, but for users manually constructing an UnsignedTransaction in Rust, we recommend explicitly using `UnsignedTransactionV0`. For creating a multisig, use `UnsignedTransactionV0::to_multisig_tx()`.
+  * The CHAIN_HASH has changed.
+
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
 

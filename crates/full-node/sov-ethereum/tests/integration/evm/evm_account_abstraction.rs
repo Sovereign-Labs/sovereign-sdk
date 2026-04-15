@@ -1,7 +1,7 @@
 use alloy_primitives::{Address, U256};
 use sov_eth_client::SimpleStorageClient;
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::{TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE};
 
@@ -60,7 +60,7 @@ fn create_insert_credentials(
     Transaction::<TestRuntime<TestSpec>, TestSpec>::new_signed_tx(
         &key,
         &chain_hash,
-        UnsignedTransaction::new(
+        UnsignedTransactionV0::new(
             msg,
             chain_id,
             max_priority_fee_bips,
