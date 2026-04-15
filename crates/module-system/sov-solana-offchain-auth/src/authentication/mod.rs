@@ -227,7 +227,7 @@ where
                 .into_unsigned_tx()
         }
     };
-    Ok(unsigned_tx.call())
+    Ok(unsigned_tx.runtime_call().clone())
 }
 
 pub fn authenticate<Accessor, S, D>(
