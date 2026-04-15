@@ -75,8 +75,13 @@ async fn test_eth_send_raw_transaction() {
         admin: admin.address(),
     };
 
-    let mut genesis =
-        crate::runtime::GenesisConfig::from_minimal_config(genesis_config.into(), evm_config);
+    let mut genesis = crate::runtime::GenesisConfig::from_minimal_config(
+        genesis_config.into(),
+        evm_config,
+        sov_paymaster::PaymasterConfig {
+            payers: Default::default(),
+        },
+    );
 
     genesis
         .bank
