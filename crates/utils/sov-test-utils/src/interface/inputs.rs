@@ -3,7 +3,9 @@ use std::collections::HashMap;
 use derivative::Derivative;
 use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
-use sov_modules_api::transaction::{PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction};
+use sov_modules_api::transaction::{
+    PriorityFeeBips, Transaction, TxDetails, UnsignedTransactionV0,
+};
 use sov_modules_api::{Amount, CryptoSpec, DispatchCall, FullyBakedTx, PrivateKey, RawTx, Spec};
 use sov_rollup_interface::da::RelevantBlobs;
 
@@ -119,9 +121,9 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         }
     }
 
-    /// Creates a [`TransactionType`] from an [`UnsignedTransaction`].
+    /// Creates a [`TransactionType`] from an [`UnsignedTransactionV0`].
     pub fn pre_signed(
-        unsigned_tx: UnsignedTransaction<RT, S>,
+        unsigned_tx: UnsignedTransactionV0<RT, S>,
         key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
         chain_hash: &[u8; 32],
     ) -> Self {
@@ -148,7 +150,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         Transaction::<RT, S>::new_signed_tx(
             &key,
             chain_hash,
-            UnsignedTransaction::new(
+            UnsignedTransactionV0::new(
                 msg,
                 details.chain_id,
                 details.max_priority_fee_bips,
