@@ -10,8 +10,8 @@ use sov_rollup_interface::da::{
     BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaProof, RelevantBlobs, RelevantProofs,
     Time,
 };
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::Bytes;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::utils::hash_to_array;
 

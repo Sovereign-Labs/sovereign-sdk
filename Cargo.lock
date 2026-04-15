@@ -11475,6 +11475,7 @@ dependencies = [
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-test-utils",
+ "sov-universal-wallet",
  "tendermint",
  "tendermint-proto",
  "test-strategy",
@@ -11595,6 +11596,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sov-rollup-interface",
+ "sov-universal-wallet",
 ]
 
 [[package]]
@@ -12110,6 +12112,7 @@ dependencies = [
  "sov-mock-da",
  "sov-rollup-interface",
  "sov-test-utils",
+ "sov-universal-wallet",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -12138,6 +12141,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-mock-zkvm",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "thiserror 2.0.17",
  "tokio",
 ]
@@ -12493,6 +12497,7 @@ dependencies = [
  "sov-metrics",
  "sov-risc0-adapter",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "sov-zkvm-utils",
  "thiserror 2.0.17",
  "tracing",
@@ -12807,6 +12812,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sp1-adapter",
  "sov-test-utils",
+ "sov-universal-wallet",
  "sov-zkvm-utils",
  "sp1-build",
  "sp1-lib",
@@ -12841,6 +12847,7 @@ dependencies = [
  "sov-mock-da",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "tempfile",
  "test-strategy",
  "tracing",

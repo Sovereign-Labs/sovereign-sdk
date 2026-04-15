@@ -6,7 +6,7 @@ use celestia_types::state::{AccAddress, AddressKind, AddressTrait};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::reexports::schemars::{self};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 #[derive(
     Debug,
@@ -150,7 +150,7 @@ mod tests {
 
     const CELESTIA_HRP: Hrp = Hrp::parse_unchecked("celestia");
 
-    use sov_rollup_interface::sov_universal_wallet::schema::Schema;
+    use sov_universal_wallet::schema::Schema;
     use sov_test_utils::validate_schema;
 
     use super::*;

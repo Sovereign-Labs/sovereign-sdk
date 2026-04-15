@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 use sov_universal_wallet::ty::IntegerDisplayable;
 
 /// Maximum number of decimal places for a fixed-point number stored as a u128 integer

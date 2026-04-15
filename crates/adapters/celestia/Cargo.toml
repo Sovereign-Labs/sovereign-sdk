@@ -52,6 +52,7 @@ rand = { workspace = true, optional = true }
 sov-metrics = { workspace = true, optional = true }
 sov-modules-macros = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["macros"] }
 
 [dev-dependencies]
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }

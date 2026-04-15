@@ -3,11 +3,10 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::ser::SerializeSeq;
+use sov_universal_wallet::UniversalWallet;
 
 use super::SafeVec;
-use crate as sov_rollup_interface;
 use crate::da::BlockHashTrait;
-use crate::sov_universal_wallet::UniversalWallet; // Needed for UniversalWallet, as it requires global paths
 
 /// A [`hex`]-encoded 32-byte hash. Note, this is not necessarily a transaction
 /// hash, rather a generic hash.

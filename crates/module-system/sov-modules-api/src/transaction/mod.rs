@@ -12,9 +12,9 @@ pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionCons
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::crypto::{SigVerificationError, Signature};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
+use sov_universal_wallet::UniversalWallet;
 use sov_universal_wallet::schema::UniversalWallet;
 use thiserror::Error;
 pub use types::{

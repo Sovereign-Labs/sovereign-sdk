@@ -3,8 +3,8 @@
 
 use schemars::JsonSchema;
 use sov_modules_api::capabilities::{BlockGasInfo, RollupHeight};
+use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::sov_universal_wallet::UniversalWallet;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{

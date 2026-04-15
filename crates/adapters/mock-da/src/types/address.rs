@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
 use sov_rollup_interface::crypto::CredentialId;
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::BasicAddress;
+use sov_universal_wallet::schema::OverrideSchema;
+use sov_universal_wallet::UniversalWallet;
 
 /// Sequencer DA address used in tests.
 pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
@@ -36,7 +37,7 @@ pub struct MockAddress {
 #[allow(dead_code)]
 #[doc(hidden)]
 pub struct MockAddressSchema(#[sov_wallet(display(hex))] [u8; 32]);
-impl sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema for MockAddress {
+impl OverrideSchema for MockAddress {
     type Output = MockAddressSchema;
 }
 
@@ -144,7 +145,7 @@ mod tests {
 
     use proptest::prelude::any;
     use proptest::proptest;
-    use sov_rollup_interface::sov_universal_wallet::schema::Schema;
+    use sov_universal_wallet::schema::Schema;
     use sov_test_utils::validate_schema;
 
     use super::*;
