@@ -932,10 +932,11 @@ where
     fn maybe_iter_user_values_with_prefix(
         &self,
         prefix: SlotKey,
+        cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         let iter = self
             .historical_state
-            .iter_user_values_with_prefix(&prefix)?;
+            .iter_user_values_with_prefix_and_cursor(&prefix, cursor)?;
         let Some(iter) = iter else {
             return Ok(None);
         };
@@ -948,10 +949,11 @@ where
     fn maybe_iter_kernel_values_with_prefix(
         &self,
         prefix: SlotKey,
+        cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         let iter = self
             .historical_state
-            .iter_kernel_values_with_prefix(&prefix)?;
+            .iter_kernel_values_with_prefix_and_cursor(&prefix, cursor)?;
         let Some(iter) = iter else {
             return Ok(None);
         };

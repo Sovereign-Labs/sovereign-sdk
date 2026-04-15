@@ -11,6 +11,7 @@
 //!    state items are marked with `include`. See
 //!    [`StateItemRestApiExists`].se std::marker::PhantomData;
 
+use axum::response::Response;
 use sov_state::Prefix;
 use std::convert::Infallible;
 use std::fmt::Display;
@@ -25,7 +26,7 @@ use sov_rest_utils::{ApiResult, ErrorObject, Path, Query};
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::{
     CompileTimeNamespace, Kernel, Namespace, NativeStorage, SlotKey, StateCodec, StateItemCodec,
-    StateItemDecoder, StateItemEncoder,
+    StateItemDecoder,
 };
 use unwrap_infallible::UnwrapInfallible;
 
@@ -283,8 +284,7 @@ where
             state.module_discriminant,
             state.state_item_info.item_discriminant,
         );
-        let state_map =
-            NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix, Codec::default());
+        let state_map = NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix, Codec::default());
         let slot_prefix = SlotKey::singleton(&prefix);
         let accessor = state
             .api_state
@@ -295,25 +295,20 @@ where
                 ))
             })?;
 
-        let entries = accessor
-            .current_values_with_prefix(N::NAMESPACE, &slot_prefix)
-            .map_err(|e| {
-                sov_rest_utils::errors::internal_server_error_response_500(format!(
-                    "Failed to iterate map: {e}"
-                ))
-            })?;
-        let entries = entries.ok_or_else(sov_rest_utils::errors::not_implemented_501)?;
-
+        let page_size = pagination
+            .size
+            .try_into()
+            .expect("u32 can always be converted to usize");
         let cursor_key = match &pagination.selection {
             sov_rest_utils::PageSelection::First => None,
             sov_rest_utils::PageSelection::Next { cursor } => {
                 let key = K::from_str(cursor).map_err(|_| {
                     sov_rest_utils::errors::bad_request_400(
                         "Invalid cursor",
-                        "Failed to parse page cursor as map key",
+                        "cursor must be a valid key",
                     )
                 })?;
-                Some(key)
+                Some(state_map.slot_key(&key))
             }
             sov_rest_utils::PageSelection::Last => {
                 return Err(sov_rest_utils::errors::bad_request_400(
@@ -323,65 +318,55 @@ where
             }
         };
 
-        // Encode the cursor key for byte-level comparison
-        let cursor_key_bytes: Option<Vec<u8>> = cursor_key
-            .as_ref()
-            .map(|k| state_map.codec().key_codec().encode_to_vec(k));
+        // Load the next `limit` entries from state
+        let entries = accessor
+            .current_values_with_prefix(N::NAMESPACE, &slot_prefix, cursor_key.clone(), page_size)
+            .map_err(|e| {
+                sov_rest_utils::errors::internal_server_error_response_500(format!(
+                    "Failed to iterate map: {e}"
+                ))
+            })?;
+        let entries = entries.ok_or_else(sov_rest_utils::errors::not_implemented_501)?;
+        let should_paginate = entries.len() > page_size;
 
-        let limit = pagination.size as usize;
-        let mut items = Vec::with_capacity(limit);
-        let mut last_included_cursor = None;
+        // Decode into k/v pairs
+        let items = entries
+            .into_iter()
+            .take(page_size)
+            .map(|(slot_key, slot_value)| {
+                let key_bytes = slot_key.without_prefix();
+                let key: K = state_map
+                    .codec()
+                    .key_codec()
+                    .try_decode(key_bytes)
+                    .map_err(|_| {
+                        sov_rest_utils::errors::internal_server_error_response_500(
+                            "Failed to decode map key",
+                        )
+                    })?;
 
-        for (slot_key, slot_value) in entries {
-            let key_bytes = slot_key.without_prefix();
+                let value: V = state_map
+                    .codec()
+                    .value_codec()
+                    .try_decode(slot_value.value())
+                    .map_err(|_| {
+                        sov_rest_utils::errors::internal_server_error_response_500(
+                            "Failed to decode map value",
+                        )
+                    })?;
 
-            // Skip entries up to and including the cursor
-            if let Some(ref cursor_bytes) = cursor_key_bytes {
-                if key_bytes <= cursor_bytes.as_slice() {
-                    continue;
-                }
-            }
+                Ok(StateItemContents::MapElement { key: key, value })
+            })
+            .collect::<Result<Vec<_>, Response>>()?;
 
-            if items.len() == limit {
-                return Ok(sov_rest_utils::PaginatedResponse {
-                    items,
-                    next_cursor: last_included_cursor,
-                }
-                .into());
-            }
-
-            let key: K = state_map
-                .codec()
-                .key_codec()
-                .try_decode(key_bytes)
-                .map_err(|_| {
-                    sov_rest_utils::errors::internal_server_error_response_500(
-                        "Failed to decode map key",
-                    )
-                })?;
-
-            let value: V = state_map
-                .codec()
-                .value_codec()
-                .try_decode(slot_value.value())
-                .map_err(|_| {
-                    sov_rest_utils::errors::internal_server_error_response_500(
-                        "Failed to decode map value",
-                    )
-                })?;
-
-            items.push(StateItemContents::MapElement {
-                key: key.clone(),
-                value,
-            });
-            last_included_cursor = Some(key.to_string());
-        }
-
-        Ok(sov_rest_utils::PaginatedResponse {
-            items,
-            next_cursor: None,
-        }
-        .into())
+        let next_cursor = if should_paginate {
+            items
+                .last()
+                .and_then(|item| item.key().map(|key| key.to_string()))
+        } else {
+            None
+        };
+        Ok(sov_rest_utils::PaginatedResponse { items, next_cursor }.into())
     }
 }
 

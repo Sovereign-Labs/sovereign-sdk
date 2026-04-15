@@ -257,15 +257,16 @@ pub trait StateGetter: core::fmt::Debug + Send + Sync {
     /// This is a permanent change to the getter that cannot be undone except by creating a new `StateGetter` from the original source.
     fn ignore_changes_after_height(&mut self, rollup_height: RollupHeight);
 
-    /// Iterate over the values currently present under the given prefix.
+    /// Iterate over the values currently present under the given prefix, starting from the given cursor (exclusive) if provided.
     ///
     /// This is optional because some implementations only support point
     /// lookups. Returned values include tombstones so callers can suppress
     /// shadowed storage entries.
-    fn maybe_iter_prefix(
+    fn maybe_iter_prefix_exclusive(
         &self,
         _namespace: Namespace,
         _prefix: &SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> Option<Box<dyn Iterator<Item = (SlotKey, Option<SlotValue>)> + '_>> {
         None
     }
@@ -425,15 +426,19 @@ pub trait NativeStorage: Storage {
     ) -> Option<SlotValue>;
 
     /// Iterate over all current k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
+    /// If a cursor is provided, the iteration will start from the given cursor (inclusive).
     fn maybe_iter_user_values_with_prefix(
         &self,
         prefix: SlotKey,
+        cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>;
 
     /// Iterate over all current kernel k/v pairs with the given prefix. This method is optional and returns None if not supported by the underlying storage.
+    /// If a cursor is provided, the iteration will start from the given cursor (inclusive).
     fn maybe_iter_kernel_values_with_prefix(
         &self,
         prefix: SlotKey,
+        cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>;
 
     /// Takes the pinned cache if one is present in this storage. See [`PinnedCache`] for more details.
