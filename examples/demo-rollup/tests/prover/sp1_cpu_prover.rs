@@ -11,6 +11,7 @@ use sov_rollup_interface::zk::{
 };
 use sov_sp1_adapter::host::{MockSp1Prover, SP1Host};
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
+use tokio::time::Instant;
 
 type ProofInput = StateTransitionWitnessWithAddress<
     <DefaultSpec as Spec>::Address,
@@ -20,7 +21,7 @@ type ProofInput = StateTransitionWitnessWithAddress<
 >;
 
 #[tokio::test(flavor = "multi_thread")]
-//#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
+#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
     let (host, code_commitment) = TestHost::new(true).await;
     let proof_data = generate_proofs(&host).await;
@@ -56,7 +57,6 @@ async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec
     let mut proofs = Vec::new();
 
     for (i, witness) in witnesses.into_iter().enumerate() {
-        println!("XX {i}");
         let da_block_header = witness.da_block_header.clone();
 
         let data: ProofInput = StateTransitionWitnessWithAddress {
@@ -64,7 +64,9 @@ async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec
             prover_address,
         };
 
+        let start = Instant::now();
         let raw_inner_proof = host.run(data).await;
+        println!("XX {i} proof generated in {:?}", start.elapsed());
         proofs.push(BlockHeaderWithProof {
             da_block_header,
             proof: SerializedInnerProof { raw_inner_proof },
