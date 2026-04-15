@@ -611,7 +611,7 @@ jobs:
 
   timing_check:
     name: timing_check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -620,8 +620,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - run: cargo switcheroo disable
         shell: bash
       - name: Compile with timings
@@ -646,8 +644,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - run: cargo switcheroo disable
         shell: bash
       - name: Build test binaries with timings
@@ -671,8 +667,6 @@ jobs:
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang libclang-dev
       - run: cargo switcheroo disable
         shell: bash
       - name: Build test binaries with timings (all features)
