@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
 
     let verification_key = SP1MethodId(saved_inner_vk_bytes()?);
 
-    let mut prover = SP1AggregationHost::new(aggregation_elf, verification_key)?;
+    let prover = SP1AggregationHost::new(aggregation_elf, verification_key)?;
 
     let proof_batches = raw_proofs
         .chunks(JUMP)
