@@ -119,6 +119,9 @@ impl sov_rollup_interface::zk::Zkvm for Risc0 {
     type Host = crate::host::Risc0Host<'static>;
 
     #[cfg(feature = "native")]
+    type OuterHost = crate::host::Risc0Host<'static>;
+
+    #[cfg(feature = "native")]
     type Network = sov_rollup_interface::zk::NoopZkvmNetwork<crate::guest::Risc0Guest>;
 }
 

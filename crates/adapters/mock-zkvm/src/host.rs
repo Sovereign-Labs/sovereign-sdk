@@ -1,6 +1,8 @@
 use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
@@ -41,6 +43,17 @@ impl MockZkvmHost {
         })
         .unwrap()
     }
+
+    fn add_hint_and_run_inner<T: Serialize>(&self, item: &T) -> anyhow::Result<Vec<u8>> {
+        let pub_data = bincode::serialize(item)?;
+        if self.wait_for_proof {
+            self.notification_manager.wait();
+        }
+        Ok(bincode::serialize(&MockProof {
+            is_valid: true,
+            pub_data,
+        })?)
+    }
 }
 
 impl Default for MockZkvmHost {
@@ -59,17 +72,32 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
     }
 
     fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
-        let pub_data = bincode::serialize(item)?;
-        if self.wait_for_proof {
-            self.notification_manager.wait();
-        }
-        Ok(bincode::serialize(&MockProof {
-            is_valid: true,
-            pub_data,
-        })?)
+        self.add_hint_and_run_inner(item)
     }
 
     fn from_args(_args: &Self::HostArgs) -> Self {
         Self::default()
+    }
+}
+
+impl OuterZkvmHost for MockZkvmHost {
+    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &self,
+        genesis_state_root: Root,
+        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>> {
+        use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
+
+        let block_proofs_data = headers_with_block_proofs
+            .iter()
+            .map(|(_, bp)| bp)
+            .collect::<Vec<_>>();
+
+        let public_data = AggregatedProofPublicData::from_block_proofs(
+            block_proofs_data.as_slice(),
+            genesis_state_root,
+        );
+
+        self.add_hint_and_run_inner(&public_data)
     }
 }

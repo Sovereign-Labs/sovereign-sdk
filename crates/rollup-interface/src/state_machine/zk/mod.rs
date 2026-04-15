@@ -58,6 +58,12 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
     #[cfg(feature = "native")]
     type Host: ZkvmHost<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
 
+    /// The host responsible for producing outer (aggregation) proofs that
+    /// recursively verify one or more inner [`Self::Host`] proofs.
+    /// Only available under the `"native"` feature.
+    #[cfg(feature = "native")]
+    type OuterHost: aggregated_proof::OuterZkvmHost;
+
     /// Network proving implementation for this Zkvm.
     /// Only available under the `"native"` feature.
     ///

@@ -11,7 +11,7 @@ use sov_rollup_interface::zk::aggregated_proof::circuit::run_aggregation_program
 use sov_sp1_adapter::SP1;
 use sov_sp1_adapter::{guest::SP1Guest, SP1Verifier};
 
-type ProgramSpec = ConfigurableSpec<MockDaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Zk>;
+type ProgramSpec = ConfigurableSpec<MockDaSpec, SP1, SP1, MultiAddressEvmSolana, Zk>;
 
 pub fn main() {
     let guest = SP1Guest::new();

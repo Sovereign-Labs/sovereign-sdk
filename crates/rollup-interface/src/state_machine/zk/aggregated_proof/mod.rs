@@ -15,10 +15,21 @@ use crate::common::SlotNumber;
 use crate::da::DaSpec;
 use crate::zk::SerializedInnerProof;
 
+/// Host-side interface for the outer zkVM that produces aggregated proofs.
+pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
+    /// Aggregates per-block inner proofs into a single serialized aggregated proof.
+    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &self,
+        genesis_state_root: Root,
+        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>>;
+}
+
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
+#[derive(Clone)]
 pub struct BlockProof<Address, Da: DaSpec, Root> {
     /// The raw proof bytes.
-    pub proof: Vec<u8>,
+    pub proof: SerializedInnerProof,
     /// The slot number this proof covers.
     pub slot_number: SlotNumber,
     /// The state transition public data for this block.
