@@ -145,7 +145,7 @@ async fn test_network_aggregated_proof_multiple_blocks() {
 
     // Complete all inner proofs (handles 0..5).
     for handle in 0..block_count {
-        inner_vm.complete_proof(handle.into());
+        inner_vm.complete_proof(handle as u64);
     }
 
     let status = prover_service
