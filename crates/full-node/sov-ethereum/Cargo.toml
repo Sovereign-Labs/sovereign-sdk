@@ -49,14 +49,21 @@ proptest = { workspace = true }
 strum = { workspace = true }
 test-strategy = { workspace = true }
 
-sov-mock-da = { workspace = true }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true }
 sov-api-spec = { workspace = true }
 sov-stf-runner = { workspace = true }
 sov-cli = { workspace = true }
 sov-state = { workspace = true }
-sov-kernels = { workspace = true }
+sov-kernels = { workspace = true, features = ["native"] }
 sov-accounts = { workspace = true }
 sov-test-utils = { workspace = true }
+
+alloy = { workspace = true, features = ["signers"] }
+reqwest = { workspace = true, features = ["json"] }
+schemars = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tempfile = { workspace = true }
 
 [features]
 default = []

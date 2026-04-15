@@ -4,7 +4,7 @@ use proptest::prelude::*;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_risc0_adapter::host::Risc0Host;
-use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
+use sov_rollup_interface::zk::ZkvmGuest;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct TestStruct {
