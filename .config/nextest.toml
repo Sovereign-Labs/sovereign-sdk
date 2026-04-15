@@ -25,7 +25,7 @@ threads-required = 4
 [[profile.default.overrides]]
 filter = 'package(sov-sequencer) & test(/pinned_cache::/)'
 priority = 90                                                        # try to run it first, so it doesn't add up at the end
-threads-required = 2
+threads-required = 3
 
 [[profile.default.overrides]]
 filter = 'package(sov-sequencer) & test(/seq_behind_deferred_slots_count|test_no_crashes_on_resync|sequencer_back_pressure|heavy_blob_submission/)'
@@ -41,12 +41,11 @@ test-group = 'isolated-perf-tests'
 priority = 95                                                        # Run early to avoid adding tail latency
 slow-timeout = { period = "60s", terminate-after = 10 }              # Needs up to 10 minutes under load
 
-# Integration tests spin up full TestRollup instances with multi_thread tokio;
-# 2 thread slots balances parallelism with CPU headroom.
+# Integration tests spin up full TestRollup instances with multi_thread tokio.
 # Unit tests (kind=lib) get default threads-required=1.
 [[profile.default.overrides]]
 filter = 'package(sov-sequencer) & kind(test)'
-threads-required = 2
+threads-required = 4
 
 [test-groups.heavy-tests]
 max-threads = 1
