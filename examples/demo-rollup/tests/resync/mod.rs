@@ -116,6 +116,7 @@ async fn start_rollup(
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
                 seq_config.ideal_lag_behind_finalized_slot = 3;
+                seq_config.num_cache_warmup_workers = 0;
             }
         })
         .start(),
