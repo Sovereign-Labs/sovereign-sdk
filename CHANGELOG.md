@@ -3,6 +3,9 @@
 - #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
   The change also affects call message de-serialization in sov-paymaster, for all call messages that use `PaymasterPolicyInitializer`
 
+# 2026-04-15
+- #2742 *Minor breaking change (code)*: The `UniversalWallet` macro exported by the `sov-universal-wallet` crate is now meant to be used by depending directly on the crate, and is no longer re-exported from `sov-rollup-interface`. The re-export from `sov-modules-api` is unchanged, so most usage is unaffected; this is only breaking if you were previously importing the macro specifically from `sov-rollup-interface`.
+
 # 2026-04-13
 - #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
 - #2735 Internal change: moves EVM RPC tests to sov-ethereum from sov-demo-rollup
