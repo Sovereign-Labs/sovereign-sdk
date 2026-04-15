@@ -131,8 +131,8 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
         }
     }
 
-    /// Returns a copy of the RuntimeCall from this unsigned transaction.
-    pub fn call(&self) -> R::Call {
-        self.runtime_call.clone()
+    /// Returns a reference to the runtime call.
+    pub fn runtime_call(&self) -> &R::Call {
+        &self.runtime_call
     }
 }
