@@ -18,6 +18,11 @@ fn test_roundtrip_nomt() {
     run_nomt_test(TestCase::single_read_write_different_key());
     run_nomt_test(TestCase::single_read_write_same_key());
     run_nomt_test(TestCase::rounds_of_same_key());
+    run_nomt_test(TestCase::multi_write_distinct_keys());
+    run_nomt_test(TestCase::multi_write_both_namespaces_distinct());
+    run_nomt_test(TestCase::mixed_reads_and_multi_writes());
+    run_nomt_test(TestCase::multi_round_multi_write());
+    run_nomt_test(TestCase::routing_bug_minimal());
 }
 
 /// Add a new read to the first round.

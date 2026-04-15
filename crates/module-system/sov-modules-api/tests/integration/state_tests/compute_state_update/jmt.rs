@@ -19,4 +19,8 @@ fn test_roundtrip_jmt() {
     run_jmt_test(TestCase::single_read_write_different_key());
     run_jmt_test(TestCase::single_read_write_same_key());
     run_jmt_test(TestCase::rounds_of_same_key());
+    run_jmt_test(TestCase::multi_write_distinct_keys());
+    run_jmt_test(TestCase::multi_write_both_namespaces_distinct());
+    run_jmt_test(TestCase::mixed_reads_and_multi_writes());
+    run_jmt_test(TestCase::multi_round_multi_write());
 }

@@ -542,6 +542,28 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
     Ok(finished)
 }
 
+/// Dumps `state_accesses` to a JSON file when `SOV_DUMP_STATE_ACCESSES` env var is set
+/// to a directory path. Each call writes `round_NNNN.json` with a monotonically-increasing index.
+///
+/// Used to capture real STF state accesses for replay in unit tests. Triggered opt-in; no cost
+/// in normal builds (gated on `test-utils` feature, further gated on env var at runtime).
+#[cfg(feature = "test-utils")]
+fn dump_state_accesses_if_enabled(state_accesses: &StateAccesses) {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static ROUND: AtomicUsize = AtomicUsize::new(0);
+
+    let Ok(dir) = std::env::var("SOV_DUMP_STATE_ACCESSES") else {
+        return;
+    };
+    let idx = ROUND.fetch_add(1, Ordering::SeqCst);
+    let path = std::path::PathBuf::from(dir).join(format!("round_{idx:04}.json"));
+    let json = serde_json::to_string_pretty(state_accesses)
+        .expect("StateAccesses must be JSON-serializable");
+    std::fs::create_dir_all(path.parent().unwrap()).expect("create dump dir");
+    std::fs::write(&path, json).expect("write dump");
+    eprintln!("[SOV_DUMP_STATE_ACCESSES] wrote {}", path.display());
+}
+
 impl<S: MerkleProofSpec, K> InitializableNativeNomtStorage<S::Hasher, K> for NomtProverStorage<S, K>
 where
     K: Clone + Send + Sync,
@@ -665,6 +687,9 @@ where
         prev_state_root: Self::Root,
         pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
+        #[cfg(feature = "test-utils")]
+        dump_state_accesses_if_enabled(&state_accesses);
+
         let start = std::time::Instant::now();
         let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user)?;
         let nomt_accesses_kernel = to_nomt_accesses::<S>(&state_accesses.kernel)?;

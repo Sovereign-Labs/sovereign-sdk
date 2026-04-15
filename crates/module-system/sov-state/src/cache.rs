@@ -745,7 +745,10 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 /// A struct that contains the values read from the DB and the values to be written, both in
 /// deterministic order.
 #[derive(Debug, Default)]
-#[cfg_attr(feature = "test-utils", derive(Clone))]
+#[cfg_attr(
+    feature = "test-utils",
+    derive(Clone, serde::Serialize, serde::Deserialize)
+)]
 pub struct OrderedReadsAndWrites {
     /// Ordered reads.
     pub ordered_reads: Vec<(SlotKey, Option<NodeLeaf>)>,
@@ -775,7 +778,10 @@ impl<'a> arbitrary::Arbitrary<'a> for OrderedReadsAndWrites {
 /// A struct that contains the read/write sets for the user and kernel namespaces.
 #[derive(Debug, Default)]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
-#[cfg_attr(feature = "test-utils", derive(Clone))]
+#[cfg_attr(
+    feature = "test-utils",
+    derive(Clone, serde::Serialize, serde::Deserialize)
+)]
 pub struct StateAccesses {
     /// The reads and writes to the user namespace
     pub user: OrderedReadsAndWrites,

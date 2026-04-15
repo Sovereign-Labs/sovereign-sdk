@@ -122,6 +122,215 @@ impl TestCase {
             ],
         }
     }
+
+    pub fn multi_write_distinct_keys() -> Self {
+        Self {
+            rounds: vec![StateAccesses {
+                kernel: OrderedReadsAndWrites {
+                    ordered_reads: vec![],
+                    ordered_writes: vec![
+                        (
+                            SlotKey::from_slice(b"key_1"),
+                            Some(SlotValue::from("value_a")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"key_2"),
+                            Some(SlotValue::from("value_b")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"key_3"),
+                            Some(SlotValue::from("value_c")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"key_4"),
+                            Some(SlotValue::from("value_d")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"key_5"),
+                            Some(SlotValue::from("value_e")),
+                        ),
+                    ],
+                },
+                user: Default::default(),
+            }],
+        }
+    }
+
+    pub fn multi_write_both_namespaces_distinct() -> Self {
+        Self {
+            rounds: vec![StateAccesses {
+                kernel: OrderedReadsAndWrites {
+                    ordered_reads: vec![],
+                    ordered_writes: vec![
+                        (
+                            SlotKey::from_slice(b"k_kernel_1"),
+                            Some(SlotValue::from("v_a")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"k_kernel_2"),
+                            Some(SlotValue::from("v_b")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"k_kernel_3"),
+                            Some(SlotValue::from("v_c")),
+                        ),
+                    ],
+                },
+                user: OrderedReadsAndWrites {
+                    ordered_reads: vec![],
+                    ordered_writes: vec![
+                        (
+                            SlotKey::from_slice(b"k_user_1"),
+                            Some(SlotValue::from("v_x")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"k_user_2"),
+                            Some(SlotValue::from("v_y")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"k_user_3"),
+                            Some(SlotValue::from("v_z")),
+                        ),
+                    ],
+                },
+            }],
+        }
+    }
+
+    pub fn mixed_reads_and_multi_writes() -> Self {
+        Self {
+            rounds: vec![StateAccesses {
+                kernel: OrderedReadsAndWrites {
+                    ordered_reads: vec![
+                        (SlotKey::from_slice(b"key_read_a"), None),
+                        (SlotKey::from_slice(b"key_read_b"), None),
+                        (SlotKey::from_slice(b"key_read_c"), None),
+                    ],
+                    ordered_writes: vec![
+                        (
+                            SlotKey::from_slice(b"key_write_1"),
+                            Some(SlotValue::from("v_1")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"key_write_2"),
+                            Some(SlotValue::from("v_2")),
+                        ),
+                        (
+                            SlotKey::from_slice(b"key_write_3"),
+                            Some(SlotValue::from("v_3")),
+                        ),
+                    ],
+                },
+                user: Default::default(),
+            }],
+        }
+    }
+
+    /// Minimal trigger for the per-path routing bug fixed by commit `1e0fefd0e`.
+    ///
+    /// Two rounds, each with **two** kernel writes and zero user writes. All four
+    /// key/value pairs are captured from the first two rounds of
+    /// `test_mock_proof_public_data_matches_witnesses` (genesis + block 1).
+    ///
+    /// Bisected from a 4-round / 1000+-write capture. The bug's trigger turned out to
+    /// be surprisingly narrow:
+    /// - 1 kernel write per round: bug does NOT trigger.
+    /// - 2 kernel writes per round: bug triggers.
+    /// - 3 kernel writes per round (using the third captured write): bug does NOT
+    ///   trigger — the witness shape changes again.
+    ///
+    /// User writes are not needed to reproduce: the pre-fix
+    /// `verify_multi_proof_update` diverges from `session.finish().root()` purely on the
+    /// kernel namespace's path proofs here. User writes were also not sufficient on
+    /// their own (see `HistoricalStateReader::materialize_values` — any user write
+    /// requires at least one kernel write, but kernel-only rounds are allowed).
+    pub fn routing_bug_minimal() -> Self {
+        Self {
+            rounds: vec![
+                // Round 1 — seed the kernel trie with two leaves.
+                StateAccesses {
+                    kernel: OrderedReadsAndWrites {
+                        ordered_reads: vec![],
+                        ordered_writes: vec![
+                            (
+                                SlotKey::from_slice(&[2, 0]),
+                                Some(SlotValue::from(vec![0u8; 8])),
+                            ),
+                            (
+                                SlotKey::from_slice(&[2, 7]),
+                                Some(SlotValue::from(vec![0u8; 8])),
+                            ),
+                        ],
+                    },
+                    user: Default::default(),
+                },
+                // Round 2 — overwrite [2, 0] and write a longer new key [2, 6, ...].
+                // The witness for this round is where the pre-fix verifier's
+                // verify_multi_proof_update routing diverges from session.finish().
+                StateAccesses {
+                    kernel: OrderedReadsAndWrites {
+                        ordered_reads: vec![],
+                        ordered_writes: vec![
+                            (
+                                SlotKey::from_slice(&[2, 0]),
+                                Some(SlotValue::from(vec![1, 0, 0, 0, 0, 0, 0, 0])),
+                            ),
+                            (
+                                SlotKey::from_slice(&[2, 6, 1, 0, 0, 0, 0, 0, 0, 0]),
+                                Some(SlotValue::from(vec![1, 0, 0, 0, 0, 0, 0, 0])),
+                            ),
+                        ],
+                    },
+                    user: Default::default(),
+                },
+            ],
+        }
+    }
+
+    pub fn multi_round_multi_write() -> Self {
+        let key_1 = SlotKey::from_slice(b"key_1");
+        let key_2 = SlotKey::from_slice(b"key_2");
+        let key_3 = SlotKey::from_slice(b"key_3");
+        let value_a = SlotValue::from("value_a");
+        let value_b = SlotValue::from("value_b");
+        let value_c = SlotValue::from("value_c");
+        Self {
+            rounds: vec![
+                // Round 1: write three keys
+                StateAccesses {
+                    kernel: OrderedReadsAndWrites {
+                        ordered_reads: vec![],
+                        ordered_writes: vec![
+                            (key_1.clone(), Some(value_a.clone())),
+                            (key_2.clone(), Some(value_b.clone())),
+                            (key_3.clone(), Some(value_c.clone())),
+                        ],
+                    },
+                    user: Default::default(),
+                },
+                // Round 2: read two of them, overwrite one, delete another
+                StateAccesses {
+                    kernel: OrderedReadsAndWrites {
+                        ordered_reads: vec![
+                            (
+                                key_1.clone(),
+                                Some(NodeLeaf::make_leaf::<TestHasher>(&value_a)),
+                            ),
+                            (
+                                key_3.clone(),
+                                Some(NodeLeaf::make_leaf::<TestHasher>(&value_c)),
+                            ),
+                        ],
+                        ordered_writes: vec![
+                            (key_1, Some(SlotValue::from("value_a2"))),
+                            (key_2, None),
+                        ],
+                    },
+                    user: Default::default(),
+                },
+            ],
+        }
+    }
 }
 
 pub fn run_test<SmProver, Verifier>(
