@@ -243,7 +243,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         chain_hash: &[u8; 32],
     ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
         Ok(self
-            .to_unsigned_transaction()
+            .as_unsigned_transaction()
             .serialized_with_chain_hash(chain_hash))
     }
 
@@ -301,10 +301,10 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Converts the transaction to a versioned unsigned transaction.
     /// For V0, this extracts the common fields. For V1, this also computes the
     /// `credential_address` from the multisig parameters.
-    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+    pub fn as_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self {
-            Transaction::V0(inner) => inner.to_unsigned(),
-            Transaction::V1(inner) => inner.to_unsigned(),
+            Transaction::V0(inner) => inner.as_unsigned(),
+            Transaction::V1(inner) => inner.as_unsigned(),
         }
     }
 }

@@ -47,7 +47,7 @@ pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
     /// Extracts the versioned unsigned transaction data from this signed envelope.
-    pub fn to_unsigned(&self) -> UnsignedTransaction<R, S> {
+    pub fn as_unsigned(&self) -> UnsignedTransaction<R, S> {
         UnsignedTransaction::V0(UnsignedTransactionV0::new_with_details(
             self.runtime_call.clone(),
             self.uniqueness,

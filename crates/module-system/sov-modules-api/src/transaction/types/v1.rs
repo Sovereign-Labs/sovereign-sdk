@@ -107,7 +107,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     }
 
     /// Extracts the versioned unsigned transaction data from this signed envelope.
-    pub fn to_unsigned(&self) -> UnsignedTransaction<R, S> {
+    pub fn as_unsigned(&self) -> UnsignedTransaction<R, S> {
         UnsignedTransaction::V1(UnsignedTransactionV1 {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
@@ -134,7 +134,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     /// Serializes the versioned unsigned transaction and appends the chain hash, producing the
     /// bytes to be signed.
     pub fn serialize_for_signing(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
-        self.to_unsigned().serialized_with_chain_hash(chain_hash)
+        self.as_unsigned().serialized_with_chain_hash(chain_hash)
     }
 
     /// Adds a signature to the signing set of the multisig, removing the public key from the set of unused pub keys.
