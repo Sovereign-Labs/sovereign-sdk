@@ -59,3 +59,6 @@ native = [
 	"sov-value-setter/native",
 	"sov-chain-state/native",
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["proptest"]

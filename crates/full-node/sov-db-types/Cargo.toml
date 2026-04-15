@@ -41,3 +41,6 @@ arbitrary = [
 	"sov-rollup-interface/arbitrary",
 	"rockbound?/arbitrary"
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["proptest"]

@@ -63,6 +63,10 @@ native = [
     "sov-metrics/native",
     "sov-sp1-adapter/native",
 ]
+bench = [
+    "sov-metrics",
+    "sov-sp1-adapter/bench",
+]
 arbitrary = [
     "dep:arbitrary",
     "dep:proptest",

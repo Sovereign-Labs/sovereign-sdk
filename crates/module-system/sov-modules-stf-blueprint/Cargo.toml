@@ -15,14 +15,10 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-axum = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true }
-jsonrpsee = { workspace = true, features = ["server"], optional = true }
 serde = { workspace = true, features = ["derive"] }
-schemars = { workspace = true }
 tracing = { workspace = true }
-tokio = { workspace = true, features = ["sync"], optional = true }
 hex = { workspace = true }
 
 # WARNING: The `stf-blueprint` crate should NOT depend on any Sovereign module.
@@ -38,12 +34,9 @@ bench = [
     "sov-state/bench",
 ]
 native = [
-    "axum",
-    "jsonrpsee",
     "sov-modules-api/native",
     "sov-rollup-interface/native",
     "sov-state/native",
-    "tokio",
     "sov-metrics/native",
 ]
 test-utils = []

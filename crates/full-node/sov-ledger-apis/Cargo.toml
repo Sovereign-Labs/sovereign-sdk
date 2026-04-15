@@ -18,19 +18,15 @@ axum = { workspace = true, features = ["http1", "http2", "ws", "json"] }
 borsh = { workspace = true }
 derive_more = { workspace = true, features = ["display"] }
 futures = { workspace = true }
-hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
-serde_yaml = { workspace = true }
 sov-db = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-rest-utils = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 tokio = { workspace = true, features = ["macros"] }
 tracing = { workspace = true }
-utoipa-swagger-ui = { workspace = true, features = ["axum"] }
-openapiv3 = { workspace = true }
 
 [dev-dependencies]
 assert-json-diff = "2"

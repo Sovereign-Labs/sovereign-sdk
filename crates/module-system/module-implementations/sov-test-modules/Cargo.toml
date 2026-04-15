@@ -33,7 +33,6 @@ strum = { workspace = true }
 sov-modules-api = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true }
-thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 sov-state = { workspace = true }
 hex = { workspace = true }
