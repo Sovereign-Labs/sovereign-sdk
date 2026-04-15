@@ -140,7 +140,7 @@ mod web3_compatibility {
 
     #[test]
     fn test_unsigned_tx_wallet_serialization_none_gas_limit() {
-        let json = r#"{
+        let json = r#"{"V0": {
         "runtime_call": {
             "value_setter": {
                  "set_value": {
@@ -158,7 +158,7 @@ mod web3_compatibility {
             "gas_limit": null,
             "chain_id": 1337
         }
-    }"#;
+    }}"#;
         let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
@@ -166,7 +166,7 @@ mod web3_compatibility {
 
     #[test]
     fn test_unsigned_tx_wallet_serialization_some_gas_limit() {
-        let json = r#"{
+        let json = r#"{"V0": {
         "runtime_call": {
             "value_setter": {
                  "set_value": {
@@ -184,7 +184,7 @@ mod web3_compatibility {
             "gas_limit": [500, 500],
             "chain_id": 1337
         }
-    }"#;
+    }}"#;
         let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");

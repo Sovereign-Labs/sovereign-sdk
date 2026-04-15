@@ -4,7 +4,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_bank::{CallMessage, Coins, TokenId};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction, UnsignedTransactionV0};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
 use sov_modules_macros::config_value;
 use sov_test_utils::{
@@ -15,7 +15,7 @@ use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 
 type S = DemoRollupSpec;
 
-fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
+fn make_unsigned_tx() -> UnsignedTransactionV0<Runtime<S>, S> {
     let msg: RuntimeCall<S> = RuntimeCall::Bank(CallMessage::Mint {
         mint_to_address: <S as Spec>::Address::from_str(
             "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
@@ -29,7 +29,7 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
             .unwrap(),
         },
     });
-    UnsignedTransaction::<_, S>::new(
+    UnsignedTransactionV0::<_, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -84,7 +84,8 @@ fn test_transfer_template() {
 #[test]
 fn test_display_unsigned_tx() {
     let unsigned_tx = make_unsigned_tx();
-    let unsigned_data = borsh::to_vec(&unsigned_tx).unwrap();
+    let unsigned_enum = UnsignedTransaction::<Runtime<S>, S>::V0(unsigned_tx);
+    let unsigned_data = borsh::to_vec(&unsigned_enum).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
         UnsignedTransaction<Runtime<S>, S>,
@@ -104,7 +105,7 @@ fn test_display_unsigned_tx() {
                 &unsigned_data
             )
             .unwrap(),
-        r#"{ runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
+        r#"V0 { runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
     );
 }
 

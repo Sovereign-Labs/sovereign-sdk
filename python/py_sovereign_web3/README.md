@@ -18,7 +18,7 @@ pip install sovereign_web3
 ## Usage
 
 ```python
-from sovereign_web3 import Serializer, UnsignedTransaction, TxDetails
+from sovereign_web3 import Serializer, UnsignedTransactionV0, TxDetails
 
 # Fetch schema from rollup
 serializer = Serializer.from_url("http://localhost:12346/rollup/schema")
@@ -26,7 +26,7 @@ serializer = Serializer.from_url("http://localhost:12346/rollup/schema")
 # Create transaction
 call = {"bank": {"create_token": {"token_name": "MyToken", "initial_balance": "1000"}}}
 details = TxDetails(chain_id=4321)
-unsigned_tx = UnsignedTransaction(runtime_call=call, details=details)
+unsigned_tx = UnsignedTransactionV0(runtime_call=call, details=details)
 
 # Get bytes for signing
 tx_bytes = unsigned_tx.bytes_for_signing(serializer)
@@ -39,6 +39,6 @@ serialized = serializer.serialize_tx(signed_tx)
 ## Classes
 
 - `Serializer`: Schema-based transaction serialization
-- `UnsignedTransaction`: Unsigned transaction with runtime calls
+- `UnsignedTransactionV0`: V0 unsigned transaction with runtime calls
 - `TxDetails`: Transaction metadata (chain ID, fees, gas)
 - `UniquenessData`: Transaction uniqueness (nonce, generation, or window)
