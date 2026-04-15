@@ -75,7 +75,7 @@ pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as S
             serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
             deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
         ))]
-        Version0<R::Call, S, C>,
+        Version0<R, S, C>,
     ),
     /// A V1 (multisig) transaction.
     V1(
@@ -83,7 +83,7 @@ pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as S
             serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
             deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
         ))]
-        Version1<R::Call, S, C>,
+        Version1<R, S, C>,
     ),
 }
 
@@ -104,9 +104,8 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         chain_hash: &[u8; 32],
         unsigned_tx: UnsignedTransactionV0<R, S>,
     ) -> Self {
-        let versioned = UnsignedTransaction::<R, S>::V0(unsigned_tx.clone());
-        let mut utx_bytes = borsh::to_vec(&versioned).unwrap();
-        utx_bytes.extend_from_slice(chain_hash);
+        let utx_bytes = UnsignedTransaction::<R, S>::V0(unsigned_tx.clone())
+            .serialized_with_chain_hash(chain_hash);
 
         let pub_key = priv_key.pub_key();
         let signature = priv_key.sign(&utx_bytes);
@@ -243,11 +242,9 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         &self,
         chain_hash: &[u8; 32],
     ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
-        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
-            TransactionVerificationError::TransactionDeserializationError(e.to_string())
-        })?;
-        serialized_tx.extend_from_slice(chain_hash);
-        Ok(serialized_tx)
+        Ok(self
+            .as_unsigned_transaction()
+            .serialized_with_chain_hash(chain_hash))
     }
 
     /// Charge gas for verifying the transaction signature against the given message.
@@ -304,16 +301,10 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Converts the transaction to a versioned unsigned transaction.
     /// For V0, this extracts the common fields. For V1, this also computes the
     /// `credential_address` from the multisig parameters.
-    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+    pub fn as_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self {
-            Transaction::V0(inner) => {
-                UnsignedTransaction::V0(UnsignedTransactionV0::new_with_details(
-                    inner.runtime_call.clone(),
-                    inner.uniqueness,
-                    inner.details.clone(),
-                ))
-            }
-            Transaction::V1(inner) => UnsignedTransaction::V1(inner.to_unsigned_v1::<R>()),
+            Transaction::V0(inner) => inner.as_unsigned(),
+            Transaction::V1(inner) => inner.as_unsigned(),
         }
     }
 }

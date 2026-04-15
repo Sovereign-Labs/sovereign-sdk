@@ -219,14 +219,13 @@ fn test_setup_multisig_and_act() {
         .to_multisig_tx(multisig.clone())
     };
 
-    let sign = |tx: &mut Version1<TestAccountsRuntimeCall<S>, S>, key: &TestPrivateKey| {
+    let sign = |tx: &mut Version1<RT, S>, key: &TestPrivateKey| {
         use sov_modules_api::Runtime;
         let chain_hash = &<RT as Runtime<S>>::CHAIN_HASH;
         tx.sign(key, chain_hash).unwrap();
     };
 
-    let assert_tx_success = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
-                             runner: &mut TestRunner<RT, S>| {
+    let assert_tx_success = |tx: Version1<RT, S>, runner: &mut TestRunner<RT, S>| {
         let tx = Transaction::<RT, S>::from(tx);
         let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
             data: borsh::to_vec(&tx).unwrap(),
@@ -239,32 +238,31 @@ fn test_setup_multisig_and_act() {
         });
     };
 
-    let assert_tx_skip = |tx: Version1<TestAccountsRuntimeCall<S>, S>,
-                          runner: &mut TestRunner<RT, S>,
-                          reason: &'static str| {
-        let tx = Transaction::<RT, S>::from(tx);
-        let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
-            data: borsh::to_vec(&tx).unwrap(),
-        });
-        runner.execute_transaction(TransactionTestCase {
-            input: multisig_tx,
-            assert: Box::new(move |result, _state| {
-                assert!(result.tx_receipt.is_skipped());
-                match result.tx_receipt {
-                    TxEffect::Skipped(SkippedTxContents { error, .. }) => {
-                        assert!(
-                            error.to_string().contains(reason),
-                            "Unexpected skip reason. Expected: {reason}, Got: {error}"
-                        );
+    let assert_tx_skip =
+        |tx: Version1<RT, S>, runner: &mut TestRunner<RT, S>, reason: &'static str| {
+            let tx = Transaction::<RT, S>::from(tx);
+            let multisig_tx = TransactionType::<RT, S>::PreSigned(RawTx {
+                data: borsh::to_vec(&tx).unwrap(),
+            });
+            runner.execute_transaction(TransactionTestCase {
+                input: multisig_tx,
+                assert: Box::new(move |result, _state| {
+                    assert!(result.tx_receipt.is_skipped());
+                    match result.tx_receipt {
+                        TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                            assert!(
+                                error.to_string().contains(reason),
+                                "Unexpected skip reason. Expected: {reason}, Got: {error}"
+                            );
+                        }
+                        _ => panic!(
+                            "Expected skipped transaction but found {:?}",
+                            result.tx_receipt
+                        ),
                     }
-                    _ => panic!(
-                        "Expected skipped transaction but found {:?}",
-                        result.tx_receipt
-                    ),
-                }
-            }),
-        });
-    };
+                }),
+            });
+        };
 
     // A transaction with two valid signatures should succeed in our 2/3 multisig
     let tx_with_two_valid_signatures = {
