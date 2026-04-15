@@ -1,5 +1,5 @@
 use sov_accounts::{Accounts, CallMessage, Response};
-use sov_modules_api::transaction::{UnsignedTransaction, Version1};
+use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
     CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
 };
@@ -209,7 +209,7 @@ fn test_setup_multisig_and_act() {
     // - Submitting the transaction and asserting it is skipped
     let generate_multisig_tx = || {
         let key = TestPrivateKey::generate();
-        UnsignedTransaction::<RT, S>::new_with_details(
+        UnsignedTransactionV0::<RT, S>::new_with_details(
             TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(
                 key.pub_key().credential_id(),
             )),
@@ -294,9 +294,7 @@ fn test_setup_multisig_and_act() {
     };
     assert_tx_success(tx_with_other_valid_signatures, &mut runner);
 
-    // A transaction with a non-member signature should be skipped because it does not match a valid credential ID.
-    // Note that this error will disappear if we add the paymaster to our test runtime; the tx will succeed on a different account. In that case,
-    // this test will need refinement
+    // A transaction with a non-member signature should fail because it does not match the signed credential ID.
     let tx_with_non_member_signature = {
         let mut tx = generate_multisig_tx();
         sign(&mut tx, &multisig_keys[0]);
@@ -318,8 +316,8 @@ fn test_setup_multisig_and_act() {
     assert_tx_skip(
         tx_with_non_member_signature,
         &mut runner,
-        "Impossible to reserve gas",
-    ); // Fails to reserve gas because the credential ID has changed
+        "Verification equation was not satisfied",
+    );
 
     // A transaction with only one signature should be skipped because it does not meet the required threshold.
     let tx_with_too_few_signatures = {
@@ -368,10 +366,12 @@ fn test_setup_multisig_and_act() {
         tx
     };
 
+    // The duplicate key changes the credential_address in the signed bytes,
+    // so signature verification fails.
     assert_tx_skip(
         tx_with_duplicate_signature,
         &mut runner,
-        "is not part of the multisig or has already signed.",
+        "Verification equation was not satisfied",
     );
 }
 

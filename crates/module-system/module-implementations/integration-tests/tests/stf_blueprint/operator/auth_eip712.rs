@@ -11,7 +11,9 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PubKeyAndSignature;
 use sov_modules_api::transaction::TxDetails;
-use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{
+    PriorityFeeBips, Transaction, UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1,
+};
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::Multisig;
 use sov_modules_api::SkippedTxContents;
@@ -132,18 +134,18 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
     (runner, admin)
 }
 
-pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
+pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransactionV0<RT, S> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     };
-    UnsignedTransaction::new_with_details(message, UniquenessData::Generation(0), details)
+    UnsignedTransactionV0::new_with_details(message, UniquenessData::Generation(0), details)
 }
 
 pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
-    utx: &UnsignedTransaction<RT, S>,
+    utx: &UnsignedTransactionV0<RT, S>,
     private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
 ) -> <S::CryptoSpec as CryptoSpec>::Signature {
     let schema = TestSchemaProvider::get_schema();
@@ -154,7 +156,40 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
         )
         .unwrap();
 
-    let utx_bytes = borsh::to_vec(&utx).expect("Failed to serialize unsigned transaction");
+    let utx_enum = sov_modules_api::transaction::UnsignedTransaction::<RT, S>::V0(utx.clone());
+    let utx_bytes = borsh::to_vec(&utx_enum).expect("Failed to serialize unsigned transaction");
+    let eip712_signing_data = schema
+        .eip712_signing_digest(transaction_type_index, &utx_bytes)
+        .expect("Failed to calculate EIP712 hash");
+
+    private_key.sign(&eip712_signing_data)
+}
+
+/// Signs a V1 (multisig) unsigned transaction with the given private key using EIP712.
+/// The credential_address is computed from the provided multisig.
+pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
+    utx: &UnsignedTransactionV0<RT, S>,
+    multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+    private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+) -> <S::CryptoSpec as CryptoSpec>::Signature {
+    let schema = TestSchemaProvider::get_schema();
+
+    let transaction_type_index = schema
+        .rollup_expected_index(
+            sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction,
+        )
+        .unwrap();
+
+    let credential_address: S::Address = multisig
+        .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
+        .into();
+    let utx_enum = UnsignedTransaction::<RT, S>::V1(UnsignedTransactionV1 {
+        runtime_call: utx.runtime_call.clone(),
+        uniqueness: utx.uniqueness,
+        details: utx.details.clone(),
+        credential_address,
+    });
+    let utx_bytes = borsh::to_vec(&utx_enum).expect("Failed to serialize unsigned transaction");
     let eip712_signing_data = schema
         .eip712_signing_digest(transaction_type_index, &utx_bytes)
         .expect("Failed to calculate EIP712 hash");
@@ -163,7 +198,7 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 }
 
 pub fn sign_utx<S: Spec, RT: Runtime<S>>(
-    utx: UnsignedTransaction<RT, S>,
+    utx: UnsignedTransactionV0<RT, S>,
     signer: &TestUser<S>,
 ) -> Transaction<RT, S> {
     let signature = sign_utx_in_place(&utx, signer.private_key());
@@ -251,15 +286,15 @@ fn test_multisig_signature_verification() {
         }),
     });
 
-    // Create a multisig transaction
+    // Create a multisig transaction — signers must sign V1 bytes (with credential_address)
     let utx = create_utx::<S, RT>(encode_message::<_, RT>());
     let mut signatures = Vec::new();
     for key in multisig_keys.iter() {
-        signatures.push(sign_utx_in_place(&utx, key));
+        signatures.push(sign_utx_v1_in_place(&utx, &multisig, key));
     }
     // Generate a signature from a random private key that's not part of the multisig. We'll use this in some of the test cases.
     let random_private_key = TestPrivateKey::generate();
-    let random_signature = sign_utx_in_place(&utx, &random_private_key);
+    let random_signature = sign_utx_v1_in_place(&utx, &multisig, &random_private_key);
     let tx = utx.to_multisig_tx(multisig);
 
     // Helper functions to assert the expected behavior of the transaction
@@ -329,15 +364,12 @@ fn test_multisig_signature_verification() {
             .unwrap();
         Transaction::<RT, S>::from(tx)
     };
-    // Since the random signature is not part of the multisig, this changes the computed credential ID yielding a gas error. If we were to add a paymaster,
-    // The tx would succeed on a different account. In that case, this test case would need refinement to distinguish between the two cases.
-    assert_tx_skipped(
-        tx_with_random_sig,
-        &mut runner,
-        "Insufficient balance to pay for the transaction gas",
-    );
+    // The random key changes the credential_address so it no longer matches the signed bytes,
+    // so signature verification fails.
+    assert_tx_skipped(tx_with_random_sig, &mut runner, "signature error");
 
-    // A transaction with a duplicate signature should be skipped
+    // A transaction with a duplicate signature should be skipped — the duplicate changes
+    // the credential_address, causing signature verification failure.
     let tx_with_duplicate_sig = {
         let mut tx = tx.clone();
         tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
@@ -350,11 +382,7 @@ fn test_multisig_signature_verification() {
             .unwrap();
         Transaction::<RT, S>::from(tx)
     };
-    assert_tx_skipped(
-        tx_with_duplicate_sig,
-        &mut runner,
-        "is not part of the multisig or has already signed",
-    );
+    assert_tx_skipped(tx_with_duplicate_sig, &mut runner, "signature error");
 
     // A transaction with a bad signature should be skipped
     let tx_with_bad_sig = {

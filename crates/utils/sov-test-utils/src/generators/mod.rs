@@ -10,7 +10,9 @@ use std::sync::Arc;
 use sov_blob_storage::PreferredBatchData;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
-use sov_modules_api::transaction::{PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction};
+use sov_modules_api::transaction::{
+    PriorityFeeBips, Transaction, TxDetails, UnsignedTransactionV0,
+};
 use sov_modules_api::{Amount, CryptoSpec, EncodeCall, FullyBakedTx, Module, RawTx, Spec};
 use sov_modules_stf_blueprint::Runtime;
 
@@ -65,7 +67,7 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
         Transaction::<RT, S>::new_signed_tx(
             &self.sender_key,
             &RT::CHAIN_HASH,
-            UnsignedTransaction::new(
+            UnsignedTransactionV0::new(
                 <RT as EncodeCall<Mod>>::to_decodable(self.content),
                 self.details.chain_id,
                 self.details.max_priority_fee_bips,
