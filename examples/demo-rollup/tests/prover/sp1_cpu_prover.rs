@@ -55,8 +55,7 @@ async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
     let mut proofs = Vec::new();
 
-    for (i, witness) in witnesses.into_iter().enumerate() {
-        println!("XX {i}");
+    for witness in witnesses {
         let da_block_header = witness.da_block_header.clone();
 
         let data: ProofInput = StateTransitionWitnessWithAddress {
@@ -159,10 +158,8 @@ impl TestHost {
         &self,
         data: ProofInput,
     ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
+        let mock_host = self.mock_host.clone();
         tokio::task::spawn_blocking(move || {
-            let mock_host = MockSp1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
-                .expect("MockSp1Prover should be created successfully");
-
             let proof = mock_host
                 .add_hint_and_run(&data)
                 .expect("Mock prover should run successfully");
