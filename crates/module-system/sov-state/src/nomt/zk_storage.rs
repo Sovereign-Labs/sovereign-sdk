@@ -1,9 +1,8 @@
 //! ZK Verifier part of the NOMT based Storage implementation
-use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use nomt_core::hasher::BinaryHasher;
-use nomt_core::proof::{MultiProof, PathProof, PathProofTerminal, PathUpdate, VerifiedPathProof};
+use nomt_core::proof::{MultiProof, PathProof, PathUpdate, VerifiedPathProof};
 use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 #[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
@@ -89,80 +88,52 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
             }
         }
 
-        // Writes: per-path verify against prev_root, then route trusted state_writes to
-        // their covering path by prefix, then call verify_update (which mirrors the
-        // prover's `Session::finish().root()` per-path algorithm).
-        let mut verified_paths: Vec<(
-            VerifiedPathProof,
-            usize,
-            KeyPath,
-            Vec<(KeyPath, Option<ValueHash>)>,
-        )> = path_proofs
-            .into_iter()
-            .map(|pp| {
-                let depth = pp.siblings.len();
-                let raw_path: KeyPath = match &pp.terminal {
-                    PathProofTerminal::Leaf(leaf) => leaf.key_path,
-                    PathProofTerminal::Terminator(trie_pos) => trie_pos.raw_path(),
-                };
-                let prefix = truncate_key_path(raw_path, depth);
-                let verified = pp
-                    .verify::<BinaryHasher<S::Hasher>>(pp.terminal.path(), prev_root)
-                    .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
-                Ok((verified, depth, prefix, Vec::new()))
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
+        // Writes: verify each path against prev_root, then route each trusted write into
+        // its single covering path and call verify_update (the per-path update algorithm
+        // that mirrors the prover's `Session::finish().root()`).
+        let mut verified_paths: Vec<(VerifiedPathProof, Vec<(KeyPath, Option<ValueHash>)>)> =
+            path_proofs
+                .into_iter()
+                .map(|pp| {
+                    let verified = pp
+                        .verify::<BinaryHasher<S::Hasher>>(pp.terminal.path(), prev_root)
+                        .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
+                    Ok((verified, Vec::new()))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?;
         // verify_update requires paths in ascending order (PathsOutOfOrder check).
         verified_paths.sort_by(|a, b| a.0.path().cmp(b.0.path()));
 
-        // (depth, prefix) -> index into verified_paths, for routing.
-        let mut path_index_by_prefix: BTreeMap<(usize, KeyPath), usize> = BTreeMap::new();
-        let mut path_depths_desc: Vec<usize> = Vec::new();
-        for (index, (_, depth, prefix, _)) in verified_paths.iter().enumerate() {
-            if path_index_by_prefix
-                .insert((*depth, *prefix), index)
-                .is_some()
-            {
-                anyhow::bail!("Duplicate NOMT path proof prefix");
-            }
-            path_depths_desc.push(*depth);
-        }
-        path_depths_desc.sort_unstable();
-        path_depths_desc.dedup();
-        path_depths_desc.reverse();
-
-        // Hash and dedup writes into a BTreeMap — global key-ascending iteration order ⇒
-        // each per-path bucket ends up locally ascending (OpsOutOfOrder check).
-        let mut sorted_writes: BTreeMap<KeyPath, Option<ValueHash>> = BTreeMap::new();
-        for (key, value) in state_writes {
-            let key_hash: KeyPath = S::Hasher::digest(key.as_ref()).into();
-            let value_hash = value.map(|slot_value| {
-                // Authenticated write is hash of a combination of size and original value hash.
-                S::Hasher::digest(slot_value.combine_val_hash_and_size::<S::Hasher>()).into()
-            });
-            if sorted_writes.insert(key_hash, value_hash).is_some() {
-                anyhow::bail!("Duplicate write for key: {:?}", key);
-            }
-        }
+        // Hash and sort writes globally. Disjoint Patricia paths ⇒ each write routes to
+        // exactly one bucket, and global ascending key order ⇒ each bucket ends up
+        // locally ascending (OpsOutOfOrder check).
+        let mut sorted_writes: Vec<(KeyPath, Option<ValueHash>)> = state_writes
+            .into_iter()
+            .map(|(key, value)| {
+                let key_hash: KeyPath = S::Hasher::digest(key.as_ref()).into();
+                let value_hash = value.map(|slot_value| {
+                    // Authenticated write is hash of a combination of size and original value hash.
+                    S::Hasher::digest(slot_value.combine_val_hash_and_size::<S::Hasher>()).into()
+                });
+                (key_hash, value_hash)
+            })
+            .collect();
+        sorted_writes.sort_by(|a, b| a.0.cmp(&b.0));
 
         for (key_hash, value_hash) in sorted_writes {
-            let matching_index = path_depths_desc
+            // `confirm_nonexistence` returns `Err(KeyOutOfScope)` iff the key's bits do
+            // NOT extend this path's proven bit-prefix — use it as an in-scope test.
+            let idx = verified_paths
                 .iter()
-                .find_map(|depth| {
-                    path_index_by_prefix
-                        .get(&(*depth, truncate_key_path(key_hash, *depth)))
-                        .copied()
-                })
+                .position(|(vp, _)| vp.confirm_nonexistence(&key_hash).is_ok())
                 .ok_or_else(|| {
                     anyhow::anyhow!("No NOMT path proof covers write key: {:?}", key_hash)
                 })?;
-            verified_paths[matching_index]
-                .3
-                .push((key_hash, value_hash));
+            verified_paths[idx].1.push((key_hash, value_hash));
         }
 
         let mut updates = Vec::new();
-        for (verified, _, _, writes) in verified_paths {
+        for (verified, writes) in verified_paths {
             if !writes.is_empty() {
                 updates.push(PathUpdate {
                     inner: verified,
@@ -174,23 +145,6 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         nomt_core::proof::verify_update::<BinaryHasher<S::Hasher>>(prev_root, &updates)
             .map_err(|e| anyhow::anyhow!("Failed to verify update: {:?}", e))
     }
-}
-
-// Zero every bit beyond `depth` in `key`, producing a canonical prefix for routing.
-fn truncate_key_path(mut key: KeyPath, depth: usize) -> KeyPath {
-    debug_assert!(depth <= 256);
-    let full_bytes = depth / 8;
-    let partial_bits = depth % 8;
-    if full_bytes < key.len() {
-        if partial_bits == 0 {
-            key[full_bytes..].fill(0);
-        } else {
-            let keep_mask = u8::MAX << (8 - partial_bits);
-            key[full_bytes] &= keep_mask;
-            key[full_bytes + 1..].fill(0);
-        }
-    }
-    key
 }
 
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
