@@ -1,11 +1,9 @@
 //! ZK Verifier part of the NOMT based Storage implementation
-use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use nomt_core::hasher::BinaryHasher;
-use nomt_core::proof::{MultiProof, PathUpdate};
+use nomt_core::proof::MultiProof;
 use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
-use nomt_core::witness::Witness as NomtWitness;
 #[cfg(all(feature = "test-utils", feature = "native"))]
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
@@ -43,171 +41,67 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
             ordered_reads: state_reads,
             ordered_writes: state_writes,
         } = state_accesses;
-        let mut expected_reads = BTreeMap::new();
-        for (key, value) in state_reads {
-            let key_hash: KeyPath = S::Hasher::digest(key.as_ref()).into();
-            let value_hash = value.map(|node_leaf| {
-                S::Hasher::digest(node_leaf.combine_val_hash_and_size()).into()
-            });
-            if expected_reads.insert(key_hash, value_hash).is_some() {
-                anyhow::bail!("Duplicate key read in state accesses: {:?}", key);
-            }
-        }
 
-        let mut expected_writes = BTreeMap::new();
-        for (key, value) in state_writes {
-            let key_hash: KeyPath = S::Hasher::digest(key.as_ref()).into();
-            let value_hash = value.map(|slot_value| {
-                // Authenticated write is hash of a combination of size and original value hash.
-                S::Hasher::digest(slot_value.combine_val_hash_and_size::<S::Hasher>()).into()
-            });
-            if expected_writes.insert(key_hash, value_hash).is_some() {
-                anyhow::bail!("Duplicate key write in state accesses: {:?}", key);
-            }
-        }
-
-        let nomt_witness: NomtWitness = array_witness.get_hint();
-        let mut path_proofs_inner = nomt_witness
-            .path_proofs
-            .iter()
-            .map(|path| path.inner.clone())
-            .collect::<Vec<_>>();
-        path_proofs_inner.sort_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
-        let multi_proof = MultiProof::from_path_proofs(path_proofs_inner);
+        let multi_proof: MultiProof = array_witness.get_hint();
         let verified_multi_proof = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
             &multi_proof,
             prev_root,
         )
         .map_err(|e| anyhow::anyhow!("Failed to verify multi proof: {:?}", e))?;
 
-        for (key, value) in &expected_reads {
+        for (key, value) in state_reads {
+            let key_hash: KeyPath = S::Hasher::digest(key.as_ref()).into();
             match value {
                 None => {
                     if !verified_multi_proof
-                        .confirm_nonexistence(key)
+                        .confirm_nonexistence(&key_hash)
                         .map_err(|e| anyhow::anyhow!("Failed to confirm non-existence: {:?}", e))?
                     {
-                        anyhow::bail!("Failed to verify non-existence of key");
+                        anyhow::bail!("Failed to verify non-existence of key: {:?}", key);
                     }
                 }
-                Some(value_hash) => {
+                Some(node_leaf) => {
+                    let authenticated_write = node_leaf.combine_val_hash_and_size();
+                    let value_hash = S::Hasher::digest(&authenticated_write).into();
                     let leaf = LeafData {
-                        key_path: *key,
-                        value_hash: *value_hash,
+                        key_path: key_hash,
+                        value_hash,
                     };
                     if !verified_multi_proof
                         .confirm_value(&leaf)
                         .map_err(|e| anyhow::anyhow!("Failed to confirm value: {:?}", e))?
                     {
-                        anyhow::bail!("Failed to verify inclusion of key");
+                        anyhow::bail!("Failed to verify inclusion of key: {:?}", key);
                     }
                 }
             }
         }
 
-        let mut witnessed_writes = BTreeMap::new();
-        for write in nomt_witness.operations.writes {
-            let Some(expected_value) = expected_writes.remove(&write.key) else {
-                anyhow::bail!("Unexpected or duplicate NOMT write witness entry");
-            };
-            if write.value != expected_value {
-                anyhow::bail!(
-                    "Mismatched NOMT write witness value for key {:?}: witness={:?}, expected={:?}",
-                    write.key,
-                    write.value,
-                    expected_value
-                );
-            }
-            if witnessed_writes
-                .insert(write.key, expected_value)
-                .is_some()
-            {
-                anyhow::bail!("Duplicate NOMT write witness entry");
-            };
-        }
-
-        if !expected_writes.is_empty() {
-            anyhow::bail!("Missing NOMT write witness entries");
-        }
-
-        let mut verified_paths = nomt_witness
-            .path_proofs
+        let mut updates = state_writes
             .into_iter()
-            .map(|path| {
-                let verified = path
-                    .inner
-                    .verify::<BinaryHasher<S::Hasher>>(path.path.path(), prev_root)
-                    .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
-                Ok((
-                    verified,
-                    path.path.depth() as usize,
-                    truncate_key_path(path.path.raw_path(), path.path.depth() as usize),
-                    Vec::<(KeyPath, Option<ValueHash>)>::new(),
-                ))
+            .map(|(key, value)| {
+                (
+                    S::Hasher::digest(key.as_ref()).into(),
+                    value.map(|slot_value| {
+                        // Authenticated write is hash of a combination of size and orignal value hash.
+                        S::Hasher::digest(slot_value.combine_val_hash_and_size::<S::Hasher>())
+                            .into()
+                    }),
+                )
             })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-        verified_paths.sort_by(|a, b| a.0.path().cmp(b.0.path()));
+            .collect::<Vec<(KeyPath, Option<ValueHash>)>>();
 
-        let mut path_index_by_prefix = BTreeMap::new();
-        let mut path_depths_desc = Vec::new();
-        for (index, (_, depth, prefix, _)) in verified_paths.iter().enumerate() {
-            if path_index_by_prefix
-                .insert((*depth, *prefix), index)
-                .is_some()
-            {
-                anyhow::bail!("Duplicate NOMT path proof prefix");
-            }
-            path_depths_desc.push(*depth);
-        }
-        path_depths_desc.sort_unstable();
-        path_depths_desc.dedup();
-        path_depths_desc.reverse();
+        // Sort them by key hash, as required by [`nomt_core::proof::verify_multi_proof_update`]
+        updates.sort_by(|a, b| a.0.cmp(&b.0));
 
-        for (key, value) in witnessed_writes {
-            let matching_index = path_depths_desc
-                .iter()
-                .find_map(|depth| {
-                    path_index_by_prefix
-                        .get(&(*depth, truncate_key_path(key, *depth)))
-                        .copied()
-                })
-                .ok_or_else(|| anyhow::anyhow!("No NOMT path proof covers write key {:?}", key))?;
-
-            verified_paths[matching_index].3.push((key, value));
-        }
-
-        let mut updates = Vec::new();
-        for (verified, _, _, writes) in verified_paths {
-            if !writes.is_empty() {
-                updates.push(PathUpdate {
-                    inner: verified,
-                    ops: writes,
-                });
-            }
-        }
-
-        nomt_core::proof::verify_update::<BinaryHasher<S::Hasher>>(prev_root, &updates)
-            .map_err(|e| anyhow::anyhow!("Failed to verify update: {:?}", e))
+        nomt_core::proof::verify_multi_proof_update::<BinaryHasher<S::Hasher>>(
+            &verified_multi_proof,
+            updates,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to verify update: {:?}", e))
+        // Note: we don't check exhaustion of the proof
+        // because it does not impact the correctness of the guest, only performance.
     }
-}
-
-fn truncate_key_path(mut key: KeyPath, depth: usize) -> KeyPath {
-    debug_assert!(depth <= 256);
-
-    let full_bytes = depth / 8;
-    let partial_bits = depth % 8;
-
-    if full_bytes < key.len() {
-        if partial_bits == 0 {
-            key[full_bytes..].fill(0);
-        } else {
-            let keep_mask = u8::MAX << (8 - partial_bits);
-            key[full_bytes] &= keep_mask;
-            key[full_bytes + 1..].fill(0);
-        }
-    }
-
-    key
 }
 
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
