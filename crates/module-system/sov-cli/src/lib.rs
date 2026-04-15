@@ -7,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 pub use sov_modules_api::clap;
-use sov_modules_api::transaction::{PriorityFeeBips, TxDetails, UnsignedTransaction};
+use sov_modules_api::transaction::{PriorityFeeBips, TxDetails, UnsignedTransactionV0};
 use sov_modules_api::{Amount, DispatchCall, HexHash, HexString, Spec};
 use sov_node_client as node_client;
 
@@ -76,10 +76,10 @@ where
         }
     }
 
-    /// Creates a new [`UnsignedTransaction`] from this [`UnsignedTransactionWithoutUniqueness`] when
+    /// Creates a new [`UnsignedTransactionV0`] from this [`UnsignedTransactionWithoutUniqueness`] when
     /// given generation number.
-    pub fn with_generation(&self, generation: u64) -> UnsignedTransaction<Tx, S> {
-        UnsignedTransaction::new(
+    pub fn with_generation(&self, generation: u64) -> UnsignedTransactionV0<Tx, S> {
+        UnsignedTransactionV0::new(
             self.tx.clone(),
             self.details.chain_id,
             self.details.max_priority_fee_bips,
