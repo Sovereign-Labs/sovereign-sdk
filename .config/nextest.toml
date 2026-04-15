@@ -16,8 +16,11 @@ filter = 'package(sov-hyperlane-integration) & test(/with_agent::/)'
 priority = 90                                                        # try to run it first, so it doesn't add up at the end
 threads-required = 3
 
+# Any test prefixed with `heavy_` runs in complete isolation
 [[profile.default.overrides]]
-filter = 'not test(heavy_)'
+filter = 'test(heavy_)'
+test-group = 'heavy-tests'
+threads-required = 4
 
 [[profile.default.overrides]]
 filter = 'package(sov-sequencer) & test(/pinned_cache::/)'
@@ -38,11 +41,14 @@ test-group = 'isolated-perf-tests'
 priority = 95                                                        # Run early to avoid adding tail latency
 slow-timeout = { period = "60s", terminate-after = 10 }              # Needs up to 10 minutes under load
 
-# Conservative default for sequencer tests: allow parallelism while avoiding
-# over-contention on tokio multi-thread tests.
+# Integration tests spin up full TestRollup instances with multi_thread tokio.
+# Unit tests (kind=lib) get default threads-required=1.
 [[profile.default.overrides]]
-filter = 'package(sov-sequencer)'
+filter = 'package(sov-sequencer) & kind(test)'
 threads-required = 4
+
+[test-groups.heavy-tests]
+max-threads = 1
 
 [test-groups.isolated-perf-tests]
 max-threads = 1
