@@ -47,13 +47,14 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         // aggregate via `verify_multi_proof` (used for reads). Write values are hashed
         // from the trusted `state_writes` (execution trace) — witness-reported values are
         // never used.
-        let path_proofs: Vec<PathProof> = array_witness.get_hint();
+        let mut path_proofs: Vec<PathProof> = array_witness.get_hint();
+        // Sort once: `MultiProof::from_path_proofs` expects terminal-path order, and
+        // `verify_update` below also expects its paths ascending — same key, one sort.
+        path_proofs.sort_unstable_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
 
         // Reads: rebuild a MultiProof from the path proofs and verify against prev_root,
         // then confirm each read via the existing NOMT primitives.
-        let mut sorted_path_proofs = path_proofs.clone();
-        sorted_path_proofs.sort_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
-        let multi_proof = MultiProof::from_path_proofs(sorted_path_proofs);
+        let multi_proof = MultiProof::from_path_proofs(path_proofs.clone());
         let verified_multi_proof = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
             &multi_proof,
             prev_root,
@@ -90,7 +91,9 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
 
         // Writes: verify each path against prev_root, then route each trusted write into
         // its single covering path and call verify_update (the per-path update algorithm
-        // that mirrors the prover's `Session::finish().root()`).
+        // that mirrors the prover's `Session::finish().root()`). `path_proofs` is already
+        // in ascending path order, so `verified_paths` inherits the ordering that
+        // `verify_update`'s PathsOutOfOrder check requires.
         let mut verified_paths: Vec<(VerifiedPathProof, Vec<(KeyPath, Option<ValueHash>)>)> =
             path_proofs
                 .into_iter()
@@ -101,8 +104,6 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
                     Ok((verified, Vec::new()))
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?;
-        // verify_update requires paths in ascending order (PathsOutOfOrder check).
-        verified_paths.sort_by(|a, b| a.0.path().cmp(b.0.path()));
 
         // Hash and sort writes globally. Disjoint Patricia paths ⇒ each write routes to
         // exactly one bucket, and global ascending key order ⇒ each bucket ends up
@@ -118,18 +119,26 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
                 (key_hash, value_hash)
             })
             .collect();
-        sorted_writes.sort_by(|a, b| a.0.cmp(&b.0));
+        sorted_writes.sort_unstable_by(|a, b| a.0.cmp(&b.0));
 
+        // Route writes with a single forward sweep. Both vectors are globally sorted, and
+        // each write belongs to exactly one disjoint verified path, so once a key falls
+        // past a path we never need to revisit it.
+        let mut path_idx = 0;
         for (key_hash, value_hash) in sorted_writes {
-            // `confirm_nonexistence` returns `Err(KeyOutOfScope)` iff the key's bits do
-            // NOT extend this path's proven bit-prefix — use it as an in-scope test.
-            let idx = verified_paths
-                .iter()
-                .position(|(vp, _)| vp.confirm_nonexistence(&key_hash).is_ok())
-                .ok_or_else(|| {
-                    anyhow::anyhow!("No NOMT path proof covers write key: {:?}", key_hash)
-                })?;
-            verified_paths[idx].1.push((key_hash, value_hash));
+            while path_idx < verified_paths.len()
+                && verified_paths[path_idx]
+                    .0
+                    .confirm_nonexistence(&key_hash)
+                    .is_err()
+            {
+                path_idx += 1;
+            }
+
+            let Some((_, writes)) = verified_paths.get_mut(path_idx) else {
+                anyhow::bail!("No NOMT path proof covers write key: {:?}", key_hash);
+            };
+            writes.push((key_hash, value_hash));
         }
 
         let mut updates = Vec::new();
