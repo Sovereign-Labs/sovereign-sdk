@@ -95,9 +95,4 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
             Self::V1(v1) => &v1.details,
         }
     }
-
-    /// Returns a clone of the runtime call.
-    pub fn call(&self) -> R::Call {
-        self.runtime_call().clone()
-    }
 }
