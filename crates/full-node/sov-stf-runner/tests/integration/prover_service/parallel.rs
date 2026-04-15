@@ -53,10 +53,13 @@ async fn test_successful_prover_execution() -> Result<(), ProverServiceError> {
 
     inner_vm.make_proof();
 
-    let status =
-        wait_for_aggregated_proof(&[header.clone()], &genesis_state_root(), &prover_service)
-            .await
-            .unwrap();
+    let status = wait_for_aggregated_proof(
+        std::slice::from_ref(&header),
+        &genesis_state_root(),
+        &prover_service,
+    )
+    .await
+    .unwrap();
 
     assert!(matches!(status, ProofAggregationStatus::Success(_)));
 

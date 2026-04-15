@@ -65,7 +65,7 @@ async fn test_network_prove_and_aggregate() {
 
     // Inner proof not ready yet → ProofGenerationInProgress.
     let status = prover_service
-        .create_aggregated_proof(&[header.clone()], &genesis.0)
+        .create_aggregated_proof(std::slice::from_ref(&header), &genesis.0)
         .await
         .unwrap();
     assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
@@ -270,7 +270,7 @@ async fn test_network_prove_rejected_after_error() {
 
     // Aggregation triggers the Err branch in Phase 1.
     let err = prover_service
-        .create_aggregated_proof(&[header_a.clone()], &genesis.0)
+        .create_aggregated_proof(std::slice::from_ref(&header_a), &genesis.0)
         .await
         .expect_err("Aggregation should fail when proof is missing");
     assert!(
