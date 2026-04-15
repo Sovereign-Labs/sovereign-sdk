@@ -17,6 +17,88 @@ use crate::{
     StorageRoot, Witness,
 };
 
+#[derive(Clone, Copy)]
+struct PathProofRange {
+    lower: usize,
+    upper: usize,
+    path_bit_index: usize,
+}
+
+fn validate_path_proofs_for_multi_proof(path_proofs: &[PathProof]) -> anyhow::Result<()> {
+    for window in path_proofs.windows(2) {
+        if window[0].terminal.path() >= window[1].terminal.path() {
+            anyhow::bail!(
+                "Malformed NOMT path proof hint: terminal paths must be strictly increasing"
+            );
+        }
+    }
+
+    if path_proofs.is_empty() {
+        return Ok(());
+    }
+
+    let mut stack = vec![PathProofRange {
+        lower: 0,
+        upper: path_proofs.len(),
+        path_bit_index: 0,
+    }];
+
+    while let Some(mut range) = stack.pop() {
+        while range.lower + 1 < range.upper {
+            let lower_path = path_proofs[range.lower].terminal.path();
+            let upper_path = path_proofs[range.upper - 1].terminal.path();
+
+            if lower_path.len() <= range.path_bit_index || upper_path.len() <= range.path_bit_index
+            {
+                anyhow::bail!(
+                    "Malformed NOMT path proof hint: terminal path ended before range divergence"
+                );
+            }
+
+            if lower_path[range.path_bit_index] != upper_path[range.path_bit_index] {
+                let mut mid = None;
+                for idx in range.lower..range.upper {
+                    let path = path_proofs[idx].terminal.path();
+                    if path.len() <= range.path_bit_index {
+                        anyhow::bail!(
+                            "Malformed NOMT path proof hint: terminal path ended before range divergence"
+                        );
+                    }
+                    if mid.is_none() && path[range.path_bit_index] {
+                        mid = Some(idx);
+                    }
+                }
+
+                let Some(mid) = mid else {
+                    anyhow::bail!(
+                        "Malformed NOMT path proof hint: could not bisect path proof range"
+                    );
+                };
+
+                stack.push(PathProofRange {
+                    lower: mid,
+                    upper: range.upper,
+                    path_bit_index: range.path_bit_index + 1,
+                });
+                range.upper = mid;
+                range.path_bit_index += 1;
+                continue;
+            }
+
+            if path_proofs[range.lower].siblings.len() <= range.path_bit_index {
+                anyhow::bail!(
+                    "Malformed NOMT path proof hint: missing sibling at shared depth {}",
+                    range.path_bit_index
+                );
+            }
+
+            range.path_bit_index += 1;
+        }
+    }
+
+    Ok(())
+}
+
 /// A [`Storage`] implementation designed to be used inside the zkVM, based on NOMT.
 #[derive(Default, derivative::Derivative)]
 #[derivative(Clone(bound = "S: MerkleProofSpec"), Debug(bound = ""))]
@@ -51,6 +133,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         // Sort once: `MultiProof::from_path_proofs` expects terminal-path order, and
         // `verify_update` below also expects its paths ascending — same key, one sort.
         path_proofs.sort_unstable_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
+        validate_path_proofs_for_multi_proof(&path_proofs)?;
 
         // Reads: rebuild a MultiProof from the path proofs and verify against prev_root,
         // then confirm each read via the existing NOMT primitives.
@@ -308,5 +391,78 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
 
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
         unimplemented!("The NomtVerifierStorage does not support `take_pinned_cache`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use nomt_core::proof::{PathProof, PathProofTerminal};
+    use nomt_core::trie_pos::TriePosition;
+    use sha2::Sha256;
+
+    use super::{validate_path_proofs_for_multi_proof, NomtVerifierStorage};
+    use crate::{ArrayWitness, DefaultStorageSpec, OrderedReadsAndWrites, Witness};
+
+    #[test]
+    fn validate_path_proofs_rejects_duplicate_terminal_paths() {
+        let path_proof = PathProof {
+            terminal: PathProofTerminal::Terminator(TriePosition::from_path_and_depth(
+                [0; 32], 256,
+            )),
+            siblings: Vec::new(),
+        };
+
+        let err = validate_path_proofs_for_multi_proof(&[path_proof.clone(), path_proof])
+            .expect_err("duplicate terminal paths should be rejected");
+
+        assert!(err
+            .to_string()
+            .contains("terminal paths must be strictly increasing"));
+    }
+
+    #[test]
+    fn validate_path_proofs_accepts_distinct_terminal_paths() {
+        let left = PathProof {
+            terminal: PathProofTerminal::Terminator(TriePosition::from_path_and_depth(
+                [0; 32], 256,
+            )),
+            siblings: Vec::new(),
+        };
+        let mut right_key = [0; 32];
+        right_key[0] = 0b1000_0000;
+        let right = PathProof {
+            terminal: PathProofTerminal::Terminator(TriePosition::from_path_and_depth(
+                right_key, 256,
+            )),
+            siblings: Vec::new(),
+        };
+
+        validate_path_proofs_for_multi_proof(&[left, right])
+            .expect("distinct terminal paths should remain valid");
+    }
+
+    #[test]
+    fn compute_state_update_namespace_rejects_malformed_untrusted_hints() {
+        type TestSpec = DefaultStorageSpec<Sha256>;
+
+        let witness = ArrayWitness::default();
+        let path_proof = PathProof {
+            terminal: PathProofTerminal::Terminator(TriePosition::from_path_and_depth(
+                [0; 32], 256,
+            )),
+            siblings: Vec::new(),
+        };
+        witness.add_hint(&vec![path_proof.clone(), path_proof]);
+
+        let err = NomtVerifierStorage::<TestSpec>::compute_state_update_namespace(
+            OrderedReadsAndWrites::default(),
+            &witness,
+            nomt_core::trie::TERMINATOR,
+        )
+        .expect_err("malformed path proof hints should return an error");
+
+        assert!(err
+            .to_string()
+            .contains("terminal paths must be strictly increasing"));
     }
 }

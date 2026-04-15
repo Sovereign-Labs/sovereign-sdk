@@ -1,3 +1,6 @@
+# 2026-04-15
+- #2739 Fixes NOMT Verifier storage.
+
 # 2026-04-13
 - #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
 

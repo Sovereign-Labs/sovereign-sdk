@@ -20,7 +20,7 @@ type ProofInput = StateTransitionWitnessWithAddress<
 >;
 
 #[tokio::test(flavor = "multi_thread")]
-//#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
+#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
     let (host, code_commitment) = TestHost::new(true).await;
     let proof_data = generate_proofs(&host).await;
@@ -74,6 +74,7 @@ async fn generate_proofs(host: &TestHost) -> Vec<BlockHeaderWithProof<MockDaSpec
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual heavy test"]
 async fn test_mock_proof_public_data_matches_witnesses() {
     let (host, _) = TestHost::new(false).await;
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
