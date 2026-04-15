@@ -150,8 +150,8 @@ mod tests {
 
     const CELESTIA_HRP: Hrp = Hrp::parse_unchecked("celestia");
 
-    use sov_universal_wallet::schema::Schema;
     use sov_test_utils::validate_schema;
+    use sov_universal_wallet::schema::Schema;
 
     use super::*;
 

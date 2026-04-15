@@ -7,10 +7,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_universal_wallet::UniversalWallet;
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
+use sov_universal_wallet::UniversalWallet;
 
 use crate::codec::EncodeLike;
 use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};

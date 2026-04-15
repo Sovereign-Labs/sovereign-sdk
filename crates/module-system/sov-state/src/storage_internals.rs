@@ -7,8 +7,8 @@ use derivative::Derivative;
 use jmt::SimpleHasher;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
-use sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::reexports::digest::Digest;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::{MerkleProofSpec, ProvableNamespace, StateRoot};
 /// Combined root hash of the user and kernel namespaces. The user root hash is the first 32 bytes, whereas the

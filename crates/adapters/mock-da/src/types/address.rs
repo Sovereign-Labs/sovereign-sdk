@@ -145,8 +145,8 @@ mod tests {
 
     use proptest::prelude::any;
     use proptest::proptest;
-    use sov_universal_wallet::schema::Schema;
     use sov_test_utils::validate_schema;
+    use sov_universal_wallet::schema::Schema;
 
     use super::*;
 
