@@ -87,9 +87,14 @@ where
 
         let eth_rpc_config = sov_ethereum::EthRpcConfig {
             #[cfg(feature = "local")]
+            // Hardhat #0 — matches `SENDER_PRIV_KEY` and mirrors the historical
+            // `eth_dev_signer()` wiring in `examples/demo-rollup/src/lib.rs`, which is
+            // how the older test harness got a populated `eth_accounts` list. Populating
+            // the signer here is required by tests like `evm_tx.rs` that assert
+            // `eth_accounts == [test_client.address()]` and by any test that exercises
+            // `eth_sendTransaction` via the local signer path. Raw hex (no `0x` prefix)
+            // because `secp256k1::SecretKey::from_str` expects unprefixed hex.
             eth_signer: sov_ethereum::Signers::new(vec![secp256k1::SecretKey::from_str(
-                // Hardhat #0 — SENDER_PRIV_KEY without the leading `0x` so eth_accounts /
-                // eth_sendTransaction work in tests that exercise the local signer path.
                 "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
             )
             .expect("valid hardhat private key")]),

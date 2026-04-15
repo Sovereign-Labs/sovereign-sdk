@@ -27,9 +27,17 @@ use crate::common::{
 };
 use crate::runtime::EvmBlueprint;
 
-/// Mirror of the relevant fields from the EVM genesis used by `default_genesis()`
-/// (see `crate::common::genesis`). Inlined as constants so the test does not depend
-/// on file-system paths into `examples/test-data/`.
+/// Mirror of the EVM genesis values used by `default_genesis()` (see
+/// `crate::common::genesis`). Inlined so the test does not depend on
+/// file-system paths into `examples/test-data/`.
+///
+/// `base_fee_params` intentionally lives only in this test fixture: the
+/// sov-evm `EvmChainSpec` struct does not carry these parameters (revm
+/// applies Ethereum mainnet EIP-1559 defaults internally — `(8, 2)`, as
+/// in `alloy_eips::eip1559::BaseFeeParams::ethereum()`). The fixture
+/// re-states them so the test can compute expected next base fees in
+/// lock-step with revm. If revm ever deviates from the Ethereum defaults,
+/// this fixture and the revm config would need to be updated together.
 struct EvmGenesisConfigFixture {
     initial_base_fee: u64,
     chain_spec: ChainSpecFixture,

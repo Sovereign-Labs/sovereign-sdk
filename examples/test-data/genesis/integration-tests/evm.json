@@ -33,10 +33,6 @@
     "coinbase": "0x0000000000000000000000000000000000000000",
     "block_gas_limit": 100000000000,
     "tx_gas_limit": 30000000,
-    "base_fee_params": {
-      "max_change_denominator": 8,
-      "elasticity_multiplier": 2
-    },
     "hardforks": [[0, "CANCUN"]]
   },
   "admin": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
