@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::{
     capabilities::UniquenessData,

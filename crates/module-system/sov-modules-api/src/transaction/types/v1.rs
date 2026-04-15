@@ -162,6 +162,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     pub fn auth_data<M: GasMeter<Spec = S>>(
         &self,
         raw_tx_hash: TxHash,
+        non_malleable_hash: TxHash,
         meter: &mut M,
     ) -> Result<AuthorizationData<S>, AuthenticationError> {
         // Charge gas; We charge for credential ID calculation based on the number of keys in the multisig
@@ -183,6 +184,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
         Ok(AuthorizationData {
             uniqueness: self.uniqueness,
             tx_hash: raw_tx_hash,
+            non_malleable_hash,
             credential_id,
             credentials: Credentials::new(multisig),
             default_address: credential_id.into(),

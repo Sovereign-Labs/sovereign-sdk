@@ -3,9 +3,9 @@ use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::capabilities::{
-    self, calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput,
-    BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator,
-    UnregisteredAuthenticationError,
+    self, calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_id,
+    AuthenticationError, AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError,
+    ReplayHashMaterial, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::transaction::{
@@ -233,19 +233,25 @@ fn verify_and_decode_tx<
     tx: Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    let (auth_data, details, runtime_call) = match &tx {
-        Transaction::V0(tx_v0) => {
-            let auth_data = tx_v0.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v0.details, &tx_v0.runtime_call)
-        }
-        Transaction::V1(tx_v1) => {
-            let auth_data = tx_v1.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v1.details, &tx_v1.runtime_call)
-        }
+    let (details, runtime_call) = match &tx {
+        Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
+        Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
     verify_chain_id(details, raw_tx_hash)?;
-    verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
+    let eip712_hash = verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
+    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+        match &tx {
+            Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
+            Transaction::V1(_) => ReplayHashMaterial::VerifiedSignatureMessage(&eip712_hash),
+        },
+        meter,
+    )
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+    let auth_data = match &tx {
+        Transaction::V0(tx_v0) => tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+        Transaction::V1(tx_v1) => tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+    };
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,
@@ -304,7 +310,7 @@ fn verify_eip712_signature<
     tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<(), AuthenticationError> {
+) -> Result<[u8; EIP712_HASH_LENGTH], AuthenticationError> {
     tx.charge_gas_for_signature(EIP712_HASH_LENGTH, meter)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
@@ -316,12 +322,13 @@ fn verify_eip712_signature<
             ),
         })?;
 
+    let eip712_hash = get_eip712_hash::<S, D, SP>(tx, raw_tx_hash)?;
+
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
-        return known_result;
+        return known_result.map(|()| eip712_hash);
     }
 
-    let eip712_hash = get_eip712_hash::<S, D, SP>(tx, raw_tx_hash)?;
     let res = tx
         .verify_signature_unmetered(&eip712_hash)
         .map_err(|e| match e {
@@ -337,5 +344,5 @@ fn verify_eip712_signature<
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
 
-    res
+    res.map(|()| eip712_hash)
 }

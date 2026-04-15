@@ -284,7 +284,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         self.uniqueness.check_uniqueness(
             &auth_data.credential_id,
             auth_data.uniqueness,
-            auth_data.tx_hash,
+            auth_data.non_malleable_hash,
             execution_context,
             state,
         )
@@ -300,7 +300,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         self.uniqueness.mark_tx_attempted(
             &auth_data.credential_id,
             auth_data.uniqueness,
-            auth_data.tx_hash,
+            auth_data.non_malleable_hash,
             state,
         )
     }
