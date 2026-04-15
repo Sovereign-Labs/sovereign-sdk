@@ -9,7 +9,7 @@ use sov_stf_runner::processes::{
     NetworkProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
 };
 
-use super::{make_transition_info, Address, StateRoot};
+use super::{make_header, make_transition_info, Address, StateRoot};
 use crate::helpers::genesis_state_root;
 
 struct TestNetworkProver {
@@ -50,12 +50,12 @@ async fn test_network_prove_and_aggregate() {
         ..
     } = make_network_prover(false, true, Duration::from_secs(60));
 
-    let header_hash = MockHash::from([1; 32]);
+    let header = make_header(MockHash::from([1; 32]), 1);
     let genesis = genesis_state_root();
 
     // Submit one block — should return ProvingInProgress.
     let status = prover_service
-        .prove(make_transition_info(header_hash, 1))
+        .prove(make_transition_info(header.clone()))
         .await
         .unwrap();
     assert!(matches!(
@@ -65,7 +65,7 @@ async fn test_network_prove_and_aggregate() {
 
     // Inner proof not ready yet → ProofGenerationInProgress.
     let status = prover_service
-        .create_aggregated_proof(&[header_hash], &genesis.0)
+        .create_aggregated_proof(&[header.clone()], &genesis.0)
         .await
         .unwrap();
     assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
@@ -75,7 +75,7 @@ async fn test_network_prove_and_aggregate() {
 
     // Now aggregation should succeed.
     let status = prover_service
-        .create_aggregated_proof(&[header_hash], &genesis.0)
+        .create_aggregated_proof(&[header], &genesis.0)
         .await
         .unwrap();
 
@@ -105,17 +105,17 @@ async fn test_network_prove_returns_in_progress() {
         ..
     } = make_network_prover(false, true, Duration::from_secs(60));
 
-    let header_hash = MockHash::from([2; 32]);
+    let header = make_header(MockHash::from([2; 32]), 1);
     let genesis = genesis_state_root();
 
     prover_service
-        .prove(make_transition_info(header_hash, 1))
+        .prove(make_transition_info(header.clone()))
         .await
         .unwrap();
 
     // Don't complete the inner proof — aggregation should stay in progress.
     let status = prover_service
-        .create_aggregated_proof(&[header_hash], &genesis.0)
+        .create_aggregated_proof(&[header], &genesis.0)
         .await
         .unwrap();
     assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
@@ -131,14 +131,14 @@ async fn test_network_aggregated_proof_multiple_blocks() {
 
     let block_count = 5;
     let genesis = genesis_state_root();
-    let hashes: Vec<_> = (0..block_count)
-        .map(|i| MockHash::from([i + 10; 32]))
+    let headers: Vec<_> = (0..block_count)
+        .map(|height| make_header(MockHash::from([height as u8 + 10; 32]), height as u64))
         .collect();
 
     // Submit all blocks.
-    for (i, hash) in hashes.iter().enumerate() {
+    for header in headers.iter().cloned() {
         prover_service
-            .prove(make_transition_info(*hash, i as u64))
+            .prove(make_transition_info(header))
             .await
             .unwrap();
     }
@@ -149,7 +149,7 @@ async fn test_network_aggregated_proof_multiple_blocks() {
     }
 
     let status = prover_service
-        .create_aggregated_proof(&hashes, &genesis.0)
+        .create_aggregated_proof(&headers, &genesis.0)
         .await
         .unwrap();
 
@@ -179,11 +179,11 @@ async fn test_network_duplicate_proof_rejected() {
         ..
     } = make_network_prover(false, true, Duration::from_secs(60));
 
-    let header_hash = MockHash::from([4; 32]);
+    let header = make_header(MockHash::from([4; 32]), 1);
 
     // First prove succeeds.
     let status = prover_service
-        .prove(make_transition_info(header_hash, 1))
+        .prove(make_transition_info(header.clone()))
         .await
         .unwrap();
     assert!(matches!(
@@ -193,12 +193,12 @@ async fn test_network_duplicate_proof_rejected() {
 
     // Second prove with same header hash should fail.
     let err = prover_service
-        .prove(make_transition_info(header_hash, 1))
+        .prove(make_transition_info(header.clone()))
         .await
         .expect_err("Duplicate proof submission should be rejected");
     assert_eq!(
         err.to_string(),
-        format!("Proof generation for {} still in progress", header_hash)
+        format!("Proof generation for {} still in progress", header.hash)
     );
 }
 
@@ -211,16 +211,16 @@ async fn test_network_prove_rejected_after_proved() {
     } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
-    let hash_a = MockHash::from([5; 32]);
-    let hash_b = MockHash::from([6; 32]);
+    let header_a = make_header(MockHash::from([5; 32]), 1);
+    let header_b = make_header(MockHash::from([6; 32]), 2);
 
     // Submit two blocks.
     prover_service
-        .prove(make_transition_info(hash_a, 1))
+        .prove(make_transition_info(header_a.clone()))
         .await
         .unwrap();
     prover_service
-        .prove(make_transition_info(hash_b, 2))
+        .prove(make_transition_info(header_b.clone()))
         .await
         .unwrap();
 
@@ -229,21 +229,21 @@ async fn test_network_prove_rejected_after_proved() {
 
     // Aggregate [A, B]: A transitions to Proved, B is still pending → InProgress.
     let status = prover_service
-        .create_aggregated_proof(&[hash_a, hash_b], &genesis.0)
+        .create_aggregated_proof(&[header_a.clone(), header_b], &genesis.0)
         .await
         .unwrap();
     assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
 
     // Proving A again should fail because it is already Proved.
     let err = prover_service
-        .prove(make_transition_info(hash_a, 1))
+        .prove(make_transition_info(header_a.clone()))
         .await
         .expect_err("Re-proving a Proved block should be rejected");
     assert_eq!(
         err.to_string(),
         format!(
             "Witness for block_header_hash {}, submitted multiple times.",
-            hash_a
+            header_a.hash
         )
     );
 }
@@ -257,11 +257,11 @@ async fn test_network_prove_rejected_after_error() {
     } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
-    let hash_a = MockHash::from([7; 32]);
+    let header_a = make_header(MockHash::from([7; 32]), 1);
 
     // Submit block A.
     prover_service
-        .prove(make_transition_info(hash_a, 1))
+        .prove(make_transition_info(header_a.clone()))
         .await
         .unwrap();
 
@@ -270,7 +270,7 @@ async fn test_network_prove_rejected_after_error() {
 
     // Aggregation triggers the Err branch in Phase 1.
     let err = prover_service
-        .create_aggregated_proof(&[hash_a], &genesis.0)
+        .create_aggregated_proof(&[header_a.clone()], &genesis.0)
         .await
         .expect_err("Aggregation should fail when proof is missing");
     assert!(
@@ -281,7 +281,7 @@ async fn test_network_prove_rejected_after_error() {
 
     // Proving A again should propagate the stored error.
     let err = prover_service
-        .prove(make_transition_info(hash_a, 1))
+        .prove(make_transition_info(header_a))
         .await
         .expect_err("Re-proving after error should propagate the stored error");
     assert!(
@@ -304,16 +304,16 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
     } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
-    let hash_a = MockHash::from([8; 32]);
-    let hash_b = MockHash::from([9; 32]);
+    let header_a = make_header(MockHash::from([8; 32]), 1);
+    let header_b = make_header(MockHash::from([9; 32]), 2);
 
     // Submit two blocks.
     prover_service
-        .prove(make_transition_info(hash_a, 1))
+        .prove(make_transition_info(header_a.clone()))
         .await
         .unwrap();
     prover_service
-        .prove(make_transition_info(hash_b, 2))
+        .prove(make_transition_info(header_b.clone()))
         .await
         .unwrap();
 
@@ -322,7 +322,7 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
 
     // First aggregation: A transitions to Proved, B is still pending → InProgress.
     let status = prover_service
-        .create_aggregated_proof(&[hash_a, hash_b], &genesis.0)
+        .create_aggregated_proof(&[header_a.clone(), header_b.clone()], &genesis.0)
         .await
         .unwrap();
     assert_eq!(status, ProofAggregationStatus::ProofGenerationInProgress);
@@ -332,7 +332,7 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
 
     // Second aggregation: A should still be Proved (not dropped), B transitions to Proved.
     let status = prover_service
-        .create_aggregated_proof(&[hash_a, hash_b], &genesis.0)
+        .create_aggregated_proof(&[header_a, header_b], &genesis.0)
         .await
         .unwrap();
 
@@ -369,16 +369,16 @@ async fn test_network_outer_proof_timeout_error_message() {
         outer_vm: _,
     } = make_network_prover(true, false, Duration::from_millis(100));
 
-    let header_hash = MockHash::from([20; 32]);
+    let header = make_header(MockHash::from([20; 32]), 1);
     let genesis = genesis_state_root();
 
     prover_service
-        .prove(make_transition_info(header_hash, 1))
+        .prove(make_transition_info(header.clone()))
         .await
         .unwrap();
 
     let err = prover_service
-        .create_aggregated_proof(&[header_hash], &genesis.0)
+        .create_aggregated_proof(&[header], &genesis.0)
         .await
         .expect_err("Should fail with outer proof timeout");
 
@@ -404,13 +404,13 @@ async fn test_network_outer_proof_poll_failure_error_message() {
         outer_vm,
     } = make_network_prover(true, false, Duration::from_secs(60));
 
-    let header_hash = MockHash::from([21; 32]);
+    let header = make_header(MockHash::from([21; 32]), 1);
     let genesis = genesis_state_root();
 
     let prover_service = Arc::new(prover_service);
 
     prover_service
-        .prove(make_transition_info(header_hash, 1))
+        .prove(make_transition_info(header.clone()))
         .await
         .unwrap();
 
@@ -418,9 +418,10 @@ async fn test_network_outer_proof_poll_failure_error_message() {
     let agg_handle = tokio::spawn({
         let prover_service = Arc::clone(&prover_service);
         let genesis = genesis.clone();
+        let header = header.clone();
         async move {
             prover_service
-                .create_aggregated_proof(&[header_hash], &genesis.0)
+                .create_aggregated_proof(&[header], &genesis.0)
                 .await
         }
     });

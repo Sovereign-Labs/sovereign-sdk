@@ -187,7 +187,7 @@ pub trait ProverService: Send + Sync + 'static {
     /// This method is not yet fully implemented: see #1185
     async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
+        block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus>;
 }
