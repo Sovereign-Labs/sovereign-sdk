@@ -24,7 +24,7 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
+use sov_rollup_interface::{ProvableHeightTracker, StateChannel, StateUpdateInfo};
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
@@ -43,6 +43,7 @@ pub struct StateTransitionRunner<Stf, Sm, Da>
 where
     Da: DaService,
     Sm: HierarchicalStorageManager<Da::Spec>,
+    Sm::StfState: Clone,
     Stf: StateTransitionFunction<Da::Spec>,
 {
     first_unprocessed_height_at_startup: u64,
@@ -130,7 +131,7 @@ where
         ledger_db: LedgerDb,
         stf: Stf,
         storage_manager: Sm,
-        state_update_channel: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+        state_channel: StateChannel<Sm::StfState>,
         prev_state_root: Stf::StateRoot,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         shutdown_receiver: watch::Receiver<()>,
@@ -186,7 +187,7 @@ where
             storage_manager,
             ledger_db,
             prev_state_root,
-            state_update_channel,
+            state_channel,
             stf_info_sender,
             state_height_tracker,
             sync_state.clone(),

@@ -124,9 +124,9 @@ pub use sov_rollup_interface::zk::HostArgs;
 pub use sov_rollup_interface::zk::{
     CodeCommitmentFor, CodeCommitmentTrait, CryptoSpec, StateTransitionPublicData, ZkVerifier, Zkvm,
 };
-#[cfg(feature = "native")]
-pub use sov_rollup_interface::StateUpdateInfo;
 pub use sov_rollup_interface::{execution_mode, BasicAddress, TxHash};
+#[cfg(feature = "native")]
+pub use sov_rollup_interface::{StateChannel, StateUpdateInfo};
 pub use sov_state::User;
 pub use sov_state::{CompileTimeNamespace, Prefix, Storage};
 pub use state::*;

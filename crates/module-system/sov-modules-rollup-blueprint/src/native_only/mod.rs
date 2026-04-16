@@ -13,8 +13,8 @@ use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
 use sov_modules_api::{
-    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
-    SyncStatus, VersionReader, ZkVerifier,
+    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateChannel, StateCheckpoint,
+    StateUpdateInfo, SyncStatus, VersionReader, ZkVerifier,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
@@ -472,16 +472,19 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Rollup state initialization is completed"
         );
 
-        let (state_update_sender, state_update_receiver) =
-            tokio::sync::watch::channel(state_update_info);
+        let state_channel = StateChannel::new(state_update_info);
+        let state_update_receiver = state_channel.subscribe_state_update();
+        let storage_receiver = state_channel.subscribe_storage();
 
         if let Some(handle) = da_service_handle {
             background_handles.push(handle);
         }
 
-        let visible_state_height_tracker: Box<dyn ProvableHeightTracker> = Box::new(
-            MaximumProvableHeight::new(state_update_sender.subscribe(), Self::Runtime::default()),
-        );
+        let visible_state_height_tracker: Box<dyn ProvableHeightTracker> =
+            Box::new(MaximumProvableHeight::new(
+                state_channel.subscribe_state_update(),
+                Self::Runtime::default(),
+            ));
 
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
@@ -499,7 +502,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             ledger_db.clone(),
             native_stf,
             storage_manager,
-            state_update_sender,
+            state_channel,
             prev_state_root,
             visible_state_height_tracker,
             main_shutdown_receiver.clone(),
@@ -544,7 +547,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         .proof_processor()
                         .create_bonding_proof_service::<Self::Runtime>(
                         prover_address,
-                        state_update_receiver.clone(),
+                        storage_receiver,
                     );
 
                     start_op_workflow_in_background::<Self::ProverService, _>(

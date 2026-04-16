@@ -239,7 +239,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
     let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
-    let state_update_receiver = state_manager.state_update_sender.subscribe();
+    let state_update_receiver = state_manager.state_channel.subscribe_state_update();
 
     // State root after executing i-th transition
     let mut post_state_roots = Vec::with_capacity(fork_happens_at as usize);
@@ -1165,8 +1165,7 @@ where
     shutdown_rx.mark_unchanged();
 
     let update_info = query_state_update_info(&ledger_db, stf_state, sync_state.as_ref()).await?;
-    // Update channel, receiver does not need to be alive
-    let (state_update_sender, _state_update_recv) = watch::channel(update_info);
+    let state_channel = StateChannel::new(update_info);
 
     let da_header_provider = DaServiceWithCachedFinalizedHeaders::new(
         Arc::new(da_service),
@@ -1179,7 +1178,7 @@ where
         storage_manager,
         ledger_db,
         initial_state_root,
-        state_update_sender,
+        state_channel,
         None,
         Box::new(InfiniteHeight),
         sync_state,
