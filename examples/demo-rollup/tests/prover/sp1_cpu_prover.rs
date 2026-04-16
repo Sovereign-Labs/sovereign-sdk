@@ -53,8 +53,8 @@ async fn test_proof_generation() {
     let prover_address = default_prover_address();
 
     for witness in witnesses {
-        let _initial_state_root = witness.initial_state_root.clone();
-        let _final_state_root = witness.final_state_root.clone();
+        let _initial_state_root = witness.initial_state_root;
+        let _final_state_root = witness.final_state_root;
 
         let proof = generate_proof(&host, witness, prover_address).await;
         let proof_public_data = verify(proof.proof.raw_inner_proof, code_commitment.clone()).await;
