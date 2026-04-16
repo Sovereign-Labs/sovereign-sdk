@@ -58,5 +58,5 @@ fn test_fibonnaci_host() {
 
     // Give the input 7 to the fibonnaci program. Under the mock backend this
     // exercises the proving pipeline end-to-end without generating real proofs.
-    let _ = host.add_hint_and_run(&7u32).unwrap();
+    host.add_hint_and_run(&7u32).unwrap();
 }

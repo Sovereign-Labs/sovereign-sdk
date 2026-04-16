@@ -139,7 +139,6 @@ impl SP1AggregationHost {
 pub struct SP1Host {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
-    is_mock: bool,
 }
 
 /// Instantiate a new SP1 Host.
@@ -147,7 +146,6 @@ impl SP1Host {
     /// Create a new SP1 Host.
     pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
         let prover = ProverClient::from_env();
-        let is_mock = std::env::var("SP1_PROVER").as_deref() == Ok("mock");
 
         let pk = prover
             .setup(elf.into())
@@ -156,7 +154,6 @@ impl SP1Host {
         Ok(Self {
             prover,
             pk: Arc::new(pk),
-            is_mock,
         })
     }
 
@@ -188,7 +185,9 @@ impl SP1Host {
         // would fail the executor-side deferred-proof check. Skip that check so
         // mock aggregation can run end-to-end; real backends keep it on.
         let request = self.prover.prove(&self.pk, stdin).compressed();
-        let request = if self.is_mock {
+
+        let is_mock = matches!(&self.prover, &EnvProver::Mock(_));
+        let request = if is_mock {
             request.deferred_proof_verification(false)
         } else {
             request
