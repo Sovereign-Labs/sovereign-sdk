@@ -15,5 +15,7 @@ workspace = true
 [dependencies]
 derive_more = { workspace = true, features = ["debug"] }
 rockbound = { workspace = true }
+serde = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 tokio = { workspace = true, features = ["sync"] }
+tracing = { workspace = true }

@@ -18,12 +18,12 @@ use sov_modules_api::{
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
+use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;

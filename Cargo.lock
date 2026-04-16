@@ -12548,8 +12548,10 @@ version = "0.3.0"
 dependencies = [
  "derive_more 2.0.1",
  "rockbound",
+ "serde",
  "sov-rollup-interface",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

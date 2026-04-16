@@ -2,11 +2,13 @@
 - #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
 - #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
   The change also affects call message de-serialization in sov-paymaster, for all call messages that use `PaymasterPolicyInitializer`
-- #2750 **Code breaking change**: `StateUpdateInfo`, `StateChannel`, and `StateUpdateReceiver` have been moved out of `sov-rollup-interface` and `sov-modules-api` into a new crate `sov-rollup-full-node-interface`. This removes the `rockbound` (RocksDB) dependency from `sov-rollup-interface/native`. Update your imports:
+- #2750 **Code breaking change**: `StateUpdateInfo`, `StateChannel`, `StateUpdateReceiver`, and `DaSyncState` have been moved out of `sov-rollup-interface` and `sov-modules-api` into a new crate `sov-rollup-full-node-interface`. This removes the `rockbound` (RocksDB) dependency from `sov-rollup-interface/native`. Update your imports:
   - `sov_rollup_interface::StateUpdateInfo` -> `sov_rollup_full_node_interface::StateUpdateInfo`
   - `sov_rollup_interface::StateChannel` -> `sov_rollup_full_node_interface::StateChannel`
+  - `sov_rollup_interface::node::DaSyncState` -> `sov_rollup_full_node_interface::DaSyncState`
   - `sov_modules_api::StateChannel` -> `sov_rollup_full_node_interface::StateChannel`
   - `sov_modules_api::rest::StateUpdateReceiver` -> `sov_rollup_full_node_interface::StateUpdateReceiver`
+  - `SyncStatus` remains in `sov_rollup_interface::node::SyncStatus` (unchanged)
   - `MaximumProvableHeight::new` now takes `watch::Receiver<S::Storage>` instead of `StateUpdateReceiver`. Use `StateChannel::subscribe_storage()` instead of `StateChannel::subscribe_state_update()` when constructing it.
 
 # 2026-04-15

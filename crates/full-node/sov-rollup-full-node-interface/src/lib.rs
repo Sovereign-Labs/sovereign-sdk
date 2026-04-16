@@ -1,17 +1,20 @@
 //! Full-node coordination types for the Sovereign SDK.
 //!
 //! This crate provides types used to coordinate state updates between
-//! the STF runner, sequencer, and rollup blueprint. These types depend on
-//! [`rockbound`] (RocksDB) and are intentionally separated from
-//! [`sov_rollup_interface`] so that crates which only need the generic
-//! rollup interface do not transitively compile RocksDB.
+//! the STF runner, sequencer, and rollup blueprint. These types are
+//! intentionally separated from [`sov_rollup_interface`] to avoid
+//! burdening generic rollup-interface consumers with heavy transitive
+//! dependencies such as `rockbound` (RocksDB).
 //!
 //! See the [README](../README.md) for more details on the motivation.
 
 #![deny(missing_docs)]
 
+mod da_sync_state;
+
+pub use da_sync_state::DaSyncState;
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::node::SyncStatus;
+pub use sov_rollup_interface::node::SyncStatus;
 
 /// Structure that holds information about the state update that happened in the block.
 #[derive(Clone, derive_more::Debug)]
