@@ -749,6 +749,8 @@ where
         (Ok((rx, remaining_slot_gas)), resource_used)
     }
 
+    // Implements the I part of a PID controller; we track our error rate over each batch and tune the bias (does our controller over or under shoot the ideal rate?)
+    // We adjust our computed rate by this factor 
     fn update_size_limit_bias_on_batch_close(&mut self) {
         let target_size = (self.batch_size_tracker.max_batch_size as u64)
         .checked_div(20)

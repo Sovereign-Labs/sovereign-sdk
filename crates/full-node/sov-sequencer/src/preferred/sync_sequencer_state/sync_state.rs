@@ -876,6 +876,8 @@ where
     }
 
     // Takes the current rate limit (in bytes/sec) and returns the next rate limit (in bytes/sec) and the offer rate (in bytes/sec).
+    // This implements the P and I parts of a PID controller; this function is responsible for both updating the P term (every tick interval) and combining
+    // it with the I term to get the current rate. (The I term is updated on each batch close.)
     fn tick_rate_limiter(&mut self) -> (f64, u64) {
         let minimum_tick_size = Duration::from_millis(10);
         let now = std::time::Instant::now();
@@ -899,7 +901,7 @@ where
         let target_rate = target_size / self.inner.approximate_block_time.as_secs_f64();
         let elapsed = self.inner.batch_start_time.elapsed();
         let remaining = std::cmp::max(self.inner.approximate_block_time - elapsed, minimum_tick_size);
-        // The idea rate, if we weren't worried about over/under shedding. (I.e., split the remaining batch size evenly over the remaining time.)
+        // The ideal rate, if we weren't worried about over/under shedding. (This is just the rate in bytes-per-second if we split the remaining batch size evenly over the estimated remaining time.)
         let goal_rate = (target_size - self.inner.batch_size_tracker.current_batch_size as f64).max(0.0) / remaining.as_secs_f64();
 
         // Slew limits (TODO, extract constants). We don't open the gates by more than 25% per of our total budget per second, and we don't close them by more than 100% per second.
@@ -909,7 +911,7 @@ where
         let max_down = rate_down_per_sec * minimum_tick_size.as_secs_f64();
 
 
-        // The next rate, before we apply the slew limits. It's just the goal rate adjusted by the bias term (recall that the bias evolves over time).
+        // The next rate, before we apply the slew limits. It's just the goal rate adjusted by the bias term (recall that the bias evolves over time based on our error). Essentially, we're implementing the PI part of a PID controller.
         let raw_next_rate = (goal_rate + self.inner.size_limit_bias).max(0.0);
         let actual_next_rate = raw_next_rate.clamp(current_rate - max_down, current_rate + max_up); // Clamp the next rate within our slew limits.
         self.inner.current_tx_accept_rate_bytes_per_second = actual_next_rate;
@@ -918,12 +920,17 @@ where
 
 
 
-    /// Get the acceptance probability for a given transaction based on the sync distance and the max allowed node distance behind.
+    /// Get the acceptance probability for a given transaction based on...
+    /// 2. the current batch size, target batch size and frequency, and the rate of offered transactions.
+    /// 1. the sync distance and the max allowed node distance behind.
     fn get_acceptance_probability(&mut self, baked_tx: &FullyBakedTx) -> f64 {
+        // 1. Probability based on batch size and offered rate.
         self.inner.bytes_offered_since_last_tick += baked_tx.len() as u64;
         let (accept_bps, offered_bps) = self.tick_rate_limiter();
         let accept_probability_batch_size = accept_bps / offered_bps as f64;
         
+        // 2. Probability based on sync distance.
+        // 
         // We subtract 1 from both the sync distance and the max_allowed_node distance so that a distance of 0 or 1 results in a 0% chance of shedding load
         let sync_distance = self.inner.latest_info.sync_status.distance().saturating_sub(1) as f64;
         let max_allowed_node_distance_behind = self.inner
