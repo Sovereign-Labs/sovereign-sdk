@@ -21,7 +21,7 @@ use sov_modules_api::{
 use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
-use sov_rollup_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};

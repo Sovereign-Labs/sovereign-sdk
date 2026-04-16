@@ -32,7 +32,7 @@ use sov_modules_api::{
     FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
     VisibleSlotNumber,
 };
-use sov_rollup_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;

@@ -14,6 +14,7 @@ use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_metrics::RunnerProcessStfChangesMetrics;
+use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
@@ -22,7 +23,7 @@ use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_rollup_interface::{ProvableHeightTracker, StateChannel};
+use sov_rollup_interface::ProvableHeightTracker;
 
 /// Result of checking if a block is a valid continuation of the current chain.
 ///

@@ -30,7 +30,7 @@ use sov_modules_api::GasArray;
 use sov_modules_api::GasSpec;
 use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
-use sov_rollup_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
