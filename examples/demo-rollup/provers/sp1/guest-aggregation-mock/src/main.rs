@@ -4,7 +4,6 @@ sp1_zkvm::entrypoint!(main);
 
 use demo_stf::MultiAddressEvmSolana;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::{execution_mode::Zk, Spec, Storage};
 use sov_rollup_interface::zk::aggregated_proof::circuit::run_aggregation_program;

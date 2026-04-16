@@ -10,7 +10,10 @@ use crate::SequencerRegistry;
 /// This `struct` must be passed as an argument to
 /// [`Module::genesis`](sov_modules_api::Module::genesis).
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, JsonSchema)]
-#[serde(bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned")]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned",
+    deny_unknown_fields
+)]
 #[schemars(
     bound = "S: sov_modules_api::Spec, <S::Da as DaSpec>::Address: JsonSchema",
     rename = "SequencerRegistryConfig"
@@ -24,6 +27,7 @@ pub struct SequencerRegistryConfig<S: Spec> {
 
 /// The initial sequencer config.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 #[schemars(
     bound = "S: sov_modules_api::Spec, <S::Da as DaSpec>::Address: JsonSchema",
     rename = "SequencerConfig"
