@@ -1,3 +1,6 @@
+# 2026-04-16
+- #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
+
 # 2026-04-13
 - #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
 - #2735 Internal change: moves EVM RPC tests to sov-ethereum from sov-demo-rollup
