@@ -1,8 +1,9 @@
 use anyhow::bail;
 use anyhow::{anyhow, Result};
 use schemars::JsonSchema;
+use sov_modules_api::digest::Digest;
 use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
+use sov_modules_api::{Context, CredentialId, CryptoSpec, Spec, StateReader, TxState};
 use sov_state::namespaces::User;
 
 use crate::{Account, Accounts};
@@ -34,9 +35,17 @@ impl<S: Spec> Accounts<S> {
 
         self.exit_if_credential_exists(&new_credential_id, state)?;
 
+        let mut hasher = <S::CryptoSpec as CryptoSpec>::Hasher::new();
+        hasher.update(&new_credential_id.0 .0);
+        // TODO: Nonce to preserve unique addresses?
+        hasher.update(context.sender().as_ref());
+        let address_source = hasher.finalize();
+
+        let new_non_controlled_address = S::Address::try_from(address_source.as_slice())?;
+
         // Insert the new credential id -> account mapping
         let account = Account {
-            addr: *context.sender(),
+            addr: new_non_controlled_address,
         };
         self.accounts.set(&new_credential_id, &account, state)?;
 
