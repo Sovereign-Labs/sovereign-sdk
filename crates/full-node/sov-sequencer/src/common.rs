@@ -24,6 +24,7 @@ use sov_rest_utils::{json_obj, to_json_object};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::StateUpdateInfo;
 use thiserror::Error;
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
 use tokio::time::timeout;

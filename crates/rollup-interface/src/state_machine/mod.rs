@@ -169,10 +169,14 @@ pub struct StateUpdateInfo<StfState> {
     pub sync_status: crate::node::SyncStatus,
 }
 
-/// A coordinating channel that atomically manages both a full [`StateUpdateInfo`] channel
+/// A coordinating channel that manages both a full [`StateUpdateInfo`] channel
 /// and a storage-only channel. Consumers that only need the latest storage (e.g. bonding proof
 /// services) can subscribe to the storage channel, avoiding a dependency on the full
 /// `StateUpdateInfo` type and its transitive dependencies.
+///
+/// The two channels are updated non-atomically by [`notify`](Self::notify), so their order
+/// is not determined. A given consumer should subscribe to only one of the two channels,
+/// not both.
 #[cfg(feature = "native")]
 pub struct StateChannel<StfState: Clone> {
     state_update_sender: tokio::sync::watch::Sender<StateUpdateInfo<StfState>>,
@@ -204,7 +208,7 @@ impl<StfState: Clone> StateChannel<StfState> {
         self.storage_sender.subscribe()
     }
 
-    /// Atomically updates both channels with the new state info.
+    /// Updates both channels with the new state info.
     pub fn notify(&self, info: StateUpdateInfo<StfState>) {
         self.storage_sender.send_replace(info.storage.clone());
         self.state_update_sender.send_replace(info);

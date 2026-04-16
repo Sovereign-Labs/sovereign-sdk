@@ -25,8 +25,6 @@ use sov_modules_api::{ExecutionContext, GasSpec, VersionReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
-#[cfg(feature = "native")]
-use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::{Kernel, User};
 
