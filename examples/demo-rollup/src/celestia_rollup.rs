@@ -13,7 +13,7 @@ use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::StateUpdateReceiver;
-use sov_modules_api::{NodeEndpoints, Spec, Storage, SyncStatus, ZkVerifier};
+use sov_modules_api::{NodeEndpoints, Spec, Storage, ZkVerifier};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{
@@ -23,6 +23,7 @@ use sov_risc0_adapter::host::Risc0Host;
 use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::execution_mode::WitnessGeneration;
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;

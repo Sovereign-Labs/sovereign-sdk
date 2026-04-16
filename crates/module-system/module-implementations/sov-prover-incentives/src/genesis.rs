@@ -13,7 +13,10 @@ use crate::ProverIncentives;
 /// the allowed verifier method and a set of initial provers with their
 /// bonding amount.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(bound = "S::Address: Serialize + DeserializeOwned")]
+#[serde(
+    bound = "S::Address: Serialize + DeserializeOwned",
+    deny_unknown_fields
+)]
 #[schemars(
     bound = "S: ::sov_modules_api::Spec",
     rename = "ProverIncentivesConfig"

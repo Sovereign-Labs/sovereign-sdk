@@ -1,3 +1,8 @@
+# 2026-04-16
+- #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
+- #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
+  The change also affects call message de-serialization in sov-paymaster, for all call messages that use `PaymasterPolicyInitializer`
+
 # 2026-04-13
 - #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
 - #2735 Internal change: moves EVM RPC tests to sov-ethereum from sov-demo-rollup

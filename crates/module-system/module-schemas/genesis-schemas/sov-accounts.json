@@ -20,6 +20,7 @@
       "type": "boolean"
     }
   },
+  "additionalProperties": false,
   "definitions": {
     "AccountData_for_Address": {
       "description": "Account data for the genesis.",
@@ -41,7 +42,8 @@
           "description": "Credential ID of the account.",
           "type": "string"
         }
-      }
+      },
+      "additionalProperties": false
     },
     "Address": {
       "description": "Address",
