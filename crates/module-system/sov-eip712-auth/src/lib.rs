@@ -275,7 +275,7 @@ fn get_eip712_hash<
     raw_tx_hash: TxHash,
 ) -> Result<[u8; EIP712_HASH_LENGTH], AuthenticationError> {
     // Convert the transaction to unsigned transaction (removes signature)
-    let unsigned_tx = tx.to_unsigned_transaction();
+    let unsigned_tx = tx.as_unsigned_transaction();
 
     // Serialize the unsigned transaction - this is what should be signed
     let unsigned_tx_bytes = borsh::to_vec(&unsigned_tx).map_err(|e| {
