@@ -54,7 +54,7 @@ async fn test_parallel_proof_generation() {
     .await
     .unwrap();
 
-    let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+    let agg_elf: &[u8] = *sp1_prover::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
     let outer_vm = tokio::task::spawn_blocking(move || {
         SP1AggregationHost::new(agg_elf, code_commitment).unwrap()

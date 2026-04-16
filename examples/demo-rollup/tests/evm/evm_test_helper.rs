@@ -15,13 +15,12 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Url;
 use serde::Serialize;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup, MockRollupSpec};
+use sov_demo_rollup::{mock_da_host_args, InnerZkvm, MockDemoRollup, MockRollupSpec};
 use sov_eth_client::SimpleStorageClient;
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
-use sov_risc0_adapter::Risc0;
 use sov_sequencer::{SeqConfigExtension, SovRateLimiterConfig};
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{
@@ -40,7 +39,7 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
 pub(crate) const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 
 async fn start_node(
-    _rollup_prover_config: RollupProverConfig<Risc0>,
+    _rollup_prover_config: RollupProverConfig<InnerZkvm>,
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
@@ -53,7 +52,7 @@ async fn start_node(
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .with_rate_limiter(rate_limiter)
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
@@ -120,7 +119,7 @@ pub async fn setup_test_rollup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
-    let host_args = mock_da_risc0_host_args();
+    let host_args = mock_da_host_args();
     let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
     start_node(config, finalization_blocks, Some(extension), None, 3).await
 }
@@ -141,7 +140,7 @@ pub async fn setup_test_rollup_with_paymaster(
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.rollup_prover_config = None;
@@ -173,7 +172,7 @@ pub async fn setup_test_rollup_with_selective_paymaster(
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.rollup_prover_config = None;
