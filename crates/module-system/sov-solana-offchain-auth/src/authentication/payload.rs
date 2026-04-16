@@ -4,7 +4,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::transaction::{TransactionCallable, TxDetails, UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1};
+use sov_modules_api::transaction::{
+    TransactionCallable, TxDetails, UnsignedTransaction, UnsignedTransactionV0,
+    UnsignedTransactionV1,
+};
 use sov_modules_api::{SafeString, Spec};
 
 /// The payload for a solana offchain message.
