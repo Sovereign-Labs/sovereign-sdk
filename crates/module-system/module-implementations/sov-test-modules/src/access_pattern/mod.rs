@@ -260,6 +260,7 @@ pub struct AccessPattern<S: Spec> {
 
 /// The genesis config of the access pattern module
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[serde(deny_unknown_fields)]
 pub struct AccessPatternGenesisConfig<S: Spec> {
     /// Admin user at genesis
     pub admin: S::Address,

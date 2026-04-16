@@ -98,6 +98,7 @@ pub enum Event<S: Spec> {
 
 #[derive(Debug, Clone)]
 #[serialize(Borsh, Serde)]
+#[serde(deny_unknown_fields)]
 pub struct GenesisConfig<S: Spec> {
     pub deployment: Option<SolanaDeployment>,
     pub ism: Option<Ism>,

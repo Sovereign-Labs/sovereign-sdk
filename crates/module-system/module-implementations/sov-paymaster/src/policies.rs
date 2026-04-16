@@ -225,7 +225,7 @@ impl<Da: DaSpec> AuthorizedSequencers<Da> {
     JsonSchema,
     UniversalWallet,
 )]
-#[serde(bound = "S: Spec ")]
+#[serde(bound = "S: Spec ", deny_unknown_fields)]
 #[schemars(bound = "S: Spec", rename = "PaymasterPolicyInitializer")]
 pub struct PaymasterPolicyInitializer<S: Spec> {
     /// Default payee policy for users that are not in the balances map.
