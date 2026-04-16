@@ -11,8 +11,6 @@ pub use state_machine::*;
 #[cfg(feature = "native")]
 pub mod node;
 
-pub use sov_universal_wallet;
-
 /// Useful third-party crate re-exports.
 pub mod reexports {
     pub use {anyhow, digest, schemars};

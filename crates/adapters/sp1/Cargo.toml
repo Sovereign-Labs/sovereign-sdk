@@ -30,6 +30,7 @@ sha2 = { workspace = true }
 sp1-lib = { version = "6.1.0" }
 
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]

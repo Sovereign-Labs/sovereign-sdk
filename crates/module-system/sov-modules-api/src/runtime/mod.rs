@@ -84,7 +84,7 @@ pub trait Runtime<S: Spec>:
     + 'static
 {
     /// Chain root hash used for transaction verification. Generated from a
-    /// [schema](sov_rollup_interface::sov_universal_wallet::schema::Schema).
+    /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
     /// GenesisConfig type.
@@ -195,7 +195,7 @@ pub trait Runtime<S: Spec>:
     + 'static
 {
     /// Chain root hash used for transaction verification. Generated from a
-    /// [schema](sov_rollup_interface::sov_universal_wallet::schema::Schema).
+    /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
     /// `GenesisConfig` type.

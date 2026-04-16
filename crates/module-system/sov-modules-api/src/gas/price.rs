@@ -2,7 +2,7 @@ use crate::Amount;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::{AsMut, AsRef, Display, Into};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 use std::fmt::Debug;
 
 /// A gas price for multi-dimensional gas.

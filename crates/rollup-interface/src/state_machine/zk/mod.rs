@@ -16,7 +16,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
-use crate as sov_rollup_interface; // Needed for UniversalWallet, as it requires global paths
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
 

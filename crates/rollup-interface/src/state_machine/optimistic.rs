@@ -3,7 +3,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
-use crate as sov_rollup_interface; // Needed for UniversalWallet, as it requires global paths
 use crate::common::SlotNumber;
 use crate::da::DaSpec;
 use crate::zk::StateTransitionPublicData;

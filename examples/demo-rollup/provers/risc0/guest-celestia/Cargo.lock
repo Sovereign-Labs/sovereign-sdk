@@ -4263,6 +4263,7 @@ dependencies = [
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "tendermint",
  "tendermint-proto",
  "thiserror 2.0.18",
@@ -4295,6 +4296,7 @@ dependencies = [
  "serde",
  "serde_with",
  "sov-rollup-interface",
+ "sov-universal-wallet",
 ]
 
 [[package]]
@@ -4412,6 +4414,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "tracing",
  "url",
 ]
@@ -4430,6 +4433,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "thiserror 2.0.18",
 ]
 
@@ -4585,6 +4589,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-metrics",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "sov-zkvm-utils",
  "thiserror 2.0.18",
  "tracing",
@@ -4660,6 +4665,7 @@ dependencies = [
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-universal-wallet",
 ]
 
 [[package]]
