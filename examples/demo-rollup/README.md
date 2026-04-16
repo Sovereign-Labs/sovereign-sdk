@@ -53,9 +53,11 @@ If you don't need ZK guest to be compiled,
 for faster compilation time you can export `export SKIP_GUEST_BUILD=1`environment variable in each terminal you run.
 There are multiple options available:
 - `export SKIP_GUEST_BUILD=1` or `export SKIP_GUEST_BUILD=true`: both guest VMs builds are skipped
-* `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 guest is built.
-* `export SKIP_GUEST_BUILD=sp1`: only sp1 VM build is skipped, risc0 is built.
+* `export SKIP_GUEST_BUILD=sp1`: only sp1 VM build is skipped, risc0 guest is built.
+* `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 is built.
 * `export SKIP_GUEST_BUILD=0`, `export SKIP_GUEST_BUILD=false` or any other string: both guests are built.
+
+The default `MockDemoRollup` blueprint uses SP1 as the inner zkVM, so the SP1 guest ELF is required when proving is enabled.
 
 By default, demo-rollup disables proving. If you want to enable proving, several options are available:
 
@@ -74,7 +76,6 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
-$ export RISC0_DEV_MODE=true
 $ export SOV_PROVER_MODE=prove
 $ make build
 ```
@@ -89,7 +90,7 @@ $ make clean
 3. Now run the demo-rollup full node, as shown below.
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ RISC0_DEV_MODE=true ../../target/debug/sov-demo-rollup
+$ ../../target/debug/sov-demo-rollup
 ```
 
 Leave it running while you proceed with the rest of the demo.

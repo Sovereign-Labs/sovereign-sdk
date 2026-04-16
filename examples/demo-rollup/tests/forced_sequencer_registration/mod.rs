@@ -19,7 +19,7 @@ use secp256k1::SecretKey;
 use sov_api_spec::types as api_types;
 use sov_bank::config_gas_token_id;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::{mock_da_sp1_host_args, MockDemoRollup};
 use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
@@ -32,7 +32,7 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey as _;
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
 use sov_modules_macros::config_value;
-use sov_risc0_adapter::crypto::private_key::Risc0PrivateKey;
+use sov_sp1_adapter::crypto::private_key::SP1PrivateKey;
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::ForcedTxBatchNotification;
 use sov_synthetic_load::CallMessage as SyntheticLoadCall;
@@ -353,7 +353,7 @@ async fn setup_with_block_producing(
         block_producing,
         FINALIZATION_BLOCKS,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_sp1_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.automatic_batch_production = true;
@@ -684,11 +684,11 @@ async fn forced_txs_resync_test_case(
     // - funded_key: has gas tokens, so its txs will succeed
     // - unfunded_key: no gas tokens, so its txs will fail (tests error handling)
     // - post_resync_recipient: separate recipient so post-resync txs don't affect main balance checks
-    let funded_key = Risc0PrivateKey::generate();
+    let funded_key = SP1PrivateKey::generate();
     let funded_address = funded_key.pub_key().credential_id().into();
-    let unfunded_key = Risc0PrivateKey::generate();
+    let unfunded_key = SP1PrivateKey::generate();
     let post_resync_recipient: <TestSpec as Spec>::Address =
-        Risc0PrivateKey::generate().pub_key().credential_id().into();
+        SP1PrivateKey::generate().pub_key().credential_id().into();
 
     let preferred_transfer = 50u128;
     let forced_transfer = 5u128;

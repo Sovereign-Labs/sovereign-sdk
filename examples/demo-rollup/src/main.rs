@@ -11,8 +11,8 @@ use sov_db::config::{
     RollupDbConfigWithCustomizations, VersionedColumnFamilyKind,
 };
 use sov_demo_rollup::{
-    celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, ExternalMockDemoRollup,
-    MockDemoRollup,
+    celestia_risc0_host_args, mock_da_risc0_host_args, mock_da_sp1_host_args, CelestiaDemoRollup,
+    ExternalMockDemoRollup, MockDemoRollup,
 };
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -21,6 +21,7 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_rollup_blueprint::logging::initialize_logging;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, Rollup};
 use sov_risc0_adapter::Risc0;
+use sov_sp1_adapter::SP1;
 use sov_stf_runner::processes::{RollupProverConfig, RollupProverConfigDiscriminants};
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
@@ -96,7 +97,7 @@ async fn run() -> anyhow::Result<()> {
     match args.da_layer {
         SupportedDaLayer::Mock => {
             let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+                .map(|config_disc| config_disc.into_config(mock_da_sp1_host_args()));
             let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -237,7 +238,7 @@ async fn new_rollup_with_celestia_da(
 async fn new_rollup_with_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig<Risc0>>,
+    prover_config: Option<RollupProverConfig<SP1>>,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {

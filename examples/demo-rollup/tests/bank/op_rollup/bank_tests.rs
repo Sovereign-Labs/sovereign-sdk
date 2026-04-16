@@ -10,7 +10,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use sov_api_spec::types::AcceptTxBody;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::{mock_da_sp1_host_args, MockDemoRollup};
 use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::default_spec::DefaultSpec;

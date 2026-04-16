@@ -8,7 +8,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
 use sov_db::test_utils::CommitFaultInjectionLocation;
 use sov_db::test_utils::CRASH_ON_COMMIT_ENV_NAME;
-use sov_demo_rollup::mock_da_risc0_host_args;
+use sov_demo_rollup::mock_da_sp1_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_demo_rollup::MockRollupSpec;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
@@ -38,7 +38,7 @@ async fn start_node(
         BlockProducingConfig::Manual,
         0,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .with_zkvm_host_args(mock_da_sp1_host_args())
     .set_da_config(|da_config: &mut MockDaConfig| {
         da_config.da_layer = Some(da_layer);
     })
