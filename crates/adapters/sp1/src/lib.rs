@@ -103,8 +103,9 @@ impl ZkVerifier for SP1Verifier {
         // public inputs and accepts Core/Compressed unconditionally.
         match &prover {
             sp1_sdk::blocking::EnvProver::Mock(mock) => {
-                sp1_sdk::blocking::Prover::verify(mock, &proof, &verifying_key, None)?
+                sp1_sdk::blocking::Prover::verify(mock, &proof, &verifying_key, None)?;
             }
+
             _ => sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?,
         }
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
