@@ -117,7 +117,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
     pub fn to_multisig_tx(
         self,
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
-    ) -> Version1<R::Call, S> {
+    ) -> Version1<R, S> {
         Version1 {
             signatures: SafeVec::new(),
             unused_pub_keys: multisig
