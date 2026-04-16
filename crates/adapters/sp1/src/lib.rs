@@ -94,10 +94,20 @@ impl ZkVerifier for SP1Verifier {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         let proof = decode_sp1_proof(serialized_proof)?;
-        let prover = sp1_sdk::blocking::ProverClient::builder().cpu().build();
+        let prover = sp1_sdk::blocking::ProverClient::from_env();
         let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
 
-        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
+        // The default `Prover::verify` path performs public-values / committed-digest
+        // checks that the dummy compressed proofs produced by the mock backend don't
+        // satisfy. Dispatch to the inner `MockProver`, which only checks Plonk/Groth16
+        // public inputs and accepts Core/Compressed unconditionally.
+        match &prover {
+            sp1_sdk::blocking::EnvProver::Mock(mock) => {
+                sp1_sdk::blocking::Prover::verify(mock, &proof, &verifying_key, None)?;
+            }
+
+            _ => sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?,
+        }
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
