@@ -1,0 +1,19 @@
+[package]
+name = "sov-rollup-full-node-interface"
+description = "Full-node coordination types shared between sov-stf-runner, sov-sequencer, and sov-modules-rollup-blueprint"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = "Sovereign Permissionless Commercial License"
+repository = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+derive_more = { workspace = true, features = ["debug"] }
+rockbound = { workspace = true }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+tokio = { workspace = true, features = ["sync"] }
