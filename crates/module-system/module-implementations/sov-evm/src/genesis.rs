@@ -22,6 +22,7 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct AccountData {
     /// Account address.
     pub address: Address,
