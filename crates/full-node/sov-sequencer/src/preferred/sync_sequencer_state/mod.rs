@@ -174,6 +174,7 @@ pub(crate) fn create<S, Rt>(
     tx_cache_writer: TxResultWriter<S, Rt>,
     cache_warm_up_executor: CacheWarmUpExecutor<S>,
     start_replica_task_notifier: EventReceiverStartNotifier,
+    approximate_block_time: std::time::Duration,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -226,6 +227,14 @@ where
         cache_warm_up_executor,
         start_replica_task_notifier,
         rate_limiter,
+        approximate_block_time,
+        batch_start_time: std::time::Instant::now(),
+        moving_average_batch_size: 0,
+        size_limit_bias: 0.0,
+        last_tick_time: std::time::Instant::now(),
+        bytes_offered_since_last_tick: 0,
+        bytes_offered_weighted_average: 0,
+        current_tx_accept_rate_bytes_per_second: seq_config.max_batch_size_bytes as f64 / approximate_block_time.as_secs_f64(),
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));

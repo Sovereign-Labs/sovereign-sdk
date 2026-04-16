@@ -81,6 +81,7 @@ where
     pub(crate) latest_info: StateUpdateInfo<S::Storage>,
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
+    pub(crate) batch_start_time: std::time::Instant,
     pub(crate) is_ready: Result<(), SequencerNotReadyDetails>,
     pub(crate) in_flight_blobs: Arc<AtomicUsize>,
     pub(crate) executor_events_sender: ExecutorEventsSender<S, Rt>,
@@ -102,6 +103,13 @@ where
     pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
     pub(crate) rate_limiter: SovRateLimiter<S>,
+    pub(crate) approximate_block_time: std::time::Duration,
+    pub(crate) moving_average_batch_size: usize,
+    pub(crate) size_limit_bias: f64,
+    pub(crate) last_tick_time: std::time::Instant,
+    pub(crate) bytes_offered_since_last_tick: u64,
+    pub(crate) bytes_offered_weighted_average: u64,
+    pub(crate) current_tx_accept_rate_bytes_per_second: f64,
 }
 
 // We submit metrics when this guard is dropped.
@@ -629,6 +637,7 @@ where
             checkpoint: old_checkpoint,
             sequence_number,
         };
+        self.batch_start_time = std::time::Instant::now();
 
         self.cache_warm_up_executor
             .send_batch_start_notification(notification);
@@ -740,6 +749,20 @@ where
         (Ok((rx, remaining_slot_gas)), resource_used)
     }
 
+    fn update_size_limit_bias_on_batch_close(&mut self) {
+        let target_size = (self.batch_size_tracker.max_batch_size as u64)
+        .checked_div(20)
+        .and_then(|x| x.checked_mul(19)).unwrap_or(0) as f64;
+        let target_rate = target_size / self.approximate_block_time.as_secs_f64();
+        let err_frac = (target_size - self.batch_size_tracker.current_batch_size as f64) / target_size;
+        let k_i = 0.1; // Tune this constant to make the bias evolve faster or slower. Faster will oscillate more
+        let next_bias = self.size_limit_bias + k_i * err_frac * target_rate;
+        let bias_min = -0.5 * target_rate;
+        let bias_max =  0.5 * target_rate;
+        self.size_limit_bias = next_bias.clamp(bias_min, bias_max);
+
+    }
+
     /// Closes the current batch.
     ///
     /// This should be called only when...
@@ -751,6 +774,9 @@ where
     pub(crate) async fn close_current_batch(&mut self) {
         // Terminate the batch.
         let forced_txs = self.executor.end_rollup_block().await;
+        self.moving_average_batch_size += self.batch_size_tracker.current_batch_size; 
+        self.moving_average_batch_size /= 2;
+        self.update_size_limit_bias_on_batch_close();
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor
