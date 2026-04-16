@@ -15,9 +15,9 @@ use sov_rollup_interface::zk::aggregated_proof::{
 };
 use sov_rollup_interface::zk::ZkvmHost;
 use sp1_sdk::blocking::ProveRequest;
-use sp1_sdk::blocking::{CpuProver, MockProver, Prover, ProverClient};
+use sp1_sdk::blocking::{EnvProver, EnvProvingKey, Prover, ProverClient};
 use sp1_sdk::ProvingKey;
-use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{HashableKey, SP1Proof, SP1Stdin};
 
 /// SP1 host that produces aggregated (outer) proofs by recursively verifying
 /// a batch of inner state-transition proofs inside an SP1 guest program.
@@ -135,16 +135,20 @@ impl SP1AggregationHost {
 }
 
 /// SP1 Host implementation.
+#[derive(Clone)]
 pub struct SP1Host {
-    prover: CpuProver,
-    pk: Arc<SP1ProvingKey>,
+    prover: EnvProver,
+    pk: Arc<EnvProvingKey>,
+    is_mock: bool,
 }
 
 /// Instantiate a new SP1 Host.
 impl SP1Host {
     /// Create a new SP1 Host.
     pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
-        let prover = ProverClient::builder().cpu().build();
+        let prover = ProverClient::from_env();
+        let is_mock = std::env::var("SP1_PROVER").as_deref() == Ok("mock");
+
         let pk = prover
             .setup(elf.into())
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
@@ -152,6 +156,7 @@ impl SP1Host {
         Ok(Self {
             prover,
             pk: Arc::new(pk),
+            is_mock,
         })
     }
 
@@ -179,23 +184,20 @@ impl SP1Host {
     }
 
     fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-        let output: sp1_sdk::SP1ProofWithPublicValues = self
-            .prover
-            .prove(&self.pk, stdin)
-            .compressed()
+        // Under the mock backend the inner compressed proofs are dummies that
+        // would fail the executor-side deferred-proof check. Skip that check so
+        // mock aggregation can run end-to-end; real backends keep it on.
+        let request = self.prover.prove(&self.pk, stdin).compressed();
+        let request = if self.is_mock {
+            request.deferred_proof_verification(false)
+        } else {
+            request
+        };
+        let output: sp1_sdk::SP1ProofWithPublicValues = request
             .run()
             .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
 
         Ok(output)
-    }
-}
-
-impl Clone for SP1Host {
-    fn clone(&self) -> Self {
-        Self {
-            prover: self.prover.clone(),
-            pk: self.pk.clone(),
-        }
     }
 }
 
@@ -224,54 +226,6 @@ impl ZkvmHost for SP1Host {
         Ok(crate::SP1MethodId(bincode::serialize(
             self.pk.verifying_key(),
         )?))
-    }
-}
-
-/// SP1 prover that uses the mock backend for fast, deterministic proving
-/// without generating real cryptographic proofs.
-///
-/// Useful for testing and development where proof validity doesn't matter
-/// but the proving pipeline needs to be exercised end-to-end.
-#[derive(Clone)]
-pub struct MockSp1Prover {
-    prover: MockProver,
-    pk: Arc<SP1ProvingKey>,
-}
-
-impl MockSp1Prover {
-    /// Creates a new mock prover for the given guest ELF binary.
-    pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
-        let prover = ProverClient::builder().mock().build();
-        let pk = prover
-            .setup(elf.into())
-            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
-
-        Ok(Self {
-            prover,
-            pk: Arc::new(pk),
-        })
-    }
-
-    /// Writes `item` to the guest's stdin and generates a compressed mock proof.
-    pub fn add_hint_and_run<T: Serialize>(
-        &self,
-        item: &T,
-    ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-        let mut stdin = SP1Stdin::new();
-        stdin.write(item);
-
-        self.prover
-            .prove(&self.pk, stdin)
-            .compressed()
-            .run()
-            .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))
-    }
-
-    /// Verifies a mock proof against the program's verifying key.
-    pub fn verify(&self, proof: &sp1_sdk::SP1ProofWithPublicValues) -> anyhow::Result<()> {
-        self.prover
-            .verify(proof, self.pk.verifying_key(), None)
-            .map_err(|e| anyhow::anyhow!("SP1 verification failed. Error: {:?}", e))
     }
 }
 
