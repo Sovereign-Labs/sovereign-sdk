@@ -107,8 +107,6 @@ pub use sov_rollup_interface::crypto::{CredentialId, PublicKey, Signature};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::node::da::SlotData;
-#[cfg(feature = "native")]
-pub use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 pub use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
 pub use sov_rollup_interface::reexports::digest;
 pub use sov_rollup_interface::stf::{
