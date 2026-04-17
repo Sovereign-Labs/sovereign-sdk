@@ -9,7 +9,7 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier};
@@ -20,7 +20,6 @@ use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
-use sov_sp1_adapter::SP1CryptoSpec;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
@@ -35,7 +34,7 @@ pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
+type Hasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
@@ -46,7 +45,7 @@ pub type MockRollupSpec<M> = ConfigurableSpec<
     MockZkvm,
     MultiAddressEvmSolana,
     M,
-    SP1CryptoSpec,
+    MockZkvmCryptoSpec,
     NativeStorage,
 >;
 
