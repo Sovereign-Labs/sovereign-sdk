@@ -179,19 +179,35 @@ async fn test_state_map_iteration() {
     test_rollup.shutdown().await.unwrap();
 }
 
-async fn assert_state_map_values(test_rollup: &TestRollup<TestNomtBlueprint>, values: &BTreeMap<StateKey, u32>) {
-	let response = test_rollup.client
-            .query_rest_endpoint::<PaginatedResponse<StateItemContents<StateKey, u32>, Option<String>>>(&format!(
-                "/modules/state-map-tester/state/values/items"
-            ))
-            .await.unwrap();
 
-	assert_eq!(response.items.len(), values.len());
-	for (item, value) in response.items.iter().zip(values.iter()) {
+async fn assert_state_map_values(test_rollup: &TestRollup<TestNomtBlueprint>, values: &BTreeMap<StateKey, u32>) {
+	let mut items = Vec::new();
+	let mut cursor: Option<String> = None;
+	loop {
+		let query_string = if let Some(cursor) = cursor {
+			format!("?page=next&page%5Bcursor%5D={cursor}&page%5Bsize%5D=25")
+		} else {
+			String::new()
+		};
+		let url = format!("/modules/state-map-tester/state/values/items{query_string}");
+
+		let response = test_rollup.client
+            .query_rest_endpoint::<PaginatedResponse<StateItemContents<StateKey, u32>, String>>(&url)
+            .await.unwrap();
+		items.extend(response.items);
+		cursor = response.next_cursor;
+		if cursor.is_none() {
+			break;
+		}
+	}
+	
+	assert_eq!(items.len(), values.len());
+	for (item, value) in items.iter().zip(values.iter()) {
 		assert_eq!(item.key(), Some(value.0));
 		assert_eq!(item.value(), Some(value.1));
 	}
 }
+
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
