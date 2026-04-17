@@ -8846,11 +8846,11 @@ dependencies = [
 
 [[package]]
 name = "reltester"
-version = "2.0.0"
-source = "git+https://github.com/sovereign-labs/reltester.git?rev=d6209abff72929f5ba41614f5cea3e4a748428c3#d6209abff72929f5ba41614f5cea3e4a748428c3"
+version = "2.1.0"
+source = "git+https://github.com/sovereign-labs/reltester.git?rev=e5ee0a7850a8fc8a747604dc3084530a63eecfd9#e5ee0a7850a8fc8a747604dc3084530a63eecfd9"
 dependencies = [
  "rand 0.8.5",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
