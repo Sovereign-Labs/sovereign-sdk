@@ -2,7 +2,7 @@ use crate::http::id_provider::HexIdProvider;
 use crate::CorsConfiguration;
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::{ConnectInfo, Request};
+use axum::extract::{ConnectInfo, MatchedPath, Request};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
@@ -186,9 +186,15 @@ fn ws_service(methods: RpcModule<()>, stop_handle: StopHandle) -> TowerService<I
         .build(methods, stop_handle)
 }
 
-async fn measure_time(req: Request, next: Next) -> impl IntoResponse {
+async fn measure_time(
+    matched_path: Option<MatchedPath>,
+    req: Request,
+    next: Next,
+) -> impl IntoResponse {
     let method = req.method().clone();
-    let uri = req.uri().clone();
+    let path = matched_path
+        .map(|mp| mp.as_str().to_owned())
+        .unwrap_or_else(|| "unmatched".to_owned());
 
     let start = std::time::Instant::now();
 
@@ -203,7 +209,7 @@ async fn measure_time(req: Request, next: Next) -> impl IntoResponse {
     track_metrics(|tracker| {
         let point = HttpMetrics {
             request_method: method,
-            request_uri: uri,
+            request_path: path,
             response_status: status,
             response_body_size: exact_or_lower,
             handler_processing_time: duration,

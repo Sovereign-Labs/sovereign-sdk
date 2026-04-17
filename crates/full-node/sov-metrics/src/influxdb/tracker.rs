@@ -569,8 +569,8 @@ impl KnownMetric for RpcMetrics {
 pub struct HttpMetrics {
     /// HTTP method.
     pub request_method: http::Method,
-    /// URI being requested.
-    pub request_uri: http::Uri,
+    /// Route template path (e.g. `/ledger/slots/{slotId}`).
+    pub request_path: String,
     /// Status code of the response.
     pub response_status: http::StatusCode,
     /// Approximate size of the response body.
@@ -595,7 +595,7 @@ impl Metric for HttpMetrics {
             // Tags
             self.request_method,
             self.response_status.as_u16(),
-            self.request_uri.path(),
+            self.request_path,
             self.is_ws,
             // Fields
             self.handler_processing_time.as_micros(),
