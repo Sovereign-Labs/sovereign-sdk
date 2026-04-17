@@ -29,6 +29,7 @@ use sov_modules_stf_blueprint::{process_tx_and_reward_prover, ApplyTxResult, Pre
 use sov_rest_utils::json_obj;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::DaSyncState;
+use sov_rollup_interface::StateUpdateInfo;
 use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;

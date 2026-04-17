@@ -17,7 +17,7 @@ use sov_mock_da::{
 };
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
-use sov_modules_api::{FullyBakedTx, ProofSender, StateTransitionFunction, StateUpdateInfo};
+use sov_modules_api::{FullyBakedTx, ProofSender, StateTransitionFunction};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
@@ -25,6 +25,7 @@ use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStat
 use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::{StateChannel, StateUpdateInfo};
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::NativeStorage;
@@ -211,11 +212,12 @@ pub async fn initialize_runner(
         .await
         .unwrap();
     let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
-    let (state_update_sender, state_update_recv) = watch::channel(
+    let state_channel = StateChannel::new(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await
             .unwrap(),
     );
+    let state_update_recv = state_channel.subscribe_state_update();
 
     let (prev_state_root, genesis_state_root) = init_variant
         .initialize(&stf, &mut storage_manager)
@@ -260,7 +262,7 @@ pub async fn initialize_runner(
         ledger_db.clone(),
         stf,
         storage_manager,
-        state_update_sender,
+        state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),

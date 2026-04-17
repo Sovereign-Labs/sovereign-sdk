@@ -22,8 +22,7 @@ use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
-use tokio::sync::watch;
+use sov_rollup_interface::{ProvableHeightTracker, StateChannel};
 
 /// Result of checking if a block is a valid continuation of the current chain.
 ///
@@ -113,6 +112,7 @@ pub struct StateManager<StateRoot, Witness, Sm, Da>
 where
     Da: DaService,
     Sm: HierarchicalStorageManager<Da::Spec>,
+    Sm::StfState: Clone,
 {
     storage_manager: Sm,
     ledger_db: LedgerDb,
@@ -127,7 +127,7 @@ where
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
-    state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+    state_channel: StateChannel<Sm::StfState>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
@@ -152,7 +152,7 @@ where
         storage_manager: Sm,
         ledger_db: LedgerDb,
         last_processed_finalized_state_root: StateRoot,
-        state_update_channel: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+        state_channel: StateChannel<Sm::StfState>,
         stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
@@ -167,7 +167,7 @@ where
             last_processed_finalized_header,
             state_on_block: Default::default(),
             seen_on_height: Default::default(),
-            state_update_sender: state_update_channel,
+            state_channel,
             stf_info_sender,
             max_provable_slot_number_tracker: state_height_tracker,
             is_initialized: false,
@@ -560,7 +560,7 @@ where
         // we don't need. It will also keep working even if there are no
         // receivers currently alive, which makes it easier to reason about the
         // code.
-        self.state_update_sender.send_replace(state_update_info);
+        self.state_channel.notify(state_update_info);
 
         Ok(())
     }

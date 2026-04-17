@@ -168,3 +168,49 @@ pub struct StateUpdateInfo<StfState> {
     ///  The node's sync status at the time this `StateUpdateInfo` was created.
     pub sync_status: crate::node::SyncStatus,
 }
+
+/// A coordinating channel that manages both a full [`StateUpdateInfo`] channel
+/// and a storage-only channel. Consumers that only need the latest storage (e.g. bonding proof
+/// services) can subscribe to the storage channel, avoiding a dependency on the full
+/// `StateUpdateInfo` type and its transitive dependencies.
+///
+/// The two channels are updated non-atomically by [`notify`](Self::notify), so their order
+/// is not determined. A given consumer should subscribe to only one of the two channels,
+/// not both.
+#[cfg(feature = "native")]
+pub struct StateChannel<StfState: Clone> {
+    state_update_sender: tokio::sync::watch::Sender<StateUpdateInfo<StfState>>,
+    storage_sender: tokio::sync::watch::Sender<StfState>,
+}
+
+#[cfg(feature = "native")]
+impl<StfState: Clone> StateChannel<StfState> {
+    /// Creates a new [`StateChannel`] initialized with the given [`StateUpdateInfo`].
+    pub fn new(initial: StateUpdateInfo<StfState>) -> Self {
+        let storage = initial.storage.clone();
+        let (state_update_sender, _) = tokio::sync::watch::channel(initial);
+        let (storage_sender, _) = tokio::sync::watch::channel(storage);
+        Self {
+            state_update_sender,
+            storage_sender,
+        }
+    }
+
+    /// Returns a receiver for full [`StateUpdateInfo`] updates.
+    pub fn subscribe_state_update(
+        &self,
+    ) -> tokio::sync::watch::Receiver<StateUpdateInfo<StfState>> {
+        self.state_update_sender.subscribe()
+    }
+
+    /// Returns a receiver for storage-only updates.
+    pub fn subscribe_storage(&self) -> tokio::sync::watch::Receiver<StfState> {
+        self.storage_sender.subscribe()
+    }
+
+    /// Updates both channels with the new state info.
+    pub fn notify(&self, info: StateUpdateInfo<StfState>) {
+        self.storage_sender.send_replace(info.storage.clone());
+        self.state_update_sender.send_replace(info);
+    }
+}
