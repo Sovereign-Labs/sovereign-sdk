@@ -7,6 +7,7 @@ homepage = { workspace = true }
 license = "Sovereign Permissionless Commercial License"
 repository = { workspace = true }
 version = { workspace = true }
+publish = true
 readme = "README.md"
 
 [lints]
