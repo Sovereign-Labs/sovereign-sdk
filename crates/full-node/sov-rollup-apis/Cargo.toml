@@ -36,6 +36,7 @@ sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-api-spec = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-rollup-full-node-interface = { workspace = true }
 sov-uniqueness = { workspace = true }
 
 [dev-dependencies]

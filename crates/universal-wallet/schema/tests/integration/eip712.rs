@@ -5,8 +5,6 @@ use sov_universal_wallet::schema::safe_string::SafeString;
 use sov_universal_wallet::schema::Schema;
 use sov_universal_wallet::UniversalWallet;
 
-use crate::sov_rollup_interface;
-
 #[derive(BorshSerialize, BorshDeserialize, UniversalWallet)]
 struct Address([u8; 32]);
 #[derive(BorshSerialize, BorshDeserialize, UniversalWallet)]

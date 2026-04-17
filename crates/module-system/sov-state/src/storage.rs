@@ -10,7 +10,7 @@ use serde::Serialize;
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::reexports::digest::{typenum, Digest};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::codec::EncodeLike;
 use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};

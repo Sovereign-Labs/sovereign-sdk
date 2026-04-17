@@ -28,11 +28,10 @@ type TestParallelProverService = ParallelProverService<
 ///
 /// Prerequisites:
 ///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
-///   - Sufficient CPU resources for local proving
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Requires SP1 guest ELF and significant CPU resources for local proving"]
 async fn test_parallel_proof_generation() {
-    tracing_subscriber::fmt::init();
+    // Use the mock prover: CPU proving is far too slow to run in tests.
+    std::env::set_var("SP1_PROVER", "mock");
 
     let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
     assert!(

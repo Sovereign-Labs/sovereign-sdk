@@ -2,10 +2,6 @@ use std::ops::{Deref, DerefMut};
 
 use sov_universal_wallet::UniversalWallet;
 
-// Needed for UniversalWallet derive macro because we are inside the
-// sov_rollup_interface crate.
-use crate as sov_rollup_interface;
-
 /// Uniquely identifies a slot **within the canonical DA fork**.
 ///
 /// Slots across reorgs can have the same [`SlotNumber`].

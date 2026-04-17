@@ -10,6 +10,7 @@ repository.workspace = true
 
 [dependencies]
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["macros"] }
 borsh = { workspace = true, features = ["rc"] }
 digest = { workspace = true }
 rockbound = { workspace = true, optional = true }

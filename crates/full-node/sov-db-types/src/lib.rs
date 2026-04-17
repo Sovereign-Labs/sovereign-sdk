@@ -9,7 +9,7 @@ use rockbound::versioned_db::HasPrefix;
 #[cfg(feature = "native")]
 use rockbound::versioned_db::VersionedSchemaKeyMarker;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 use core::{fmt, str};
 
@@ -77,7 +77,7 @@ mod private {
     use borsh::{BorshDeserialize, BorshSerialize};
     use serde::{Deserialize, Serialize};
     use serde_with::{serde_as, Bytes};
-    use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+    use sov_universal_wallet::UniversalWallet;
 
     /// The total number of bytes in an inline key.
     ///

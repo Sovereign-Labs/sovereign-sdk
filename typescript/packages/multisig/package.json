@@ -11,7 +11,10 @@
     "test:integration": "vitest run **/*.integration-test.ts",
     "typecheck": "tsc --noEmit"
   },
-  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sovereign-Labs/sovereign-sdk.git"
+  },
   "files": ["dist", "README.md", "package.json"],
   "exports": {
     ".": {

@@ -10,7 +10,7 @@ use ed25519_dalek::{
 use schemars::JsonSchema;
 use sov_rollup_interface::common::HexString;
 use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
-use sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema;
+use sov_universal_wallet::schema::OverrideSchema;
 
 /// Defines private key types and operations
 #[cfg(feature = "native")]

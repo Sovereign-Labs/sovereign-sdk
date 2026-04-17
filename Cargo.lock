@@ -11475,6 +11475,7 @@ dependencies = [
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-test-utils",
+ "sov-universal-wallet",
  "tendermint",
  "tendermint-proto",
  "test-strategy",
@@ -11595,6 +11596,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sov-rollup-interface",
+ "sov-universal-wallet",
 ]
 
 [[package]]
@@ -11657,6 +11659,7 @@ dependencies = [
  "sov-paymaster",
  "sov-proxy-utils",
  "sov-risc0-adapter",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-rpc-eth-types",
  "sov-sequencer",
@@ -12110,6 +12113,7 @@ dependencies = [
  "sov-mock-da",
  "sov-rollup-interface",
  "sov-test-utils",
+ "sov-universal-wallet",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -12138,6 +12142,7 @@ dependencies = [
  "sha2 0.10.9",
  "sov-mock-zkvm",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "thiserror 2.0.17",
  "tokio",
 ]
@@ -12279,6 +12284,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-rollup-apis",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
@@ -12493,6 +12499,7 @@ dependencies = [
  "sov-metrics",
  "sov-risc0-adapter",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "sov-zkvm-utils",
  "thiserror 2.0.17",
  "tracing",
@@ -12523,6 +12530,7 @@ dependencies = [
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-rest-utils",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
@@ -12532,6 +12540,17 @@ dependencies = [
  "thiserror 2.0.17",
  "tracing",
  "utoipa-swagger-ui",
+]
+
+[[package]]
+name = "sov-rollup-full-node-interface"
+version = "0.3.0"
+dependencies = [
+ "derive_more 2.0.1",
+ "rockbound",
+ "sov-rollup-interface",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -12552,7 +12571,6 @@ dependencies = [
  "jsonschema",
  "proptest",
  "proptest-derive 0.5.1",
- "rockbound",
  "schemars 0.8.22",
  "serde",
  "serde_json",
@@ -12632,6 +12650,7 @@ dependencies = [
  "sov-node-client",
  "sov-paymaster",
  "sov-rest-utils",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-state",
  "sov-stf-runner",
@@ -12772,6 +12791,7 @@ dependencies = [
  "sov-node-client",
  "sov-paymaster",
  "sov-rest-utils",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-solana-offchain-auth",
@@ -12807,6 +12827,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sp1-adapter",
  "sov-test-utils",
+ "sov-universal-wallet",
  "sov-zkvm-utils",
  "sp1-build",
  "sp1-lib",
@@ -12841,6 +12862,7 @@ dependencies = [
  "sov-mock-da",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-universal-wallet",
  "tempfile",
  "test-strategy",
  "tracing",
@@ -12876,6 +12898,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-rest-utils",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
@@ -12989,6 +13012,7 @@ dependencies = [
  "sov-paymaster",
  "sov-prover-incentives",
  "sov-rollup-apis",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-sequencer-registry",

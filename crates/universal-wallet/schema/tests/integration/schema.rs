@@ -12,9 +12,6 @@ use sov_universal_wallet::schema::{
 };
 use sov_universal_wallet::UniversalWallet;
 
-// The fake sov_rollup_interface for fixing macro namespacing
-use crate::sov_rollup_interface;
-
 #[derive(Debug, Serialize)]
 struct TestVector {
     /// The JSON object to be serialized to borsh
