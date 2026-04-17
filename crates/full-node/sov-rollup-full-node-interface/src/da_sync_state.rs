@@ -44,6 +44,7 @@ impl DaSyncState {
                     }
                 },
             )
+            // Err means target was already >= synced, so no update needed.
             .ok();
 
         if let Err(e) = self.sync_status_sender.send(self.status()) {

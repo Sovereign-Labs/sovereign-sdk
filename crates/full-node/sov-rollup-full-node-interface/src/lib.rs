@@ -14,7 +14,7 @@ mod da_sync_state;
 
 pub use da_sync_state::DaSyncState;
 use sov_rollup_interface::common::SlotNumber;
-pub use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::node::SyncStatus;
 
 /// Structure that holds information about the state update that happened in the block.
 #[derive(Clone, derive_more::Debug)]
