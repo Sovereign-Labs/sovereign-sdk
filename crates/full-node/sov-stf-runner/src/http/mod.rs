@@ -192,31 +192,31 @@ async fn measure_time(
     next: Next,
 ) -> impl IntoResponse {
     let method = req.method().clone();
-    let path = matched_path
-        .map(|mp| mp.as_str().to_owned())
-        .unwrap_or_else(|| "unmatched".to_owned());
-
     let start = std::time::Instant::now();
 
     let response = next.run(req).await;
     let duration = start.elapsed();
 
-    let body = response.body();
-    let status = response.status();
-    let size_hint = body.size_hint();
-    let exact_or_lower = size_hint.exact().unwrap_or_else(|| size_hint.lower());
+    // Skip metrics for unmatched routes (404s) to avoid cardinality explosion
+    // from arbitrary paths hitting the server.
+    if let Some(matched_path) = matched_path {
+        let body = response.body();
+        let status = response.status();
+        let size_hint = body.size_hint();
+        let exact_or_lower = size_hint.exact().unwrap_or_else(|| size_hint.lower());
 
-    track_metrics(|tracker| {
-        let point = HttpMetrics {
-            request_method: method,
-            request_path: path,
-            response_status: status,
-            response_body_size: exact_or_lower,
-            handler_processing_time: duration,
-            is_ws: false,
-        };
-        tracker.submit_known_metric(point);
-    });
+        track_metrics(|tracker| {
+            let point = HttpMetrics {
+                request_method: method,
+                request_path: matched_path.as_str().to_owned(),
+                response_status: status,
+                response_body_size: exact_or_lower,
+                handler_processing_time: duration,
+                is_ws: false,
+            };
+            tracker.submit_known_metric(point);
+        });
+    }
 
     response
 }

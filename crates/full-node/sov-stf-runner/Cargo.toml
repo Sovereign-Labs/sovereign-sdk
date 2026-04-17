@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 sov-rest-utils = { workspace = true }
 anyhow = { workspace = true }
-axum = { workspace = true, features = ["tokio", "http1", "http2", "ws", "matched-path"] }
+axum = { workspace = true, features = ["tokio", "http1", "http2", "ws"] }
 rockbound = { workspace = true }
 bincode = { workspace = true }
 derivative = { workspace = true }
