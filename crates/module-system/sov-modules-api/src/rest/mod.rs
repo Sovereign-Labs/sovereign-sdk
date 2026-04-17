@@ -62,7 +62,7 @@ pub extern crate sov_rest_utils as utils;
 ///   pagination for structured state items like
 ///   [`StateVec`](crate::containers::StateVec).
 pub trait HasRestApi<S: Spec> {
-    /// Returns an [`axum::Router`] on the provided [`StateUpdateReceiver`] instance for the REST API.
+    /// Returns an [`axum::Router`] on the provided [`ApiState`] instance for the REST API.
     fn rest_api(&self, _state: ApiState<S>) -> axum::Router<()>;
 
     /// Returns the OpenAPI specification for [`HasRestApi::rest_api`].
