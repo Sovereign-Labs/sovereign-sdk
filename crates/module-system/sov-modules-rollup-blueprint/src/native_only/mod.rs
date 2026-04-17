@@ -11,20 +11,22 @@ use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
-use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
-    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateChannel, StateCheckpoint,
-    VersionReader, ZkVerifier,
+    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, VersionReader,
+    ZkVerifier,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateChannel;
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
-use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::preferred::PreferredSequencer;
 use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
@@ -482,11 +484,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             background_handles.push(handle);
         }
 
-        let visible_state_height_tracker: Box<dyn ProvableHeightTracker> =
-            Box::new(MaximumProvableHeight::new(
-                state_channel.subscribe_state_update(),
-                Self::Runtime::default(),
-            ));
+        let visible_state_height_tracker: Box<dyn ProvableHeightTracker> = Box::new(
+            MaximumProvableHeight::new(state_channel.subscribe_storage(), Self::Runtime::default()),
+        );
 
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;

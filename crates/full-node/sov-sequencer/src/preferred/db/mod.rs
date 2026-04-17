@@ -27,7 +27,7 @@ use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, TxHash, VisibleSlotNumber,
 };
-use sov_rollup_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::num::NonZero;

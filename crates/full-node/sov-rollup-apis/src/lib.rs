@@ -13,11 +13,11 @@ use axum::Json;
 use sov_modules_api::capabilities::{ChainState, HasCapabilities};
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::prelude::tokio::sync::watch;
-use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::{Gas, Spec, StateCheckpoint};
 pub use sov_modules_stf_blueprint::ApplyTxResult;
 use sov_modules_stf_blueprint::Runtime;
 use sov_rest_utils::{errors, preconfigured_router_layers, ApiResult};
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::SyncStatus;
 
 /// Provides functionality for various `/rollup` endpoints.

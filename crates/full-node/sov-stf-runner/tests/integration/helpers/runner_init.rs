@@ -18,14 +18,15 @@ use sov_mock_da::{
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, ProofSender, StateTransitionFunction};
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::{StateChannel, StateUpdateInfo};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStateProvider};
-use sov_rollup_interface::node::{DaSyncState, SyncStatus};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::{StateChannel, StateUpdateInfo};
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::NativeStorage;

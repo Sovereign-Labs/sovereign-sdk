@@ -14,7 +14,7 @@ use sov_modules_api::StateCheckpoint;
 use sov_modules_api::Storage;
 use sov_modules_api::TxChangeSet;
 use sov_modules_api::{FullyBakedTx, Runtime};
-use sov_rollup_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::sync::atomic::AtomicU64;

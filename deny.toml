@@ -113,6 +113,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-rollup-full-node-interface"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-sequencer"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

@@ -10,13 +10,13 @@ use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use sov_metrics::RunnerMetrics;
 
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::{StateChannel, StateUpdateInfo};
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::{
-    future_or_shutdown, DaSyncState, FutureOrShutdownOutput, SyncStatus,
-};
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
 use sov_rollup_interface::stf::{
     ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
     StateTransitionFunction,
@@ -24,7 +24,7 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_rollup_interface::{ProvableHeightTracker, StateChannel, StateUpdateInfo};
+use sov_rollup_interface::ProvableHeightTracker;
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 

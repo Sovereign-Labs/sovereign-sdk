@@ -5,7 +5,7 @@ use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::SequencerRemuneration;
-use sov_modules_api::rest::StateUpdateReceiver;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::sync::atomic::AtomicU64;

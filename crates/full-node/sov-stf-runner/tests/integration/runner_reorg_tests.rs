@@ -16,7 +16,8 @@ use sov_mock_da::{
 };
 
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
-use sov_modules_api::{FullyBakedTx, StateChannel, StateTransitionFunction};
+use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
+use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
