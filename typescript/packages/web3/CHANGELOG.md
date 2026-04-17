@@ -1,5 +1,11 @@
 # @sovereign-sdk/web3
 
+## Unreleased
+
+### Major Changes
+
+- Align unsigned transaction signing with Rust's versioned `UnsignedTransaction` enum, add first-class standard multisig helpers, and remove redundant Solana multisig address/order parameters from the public API.
+
 ## 0.14.0
 
 ### Minor Changes

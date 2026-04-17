@@ -14,6 +14,8 @@ npm install @sovereign-sdk/web3
 ## Features
 
 - 🔄 Type-safe transaction submission and signing
+- ✍️ First-class unsigned transaction builders via `buildUnsignedTransaction()`
+- 🔐 Standard and Solana multisig signing helpers
 - 🔍 Runtime call simulation for gas estimation
 - 📦 Borsh serialization with schema validation
 - 🎯 Strongly typed rollup interactions with customizable type specifications
@@ -116,6 +118,31 @@ const simulation = await rollup.simulate(
 );
 ```
 
+### Multisig
+
+```typescript
+import { Multisig } from "@sovereign-sdk/multisig";
+import type { UnsignedTransactionV0 } from "@sovereign-sdk/types";
+
+const unsignedTx: UnsignedTransactionV0<YourRuntimeCall> =
+  await rollup.buildUnsignedTransaction(runtimeCall, {
+    overrides: { uniqueness: { nonce: 1 } },
+  });
+
+const multisig = Multisig.fromPubKeys(
+  ["pubkey1hex", "pubkey2hex", "pubkey3hex"],
+  2,
+);
+
+await rollup.signMultisigTransaction(unsignedTx, multisig, { signer: signer1 });
+await rollup.signMultisigTransaction(unsignedTx, multisig, { signer: signer2 });
+
+const tx = rollup.finalizeMultisigTransaction(unsignedTx, multisig);
+await rollup.submitMultisigTransaction(unsignedTx, multisig);
+```
+
+`SolanaSignableRollup` exposes the same multisig flow for `"standard"`, `"solanaSimple"`, and `"solana"` authenticators. The Solana multisig helpers derive canonical signer ordering and the multisig ID internally, so callers no longer pass `multisigPubkeys` or `multisigAddress`.
+
 ## API Reference
 
 The package exports the following main components:
@@ -125,4 +152,3 @@ The package exports the following main components:
 - `createSerializer`: Function to create a Borsh serializer for your rollup schema
 
 For detailed API documentation, please refer to the inline TypeScript documentation in the source code.
-

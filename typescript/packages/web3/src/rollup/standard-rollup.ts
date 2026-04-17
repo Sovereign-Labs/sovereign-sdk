@@ -1,13 +1,19 @@
 import SovereignClient from "@sovereign-sdk/client";
+import { Multisig } from "@sovereign-sdk/multisig";
 import { JsSerializer } from "@sovereign-sdk/serializers";
 import type {
+  SignatureAndPubKey,
   Transaction,
+  TransactionV1,
   TxDetails,
   UnsignedTransaction,
+  UnsignedTransactionV0,
 } from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
+import { addressFromPublicKey } from "../addresses";
 import type { DeepPartial } from "../utils";
 import {
+  type CredentialIdToAddress,
   Rollup,
   type RollupConfig,
   type SignerParams,
@@ -22,10 +28,11 @@ export type Dedup = {
 
 export type StandardRollupContext = {
   defaultTxDetails: TxDetails;
+  credentialIdToAddress?: CredentialIdToAddress;
 };
 
 export type StandardRollupSpec<RuntimeCall> = {
-  UnsignedTransaction: UnsignedTransaction<RuntimeCall>;
+  UnsignedTransaction: UnsignedTransactionV0<RuntimeCall>;
   Transaction: Transaction<RuntimeCall>;
   RuntimeCall: RuntimeCall;
   Dedup: Dedup;
@@ -77,7 +84,7 @@ export function standardTypeBuilder<
           signature: bytesToHex(signature),
           ...unsignedTx,
         },
-      };
+      } as S["Transaction"];
     },
   };
 }
@@ -98,6 +105,110 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
   StandardRollupContext
 > {
+  protected async unsignedTxForSigning(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+  ): Promise<UnsignedTransaction<RuntimeCall>> {
+    return { V0: unsignedTx };
+  }
+
+  private async credentialAddressFromId(
+    credentialId: Uint8Array,
+  ): Promise<unknown> {
+    if (this.context.credentialIdToAddress) {
+      const serializer = await this.serializer();
+      return this.context.credentialIdToAddress(credentialId, serializer.schema);
+    }
+
+    return addressFromPublicKey(credentialId, "sov");
+  }
+
+  private async multisigUnsignedTxForSigning(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    multisig: Multisig,
+  ): Promise<UnsignedTransaction<RuntimeCall>> {
+    return {
+      V1: {
+        ...unsignedTx,
+        credential_address: await this.credentialAddressFromId(
+          multisig.getMultisigAddress(),
+        ),
+      },
+    };
+  }
+
+  private async signVersionedUnsignedTx(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    signer: SignerParams["signer"],
+  ): Promise<SignatureAndPubKey> {
+    const serializer = await this.serializer();
+    const serializedUnsignedTx = serializer.serializeUnsignedTx(unsignedTx);
+    const chainHash = await this.chainHash();
+    const signature = await signer.sign(
+      new Uint8Array([...serializedUnsignedTx, ...chainHash]),
+    );
+    const publicKey = await signer.publicKey();
+
+    return {
+      pub_key: bytesToHex(publicKey),
+      signature: bytesToHex(signature),
+    };
+  }
+
+  async createMultisigSignature(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    multisig: Multisig,
+    { signer }: SignerParams,
+  ): Promise<SignatureAndPubKey> {
+    const signingUnsignedTx = await this.multisigUnsignedTxForSigning(
+      unsignedTx,
+      multisig,
+    );
+
+    return this.signVersionedUnsignedTx(signingUnsignedTx, signer);
+  }
+
+  async signMultisigTransaction(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    multisig: Multisig,
+    params: SignerParams,
+  ): Promise<void> {
+    const signature = await this.createMultisigSignature(
+      unsignedTx,
+      multisig,
+      params,
+    );
+    multisig.addSignature(signature);
+  }
+
+  finalizeMultisigTransaction(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    multisig: Multisig,
+  ): TransactionV1<RuntimeCall> {
+    return {
+      V1: {
+        ...unsignedTx,
+        signatures: [...multisig.signaturesAndPubKeys],
+        unused_pub_keys: [...multisig.remainingPubKeys],
+        min_signers: multisig.threshold,
+      },
+    };
+  }
+
+  async submitMultisigTransaction(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    multisig: Multisig,
+    options?: SovereignClient.RequestOptions,
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    if (!multisig.isComplete) {
+      throw new Error("Multisig transaction is incomplete");
+    }
+
+    return this.submitTransaction(
+      this.finalizeMultisigTransaction(unsignedTx, multisig),
+      options,
+    );
+  }
+
   /**
    * Simulates a runtime call transaction.
    *
@@ -131,6 +242,7 @@ export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_id"> = {
 async function buildContext<C extends StandardRollupContext>(
   client: SovereignClient,
   context?: DeepPartial<C>,
+  credentialIdToAddress?: CredentialIdToAddress,
 ): Promise<C> {
   const defaultTxDetails = {
     ...DEFAULT_TX_DETAILS,
@@ -144,7 +256,10 @@ async function buildContext<C extends StandardRollupContext>(
   }
 
   return {
+    ...context,
     defaultTxDetails,
+    credentialIdToAddress:
+      credentialIdToAddress ?? context?.credentialIdToAddress,
   } as C;
 }
 
@@ -161,7 +276,11 @@ export async function createStandardRollup<
   const client = config.client ?? new SovereignClient({ baseURL: config.url });
   const getSerializer =
     config.getSerializer ?? ((schema) => new JsSerializer(schema));
-  const context = await buildContext<C>(client, config.context);
+  const context = await buildContext<C>(
+    client,
+    config.context,
+    config.credentialIdToAddress,
+  );
 
   // Default to the standard transaction submission endpoint
   const txSubmissionEndpoint = config.txSubmissionEndpoint ?? "/sequencer/txs";

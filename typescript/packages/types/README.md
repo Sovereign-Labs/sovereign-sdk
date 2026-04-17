@@ -4,39 +4,50 @@ Core type definitions for Sovereign SDK blockchain interactions.
 
 ## Overview
 
-This package provides TypeScript type definitions for working with "standard" Sovereign SDK rollups. While Sovereign SDK rollups are fully generic and can define custom types for transactions, blocks, and other primitives, this package contains the default type definitions used by the standard Sovereign SDK implementation.
+This package mirrors the standard Sovereign SDK transaction model used on the Rust side:
+
+- `UnsignedTransactionV0` is the public builder type for normal transaction flows
+- `UnsignedTransactionV1` is the multisig signing payload that includes `credential_address`
+- `UnsignedTransaction` is the versioned enum serialized for signing
+- `TransactionV0` and `TransactionV1` are the signed transaction envelopes submitted to the rollup
 
 ## Standard Types
 
-While Sovereign SDK supports this level of customization, most rollups will use a common set of primitives. This package provides type definitions for these standard components (and more):
-
-- `UnsignedTransaction` - Standard unsigned transaction format
-- `Transaction` - Standard signed transaction format
-
-These types work out-of-the-box with the default Sovereign SDK rollup configuration and are compatible with the other packages in this monorepo (`@sovereign-sdk/web3`, `@sovereign-sdk/signers`, etc.).
-
-## Usage
-
 ```typescript
-import type { UnsignedTransaction, Transaction } from "@sovereign-sdk/types";
+import type {
+  Transaction,
+  UnsignedTransaction,
+  UnsignedTransactionV0,
+} from "@sovereign-sdk/types";
 
-// Use the standard transaction types
-const unsignedTx: UnsignedTransaction = {
-  // Standard transaction fields
+const unsignedTxV0: UnsignedTransactionV0<YourRuntimeCall> = {
+  runtime_call: {
+    // Your rollup-specific call data
+  },
+  uniqueness: { nonce: 1 },
+  details: {
+    max_priority_fee_bips: 0,
+    max_fee: "1000000",
+    gas_limit: null,
+    chain_id: 4321,
+  },
 };
 
-const signedTx: Transaction = {
-  // Standard signed transaction fields
+const signingEnvelope: UnsignedTransaction<YourRuntimeCall, string> = {
+  V0: unsignedTxV0,
+};
+
+const signedTx: Transaction<YourRuntimeCall> = {
+  V0: {
+    pub_key: "deadbeef",
+    signature: "cafebabe",
+    ...unsignedTxV0,
+  },
 };
 ```
 
-## Custom Types
+## Migration Notes
 
-If your rollup uses custom transaction or block formats that differ from the standard Sovereign SDK types, you can:
-
-1. Define your own types in your application
-2. Extend or modify these standard types as needed
-3. Use the generic interfaces provided by other packages in this monorepo
-
-The Sovereign SDK's flexibility means you're never locked into these standard definitions if your use case requires something different.
-
+- Import `UnsignedTransactionV0` when you want the old flat unsigned transaction shape.
+- Use `UnsignedTransaction` only for exact versioned signing payloads.
+- `TransactionV1` remains the finalized multisig envelope and does not include `credential_address`.

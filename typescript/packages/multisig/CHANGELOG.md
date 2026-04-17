@@ -1,5 +1,11 @@
 # @sovereign-sdk/multisig
 
+## Unreleased
+
+### Major Changes
+
+- Replace `MultisigTransaction` with payload-agnostic `Multisig` signer state and move transaction finalization into `@sovereign-sdk/web3`.
+
 ## 0.3.1
 
 ### Patch Changes
