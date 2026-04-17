@@ -3661,7 +3661,7 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
         false,
         TEST_MAX_BATCH_SIZE,
         DEFAULT_BLOCK_PRODUCING_CONFIG,
-        Some(RollupProverConfig::Skip),
+        Some(RollupProverConfig::Prove(std::sync::Arc::new(()))),
         60,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,

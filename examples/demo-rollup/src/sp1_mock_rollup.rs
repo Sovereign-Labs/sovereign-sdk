@@ -159,16 +159,12 @@ impl FullNodeBlueprint<Native> for Sp1MockDemoRollup<Native> {
         let (host_args, prover_config_discriminant) = prover_config.split();
         let elf = *host_args;
 
-        let inner_vm = if elf.is_empty() {
-            SP1Host::skip()
-        } else {
-            // SP1's blocking CPU prover spins up its own tokio runtime during setup,
-            // so it must be constructed off the async executor thread.
-            tokio::task::spawn_blocking(move || SP1Host::new(elf))
-                .await
-                .expect("SP1Host setup task panicked")
-                .expect("Failed to create SP1Host from guest ELF")
-        };
+        // SP1's blocking CPU prover spins up its own tokio runtime during setup,
+        // so it must be constructed off the async executor thread.
+        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf))
+            .await
+            .expect("SP1Host setup task panicked")
+            .expect("Failed to create SP1Host from guest ELF");
 
         let outer_vm = MockZkvmHost::new_non_blocking();
         let da_verifier = Default::default();

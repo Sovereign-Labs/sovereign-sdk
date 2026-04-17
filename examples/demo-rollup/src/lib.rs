@@ -13,6 +13,9 @@ mod mock_rollup;
 
 pub use mock_rollup::*;
 
+mod sp1_mock_rollup;
+pub use sp1_mock_rollup::*;
+
 mod celestia_rollup;
 pub use celestia_rollup::*;
 

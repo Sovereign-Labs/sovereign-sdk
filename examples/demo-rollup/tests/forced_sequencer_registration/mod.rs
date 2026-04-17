@@ -19,7 +19,7 @@ use secp256k1::SecretKey;
 use sov_api_spec::types as api_types;
 use sov_bank::config_gas_token_id;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_sp1_host_args, MockDemoRollup};
+use sov_demo_rollup::{mock_zkvm_host_args, MockDemoRollup};
 use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
@@ -353,7 +353,7 @@ async fn setup_with_block_producing(
         block_producing,
         FINALIZATION_BLOCKS,
     )
-    .with_zkvm_host_args(mock_da_sp1_host_args())
+    .with_zkvm_host_args(mock_zkvm_host_args())
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.automatic_batch_production = true;
