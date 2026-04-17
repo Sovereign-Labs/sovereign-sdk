@@ -77,6 +77,7 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 ```shell,test-ci
 $ cd examples/demo-rollup/
 $ export SOV_PROVER_MODE=prove
+$ export SP1_PROVER=mock
 $ make build
 ```
 
@@ -90,7 +91,7 @@ $ make clean
 3. Now run the demo-rollup full node, as shown below.
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ ../../target/debug/sov-demo-rollup
+$ SP1_PROVER=mock ../../target/debug/sov-demo-rollup
 ```
 
 Leave it running while you proceed with the rest of the demo.

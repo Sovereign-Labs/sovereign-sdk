@@ -10,6 +10,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 
 #[cfg(feature = "native")]

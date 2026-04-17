@@ -9,6 +9,7 @@
 pub mod aggregated_proof;
 use core::fmt::Debug;
 
+use crate::zk::aggregated_proof::CodeCommitmentHash;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::typenum::U32;
 use digest::Digest;

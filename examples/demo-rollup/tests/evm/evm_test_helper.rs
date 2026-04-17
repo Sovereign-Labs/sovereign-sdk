@@ -21,8 +21,8 @@ use sov_evm_test_utils::LegacySimpleStorage;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
-use sov_sp1_adapter::SP1;
 use sov_sequencer::{SeqConfigExtension, SovRateLimiterConfig};
+use sov_sp1_adapter::SP1;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{
     get_appropriate_rollup_prover_config, RollupBuilder, TestRollup,

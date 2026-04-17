@@ -4,6 +4,7 @@
 #[cfg(feature = "native")]
 mod notifier;
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use thiserror::Error;
 mod guest;
 pub use guest::MockZkGuest;
