@@ -9,7 +9,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sovereign-Labs/sovereign-sdk.git"
+  },
   "files": ["dist", "package.json"],
   "exports": {
     ".": {
