@@ -2,7 +2,6 @@ use std::cmp::max;
 
 use sov_bank::{config_gas_token_id, Amount, Coins, IntoPayable};
 use sov_modules_api::registration_lib::StakeRegistration;
-use sov_modules_api::CodeCommitmentTrait;
 use sov_modules_api::{
     AggregatedProofPublicData, Gas, GasSpec, GetGasPrice, InvalidProofError,
     SerializedAggregatedProof, Spec, StateReader, Storage, TxState, VersionReader, ZkVerifier,
