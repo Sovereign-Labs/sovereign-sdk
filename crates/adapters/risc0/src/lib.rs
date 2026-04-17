@@ -10,7 +10,6 @@ use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
 
