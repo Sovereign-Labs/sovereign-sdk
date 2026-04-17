@@ -10,8 +10,10 @@ use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::rest::{ApiState, HasRestApi};
 use sov_modules_api::{
     ConcurrentStateCheckpoint, Context, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateCheckpoint, StateValue, TxState,
+    StateCheckpoint, StateValue, Storage, TxState,
 };
+use sov_state::sequencer_state::{RawStateChanges, SequencerStateChanges};
+use sov_state::{SlotValue, SlotValueFromCodec};
 use sov_test_utils::TestSpec;
 use unwrap_infallible::UnwrapInfallible;
 use utoipa::openapi::path::ParameterIn;
@@ -122,6 +124,91 @@ pub struct MyRuntime<S: Spec> {
 
 impl<S: Spec> TxHooks for MyRuntime<S> {
     type Spec = S;
+}
+
+type TestStorageManager =
+    sov_test_utils::storage::SimpleStorageManager<sov_test_utils::TestStorageSpec>;
+type CheckpointUpdate = Arc<ConcurrentStateCheckpoint<TestSpec>>;
+
+fn persist_mapping_entries(
+    runtime: &mut MyRuntime<TestSpec>,
+    storage_manager: &mut TestStorageManager,
+    entries: &[(u32, u32)],
+) {
+    let storage = storage_manager.create_storage();
+    let mut checkpoint = StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+
+    for (key, value) in entries {
+        runtime
+            .my_foo_module
+            .mapping
+            .set(key, value, &mut checkpoint)
+            .unwrap_infallible();
+    }
+
+    let (_root, state_update, _accessory_delta, _witness, storage) =
+        checkpoint.materialize_update(<<TestSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT);
+    storage_manager.commit(storage.materialize_changes(state_update));
+}
+
+fn checkpoint_with_uncommitted_mapping_entries(
+    runtime: &MyRuntime<TestSpec>,
+    storage_manager: &TestStorageManager,
+    blocks_newest_first: Vec<(u64, Vec<(u32, u32)>)>,
+) -> StateCheckpoint<TestSpec> {
+    let mut uncommitted = SequencerStateChanges::<sha2::Sha256>::default();
+
+    for (rollup_height, entries) in blocks_newest_first.into_iter().rev() {
+        let mut changes = RawStateChanges {
+            rollup_height,
+            ..Default::default()
+        };
+
+        for (key, value) in entries {
+            changes.user.set(
+                &runtime.my_foo_module.mapping.slot_key(&key),
+                SlotValue::new(&value, runtime.my_foo_module.mapping.codec().value_codec()),
+            );
+        }
+
+        uncommitted.push_front(Arc::new(changes));
+    }
+
+    StateCheckpoint::new_with_uncommitted_changes(
+        storage_manager.create_storage(),
+        &MockKernel::<TestSpec>::default(),
+        Box::new(uncommitted),
+        None,
+    )
+}
+
+async fn spawn_mapping_items_rest_api(
+    runtime: MyRuntime<TestSpec>,
+    module_name: &str,
+    checkpoint: StateCheckpoint<TestSpec>,
+) -> (Client, String, tokio::sync::watch::Sender<CheckpointUpdate>) {
+    let (sender, receiver) = tokio::sync::watch::channel(Arc::new(
+        ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint),
+    ));
+    let state = ApiState::build(
+        Arc::new(()),
+        receiver,
+        Arc::new(MockKernel::default()),
+        None,
+    );
+    let router = runtime.rest_api(state);
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let rest_address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    (
+        Client::new(),
+        format!("http://{rest_address}/modules/{module_name}/state/mapping/items"),
+        sender,
+    )
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -301,7 +388,7 @@ async fn state_map_items_route_lists_current_checkpoint_state() {
         first_page_body,
         json!({
             "items": [{ "key": 1, "value": 10 }],
-            "next_cursor": "1"
+            "next_cursor": 1
         })
     );
 
@@ -347,4 +434,134 @@ async fn state_map_items_route_lists_current_checkpoint_state() {
         .await
         .unwrap();
     assert_eq!(historical_response.status(), StatusCode::NOT_IMPLEMENTED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn state_map_items_route_paginates_persisted_storage_state() {
+    let module_name = "my-foo-module";
+    let mut runtime = MyRuntime::<TestSpec>::default();
+    let mut storage_manager = TestStorageManager::new();
+
+    persist_mapping_entries(
+        &mut runtime,
+        &mut storage_manager,
+        &[(1, 10), (2, 20), (3, 30)],
+    );
+
+    let checkpoint = StateCheckpoint::new(
+        storage_manager.create_storage(),
+        &MockKernel::<TestSpec>::default(),
+        None,
+    );
+    let (client, base_url, _sender) =
+        spawn_mapping_items_rest_api(runtime, module_name, checkpoint).await;
+
+    let first_page = client
+        .get(&base_url)
+        .query(&[("page", "first"), ("page[size]", "2")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first_page.status(), StatusCode::OK);
+    let first_page_body: serde_json::Value = first_page.json().await.unwrap();
+    assert_eq!(
+        first_page_body,
+        json!({
+            "items": [
+                { "key": 1, "value": 10 },
+                { "key": 2, "value": 20 }
+            ],
+            "next_cursor": 2
+        })
+    );
+
+    let second_page = client
+        .get(&base_url)
+        .query(&[("page", "next"), ("page[cursor]", "2"), ("page[size]", "2")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(second_page.status(), StatusCode::OK);
+    let second_page_body: serde_json::Value = second_page.json().await.unwrap();
+    assert_eq!(
+        second_page_body,
+        json!({
+            "items": [{ "key": 3, "value": 30 }],
+            "next_cursor": null
+        })
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn state_map_items_route_uses_latest_uncommitted_values_for_each_page_snapshot() {
+    let module_name = "my-foo-module";
+    let mut runtime = MyRuntime::<TestSpec>::default();
+    let mut storage_manager = TestStorageManager::new();
+
+    persist_mapping_entries(
+        &mut runtime,
+        &mut storage_manager,
+        &[(1, 10), (2, 20), (3, 30)],
+    );
+
+    let checkpoint = checkpoint_with_uncommitted_mapping_entries(
+        &runtime,
+        &storage_manager,
+        vec![(2, vec![(2, 220)]), (1, vec![(2, 120), (3, 130)])],
+    );
+    let (client, base_url, sender) =
+        spawn_mapping_items_rest_api(runtime.clone(), module_name, checkpoint).await;
+
+    let first_page = client
+        .get(&base_url)
+        .query(&[("page", "first"), ("page[size]", "2")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(first_page.status(), StatusCode::OK);
+    let first_page_body: serde_json::Value = first_page.json().await.unwrap();
+    assert_eq!(
+        first_page_body,
+        json!({
+            "items": [
+                { "key": 1, "value": 10 },
+                { "key": 2, "value": 220 }
+            ],
+            "next_cursor": 2
+        })
+    );
+
+    let next_checkpoint = checkpoint_with_uncommitted_mapping_entries(
+        &runtime,
+        &storage_manager,
+        vec![
+            (3, vec![(3, 330), (4, 440)]),
+            (2, vec![(2, 220)]),
+            (1, vec![(2, 120), (3, 130)]),
+        ],
+    );
+    sender
+        .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
+            next_checkpoint,
+        )))
+        .unwrap();
+
+    let second_page = client
+        .get(&base_url)
+        .query(&[("page", "next"), ("page[cursor]", "2"), ("page[size]", "2")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(second_page.status(), StatusCode::OK);
+    let second_page_body: serde_json::Value = second_page.json().await.unwrap();
+    assert_eq!(
+        second_page_body,
+        json!({
+            "items": [
+                { "key": 3, "value": 330 },
+                { "key": 4, "value": 440 }
+            ],
+            "next_cursor": null
+        })
+    );
 }
