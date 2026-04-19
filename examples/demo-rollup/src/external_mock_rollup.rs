@@ -26,7 +26,9 @@ use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{
+    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
+};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
@@ -155,12 +157,11 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (host_args, prover_config_discriminant) = prover_config.split();
-        let inner_vm = Risc0Host::new(*host_args);
+        let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
 
         let outer_vm = MockZkvmHost::new_non_blocking();
         let da_verifier = Default::default();
@@ -169,7 +170,7 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_discriminant,
+            RollupProverConfigDiscriminants::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

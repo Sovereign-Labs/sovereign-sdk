@@ -24,9 +24,6 @@ pub use external_mock_rollup::*;
 
 mod solana_offchain_endpoint;
 
-mod zk;
-pub use zk::*;
-
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
 pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!("BATCH_NAMESPACE"));

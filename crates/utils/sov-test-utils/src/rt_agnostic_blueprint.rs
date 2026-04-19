@@ -21,11 +21,13 @@ use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
+use sov_rollup_interface::zk::ZkvmGuest;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{
+    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
+};
 use sov_stf_runner::RollupConfig;
 
 /// Factory for creating a prover service within [`RtAgnosticBlueprint`].
@@ -46,7 +48,7 @@ pub trait ProverFactory<S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>>:
 
     /// Create the prover service from the given config.
     async fn create(
-        prover_config: RollupProverConfig<S::InnerZkvm>,
+        prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
     ) -> Self::ProverService;
 }
@@ -57,7 +59,7 @@ pub struct ParallelProverFactory<S>(PhantomData<S>);
 #[async_trait]
 impl<S> ProverFactory<S> for ParallelProverFactory<S>
 where
-    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
+    S: Spec<Da = MockDaSpec, InnerZkvm = MockZkvm, OuterZkvm = MockZkvm> + PluggableSpec,
 {
     type ProverService = ParallelProverService<
         S::Address,
@@ -69,18 +71,17 @@ where
     >;
 
     async fn create(
-        prover_config: RollupProverConfig<S::InnerZkvm>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
     ) -> Self::ProverService {
-        let (host_args, prover_config_disc) = prover_config.split();
-        let inner_vm = <S::InnerZkvm as Zkvm>::Host::from_args(&host_args);
+        let inner_vm = MockZkvmHost::new_non_blocking();
         let outer_vm = MockZkvmHost::new_non_blocking();
 
         ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             Default::default(),
-            prover_config_disc,
+            RollupProverConfigDiscriminants::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }
@@ -213,7 +214,7 @@ where
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
+        prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {

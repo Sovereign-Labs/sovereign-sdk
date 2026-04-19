@@ -67,9 +67,7 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
             true,
             TEST_MAX_BATCH_SIZE,
             BlockProducingConfig::Manual,
-            Some(RollupProverConfig {
-                host_args: std::sync::Arc::new(()),
-            }),
+            Some(RollupProverConfig),
             60,
             1000,
             None,

@@ -28,7 +28,9 @@ use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{
+    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
+};
 use sov_stf_runner::RollupConfig;
 
 use crate::solana_offchain_endpoint::solana_offchain_router;
@@ -163,12 +165,11 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (elf, prover_config_disc) = prover_config.split();
-        let inner_vm = Risc0Host::new(*elf);
+        let inner_vm = Risc0Host::new(risc0::ROLLUP_ELF);
 
         let outer_vm = MockZkvmHost::new_non_blocking();
 
@@ -183,7 +184,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_disc,
+            RollupProverConfigDiscriminants::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

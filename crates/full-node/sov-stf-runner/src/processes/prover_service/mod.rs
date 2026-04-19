@@ -2,7 +2,6 @@ mod network;
 mod parallel;
 
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
@@ -13,7 +12,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{ZkVerifier, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::ZkVerifier;
 use strum::{Display, EnumString};
 use thiserror::Error;
 
@@ -26,18 +25,16 @@ where
     pub(crate) da_verifier: Da::Verifier,
 }
 
-/// The configuration of the prover: runs the rollup verifier and creates a SNARK of execution.
-// We use arcs for cheap cloning
-#[derive(Clone)]
-pub struct RollupProverConfig<Vm: Zkvm> {
-    /// Host arguments used to instantiate the zkVM prover.
-    pub host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-}
+/// Flag indicating the prover should run the rollup verifier and create a SNARK of execution.
+///
+/// Blueprints that need more configuration (e.g., which guest ELF to prove) should source
+/// that directly in [`crate::processes::ProverService`] construction rather than threading
+/// it through this type.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RollupProverConfig;
 
-/// The associated discriminants of [`RollupProverConfig`]. Possible configurations of the prover
-// Note: it's best if all string conversions to and from this type (even
-// `Debug`) use the same casing, to avoid bad UX or confusion around env. vars
-// expected behavior.
+/// String-parseable discriminant for [`RollupProverConfig`], used to deserialize
+/// prover mode from env vars / CLI flags.
 #[derive(Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RollupProverConfigDiscriminants {
@@ -51,33 +48,15 @@ impl Debug for RollupProverConfigDiscriminants {
     }
 }
 
-impl<Vm: Zkvm> From<RollupProverConfig<Vm>> for RollupProverConfigDiscriminants {
-    fn from(_value: RollupProverConfig<Vm>) -> Self {
+impl From<RollupProverConfig> for RollupProverConfigDiscriminants {
+    fn from(_value: RollupProverConfig) -> Self {
         RollupProverConfigDiscriminants::Prove
     }
 }
 
-impl RollupProverConfigDiscriminants {
-    /// Converts the discriminant into a config
-    pub fn into_config<Vm: Zkvm>(
-        self,
-        host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-    ) -> RollupProverConfig<Vm> {
-        match self {
-            RollupProverConfigDiscriminants::Prove => RollupProverConfig { host_args },
-        }
-    }
-}
-
-impl<Vm: Zkvm> RollupProverConfig<Vm> {
-    /// Splits the rollup prover config into host arguments and an associated discriminant
-    pub fn split(
-        self,
-    ) -> (
-        Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-        RollupProverConfigDiscriminants,
-    ) {
-        (self.host_args, RollupProverConfigDiscriminants::Prove)
+impl From<RollupProverConfigDiscriminants> for RollupProverConfig {
+    fn from(_value: RollupProverConfigDiscriminants) -> Self {
+        RollupProverConfig
     }
 }
 

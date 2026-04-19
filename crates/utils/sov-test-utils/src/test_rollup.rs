@@ -35,7 +35,7 @@ use sov_modules_api::prelude::axum;
 use sov_modules_api::prelude::axum::extract::Request;
 use sov_modules_api::prelude::axum::ServiceExt;
 use sov_modules_api::ModuleExecutionConfig;
-use sov_modules_api::{Spec, Zkvm};
+use sov_modules_api::Spec;
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::{GenesisParams, Runtime};
@@ -45,7 +45,6 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
@@ -108,7 +107,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub max_infos_in_db: u64,
     pub max_channel_size: u64,
     pub telegraf_address: sov_stf_runner::TelegrafSocketConfig,
-    pub rollup_prover_config: Option<RollupProverConfig<S::InnerZkvm>>,
+    pub rollup_prover_config: Option<RollupProverConfig>,
     pub storage: StoragePath,
     pub axum_host: String,
     pub axum_port: u16,
@@ -193,14 +192,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self
     }
 
-    /// See [`RollupBuilderConfig::rollup_prover_config`].
-    pub fn with_zkvm_host_args(
-        mut self,
-        zkvm_host_args: Arc<<<<R::Spec as Spec>::InnerZkvm as Zkvm>::Host as ZkvmHost>::HostArgs>,
-    ) -> Self {
-        self.config.rollup_prover_config = Some(get_appropriate_rollup_prover_config::<R::Spec>(
-            zkvm_host_args,
-        ));
+    /// Enables the prover for this rollup. Equivalent to setting
+    /// [`RollupBuilderConfig::rollup_prover_config`] to `Some(RollupProverConfig)`.
+    pub fn enable_prover(mut self) -> Self {
+        self.config.rollup_prover_config = Some(RollupProverConfig);
 
         self.disable_state_root_consistency_checks()
     }
@@ -1227,12 +1222,6 @@ pub fn read_private_key<S: Spec>(suffix: &str) -> PrivateKeyAndAddress<S> {
     key_and_address
 }
 
-/// Parses [`RollupProverConfig`] from its env. variable.
-pub fn get_appropriate_rollup_prover_config<S: Spec>(
-    host_args: Arc<<<S::InnerZkvm as Zkvm>::Host as ZkvmHost>::HostArgs>,
-) -> RollupProverConfig<S::InnerZkvm> {
-    RollupProverConfig { host_args }
-}
 
 /// Get rollup height
 pub async fn get_height(client: &NodeClient) -> anyhow::Result<RollupHeight> {

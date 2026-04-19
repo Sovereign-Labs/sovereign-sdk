@@ -127,7 +127,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Creates an instance of [`ProverService`].
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
+        prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
@@ -166,7 +166,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         runtime_genesis_paths: &<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisInput,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
+        prover_config: Option<RollupProverConfig>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -307,7 +307,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
+        prover_config: Option<RollupProverConfig>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,

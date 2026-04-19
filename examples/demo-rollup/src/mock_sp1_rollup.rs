@@ -24,7 +24,9 @@ use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::{SP1CryptoSpec, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{
+    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
+};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
@@ -156,12 +158,11 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<SP1>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (host_args, prover_config_discriminant) = prover_config.split();
-        let elf = *host_args;
+        let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
 
         // SP1's blocking CPU prover spins up its own tokio runtime during setup,
         // so it must be constructed off the async executor thread.
@@ -193,7 +194,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_discriminant,
+            RollupProverConfigDiscriminants::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }
