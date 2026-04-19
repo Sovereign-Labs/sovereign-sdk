@@ -12823,6 +12823,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "slop-algebra",
  "sov-metrics",
  "sov-rollup-interface",
  "sov-sp1-adapter",
@@ -12831,7 +12832,10 @@ dependencies = [
  "sov-zkvm-utils",
  "sp1-build",
  "sp1-lib",
+ "sp1-primitives",
+ "sp1-recursion-executor",
  "sp1-sdk",
+ "sp1-verifier",
  "sp1-zkvm",
 ]
 

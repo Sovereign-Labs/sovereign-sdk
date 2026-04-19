@@ -35,6 +35,10 @@ sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking"] }
+sp1-verifier = { version = "6.1.0", default-features = false, features = ["std"] }
+sp1-primitives = { version = "6.1.0", default-features = false }
+sp1-recursion-executor = { version = "6.1.0", default-features = false }
+slop-algebra = { version = "6.1.0", default-features = false }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
 sp1-zkvm = { version = "6.1.0", features = ["verify"] }

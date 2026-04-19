@@ -91,12 +91,12 @@ pub(crate) fn build_proof(
         .inner_code_commitment(state)
         .unwrap()
         .expect("Inner code commitment must be set at genesis")
-        .to_hash()?;
+        .to_hash();
     let outer_vk_hash = chain_state
         .outer_code_commitment(state)
         .unwrap()
         .expect("Outer code commitment must be set at genesis")
-        .to_hash()?;
+        .to_hash();
 
     Ok(AggregatedProofPublicData {
         initial_slot_number: initial_slot,

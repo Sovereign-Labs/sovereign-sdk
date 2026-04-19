@@ -22,19 +22,25 @@ type ProofInput = StateTransitionWitnessWithAddress<
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
 async fn test_save_proofs() {
-    let (host, code_commitment) = TestHost::new().await;
+    let host = TestHost::new().await;
     let proof_data = generate_proofs(&host).await;
     let proofs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
         .join("test_data")
         .join("tmp");
 
+    let v_key = host.host.verifying_key();
+    let method_id = host.host.method_id();
+
     std::fs::create_dir_all(&proofs_dir).unwrap();
-    std::fs::write(proofs_dir.join("inner_vk.bin"), code_commitment.0.clone()).unwrap();
+    std::fs::write(
+        proofs_dir.join("inner_vk.bin"),
+        bincode::serialize(v_key).unwrap(),
+    )
+    .unwrap();
 
     for (i, data) in proof_data.into_iter().enumerate() {
-        let proof_public_data =
-            verify(data.proof.raw_inner_proof.clone(), code_commitment.clone()).await;
+        let proof_public_data = verify(data.proof.raw_inner_proof.clone(), method_id.clone()).await;
         assert_eq!(proof_public_data.slot_hash, data.da_block_header.hash());
         let json = serde_json::to_string(&data).unwrap();
         std::fs::write(proofs_dir.join(format!("inner_{i}_proof.json")), &json).unwrap();
@@ -48,7 +54,8 @@ async fn test_proof_generation() {
     // Use the mock prover: CPU proving is far too slow to run in tests.
     std::env::set_var("SP1_PROVER", "mock");
 
-    let (host, code_commitment) = TestHost::new().await;
+    let host = TestHost::new().await;
+    let method_id = host.host.method_id();
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
     let prover_address = default_prover_address();
 
@@ -57,7 +64,7 @@ async fn test_proof_generation() {
         let _final_state_root = witness.final_state_root;
 
         let proof = generate_proof(&host, witness, prover_address).await;
-        let proof_public_data = verify(proof.proof.raw_inner_proof, code_commitment.clone()).await;
+        let proof_public_data = verify(proof.proof.raw_inner_proof, method_id.clone()).await;
 
         assert_eq!(proof_public_data.slot_hash, proof.da_block_header.hash());
         // TODO: Uncomment after NOmt bug is solved: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739
@@ -108,21 +115,14 @@ struct TestHost {
 }
 
 impl TestHost {
-    async fn new() -> (Self, SP1MethodId) {
-        let (code_commitment, host) = tokio::task::spawn_blocking(move || {
-            let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF)
-                .expect("SP1Host should be created successfully");
-
-            (
-                host.code_commitment()
-                    .expect("SP1 code commitment should be created successfully"),
-                host,
-            )
+    async fn new() -> Self {
+        let host = tokio::task::spawn_blocking(move || {
+            SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF).expect("SP1Host should be created successfully")
         })
         .await
         .unwrap();
 
-        (Self { host }, code_commitment)
+        Self { host }
     }
 
     async fn run(&self, data: ProofInput) -> Vec<u8> {
@@ -140,10 +140,5 @@ async fn verify(
     proof: Vec<u8>,
     code_commitment: SP1MethodId,
 ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-    tokio::task::spawn_blocking(move || -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-            SP1Verifier::verify(&proof, &code_commitment)
-                .expect("SP1 proof verification should succeed")
-        })
-        .await
-        .unwrap()
+    SP1Verifier::verify(&proof, &code_commitment).expect("SP1 proof verification should succeed")
 }

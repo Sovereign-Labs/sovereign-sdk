@@ -6303,11 +6303,14 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "sha2 0.10.9",
+ "slop-algebra",
  "sov-rollup-interface",
  "sov-universal-wallet",
  "sov-zkvm-utils",
  "sp1-lib",
+ "sp1-primitives",
  "sp1-sdk",
+ "sp1-verifier",
  "sp1-zkvm",
 ]
 
