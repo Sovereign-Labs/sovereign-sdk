@@ -45,9 +45,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .set_config(|config| {
             // Enable witness generation so proofs can be submitted to the network.
             // The actual host args are unused by NetworkProverService.
-            config.rollup_prover_config = Some(RollupProverConfig::Prove(Arc::new(
-                *sp1::SP1_GUEST_MOCK_ELF,
-            )));
+            config.rollup_prover_config = Some(RollupProverConfig {
+                host_args: Arc::new(*sp1::SP1_GUEST_MOCK_ELF),
+            });
         });
         start_and_wait(builder).await?;
     } else {

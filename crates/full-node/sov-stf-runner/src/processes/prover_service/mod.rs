@@ -26,12 +26,12 @@ where
     pub(crate) da_verifier: Da::Verifier,
 }
 
-/// The possible configurations of the prover
+/// The configuration of the prover: runs the rollup verifier and creates a SNARK of execution.
 // We use arcs for cheap cloning
 #[derive(Clone)]
-pub enum RollupProverConfig<Vm: Zkvm> {
-    /// Run the rollup verifier and create a SNARK of execution.
-    Prove(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
+pub struct RollupProverConfig<Vm: Zkvm> {
+    /// Host arguments used to instantiate the zkVM prover.
+    pub host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
 }
 
 /// The associated discriminants of [`RollupProverConfig`]. Possible configurations of the prover
@@ -52,10 +52,8 @@ impl Debug for RollupProverConfigDiscriminants {
 }
 
 impl<Vm: Zkvm> From<RollupProverConfig<Vm>> for RollupProverConfigDiscriminants {
-    fn from(value: RollupProverConfig<Vm>) -> Self {
-        match value {
-            RollupProverConfig::Prove(_) => RollupProverConfigDiscriminants::Prove,
-        }
+    fn from(_value: RollupProverConfig<Vm>) -> Self {
+        RollupProverConfigDiscriminants::Prove
     }
 }
 
@@ -66,7 +64,7 @@ impl RollupProverConfigDiscriminants {
         host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
     ) -> RollupProverConfig<Vm> {
         match self {
-            RollupProverConfigDiscriminants::Prove => RollupProverConfig::Prove(host_args),
+            RollupProverConfigDiscriminants::Prove => RollupProverConfig { host_args },
         }
     }
 }
@@ -79,11 +77,7 @@ impl<Vm: Zkvm> RollupProverConfig<Vm> {
         Arc<<Vm::Host as ZkvmHost>::HostArgs>,
         RollupProverConfigDiscriminants,
     ) {
-        match self {
-            RollupProverConfig::Prove(host_args) => {
-                (host_args, RollupProverConfigDiscriminants::Prove)
-            }
-        }
+        (self.host_args, RollupProverConfigDiscriminants::Prove)
     }
 }
 

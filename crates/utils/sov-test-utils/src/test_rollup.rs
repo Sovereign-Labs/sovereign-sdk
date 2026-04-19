@@ -1231,7 +1231,7 @@ pub fn read_private_key<S: Spec>(suffix: &str) -> PrivateKeyAndAddress<S> {
 pub fn get_appropriate_rollup_prover_config<S: Spec>(
     host_args: Arc<<<S::InnerZkvm as Zkvm>::Host as ZkvmHost>::HostArgs>,
 ) -> RollupProverConfig<S::InnerZkvm> {
-    RollupProverConfig::Prove(host_args)
+    RollupProverConfig { host_args }
 }
 
 /// Get rollup height
