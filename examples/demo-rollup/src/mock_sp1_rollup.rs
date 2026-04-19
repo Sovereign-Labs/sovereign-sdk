@@ -32,7 +32,7 @@ use crate::solana_offchain_endpoint::solana_offchain_router;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`SP1`] inner vm and [`MockZkvm`] for outer vm
 #[derive(Default, Clone, Copy)]
-pub struct Sp1MockDemoRollup<M> {
+pub struct MockSp1DemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
@@ -41,7 +41,7 @@ type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
-pub type Sp1MockRollupSpec<M> = ConfigurableSpec<
+pub type MockSp1RollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
     SP1,
     MockZkvm,
@@ -51,26 +51,26 @@ pub type Sp1MockRollupSpec<M> = ConfigurableSpec<
     NativeStorage,
 >;
 
-impl RollupBlueprint<Native> for Sp1MockDemoRollup<Native>
+impl RollupBlueprint<Native> for MockSp1DemoRollup<Native>
 where
-    Sp1MockRollupSpec<Native>: PluggableSpec,
-    <Sp1MockRollupSpec<Native> as Spec>::Address: FromVmAddress<EthereumAddress>,
+    MockSp1RollupSpec<Native>: PluggableSpec,
+    <MockSp1RollupSpec<Native> as Spec>::Address: FromVmAddress<EthereumAddress>,
 {
-    type Spec = Sp1MockRollupSpec<Native>;
+    type Spec = MockSp1RollupSpec<Native>;
     type Runtime = Runtime<Self::Spec>;
 }
 
-impl RollupBlueprint<WitnessGeneration> for Sp1MockDemoRollup<WitnessGeneration>
+impl RollupBlueprint<WitnessGeneration> for MockSp1DemoRollup<WitnessGeneration>
 where
-    Sp1MockRollupSpec<WitnessGeneration>: PluggableSpec,
-    <Sp1MockRollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
+    MockSp1RollupSpec<WitnessGeneration>: PluggableSpec,
+    <MockSp1RollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
 {
-    type Spec = Sp1MockRollupSpec<WitnessGeneration>;
+    type Spec = MockSp1RollupSpec<WitnessGeneration>;
     type Runtime = Runtime<Self::Spec>;
 }
 
 #[async_trait]
-impl FullNodeBlueprint<Native> for Sp1MockDemoRollup<Native> {
+impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
     type DaService = StorableMockDaService;
 
     type StorageManager = NomtStorageManager<MockDaSpec, Hasher, NativeStorage>;

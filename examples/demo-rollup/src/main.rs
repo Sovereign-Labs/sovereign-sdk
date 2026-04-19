@@ -12,7 +12,7 @@ use sov_db::config::{
 };
 use sov_demo_rollup::{
     celestia_risc0_host_args, mock_da_risc0_host_args, mock_da_sp1_host_args, mock_zkvm_host_args,
-    CelestiaDemoRollup, ExternalMockDemoRollup, MockDemoRollup, Sp1MockDemoRollup,
+    CelestiaDemoRollup, ExternalMockDemoRollup, MockDemoRollup, MockSp1DemoRollup,
 };
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -302,7 +302,7 @@ async fn new_rollup_with_sp1_mock_da(
     prover_config: Option<RollupProverConfig<SP1>>,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
-) -> anyhow::Result<Rollup<Sp1MockDemoRollup<Native>, Native>> {
+) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on mock DA with SP1 zkVM"
@@ -313,7 +313,7 @@ async fn new_rollup_with_sp1_mock_da(
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
 
-    let mock_rollup = Sp1MockDemoRollup::<Native>::default();
+    let mock_rollup = MockSp1DemoRollup::<Native>::default();
     mock_rollup
         .create_new_rollup(
             rt_genesis_paths,
