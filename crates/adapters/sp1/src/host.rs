@@ -44,7 +44,7 @@ impl SP1AggregationHost {
     /// and the verifying key (`inner_method_id`) of the inner proof program.
     pub fn new(elf: &'static [u8], inner_method_id: SP1MethodId) -> anyhow::Result<Self> {
         let host = SP1Host::new(elf)?;
-        let aggregation_vk = host.pk.verifying_key().clone();
+        let aggregation_vk = host.proving_key()?.verifying_key().clone();
         let code_commitment = SP1MethodId(bincode::serialize(&aggregation_vk)?);
         Ok(Self {
             inner: Arc::new(Inner {
@@ -137,13 +137,27 @@ impl SP1AggregationHost {
 /// SP1 Host implementation.
 #[derive(Clone)]
 pub struct SP1Host {
+    inner: SP1HostInner,
+}
+
+#[derive(Clone)]
+enum SP1HostInner {
+    /// Non-proving host; any call that needs a proving/verifying key errors.
+    /// Used by tests that run with `RollupProverConfig::Skip`, which drops
+    /// the host arguments before reaching `create_prover_service`.
+    Skip,
+    Execute(SP1HostExecute),
+}
+
+#[derive(Clone)]
+struct SP1HostExecute {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
 }
 
 /// Instantiate a new SP1 Host.
 impl SP1Host {
-    /// Create a new SP1 Host.
+    /// Create a new SP1 Host backed by a real proving key derived from `elf`.
     pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
         let prover = ProverClient::from_env();
 
@@ -152,14 +166,36 @@ impl SP1Host {
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
         Ok(Self {
-            prover,
-            pk: Arc::new(pk),
+            inner: SP1HostInner::Execute(SP1HostExecute {
+                prover,
+                pk: Arc::new(pk),
+            }),
         })
+    }
+
+    /// Create a non-proving SP1 Host. Any call that would require a proving
+    /// or verifying key returns an error. Intended for test configurations
+    /// (e.g. `RollupProverConfig::Skip`) where a host must be constructed but
+    /// is never actually exercised.
+    pub fn skip() -> Self {
+        Self {
+            inner: SP1HostInner::Skip,
+        }
     }
 
     /// Create a new `Sp1Guest` that reads the provided hints
     pub fn simulate_with_hints(stdin: SP1Stdin) -> SP1Guest {
         SP1Guest::with_hints(stdin.buffer)
+    }
+
+    /// Returns the proving key, or an error if the host was constructed in Skip mode.
+    pub(crate) fn proving_key(&self) -> anyhow::Result<&EnvProvingKey> {
+        match &self.inner {
+            SP1HostInner::Skip => {
+                anyhow::bail!("SP1Host was constructed in Skip mode; no proving key is available")
+            }
+            SP1HostInner::Execute(exec) => Ok(&exec.pk),
+        }
     }
 
     fn add_proof_helper(
@@ -181,12 +217,19 @@ impl SP1Host {
     }
 
     fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+        let exec = match &self.inner {
+            SP1HostInner::Skip => {
+                anyhow::bail!("SP1Host was constructed in Skip mode; cannot run a proof")
+            }
+            SP1HostInner::Execute(exec) => exec,
+        };
+
         // Under the mock backend the inner compressed proofs are dummies that
         // would fail the executor-side deferred-proof check. Skip that check so
         // mock aggregation can run end-to-end; real backends keep it on.
-        let request = self.prover.prove(&self.pk, stdin).compressed();
+        let request = exec.prover.prove(&exec.pk, stdin).compressed();
 
-        let is_mock = matches!(&self.prover, &EnvProver::Mock(_));
+        let is_mock = matches!(&exec.prover, &EnvProver::Mock(_));
         let request = if is_mock {
             request.deferred_proof_verification(false)
         } else {
@@ -222,8 +265,14 @@ impl ZkvmHost for SP1Host {
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
+        let exec = match &self.inner {
+            SP1HostInner::Skip => {
+                anyhow::bail!("SP1Host was constructed in Skip mode; no verifying key is available")
+            }
+            SP1HostInner::Execute(exec) => exec,
+        };
         Ok(crate::SP1MethodId(bincode::serialize(
-            self.pk.verifying_key(),
+            exec.pk.verifying_key(),
         )?))
     }
 }

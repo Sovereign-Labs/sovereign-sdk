@@ -16,12 +16,12 @@ use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
+use sov_sp1_adapter::host::SP1Host;
+use sov_sp1_adapter::{SP1CryptoSpec, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
@@ -30,24 +30,24 @@ use sov_stf_runner::RollupConfig;
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
-/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
+/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`SP1`] inner vm and [`MockZkvm`] for outer vm
 #[derive(Default, Clone, Copy)]
 pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
+type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
 pub type MockRollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
-    Risc0,
+    SP1,
     MockZkvm,
     MultiAddressEvmSolana,
     M,
-    Risc0CryptoSpec,
+    SP1CryptoSpec,
     NativeStorage,
 >;
 
@@ -152,12 +152,23 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        prover_config: RollupProverConfig<SP1>,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let (host_args, prover_config_discriminant) = prover_config.split();
-        let inner_vm = Risc0Host::new(*host_args);
+        let elf = *host_args;
+
+        let inner_vm = if elf.is_empty() {
+            SP1Host::skip()
+        } else {
+            // SP1's blocking CPU prover spins up its own tokio runtime during setup,
+            // so it must be constructed off the async executor thread.
+            tokio::task::spawn_blocking(move || SP1Host::new(elf))
+                .await
+                .expect("SP1Host setup task panicked")
+                .expect("Failed to create SP1Host from guest ELF")
+        };
 
         let outer_vm = MockZkvmHost::new_non_blocking();
         let da_verifier = Default::default();
