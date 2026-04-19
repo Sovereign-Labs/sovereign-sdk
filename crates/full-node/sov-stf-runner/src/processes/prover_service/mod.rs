@@ -26,24 +26,12 @@ where
     pub(crate) da_verifier: Da::Verifier,
 }
 
-/// The possible configurations of the prover
+/// The configuration of the prover: runs the rollup verifier and creates a SNARK of execution.
 // We use arcs for cheap cloning
 #[derive(Clone)]
-pub enum RollupProverConfig<Vm: Zkvm> {
-    /// Skip proving.
-    Skip,
-    /// Run the rollup verifier and create a SNARK of execution.
-    Prove(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
-}
-
-impl<Vm: Zkvm> RollupProverConfig<Vm> {
-    /// Returns `true` if witness generation is needed for this prover configuration.
-    ///
-    /// Only [`Prove`](Self::Prove) requires witness data;
-    /// [`Skip`](Self::Skip) does not run the verifier, so recording witness hints is wasted work.
-    pub fn needs_witness(&self) -> bool {
-        !matches!(self, Self::Skip)
-    }
+pub struct RollupProverConfig<Vm: Zkvm> {
+    /// Host arguments used to instantiate the zkVM prover.
+    pub host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
 }
 
 /// The associated discriminants of [`RollupProverConfig`]. Possible configurations of the prover
@@ -53,8 +41,6 @@ impl<Vm: Zkvm> RollupProverConfig<Vm> {
 #[derive(Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(serialize_all = "snake_case")]
 pub enum RollupProverConfigDiscriminants {
-    /// Skip proving.
-    Skip,
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
 }
@@ -66,11 +52,8 @@ impl Debug for RollupProverConfigDiscriminants {
 }
 
 impl<Vm: Zkvm> From<RollupProverConfig<Vm>> for RollupProverConfigDiscriminants {
-    fn from(value: RollupProverConfig<Vm>) -> Self {
-        match value {
-            RollupProverConfig::Prove(_) => RollupProverConfigDiscriminants::Prove,
-            RollupProverConfig::Skip => RollupProverConfigDiscriminants::Skip,
-        }
+    fn from(_value: RollupProverConfig<Vm>) -> Self {
+        RollupProverConfigDiscriminants::Prove
     }
 }
 
@@ -81,8 +64,7 @@ impl RollupProverConfigDiscriminants {
         host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
     ) -> RollupProverConfig<Vm> {
         match self {
-            RollupProverConfigDiscriminants::Skip => RollupProverConfig::Skip,
-            RollupProverConfigDiscriminants::Prove => RollupProverConfig::Prove(host_args),
+            RollupProverConfigDiscriminants::Prove => RollupProverConfig { host_args },
         }
     }
 }
@@ -95,12 +77,7 @@ impl<Vm: Zkvm> RollupProverConfig<Vm> {
         Arc<<Vm::Host as ZkvmHost>::HostArgs>,
         RollupProverConfigDiscriminants,
     ) {
-        match self {
-            RollupProverConfig::Skip => (Default::default(), RollupProverConfigDiscriminants::Skip),
-            RollupProverConfig::Prove(host_args) => {
-                (host_args, RollupProverConfigDiscriminants::Prove)
-            }
-        }
+        (self.host_args, RollupProverConfigDiscriminants::Prove)
     }
 }
 
@@ -200,13 +177,13 @@ mod tests {
 
     #[test]
     fn prover_config_debug_and_display_are_the_same() {
-        let config = RollupProverConfigDiscriminants::Skip;
+        let config = RollupProverConfigDiscriminants::Prove;
         assert_eq!(format!("{config:?}"), format!("{}", config));
     }
 
     #[test]
     fn prover_config_display_from_str() {
-        let config = RollupProverConfigDiscriminants::Skip;
+        let config = RollupProverConfigDiscriminants::Prove;
         assert_eq!(
             RollupProverConfigDiscriminants::from_str(&config.to_string()).unwrap(),
             config

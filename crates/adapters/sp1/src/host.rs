@@ -137,20 +137,6 @@ impl SP1AggregationHost {
 /// SP1 Host implementation.
 #[derive(Clone)]
 pub struct SP1Host {
-    inner: SP1HostInner,
-}
-
-#[derive(Clone)]
-enum SP1HostInner {
-    /// Non-proving host; any call that needs a proving/verifying key errors.
-    /// Used by tests that run with `RollupProverConfig::Skip`, which drops
-    /// the host arguments before reaching `create_prover_service`.
-    Skip,
-    Execute(SP1HostExecute),
-}
-
-#[derive(Clone)]
-struct SP1HostExecute {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
 }
@@ -166,21 +152,9 @@ impl SP1Host {
             .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
         Ok(Self {
-            inner: SP1HostInner::Execute(SP1HostExecute {
-                prover,
-                pk: Arc::new(pk),
-            }),
+            prover,
+            pk: Arc::new(pk),
         })
-    }
-
-    /// Create a non-proving SP1 Host. Any call that would require a proving
-    /// or verifying key returns an error. Intended for test configurations
-    /// (e.g. `RollupProverConfig::Skip`) where a host must be constructed but
-    /// is never actually exercised.
-    pub fn skip() -> Self {
-        Self {
-            inner: SP1HostInner::Skip,
-        }
     }
 
     /// Create a new `Sp1Guest` that reads the provided hints
@@ -188,14 +162,8 @@ impl SP1Host {
         SP1Guest::with_hints(stdin.buffer)
     }
 
-    /// Returns the proving key, or an error if the host was constructed in Skip mode.
     pub(crate) fn proving_key(&self) -> anyhow::Result<&EnvProvingKey> {
-        match &self.inner {
-            SP1HostInner::Skip => {
-                anyhow::bail!("SP1Host was constructed in Skip mode; no proving key is available")
-            }
-            SP1HostInner::Execute(exec) => Ok(&exec.pk),
-        }
+        Ok(&self.pk)
     }
 
     fn add_proof_helper(
@@ -217,19 +185,12 @@ impl SP1Host {
     }
 
     fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-        let exec = match &self.inner {
-            SP1HostInner::Skip => {
-                anyhow::bail!("SP1Host was constructed in Skip mode; cannot run a proof")
-            }
-            SP1HostInner::Execute(exec) => exec,
-        };
-
         // Under the mock backend the inner compressed proofs are dummies that
         // would fail the executor-side deferred-proof check. Skip that check so
         // mock aggregation can run end-to-end; real backends keep it on.
-        let request = exec.prover.prove(&exec.pk, stdin).compressed();
+        let request = self.prover.prove(&self.pk, stdin).compressed();
 
-        let is_mock = matches!(&exec.prover, &EnvProver::Mock(_));
+        let is_mock = matches!(&self.prover, &EnvProver::Mock(_));
         let request = if is_mock {
             request.deferred_proof_verification(false)
         } else {
@@ -265,14 +226,8 @@ impl ZkvmHost for SP1Host {
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
-        let exec = match &self.inner {
-            SP1HostInner::Skip => {
-                anyhow::bail!("SP1Host was constructed in Skip mode; no verifying key is available")
-            }
-            SP1HostInner::Execute(exec) => exec,
-        };
         Ok(crate::SP1MethodId(bincode::serialize(
-            exec.pk.verifying_key(),
+            self.pk.verifying_key(),
         )?))
     }
 }

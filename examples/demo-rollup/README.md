@@ -57,14 +57,13 @@ There are multiple options available:
 * `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 is built.
 * `export SKIP_GUEST_BUILD=0`, `export SKIP_GUEST_BUILD=false` or any other string: both guests are built.
 
-The default `MockDemoRollup` blueprint uses SP1 as the inner zkVM, so the SP1 guest ELF is required when proving is enabled.
+The default `MockDemoRollup` blueprint uses MockZkvm as the inner zkVM. Selecting `--zk-vm sp1` switches to SP1, which requires the SP1 guest ELF when proving is enabled.
 
-By default, demo-rollup disables proving. If you want to enable proving, several options are available:
+By default, demo-rollup disables proving. To enable proving:
 
-- `export SOV_PROVER_MODE=skip` Skips verification logic.
 - `export SOV_PROVER_MODE=prove` Run the rollup verifier and create a SNARK of execution.
 
-(!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`), only `SOV_PROVER_MODE=skip` will work, otherwise error about missing binary occurs.
+(!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`) for a zkVM that requires a guest ELF, proving will fail with a missing binary error. Leave `SOV_PROVER_MODE` unset to disable proving.
 
 ### Run a local DA layer instance
 
@@ -91,7 +90,7 @@ $ make clean
 3. Now run the demo-rollup full node, as shown below.
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ SP1_PROVER=mock ../../target/debug/sov-demo-rollup
+$ SP1_PROVER=mock ../../target/debug/sov-demo-rollup --zk-vm sp1
 ```
 
 Leave it running while you proceed with the rest of the demo.
