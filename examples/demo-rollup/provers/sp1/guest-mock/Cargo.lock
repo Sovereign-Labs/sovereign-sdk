@@ -6253,6 +6253,7 @@ dependencies = [
  "sov-zkvm-utils",
  "sp1-lib",
  "sp1-primitives",
+ "sp1-recursion-executor",
  "sp1-sdk",
  "sp1-verifier",
  "sp1-zkvm",
