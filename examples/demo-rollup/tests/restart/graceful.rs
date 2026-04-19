@@ -574,8 +574,8 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = Some(RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            });
+            host_args: mock_zkvm_host_args(),
+        });
         // Since we have the prover enabled, we need to disable state root consistency checks.
         if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
             sequencer_conf.disable_state_root_consistency_checks = true;
@@ -733,8 +733,8 @@ async fn check_with_increasing_stf_infos(
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = Some(RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            });
+            host_args: mock_zkvm_host_args(),
+        });
         c.aggregated_proof_block_jump = aggregated_proof_jump;
         c.max_channel_size = max_channel_size;
         c.max_infos_in_db = max_infos_in_db;
