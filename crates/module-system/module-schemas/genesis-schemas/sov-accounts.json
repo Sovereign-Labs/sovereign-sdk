@@ -15,7 +15,7 @@
       }
     },
     "enable_custom_account_mappings": {
-      "description": "Enable custom `CredentailId` => `Account` mapping.",
+      "description": "Enable custom `CredentialId` => `Account` mapping.",
       "default": true,
       "type": "boolean"
     }

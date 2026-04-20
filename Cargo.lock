@@ -11190,6 +11190,7 @@ dependencies = [
  "serde",
  "serde_with",
  "sov-accounts",
+ "sov-bank",
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",

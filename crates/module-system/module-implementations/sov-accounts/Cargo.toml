@@ -29,6 +29,7 @@ arbitrary = { workspace = true, optional = true }
 sov-accounts = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 strum = { workspace = true }
+sov-bank = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["test-utils"] }
 sov-test-utils = { workspace = true }
 

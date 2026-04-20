@@ -1,7 +1,10 @@
 use sov_accounts::{Accounts, CallMessage, Response};
+use sov_bank::{config_gas_token_id, Amount, Bank, Coins};
+use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::{UnsignedTransaction, Version1};
 use sov_modules_api::{
-    CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+    CredentialId, CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec,
+    TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -18,6 +21,18 @@ type S = sov_test_utils::TestSpec;
 generate_optimistic_runtime!(TestAccountsRuntime <=);
 
 type RT = TestAccountsRuntime<S>;
+
+/// Mirror of the address derivation in `Accounts::insert_credential_id`.
+fn expected_derived_address(
+    new_credential: CredentialId,
+    sender: <S as Spec>::Address,
+) -> <S as Spec>::Address {
+    let mut hasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher::new();
+    hasher.update(new_credential.0 .0);
+    hasher.update(sender.as_ref());
+    let hash: [u8; 32] = hasher.finalize().into();
+    <S as Spec>::Address::from(CredentialId::from_bytes(hash))
+}
 
 struct TestData<S: Spec> {
     account_1: TestUser<S>,
@@ -107,11 +122,11 @@ fn test_update_account() {
 
             let accounts = Accounts::<S>::default();
 
-            // New account with the new public key and an old address is created.
+            // New credential maps to a freshly derived, non-controlled address.
             assert_eq!(
                 accounts.get_account(new_credential, state),
                 Response::AccountExists {
-                    addr: user.address()
+                    addr: expected_derived_address(new_credential, user.address())
                 }
             );
             // Account corresponding to the old credential still exists.
@@ -132,23 +147,28 @@ fn test_update_account_fails() {
     let (
         TestData {
             account_1,
-            account_2,
+            non_registered_account,
             ..
         },
         mut runner,
     ) = setup();
 
+    // `non_registered_account` has no `custom_credential_id`, so its signing
+    // credential matches the address that holds its balance — gas reservation
+    // can succeed and the call handler actually runs.
     runner.execute_transaction(TransactionTestCase {
-        input: account_1.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
-            account_2.credential_id(),
-        )),
-        assert: Box::new(move |result, _state| {
-            if let TxEffect::Reverted(contents) = result.tx_receipt {
-                assert_eq!(
-                    contents.reason.to_string(),
-                    "New CredentialId already exists"
+        input: non_registered_account.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::InsertCredentialId(account_1.credential_id()),
+        ),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                let reason = contents.reason.to_string();
+                assert!(
+                    reason.contains("New CredentialId already exists"),
+                    "Unexpected revert reason: {reason}",
                 );
             }
+            other => panic!("Expected reverted transaction, got {other:?}"),
         }),
     });
 }
@@ -174,6 +194,9 @@ fn test_setup_multisig_and_act() {
     let multisig = Multisig::new(2, multisig_keys.iter().map(|k| k.pub_key()).collect());
     let multisig_credential_id =
         multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+    let user_address = user.address();
+    let user_credential_id = user.credential_id();
+    let multisig_address = expected_derived_address(multisig_credential_id, user_address);
     runner.execute_transaction(TransactionTestCase {
         input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
             multisig_credential_id,
@@ -183,22 +206,38 @@ fn test_setup_multisig_and_act() {
 
             let accounts = Accounts::<S>::default();
 
-            // New account with the new public key and an old address is created.
+            // Multisig credential maps to a freshly derived, non-controlled address —
+            // it must not alias the creator's address, otherwise a compromise of the
+            // creator's single key would also control the multisig.
             assert_eq!(
                 accounts.get_account(multisig_credential_id, state),
                 Response::AccountExists {
-                    addr: user.address()
+                    addr: multisig_address,
                 }
             );
             // Account corresponding to the old credential still exists.
             assert_eq!(
-                accounts.get_account(user.credential_id(), state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
+                accounts.get_account(user_credential_id, state),
+                Response::AccountExists { addr: user_address }
             );
 
-            assert_ne!(multisig_credential_id, user.credential_id());
+            assert_ne!(multisig_credential_id, user_credential_id);
+        }),
+    });
+
+    // The multisig now lives at its own, non-controlled address and has no balance of
+    // its own — transfer from `user` so subsequent multisig-signed transactions can
+    // reserve gas.
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Bank<S>>(sov_bank::CallMessage::Transfer {
+            to: multisig_address,
+            coins: Coins {
+                amount: Amount::new(1_000_000_000_000),
+                token_id: config_gas_token_id(),
+            },
+        }),
+        assert: Box::new(move |result, _state| {
+            assert!(result.tx_receipt.is_successful(), "Funding transfer failed");
         }),
     });
 
@@ -405,11 +444,14 @@ fn test_register_new_account() {
 
             let accounts = Accounts::<S>::default();
 
-            // New account with the new public key and an old address is created.
+            // New credential maps to a freshly derived, non-controlled address.
             assert_eq!(
                 accounts.get_account(new_credential, state),
                 Response::AccountExists {
-                    addr: non_registered_account.address()
+                    addr: expected_derived_address(
+                        new_credential,
+                        non_registered_account.address(),
+                    ),
                 }
             );
 
@@ -507,18 +549,19 @@ fn test_resolve_address_if_more_than_one_credential() {
     runner.query_visible_state(|state| {
         let mut accounts = Accounts::<S>::default();
 
+        // Each credential now resolves to its own derived address, not the sender's.
         assert_eq!(
             accounts
                 .resolve_sender_address(&default_address_1, &credential_1, state)
                 .unwrap(),
-            non_registered_account.address()
+            expected_derived_address(credential_1, non_registered_account.address()),
         );
 
         assert_eq!(
             accounts
                 .resolve_sender_address(&default_address_2, &credential_2, state)
                 .unwrap(),
-            non_registered_account.address()
+            expected_derived_address(credential_2, non_registered_account.address()),
         );
     });
 }
