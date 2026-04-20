@@ -57,3 +57,48 @@ impl Metric for ZkProofManagerMetrics {
         )
     }
 }
+
+/// Metrics emitted after each completed aggregated proof.
+#[derive(Debug)]
+pub(crate) struct ZkAggregatedProofMetrics {
+    /// Wall-clock time for the full aggregated proof cycle, in milliseconds.
+    pub aggregation_duration_ms: u128,
+}
+
+impl Metric for ZkAggregatedProofMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_zk_aggregated_proof"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} aggregation_duration_ms={}i",
+            self.measurement_name(),
+            self.aggregation_duration_ms,
+        )
+    }
+}
+
+/// Metrics for the network prover.
+/// Emitted after each proof submission to the proving network.
+#[derive(Debug)]
+pub(crate) struct ZkNetworkProverMetrics {
+    /// Time in milliseconds for submitting a proof request to the network.
+    pub submit_duration_ms: u128,
+}
+
+impl Metric for ZkNetworkProverMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_zk_network_prover"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} submit_duration_ms={}i",
+            self.measurement_name(),
+            self.submit_duration_ms,
+        )
+    }
+}

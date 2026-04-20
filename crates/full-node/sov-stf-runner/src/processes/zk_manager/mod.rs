@@ -215,13 +215,9 @@ where
             let aggregation_duration = proving_start.elapsed();
 
             sov_metrics::track_metrics(|tracker| {
-                tracker.submit_inline(
-                    "sov_rollup_zk_aggregated_proof",
-                    format!(
-                        "aggregation_duration_ms={}i",
-                        aggregation_duration.as_millis()
-                    ),
-                );
+                tracker.submit(super::metrics::ZkAggregatedProofMetrics {
+                    aggregation_duration_ms: aggregation_duration.as_millis(),
+                });
             });
 
             tracing::debug!(

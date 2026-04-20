@@ -141,10 +141,9 @@ where
             .await
             .map_err(ProverServiceError::Other)?;
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit_inline(
-                "sov_rollup_zk_network_proof_submit",
-                format!("duration_ms={}i", submit_start.elapsed().as_millis()),
-            );
+            tracker.submit(crate::processes::metrics::ZkNetworkProverMetrics {
+                submit_duration_ms: submit_start.elapsed().as_millis(),
+            });
         });
 
         let StateTransitionWitnessWithAddress {
