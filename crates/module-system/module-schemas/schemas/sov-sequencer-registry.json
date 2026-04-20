@@ -100,6 +100,33 @@
       "required": [
         "withdraw"
       ]
+    },
+    {
+      "description": "Rotates the sequencer's DA address without unstaking.\n\nAuthorized by the rollup key (`context.sender()`) — the intended\nrecovery path when a DA signing key is compromised but the rollup\nkey is safe. Preserves `balance`, `balance_state`, and the\n`preferred_sequencer` pointer (atomically moved to `new_da_address`\nif the caller was the preferred sequencer).\n\nAfter this call lands on-chain, the sequencer node operator must\nrestart their binary with the new DA signer keys. The registry\ncannot enforce this from state.\n\nAt most one rotation may be pending per rollup block. A preferred\nsequencer rotating its own DA defers application to end-of-block;\nwhile that rotation is pending, any other `UpdateDaAddress` in the\nsame block (by any sequencer) is rejected and must be retried in a\nlater block.",
+      "type": "object",
+      "properties": {
+        "update_da_address": {
+          "type": "object",
+          "properties": {
+            "new_da_address": {
+              "description": "The new DA address. Must not already be registered.",
+              "$ref": "#/$defs/MockAddress"
+            },
+            "old_da_address": {
+              "description": "The sequencer's current DA address (the one being rotated away from).",
+              "$ref": "#/$defs/MockAddress"
+            }
+          },
+          "required": [
+            "old_da_address",
+            "new_da_address"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "update_da_address"
+      ]
     }
   ],
   "$defs": {

@@ -8,6 +8,7 @@ mod call;
 mod capabilities;
 mod event;
 mod genesis;
+mod hooks;
 mod registration;
 
 use std::convert::Infallible;
@@ -75,6 +76,25 @@ impl<S: Spec> TryFrom<KnownSequencer<S>> for AllowedSequencer<S> {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
+)]
+struct PendingDaAddressUpdate<S: Spec> {
+    sequencer: S::Address,
+    old_da_address: <S::Da as DaSpec>::Address,
+    new_da_address: <S::Da as DaSpec>::Address,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
+)]
+struct RetiredDaAddress<S: Spec> {
+    sequencer: S::Address,
+    current_da_address: <S::Da as DaSpec>::Address,
+}
+
 /// The status of the sequencer's balance.
 #[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
 pub enum BalanceState {
@@ -137,6 +157,15 @@ pub struct SequencerRegistry<S: Spec> {
     /// Minimum bond for the sequencer to be registered.
     #[state]
     pub(crate) minimum_bond: StateValue<Amount>,
+
+    /// A preferred sequencer DA address rotation scheduled for the end of the current rollup block.
+    #[state]
+    pending_da_address_update: StateValue<PendingDaAddressUpdate<S>>,
+
+    /// DA addresses retired by rotation. Retired addresses cannot sequence or be reused, but
+    /// escrow refunds already addressed to them are redirected to the sequencer's current DA.
+    #[state]
+    retired_da_addresses: KernelStateMap<<S::Da as DaSpec>::Address, RetiredDaAddress<S>>,
 }
 
 /// A special error type that can be raised when calling a method from the sequencer registry
@@ -169,6 +198,10 @@ pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
         /// The address of the transaction sender.
         sender: RollupAddress,
     },
+
+    /// The sequencer attempted to update its DA address to the same value.
+    #[error("Cannot update DA address to the same value: {0}")]
+    NewDaAddressSameAsOld(DaAddress),
 }
 
 /// The different errors that can be raised by the sequencer registry
@@ -222,6 +255,11 @@ impl<S: Spec> Module for SequencerRegistry<S> {
             CallMessage::Withdraw { da_address } => {
                 Ok(self.withdraw(&da_address, context, state)?)
             }
+
+            CallMessage::UpdateDaAddress {
+                old_da_address,
+                new_da_address,
+            } => Ok(self.update_da_address(&old_da_address, &new_da_address, context, state)?),
         }
     }
 }

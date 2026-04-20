@@ -86,6 +86,12 @@ Temporary section for maintaining breaking changes from individual PRs, which wi
 - #2904 **Breaking change**: for EVM rollups only: removes the `EVM_RECEIPT_ACTUAL_FEE_HEIGHT` constant.
   Receipt `effectiveGasPrice` and projected `gasUsed` are now unconditionally derived from the actual metered fee. 
   Forks that had set this to a non-zero future activation height must migrate; the new behavior is mandatory.
+- #2766 **Breaking change (code, wire, consensus)**: `sov-sequencer-registry` adds an `UpdateDaAddress { old_da_address, new_da_address }` variant to `CallMessage`, changing the borsh encoding surface and the chain hash.
+  Rotation is authorized by the rollup key (`context.sender()`), so a sequencer whose DA signing key is compromised (but whose rollup key is safe) can recover without going through withdrawal.
+  Balance, balance state, and the preferred-sequencer pointer are preserved; the old DA is marked retired (cannot be re-registered or rotated to).
+  Recovery procedure:
+    1. sign and submit `UpdateDaAddress` from the rollup key while the old DA is still valid
+    2. once the tx lands, restart the sequencer binary with the new DA signing keys. Blobs signed with the old key after the rotation lands are rejected as `NotRegistered` (no security impact, only lost throughput during the restart window).
 
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
