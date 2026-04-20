@@ -49,17 +49,17 @@ type BenchNativeStorage =
 type BenchStorageManager = NomtStorageManager<MockDaSpec, Hasher, BenchNativeStorage>;
 
 /// Parallel prover factory for the Risc0 inner VM benchmarks.
-pub struct Risc0ProverFactory<Sp>(PhantomData<Sp>);
+pub struct Risc0ProverFactory<S>(PhantomData<S>);
 
 #[async_trait]
-impl<Sp> ProverFactory<Sp> for Risc0ProverFactory<Sp>
+impl<S> ProverFactory<S> for Risc0ProverFactory<S>
 where
-    Sp: Spec<Da = MockDaSpec, InnerZkvm = Risc0, OuterZkvm = MockZkvm> + PluggableSpec,
+    S: Spec<Da = MockDaSpec, InnerZkvm = Risc0, OuterZkvm = MockZkvm> + PluggableSpec,
 {
     type ProverService = ParallelProverService<
-        <Sp as Spec>::Address,
-        <<Sp as Spec>::Storage as Storage>::Root,
-        <<Sp as Spec>::Storage as Storage>::Witness,
+        <S as Spec>::Address,
+        <<S as Spec>::Storage as Storage>::Root,
+        <<S as Spec>::Storage as Storage>::Witness,
         StorableMockDaService,
         Risc0,
         MockZkvm,
@@ -67,7 +67,7 @@ where
 
     async fn create(
         _prover_config: RollupProverConfig,
-        rollup_config: &RollupConfig<<Sp as Spec>::Address, StorableMockDaService>,
+        rollup_config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
     ) -> Self::ProverService {
         let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
         let outer_vm = MockZkvmHost::new_non_blocking();
