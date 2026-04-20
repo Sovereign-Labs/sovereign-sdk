@@ -28,9 +28,7 @@ use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
-use sov_stf_runner::processes::{
-    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
-};
+use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::solana_offchain_endpoint::solana_offchain_router;
@@ -184,7 +182,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            RollupProverConfigDiscriminants::Prove,
+            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

@@ -11,7 +11,7 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
-use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants, Verifier};
+use super::{ProverService, ProverServiceError, RollupProverConfig, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
 
 /// Prover service that generates proofs in parallel.
@@ -26,7 +26,7 @@ where
 {
     inner_vm: InnerVm::Host,
     outer_vm: OuterVm::OuterHost,
-    prover_config: RollupProverConfigDiscriminants,
+    prover_config: RollupProverConfig,
 
     prover_state: Prover<Address, StateRoot, Witness, Da>,
 
@@ -50,7 +50,7 @@ where
         inner_vm: InnerVm::Host,
         outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
-        config: RollupProverConfigDiscriminants,
+        config: RollupProverConfig,
         num_threads: usize,
         prover_address: Address,
     ) -> Self {
@@ -70,7 +70,7 @@ where
         inner_vm: InnerVm::Host,
         outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
-        config: RollupProverConfigDiscriminants,
+        config: RollupProverConfig,
         prover_address: Address,
     ) -> Self {
         let num_cpus = num_cpus::get();

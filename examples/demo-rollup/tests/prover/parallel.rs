@@ -7,7 +7,7 @@ use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::{SP1Verifier, SP1};
 use sov_stf_runner::processes::{
     ParallelProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
-    RollupProverConfigDiscriminants, StateTransitionInfo,
+    RollupProverConfig, StateTransitionInfo,
 };
 
 use super::{DefaultSpec, ProofStateRoot, ProofWitness};
@@ -61,7 +61,7 @@ async fn test_parallel_proof_generation() {
         inner_vm,
         outer_vm,
         da_verifier,
-        RollupProverConfigDiscriminants::Prove,
+        RollupProverConfig::Prove,
         prover_address,
     );
 

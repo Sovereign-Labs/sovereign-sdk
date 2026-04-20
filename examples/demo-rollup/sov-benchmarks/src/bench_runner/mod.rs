@@ -28,9 +28,7 @@ use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::DaSpec;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{
-    ParallelProverService, RollupProverConfig, RollupProverConfigDiscriminants,
-};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{MockDaSpec, ProverFactory, RtAgnosticBlueprint};
@@ -78,14 +76,13 @@ where
             inner_vm,
             outer_vm,
             Default::default(),
-            RollupProverConfigDiscriminants::Prove,
+            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }
 }
 
-pub type BenchBlueprint =
-    RtAgnosticBlueprint<S, RT, BenchStorageManager, Risc0ProverFactory<S>>;
+pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, BenchStorageManager, Risc0ProverFactory<S>>;
 pub type BenchRollup = TestRollup<BenchBlueprint>;
 pub type BenchRollupBuilder = RollupBuilder<BenchBlueprint>;
 pub type BenchLogs = BasicChangeLogEntry<S>;

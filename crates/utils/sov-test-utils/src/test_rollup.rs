@@ -193,9 +193,9 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     /// Enables the prover for this rollup. Equivalent to setting
-    /// [`RollupBuilderConfig::rollup_prover_config`] to `Some(RollupProverConfig)`.
+    /// [`RollupBuilderConfig::rollup_prover_config`] to `Some(RollupProverConfig::Prove)`.
     pub fn enable_prover(mut self) -> Self {
-        self.config.rollup_prover_config = Some(RollupProverConfig);
+        self.config.rollup_prover_config = Some(RollupProverConfig::Prove);
 
         self.disable_state_root_consistency_checks()
     }
@@ -273,7 +273,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                     .create_new_rollup(
                         genesis_paths,
                         rollup_config.clone(),
-                        self.config.rollup_prover_config.clone(),
+                        self.config.rollup_prover_config,
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
@@ -285,7 +285,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                     .create_new_rollup_with_genesis_params(
                         genesis_params.clone(),
                         rollup_config.clone(),
-                        self.config.rollup_prover_config.clone(),
+                        self.config.rollup_prover_config,
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
@@ -1221,7 +1221,6 @@ pub fn read_private_key<S: Spec>(suffix: &str) -> PrivateKeyAndAddress<S> {
 
     key_and_address
 }
-
 
 /// Get rollup height
 pub async fn get_height(client: &NodeClient) -> anyhow::Result<RollupHeight> {

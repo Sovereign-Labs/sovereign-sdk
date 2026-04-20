@@ -19,7 +19,7 @@ use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_rollup_blueprint::logging::initialize_logging;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, Rollup};
-use sov_stf_runner::processes::{RollupProverConfig, RollupProverConfigDiscriminants};
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
 
@@ -92,16 +92,11 @@ async fn run() -> anyhow::Result<()> {
 
     let rollup_config_path = args.rollup_config_path.as_str();
 
-    let prover_config_disc = parse_prover_config().expect("Failed to parse prover config");
-    tracing::info!(
-        ?prover_config_disc,
-        "Running demo rollup with prover config"
-    );
+    let prover_config = parse_prover_config().expect("Failed to parse prover config");
+    tracing::info!(?prover_config, "Running demo rollup with prover config");
 
     let start_at_rollup_height = args.start_at_rollup_height.map(RollupHeight::new);
     let stop_at_rollup_height = args.stop_at_rollup_height.map(RollupHeight::new);
-
-    let prover_config = prover_config_disc.map(RollupProverConfig::from);
 
     match (args.da_layer, args.zk_vm) {
         (SupportedDaLayer::Mock, SupportedZkVm::Mock) => {
@@ -161,14 +156,14 @@ async fn run() -> anyhow::Result<()> {
     }
 }
 
-fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfigDiscriminants>> {
+fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfig>> {
     if let Some(value) = option_env!("SOV_PROVER_MODE") {
         let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
             tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
         })?;
         #[cfg(debug_assertions)]
         {
-            if config == RollupProverConfigDiscriminants::Prove {
+            if config == RollupProverConfig::Prove {
                 tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
             }
         }

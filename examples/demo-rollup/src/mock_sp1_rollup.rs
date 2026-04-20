@@ -24,9 +24,7 @@ use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::{SP1CryptoSpec, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{
-    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
-};
+use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
@@ -43,15 +41,8 @@ type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
-pub type MockSp1RollupSpec<M> = ConfigurableSpec<
-    MockDaSpec,
-    SP1,
-    SP1,
-    MultiAddressEvmSolana,
-    M,
-    SP1CryptoSpec,
-    NativeStorage,
->;
+pub type MockSp1RollupSpec<M> =
+    ConfigurableSpec<MockDaSpec, SP1, SP1, MultiAddressEvmSolana, M, SP1CryptoSpec, NativeStorage>;
 
 impl RollupBlueprint<Native> for MockSp1DemoRollup<Native>
 where
@@ -171,18 +162,11 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
             .expect("SP1Host setup task panicked")
             .expect("Failed to create SP1Host from guest ELF");
 
-        let inner_vm_clone = inner_vm.clone();
-        let inner_code_commitment = tokio::task::spawn_blocking(move || {
-            inner_vm_clone
-                .code_commitment()
-                .expect("SP1 inner code commitment should be created successfully")
-        })
-        .await
-        .expect("SP1 inner code commitment task panicked");
+        let inner_verifying_key = inner_vm.verifying_key().clone();
 
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
         let outer_vm = tokio::task::spawn_blocking(move || {
-            SP1AggregationHost::new(agg_elf, inner_code_commitment)
+            SP1AggregationHost::new(agg_elf, inner_verifying_key)
                 .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
         })
         .await
@@ -194,7 +178,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            RollupProverConfigDiscriminants::Prove,
+            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

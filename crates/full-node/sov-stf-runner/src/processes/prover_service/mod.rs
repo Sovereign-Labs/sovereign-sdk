@@ -25,38 +25,21 @@ where
     pub(crate) da_verifier: Da::Verifier,
 }
 
-/// Flag indicating the prover should run the rollup verifier and create a SNARK of execution.
+/// Prover mode, parsed from the `SOV_PROVER_MODE` env var / CLI flag.
 ///
 /// Blueprints that need more configuration (e.g., which guest ELF to prove) should source
 /// that directly in [`crate::processes::ProverService`] construction rather than threading
 /// it through this type.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct RollupProverConfig;
-
-/// String-parseable discriminant for [`RollupProverConfig`], used to deserialize
-/// prover mode from env vars / CLI flags.
 #[derive(Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(serialize_all = "snake_case")]
-pub enum RollupProverConfigDiscriminants {
+pub enum RollupProverConfig {
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
 }
 
-impl Debug for RollupProverConfigDiscriminants {
+impl Debug for RollupProverConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_string())
-    }
-}
-
-impl From<RollupProverConfig> for RollupProverConfigDiscriminants {
-    fn from(_value: RollupProverConfig) -> Self {
-        RollupProverConfigDiscriminants::Prove
-    }
-}
-
-impl From<RollupProverConfigDiscriminants> for RollupProverConfig {
-    fn from(_value: RollupProverConfigDiscriminants) -> Self {
-        RollupProverConfig
     }
 }
 
@@ -156,15 +139,15 @@ mod tests {
 
     #[test]
     fn prover_config_debug_and_display_are_the_same() {
-        let config = RollupProverConfigDiscriminants::Prove;
+        let config = RollupProverConfig::Prove;
         assert_eq!(format!("{config:?}"), format!("{}", config));
     }
 
     #[test]
     fn prover_config_display_from_str() {
-        let config = RollupProverConfigDiscriminants::Prove;
+        let config = RollupProverConfig::Prove;
         assert_eq!(
-            RollupProverConfigDiscriminants::from_str(&config.to_string()).unwrap(),
+            RollupProverConfig::from_str(&config.to_string()).unwrap(),
             config
         );
     }

@@ -118,7 +118,7 @@ pub async fn setup_test_rollup(
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
     start_node(
-        RollupProverConfig,
+        RollupProverConfig::Prove,
         finalization_blocks,
         Some(extension),
         None,

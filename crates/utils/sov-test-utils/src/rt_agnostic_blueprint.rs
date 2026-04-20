@@ -25,9 +25,7 @@ use sov_rollup_interface::zk::ZkvmGuest;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
-use sov_stf_runner::processes::{
-    ParallelProverService, ProverService, RollupProverConfig, RollupProverConfigDiscriminants,
-};
+use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 /// Factory for creating a prover service within [`RtAgnosticBlueprint`].
@@ -81,7 +79,7 @@ where
             inner_vm,
             outer_vm,
             Default::default(),
-            RollupProverConfigDiscriminants::Prove,
+            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

@@ -34,7 +34,7 @@ pub struct SP1AggregationHost {
 
 struct Inner {
     host: SP1Host,
-    aggregation_vk: sp1_sdk::SP1VerifyingKey,
+    outer_vk: sp1_sdk::SP1VerifyingKey,
     inner_vk: sp1_sdk::SP1VerifyingKey,
     prev_agg_proof: Mutex<Option<sp1_sdk::SP1ProofWithPublicValues>>,
 }
@@ -44,12 +44,12 @@ impl SP1AggregationHost {
     /// and the verifying key (`inner_method_id`) of the inner proof program.
     pub fn new(elf: &'static [u8], inner_vk: sp1_sdk::SP1VerifyingKey) -> anyhow::Result<Self> {
         let host = SP1Host::new(elf)?;
-        let aggregation_vk = host.proving_key()?.verifying_key().clone();
+        let outer_vk = host.proving_key()?.verifying_key().clone();
 
         Ok(Self {
             inner: Arc::new(Inner {
                 host,
-                aggregation_vk,
+                outer_vk,
                 inner_vk,
                 prev_agg_proof: Mutex::new(None),
             }),
@@ -58,7 +58,7 @@ impl SP1AggregationHost {
 
     /// Returns the code commitment (verifying key) of the aggregation program.
     pub fn code_commitment(&self) -> SP1MethodId {
-        SP1MethodId(self.inner.aggregation_vk.hash_u32())
+        SP1MethodId(self.inner.outer_vk.hash_u32())
     }
 
     /// Generates a compressed aggregation proof over the supplied inner
@@ -83,11 +83,10 @@ impl SP1AggregationHost {
 
         let prev_outer_proof_witness = if let Some(previous_outer_proof) = prev_agg_proof.as_ref() {
             let serialized = bincode::serialize(previous_outer_proof)?;
-            let public_values = self.inner.host.add_proof_helper(
-                &mut stdin,
-                &serialized,
-                &self.inner.aggregation_vk,
-            )?;
+            let public_values =
+                self.inner
+                    .host
+                    .add_proof_helper(&mut stdin, &serialized, &self.inner.outer_vk)?;
 
             Some(PreviousOuterProofWitness { public_values })
         } else {
@@ -109,11 +108,11 @@ impl SP1AggregationHost {
             proof_inputs.push(proof_input);
         }
 
-        let aggregation_vk_hash = self.inner.aggregation_vk.hash_u32();
+        let outer_vk_hash = self.inner.outer_vk.hash_u32();
         let inner_vk = &self.inner.inner_vk;
 
         let inner_vkey_hash = CodeCommitmentHash::from_u32_array(inner_vk.hash_u32());
-        let outer_vkey_hash = CodeCommitmentHash::from_u32_array(aggregation_vk_hash);
+        let outer_vkey_hash = CodeCommitmentHash::from_u32_array(outer_vk_hash);
 
         let witness = AggregatedProofWitness {
             proof_inputs,
