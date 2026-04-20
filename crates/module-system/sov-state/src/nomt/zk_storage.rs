@@ -57,8 +57,13 @@ fn validate_path_proofs_for_multi_proof(path_proofs: &[PathProof]) -> anyhow::Re
 
             if lower_path[range.path_bit_index] != upper_path[range.path_bit_index] {
                 let mut mid = None;
-                for idx in range.lower..range.upper {
-                    let path = path_proofs[idx].terminal.path();
+                for (idx, path_proof) in path_proofs
+                    .iter()
+                    .enumerate()
+                    .take(range.upper)
+                    .skip(range.lower)
+                {
+                    let path = path_proof.terminal.path();
                     if path.len() <= range.path_bit_index {
                         anyhow::bail!(
                             "Malformed NOMT path proof hint: terminal path ended before range divergence"
@@ -177,16 +182,19 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         // that mirrors the prover's `Session::finish().root()`). `path_proofs` is already
         // in ascending path order, so `verified_paths` inherits the ordering that
         // `verify_update`'s PathsOutOfOrder check requires.
-        let mut verified_paths: Vec<(VerifiedPathProof, Vec<(KeyPath, Option<ValueHash>)>)> =
-            path_proofs
-                .into_iter()
-                .map(|pp| {
-                    let verified = pp
-                        .verify::<BinaryHasher<S::Hasher>>(pp.terminal.path(), prev_root)
-                        .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
-                    Ok((verified, Vec::new()))
-                })
-                .collect::<anyhow::Result<Vec<_>>>()?;
+        #[allow(clippy::type_complexity)]
+        let mut verified_paths: Vec<(
+            VerifiedPathProof,
+            Vec<(KeyPath, Option<ValueHash>)>,
+        )> = path_proofs
+            .into_iter()
+            .map(|pp| {
+                let verified = pp
+                    .verify::<BinaryHasher<S::Hasher>>(pp.terminal.path(), prev_root)
+                    .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
+                Ok((verified, Vec::new()))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
 
         // Hash and sort writes globally. Disjoint Patricia paths ⇒ each write routes to
         // exactly one bucket, and global ascending key order ⇒ each bucket ends up

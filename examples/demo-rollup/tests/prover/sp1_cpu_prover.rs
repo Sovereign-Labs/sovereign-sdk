@@ -111,13 +111,16 @@ fn default_prover_address() -> <DefaultSpec as Spec>::Address {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "manual heavy test"]
 async fn test_mock_proof_public_data_matches_witnesses() {
-    let (host, _) = TestHost::new(false).await;
+    // Use the mock prover: CPU proving is far too slow to run in tests.
+    std::env::set_var("SP1_PROVER", "mock");
+
+    let host = TestHost::new().await;
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
     let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
 
     for witness in witnesses {
-        let expected_initial_state_root = witness.initial_state_root.clone();
-        let expected_final_state_root = witness.final_state_root.clone();
+        let expected_initial_state_root = witness.initial_state_root;
+        let expected_final_state_root = witness.final_state_root;
         let expected_slot_hash = witness.da_block_header.hash();
 
         let public_data = host
@@ -164,14 +167,14 @@ impl TestHost {
         &self,
         data: ProofInput,
     ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-        let mock_host = self.mock_host.clone();
+        let mut host = self.host.clone();
+        let method_id = host.method_id();
         tokio::task::spawn_blocking(move || {
-            let proof = mock_host
+            let proof = host
                 .add_hint_and_run(&data)
                 .expect("Mock prover should run successfully");
 
-            bincode::deserialize(proof.public_values.as_slice())
-                .expect("Mock proof public values should deserialize")
+            SP1Verifier::verify(&proof, &method_id).expect("Mock proof should verify successfully")
         })
         .await
         .unwrap()
