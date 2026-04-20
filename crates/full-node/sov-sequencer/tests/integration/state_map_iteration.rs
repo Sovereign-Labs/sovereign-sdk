@@ -168,7 +168,7 @@ async fn do_step(
     // causes the sequencer to store multiple blocks worth of updates in its uncommitted changes.
     //
     // The rest of the time, we produce a new block and let the state update flow to the sequencer normally.
-    if iter >= 20 && iter < 25 {
+    if (20..25).contains(&iter) {
         if iter == 20 {
             test_rollup.pause_preferred_batches().await;
         }
