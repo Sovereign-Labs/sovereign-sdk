@@ -31,10 +31,9 @@ impl<S: Spec> Accounts<S> {
             bail!("Custom account mappings are disabled");
         }
 
+        // Important invariant: credential ids must never be deleted once inserted.
         self.exit_if_credential_exists(&new_credential_id, state)?;
 
-        // TODO: also mix in a per-sender nonce so the same (credential, sender) pair
-        // can't reproduce an address a compromised sender previously controlled.
         let addr = derive_address_for_new_credential::<S>(&new_credential_id, context.sender());
         self.accounts
             .set(&new_credential_id, &Account { addr }, state)?;

@@ -1,4 +1,6 @@
-use sov_accounts::{Accounts, CallMessage as AccountsCallMessage};
+use sov_accounts::{
+    derive_address_for_new_credential, Accounts, CallMessage as AccountsCallMessage,
+};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_eip712_auth::{
     Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
@@ -229,25 +231,58 @@ fn correct_signature_is_accepted() {
 #[test]
 fn test_multisig_signature_verification() {
     use sov_test_utils::AsUser;
-    let (mut runner, admin) = setup();
 
-    // First, create and register a multisig
+    // Pre-generate the multisig so we can configure its (future) derived address
+    // as the ValueSetter admin at genesis. Without this the multisig-signed txs
+    // below would be rejected with "Only admin can change the value".
     let multisig_keys = [
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
     ];
-
-    // Create the multisig and register it
     let multisig = Multisig::new(2, multisig_keys.iter().map(|k| k.pub_key()).collect());
     let multisig_credential_id =
         multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(2);
+    let admin = genesis_config
+        .additional_accounts()
+        .first()
+        .unwrap()
+        .clone();
+    let multisig_address =
+        derive_address_for_new_credential::<S>(&multisig_credential_id, &admin.address());
+    let module_config = sov_value_setter::ValueSetterConfig {
+        admin: multisig_address,
+    };
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.clone().into(), module_config);
+    let mut runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    // Register the multisig credential: inserts `multisig_credential_id -> multisig_address`.
     runner.execute_transaction(TransactionTestCase {
         input: admin.create_plain_message::<RT, Accounts<S>>(
             AccountsCallMessage::InsertCredentialId(multisig_credential_id),
         ),
         assert: Box::new(move |result, _state| {
             assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    // The multisig now lives at its own, non-controlled address and has no balance —
+    // fund it from `admin` so subsequent multisig-signed transactions can reserve gas.
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, sov_bank::Bank<S>>(
+            sov_bank::CallMessage::Transfer {
+                to: multisig_address,
+                coins: sov_bank::Coins {
+                    amount: sov_bank::Amount::new(1_000_000_000_000),
+                    token_id: sov_bank::config_gas_token_id(),
+                },
+            },
+        ),
+        assert: Box::new(move |result, _state| {
+            assert!(result.tx_receipt.is_successful(), "Funding transfer failed");
         }),
     });
 
