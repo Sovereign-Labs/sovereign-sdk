@@ -1,3 +1,6 @@
+# 2026-04-20
+- #2196 Renames 5 metrics to add the `sov_` prefix; update Grafana/Flux dashboards accordingly: `state_db_materialization` → `sov_state_db_materialization`, `nomt_db_stats` → `sov_nomt_db_stats`, `nomt_begin_session` → `sov_nomt_begin_session`, `storage_manager_finalization` → `sov_storage_manager_finalization`, `pruner` → `sov_db_pruner`. Also adds a metric inventory to the `sov-metrics` crate rustdoc.
+
 # 2026-04-16
 - #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
 - #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.

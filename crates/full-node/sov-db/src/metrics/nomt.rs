@@ -5,8 +5,25 @@ use nomt::Nomt;
 use sov_metrics::Metric;
 use sov_rollup_interface::reexports::digest;
 
+/// Snapshot of NOMT hash-table occupancy and page-cache effectiveness for one database.
+/// The `db` tag disambiguates instances (user / kernel / ledger). Emitted as `sov_nomt_db_stats`.
+///
+/// **What healthy looks like:** `hash_table_occupied / hash_table_capacity < 0.9`, page cache miss
+/// ratio low and steady, page/value fetch times flat.
+///
+/// **Diagnostic signals:**
+/// - Occupancy > 0.9 → NOMT emits a warning log; hash collisions start to degrade lookups
+///   and inserts. Remediation: resync the database with a larger `hash_table_capacity`.
+/// - `page_cache_misses / page_requests` rising → working set has outgrown the page cache.
+///   Remediation: raise the NOMT page-cache size or add RAM.
+/// - `avg_page_fetch_time_ns` spiking while miss ratio is flat → underlying disk is saturated
+///   (compare with OS-level I/O metrics and other DBs' NOMT stats).
+///
+/// **Correlate with:** `sov_nomt_commit_detailed` (slow commits often trace back here) and
+/// `sov_storage_manager_finalization` (finalization commit_time).
 #[derive(Debug)]
 pub struct NomtDbMetric {
+    /// Logical name of the NOMT instance (user/kernel/ledger); used as the InfluxDB `db` tag.
     pub db: &'static str,
     pub hash_table_capacity: usize,
     pub hash_table_occupied: usize,
@@ -43,7 +60,7 @@ impl NomtDbMetric {
 
 impl Metric for NomtDbMetric {
     fn measurement_name(&self) -> &'static str {
-        "nomt_db_stats"
+        "sov_nomt_db_stats"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -69,16 +86,34 @@ impl Metric for NomtDbMetric {
     }
 }
 
+/// Per-slot cost of opening a NOMT session and the unfinalized-overlay depth at that moment.
+/// Emitted as `sov_nomt_begin_session`.
+///
+/// **What healthy looks like:** `init_time` low and flat; `overlays` bounded by the finalization
+/// window (i.e., stays near the configured `STATE_ROOT_DELAY_BLOCKS`).
+///
+/// **Diagnostic signals:**
+/// - `overlays` monotonically increasing → finalization is falling behind (the node cannot
+///   promote unfinalized state to disk fast enough). Check `sov_rollup_runner_da.sync_distance`
+///   and `sov_runner_process_stf_changes`.
+/// - `init_time` spiking with stable `overlays` → storage-engine contention at session start
+///   (often correlated with compaction or heavy commits on the same DB).
+///
+/// **Correlate with:** `sov_storage_manager_finalization` (finalization latency drives overlays),
+/// `sov_nomt_commit_detailed` (commits can block session starts on the same DB).
 #[derive(Debug)]
 pub struct NomtBeginSessionMetric {
+    /// Logical name of the NOMT instance (user/kernel/ledger); InfluxDB `db` tag.
     pub db: &'static str,
+    /// Number of unfinalized overlays stacked on top of the on-disk state when the session opened.
+    /// This is the "lag to finalization" in slots.
     pub overlays: usize,
     pub init_time: std::time::Duration,
 }
 
 impl Metric for NomtBeginSessionMetric {
     fn measurement_name(&self) -> &'static str {
-        "nomt_begin_session"
+        "sov_nomt_begin_session"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -94,16 +129,29 @@ impl Metric for NomtBeginSessionMetric {
     }
 }
 
+/// Wall-clock breakdown of finalizing one slot in the storage manager (promoting the oldest
+/// overlay to on-disk state). Emitted as `sov_storage_manager_finalization`.
+///
+/// **What healthy looks like:** all three fields sub-second and stable from slot to slot.
+///
+/// **Diagnostic signals:**
+/// - `commit_time` dominates slot time → storage is the rollup's bottleneck. Investigate
+///   `sov_nomt_db_stats` (disk/page-cache pressure) and `sov_nomt_commit_detailed`.
+/// - `pruning_commit_time` is `Some` and consistently large → pruner backlog; cross-check
+///   `sov_db_pruner` throughput and the rollup's retention configuration.
+/// - `preparation_time` rising → large overlays are being materialized; see
+///   `sov_nomt_begin_session.overlays` and `sov_state_db_materialization`.
 #[derive(Debug)]
 pub struct StorageManagerFinalizationMetric {
     pub preparation_time: std::time::Duration,
     pub commit_time: std::time::Duration,
+    /// `None` when pruning did not run this slot; `Some(_)` otherwise.
     pub pruning_commit_time: Option<std::time::Duration>,
 }
 
 impl Metric for StorageManagerFinalizationMetric {
     fn measurement_name(&self) -> &'static str {
-        "storage_manager_finalization"
+        "sov_storage_manager_finalization"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -127,8 +175,25 @@ impl Metric for StorageManagerFinalizationMetric {
     }
 }
 
+/// Throughput and efficiency of one pruner pass over a NOMT database. Emitted as `sov_db_pruner`.
+/// The `db` tag distinguishes which database is being pruned.
+///
+/// **What healthy looks like:** `time` roughly linear in `keys_inspected`; a non-trivial
+/// `keys_to_prune / keys_inspected` ratio (the pruner finds work on every pass).
+///
+/// **Diagnostic signals:**
+/// - Sustained `keys_to_prune ≈ 0` with non-zero `keys_inspected` → pruner is scanning but
+///   finding nothing: retention config may be wrong, or nothing is eligible for pruning yet.
+/// - `keys_inspected` flat while `time` spikes → disk bottleneck on this DB (check
+///   `sov_nomt_db_stats` page fetch times).
+/// - No emissions at all over long windows → the pruner task may be stuck; confirm the
+///   pruner background task is still alive.
+///
+/// **Correlate with:** `sov_storage_manager_finalization.pruning_commit_time` (the commit
+/// cost paired with each inspection pass).
 #[derive(Debug)]
 pub struct PrunerMetric {
+    /// Logical name of the NOMT instance being pruned; InfluxDB `db` tag.
     pub db: &'static str,
     pub keys_inspected: usize,
     pub keys_to_prune: usize,
@@ -137,7 +202,7 @@ pub struct PrunerMetric {
 
 impl Metric for PrunerMetric {
     fn measurement_name(&self) -> &'static str {
-        "pruner"
+        "sov_db_pruner"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
