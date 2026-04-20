@@ -10,7 +10,7 @@ finalization_blocks = 0 # Defines how many blocks progress to finalization. Set 
 # failure_behavior = "none" # Configures failure injection for testing. Options: "none", or structured variants for testing
 
 [da.block_producing.periodic]
-block_time_ms = 1000
+block_time_ms = 3000
 
 # Alternative block producing modes:
 # [da.block_producing.manual] # Manual block production mode
