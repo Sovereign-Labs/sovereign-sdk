@@ -10,7 +10,10 @@ use crate::{config_gas_token_id, Amount, Bank, TokenId};
 
 /// Initial configuration for sov-bank module.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, JsonSchema)]
-#[serde(bound = "S::Address: Serialize + DeserializeOwned")]
+#[serde(
+    bound = "S::Address: Serialize + DeserializeOwned",
+    deny_unknown_fields
+)]
 #[schemars(bound = "S: Spec", rename = "BankConfig")]
 pub struct BankConfig<S: Spec> {
     /// Configuration for the gas token
@@ -23,7 +26,10 @@ pub struct BankConfig<S: Spec> {
 /// [`TokenConfig`] specifies a configuration used when generating a token for the bank
 /// module.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, JsonSchema, derive_more::Display)]
-#[serde(bound = "S::Address: Serialize + DeserializeOwned")]
+#[serde(
+    bound = "S::Address: Serialize + DeserializeOwned",
+    deny_unknown_fields
+)]
 #[display("{:?}", self)]
 #[schemars(bound = "S: Spec", rename = "TokenConfig")]
 pub struct TokenConfig<S: Spec> {
@@ -43,7 +49,10 @@ pub struct TokenConfig<S: Spec> {
 
 /// [`GasTokenConfig`] specifies a configuration for the rollup's gas token.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, JsonSchema)]
-#[serde(bound = "S::Address: Serialize + DeserializeOwned")]
+#[serde(
+    bound = "S::Address: Serialize + DeserializeOwned",
+    deny_unknown_fields
+)]
 #[schemars(bound = "S: Spec", rename = "GasTokenConfig")]
 pub struct GasTokenConfig<S: Spec> {
     /// The name of the token.

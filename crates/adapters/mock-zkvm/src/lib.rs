@@ -60,6 +60,9 @@ impl Zkvm for MockZkvm {
     type Host = crate::host::MockZkvmHost;
 
     #[cfg(feature = "native")]
+    type OuterHost = crate::host::MockZkvmHost;
+
+    #[cfg(feature = "native")]
     type Network = crate::network::MockZkvmNetwork;
 }
 /// A mock commitment to a particular zkVM program.
@@ -69,13 +72,18 @@ impl Zkvm for MockZkvm {
 pub struct MockCodeCommitment(pub [u8; 8]);
 
 impl sov_rollup_interface::zk::CodeCommitmentTrait for MockCodeCommitment {
-    fn to_hash(
-        &self,
-    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
+    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
         // Pad the 8-byte mock commitment to 32 bytes to match the canonical hash layout.
         let mut bytes = vec![0u8; 32];
         bytes[..8].copy_from_slice(&self.0);
-        Ok(sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes))
+        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes)
+    }
+
+    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+        let mut bytes = [0u8; 8];
+        let len = hash.0.len().min(8);
+        bytes[..len].copy_from_slice(&hash.0[..len]);
+        Self(bytes)
     }
 }
 

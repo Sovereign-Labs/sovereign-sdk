@@ -3,9 +3,8 @@ use std::num::NonZero;
 use rockbound::cache::delta_reader::DeltaReader;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
-use sov_modules_api::{
-    Runtime, Spec, StateCheckpoint, StateUpdateInfo, TxChangeSet, VisibleSlotNumber,
-};
+use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet, VisibleSlotNumber};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot, watch};
 

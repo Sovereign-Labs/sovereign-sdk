@@ -16,7 +16,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
-use crate as sov_rollup_interface; // Needed for UniversalWallet, as it requires global paths
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
 
@@ -57,6 +56,12 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
     /// The proof generator. Only available under the `"native"` feature.
     #[cfg(feature = "native")]
     type Host: ZkvmHost<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
+
+    /// The host responsible for producing outer (aggregation) proofs that
+    /// recursively verify one or more inner [`Self::Host`] proofs.
+    /// Only available under the `"native"` feature.
+    #[cfg(feature = "native")]
+    type OuterHost: aggregated_proof::OuterZkvmHost;
 
     /// Network proving implementation for this Zkvm.
     /// Only available under the `"native"` feature.
@@ -116,7 +121,10 @@ pub trait CodeCommitmentTrait:
     /// form of this commitment. Implementations that decode an opaque byte
     /// representation (e.g. SP1's serialized verifying key) may fail if the
     /// bytes are malformed.
-    fn to_hash(&self) -> anyhow::Result<aggregated_proof::CodeCommitmentHash>;
+    fn to_hash(&self) -> aggregated_proof::CodeCommitmentHash;
+
+    /// Constructs the code commitment from its canonical hash.
+    fn from_hash(hash: aggregated_proof::CodeCommitmentHash) -> Self;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code

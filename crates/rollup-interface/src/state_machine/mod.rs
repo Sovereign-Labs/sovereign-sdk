@@ -146,25 +146,3 @@ pub trait ProvableHeightTracker: Send + Sync + 'static {
     /// Returns the maximum provable height of the rollup.
     fn max_provable_slot_number(&self) -> SlotNumber;
 }
-
-/// Structure that holds information about the state update that happened in the block.
-#[cfg(feature = "native")]
-#[derive(Clone, derive_more::Debug)]
-pub struct StateUpdateInfo<StfState> {
-    /// The storage following the state update.
-    #[debug(skip)]
-    pub storage: StfState,
-    #[debug(skip)]
-    /// The `DeltaReader` associated with the current `LedgerDb`.
-    pub ledger_reader: rockbound::cache::delta_reader::DeltaReader,
-    /// What the next event number will be after the state update.
-    pub next_event_number: u64,
-    /// What the next transaction number will be after the state update.
-    pub next_tx_number: u64,
-    /// The slot number of the rollup following the state update.
-    pub slot_number: SlotNumber,
-    /// The latest slot number that was finalized.
-    pub latest_finalized_slot_number: SlotNumber,
-    ///  The node's sync status at the time this `StateUpdateInfo` was created.
-    pub sync_status: crate::node::SyncStatus,
-}

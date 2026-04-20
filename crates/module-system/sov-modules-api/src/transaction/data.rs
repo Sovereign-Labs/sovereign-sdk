@@ -4,6 +4,7 @@ use std::rc::Rc;
 use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
+use sov_universal_wallet::UniversalWallet;
 
 use crate::{Amount, BasicGasMeter, Gas, GasArray, Spec};
 
@@ -27,7 +28,7 @@ use crate::{Amount, BasicGasMeter, Gas, GasArray, Spec};
     Eq,
     PartialOrd,
     Ord,
-    sov_rollup_interface::sov_universal_wallet::UniversalWallet,
+    UniversalWallet,
 )]
 pub struct PriorityFeeBips(pub u64);
 
@@ -89,7 +90,7 @@ impl PriorityFeeBips {
     borsh::BorshSerialize,
     serde::Serialize,
     serde::Deserialize,
-    sov_rollup_interface::sov_universal_wallet::UniversalWallet,
+    UniversalWallet,
 )]
 #[serde(bound = "S: Spec")]
 pub struct TxDetails<S: Spec> {

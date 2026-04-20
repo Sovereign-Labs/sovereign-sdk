@@ -17,6 +17,7 @@ use sov_mock_da::{
 
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
+use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -78,7 +79,7 @@ async fn test_runner_with_background_da_service(
     let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache).await?;
     let mut sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
-    let (state_update_sender, _state_update_recv) = watch::channel(
+    let state_channel = StateChannel::new(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
     );
 
@@ -108,7 +109,7 @@ async fn test_runner_with_background_da_service(
         ledger_db.clone(),
         stf,
         storage_manager,
-        state_update_sender,
+        state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),

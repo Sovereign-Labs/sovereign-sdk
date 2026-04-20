@@ -9,6 +9,7 @@ use crate::AttesterIncentives;
 
 /// Configuration of the attester incentives module
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AttesterIncentivesConfig<S: Spec> {
     /// The minimum bond for an attester.
     pub minimum_attester_bond: S::Gas,

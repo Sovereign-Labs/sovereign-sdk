@@ -1,6 +1,6 @@
 use crate::transaction::data::TxDetails;
 use derivative::Derivative;
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
 use crate::transaction::{hex_field_format, Credentials, Transaction, TransactionCallable};
@@ -32,9 +32,7 @@ pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     #[sov_wallet(display = "hex")]
     pub pub_key: C::PublicKey,
     /// The runtime call of the transaction.
-    #[sov_wallet(
-        bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
-    )]
+    #[sov_wallet(bound = "Call: sov_universal_wallet::schema::UniversalWallet")]
     pub runtime_call: Call,
     /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,

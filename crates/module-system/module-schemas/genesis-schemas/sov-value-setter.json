@@ -16,6 +16,7 @@
       ]
     }
   },
+  "additionalProperties": false,
   "definitions": {
     "Address": {
       "description": "Address",

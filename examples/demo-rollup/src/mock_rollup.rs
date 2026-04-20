@@ -9,17 +9,16 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::rest::StateUpdateReceiver;
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, SyncStatus, ZkVerifier};
+use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
@@ -29,24 +28,24 @@ use sov_stf_runner::RollupConfig;
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
-/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
+/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`MockZkvm`] inner vm and [`MockZkvm`] for outer vm
 #[derive(Default, Clone, Copy)]
 pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
+type Hasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
 pub type MockRollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
-    Risc0,
+    MockZkvm,
     MockZkvm,
     MultiAddressEvmSolana,
     M,
-    Risc0CryptoSpec,
+    MockZkvmCryptoSpec,
     NativeStorage,
 >;
 
@@ -151,13 +150,11 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (host_args, prover_config_discriminant) = prover_config.split();
-        let inner_vm = Risc0Host::new(*host_args);
-
+        let inner_vm = MockZkvmHost::new_non_blocking();
         let outer_vm = MockZkvmHost::new_non_blocking();
         let da_verifier = Default::default();
 
@@ -165,7 +162,6 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_discriminant,
             rollup_config.proof_manager.prover_address,
         )
     }

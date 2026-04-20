@@ -25,8 +25,6 @@ use sov_modules_api::{ExecutionContext, GasSpec, VersionReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
-#[cfg(feature = "native")]
-use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::{Kernel, User};
 
@@ -366,8 +364,8 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
     fn create_bonding_proof_service<K: HasKernel<S>>(
         &self,
         attester_address: <S as Spec>::Address,
-        state_update_info: sov_modules_api::prelude::tokio::sync::watch::Receiver<
-            StateUpdateInfo<<S as Spec>::Storage>,
+        storage_receiver: sov_modules_api::prelude::tokio::sync::watch::Receiver<
+            <S as Spec>::Storage,
         >,
     ) -> Self::BondingProofService<K> {
         use sov_attester_incentives::BondingProofServiceImpl;
@@ -375,7 +373,7 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
         BondingProofServiceImpl::new(
             attester_address,
             self.attester_incentives.clone(),
-            state_update_info,
+            storage_receiver,
         )
     }
 

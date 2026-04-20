@@ -11,8 +11,7 @@ use sov_db::config::{
     RollupDbConfigWithCustomizations, VersionedColumnFamilyKind,
 };
 use sov_demo_rollup::{
-    celestia_risc0_host_args, mock_da_risc0_host_args, CelestiaDemoRollup, ExternalMockDemoRollup,
-    MockDemoRollup,
+    CelestiaDemoRollup, ExternalMockDemoRollup, MockDemoRollup, MockSp1DemoRollup,
 };
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -20,8 +19,7 @@ use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_rollup_blueprint::logging::initialize_logging;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, Rollup};
-use sov_risc0_adapter::Risc0;
-use sov_stf_runner::processes::{RollupProverConfig, RollupProverConfigDiscriminants};
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
 
@@ -34,6 +32,10 @@ struct Args {
     /// The data layer type.
     #[arg(long, default_value = "mock")]
     da_layer: SupportedDaLayer,
+
+    /// The zk VM to use.
+    #[arg(long, default_value = "mock")]
+    zk_vm: SupportedZkVm,
 
     /// The path to the rollup config.
     #[arg(long, default_value = "configs/mock_rollup_config.toml")]
@@ -57,6 +59,12 @@ enum SupportedDaLayer {
     Celestia,
     Mock,
     ExternalMock,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq, Eq)]
+enum SupportedZkVm {
+    Mock,
+    Sp1,
 }
 
 #[tokio::main]
@@ -84,19 +92,14 @@ async fn run() -> anyhow::Result<()> {
 
     let rollup_config_path = args.rollup_config_path.as_str();
 
-    let prover_config_disc = parse_prover_config().expect("Failed to parse prover config");
-    tracing::info!(
-        ?prover_config_disc,
-        "Running demo rollup with prover config"
-    );
+    let prover_config = parse_prover_config().expect("Failed to parse prover config");
+    tracing::info!(?prover_config, "Running demo rollup with prover config");
 
     let start_at_rollup_height = args.start_at_rollup_height.map(RollupHeight::new);
     let stop_at_rollup_height = args.stop_at_rollup_height.map(RollupHeight::new);
 
-    match args.da_layer {
-        SupportedDaLayer::Mock => {
-            let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+    match (args.da_layer, args.zk_vm) {
+        (SupportedDaLayer::Mock, SupportedZkVm::Mock) => {
             let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -108,9 +111,19 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize MockDa rollup")?;
             rollup.run().await
         }
-        SupportedDaLayer::ExternalMock => {
-            let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(mock_da_risc0_host_args()));
+        (SupportedDaLayer::Mock, SupportedZkVm::Sp1) => {
+            let rollup = new_rollup_with_sp1_mock_da(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+                start_at_rollup_height,
+                stop_at_rollup_height,
+            )
+            .await
+            .context("Failed to initialize SP1 MockDa rollup")?;
+            rollup.run().await
+        }
+        (SupportedDaLayer::ExternalMock, SupportedZkVm::Mock) => {
             let rollup = new_rollup_with_external_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -122,9 +135,7 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize ExternalMockDa rollup")?;
             rollup.run().await
         }
-        SupportedDaLayer::Celestia => {
-            let prover_config = prover_config_disc
-                .map(|config_disc| config_disc.into_config(celestia_risc0_host_args()));
+        (SupportedDaLayer::Celestia, SupportedZkVm::Mock) => {
             let rollup = new_rollup_with_celestia_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
                 rollup_config_path,
@@ -136,24 +147,28 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize Celestia rollup")?;
             rollup.run().await
         }
+        (da, SupportedZkVm::Sp1) => {
+            anyhow::bail!(
+                "zk_vm=sp1 is only compatible with da_layer=mock (got da_layer={:?})",
+                da
+            );
+        }
     }
 }
 
-fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfigDiscriminants>> {
-    if let Some(value) = option_env!("SOV_PROVER_MODE") {
-        let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
-            tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
-        })?;
-        #[cfg(debug_assertions)]
-        {
-            if config == RollupProverConfigDiscriminants::Prove {
-                tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
-            }
-        }
-        Ok(Some(config))
-    } else {
-        Ok(None)
+fn parse_prover_config() -> anyhow::Result<RollupProverConfig> {
+    let Some(value) = option_env!("SOV_PROVER_MODE") else {
+        return Ok(RollupProverConfig::Disabled);
+    };
+    let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
+        tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
+    })?;
+
+    if config == RollupProverConfig::Prove {
+        tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
     }
+
+    Ok(config)
 }
 
 /// Example: tune the live flat-state RocksDB instance for a workload with frequent small writes.
@@ -210,7 +225,7 @@ fn example_tune_live_nomt_table_for_small_writes(
 async fn new_rollup_with_celestia_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig<Risc0>>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
@@ -237,7 +252,7 @@ async fn new_rollup_with_celestia_da(
 async fn new_rollup_with_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig<Risc0>>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {
@@ -264,10 +279,40 @@ async fn new_rollup_with_mock_da(
         .await
 }
 
+async fn new_rollup_with_sp1_mock_da(
+    rt_genesis_paths: &GenesisPaths,
+    rollup_config_path: &str,
+    prover_config: RollupProverConfig,
+    start_at_rollup_height: Option<RollupHeight>,
+    stop_at_rollup_height: Option<RollupHeight>,
+) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
+    debug!(
+        config_path = rollup_config_path,
+        "Starting rollup on mock DA with SP1 zkVM"
+    );
+
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
+        from_toml_path(rollup_config_path).with_context(|| {
+            format!("Failed to read rollup configuration from {rollup_config_path}")
+        })?;
+
+    let mock_rollup = MockSp1DemoRollup::<Native>::default();
+    mock_rollup
+        .create_new_rollup(
+            rt_genesis_paths,
+            rollup_config,
+            prover_config,
+            start_at_rollup_height,
+            stop_at_rollup_height,
+            None,
+        )
+        .await
+}
+
 async fn new_rollup_with_external_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig<Risc0>>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {

@@ -11,7 +11,10 @@
     "lint": "biome lint",
     "test:integration": "vitest run"
   },
-  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sovereign-Labs/sovereign-sdk.git"
+  },
   "bin": {
     "indexer": "./bin/sov-indexer"
   },

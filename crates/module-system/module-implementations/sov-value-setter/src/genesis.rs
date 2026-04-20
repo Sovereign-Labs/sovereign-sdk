@@ -6,6 +6,7 @@ use super::ValueSetter;
 
 /// Initial configuration for sov-value-setter module.
 #[derive(Clone, serde::Serialize, serde::Deserialize, Debug, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 #[schemars(bound = "S: Spec", rename = "ValueSetterConfig")]
 pub struct ValueSetterConfig<S: Spec> {
     /// Admin of the module.

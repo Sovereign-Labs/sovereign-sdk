@@ -6,13 +6,13 @@ use std::sync::Arc;
 
 use sov_modules_api::prelude::utoipa_swagger_ui::Config;
 use sov_modules_api::rest::utils::errors;
-use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
-use sov_modules_api::{
-    BatchSequencerReceipt, NodeEndpoints, RuntimeEventProcessor, Spec, SyncStatus, *,
-};
+use sov_modules_api::rest::HasRestApi;
+use sov_modules_api::{BatchSequencerReceipt, NodeEndpoints, RuntimeEventProcessor, Spec, *};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::rollup_tx_router;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::node::SyncStatus;
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
 use super::SequencerCreationReceipt;

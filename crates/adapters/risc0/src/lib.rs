@@ -31,10 +31,12 @@ pub mod metrics;
 pub struct Risc0MethodId([u32; 8]);
 
 impl sov_rollup_interface::zk::CodeCommitmentTrait for Risc0MethodId {
-    fn to_hash(
-        &self,
-    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
-        Ok(sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(self.0))
+    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(self.0)
+    }
+
+    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+        Self(hash.to_u32_array())
     }
 }
 
@@ -117,6 +119,9 @@ impl sov_rollup_interface::zk::Zkvm for Risc0 {
 
     #[cfg(feature = "native")]
     type Host = crate::host::Risc0Host<'static>;
+
+    #[cfg(feature = "native")]
+    type OuterHost = crate::host::Risc0Host<'static>;
 
     #[cfg(feature = "native")]
     type Network = sov_rollup_interface::zk::NoopZkvmNetwork<crate::guest::Risc0Guest>;

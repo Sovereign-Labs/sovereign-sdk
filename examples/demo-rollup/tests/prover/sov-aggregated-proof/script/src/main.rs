@@ -14,8 +14,9 @@ use sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::ZkVerifier;
 use sov_sp1_adapter::host::SP1AggregationHost;
+use sov_sp1_adapter::SP1Verifier;
 use sov_sp1_adapter::SP1;
-use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
+use sp1_sdk::SP1VerifyingKey;
 
 const JUMP: usize = 3;
 
@@ -45,9 +46,9 @@ fn main() -> anyhow::Result<()> {
         "SP1 aggregation guest ELF is empty — build the guest first"
     );
 
-    let verification_key = SP1MethodId(saved_inner_vk_bytes()?);
+    let verification_key = saved_inner_vk_bytes()?;
 
-    let mut prover = SP1AggregationHost::new(aggregation_elf, verification_key)?;
+    let prover = SP1AggregationHost::new(aggregation_elf, verification_key)?;
 
     let proof_batches = raw_proofs
         .chunks(JUMP)
@@ -117,14 +118,16 @@ fn proofs() -> Vec<BlockHeaderWithProof<MockDaSpec>> {
     block_headers_with_proofs
 }
 
-fn saved_inner_vk_bytes() -> anyhow::Result<Vec<u8>> {
+fn saved_inner_vk_bytes() -> anyhow::Result<SP1VerifyingKey> {
     let path = data_dir().join("inner_vk.bin");
-    fs::read(&path).with_context(|| {
+    let bytes = fs::read(&path).with_context(|| {
         format!(
             "Failed to read saved verifying key fixture at {}",
             path.display()
         )
-    })
+    })?;
+
+    Ok(bincode::deserialize(&bytes)?)
 }
 
 fn data_dir() -> PathBuf {

@@ -33,9 +33,8 @@ use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
-use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
-};
+use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint, VersionReader};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
