@@ -206,8 +206,8 @@ are rules of thumb, not hard limits.
 
 | Name | Kind | Defined in | What to look for |
 |---|---|---|---|
-| `sov_rollup_current_sequence_number` | gauge (inline) | `sov-sequencer/src/metrics.rs` | Must increase monotonically. Flat for extended periods while the rollup is live = sequencer stalled. |
-| `sov_rollup_in_progress_batch_size` | gauge (inline) | `sov-sequencer/src/metrics.rs` | Growing unboundedly = sequencer is accumulating but not producing batches; cross-check `sov_rollup_preferred_sequencer_channel`. |
+| `sov_rollup_current_sequence_number` | gauge | `sov-sequencer/src/metrics.rs` | Must increase monotonically. Flat for extended periods while the rollup is live = sequencer stalled. |
+| `sov_rollup_in_progress_batch_size` | gauge | `sov-sequencer/src/metrics.rs` | Growing unboundedly = sequencer is accumulating but not producing batches; cross-check `sov_rollup_preferred_sequencer_channel`. |
 | `sov_rollup_preferred_sequencer_update_state` | timer + counter | `sov-sequencer/src/metrics.rs` | Main state-update loop cost. `total_message_processing_duration` high = event flood or slow event handlers (see `sov_rollup_preferred_sequencer_executor_event`). |
 | `sov_rollup_preferred_sequencer_channel` | timer | `sov-sequencer/src/metrics.rs` | Blocking time on the channel send, tagged by `reason`. High = downstream consumer is slow; consumer identified by the reason tag. |
 | `sov_rollup_preferred_sequencer_executor_event` | timer | `sov-sequencer/src/metrics.rs` | Per-event-type handling time; tag `event_type` is low-cardinality so safe to group by. |
@@ -218,7 +218,7 @@ are rules of thumb, not hard limits.
 | `sov_rollup_nonce_buffer_main_queue_blocked` | timer | `sov-sequencer/src/metrics.rs` | **Only emitted when send blocked** (`blocked_for_us > 0`); presence of this metric = main queue capacity pressure. |
 | `sov_rollup_nonce_buffer_main_queue_depth` | gauge | `sov-sequencer/src/metrics.rs` | Instantaneous main queue depth. Compare against configured capacity to spot near-full saturation. |
 | `sov_rollup_nonce_buffer_timeout_queue` | timer + gauge | `sov-sequencer/src/metrics.rs` | Timeout queue activity (txs parked waiting for their nonce to become current). Deep queue = out-of-order nonces from clients. |
-| `sov_rollup_sequence_number_delta` | gauge (inline) | `sov-sequencer/src/preferred/sync_sequencer_state/inner.rs` | Gap between expected and observed sequence numbers. Non-zero briefly is normal during rebase; sustained non-zero = desync. |
+| `sov_rollup_sequence_number_delta` | gauge | `sov-sequencer/src/preferred/sync_sequencer_state/inner.rs` | Gap between expected and observed sequence numbers. Non-zero briefly is normal during rebase; sustained non-zero = desync. |
 | `sov_sequencer_cache_warmup_metrics` | gauge | `sov-sequencer/src/preferred/cache_warm_up_executor.rs` | Tx-channel size seen by the cache warm-up executor; use as a sanity check that warm-up is receiving work. |
 
 ### Blob sender
@@ -226,9 +226,9 @@ are rules of thumb, not hard limits.
 | Name | Kind | Defined in | What to look for |
 |---|---|---|---|
 | `sov_rollup_in_flight_blobs_snapshot` | snapshot | `sov-blob-sender/src/in_flight_blob.rs` | Per-blob lifecycle snapshot. `duration_ms` high with stable `last_known_state` = blob stuck in that state (DA submission hanging or resurrection loop). |
-| `sov_rollup_num_of_in_flight_blobs` | gauge (inline) | `sov-blob-sender/src/in_flight_blob.rs` | Growing unboundedly = DA submission is not keeping up with blob production. |
-| `sov_rollup_blobs_enter_scope` | counter (inline) | `sov-blob-sender/src/lib.rs` | Rate of new blobs being handed to the sender. Compare with `exit_scope` for throughput balance. |
-| `sov_rollup_blobs_exit_scope` | counter (inline) | `sov-blob-sender/src/lib.rs` | Rate of blobs leaving the sender (success or drop). `enter - exit` over a window ≈ backlog growth. |
+| `sov_rollup_num_of_in_flight_blobs` | gauge | `sov-blob-sender/src/in_flight_blob.rs` | Growing unboundedly = DA submission is not keeping up with blob production. |
+| `sov_rollup_blobs_enter_scope` | counter | `sov-blob-sender/src/lib.rs` | Rate of new blobs being handed to the sender. Compare with `exit_scope` for throughput balance. |
+| `sov_rollup_blobs_exit_scope` | counter | `sov-blob-sender/src/lib.rs` | Rate of blobs leaving the sender (success or drop). `enter - exit` over a window ≈ backlog growth. |
 
 ### Celestia adapter
 

@@ -225,14 +225,9 @@ where
         let next_sequence_number_according_to_node =
             get_next_sequence_number_according_to_node(latest_state_info, &mut runtime);
 
+        let delta = (next_sequence_number as i64) - (next_sequence_number_according_to_node as i64);
         sov_metrics::track_metrics(|tracker| {
-            tracker.submit_inline(
-                "sov_rollup_sequence_number_delta",
-                format!(
-                    "delta={}i",
-                    (next_sequence_number as i64) - (next_sequence_number_according_to_node as i64)
-                ),
-            );
+            tracker.submit(crate::metrics::SequenceNumberDeltaMetric { delta });
         });
 
         match latest_finalized_sequence_number(latest_state_info, &mut runtime) {
