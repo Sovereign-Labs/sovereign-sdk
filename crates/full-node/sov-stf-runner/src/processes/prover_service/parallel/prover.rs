@@ -19,8 +19,7 @@ use tracing::{error, info, trace};
 use super::state::{ProverState, ProverStatus};
 use super::{ProverServiceError, Verifier};
 use crate::processes::{
-    ProofAggregationStatus, ProofProcessingStatus, RollupProverConfigDiscriminants,
-    StateTransitionInfo,
+    ProofAggregationStatus, ProofProcessingStatus, RollupProverConfig, StateTransitionInfo,
 };
 
 // A prover that generates proofs in parallel using a thread pool. If the pool is saturated,
@@ -68,7 +67,7 @@ where
     pub(crate) fn start_proving<InnerVm>(
         &self,
         state_transition_info: StateTransitionInfo<StateRoot, Witness, <Da as DaService>::Spec>,
-        config: RollupProverConfigDiscriminants,
+        config: RollupProverConfig,
         inner_vm: InnerVm::Host,
         verifier: Arc<Verifier<Da>>,
     ) -> Result<
@@ -221,18 +220,14 @@ where
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
     hint: &impl Serialize,
-    config: RollupProverConfigDiscriminants,
+    _config: RollupProverConfig,
 ) -> anyhow::Result<SerializedInnerProof>
 where
     InnerVm: Zkvm + 'static,
 {
     let proving_start = std::time::Instant::now();
-    let result = match config {
-        RollupProverConfigDiscriminants::Prove => {
-            info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-            vm.add_hint_and_run(hint)
-        }
-    };
+    info!("Generating proof with {}", std::any::type_name::<InnerVm>());
+    let result = vm.add_hint_and_run(hint);
     sov_metrics::track_metrics(|tracker| {
         let proving_time = proving_start.elapsed();
         let is_success = result.is_ok();

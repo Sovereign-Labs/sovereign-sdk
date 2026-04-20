@@ -8,7 +8,6 @@ use sov_chain_state::ChainState;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::rest::HasRestApi;
@@ -299,7 +298,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     automatic_batch_production: bool,
     max_batch_size_bytes: usize,
     block_producing_config: BlockProducingConfig,
-    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    rollup_prover_config: Option<RollupProverConfig>,
     blob_processing_timeout_secs: u64,
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,

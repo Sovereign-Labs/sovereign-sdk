@@ -12,7 +12,7 @@ use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
-use sov_demo_rollup::{mock_zkvm_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, RawTx, Runtime, Spec, TxHash};
@@ -106,7 +106,7 @@ async fn start_rollup(
             StoragePath::Tmp(rollup_storage_path.clone()),
             false,
         )
-        .with_zkvm_host_args(mock_zkvm_host_args())
+        .enable_prover()
         .set_config(|c| {
             c.rollup_prover_config = None;
             c.aggregated_proof_block_jump = 10;

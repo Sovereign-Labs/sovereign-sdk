@@ -163,12 +163,11 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (elf, prover_config_disc) = prover_config.split();
-        let inner_vm = Risc0Host::new(*elf);
+        let inner_vm = Risc0Host::new(risc0::ROLLUP_ELF);
 
         let outer_vm = MockZkvmHost::new_non_blocking();
 
@@ -183,7 +182,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_disc,
+            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

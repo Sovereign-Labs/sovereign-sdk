@@ -35,7 +35,6 @@ use sov_state::Storage;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
-    RollupProverConfigDiscriminants,
 };
 use sov_stf_runner::{
     initialize_state, query_state_update_info, CorsConfiguration, RollupConfig,
@@ -127,7 +126,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Creates an instance of [`ProverService`].
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
+        prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
@@ -166,7 +165,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         runtime_genesis_paths: &<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisInput,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
+        prover_config: Option<RollupProverConfig>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -307,7 +306,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
+        prover_config: Option<RollupProverConfig>,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -347,10 +346,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
         info!(?operating_mode, "Instantiating a new rollup");
 
-        if let (OperatingMode::Operator, Some(prover_config)) =
-            (operating_mode, prover_config.clone())
-        {
-            let prover_config: RollupProverConfigDiscriminants = prover_config.into();
+        if let (OperatingMode::Operator, Some(prover_config)) = (operating_mode, prover_config) {
             panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
         }
 

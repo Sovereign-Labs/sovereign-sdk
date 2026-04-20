@@ -8,20 +8,30 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
+use std::marker::PhantomData;
+
 use anyhow::{bail, Context};
+use async_trait::async_trait;
 use cli::BenchRunnerCLI;
 use demo_stf::runtime::{GenesisConfig, Runtime, RuntimeCall};
 use helpers::{BatchReceiver, BatchSender};
 use humantime::Timestamp;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::{timestamp, TelegrafSocketConfig};
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
+use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::{CryptoSpec, Spec};
+use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
+use sov_risc0_adapter::host::Risc0Host;
+use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::DaSpec;
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::DefaultStorageSpec;
+use sov_state::{DefaultStorageSpec, Storage};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
+use sov_stf_runner::RollupConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
-use sov_test_utils::{MockDaSpec, RtAgnosticBlueprint};
+use sov_test_utils::{MockDaSpec, ProverFactory, RtAgnosticBlueprint};
 use sov_transaction_generator::generators::basic::{BasicChangeLogEntry, BasicClientConfig};
 use sov_transaction_generator::{assert_logs_against_state, GeneratedMessage};
 use tokio::sync::mpsc;
@@ -29,7 +39,7 @@ use tracing::{info, trace};
 
 use crate::bench_generator::BenchmarkData;
 use crate::bench_runner::cli::MetricsCLI;
-use crate::{mock_da_risc0_host_args, BenchRisc0Spec, DEFAULT_FINALIZATION_BLOCKS};
+use crate::{BenchRisc0Spec, DEFAULT_FINALIZATION_BLOCKS};
 
 pub type S = BenchRisc0Spec;
 pub type RT = Runtime<S>;
@@ -37,7 +47,42 @@ type Hasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
 type BenchNativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 type BenchStorageManager = NomtStorageManager<MockDaSpec, Hasher, BenchNativeStorage>;
-pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, BenchStorageManager>;
+
+/// Parallel prover factory for the Risc0 inner VM benchmarks.
+pub struct Risc0ProverFactory<Sp>(PhantomData<Sp>);
+
+#[async_trait]
+impl<Sp> ProverFactory<Sp> for Risc0ProverFactory<Sp>
+where
+    Sp: Spec<Da = MockDaSpec, InnerZkvm = Risc0, OuterZkvm = MockZkvm> + PluggableSpec,
+{
+    type ProverService = ParallelProverService<
+        <Sp as Spec>::Address,
+        <<Sp as Spec>::Storage as Storage>::Root,
+        <<Sp as Spec>::Storage as Storage>::Witness,
+        StorableMockDaService,
+        Risc0,
+        MockZkvm,
+    >;
+
+    async fn create(
+        _prover_config: RollupProverConfig,
+        rollup_config: &RollupConfig<<Sp as Spec>::Address, StorableMockDaService>,
+    ) -> Self::ProverService {
+        let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
+        let outer_vm = MockZkvmHost::new_non_blocking();
+
+        ParallelProverService::new_with_default_workers(
+            inner_vm,
+            outer_vm,
+            Default::default(),
+            RollupProverConfig::Prove,
+            rollup_config.proof_manager.prover_address,
+        )
+    }
+}
+
+pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, BenchStorageManager, Risc0ProverFactory<S>>;
 pub type BenchRollup = TestRollup<BenchBlueprint>;
 pub type BenchRollupBuilder = RollupBuilder<BenchBlueprint>;
 pub type BenchLogs = BasicChangeLogEntry<S>;
@@ -99,7 +144,7 @@ pub async fn setup_rollup(
         BlockProducingConfig::Manual,
         DEFAULT_FINALIZATION_BLOCKS,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .enable_prover()
     .set_config(|config| {
         config.max_concurrent_blobs = 1024;
         config.prover_address = prover_address.to_string();

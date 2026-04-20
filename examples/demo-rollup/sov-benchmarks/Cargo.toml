@@ -28,6 +28,8 @@ sov-node-client = { workspace = true }
 sov-metrics = { workspace = true, default-features = false }
 
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-stf-runner = { workspace = true }
 
 demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
 reqwest = { workspace = true, features = ["rustls-tls", "stream"], default-features = false }
@@ -52,6 +54,7 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 backon = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["process"] }
+async-trait = { workspace = true }
 humantime = "2.1"
 clap = { workspace = true }
 tempfile = { workspace = true }

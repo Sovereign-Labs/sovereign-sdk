@@ -5,7 +5,7 @@ use futures::StreamExt;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::TokenId;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_zkvm_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::transaction::Transaction;
@@ -271,9 +271,7 @@ pub async fn start_test_rollup(
 ) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let prover_config = match &operating_mode {
         OperatingMode::Operator => None,
-        OperatingMode::Zk | OperatingMode::Optimistic => Some(RollupProverConfig {
-            host_args: mock_zkvm_host_args(),
-        }),
+        OperatingMode::Zk | OperatingMode::Optimistic => Some(RollupProverConfig::Prove),
     };
     let disable_state_root_consistency_check = match &operating_mode {
         OperatingMode::Operator => false,
@@ -285,7 +283,7 @@ pub async fn start_test_rollup(
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         test_case.finalization_blocks,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 16777216;
         c.rollup_prover_config = prover_config;
