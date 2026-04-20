@@ -1,3 +1,11 @@
+# 2026-04-20
+- Celestia adapter: re-enables block integrity verification on fetch. Replaces the
+  previously-reverted boolean toggle (PR #2489 / reverted in PR #2520) with a
+  `verify_on_fetch_mode` enum accepting `"off"`, `"log_error"` (default), or
+  `"return_error"`. `log_error` runs verification and logs via `tracing::error!` on
+  failure while still returning the block, enabling staged rollouts without breaking
+  the node. The underlying verifier bug fix from PR #2525 is already in place.
+
 # 2026-04-16
 - #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
 - #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
