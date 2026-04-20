@@ -57,4 +57,3 @@ impl Metric for ZkProofManagerMetrics {
         )
     }
 }
-

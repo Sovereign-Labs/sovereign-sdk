@@ -217,7 +217,10 @@ where
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit_inline(
                     "sov_rollup_zk_aggregated_proof",
-                    format!("aggregation_duration_ms={}i", aggregation_duration.as_millis()),
+                    format!(
+                        "aggregation_duration_ms={}i",
+                        aggregation_duration.as_millis()
+                    ),
                 );
             });
 
