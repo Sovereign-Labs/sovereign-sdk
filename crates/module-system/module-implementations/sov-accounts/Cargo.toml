@@ -41,10 +41,12 @@ arbitrary = [
 	"sov-modules-api/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
+	"sov-bank/arbitrary"
 ]
 native = [
 	"sov-accounts/native",
 	"sov-modules-api/native",
 	"sov-state/native",
+	"sov-bank/native"
 ]
 test-utils = []

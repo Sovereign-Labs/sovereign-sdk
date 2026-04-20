@@ -1,10 +1,8 @@
-use sov_accounts::{Accounts, CallMessage, Response};
+use sov_accounts::{derive_address_for_new_credential, Accounts, CallMessage, Response};
 use sov_bank::{config_gas_token_id, Amount, Bank, Coins};
-use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::{UnsignedTransaction, Version1};
 use sov_modules_api::{
-    CredentialId, CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec,
-    TxEffect,
+    CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -21,18 +19,6 @@ type S = sov_test_utils::TestSpec;
 generate_optimistic_runtime!(TestAccountsRuntime <=);
 
 type RT = TestAccountsRuntime<S>;
-
-/// Mirror of the address derivation in `Accounts::insert_credential_id`.
-fn expected_derived_address(
-    new_credential: CredentialId,
-    sender: <S as Spec>::Address,
-) -> <S as Spec>::Address {
-    let mut hasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher::new();
-    hasher.update(new_credential.0 .0);
-    hasher.update(sender.as_ref());
-    let hash: [u8; 32] = hasher.finalize().into();
-    <S as Spec>::Address::from(CredentialId::from_bytes(hash))
-}
 
 struct TestData<S: Spec> {
     account_1: TestUser<S>,
@@ -126,7 +112,7 @@ fn test_update_account() {
             assert_eq!(
                 accounts.get_account(new_credential, state),
                 Response::AccountExists {
-                    addr: expected_derived_address(new_credential, user.address())
+                    addr: derive_address_for_new_credential::<S>(&new_credential, &user.address(),),
                 }
             );
             // Account corresponding to the old credential still exists.
@@ -196,7 +182,8 @@ fn test_setup_multisig_and_act() {
         multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
     let user_address = user.address();
     let user_credential_id = user.credential_id();
-    let multisig_address = expected_derived_address(multisig_credential_id, user_address);
+    let multisig_address =
+        derive_address_for_new_credential::<S>(&multisig_credential_id, &user_address);
     runner.execute_transaction(TransactionTestCase {
         input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
             multisig_credential_id,
@@ -448,9 +435,9 @@ fn test_register_new_account() {
             assert_eq!(
                 accounts.get_account(new_credential, state),
                 Response::AccountExists {
-                    addr: expected_derived_address(
-                        new_credential,
-                        non_registered_account.address(),
+                    addr: derive_address_for_new_credential::<S>(
+                        &new_credential,
+                        &non_registered_account.address(),
                     ),
                 }
             );
@@ -554,14 +541,20 @@ fn test_resolve_address_if_more_than_one_credential() {
             accounts
                 .resolve_sender_address(&default_address_1, &credential_1, state)
                 .unwrap(),
-            expected_derived_address(credential_1, non_registered_account.address()),
+            derive_address_for_new_credential::<S>(
+                &credential_1,
+                &non_registered_account.address()
+            ),
         );
 
         assert_eq!(
             accounts
                 .resolve_sender_address(&default_address_2, &credential_2, state)
                 .unwrap(),
-            expected_derived_address(credential_2, non_registered_account.address()),
+            derive_address_for_new_credential::<S>(
+                &credential_2,
+                &non_registered_account.address()
+            ),
         );
     });
 }

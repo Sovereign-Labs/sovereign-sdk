@@ -12,11 +12,13 @@ mod query;
 pub use query::*;
 #[cfg(test)]
 mod tests;
+mod utils;
 pub use call::CallMessage;
 use sov_modules_api::{
     Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
     StateMap, StateValue, TxState,
 };
+pub use utils::derive_address_for_new_credential;
 
 /// An account on the rollup.
 #[derive(
