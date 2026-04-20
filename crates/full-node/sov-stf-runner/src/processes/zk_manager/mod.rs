@@ -170,6 +170,14 @@ where
         let first_height_unproven = self.stf_info_receiver.next_height_to_receive();
         let received_slot_number = stf_info.slot_number;
 
+        if received_slot_number.get() < first_height_unproven.get() {
+            tracing::warn!(
+                %received_slot_number,
+                %first_height_unproven,
+                "Received slot is behind first unproven height — this is a bug"
+            );
+        }
+
         let prover_service = &self.prover_service;
 
         // We ensure that we're not trying to prove blocks that are being proven.
