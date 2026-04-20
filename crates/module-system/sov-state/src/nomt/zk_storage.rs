@@ -140,9 +140,34 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         path_proofs.sort_unstable_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
         validate_path_proofs_for_multi_proof(&path_proofs)?;
 
+        // Writes: verify each path against prev_root up front. Doing this first lets us
+        // hand ownership of `path_proofs` to `MultiProof::from_path_proofs` below without
+        // cloning — the latter consumes the vec, and cloning a full `Vec<PathProof>`
+        // (each with its own `Vec<Node>` of siblings) is non-trivial proving cost in a
+        // zkVM. Per nomt_core's `PathProof::verify` contract, the `key_path` argument can
+        // be any key that looks up this terminal and must be at least `siblings.len()`
+        // bits long; `pp.terminal.path()` is exactly the bit-path that reached the
+        // terminal during proof construction and satisfies both conditions.
+        //
+        // `path_proofs` is already in ascending path order, so `verified_paths` inherits
+        // the ordering that `verify_update`'s PathsOutOfOrder check requires below.
+        #[allow(clippy::type_complexity)]
+        let mut verified_paths: Vec<(
+            VerifiedPathProof,
+            Vec<(KeyPath, Option<ValueHash>)>,
+        )> = path_proofs
+            .iter()
+            .map(|pp| {
+                let verified = pp
+                    .verify::<BinaryHasher<S::Hasher>>(pp.terminal.path(), prev_root)
+                    .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
+                Ok((verified, Vec::new()))
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
         // Reads: rebuild a MultiProof from the path proofs and verify against prev_root,
         // then confirm each read via the existing NOMT primitives.
-        let multi_proof = MultiProof::from_path_proofs(path_proofs.clone());
+        let multi_proof = MultiProof::from_path_proofs(path_proofs);
         let verified_multi_proof = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
             &multi_proof,
             prev_root,
@@ -176,25 +201,6 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
                 }
             }
         }
-
-        // Writes: verify each path against prev_root, then route each trusted write into
-        // its single covering path and call verify_update (the per-path update algorithm
-        // that mirrors the prover's `Session::finish().root()`). `path_proofs` is already
-        // in ascending path order, so `verified_paths` inherits the ordering that
-        // `verify_update`'s PathsOutOfOrder check requires.
-        #[allow(clippy::type_complexity)]
-        let mut verified_paths: Vec<(
-            VerifiedPathProof,
-            Vec<(KeyPath, Option<ValueHash>)>,
-        )> = path_proofs
-            .into_iter()
-            .map(|pp| {
-                let verified = pp
-                    .verify::<BinaryHasher<S::Hasher>>(pp.terminal.path(), prev_root)
-                    .map_err(|e| anyhow::anyhow!("Failed to verify path proof: {:?}", e))?;
-                Ok((verified, Vec::new()))
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
 
         // Hash and sort writes globally. Disjoint Patricia paths ⇒ each write routes to
         // exactly one bucket, and global ascending key order ⇒ each bucket ends up
