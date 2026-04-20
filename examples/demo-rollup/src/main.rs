@@ -95,6 +95,11 @@ async fn run() -> anyhow::Result<()> {
     let prover_config = parse_prover_config().expect("Failed to parse prover config");
     tracing::info!(?prover_config, "Running demo rollup with prover config");
 
+    let prover_config = match prover_config {
+        RollupProverConfig::Disabled => None,
+        other => Some(other),
+    };
+
     let start_at_rollup_height = args.start_at_rollup_height.map(RollupHeight::new);
     let stop_at_rollup_height = args.stop_at_rollup_height.map(RollupHeight::new);
 
@@ -156,21 +161,19 @@ async fn run() -> anyhow::Result<()> {
     }
 }
 
-fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfig>> {
-    if let Some(value) = option_env!("SOV_PROVER_MODE") {
-        let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
-            tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
-        })?;
-        #[cfg(debug_assertions)]
-        {
-            if config == RollupProverConfig::Prove {
-                tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
-            }
-        }
-        Ok(Some(config))
-    } else {
-        Ok(None)
+fn parse_prover_config() -> anyhow::Result<RollupProverConfig> {
+    let Some(value) = option_env!("SOV_PROVER_MODE") else {
+        return Ok(RollupProverConfig::Disabled);
+    };
+    let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
+        tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
+    })?;
+
+    if config == RollupProverConfig::Prove {
+        tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
     }
+
+    Ok(config)
 }
 
 /// Example: tune the live flat-state RocksDB instance for a workload with frequent small writes.

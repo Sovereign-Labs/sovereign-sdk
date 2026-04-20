@@ -35,6 +35,8 @@ where
 pub enum RollupProverConfig {
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
+    /// Proving is disabled.
+    Disabled,
 }
 
 impl Debug for RollupProverConfig {
