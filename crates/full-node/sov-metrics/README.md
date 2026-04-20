@@ -170,7 +170,7 @@ are rules of thumb, not hard limits.
 
 | Name | Kind | Defined in | What to look for |
 |---|---|---|---|
-| `sov_rollup_zkvm` | cycles + memory | `sov-metrics/src/influxdb/tracker.rs` | Cycles / heap usage per named call site in the guest. Use to find hot functions blowing up circuit size. ⚠️ Caller-supplied `name` + arbitrary `metadata` are tags — audit call sites before using this in Grafana group-bys. |
+| `sov_rollup_zkvm` | cycles + memory | `sov-metrics/src/influxdb/tracker.rs` | Cycles / heap usage per named call site in the guest. Use to find hot functions blowing up circuit size. `name` is the only tag (bounded — one per `#[cycle_tracker]`-annotated function); caller-supplied `metadata` is emitted as string fields, so it stays cardinality-safe even when call sites pass hashes or heights. |
 | `sov_rollup_zkvm_proving` | timer | `sov-metrics/src/influxdb/tracker.rs` | Proof generation wall-clock per `circuit`. Success/failure ratio via `is_success`. |
 | `sov_nomt_prover_compute_state` | counter | `sov-state/src/nomt/prover_storage.rs` | Prover-side state computations, split by `with_witness`. |
 
@@ -181,7 +181,7 @@ are rules of thumb, not hard limits.
 | `sov_rollup_tokio_runtime` | runtime | `sov-metrics/src/influxdb/tracker.rs` | Tokio worker saturation and scheduling. Busy workers pegged near total workers = runtime is CPU-bound; high poll latencies = blocking code on async thread. |
 | `sov_rollup_dropped_metrics` | counter | `sov-metrics/src/influxdb/tracker.rs` | **Any non-zero sustained value means the metrics pipeline is backpressured** — Telegraf or the publisher task can't keep up. Other metrics become unreliable until this is zero again. |
 | `sov_rollup_rate_limiter` | timer + counter | `sov-metrics/src/influxdb/tracker.rs` | Rate limiter hits by `limiter_type`. Non-zero = clients throttled; cross-check against `sov_rollup_rpc_handlers` / `sov_rollup_http_handlers` 429 responses. |
-| `sov_rollup_gas_constant` | counter | `sov-metrics/src/influxdb/gas_constant_estimation.rs` | Empirical gas cost samples keyed by `name`/`constant`. Only emitted with the `gas-constant-estimation` feature. ⚠️ Tag cardinality depends on caller-supplied metadata. |
+| `sov_rollup_gas_constant` | counter | `sov-metrics/src/influxdb/gas_constant_estimation.rs` | Empirical gas cost samples keyed by `name`/`constant` (both bounded tags). Only emitted with the `gas-constant-estimation` feature. Caller-supplied `metadata` is emitted as string fields, so it stays cardinality-safe even when call sites pass hashes or heights. |
 
 ### Module implementations
 
@@ -238,15 +238,23 @@ are rules of thumb, not hard limits.
 | `sov_celestia_adapter_header_network_head` | timer + status | `celestia/src/metrics/client.rs` | Polling for network head; similar failure-mode semantics as `header_get_by_height`. |
 | `sov_celestia_adapter_share_get_namespace_data` | timer + status | `celestia/src/metrics/client.rs` | Data-share retrieval per namespace. Failures here often surface upstream as `sov_rollup_runner_da` gaps. |
 | `sov_celestia_adapter_state_submit_pay_for_blob` | timer + status | `celestia/src/metrics/client.rs` | PFB submission to Celestia; failures block DA posting entirely. Pair with `sov_rollup_in_flight_blobs_snapshot` to confirm blobs are stuck here vs. elsewhere. |
-| `sov_celestia_adapter_get_block` | timer | `celestia/src/metrics/full.rs` | Block-level fetch latency (full-node path). Tags include `height` and `square_width` — `square_width` is a useful indicator of on-chain activity. |
+| `sov_celestia_adapter_get_block` | timer | `celestia/src/metrics/full.rs` | Block-level fetch latency (full-node path). `height` and `square_width` are fields (not tags); `square_width` is a useful indicator of on-chain activity. |
 | `sov_celestia_adapter_submit_blob` | timer | `celestia/src/metrics/full.rs` | Full-node blob submission path; tag `namespace` is low-cardinality. |
 
 ### Known cardinality caveats
 
-Grafana / Flux queries that group by high-cardinality tags can blow out InfluxDB memory. The
-following tags are caller-supplied today; audit call sites before using them in `group by`:
+Grafana / Flux queries that group by high-cardinality tags can blow out InfluxDB memory.
+Known cases today:
 
-- `sov_rollup_transaction_execution_us` — `call_message`, `sequencer_address`.
-- `sov_rollup_zkvm` — `name` and arbitrary `metadata` k/v pairs.
-- `sov_rollup_gas_constant` — `name`, `constant`, and arbitrary `metadata` k/v pairs.
-- `sov_rollup_http_handlers` — `path` (normalization tracked in #2753).
+- `sov_rollup_http_handlers` — `path` is the raw `request_uri.path()`; paths containing
+  IDs (`/blocks/12345`, `/tx/0xabc…`) create one series per ID. Normalization is tracked
+  in PR #2753.
+- `sov_hyperlane_rate_limiter_capacity` — series count is `monitored_routes × enrolled_domains × 2`.
+  Cardinality is operator-controlled via `WarpExecutionConfig.monitored_route_ids`; a large
+  monitored list × many enrolled destinations can still pressure InfluxDB. Prefer enumerating
+  only the routes you actively care about.
+
+Note: `sov_rollup_zkvm` and `sov_rollup_gas_constant` used to carry caller-supplied
+`metadata` as tags. Those are now emitted as string fields instead, so enabling the
+`bench` or `gas-constant-estimation` features against a real InfluxDB no longer risks
+series explosion.
