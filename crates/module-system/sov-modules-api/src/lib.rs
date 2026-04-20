@@ -107,8 +107,6 @@ pub use sov_rollup_interface::crypto::{CredentialId, PublicKey, Signature};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::node::da::SlotData;
-#[cfg(feature = "native")]
-pub use sov_rollup_interface::node::{DaSyncState, SyncStatus};
 pub use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
 pub use sov_rollup_interface::reexports::digest;
 pub use sov_rollup_interface::stf::{
@@ -117,15 +115,13 @@ pub use sov_rollup_interface::stf::{
     ProofSender, StateTransitionFunction, StoredEvent,
 };
 pub use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitment, SerializedAggregatedProof,
+    AggregatedProofPublicData, CodeCommitmentHash, SerializedAggregatedProof,
 };
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::zk::HostArgs;
 pub use sov_rollup_interface::zk::{
-    CodeCommitmentFor, CryptoSpec, StateTransitionPublicData, ZkVerifier, Zkvm,
+    CodeCommitmentFor, CodeCommitmentTrait, CryptoSpec, StateTransitionPublicData, ZkVerifier, Zkvm,
 };
-#[cfg(feature = "native")]
-pub use sov_rollup_interface::StateUpdateInfo;
 pub use sov_rollup_interface::{execution_mode, BasicAddress, TxHash};
 pub use sov_state::User;
 pub use sov_state::{CompileTimeNamespace, Prefix, Storage};

@@ -1,4 +1,7 @@
-use crate::helpers::{create_deploy_tx, create_set_arg_tx, setup, EvmAccount};
+use crate::helpers::{
+    create_deploy_tx, create_set_arg_tx, create_transfer_tx, set_max_fee_check_height, setup,
+    EvmAccount,
+};
 use crate::runtime::{GenesisConfig, RT, S};
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
@@ -356,7 +359,7 @@ fn test_eth_estimate_gas_state_override_code_is_applied() {
         };
 
         assert!(evm
-            .eth_estimate_gas(request.clone(), None, None, None, state)
+            .eth_estimate_gas_helper(request.clone(), None, None, None, state)
             .is_err());
 
         let mut state_overrides = StateOverride::default();
@@ -365,7 +368,7 @@ fn test_eth_estimate_gas_state_override_code_is_applied() {
             AccountOverride::default().with_code(Bytes::from(vec![0x00])),
         );
         let estimate = evm
-            .eth_estimate_gas(request, None, Some(state_overrides), None, state)
+            .eth_estimate_gas_helper(request, None, Some(state_overrides), None, state)
             .unwrap();
         assert!(estimate.to::<u64>() > 0);
     });
@@ -387,7 +390,7 @@ fn test_eth_estimate_gas_block_override_number_is_applied() {
         );
 
         assert!(evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 request.clone(),
                 None,
                 Some(state_overrides.clone()),
@@ -397,13 +400,101 @@ fn test_eth_estimate_gas_block_override_number_is_applied() {
             .is_err());
 
         let estimate = evm
-            .eth_estimate_gas(
+            .eth_estimate_gas_helper(
                 request,
                 None,
                 Some(state_overrides),
                 Some(Box::new(
                     BlockOverrides::default().with_number(U256::from(77u64)),
                 )),
+                state,
+            )
+            .unwrap();
+        assert!(estimate.to::<u64>() > 0);
+    });
+}
+
+#[test]
+fn test_eth_call_and_estimate_gas_prefer_fee_cap_over_stale_nonce_after_block_override() {
+    set_max_fee_check_height(0);
+
+    let (mut runner, account, recipient, _) = setup();
+    runner.execute(create_transfer_tx(0, &account, &recipient, 1).tx);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = TransactionRequest {
+            from: Some(account.address()),
+            to: Some(TxKind::Call(recipient.address())),
+            gas: Some(21_000),
+            nonce: Some(0),
+            max_fee_per_gas: Some(1),
+            max_priority_fee_per_gas: Some(0),
+            ..Default::default()
+        };
+        let block_overrides = BlockOverrides::default().with_base_fee(U256::from(2u64));
+
+        let call_err = evm
+            .eth_call(
+                request.clone(),
+                None,
+                None,
+                Some(Box::new(block_overrides.clone())),
+                state,
+            )
+            .unwrap_err();
+        assert!(
+            call_err
+                .message()
+                .contains("max fee per gas less than block base fee"),
+            "unexpected eth_call error: {call_err}"
+        );
+
+        let estimate_err = evm
+            .eth_estimate_gas_helper(request, None, None, Some(Box::new(block_overrides)), state)
+            .unwrap_err();
+        assert!(
+            estimate_err
+                .message()
+                .contains("max fee per gas less than block base fee"),
+            "unexpected eth_estimateGas error: {estimate_err}"
+        );
+    });
+}
+
+#[test]
+fn test_omitted_gas_respects_lower_block_gas_limit_override() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x56);
+    let expected = U256::from(0x1234u64);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = call_request(account.address(), target);
+        let mut state_overrides = StateOverride::default();
+        state_overrides.insert(
+            target,
+            AccountOverride::default().with_code(runtime_returning_constant(expected)),
+        );
+        let block_overrides = BlockOverrides::default().with_gas_limit(500_000);
+
+        let output = evm
+            .eth_call(
+                request.clone(),
+                None,
+                Some(state_overrides.clone()),
+                Some(Box::new(block_overrides.clone())),
+                state,
+            )
+            .unwrap();
+        assert_eq!(decode_u256(output), expected);
+
+        let estimate = evm
+            .eth_estimate_gas_helper(
+                request,
+                None,
+                Some(state_overrides),
+                Some(Box::new(block_overrides)),
                 state,
             )
             .unwrap();
@@ -481,7 +572,7 @@ fn test_eth_call_block_overrides_base_fee_and_number_are_applied() {
 }
 
 #[test]
-fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
+fn test_eth_call_block_number_override_changes_hardfork_spec() {
     let (runner, account) = setup_with_hardforks(vec![(0, SpecId::LONDON), (100, SpecId::CANCUN)]);
     let push0_contract_addr = Address::with_last_byte(0x56);
     let number_contract_addr = Address::with_last_byte(0x57);
@@ -504,6 +595,7 @@ fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
             )
             .is_err());
 
+        // Overriding block number to 100 activates CANCUN, so PUSH0 should now succeed.
         let block_overrides = BlockOverrides::default().with_number(U256::from(100u64));
         assert!(evm
             .eth_call(
@@ -513,7 +605,7 @@ fn test_eth_call_block_number_override_does_not_change_hardfork_spec() {
                 Some(Box::new(block_overrides.clone())),
                 state,
             )
-            .is_err());
+            .is_ok());
 
         let mut number_overrides = StateOverride::default();
         number_overrides.insert(

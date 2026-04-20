@@ -1,14 +1,16 @@
+use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{Runtime, Spec};
 use sov_rollup_interface::node::da::DaService;
 use sov_state::{NativeStorage, Storage};
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 use crate::metrics::PreferredSequencerUpdateStateMetrics;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
-    get_next_sequence_number_according_to_node, DbEvent, FetchBatches, Flow,
-    PreferredBatchToReplay, PreferredSequencer, ProcessFinalCatchupData, RollupBlockExecutor,
-    StateUpdateInfo,
+    get_next_sequence_number_according_to_node, DbEvent, FetchProofsAndCompletedBatches, Flow,
+    PreferredBatchToReplay, PreferredBlobToReplay, PreferredProofToReplay, PreferredSequencer,
+    ProcessFinalCatchupData, RollupBlockExecutor, StateUpdateInfo,
 };
 use crate::SequencerRole;
 use tracing::error;
@@ -48,7 +50,7 @@ where
 
         let mut batches_count = 0;
         let mut transactions_count = 0;
-        let mut next_sequence_number =
+        let mut min_sequence_number_of_open_batch =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
         // Total time to update the state for `replay_soft_confirmations_on_top_of_node_stat`e, including time spent in the `Message` channel.
         let mut total_message_processing_duration = std::time::Duration::ZERO;
@@ -60,17 +62,18 @@ where
             .in_scope(|| info.storage.get_root_hash(info.slot_number))?;
 
         // Repeatedly fetch all completed batches from the database that haven't yet been played on this sequencer and replay them
-        let (in_progress_batch, mut db_event_subscription) = loop {
+        let mut unprocessed_proofs = BTreeMap::new();
+        let (in_progress_batch, mut db_event_subscription, mut unprocessed_proofs) = loop {
             let (
-                FetchBatches {
+                FetchProofsAndCompletedBatches {
                     metrics: fetch_batches_to_replay_metrics,
                     flow,
                 },
                 message_processing_duration,
             ) = self
                 .synchronized_state_updator
-                .fetch_completed_batches_msg(
-                    next_sequence_number,
+                .fetch_proofs_and_completed_batches_msg(
+                    min_sequence_number_of_open_batch,
                     "update_state::fetch_completed_batches_iteration",
                 )
                 .await
@@ -78,8 +81,9 @@ where
 
             total_message_processing_duration += message_processing_duration;
 
-            let completed_batches = match flow {
+            let completed_blobs = match flow {
                 Flow::Break {
+                    pending_completed_proofs,
                     in_progress_batch,
                     subscription,
                     fetch_in_progress_batch_time,
@@ -93,9 +97,13 @@ where
                         });
                     }
 
-                    break (in_progress_batch, subscription);
+                    extend_pending_completed_proofs(
+                        &mut unprocessed_proofs,
+                        pending_completed_proofs,
+                    );
+                    break (in_progress_batch, subscription, unprocessed_proofs);
                 }
-                Flow::Continue { completed_batches } => completed_batches,
+                Flow::Continue { completed_blobs } => completed_blobs,
             };
 
             // Update metrics
@@ -106,14 +114,40 @@ where
                 });
             }
 
-            for batch in completed_batches {
-                batches_count += 1;
-                transactions_count += batch.batch.inner.data.len();
-                next_sequence_number = batch.batch.inner.sequence_number.saturating_add(1);
-                executor.replay_batch(&batch, &node_state_root).await?;
-                if self.shutdown_receiver.has_changed().unwrap_or(true) {
-                    tracing::info!("The sequencer is shutting down. Exiting replay_soft_confirmations_on_top_of_node_state.");
-                    return Ok(());
+            // On each iteration, we'll get some proofs (say, sequence 3, 4, 6, and  8) and some completed batches (say, sequence 5 and 7).
+            // We process the proofs when we start the next batch in sequence, and any proofs after the last batch are returned.
+            // In our example we would...
+            //  - Push proofs 3, 4 to unprocessed_proofs
+            //  - Process batch 5, draining 3, 4 from unprocessed_proofs
+            //  - Push proof 6
+            //  - Process batch 7, draining 6 from unprocessed_proofs
+            //  - Push batch 8. Since we don't have any completed batches after the last proof, unprocessed_proofs will have an entry when the loop exits.
+            // Note that some "completed" proofs may have sequence numbers greater than the sequence number of the in-progress batch.
+            // We have to be careful to ignore these proofs for now (they'll get processed when we start the *next*batch)
+            for blob in completed_blobs {
+                match blob {
+                    PreferredBlobToReplay::Batch(batch) => {
+                        batches_count += 1;
+                        transactions_count += batch.batch.inner.data.len();
+                        min_sequence_number_of_open_batch =
+                            batch.batch.inner.sequence_number.saturating_add(1);
+                        let proofs_to_replay = unprocessed_proofs
+                            .extract_if(0.., |sequence_number, _| {
+                                *sequence_number < batch.batch.inner.sequence_number
+                            })
+                            .map(|(_, proof)| proof)
+                            .collect::<Vec<_>>();
+                        executor
+                            .replay_batch(&batch, proofs_to_replay, &node_state_root)
+                            .await?;
+                        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                            tracing::info!("The sequencer is shutting down. Exiting replay_soft_confirmations_on_top_of_node_state.");
+                            return Ok(());
+                        }
+                    }
+                    PreferredBlobToReplay::Proof(proof) => {
+                        unprocessed_proofs.insert(proof.sequence_number, proof);
+                    }
                 }
             }
         };
@@ -124,10 +158,11 @@ where
 
         // Replay the in-progress batch if it exists.
         let mut batch_is_in_progress = false;
+        let mut sequence_number_of_open_batch = None;
         if let Some(batch) = in_progress_batch {
-            if let Err(err) = validate_seq_nr_from_node(
+            if let Err(err) = validate_batch_seq_nr_from_node(
                 batch.sequence_number,
-                next_sequence_number,
+                min_sequence_number_of_open_batch,
                 self.seq_role,
             ) {
                 match err {
@@ -139,6 +174,14 @@ where
             batches_count += 1;
             transactions_count += batch.txs.len();
             batch_is_in_progress = true;
+            sequence_number_of_open_batch = Some(batch.sequence_number);
+            // Only process proofs with sequence numbers less than the in-progress batch.
+            let proofs_to_replay = unprocessed_proofs
+                .extract_if(0.., |sequence_number, _| {
+                    *sequence_number < batch.sequence_number
+                })
+                .map(|(_, proof)| proof)
+                .collect::<Vec<_>>();
             let in_progress_batch = PreferredBatchToReplay {
                 is_in_progress: true,
                 visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
@@ -146,7 +189,7 @@ where
             };
 
             executor
-                .replay_batch(&in_progress_batch, &node_state_root)
+                .replay_batch(&in_progress_batch, proofs_to_replay, &node_state_root)
                 .await?;
         }
 
@@ -162,7 +205,7 @@ where
             let event = db_event_subscription.try_recv().unwrap();
             if let Err(err) = do_next_event(
                 self.seq_role,
-                next_sequence_number,
+                min_sequence_number_of_open_batch,
                 &mut executor,
                 &tx_cache_writer,
                 event,
@@ -170,6 +213,8 @@ where
                 &mut transactions_count,
                 &node_state_root,
                 &mut batch_is_in_progress,
+                &mut sequence_number_of_open_batch,
+                &mut unprocessed_proofs,
             )
             .await
             {
@@ -191,6 +236,8 @@ where
                     batches_count,
                     transactions_count,
                     batch_is_in_progress,
+                    sequence_number_of_open_batch,
+                    unprocessed_proofs,
                 },
                 "update_state::do_final_catchup",
             )
@@ -249,6 +296,15 @@ where
     }
 }
 
+fn extend_pending_completed_proofs(
+    unprocessed_proofs: &mut BTreeMap<SequenceNumber, PreferredProofToReplay>,
+    pending_completed_proofs: Vec<PreferredProofToReplay>,
+) {
+    for proof in pending_completed_proofs {
+        unprocessed_proofs.insert(proof.sequence_number, proof);
+    }
+}
+
 /// The sequencer number and node sequence number do not match.
 pub enum SequenceNumberMismatchError {
     /// The sequence number mismatch can be resolved by skipping the `state_update`.
@@ -257,18 +313,18 @@ pub enum SequenceNumberMismatchError {
     Other(anyhow::Error),
 }
 
-fn validate_seq_nr_from_node(
+fn validate_batch_seq_nr_from_node(
     seq_nr_of_in_progress_batch: u64,
-    next_sequence_number_according_to_node: u64,
+    next_batch_sequence_number_according_to_node: u64,
     seq_role: SequencerRole,
 ) -> Result<(), SequenceNumberMismatchError> {
-    if seq_nr_of_in_progress_batch < next_sequence_number_according_to_node {
+    if seq_nr_of_in_progress_batch < next_batch_sequence_number_according_to_node {
         match seq_role {
             SequencerRole::PgSyncReplica => {
                 // If this occurs on replicas, we log the error and skip `update_state` for the batch received from the node.
                 // If the database slowdown is temporary, the issue will be resolved when the next `update_state` call succeeds.
                 // If the situation persists, the replica will eventually enter sync mode in that case that the database setup needs to be examined.
-                error!(seq_nr_of_in_progress_batch, next_sequence_number_according_to_node, "The replica has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node. 
+                error!(seq_nr_of_in_progress_batch, next_batch_sequence_number_according_to_node, "The replica has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node. 
                     This indicate that Postgres notifications are delayed. In this case, the update from the node is ignored. 
                     If this error occurs repeatedly, investigate the database stack in the deployment.");
                 return Err(SequenceNumberMismatchError::SkipStateUpdate);
@@ -278,7 +334,7 @@ fn validate_seq_nr_from_node(
                 let err = anyhow::anyhow!(
                     "sequencer_role: {seq_role:?},
                     seq_nr_of_in_progress_batch: {seq_nr_of_in_progress_batch}, 
-                    next_sequence_number_according_to_node: {next_sequence_number_according_to_node},
+                    next_sequence_number_according_to_node: {next_batch_sequence_number_according_to_node},
                     The sequencer has an in-progress batch whose sequence number is lower than the next_sequence_number expected by the node.
                     This is a bug, please report it."
                 );
@@ -302,6 +358,8 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
     transactions_count: &mut usize,
     node_state_root: &<S::Storage as Storage>::Root,
     batch_is_in_progress: &mut bool,
+    sequence_number_of_open_batch: &mut Option<SequenceNumber>,
+    unprocessed_proofs: &mut BTreeMap<SequenceNumber, PreferredProofToReplay>,
 ) -> Result<(), SequenceNumberMismatchError> {
     match event {
         DbEvent::TxAccepted(tx, hash) => {
@@ -310,7 +368,7 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
             *batch_is_in_progress = true;
         }
         DbEvent::BatchClosed(sequence_number) => {
-            validate_seq_nr_from_node(
+            validate_batch_seq_nr_from_node(
                 sequence_number,
                 next_sequence_number_according_to_node,
                 seq_role,
@@ -322,34 +380,54 @@ pub(crate) async fn do_next_event<S: Spec, Rt: Runtime<S>>(
                 tx_cache_writer.insert(tx).await;
             }
             *batch_is_in_progress = false;
+            *sequence_number_of_open_batch = None;
         }
         DbEvent::BatchStarted {
             sequence_number,
             visible_slot_number_after_increase,
             visible_slots_to_advance,
         } => {
-            validate_seq_nr_from_node(
+            validate_batch_seq_nr_from_node(
                 sequence_number,
                 next_sequence_number_according_to_node,
                 seq_role,
             )?;
 
             *batches_count += 1;
+            // Replay all the proofs with sequence numbers less than the batch sequence number.
+            let proofs_to_replay = unprocessed_proofs
+                .extract_if(0.., |proof_sequence_number, _| {
+                    *proof_sequence_number < sequence_number
+                })
+                .map(|(_, proof)| proof)
+                .collect::<Vec<_>>();
             executor
                 .start_rollup_block_for_replay(
                     visible_slot_number_after_increase,
                     visible_slots_to_advance,
                     node_state_root,
                     0,
+                    proofs_to_replay,
                 )
                 .await;
 
             *batch_is_in_progress = true;
+            *sequence_number_of_open_batch = Some(sequence_number);
         }
-        DbEvent::ProofBlobAccepted(_) => {
-            // We don't do anything with proofs yet.
+        DbEvent::ProofBlobAccepted {
+            sequence_number,
+            proof_bytes,
+        } => {
             // Note that we also don't change the state of the batch_is_in_progress flag here.
             tracing::trace!("Proof blob accepted");
+
+            unprocessed_proofs.insert(
+                sequence_number,
+                PreferredProofToReplay {
+                    sequence_number,
+                    data: proof_bytes,
+                },
+            );
         }
     }
     Ok(())

@@ -29,7 +29,7 @@ pub(crate) fn process_proof<S, RT>(
     sequencer_rollup_address: &S::Address,
     sequencer_bond: Amount,
     gas_price: <S::Gas as Gas>::Price,
-    raw_proof: Vec<u8>,
+    raw_proof: &[u8],
     state: StateCheckpoint<S>,
 ) -> (ProcessProofOutput<S>, StateCheckpoint<S>)
 where
@@ -56,7 +56,7 @@ where
 
     // The `pre_exec_working_set` is initialized, indicating that the sequencer is bonded and we can begin charging gas.
     match SerializeProofWithDetails::<S>::deserialize(
-        &mut raw_proof.as_slice(),
+        &mut &raw_proof[..],
         &mut pre_exec_working_set,
     ) {
         Ok(proof_with_details) => {

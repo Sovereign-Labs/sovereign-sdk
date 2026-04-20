@@ -11,7 +11,7 @@ use sov_modules_api::{Amount, ProofSender, Spec};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_sequencer::ProofBlobSender;
+use sov_sequencer::{ProofBlobSender, SerializedProofWithDetailsBytes};
 
 const MAX_FEE: Amount = Amount::new(10_000_000);
 
@@ -75,38 +75,44 @@ impl<S: Spec> ProofSender for SovApiProofSender<S> {
 /// See [`ProofSender::publish_attestation_blob_with_metadata`].
 pub fn serialize_attestation_blob_with_metadata<S: Spec>(
     serialized_attestation: SerializedAttestation,
-) -> anyhow::Result<Arc<[u8]>> {
+) -> anyhow::Result<SerializedProofWithDetailsBytes> {
     let proof_with_details = SerializeProofWithDetails::<S> {
         proof: ProofType::OptimisticProofAttestation(serialized_attestation),
         details: make_details(MAX_FEE),
     };
 
-    Ok(borsh::to_vec(&proof_with_details)?.into())
+    Ok(SerializedProofWithDetailsBytes(
+        borsh::to_vec(&proof_with_details)?.into(),
+    ))
 }
 
 /// See [`ProofSender::publish_challenge_blob_with_metadata`].
 pub fn serialize_challenge_blob_with_metadata<S: Spec>(
     serialized_challenge: SerializedChallenge,
     slot_height: SlotNumber,
-) -> anyhow::Result<Arc<[u8]>> {
+) -> anyhow::Result<SerializedProofWithDetailsBytes> {
     let proof_with_details = SerializeProofWithDetails::<S> {
         proof: ProofType::OptimisticProofChallenge(serialized_challenge, slot_height),
         details: make_details(MAX_FEE),
     };
 
-    Ok(borsh::to_vec(&proof_with_details)?.into())
+    Ok(SerializedProofWithDetailsBytes(
+        borsh::to_vec(&proof_with_details)?.into(),
+    ))
 }
 
 /// See [`ProofSender::publish_proof_blob_with_metadata`].
 pub fn serialize_proof_blob_with_metadata<S: Spec>(
     serialized_proof: SerializedAggregatedProof,
-) -> anyhow::Result<Arc<[u8]>> {
+) -> anyhow::Result<SerializedProofWithDetailsBytes> {
     let proof_with_details = SerializeProofWithDetails::<S> {
         proof: ProofType::ZkAggregatedProof(serialized_proof),
         details: make_details(MAX_FEE),
     };
 
-    Ok(borsh::to_vec(&proof_with_details)?.into())
+    Ok(SerializedProofWithDetailsBytes(
+        borsh::to_vec(&proof_with_details)?.into(),
+    ))
 }
 
 fn make_details<S: Spec>(max_fee: Amount) -> TxDetails<S> {

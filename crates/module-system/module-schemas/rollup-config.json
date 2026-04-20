@@ -655,6 +655,11 @@
           "format": "uint",
           "minimum": 1.0
         },
+        "eager_proof_submission": {
+          "description": "When true, proofs are submitted as each block arrives. When false, submission is deferred until the batch is full, then submitted concurrently.",
+          "default": true,
+          "type": "boolean"
+        },
         "max_number_of_transitions_in_db": {
           "description": "A number of state transition info entries are allowed to be stored in the database. When the number is exceeded, older entries are removed.",
           "type": "integer",
@@ -1022,6 +1027,12 @@
         }
       }
     },
+    "RollupHeight": {
+      "description": "A rollup \"block number\". Rollup heights increase in order (1, 2, 3, ...), regardless of what happens on the underlying DA layer.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "RunnerConfig": {
       "description": "Configuration for StateTransitionRunner.",
       "type": "object",
@@ -1222,6 +1233,14 @@
           "allOf": [
             {
               "$ref": "#/definitions/Limits"
+            }
+          ]
+        },
+        "height_for_gas_limit_computation": {
+          "description": "Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.\n\nThis height is used to statically compute the gas limit for the rate limiter. (If this value is less than or equal to CHANGE_GAS_LIMIT_AFTER_HEIGHT in constants.toml, the gas limit will *always* be computed using the initial gas limit for rate limiting. If it is greater, the gas limit will be computed using the updated gas limit.) Even after rate limiting based on gas is enabled, you can safely change this param at any time since it only impacts off-chain code.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/RollupHeight"
             }
           ]
         },

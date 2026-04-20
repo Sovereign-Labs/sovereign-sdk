@@ -1,12 +1,10 @@
 demo-rollup-readme.sh
-/target
+target
 lcov.info
 
 rustc-ice*
 
 .idea/
-
-target/
 
 .DS_Store
 
@@ -38,12 +36,13 @@ examples/demo-rollup/demo_rollup_config.toml
 examples/demo-rollup/demo_rollup_config_1.toml
 examples/demo-rollup/demo_rollup_config_2.toml
 
-riscv32im-succinct-zkvm-elf
 build
 
 runtime_call.json
 zk_vm.csv
 constants_output.csv
+
+.codex
 
 # Temporary test data files
 examples/demo-rollup/tests/resync/data/.tmp*

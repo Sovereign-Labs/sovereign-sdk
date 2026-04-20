@@ -3,9 +3,9 @@ use alloy_consensus::TxEip1559;
 use alloy_consensus::TypedTransaction;
 use alloy_primitives::{Address, Bytes, TxKind, U256};
 use arbitrary::Arbitrary;
-use reth_primitives::TransactionSigned;
 use revm::context::transaction::AccessList;
 use secp256k1::SecretKey;
+use sov_eth_dev_signer::TransactionSigned;
 
 use crate::randomness::Randomness;
 use sov_eth_dev_signer::Signer;

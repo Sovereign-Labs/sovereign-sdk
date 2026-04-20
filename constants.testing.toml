@@ -10,6 +10,8 @@ freeze = [1, 1]
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
 CHAIN_HASH_OVERRIDES = []
+# The number of bytes a transaction can have.
+MAX_TX_SIZE=1_048_576
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
@@ -132,6 +134,8 @@ PERCENT_BASE_FEE_TO_BURN = 10
 # --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
 # The initial gas limit of the rollup.
 INITIAL_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
+UPDATED_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
+CHANGE_GAS_LIMIT_AFTER_HEIGHT = 9223372036854775807
 # The initial "base fee" that every transaction emits when executed.
 INITIAL_BASE_FEE_PER_GAS = [10, 10]
 # The maximum change denominator of the base fee.

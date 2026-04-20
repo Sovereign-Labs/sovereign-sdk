@@ -1,108 +1,54 @@
+mod network;
 mod parallel;
 
-mod block_proof;
-
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
+pub use network::NetworkProverService;
 pub use parallel::ParallelProverService;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{ZkVerifier, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::ZkVerifier;
 use strum::{Display, EnumString};
 use thiserror::Error;
 
 pub use crate::processes::StateTransitionInfo;
 
-/// The possible configurations of the prover
-// We use arcs for cheap cloning
-#[derive(Clone)]
-pub enum RollupProverConfig<Vm: Zkvm> {
-    /// Skip proving.
-    Skip,
-    /// Run the rollup verifier in a zkVM executor.
-    Execute(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
-    /// Run the rollup verifier and create a SNARK of execution.
-    Prove(Arc<<Vm::Host as ZkvmHost>::HostArgs>),
+pub(crate) struct Verifier<Da>
+where
+    Da: DaService,
+{
+    pub(crate) da_verifier: Da::Verifier,
 }
 
-impl<Vm: Zkvm> RollupProverConfig<Vm> {
-    /// Returns `true` if witness generation is needed for this prover configuration.
-    ///
-    /// Only [`Execute`](Self::Execute) and [`Prove`](Self::Prove) require witness data;
-    /// [`Skip`](Self::Skip) does not run the verifier, so recording witness hints is wasted work.
-    pub fn needs_witness(&self) -> bool {
-        !matches!(self, Self::Skip)
-    }
-}
-
-/// The associated discriminants of [`RollupProverConfig`]. Possible configurations of the prover
-// Note: it's best if all string conversions to and from this type (even
-// `Debug`) use the same casing, to avoid bad UX or confusion around env. vars
-// expected behavior.
+/// Prover mode, parsed from the `SOV_PROVER_MODE` env var / CLI flag.
+///
+/// Blueprints that need more configuration (e.g., which guest ELF to prove) should source
+/// that directly in [`crate::processes::ProverService`] construction rather than threading
+/// it through this type.
 #[derive(Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(serialize_all = "snake_case")]
-pub enum RollupProverConfigDiscriminants {
-    /// Skip proving.
-    Skip,
-    /// Run the rollup verifier in a zkVM executor.
-    Execute,
+pub enum RollupProverConfig {
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
+    /// Proving is disabled.
+    Disabled,
 }
 
-impl Debug for RollupProverConfigDiscriminants {
+impl RollupProverConfig {
+    /// Returns `true` unless the prover is disabled.
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, RollupProverConfig::Disabled)
+    }
+}
+
+impl Debug for RollupProverConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_string())
-    }
-}
-
-impl<Vm: Zkvm> From<RollupProverConfig<Vm>> for RollupProverConfigDiscriminants {
-    fn from(value: RollupProverConfig<Vm>) -> Self {
-        match value {
-            RollupProverConfig::Prove(_) => RollupProverConfigDiscriminants::Prove,
-            RollupProverConfig::Execute(_) => RollupProverConfigDiscriminants::Execute,
-            RollupProverConfig::Skip => RollupProverConfigDiscriminants::Skip,
-        }
-    }
-}
-
-impl RollupProverConfigDiscriminants {
-    /// Converts the discriminant into a config
-    pub fn into_config<Vm: Zkvm>(
-        self,
-        host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-    ) -> RollupProverConfig<Vm> {
-        match self {
-            RollupProverConfigDiscriminants::Skip => RollupProverConfig::Skip,
-            RollupProverConfigDiscriminants::Execute => RollupProverConfig::Execute(host_args),
-            RollupProverConfigDiscriminants::Prove => RollupProverConfig::Prove(host_args),
-        }
-    }
-}
-
-impl<Vm: Zkvm> RollupProverConfig<Vm> {
-    /// Splits the rollup prover config into host arguments and an associated discriminant
-    pub fn split(
-        self,
-    ) -> (
-        Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-        RollupProverConfigDiscriminants,
-    ) {
-        match self {
-            RollupProverConfig::Skip => (Default::default(), RollupProverConfigDiscriminants::Skip),
-            RollupProverConfig::Execute(host_args) => {
-                (host_args, RollupProverConfigDiscriminants::Execute)
-            }
-            RollupProverConfig::Prove(host_args) => {
-                (host_args, RollupProverConfigDiscriminants::Prove)
-            }
-        }
     }
 }
 
@@ -189,7 +135,7 @@ pub trait ProverService: Send + Sync + 'static {
     /// This method is not yet fully implemented: see #1185
     async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
+        block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus>;
 }
@@ -202,15 +148,15 @@ mod tests {
 
     #[test]
     fn prover_config_debug_and_display_are_the_same() {
-        let config = RollupProverConfigDiscriminants::Skip;
+        let config = RollupProverConfig::Prove;
         assert_eq!(format!("{config:?}"), format!("{}", config));
     }
 
     #[test]
     fn prover_config_display_from_str() {
-        let config = RollupProverConfigDiscriminants::Skip;
+        let config = RollupProverConfig::Prove;
         assert_eq!(
-            RollupProverConfigDiscriminants::from_str(&config.to_string()).unwrap(),
+            RollupProverConfig::from_str(&config.to_string()).unwrap(),
             config
         );
     }

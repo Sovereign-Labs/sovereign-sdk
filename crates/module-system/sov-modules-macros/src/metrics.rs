@@ -131,9 +131,9 @@ pub mod zk {
                 let inputs = vec![ #(#inputs_iter,)* ];
 
                 let memory_before = ::sov_metrics::cycle_utils::sp1::get_available_heap();
-                let before = ::sov_metrics::cycle_utils::sp1::get_cycle_count();
+                println!("cycle-tracker-report-start: {}", stringify!(#ident));
                 let result = (move || #block)();
-                let after = ::sov_metrics::cycle_utils::sp1::get_cycle_count();
+                println!("cycle-tracker-report-end: {}", stringify!(#ident));
                 let memory_after = ::sov_metrics::cycle_utils::sp1::get_available_heap();
 
                 let memory_diff = ::sov_metrics::cycle_utils::MemoryInfo {
@@ -145,7 +145,7 @@ pub mod zk {
                     ::sov_metrics::cycle_utils::CycleMetric {
                         name: stringify!(#ident).to_string(),
                         metadata: inputs,
-                        count: after - before,
+                        count: 0,
                         memory: memory_diff,
                     });
                 result

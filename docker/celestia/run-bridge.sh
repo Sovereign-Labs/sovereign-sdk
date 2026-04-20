@@ -50,11 +50,10 @@ add_trusted_genesis_and_set_network() {
   genesis_hash="$(cat "$GENESIS_HASH_FILE")"
   # and make it trusted in the node's config
   echo "Trusting a genesis: $genesis_hash"
-  sed -i'.bak' "s/TrustedHash = .*/TrustedHash = \"$genesis_hash\"/" "$CONFIG_DIR/config.toml"
-  sed -i'.bak' "s/Address = \"localhost\"/Address = \"0.0.0.0\"/" "$CONFIG_DIR/config.toml"
-  sed -i'.bak' "s/SkipAuth = false/SkipAuth = true/" "$CONFIG_DIR/config.toml"
+  sed -i "s/TrustedHash = .*/TrustedHash = \"$genesis_hash\"/" "$CONFIG_DIR/config.toml"
+  sed -i "s/Address = \"localhost\"/Address = \"0.0.0.0\"/" "$CONFIG_DIR/config.toml"
+  sed -i "s/SkipAuth = false/SkipAuth = true/" "$CONFIG_DIR/config.toml"
   # celestia-node requires setting custom network params through env
-  cat
   export CELESTIA_CUSTOM="$P2P_NETWORK:$genesis_hash"
 }
 

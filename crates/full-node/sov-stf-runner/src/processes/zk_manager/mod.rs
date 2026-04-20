@@ -26,6 +26,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     prover_service: Ps,
     proofs_to_create: UnAggregatedProofList<Ps>,
     aggregated_proof_block_jump: NonZero<usize>,
+    eager_proof_submission: bool,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
     genesis_state_root: Ps::StateRoot,
@@ -42,6 +43,7 @@ where
     pub fn new(
         prover_service: Ps,
         aggregated_proof_block_jump: NonZero<usize>,
+        eager_proof_submission: bool,
         proof_sender: Box<dyn ProofSender>,
         genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
@@ -51,6 +53,7 @@ where
             prover_service,
             proofs_to_create: UnAggregatedProofList::new(),
             aggregated_proof_block_jump,
+            eager_proof_submission,
             proof_sender,
             backoff_policy: ExponentialBuilder::default()
                 .with_min_delay(Duration::from_secs(BACKOFF_POLICY_MIN_DELAY))
@@ -86,6 +89,11 @@ where
                         tracing::error!(
                             "Please check your zk circuit ELF file was built correctly!"
                         );
+                        anyhow::bail!(error)
+                    };
+
+                    if error_message.contains("Outer network proving") {
+                        tracing::error!("Fatal error: {error_message}");
                         anyhow::bail!(error)
                     };
 
@@ -168,24 +176,25 @@ where
         if first_height_unproven.saturating_add(self.proofs_to_create.current_proof_jump() as u64)
             <= stf_info.slot_number
         {
-            let block_hash = stf_info.da_block_header().hash();
+            let block_header = stf_info.da_block_header().clone();
             // Save the transition for later proving. This is temporarily redundant
             // since we always just try to prove blocks right away (because we don't have fee
             // estimates for proving built out yet).
             self.proofs_to_create.append(BlockProofInfo {
                 status: BlockProofStatus::Waiting(stf_info),
-                hash: block_hash,
+                header: block_header,
                 // TODO(@preston-evans98): estimate public data size. This requires a new API on the `prover_service`.
                 // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/440>
                 public_data_size: 0,
             });
         }
 
-        // Start proving the next block right away... for now.
-        self.proofs_to_create
-            .oldest_mut()
-            .prove_any_unproven_blocks(prover_service)
-            .await;
+        if self.eager_proof_submission {
+            self.proofs_to_create
+                .oldest_mut()
+                .prove_any_unproven_blocks(prover_service)
+                .await;
+        }
 
         let num_proofs_to_create = self.proofs_to_create.current_proof_jump();
 

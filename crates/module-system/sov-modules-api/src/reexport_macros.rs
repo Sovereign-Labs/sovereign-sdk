@@ -600,7 +600,7 @@ pub mod macros {
     /// This annotation may only be applied to fields, not items.
     ///
     /// ```rust
-    /// use sov_universal_wallet::schema::Schema;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     /// use sov_modules_api::macros::UniversalWallet;
     /// use sov_modules_api::SafeString;
     ///
@@ -627,7 +627,8 @@ pub mod macros {
     /// or when you want to override the default schema for a type in a particular context.
     ///
     /// ```rust
-    /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+    /// use sov_modules_api::macros::UniversalWallet;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     ///
     /// // A foreign type that doesn't derive UniversalWallet
     /// #[derive(borsh::BorshSerialize)]
@@ -654,7 +655,8 @@ pub mod macros {
     ///    given offset `m`. The offset defaults to `0` if not specified.
     ///
     /// ```rust
-    /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+    /// use sov_modules_api::macros::UniversalWallet;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     /// #[derive(UniversalWallet, borsh::BorshSerialize)]
     /// pub struct Coins {
     ///     #[sov_wallet(fixed_point(from_field(1)))]
@@ -723,8 +725,8 @@ pub mod macros {
     /// named in the variant's own attribute will be available on that attribute.
     ///
     /// ```rust
-    /// use sov_universal_wallet::schema::Schema;
-    /// use sov_universal_wallet::schema::safe_string::SafeString;
+    /// use sov_modules_api::sov_universal_wallet::schema::safe_string::SafeString;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     /// use sov_modules_api::macros::UniversalWallet;
     /// #[derive(UniversalWallet, borsh::BorshSerialize)]
     /// pub enum CallMessage {
@@ -772,7 +774,8 @@ pub mod macros {
     ///   to `template_override_ty`.
     ///
     /// ```rust
-    /// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+    /// use sov_modules_api::macros::UniversalWallet;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     ///
     /// /// A foreign module
     /// mod foreign {
@@ -823,7 +826,7 @@ pub mod macros {
     /// use `#[sov_wallet(hidden)]` instead.
     ///
     /// ```rust
-    /// use sov_universal_wallet::schema::Schema;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     /// use sov_modules_api::macros::UniversalWallet;
     /// #[derive(UniversalWallet, borsh::BorshSerialize)]
     /// pub struct File {
@@ -841,7 +844,7 @@ pub mod macros {
     /// Causes the tag of an enum to be skipped when displaying from its human-readable representation.
     ///
     /// ```rust
-    /// use sov_universal_wallet::schema::Schema;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     /// use sov_modules_api::macros::UniversalWallet;
     /// #[derive(UniversalWallet, borsh::BorshSerialize)]
     /// #[sov_wallet(hide_tag)]
@@ -864,7 +867,7 @@ pub mod macros {
     /// This annotation may only be applied to fields, not items. The field must have type `[u8;N]` or `Vec<u8>` to use this attribute.
     ///
     /// ```rust
-    /// use sov_universal_wallet::schema::Schema;
+    /// use sov_modules_api::sov_universal_wallet::schema::Schema;
     /// use sov_modules_api::macros::UniversalWallet;
     ///
     /// fn prefix() -> &'static str {

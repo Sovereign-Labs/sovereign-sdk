@@ -1,7 +1,9 @@
 use crate::preferred::db::BatchToStore;
 use crate::preferred::db::StoredBlob;
+use crate::PreferredProofDataBytes;
 use crate::Serialize;
 use serde::Deserialize;
+use sov_blob_storage::SequenceNumber;
 use sov_modules_api::FullyBakedTx;
 use sov_modules_api::TxHash;
 use sqlx::postgres::PgRow;
@@ -30,6 +32,9 @@ pub(crate) enum ParsingError {
 
     #[error("Unexpected proof: sequence number: '{0}'")]
     UnexpectedProof(u64),
+
+    #[error("Unexpected batch: sequence number: '{0}'")]
+    UnexpectedBatch(u64),
 
     #[error("Borsh deserialization error: '{0}'")]
     Borsh(io::Error),
@@ -117,7 +122,7 @@ pub(crate) enum DbData {
     BatchStart(BatchToStore),
     Transaction(u64, FullyBakedTx, TxHash),
     BatchEnd(BatchToStore),
-    NewProof,
+    NewProof(SequenceNumber, PreferredProofDataBytes),
 }
 
 impl DbData {
@@ -130,25 +135,33 @@ impl DbData {
             DbData::BatchStart(batch_to_store) | DbData::BatchEnd(batch_to_store) => {
                 batch_to_store.sequence_number
             }
-            DbData::Transaction(sequence_number, _, _) => *sequence_number,
-            DbData::NewProof => 0,
+            DbData::Transaction(sequence_number, _, _) | DbData::NewProof(sequence_number, _) => {
+                *sequence_number
+            }
         }
     }
 }
 
 pub(crate) async fn rows(
     query_pool: &PgPool,
-    page_end: u64,
     current_event_id: u64,
+    target_event_id: u64,
+    page_size: usize,
 ) -> Result<Vec<PgRow>, sqlx::Error> {
-    // Query and process events for this page
+    // Fetch the next existing rows in event_id order rather than assuming ids are dense.
     sqlx::query(
-        "SELECT event_id, sequence_number, index_in_batch, event_type, hash, data FROM events
-                 WHERE event_id >= $1 AND event_id <= $2
-                 ORDER BY event_id ASC",
+        "SELECT e.event_id, e.sequence_number, e.index_in_batch, e.event_type, e.hash, COALESCE(e.data, p.borsh_value) AS data
+        FROM events e
+        LEFT JOIN proof_blobs p
+          ON p.sequence_number = e.sequence_number
+          AND e.event_type = 'new_proof'
+        WHERE e.event_id >= $1 AND e.event_id <= $2
+        ORDER BY e.event_id ASC
+        LIMIT $3",
     )
     .bind(current_event_id as i64)
-    .bind(page_end as i64)
+    .bind(target_event_id as i64)
+    .bind(page_size as i64)
     .fetch_all(query_pool)
     .await
 }
@@ -174,7 +187,10 @@ pub(crate) fn row_to_event(row: PgRow) -> Result<(DbData, EventType), ParsingErr
             let batch_to_store = parse_serialized_batch(data, sequence_number)?;
             DbData::BatchEnd(batch_to_store)
         }
-        EventType::NewProof => DbData::NewProof,
+        EventType::NewProof => DbData::NewProof(
+            sequence_number,
+            parse_serialized_proof(data, sequence_number)?,
+        ),
     };
 
     Ok((event, event_type))
@@ -197,5 +213,17 @@ fn parse_serialized_batch(
             sequence_number,
         }),
         StoredBlob::Proof { .. } => Err(ParsingError::UnexpectedProof(sequence_number)),
+    }
+}
+
+fn parse_serialized_proof(
+    data: Vec<u8>,
+    sequence_number: u64,
+) -> Result<PreferredProofDataBytes, ParsingError> {
+    let stored_blob: StoredBlob = borsh::from_slice(&data).map_err(ParsingError::Borsh)?;
+    match stored_blob {
+        StoredBlob::Batch { .. } => Err(ParsingError::UnexpectedBatch(sequence_number)),
+
+        StoredBlob::Proof { data, .. } => Ok(PreferredProofDataBytes(data)),
     }
 }

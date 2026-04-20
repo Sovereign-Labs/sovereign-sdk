@@ -490,26 +490,24 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
         key: SlotKey,
-        version: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>> {
-        let version_to_use = match self.get_version_to_use(version) {
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, SlotNumber, Self::Root)> {
+        let version_to_use = match self.get_version_to_use(None) {
             None => {
-                anyhow::bail!(
-                    "Proof is not available at version {:?}. Empty storage or future version",
-                    version
-                )
+                anyhow::bail!("Proof is not available. Empty storage",)
             }
             Some(v) => v,
         };
         let namespace = N::PROVABLE_NAMESPACE;
-        Ok(match namespace {
+        let root = self.get_root_hash(version_to_use)?;
+        let proof = match namespace {
             ProvableNamespace::User => {
                 self.get_with_proof_namespace::<DBUserNamespace>(namespace, key, version_to_use)
             }
             ProvableNamespace::Kernel => {
                 self.get_with_proof_namespace::<DBKernelNamespace>(namespace, key, version_to_use)
             }
-        })
+        };
+        Ok((proof, version_to_use, root))
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
@@ -546,6 +544,17 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
+    }
+
+    fn get_accessory_unbound(
+        &self,
+        key: SlotKey,
+        max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue> {
+        self.accessory_db
+            .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
+            .expect("Unable to read from AccessoryDb")
+            .map(Into::into)
     }
 
     // JMT doesn't currently support iter_with_prefix, so we return None.

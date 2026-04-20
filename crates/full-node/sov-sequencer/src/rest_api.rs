@@ -16,8 +16,9 @@ use serde_with::base64::Base64;
 use serde_with::serde_as;
 use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse};
+use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
@@ -50,7 +51,7 @@ fn emit_ws_metrics(
     track_metrics(|tracker| {
         let point = HttpMetrics {
             request_method: http::Method::GET,
-            request_uri: http::Uri::from_static("/sequencer/txs/submit/ws"),
+            request_path: "/sequencer/txs/submit/ws".to_owned(),
             response_status,
             response_body_size,
             handler_processing_time,
@@ -145,15 +146,15 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .route("/sequencer/txs", axum::routing::post(Self::axum_accept_tx))
             .route("/sequencer/ready", axum::routing::get(Self::axum_get_ready))
             .route(
-                "/sequencer/txs/:tx_hash/status",
+                "/sequencer/txs/{tx_hash}/status",
                 axum::routing::get(Self::axum_get_tx_status),
             )
             .route(
-                "/sequencer/txs/:tx_hash",
+                "/sequencer/txs/{tx_hash}",
                 axum::routing::get(Self::axum_get_tx),
             )
             .route(
-                "/sequencer/txs/:tx_hash/ws",
+                "/sequencer/txs/{tx_hash}/ws",
                 axum::routing::get(Self::axum_get_tx_ws),
             )
             .route(
@@ -169,7 +170,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 axum::routing::get(Self::axum_ws_submit_tx),
             )
             .route(
-                "/sequencer/unstable/events/:eventId",
+                "/sequencer/unstable/events/{eventId}",
                 axum::routing::get(Self::axum_get_event),
             )
             .route(
@@ -208,10 +209,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         // Send a message with the initial status of the transaction,
         // without waiting for it to change for the first time.
         let initial_status = self.sequencer.tx_status(&tx_hash).await?;
-        let ws_msg = ws::Message::Text(serde_json::to_string(&TxInfo {
-            id: tx_hash,
-            status: initial_status,
-        })?);
+        let ws_msg = ws::Message::Text(
+            serde_json::to_string(&TxInfo {
+                id: tx_hash,
+                status: initial_status,
+            })?
+            .into(),
+        );
         socket.send(ws_msg).await?;
 
         Ok(())
@@ -225,6 +229,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     ) -> Result<impl IntoResponse, axum::response::Response> {
         let ip_addr = get_client_ip(headers, Some(&connect_info))
             .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
+        // Limit the incoming messsages directly on the web-socket
+        // layer.
+        //
+        // We choose 2x here for simplicity to cover the base64
+        // encoding overhead and the few bytes for the JSON around.
+        let ws = ws.max_message_size(config_value!("MAX_TX_SIZE") * 2);
 
         Ok(ws.on_upgrade(move |mut socket| async move {
             let mut shutdown_receiver = state.shutdown_receiver.clone();
@@ -317,7 +328,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                 break;
                             }
                             Some(Ok(ws::Message::Pong(data))) => {
-                                if awaiting_pong.is_some_and(|expected| data == expected) {
+                                if awaiting_pong.is_some_and(|expected| *data == expected) {
                                     awaiting_pong = None;
                                     ping_interval.reset();
                                     tracing::trace!("Received valid pong from client");
@@ -345,7 +356,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                         let Some(msg) = outbound_msg else {
                             break;
                         };
-                        if let Err(err) = socket.send(ws::Message::Text(msg)).await {
+                        if let Err(err) = socket.send(ws::Message::Text(msg.into())).await {
                             tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                             should_drain = false;
                             break;
@@ -363,7 +374,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
                         ping_counter = ping_counter.wrapping_add(1);
                         let ping_data = ping_counter.to_le_bytes();
-                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec())).await {
+                        if let Err(err) = socket.send(ws::Message::Ping(ping_data.to_vec().into())).await {
                             tracing::warn!(?err, "Failed to send ping - disconnecting client");
                             should_drain = false;
                             break;
@@ -382,13 +393,13 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             // Wait up to 5 seconds for any remaining in-flight txs to return responses, forwarding them to the client.
             if should_drain {
                 while let Ok(Some(msg)) = tokio::time::timeout(std::time::Duration::from_secs(5), outbound_rx.recv()).await {
-                    if let Err(err) = socket.send(ws::Message::Text(msg)).await {
+                    if let Err(err) = socket.send(ws::Message::Text(msg.into())).await {
                         tracing::warn!(?err, ip_addr=%ip_addr, "Error sending ws message to client");
                         break;
                     }
                 }
             }
-            socket.close().await.ok();
+            socket.send(ws::Message::Close(None)).await.ok();
         }))
     }
 
@@ -487,7 +498,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             errors::database_error_500("Unable to retrieve transaction").into_response()
         })?;
         if let Some(tx) = tx {
-            let tx: ApiAcceptedTx<_> = tx.into();
+            let tx = ApiAcceptedTx::<_>::from_accepted_tx::<Seq::Rt, Seq::Spec>(tx);
             Ok(tx.into())
         } else {
             Err(errors::not_found_404("Transaction", tx_hash.0))
@@ -612,8 +623,8 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     }
 
     #[cfg(feature = "test-utils")]
-    async fn axum_force_close_batch(state: State<Self>) -> ApiResult<()> {
-        state
+    async fn axum_force_close_batch(state: State<Self>) -> ApiResult<bool> {
+        let result = state
             .sequencer
             .force_close_current_batch()
             .await
@@ -622,8 +633,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 errors::internal_server_error_response_500("Unable to force close batch")
                     .into_response()
             })?;
-
-        Ok(().into())
+        Ok(result.into())
     }
 
     #[cfg(feature = "test-utils")]
@@ -749,17 +759,22 @@ pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,
     /// Transaction body
-    pub tx: FullyBakedTx,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx: Option<serde_json::Value>,
     /// The confirmation data
     #[serde(flatten)]
     pub confirmation: Confirmation,
 }
 
-impl<C> From<AcceptedTx<C>> for ApiAcceptedTx<C> {
-    fn from(tx: AcceptedTx<C>) -> Self {
+impl<C> ApiAcceptedTx<C> {
+    /// Converts an [`AcceptedTx`] into an [`ApiAcceptedTx`].
+    pub fn from_accepted_tx<Rt: Runtime<S>, S: Spec>(tx: AcceptedTx<C>) -> Self {
+        let tx_json = Rt::Auth::decode_serialized_tx(&tx.tx).ok().map(|tx| {
+            serde_json::to_value(Rt::wrap_call(tx)).expect("Txs must be json serializable")
+        });
         Self {
             id: tx.tx_hash,
-            tx: tx.tx,
+            tx: tx_json,
             confirmation: tx.confirmation,
         }
     }

@@ -109,7 +109,7 @@ impl<S: Spec> BlobData<S> {
                 sequencer_address: seq_addr,
             }),
             Self::Proof((proof, seq_addr)) => BlobDataWithId::Proof {
-                proof,
+                proof: Arc::from(proof),
                 id,
                 sequencer_address: seq_addr,
             },
@@ -136,7 +136,7 @@ pub enum BlobDataWithId<S: Spec, B> {
     /// Aggregated proof posted on the DA.
     Proof {
         /// The proof
-        proof: Vec<u8>,
+        proof: Arc<[u8]>,
         /// The id of the blob on the DA layer
         id: [u8; 32],
         /// The address of the sequencer that submitted the proof

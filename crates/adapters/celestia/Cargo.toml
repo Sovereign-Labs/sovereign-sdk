@@ -20,8 +20,8 @@ bech32 = { workspace = true }
 prost = "0.13"
 
 # Upgrade with care. The new version might be incompatible and require a run of soak tests
-celestia-types = { version = "0.20.0", default-features = false }
-celestia-client = { version = "0.5.0", optional = true }
+celestia-types = { version = "1.0.0", default-features = false }
+celestia-client = { version = "1.0.0", optional = true }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
@@ -52,6 +52,7 @@ rand = { workspace = true, optional = true }
 sov-metrics = { workspace = true, optional = true }
 sov-modules-macros = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["macros"] }
 
 [dev-dependencies]
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }

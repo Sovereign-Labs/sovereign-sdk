@@ -63,7 +63,7 @@ Always use `SKIP_GUEST_BUILD=1` unless performing specific ZK related changes, b
 3. **Adapters** (`crates/adapters/`) - DA and zkVM integrations
 4. **Full Node** (`crates/full-node/`) - Node infrastructure
 
-Delegate to subagents & CLAUDE.md in those directories for more details.
+Delegate to subagents & AGENTS.md in those directories for more details.
 
 ### Bindings
 
@@ -115,12 +115,63 @@ This codebase will outlive you. Avoid shortcuts that create long-term debt.
 
 ## Code Review
 
- - Base branch for this project is `dev`.
- - Focus on business logic, correctness and code quality which has the highest business impact. Ignore untracked files.
- - Ignore uncommitted changes in Cargo.toml, if it removes `default-members`. This is expected pattern with `cargo switcheroo`
+- Base branch for this project is `dev`.
+- Focus on business logic, correctness and code quality which has the highest business impact. Ignore untracked files.
+- Ignore uncommitted changes in Cargo.toml, if it removes `default-members`. This is expected pattern with `cargo switcheroo`
 
-## Toolchain
+# Agent working agreement
 
-- Rust 1.88.0
-- cargo-nextest for testing
-- risc0 and SP1 toolchains for ZK proofs
+## Default operating mode: Minimal Patch Mode
+
+Unless the user explicitly asks for a refactor, redesign, or broader cleanup, operate in Minimal Patch Mode.
+
+Rules:
+- Make the smallest diff that satisfies the request.
+- Preserve the requested approach, constraints, and test strategy.
+- Prefer editing existing code over introducing new abstractions.
+- Do not fix adjacent issues in the same PR.
+- Put unrelated ideas under "Follow-ups", not in the diff.
+
+## Plan Lock
+
+An approved plan is binding.
+
+Rules:
+- Implement the approved plan, not a "better" plan.
+- **Do not silently replace requested techniques**, test strategies, or constraints.
+- **Do not widen scope** because a broader change seems cleaner.
+- Do not drop explicit user requirements from earlier discussion just because they were omitted from a later summary.
+- If the plan omitted a prior explicit requirement, repair the plan before coding.
+
+If you believe the approved plan is flawed, stop and report:
+1. the exact conflict or new evidence
+2. the smallest change to the plan that would fix it
+3. zero implementation changes beyond investigation
+
+Any deviation from the approved plan must be called out explicitly under:
+`Deviations from approved plan: ...`
+**Silent deviations are not allowed.**
+
+## Scope budget
+
+Default budget **unless explicitly approved otherwise**:
+- at most 4 files changed
+- at most 200 added non-test lines
+- no new dependencies
+- no public API changes
+- no file moves or broad renames
+- no opportunistic refactors
+- no formatting-only churn
+- no test rewrites unless explicitly requested
+
+If the task cannot be completed within this budget, stop and propose the smallest split.
+
+## Review behavior
+
+Reviewer direction wins over agent preference.
+
+Rules:
+- When asked to reduce scope, reduce scope.
+- Do not argue for the broader patch after the reviewer asks for a smaller PR.
+- You may note one concise technical risk or tradeoff, then comply.
+- Remove incidental changes instead of defending them.

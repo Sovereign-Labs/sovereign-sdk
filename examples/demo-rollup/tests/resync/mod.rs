@@ -10,15 +10,14 @@ use anyhow::{bail, Context};
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
-use demo_stf_json_client::types::RuntimeAnyJsonValue;
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::{OperatingMode, RawTx, Runtime, TxHash};
+use sov_modules_api::{CryptoSpec, OperatingMode, RawTx, Runtime, Spec, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
-use sov_risc0_adapter::crypto::private_key::Risc0PrivateKey;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::logging::LogCollector;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
@@ -65,7 +64,11 @@ const CHECK_TRANSACTION_VALUE: u64 = 13;
 const DA_SLOTS_TO_GENERATE: u64 = 100;
 const FINALIZATION_SLOTS: u32 = 5;
 
-fn tx_set_value_for_check(key: Risc0PrivateKey, value: u64, generation: u64) -> RawTx {
+fn tx_set_value_for_check(
+    key: <<DemoRollupSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    value: u64,
+    generation: u64,
+) -> RawTx {
     let msg: RuntimeCall<DemoRollupSpec> =
         RuntimeCall::SyntheticLoad(sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
             number_of_new_values: value,
@@ -88,15 +91,8 @@ async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
         .unwrap()
         .into_inner();
 
-    match &*response {
-        RuntimeAnyJsonValue::Object(inner) => {
-            let state_value = inner.get("value").unwrap();
-            println!("State value: {state_value:?}");
-            let heavy_vec = state_value.as_array().expect("HeavyVec is not an array");
-            assert_eq!(heavy_vec.len(), expected as usize);
-        }
-        _ => panic!("Getting SyntheticLoad state value returned unexpected JSON shape."),
-    }
+    println!("State value: {:?}", response.value);
+    assert_eq!(response.value.len(), expected as usize);
 }
 
 async fn start_rollup(
@@ -111,14 +107,15 @@ async fn start_rollup(
             StoragePath::Tmp(rollup_storage_path.clone()),
             false,
         )
-        .with_zkvm_host_args(mock_da_risc0_host_args())
+        .enable_prover()
         .set_config(|c| {
-            c.rollup_prover_config = None;
+            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 10;
             c.max_concurrent_blobs = 92;
             if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
+                seq_config.ideal_lag_behind_finalized_slot = 3;
             }
         })
         .start(),
@@ -272,7 +269,15 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
     // doesn't interfere
-    for path in ["state", "accessory", "ledger", "blob_sender"] {
+    for path in [
+        "user_nomt_db",
+        "kernel_nomt_db",
+        "state-db",
+        "archival-state-db",
+        "accessory",
+        "ledger",
+        "blob_sender",
+    ] {
         std::fs::remove_dir_all(rollup_storage_path.path().join(path))?;
     }
     // sanity check

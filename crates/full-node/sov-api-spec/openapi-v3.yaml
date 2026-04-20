@@ -818,8 +818,11 @@ components:
             - successful
             - reverted
             - skipped
+        data:
+          description: Receipt data associated with the transaction result. Contents are generic and vary by rollup implementation.
       required:
         - result
+        - data
     LedgerTx:
       type: object
       properties:
@@ -951,6 +954,8 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/TxHash"
+        tx:
+          description: Decoded transaction body as a JSON object. Omitted if the transaction could not be decoded.
         tx_number:
           type: integer
           format: uint64

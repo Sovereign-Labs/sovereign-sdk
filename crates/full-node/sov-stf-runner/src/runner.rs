@@ -10,20 +10,21 @@ use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use sov_metrics::RunnerMetrics;
 
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::{StateChannel, StateUpdateInfo};
 use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::{
-    future_or_shutdown, DaSyncState, FutureOrShutdownOutput, SyncStatus,
-};
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
 use sov_rollup_interface::stf::{
-    ExecutionContext, ProofOutcome, ProofReceipt, ProofReceiptContents, StateTransitionFunction,
+    ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
+    StateTransitionFunction,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{StateTransitionWitness, Zkvm};
-use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
+use sov_rollup_interface::zk::StateTransitionWitness;
+use sov_rollup_interface::ProvableHeightTracker;
 use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
@@ -32,20 +33,18 @@ use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::{BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
-type GenesisParams<ST, InnerVm, OuterVm, Da> =
-    <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
+type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 type NextDaHeightToProcess = u64;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 #[allow(clippy::type_complexity)]
-pub struct StateTransitionRunner<Stf, Sm, Da, InnerVm, OuterVm>
+pub struct StateTransitionRunner<Stf, Sm, Da>
 where
     Da: DaService,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
     Sm: HierarchicalStorageManager<Da::Spec>,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
+    Sm::StfState: Clone,
+    Stf: StateTransitionFunction<Da::Spec>,
 {
     first_unprocessed_height_at_startup: u64,
     da_polling_interval: Duration,
@@ -68,16 +67,14 @@ where
 /// Initializes rollup genesis.
 /// Gets proper DA block and finalizes storage.
 /// Returns root hashes.
-pub async fn initialize_state<Stf, InnerVm, OuterVm, Da, Sm>(
+pub async fn initialize_state<Stf, Da, Sm>(
     stf: &Stf,
     storage_manager: &mut Sm,
     genesis_block: Da::FilteredBlock,
-    genesis_params: GenesisParams<Stf, InnerVm, OuterVm, Da::Spec>,
+    genesis_params: GenesisParams<Stf, Da::Spec>,
 ) -> anyhow::Result<Stf::StateRoot>
 where
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
+    Stf: StateTransitionFunction<Da::Spec>,
     Da: DaService,
     Sm: HierarchicalStorageManager<
         Da::Spec,
@@ -113,24 +110,16 @@ where
     Ok(genesis_state_root)
 }
 
-impl<Stf, Sm, Da, InnerVm, OuterVm> StateTransitionRunner<Stf, Sm, Da, InnerVm, OuterVm>
+impl<Stf, Sm, Da> StateTransitionRunner<Stf, Sm, Da>
 where
     Da: DaService<Error = anyhow::Error>,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
     Sm: HierarchicalStorageManager<
         Da::Spec,
         LedgerChangeSet = SchemaBatch,
         LedgerState = DeltaReader,
     >,
     Sm::StfState: Clone,
-    Stf: StateTransitionFunction<
-        InnerVm,
-        OuterVm,
-        Da::Spec,
-        PreState = Sm::StfState,
-        ChangeSet = Sm::StfChangeSet,
-    >,
+    Stf: StateTransitionFunction<Da::Spec, PreState = Sm::StfState, ChangeSet = Sm::StfChangeSet>,
 {
     /// Creates a new [`StateTransitionRunner`].
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -142,7 +131,7 @@ where
         ledger_db: LedgerDb,
         stf: Stf,
         storage_manager: Sm,
-        state_update_channel: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+        state_channel: StateChannel<Sm::StfState>,
         prev_state_root: Stf::StateRoot,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         shutdown_receiver: watch::Receiver<()>,
@@ -198,7 +187,7 @@ where
             storage_manager,
             ledger_db,
             prev_state_root,
-            state_update_channel,
+            state_channel,
             stf_info_sender,
             state_height_tracker,
             sync_state.clone(),
@@ -636,8 +625,8 @@ where
                 witness: slot_result.witness,
             };
 
-        let aggregated_proofs =
-            Self::collect_aggregated_proofs(slot_result.proof_receipts.into_iter());
+        let (aggregated_proofs, proof_receipts) =
+            Self::collect_aggregated_proofs_and_receipts(slot_result.proof_receipts.into_iter());
 
         let processing_changes_start = std::time::Instant::now();
         self.state_manager
@@ -647,6 +636,7 @@ where
                 transition_data,
                 data_to_commit,
                 aggregated_proofs,
+                proof_receipts,
             )
             .await?;
         trace!("Stf changes processing is completed");
@@ -709,19 +699,28 @@ where
         self.da_service.clone()
     }
 
-    fn collect_aggregated_proofs(
+    #[allow(clippy::type_complexity)] // Any type alias needs the STF bounds, which are more complex than the original type
+    fn collect_aggregated_proofs_and_receipts(
         receipts: impl Iterator<
             Item = ProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
         >,
-    ) -> Vec<SerializedAggregatedProof> {
+    ) -> (
+        Vec<SerializedAggregatedProof>,
+        Vec<PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>>,
+    ) {
         let mut aggregated_proofs: Vec<SerializedAggregatedProof> = Vec::new();
-        for receipt in receipts {
-            match receipt.outcome {
+        #[allow(clippy::type_complexity)]
+        // Any type alias needs the STF bounds, which are more complex than the original type
+        let mut partial_receipts: Vec<
+            PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
+        > = Vec::new();
+        for mut receipt in receipts {
+            match &mut receipt.outcome {
                 ProofOutcome::Valid(ProofReceiptContents::AggregateProof(
                     _public_data,
                     raw_proof,
                 )) => {
-                    aggregated_proofs.push(raw_proof);
+                    aggregated_proofs.push(std::mem::take(raw_proof));
                 }
                 ProofOutcome::Valid(_) => {
                     tracing::info!("Not aggregated proof, probably running in a different mode. Will be fixed in the future.");
@@ -733,9 +732,10 @@ where
                         "Invalid proof outcome");
                 }
             }
+            partial_receipts.push(receipt.into());
         }
 
-        aggregated_proofs
+        (aggregated_proofs, partial_receipts)
     }
 }
 

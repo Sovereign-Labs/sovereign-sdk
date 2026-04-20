@@ -16,6 +16,7 @@ use tracing::debug;
 
 use super::db::{ReadBatch, ReadBlob};
 use crate::preferred::db::SequencerRole;
+use crate::PreferredProofDataBytes;
 use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
@@ -79,7 +80,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 
     pub(crate) async fn publish_proof(
         &mut self,
-        proof_data: Arc<[u8]>,
+        proof_data: PreferredProofDataBytes,
         sequence_number: u64,
         blob_id: BlobInternalId,
     ) -> anyhow::Result<()> {
@@ -87,14 +88,12 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             return Ok(());
         };
 
-        let blob_bytes = proof_bytes(&proof_data, sequence_number)?;
-
         debug!(
             sequence_number,
             blob_id, "Dispatching proof blob for publishing"
         );
 
-        inner.publish_proof_blob(blob_bytes, blob_id).await?;
+        inner.publish_proof_blob(proof_data.0, blob_id).await?;
 
         Ok(())
     }
@@ -162,14 +161,14 @@ pub fn create_blobs_to_send(
                 data,
                 sequence_number,
                 blob_id,
+                ..
             } => {
-                let data = proof_bytes(&data, sequence_number)?;
                 debug!(
                     sequence_number,
                     blob_id, "Dispatching proof blob for publishing"
                 );
 
-                blobs_to_send.push((BlobToSend::Proof { data }, blob_id));
+                blobs_to_send.push((BlobToSend::Proof { data: data.0 }, blob_id));
             }
         }
     }
@@ -177,12 +176,15 @@ pub fn create_blobs_to_send(
     Ok(blobs_to_send)
 }
 
-fn proof_bytes(proof_data: &[u8], sequence_number: u64) -> anyhow::Result<Arc<[u8]>> {
+pub(crate) fn proof_bytes(
+    proof_data: &[u8],
+    sequence_number: u64,
+) -> anyhow::Result<PreferredProofDataBytes> {
     let blob = PreferredProofData {
         sequence_number,
         data: proof_data.to_vec(),
     };
-    Ok(Arc::from(borsh::to_vec(&blob)?))
+    Ok(PreferredProofDataBytes(borsh::to_vec(&blob)?.into()))
 }
 
 fn batch_bytes(batch: ReadBatch) -> anyhow::Result<Arc<[u8]>> {

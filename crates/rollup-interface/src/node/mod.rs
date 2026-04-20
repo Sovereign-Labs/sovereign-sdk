@@ -10,7 +10,7 @@ pub mod ledger_api;
 
 use std::future::Future;
 
-pub use da_sync_state::{DaSyncState, SyncStatus};
+pub use da_sync_state::SyncStatus;
 use tokio::select;
 use tokio::sync::watch;
 

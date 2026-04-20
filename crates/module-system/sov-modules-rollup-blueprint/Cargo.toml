@@ -26,6 +26,7 @@ sov-db = { workspace = true, optional = true }
 sov-sequencer = { workspace = true, optional = true }
 sov-ledger-apis = { workspace = true, optional = true }
 sov-rollup-apis = { workspace = true, optional = true }
+sov-rollup-full-node-interface = { workspace = true, optional = true }
 sov-api-spec = { workspace = true, optional = true }
 sov-metrics = { workspace = true, optional = true }
 
@@ -64,6 +65,7 @@ native = [
 	"sov-modules-api/native",
 	"sov-modules-stf-blueprint/native",
 	"sov-rollup-apis",
+	"sov-rollup-full-node-interface",
 	"sov-rollup-interface/native",
 	"sov-sequencer",
 	"sov-state/native",

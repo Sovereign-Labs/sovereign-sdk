@@ -30,7 +30,7 @@ use super::optimistic::Attestation;
 use crate::common::{HexHash, RollupHeight};
 use crate::da::{DaSpec, RelevantBlobIters};
 use crate::zk::aggregated_proof::{AggregatedProofPublicData, SerializedAggregatedProof};
-use crate::zk::{StateTransitionPublicData, Zkvm};
+use crate::zk::StateTransitionPublicData;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
@@ -87,6 +87,35 @@ pub struct ProofReceipt<Address, Da: DaSpec, Root, StorageProof> {
     pub gas_price: Vec<u128>,
 }
 
+/// A receipt for data posted into the proof namespace
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(
+    bound = "Address: Serialize + DeserializeOwned, Da: DaSpec, Root: Serialize + DeserializeOwned, StorageProof: Serialize + DeserializeOwned"
+)]
+pub struct PartialProofReceipt<Address, Da: DaSpec, Root, StorageProof> {
+    /// The hash of the blob which contained the proof
+    pub blob_hash: [u8; 32],
+    /// The outcome of the proof
+    pub outcome: PartialProofOutcome<Address, Da, Root, StorageProof>,
+    /// Total gas incurred for this proof. This does not include the priority fee.
+    pub gas_used: Vec<u64>,
+    /// Computed gas price for this proof.
+    pub gas_price: Vec<u128>,
+}
+
+impl<Address, Da: DaSpec, Root, StorageProof> From<ProofReceipt<Address, Da, Root, StorageProof>>
+    for PartialProofReceipt<Address, Da, Root, StorageProof>
+{
+    fn from(value: ProofReceipt<Address, Da, Root, StorageProof>) -> Self {
+        PartialProofReceipt {
+            blob_hash: value.blob_hash,
+            gas_used: value.gas_used,
+            gas_price: value.gas_price,
+            outcome: value.outcome.into(),
+        }
+    }
+}
+
 /// The contents of a proof receipt.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -100,6 +129,38 @@ pub enum ProofReceiptContents<Address, Da: DaSpec, Root, StorageProof> {
     BlockProof(StateTransitionPublicData<Address, Da, Root>),
     /// A receipt for an attestation contains the public data that the attestation made a claim about.
     Attestation(Attestation<Da::SlotHash, Root, StorageProof>),
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(
+    bound = "Address: Serialize + DeserializeOwned, Da: DaSpec, Root: Serialize + DeserializeOwned, StorageProof: Serialize + DeserializeOwned"
+)]
+/// The contents of a proof receipt with the actual proof data removed.
+pub enum PartialProofReceiptContents<Address, Da: DaSpec, Root, StorageProof> {
+    /// A receipt for an aggregate proof contains the public data form the proof and the serialized proof.
+    AggregateProof(AggregatedProofPublicData<Address, Da, Root>),
+    /// A receipt for a block proof contains the public data from the state transition which was proven.
+    BlockProof(StateTransitionPublicData<Address, Da, Root>),
+    /// A receipt for an attestation contains the public data that the attestation made a claim about.
+    Attestation(Attestation<Da::SlotHash, Root, StorageProof>),
+}
+
+impl<Address, Da: DaSpec, Root, StorageProof>
+    From<ProofReceiptContents<Address, Da, Root, StorageProof>>
+    for PartialProofReceiptContents<Address, Da, Root, StorageProof>
+{
+    fn from(value: ProofReceiptContents<Address, Da, Root, StorageProof>) -> Self {
+        match value {
+            ProofReceiptContents::AggregateProof(data, _) => {
+                PartialProofReceiptContents::AggregateProof(data)
+            }
+            ProofReceiptContents::BlockProof(data) => PartialProofReceiptContents::BlockProof(data),
+            ProofReceiptContents::Attestation(data) => {
+                PartialProofReceiptContents::Attestation(data)
+            }
+        }
+    }
 }
 
 /// The context in which the execution is happening.
@@ -144,7 +205,8 @@ impl ExecutionContext {
 }
 
 /// The error returned when the proof that was processed is invalid.
-#[derive(Debug, Clone, Error, Eq, PartialEq)]
+#[derive(Debug, Clone, Error, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum InvalidProofError {
     /// A precondition for processing the proof was not met.
     #[error("A precondition required to process the proof was not met: {0}")]
@@ -173,16 +235,38 @@ impl InvalidProofError {
     }
 }
 
+/// The outcome of a proof, including the actual proof data
+pub type ProofOutcome<Address, Da, Root, StorageProof> =
+    ProofOutcomeEnum<ProofReceiptContents<Address, Da, Root, StorageProof>>;
+
+/// The outcome of a proof, without the actual proof data
+pub type PartialProofOutcome<Address, Da, Root, StorageProof> =
+    ProofOutcomeEnum<PartialProofReceiptContents<Address, Da, Root, StorageProof>>;
+
 /// The outcome of a proof
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum ProofOutcome<Address, Da: DaSpec, Root, StorageProof> {
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(bound = "Receipt: Serialize + DeserializeOwned")]
+#[serde(rename_all = "snake_case")]
+pub enum ProofOutcomeEnum<Receipt> {
     /// The blob was filtered out as irrelevant
     Ignored,
     /// The blob is some kind of valid proof
-    Valid(ProofReceiptContents<Address, Da, Root, StorageProof>),
+    Valid(Receipt),
     /// The blob is some kind of invalid proof
     Invalid(InvalidProofError),
+}
+
+impl<Address, Da: DaSpec, Root, StorageProof> From<ProofOutcome<Address, Da, Root, StorageProof>>
+    for PartialProofOutcome<Address, Da, Root, StorageProof>
+{
+    fn from(value: ProofOutcome<Address, Da, Root, StorageProof>) -> Self {
+        match value {
+            ProofOutcomeEnum::Ignored => ProofOutcomeEnum::Ignored,
+            ProofOutcomeEnum::Valid(receipt) => ProofOutcomeEnum::Valid(receipt.into()),
+            ProofOutcomeEnum::Invalid(error) => ProofOutcomeEnum::Invalid(error),
+        }
+    }
 }
 
 type ProofReceipts<Address, Da, StateRoot, StorageProof> =
@@ -249,12 +333,7 @@ pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
 
 /// The result of applying a slot to current state.
 #[allow(type_alias_bounds)]
-pub type ApplySlotOutput<
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    Da: DaSpec,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da>,
-> = ApplySlotOutputInner<
+pub type ApplySlotOutput<Da: DaSpec, Stf: StateTransitionFunction<Da>> = ApplySlotOutputInner<
     Stf::StateRoot,
     Stf::ChangeSet,
     BatchReceipt<Stf::BatchReceiptContents, Stf::TxReceiptContents>,
@@ -262,7 +341,6 @@ pub type ApplySlotOutput<
     Stf::Witness,
 >;
 
-// TODO(@preston-evans98): update spec with simplified API
 /// State transition function defines business logic that responsible for changing state.
 /// Terminology:
 ///  - state root: root hash of state merkle tree
@@ -270,10 +348,8 @@ pub type ApplySlotOutput<
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
 ///
-/// The STF is generic over a DA layer and two `Zkvm`s. The `InnerVm` is used to prove individual slots,
-/// while the `OuterVm` is used to generate recursive proofs over multiple slots. The two VMs *may* be set to be
-/// the  same type.
-pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
+/// The STF is generic over a DA layer specification.
+pub trait StateTransitionFunction<Da: DaSpec> {
     /// Root hash of state merkle tree
     type StateRoot: Serialize
         + DeserializeOwned
@@ -345,7 +421,7 @@ pub trait StateTransitionFunction<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> {
         slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self>;
+    ) -> ApplySlotOutput<Da, Self>;
 }
 
 /// The parameters for the genesis block.

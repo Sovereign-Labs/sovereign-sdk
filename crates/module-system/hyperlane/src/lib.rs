@@ -201,12 +201,12 @@ impl<S: Spec, R: Recipient<S>> Mailbox<S, R> {
 /// An address which is compatible with the hyperlane protocol.
 ///
 /// Implementers of this trait must ensure that their addresses can be unambiguously represented in 32 bytes.
-/// For example, if the address type is an enum where at least one variant is 32 bytes long, the impelementation
+/// For example, if the address type is an enum where at least one variant is 32 bytes long, the implementation
 /// must pick one variant and always deserialize into that type (since there's no room to encode the discriminant).
 pub trait HyperlaneAddress: Sized {
     /// Convert the address to a Hyperlane sender address.
     fn to_sender(&self) -> HexHash;
-    /// Convert a Hyperlane sender address back to the original..
+    /// Convert a Hyperlane sender address back to the original.
     fn from_sender(recipient: HexHash) -> anyhow::Result<Self>;
 }
 
@@ -241,7 +241,7 @@ impl HyperlaneAddress for Base58Address {
     fn to_sender(&self) -> HexHash {
         HexString(self.0)
     }
-    /// Convert a Hyperlane sender address back to the original..
+    /// Convert a Hyperlane sender address back to the original.
     fn from_sender(recipient: HexHash) -> anyhow::Result<Self> {
         Ok(Self(recipient.0))
     }
@@ -302,7 +302,7 @@ pub trait Recipient<S: Spec>:
 
     /// Handle validator announcement.
     ///
-    /// Implement this to react to to validators announcing themselves.
+    /// Implement this to react to validators announcing themselves.
     /// It is called after the identity of validator has already been confirmed.
     /// Default implementation just ignores any announcements.
     fn handle_validator_announce(

@@ -11,10 +11,14 @@ pub use guest::MockZkGuest;
 mod host;
 #[cfg(feature = "native")]
 pub use host::MockZkvmHost;
+#[cfg(feature = "native")]
+mod network;
+#[cfg(feature = "native")]
+pub use network::MockZkvmNetwork;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
-use sov_rollup_interface::zk::{CryptoSpec, Proof, Zkvm};
+use sov_rollup_interface::zk::{CryptoSpec, Zkvm};
 
 use crate::crypto::{Ed25519PublicKey, Ed25519Signature};
 
@@ -54,6 +58,12 @@ impl Zkvm for MockZkvm {
 
     #[cfg(feature = "native")]
     type Host = crate::host::MockZkvmHost;
+
+    #[cfg(feature = "native")]
+    type OuterHost = crate::host::MockZkvmHost;
+
+    #[cfg(feature = "native")]
+    type Network = crate::network::MockZkvmNetwork;
 }
 /// A mock commitment to a particular zkVM program.
 #[derive(
@@ -61,20 +71,19 @@ impl Zkvm for MockZkvm {
 )]
 pub struct MockCodeCommitment(pub [u8; 8]);
 
-impl sov_rollup_interface::zk::CodeCommitment for MockCodeCommitment {
-    type DecodeError = MockCodeCommitmentError;
-
-    fn encode(&self) -> Vec<u8> {
-        self.0.to_vec()
+impl sov_rollup_interface::zk::CodeCommitmentTrait for MockCodeCommitment {
+    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+        // Pad the 8-byte mock commitment to 32 bytes to match the canonical hash layout.
+        let mut bytes = vec![0u8; 32];
+        bytes[..8].copy_from_slice(&self.0);
+        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes)
     }
 
-    fn decode(value: &[u8]) -> Result<Self, Self::DecodeError> {
-        if value.len() != 8 {
-            return Err(MockCodeCommitmentError::InvalidLength { found: value.len() });
-        }
-        let mut contents = [0u8; 8];
-        contents.copy_from_slice(value);
-        Ok(Self(contents))
+    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+        let mut bytes = [0u8; 8];
+        let len = hash.0.len().min(8);
+        bytes[..len].copy_from_slice(&hash.0[..len]);
+        Self(bytes)
     }
 }
 
@@ -89,13 +98,9 @@ pub enum MockCodeCommitmentError {
     },
 }
 
-/// A type that is impossible to instantiate.
-#[derive(Serialize, Deserialize)]
-enum Empty {}
-
 /// A helper type capable of simulating invalid proofs.
 #[derive(Serialize, Deserialize)]
-struct Inner {
+struct MockProof {
     /// Is proof valid.
     is_valid: bool,
     /// Public input.
@@ -117,19 +122,14 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
         serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: Proof<Empty, Inner> = bincode::deserialize(serialized_proof)?;
-        match proof {
-            Proof::PublicData(Inner {
-                is_valid,
-                pub_data: input,
-            }) => {
-                if is_valid {
-                    Ok(bincode::deserialize(&input)?)
-                } else {
-                    anyhow::bail!("Proof is not valid")
-                }
-            }
-            Proof::Full(_) => unimplemented!("MockZkVerifier doesn't support full zk proofs"),
+        let MockProof {
+            is_valid,
+            pub_data: input,
+        } = bincode::deserialize(serialized_proof)?;
+        if is_valid {
+            Ok(bincode::deserialize(&input)?)
+        } else {
+            anyhow::bail!("Proof is not valid")
         }
     }
 }
@@ -137,7 +137,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 #[cfg(test)]
 mod tests {
     use sov_rollup_interface::crypto::PublicKey;
-    use sov_rollup_interface::zk::{CodeCommitment, ZkVerifier, ZkvmHost};
+    use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost, ZkvmNetwork};
 
     use super::*;
 
@@ -163,10 +163,8 @@ mod tests {
         };
 
         let mut vm = MockZkvmHost::new();
-        vm.add_hint(&pub_data);
         vm.make_proof();
-
-        let proof = vm.run(false).unwrap();
+        let proof = vm.add_hint_and_run(&pub_data).unwrap();
         let verified_pub_data =
             MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default())?;
 
@@ -191,21 +189,49 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn mock_code_commitment_codec_roundtrip() {
-        // Check a roundtrip with the "digest" type from risc0.
-        // This ensures that our use of `from_ne_bytes` is correct on the target platform.
-        let raw_data = [1; 8];
-        let method_id = MockCodeCommitment(raw_data);
-        let bytes = method_id.encode();
-        let id = MockCodeCommitment::decode(&bytes).expect("Encoding is valid");
-        assert_eq!(id.0, raw_data);
+    #[tokio::test]
+    async fn test_mock_network() -> anyhow::Result<()> {
+        let network = MockZkvmNetwork::new(false);
+        let pub_data = TestPublicData {
+            hint: "NetworkTest".to_owned(),
+        };
 
-        // Assert that we return the expected error when the length is incorrect.
-        let bytes = vec![1u8; 31];
-        assert!(matches!(
-            MockCodeCommitment::decode(&bytes),
-            Err(MockCodeCommitmentError::InvalidLength { found: 31 })
-        ));
+        let handle = network.add_hint_and_submit(&pub_data).await?;
+
+        // Proof should be pending
+        assert_eq!(network.poll(&handle).await?, None);
+
+        // Complete the proof
+        network.complete_proof(handle);
+
+        // Now poll should return the proof bytes
+        let proof_bytes = network
+            .poll(&handle)
+            .await?
+            .expect("proof should be ready after complete_proof");
+
+        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
+        assert_eq!(verified, pub_data);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_mock_network_auto_complete() -> anyhow::Result<()> {
+        let network = MockZkvmNetwork::new(true);
+        let pub_data = TestPublicData {
+            hint: "AutoComplete".to_owned(),
+        };
+
+        let handle = network.add_hint_and_submit(&pub_data).await?;
+
+        // Proof should be immediately ready
+        let proof_bytes = network
+            .poll(&handle)
+            .await?
+            .expect("auto-complete proof should be immediately ready");
+
+        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
+        assert_eq!(verified, pub_data);
+        Ok(())
     }
 }

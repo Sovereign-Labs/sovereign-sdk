@@ -4,11 +4,11 @@ mod harness_interface;
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 pub use harness_interface::*;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::prelude::arbitrary;
 use sov_modules_api::prelude::arbitrary::Arbitrary;
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::{CryptoSpec, Spec};
 use sov_synthetic_load::{CallMessage, CallMessageDiscriminants};
 use strum::{EnumDiscriminants, VariantArray};

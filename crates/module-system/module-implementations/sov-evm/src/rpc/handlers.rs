@@ -11,22 +11,29 @@ use alloy_rpc_types::{
 use alloy_rpc_types_trace::geth::GethDebugTracingOptions;
 use alloy_rpc_types_trace::geth::{GethTrace, TraceResult};
 use jsonrpsee::core::RpcResult;
-use revm::context::result::{ExecutionResult, ResultAndState};
+use revm::context::result::ExecutionResult;
 use revm::Database;
-use revm_database_interface::TryDatabaseCommit;
 use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{charge_write, ApiStateAccessor, GasMeter, GasSpec, Spec};
-use sov_rpc_eth_types::{
-    EthApiError, LogWithExecutionTimestamp, RevertError, RpcInvalidTransactionError,
-};
-use sov_state::{Accessory, CompileTimeNamespace, StateCodec, StateItemEncoder};
+use sov_modules_api::state::PinnedCacheAccessor;
+use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
+use sov_state::{NativeStorage, Storage, StorageProof, User};
 use std::ops::DerefMut;
 use tracing::trace;
 
 use crate::Evm;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub struct GetProofResponse<S: Spec> {
+    pub proof: StorageProof<<S::Storage as Storage>::Proof>,
+    pub state_root: <S::Storage as Storage>::Root,
+    /// The ethereum block which contains the state root as its storage root.
+    /// Note that since state roots are delayed, this is *not* the same as the block number which would have viewed the state root as its storage root.
+    pub state_root_block_number: u64,
+}
 
 #[rpc_gen(client, server)]
 impl<S: Spec> Evm<S>
@@ -137,6 +144,48 @@ where
             .unwrap_or_default();
 
         Ok(storage_slot.to_be_bytes::<32>().into())
+    }
+
+    /// Returns merkle proofs of storage slots
+    #[rpc_method(name = "ext_getStorageProof", blocking)]
+    pub fn get_storage_proof(
+        &self,
+        address: Address,
+        index: U256,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<GetProofResponse<S>> {
+        let storage = state.storage();
+        let account_slot_key = self.account_storage.slot_key(&(&address, &index));
+        let accessory_block_numbers_key = self.block_numbers.slot_key();
+        let (proof, slot_number, root_hash) = storage
+            .get_with_proof::<User>(account_slot_key)
+            .map_err(|err| {
+                tracing::warn!(error = ?err, "Error getting storage proof after retries");
+                into_rpc_error(err)
+            })?;
+
+        let accessory_values =
+            storage.get_accessory_unbound(accessory_block_numbers_key, Some(slot_number));
+        let Some(block_number_slot_value) = accessory_values.as_ref() else {
+            tracing::error!(
+                %slot_number,
+                "Missing evm.block_numbers while building storage proof response. This is a bug, block numbers must always be set."
+            );
+            return Err(into_rpc_error(format!(
+                "evm.block_numbers returned None at slot {slot_number}."
+            )));
+        };
+
+        let block_number = *self
+            .block_numbers
+            .decode_unwrap(block_number_slot_value)
+            .end();
+        let block_number = block_number.saturating_add(config_value!("STATE_ROOT_DELAY_BLOCKS")); // Add state root delay blocks to get the state root for the block number
+        Ok(GetProofResponse {
+            proof,
+            state_root: root_hash,
+            state_root_block_number: block_number,
+        })
     }
 
     /// Handler for: `eth_getTransactionCount`
@@ -307,7 +356,27 @@ where
     }
 
     /// Handler for: `eth_call`
-    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    ///
+    /// Simulates a transaction without committing state changes.
+    ///
+    /// # Affordability checks
+    ///
+    /// No balance check is performed when fee fields are omitted (the common case).
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) hardcodes `gas_price = 0`,
+    /// making revm's upfront-cost formula evaluate to zero so any account can call.
+    /// When `value > 0`, revm still verifies the caller holds at least `value`.
+    ///
+    /// **Desired behaviour** (matching geth): when the caller explicitly provides
+    /// `gasPrice > 0` or `maxFeePerGas > 0`, enforce `gas_limit * gas_price + value
+    /// <= balance` and return `InsufficientFunds` on failure. This is not yet
+    /// implemented — see the divergence note on [`prepare_call_env`](crate::helpers::prepare_call_env).
+    ///
+    /// This differs from `eth_estimateGas`, which runs a paymaster-aware
+    /// affordability preflight in `sov-ethereum` (see `estimate_gas.rs`).
+    ///
+    /// References:
+    /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
+    /// - Reth `call`: <https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-eth-api/src/helpers/call.rs>
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,
@@ -330,6 +399,20 @@ where
     }
 
     /// Handler for: `eth_createAccessList`
+    ///
+    /// Generates an EIP-2930 access list by running the transaction with an
+    /// [`AccessListInspector`]. Affordability semantics are identical to `eth_call`:
+    /// no balance check when fee fields are omitted, because
+    /// [`prepare_call_env`](crate::helpers::prepare_call_env) sets `gas_price = 0`.
+    /// This matches geth's `AccessList()` path which also uses zero-fee defaults.
+    ///
+    /// Note: EIP-2930 (<https://eips.ethereum.org/EIPS/eip-2930>) defines the access
+    /// list *transaction type*; the `eth_createAccessList` RPC method itself is a
+    /// client-level addition defined in `execution-apis`
+    /// (<https://github.com/ethereum/execution-apis>).
+    ///
+    /// See [`prepare_call_env`](crate::helpers::prepare_call_env) for the full
+    /// affordability analysis and current divergence from geth.
     #[rpc_method(name = "eth_createAccessList")]
     pub fn eth_create_access_list(
         &self,
@@ -343,12 +426,18 @@ where
             "EVM module JSON-RPC request"
         );
         let initial_access_list = request.access_list.clone().unwrap_or_default();
-        let block_env = self.resolve_block_env_for_call(block_id, state)?;
-        let tx_env = crate::helpers::prepare_call_env(&block_env, request)?;
-        let cfg = self.cfg_infallible(state);
+        // Intentionally do not apply the shared simulation max-fee-vs-base-fee
+        // rejection here. Geth's access-list path executes with `NoBaseFee: true`
+        // and lowers the EVM base fee to `0` when needed, keeping low-fee
+        // requests admissible during access-list generation:
+        // https://github.com/ethereum/go-ethereum/blob/16783c167c4be5e6675fd8de0d1b762c88d6232f/internal/ethapi/api.go#L1359-L1372
+        super::validate_call_fee_fields(&request)?;
+        let (block_env, mut maybe_archival_state, cfg) =
+            self.resolve_simulation_context_for_block_id(block_id, state)?;
+        let tx_env =
+            crate::helpers::prepare_call_env(&block_env, request, cfg.chain_spec.tx_gas_limit)?;
         let cfg_env =
             crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
-        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
         let evm_db = self.db(maybe_archival_state.deref_mut());
 
         let mut inspector = AccessListInspector::new(initial_access_list);
@@ -382,94 +471,6 @@ where
         Ok(U256::from(
             self.resolve_block_number(BlockNumberOrTag::Latest, state),
         ))
-    }
-
-    /// Handler for: `eth_estimateGas`
-    // https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc/src/eth/api/call.rs#L172
-    #[rpc_method(name = "eth_estimateGas")]
-    pub fn eth_estimate_gas(
-        &self,
-        request: TransactionRequest,
-        block_id: Option<BlockId>,
-        state_overrides: Option<StateOverride>,
-        block_overrides: Option<Box<BlockOverrides>>,
-        state: &mut ApiStateAccessor<S>,
-    ) -> RpcResult<U64> {
-        trace!(
-            ?block_id,
-            method = "eth_estimateGas",
-            "EVM module JSON-RPC request"
-        );
-
-        // Add 1,000 bytes to account for all Transaction fields besides calldata.
-        let tx_size = request
-            .input
-            .input()
-            .as_ref()
-            .map(|input| input.len())
-            .unwrap_or(0)
-            .saturating_add(1000);
-
-        let ResultAndState {
-            result,
-            state: changes,
-        } = self.call(request, block_id, state_overrides, block_overrides, state)?;
-
-        let (gas_used, logs) = match result {
-            ExecutionResult::Success { gas_used, logs, .. } => (gas_used, logs),
-            ExecutionResult::Revert { output, .. } => {
-                return Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into());
-            }
-            ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason, gas_used).into());
-            }
-        };
-
-        // Commit into the RPC-local DB so state-write metering is charged for this simulation.
-        // This intentionally includes override-based hypothetical state, because estimateGas
-        // should reflect the exact scenario requested by eth_call/eth_estimateGas overrides.
-        self.db(state)
-            .try_commit(changes)
-            .expect("Gas meter is initialized with INF");
-
-        // Charge for logs storage in the receipt.
-        // Other receipt fields are small and covered by the constant margin.
-        let logs_size = self
-            .receipts
-            .codec()
-            .value_codec()
-            .encode_to_vec(&logs)
-            .len();
-        let logs_size =
-            u32::try_from(logs_size).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        charge_write(
-            state,
-            Accessory::NAMESPACE,
-            &self.receipts.slot_key(&u64::MAX),
-            logs_size,
-        )
-        .map_err(into_rpc_error)?;
-
-        let gas_meter = state
-            .try_as_basic_gas_meter()
-            .expect("ApiState has BasicGasMeter");
-
-        sov_modules_api::gas::charge_gas_for_sig(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        sov_modules_api::transaction::charge_tx_deserialization(gas_meter, tx_size)
-            .expect("Gas meter is initialized with INF");
-
-        let gas_used =
-            u32::try_from(gas_used).map_err(|_| RpcInvalidTransactionError::GasUintOverflow)?;
-        gas_meter
-            .charge_linear_gas(<S as GasSpec>::gas_to_charge_per_evm_gas(), gas_used)
-            .expect("Gas meter is initialized with INF");
-
-        let total_gas_used =
-            gas_meter.initial_gas.as_ref()[0] - gas_meter.remaining_gas.as_ref()[0];
-
-        Ok(U64::from(super::apply_margins(total_gas_used)?))
     }
 
     /// Handler for `debug_traceBlockByNumber`
@@ -592,6 +593,80 @@ where
                     .saturating_sub(block.transactions_start()),
             )
         }))
+    }
+}
+
+/// Methods that are NOT auto-registered via `#[rpc_gen]`.
+/// `eth_estimate_gas` is registered by `sov-ethereum` which wraps it with
+/// paymaster-aware affordability checks.
+impl<S: Spec> Evm<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    /// Validates request-shape and base-fee rules for `eth_estimateGas` before any
+    /// transport-specific affordability checks run.
+    pub fn validate_estimate_gas_request(
+        &self,
+        request: &TransactionRequest,
+        block_id: Option<BlockId>,
+        state_overrides: Option<StateOverride>,
+        block_overrides: Option<Box<BlockOverrides>>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<()> {
+        let has_overrides = state_overrides.is_some() || block_overrides.is_some();
+        let block_env = self.resolve_block_env_for_call(block_id, state)?;
+        let mut maybe_archival_state = self.resolve_state_for_block_id(block_id, state)?;
+        let enforce_max_fee_check = self
+            .is_max_fee_check_active(maybe_archival_state.deref_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        super::validate_call_fee_fields(request)?;
+
+        if has_overrides {
+            let mut validation_block_env = block_env.clone();
+            {
+                let evm_db = self.db(maybe_archival_state.deref_mut());
+                let mut validation_state = revm::database::State::builder()
+                    .with_database(evm_db)
+                    .build();
+                super::apply_call_overrides(
+                    &mut validation_state,
+                    &mut validation_block_env,
+                    state_overrides,
+                    block_overrides,
+                )?;
+            }
+            super::validate_simulation_max_fee_against_base_fee(
+                request,
+                &validation_block_env,
+                enforce_max_fee_check,
+            )?;
+        } else {
+            super::validate_simulation_max_fee_against_base_fee(
+                request,
+                &block_env,
+                enforce_max_fee_check,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// Returns a cloned accessor pinned to the requested block context so callers
+    /// can run transport-side preflight logic without mutating shared API state.
+    pub fn preflight_state_for_block_id(
+        &self,
+        block_id: Option<BlockId>,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<ApiStateAccessor<S>, EthApiError> {
+        let state = match self.resolve_state_for_block_id(block_id, state)? {
+            super::maybe_archival_state::MaybeArchivalState::Current(current) => {
+                current.clone_without_local_writes()
+            }
+            super::maybe_archival_state::MaybeArchivalState::Archival(state)
+            | super::maybe_archival_state::MaybeArchivalState::Synthetic(state) => *state,
+        };
+
+        Ok(state)
     }
 }
 

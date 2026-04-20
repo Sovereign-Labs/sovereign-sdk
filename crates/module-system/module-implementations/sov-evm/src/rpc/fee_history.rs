@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use alloy_consensus::BlockHeader;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_rpc_types::FeeHistory;
-use jsonrpsee::types::error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE};
+use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
@@ -43,11 +43,7 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<FeeHistory, EthApiError> {
         if block_count == 0 {
-            return Err(EthApiError::other(ErrorObjectOwned::owned(
-                INVALID_PARAMS_CODE,
-                "block_count must be greater than 0",
-                None::<()>,
-            )));
+            return Ok(FeeHistory::default());
         }
 
         if block_count > 1024 {
@@ -125,8 +121,12 @@ where
             .expect("Block count should fit in a usize");
         let mut base_fees = Vec::with_capacity(block_count);
         let mut gas_used = Vec::with_capacity(block_count.saturating_sub(1));
+        let mut gas_limits = Vec::with_capacity(block_count);
         let mut used_pending_block = false;
         for n in start_block..=end_block {
+            // The gas limits for each block can be computed statically since they don't depend on the gas used.
+            gas_limits.push(S::gas_limit_for_height(RollupHeight::new(n)).as_ref()[0]);
+
             // For all the blocks in the requested range that are already sealed, we can just take the base fee and gas used from the block.
             if sealed_block_numbers.contains(&n) {
                 let block = self
@@ -169,7 +169,7 @@ where
         }
 
         // Finally, eth_feeHistory always returns info for one block after the last one requested, so we need to compute the base fee for the next block.
-        let gas_limit: u64 = S::initial_gas_limit().as_ref()[0];
+        let gas_limit: u64 = S::gas_limit_for_height(RollupHeight::new(end_block)).as_ref()[0];
         let actual_parent_gas_usage = gas_used
             .last()
             .expect("At least one gas used must have been collected");
@@ -228,11 +228,17 @@ where
         };
         base_fees.push(next_gas_price);
 
-        #[allow(clippy::float_arithmetic)]
         // Float arithmetic is safe here. This method is RPC only, not consensus-critical; and it's required by the spec
+        assert_eq!(
+            gas_used.len(),
+            gas_limits.len(),
+            "Gas used and gas limits must have the same length - this is a bug in eth_feeHistory"
+        );
+        #[allow(clippy::float_arithmetic)]
         let gas_used_ratios = gas_used
             .into_iter()
-            .map(|gas| gas as f64 / gas_limit as f64)
+            .zip(gas_limits)
+            .map(|(gas, limit)| gas as f64 / limit as f64)
             .collect();
         Ok(FeesAndUsage {
             fees: base_fees.into_iter().map(|fee| fee.into()).collect(),

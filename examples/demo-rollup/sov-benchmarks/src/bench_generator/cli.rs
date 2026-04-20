@@ -5,7 +5,6 @@ use demo_stf::genesis_config::EvmGenesisConfig;
 use demo_stf::runtime::{GenesisConfig, Runtime};
 use sov_modules_api::{Amount, CryptoSpec, Spec};
 use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_test_modules::access_pattern::AccessPatternGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
@@ -16,9 +15,9 @@ use sov_transaction_generator::generators::basic::BasicModuleRef;
 use sov_transaction_generator::{Distribution, MessageValidity};
 
 use super::{Benchmark, DEFAULT_RANDOMIZATION_BUFFER_SIZE};
-use crate::{mock_da_risc0_host_args, BenchSpec};
+use crate::{mock_da_risc0_host_args, BenchRisc0Spec};
 
-type S = BenchSpec<Risc0>;
+type S = BenchRisc0Spec;
 type RT = Runtime<S>;
 
 const DEFAULT_GENERATION_PATH: &str = "./src/bench_files/generated/";
@@ -190,7 +189,10 @@ impl BenchCLICustomArgs {
         passed_admin: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
     ) -> Benchmark<S> {
         let risc0_host_args = mock_da_risc0_host_args();
-        let risc0_commitment = Risc0Host::from_args(&*risc0_host_args).code_commitment();
+        let risc0_commitment = Risc0Host::from_args(&*risc0_host_args)
+            .code_commitment()
+            .unwrap_or_else(|e| panic!("Uncable to compute code commitment: {e}"));
+
         let mut genesis_config =
             HighLevelZkGenesisConfig::generate_with_additional_accounts_and_code_commitments(
                 2,

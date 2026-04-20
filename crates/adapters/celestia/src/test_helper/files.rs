@@ -494,11 +494,7 @@ pub mod with_parity_boundary_followed_by_namespace {
                 let block_header = submit_blobs(client, blobs).await?;
                 let rollup_batch_rows = client
                     .share()
-                    .get_namespace_data(
-                        block_header.height(),
-                        APP_VERSION,
-                        ROLLUP_PARAMS.rollup_batch_namespace,
-                    )
+                    .get_namespace_data(block_header.height(), ROLLUP_PARAMS.rollup_batch_namespace)
                     .await?;
 
                 if !has_parity_boundary_followed_by_namespace(
@@ -710,8 +706,7 @@ pub mod with_mixed_v0_and_v1_blobs {
         // First blob: V0
         let mut data = vec![0u8; MEDIUM_BATCH_BYTES];
         rng.fill_bytes(&mut data);
-        let blob =
-            celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap();
+        let blob = celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None).unwrap();
 
         blobs.push(blob);
 
@@ -725,8 +720,7 @@ pub mod with_mixed_v0_and_v1_blobs {
         for size in [SMALL_BATCH_BYTES, MEDIUM_BATCH_BYTES] {
             let mut data = vec![0u8; size];
             rng.fill_bytes(&mut data);
-            let blob =
-                celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None, APP_VERSION).unwrap();
+            let blob = celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, data, None).unwrap();
             blobs.push(blob);
         }
 
@@ -837,7 +831,6 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                     ROLLUP_BATCH_NAMESPACE,
                                     payload_v0_a,
                                     None,
-                                    APP_VERSION,
                                 )?);
 
                                 let mut payload_v1_a =
@@ -856,7 +849,6 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                     ROLLUP_BATCH_NAMESPACE,
                                     payload_v0_b,
                                     None,
-                                    APP_VERSION,
                                 )?);
 
                                 let mut payload_v1_b =
@@ -882,7 +874,6 @@ pub mod with_mixed_v0_and_v1_multi_v1_parity_boundary {
                                     .share()
                                     .get_namespace_data(
                                         block_header.height(),
-                                        APP_VERSION,
                                         ROLLUP_PARAMS.rollup_batch_namespace,
                                     )
                                     .await?;
@@ -1149,14 +1140,14 @@ async fn save_blobs(
 
     let rollup_batch_rows = client
         .share()
-        .get_namespace_data(block_header.height(), APP_VERSION, batch_namespace)
+        .get_namespace_data(block_header.height(), batch_namespace)
         .await
         .unwrap();
     write_to_file(&path.join(ROLLUP_BATCH_ROWS_JSON), &rollup_batch_rows).unwrap();
 
     let rollup_proof_rows = client
         .share()
-        .get_namespace_data(block_header.height(), APP_VERSION, proof_namespace)
+        .get_namespace_data(block_header.height(), proof_namespace)
         .await
         .unwrap();
     write_to_file(&path.join(ROLLUP_PROOF_ROWS_JSON), &rollup_proof_rows).unwrap();

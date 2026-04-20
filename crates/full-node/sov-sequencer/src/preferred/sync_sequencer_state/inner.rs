@@ -6,7 +6,6 @@ use crate::preferred::block_executor::{
 };
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
-use crate::preferred::comfortable_gas_limit;
 use crate::preferred::db::{latest_finalized_sequence_number, SequencerRole};
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::rate_limiter::ResourceUsed;
@@ -15,20 +14,25 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
+use crate::preferred::{comfortable_gas_limit_for_height, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
-    Confirmation, PreferredBatchToReplay, PreferredSequencerConfig,
-    PreferredSequencerFetchBatchesToReplayMetrics, TxResultWriter,
+    Confirmation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
+    TxResultWriter,
 };
-use crate::{SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash};
+use crate::{
+    PreferredProofDataBytes, SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash,
+};
+use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::Gas;
 use sov_modules_api::{
-    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, StateUpdateInfo,
-    VersionReader, VisibleSlotNumber,
+    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
+    VisibleSlotNumber,
 };
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
@@ -73,13 +77,19 @@ where
     pub(crate) shutdown_sender: watch::Sender<()>,
 
     pub(crate) executor: RollupBlockExecutor<S, Rt>,
+    /// The rollup height of the latest node checkpoint applied to this executor's storage.
+    pub(crate) executor_rebase_height: RollupHeight,
     pub(crate) latest_info: StateUpdateInfo<S::Storage>,
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
     pub(crate) is_ready: Result<(), SequencerNotReadyDetails>,
     pub(crate) in_flight_blobs: Arc<AtomicUsize>,
     pub(crate) executor_events_sender: ExecutorEventsSender<S, Rt>,
-    pub(crate) sequence_number_of_next_blob: SequenceNumber,
+    // We track two sequence numbers: the sequence number of the current open batch, and the next unassigned sequence number.
+    // This is because we might need to assign a sequence number to some proofs while a batch is in progress,
+    // and we don't want to forget what we've assigned.
+    pub(crate) sequence_number_of_open_batch: Option<SequenceNumber>,
+    pub(crate) next_unassigned_sequence_number: SequenceNumber,
     /// A boolean that indicates whether the sequencer has finished its startup phase.
     /// We need this rather than relying on `SequencerNotReadyDetails::Startup` because that state
     /// can be overwritten when the node is resyncing.
@@ -182,26 +192,34 @@ where
         sequence_number: SequenceNumber,
     ) {
         info!(%sequence_number, "Overwriting next sequence number");
-        self.sequence_number_of_next_blob = sequence_number;
-        track_sequence_number(self.sequence_number_of_next_blob);
+        self.next_unassigned_sequence_number = sequence_number;
+        track_sequence_number(self.next_unassigned_sequence_number);
     }
 
-    pub(crate) fn current_sequence_number(&self) -> SequenceNumber {
-        self.sequence_number_of_next_blob.checked_sub(1).expect("Sequence number underflow. Cannot get sequence number if no batch has ever been active. This is a bug, please report")
+    /// Assign a sequence number to the current open batch.
+    pub(crate) fn assign_sequence_number_to_batch(&mut self) -> SequenceNumber {
+        let sequence_number = self.take_sequence_number_internal();
+        self.sequence_number_of_open_batch = Some(sequence_number);
+        sequence_number
     }
 
-    pub(crate) fn get_and_inc_next_sequence_number(&mut self) -> SequenceNumber {
-        let sequence_number = self.sequence_number_of_next_blob;
-        self.sequence_number_of_next_blob = self
-            .sequence_number_of_next_blob
+    /// Take a sequence number for a proof blob.
+    pub(crate) fn take_sequence_number_for_proof(&mut self) -> SequenceNumber {
+        self.take_sequence_number_internal()
+    }
+
+    fn take_sequence_number_internal(&mut self) -> SequenceNumber {
+        let sequence_number = self.next_unassigned_sequence_number;
+        self.next_unassigned_sequence_number = self
+            .next_unassigned_sequence_number
             .checked_add(1)
             .expect("Sequence number overflow; this should be unreachable for a few billion years");
-        track_sequence_number(self.sequence_number_of_next_blob);
+        track_sequence_number(self.next_unassigned_sequence_number);
         sequence_number
     }
 
     pub(crate) async fn prune_sequencer_db(&mut self) {
-        let next_sequence_number = self.sequence_number_of_next_blob;
+        let next_sequence_number = self.next_unassigned_sequence_number;
         let latest_state_info = &self.latest_info;
         let mut runtime = Rt::default();
         let next_sequence_number_according_to_node =
@@ -236,6 +254,7 @@ where
 
         // Replace known info
         self.latest_info = info.clone();
+        self.executor_rebase_height = new_executor.checkpoint.rollup_height_to_access();
 
         // Replace executor state
         self.executor.replace_state(new_executor).await;
@@ -277,12 +296,12 @@ where
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
-    pub(crate) fn completed_batches_to_replay(
+    pub(crate) fn proofs_and_completed_batches_for_replay(
         &self,
         sequence_number: SequenceNumber,
         include_in_progress_batch: bool,
     ) -> (
-        Vec<PreferredBatchToReplay>,
+        Vec<PreferredBlobToReplay>,
         PreferredSequencerFetchBatchesToReplayMetrics,
     )
     where
@@ -292,12 +311,15 @@ where
         let start = std::time::Instant::now();
         let result = self
             .executor_events_sender
-            .fetch_completed_blobs_by_sequence(sequence_number, include_in_progress_batch);
+            .fetch_proofs_and_completed_batches_by_sequence(
+                sequence_number,
+                include_in_progress_batch,
+            );
         let duration = start.elapsed();
         let metrics = PreferredSequencerFetchBatchesToReplayMetrics {
             duration,
             num_batches: result.len() as u64,
-            num_transactions: result.iter().map(|b| b.batch.inner.data.len()).sum(),
+            num_transactions: result.iter().map(|b| b.num_txs()).sum(),
         };
         (result, metrics)
     }
@@ -307,10 +329,11 @@ where
         &mut self,
         remaining_slot_gas: <S as GasSpec>::Gas,
     ) {
+        let rollup_height = self.executor.checkpoint.rollup_height_to_access();
         // Check if we're close to the gas limit and close the batch if we are.
         // We want to close when gas used is at least 95% of the initial gas limit.
-        let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
-        let comfortable_gas_limit = comfortable_gas_limit::<S>();
+        let initial_gas_limit = <S as GasSpec>::gas_limit_for_height(rollup_height);
+        let comfortable_gas_limit = comfortable_gas_limit_for_height::<S>(rollup_height);
 
         let gas_used = initial_gas_limit
             .checked_sub(remaining_slot_gas)
@@ -378,6 +401,16 @@ where
             return;
         }
 
+        self.trigger_batch_production().await;
+    }
+
+    pub(crate) async fn trigger_batch_production(&mut self) {
+        if !self.seq_config.automatic_batch_production {
+            tracing::error!("Producing batch even though automatic batch production is disabled. This is probably a test bug");
+            #[cfg(debug_assertions)]
+            panic!("Producing batch even though automatic batch production is disabled. This is probably a test bug");
+        }
+
         if let Err(e) = self
             .try_to_create_and_start_batch_if_none_in_progress(true)
             .await
@@ -396,9 +429,7 @@ where
 
         // If the node is shutting down, we may not be able to terminate the batch. In that case, just return early.
         if self.shutdown_receiver.has_changed().unwrap_or(true) {
-            info!(
-                "The sequencer is shutting down. Exiting trigger_batch_production_if_convenient."
-            );
+            info!("The sequencer is shutting down. Exiting trigger_batch_production.");
             return;
         }
 
@@ -571,8 +602,11 @@ where
             .map_err(BatchCreationError::DatabaseError)?;
 
         // DB operations handled by replica-aware db implementation
-        let sequence_number = self.get_and_inc_next_sequence_number();
+        let sequence_number = self.assign_sequence_number_to_batch();
         let min_profit_per_tx = self.seq_config.sequencer_kind_config.minimum_profit_per_tx;
+        let proofs_to_replay = self
+            .executor_events_sender
+            .fetch_proofs_for_replay(sequence_number);
 
         let start_block_data = StartBlockData {
             sanity_check_visible_slot_number_after_increase: visible_slot_number_after_increase,
@@ -580,6 +614,7 @@ where
             node_state_root: node_state_root.clone(),
             minimum_profit_per_tx: min_profit_per_tx,
             is_responsible_for_gating_admins: !self.is_replica_role(),
+            proofs_to_replay,
         };
 
         let old_checkpoint = self
@@ -650,7 +685,9 @@ where
             );
         }
 
-        let sequence_number = self.current_sequence_number();
+        let sequence_number = self
+            .sequence_number_of_open_batch
+            .expect("No batch in progress in Inner::do_new_tx");
         let Inner {
             executor,
             batch_size_tracker,
@@ -728,8 +765,22 @@ where
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+        self.sequence_number_of_open_batch = None;
         self.executor_events_sender
             .close_batch(checkpoint, forced_txs)
+            .await;
+    }
+
+    pub(crate) async fn process_proof(
+        &mut self,
+        blob_id: BlobInternalId,
+        proof_bytes: PreferredProofDataBytes,
+        sequence_number: SequenceNumber,
+    ) {
+        // Put the proof blob into the sequencer cache, from which it will get pulled out and processed when the next batch is created.
+        // The side effects task also persists it to postgres.
+        self.executor_events_sender
+            .publish_proof_blob(blob_id, proof_bytes, sequence_number)
             .await;
     }
 }

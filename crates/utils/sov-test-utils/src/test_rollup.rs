@@ -35,16 +35,16 @@ use sov_modules_api::prelude::axum;
 use sov_modules_api::prelude::axum::extract::Request;
 use sov_modules_api::prelude::axum::ServiceExt;
 use sov_modules_api::ModuleExecutionConfig;
-use sov_modules_api::{Spec, Zkvm};
+use sov_modules_api::Spec;
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::{GenesisParams, Runtime};
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{DaSyncState, SyncStatus};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::ZkvmHost;
-use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
@@ -107,7 +107,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub max_infos_in_db: u64,
     pub max_channel_size: u64,
     pub telegraf_address: sov_stf_runner::TelegrafSocketConfig,
-    pub rollup_prover_config: Option<RollupProverConfig<S::InnerZkvm>>,
+    pub rollup_prover_config: RollupProverConfig,
     pub storage: StoragePath,
     pub axum_host: String,
     pub axum_port: u16,
@@ -192,14 +192,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self
     }
 
-    /// See [`RollupBuilderConfig::rollup_prover_config`].
-    pub fn with_zkvm_host_args(
-        mut self,
-        zkvm_host_args: Arc<<<<R::Spec as Spec>::InnerZkvm as Zkvm>::Host as ZkvmHost>::HostArgs>,
-    ) -> Self {
-        self.config.rollup_prover_config = Some(get_appropriate_rollup_prover_config::<R::Spec>(
-            zkvm_host_args,
-        ));
+    /// Enables the prover for this rollup. Equivalent to setting
+    /// [`RollupBuilderConfig::rollup_prover_config`] to [`RollupProverConfig::Prove`].
+    pub fn enable_prover(mut self) -> Self {
+        self.config.rollup_prover_config = RollupProverConfig::Prove;
 
         self.disable_state_root_consistency_checks()
     }
@@ -248,13 +244,21 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 
     pub async fn start_test_rollup(self) -> anyhow::Result<TestRollup<R>> {
         let blueprint: R = Default::default();
+
+        let mut node_id = None;
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
-            if self.config.rollup_prover_config.is_some()
+            if self.config.rollup_prover_config.is_enabled()
                 && !sequencer_conf.disable_state_root_consistency_checks
             {
                 tracing::warn!("Prover process is enabled, but state root consistency checks are not disabled. This will cause crashes in the sequencer since proofs are created but not yet handled by the sequencer. Consider disabling one of the two options.");
             }
+
+            node_id = sequencer_conf
+                .postgres_config
+                .as_ref()
+                .map(|postgres_config| postgres_config.node_id.clone());
         }
+
         std::fs::create_dir_all(self.config.storage.path()).with_context(|| {
             format!(
                 "Failed to create storage directory: {}",
@@ -269,7 +273,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                     .create_new_rollup(
                         genesis_paths,
                         rollup_config.clone(),
-                        self.config.rollup_prover_config.clone(),
+                        self.config.rollup_prover_config,
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
@@ -281,7 +285,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                     .create_new_rollup_with_genesis_params(
                         genesis_params.clone(),
                         rollup_config.clone(),
-                        self.config.rollup_prover_config.clone(),
+                        self.config.rollup_prover_config,
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
@@ -330,6 +334,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             rollup_task,
             http_addr: rest_addr,
             rollup_config,
+            node_id,
             client,
             da_service,
             shutdown_sender,
@@ -364,6 +369,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_number_of_transitions_in_db: NonZero::new(self.config.max_infos_in_db).unwrap(),
                 max_number_of_transitions_in_memory: NonZero::new(self.config.max_channel_size)
                     .unwrap(),
+                eager_proof_submission: true,
             },
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,
@@ -408,7 +414,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
             sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
             aggregated_proof_block_jump: 1,
-            rollup_prover_config: None,
+            rollup_prover_config: RollupProverConfig::Disabled,
             storage: storage_path,
             telegraf_address: MonitoringConfig::standard().telegraf_address,
             axum_host: "127.0.0.1".to_string(),
@@ -689,6 +695,8 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     pub http_addr: SocketAddr,
     /// The rollup config used to run the rollup.
     pub rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
+    /// Configured postgres node id for preferred-sequencer tests, if present.
+    pub node_id: Option<String>,
     /// A copy of the [`DaService`]
     /// that the node uses.
     ///
@@ -779,7 +787,7 @@ where
     /// # Arguments
     /// * `t` - Timeout duration
     /// * `expected_panic_substring` - String that must appear in the panic message
-    ///   (e.g., `CrashLocation` variant name)
+    ///   (e.g., `CommitFaultInjectionLocation` variant name)
     ///
     /// # Errors
     /// - If the task doesn't crash within the timeout
@@ -895,6 +903,18 @@ where
         }
     }
 
+    /// Check if the sequencer is recovering.
+    pub async fn is_sequencer_recovering(&self) -> bool {
+        let is_ready = self.client.client.is_ready().await;
+
+        if let Err(err) = is_ready {
+            err.to_string()
+                .contains("The preferred sequencer is recovering from downtime")
+        } else {
+            false
+        }
+    }
+
     /// Returns the current sequencer role.
     pub async fn sequencer_role(&self) -> anyhow::Result<SequencerRole> {
         self.client.query_rest_endpoint("/sequencer/role").await
@@ -914,6 +934,17 @@ where
     /// Times out after TestRollup::POLLING_TIMEOUT seconds.
     pub async fn wait_for_sequencer_ready(&self) -> anyhow::Result<()> {
         self.wait_for_sequencer_state(true).await
+    }
+
+    /// Polls the sequencer until it enters recovery mode.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds.
+    pub async fn wait_for_sequencer_recovering(&self) -> anyhow::Result<()> {
+        self.wait_for_condition(
+            || async { Ok(self.is_sequencer_recovering().await) },
+            "sequencer to enter recovery",
+        )
+        .await
     }
 
     /// Generic helper for waiting on a condition with timeout and polling.
@@ -987,6 +1018,17 @@ where
         std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
     }
 
+    /// Like [`TestRollup::pause_preferred_batches`], but only pauses this
+    /// rollup's configured postgres node. Other nodes sharing the same process
+    /// (e.g. a replica) will continue producing batches.
+    pub async fn pause_preferred_batches_for_node(&self) {
+        let node_id = self
+            .node_id
+            .as_deref()
+            .expect("pause_preferred_batches_for_node requires TestRollup.node_id to be set");
+        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", node_id);
+    }
+
     /// Pauses preferred batch production and waits until the sequencer confirms
     /// that at least one state update was skipped because of the pause flag.
     ///
@@ -1031,6 +1073,24 @@ where
             std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
             "1",
             "Resuming but it was never paused in the first place",
+        );
+
+        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
+    }
+
+    /// Resumes batch production after [`TestRollup::pause_preferred_batches_for_node`].
+    ///
+    /// Note: calling this method MAY NOT immediately produce a batch.
+    pub async fn resume_preferred_batches_for_node(&self) {
+        let node_id = self
+            .node_id
+            .as_deref()
+            .expect("resume_preferred_batches_for_node requires TestRollup.node_id to be set");
+
+        assert_eq!(
+            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
+            node_id,
+            "Resuming but it was never paused for this node in the first place",
         );
 
         std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
@@ -1160,18 +1220,6 @@ pub fn read_private_key<S: Spec>(suffix: &str) -> PrivateKeyAndAddress<S> {
     );
 
     key_and_address
-}
-
-/// Parses [`RollupProverConfig`] from its env. variable.
-pub fn get_appropriate_rollup_prover_config<S: Spec>(
-    host_args: Arc<<<S::InnerZkvm as Zkvm>::Host as ZkvmHost>::HostArgs>,
-) -> RollupProverConfig<S::InnerZkvm> {
-    let skip_guest_build = std::env::var("SKIP_GUEST_BUILD").unwrap_or_else(|_| "0".to_string());
-    if skip_guest_build == "1" {
-        RollupProverConfig::Skip
-    } else {
-        RollupProverConfig::Execute(host_args)
-    }
 }
 
 /// Get rollup height

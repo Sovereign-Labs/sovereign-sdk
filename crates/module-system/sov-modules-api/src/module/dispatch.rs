@@ -63,6 +63,7 @@ pub trait DispatchCall: Send + Sync {
         + NestedEnumUtils
         + BorshSerialize
         + BorshDeserialize
+        + serde::Serialize
         + Debug
         + PartialEq
         + Eq

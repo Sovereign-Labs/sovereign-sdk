@@ -378,7 +378,6 @@ mod tests {
     use sov_rollup_interface::da::CountedBufReader;
 
     use super::*;
-    use crate::types::APP_VERSION;
 
     /// This test detects a regression, where we panic on trying to read the entire contents of a blob using the `Buf` trait.
     /// A previous implementation caused buf.advance(buf.remaining()) to panic because an internal state change of
@@ -434,7 +433,7 @@ mod tests {
             // } else {
             //     0u8
             // };
-            let blob = celestia_types::Blob::new(namespace, payload.clone(), None, APP_VERSION).unwrap();
+            let blob = celestia_types::Blob::new(namespace, payload.clone(), None).unwrap();
             // blob.share_version = ;
             (blob, payload)
         }

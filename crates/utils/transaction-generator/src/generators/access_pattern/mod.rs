@@ -3,10 +3,10 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use http::HttpStorageAccessClient;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::prelude::arbitrary::{self, Arbitrary, Unstructured};
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::{CryptoSpec, PrivateKey, SafeVec, SizedSafeString, Spec};
 use sov_test_modules::access_pattern::*;
 use strum::VariantArray;

@@ -1,6 +1,7 @@
 use crate::metrics::{PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics};
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::BatchToStore;
+use crate::preferred::preferred_blob_sender::proof_bytes;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
@@ -12,27 +13,28 @@ use crate::preferred::sync_sequencer_state::ConditionsTable;
 use crate::preferred::sync_sequencer_state::{InitialStatus, Message};
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::update_state::SequenceNumberMismatchError;
-use crate::preferred::AcceptTxError;
 use crate::preferred::DoNewTxError;
 use crate::preferred::Inner;
 use crate::preferred::InnerGuard;
+use crate::preferred::PreferredProofToReplay;
 use crate::preferred::ProcessFinalCatchupData;
 use crate::preferred::SequencerStateUpdatorError;
 use crate::preferred::StateUpdateNotification;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, DbEvent,
-    PreferredBatchToReplay, PreferredSeqOperation, PreferredSequencerFetchBatchesToReplayMetrics,
-    ReadBatch,
+    PreferredSeqOperation, PreferredSequencerFetchBatchesToReplayMetrics, ReadBatch,
 };
-use crate::{SequencerNotReadyDetails, TxHash};
-use sov_blob_sender::BlobInternalId;
+use crate::preferred::{AcceptTxError, PreferredBlobToReplay};
+use crate::{
+    PreferredProofDataBytes, SequencerNotReadyDetails, SerializedProofWithDetailsBytes, TxHash,
+};
+use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
-use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
-};
+use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint, VersionReader};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -192,13 +194,13 @@ where
                 self.send_response(resp, ret, "next_sequence_number").await;
             }
 
-            Message::FetchCompletedBatches {
+            Message::FetchProofsAndCompletedBatches {
                 resp,
                 next_sequence_number,
                 reason,
             } => {
                 let ret = self
-                    .process_fetch_completed_batches(next_sequence_number, reason)
+                    .process_fetch_proofs_and_completed_batches(next_sequence_number, reason)
                     .await;
 
                 self.send_response(resp, ret, "fetch_completed_batches")
@@ -292,6 +294,8 @@ where
                             finalized_slot_number,
                             #[cfg(feature = "test-utils")]
                             update_skipped_due_to_pause: false,
+                            #[cfg(feature = "test-utils")]
+                            triggered_recovery: false,
                         });
             }
             Message::PruneSequencerDb { reason } => {
@@ -310,17 +314,20 @@ where
                     .await;
             }
             #[cfg(feature = "test-utils")]
-            Message::ForceCloseCurrentBatch { reason: _reason } => {
-                self.process_force_close_current_batch(_reason).await;
+            Message::ForceCloseCurrentBatch {
+                reason: _reason,
+                result_sender,
+            } => {
+                self.process_force_close_current_batch(_reason, result_sender)
+                    .await;
             }
             Message::ProofBlob {
                 blob_id,
                 data,
                 reason,
             } => self.process_proof_blob(blob_id, data, reason).await,
-            Message::TriggerBatchProductionIfConvenient { reason } => {
-                self.process_trigger_batch_production_if_convenient(reason)
-                    .await;
+            Message::TriggerBatchProduction { reason } => {
+                self.process_trigger_batch_production(reason).await;
             }
             Message::SimpleStateUpdate { info } => {
                 let slot_number = info.slot_number;
@@ -336,6 +343,8 @@ where
                             finalized_slot_number,
                             #[cfg(feature = "test-utils")]
                             update_skipped_due_to_pause: false,
+                            #[cfg(feature = "test-utils")]
+                            triggered_recovery: false,
                         });
             }
             Message::ReplicaBatchStartMsg {
@@ -375,6 +384,18 @@ where
                 self.send_response(resp, ret, "process_do_batch_start_replica")
                     .await;
             }
+            Message::ReplicaNewProof {
+                resp,
+                sequence_number,
+                proof_bytes,
+                reason,
+            } => {
+                let ret = self
+                    .process_new_proof_replica(sequence_number, proof_bytes, reason)
+                    .await;
+                self.send_response(resp, ret, "process_new_proof_replica")
+                    .await;
+            }
             Message::GetSequencerRole { resp, reason } => {
                 let inner = self.get_inner_with_timing(reason).await;
                 let role = inner.seq_role;
@@ -394,23 +415,24 @@ where
 
     async fn process_next_sequence_number(&mut self, reason: &'static str) -> SequenceNumber {
         let inner = self.get_inner_with_timing(reason).await;
-        inner.sequence_number_of_next_blob
+        inner.next_unassigned_sequence_number
     }
 
-    async fn process_fetch_completed_batches(
+    async fn process_fetch_proofs_and_completed_batches(
         &mut self,
         next_sequence_number: u64,
         reason: &'static str,
-    ) -> FetchBatches {
+    ) -> FetchProofsAndCompletedBatches {
         let mut inner = self.get_inner_with_timing(reason).await;
 
-        let (completed_batches, metrics) =
-            inner.completed_batches_to_replay(next_sequence_number, false);
+        let (completed_blobs, metrics) =
+            inner.proofs_and_completed_batches_for_replay(next_sequence_number, false);
+        let has_completed_batch = completed_blobs_contain_batch(&completed_blobs);
 
         // Once we've caught up to the in-progress batch, we're done.
         let (db_events_sender, subscription) =
             mpsc::channel(inner.seq_config.sequencer_kind_config.db_event_channel_size);
-        if completed_batches.is_empty() {
+        if !has_completed_batch {
             inner
                 .executor_events_sender
                 .subscribe_to_events(db_events_sender);
@@ -418,11 +440,27 @@ where
             let fetch_in_progress_batch_time_start = std::time::Instant::now();
             let in_progress_batch = inner.executor_events_sender.fetch_in_progress_batch();
             let fetch_in_progress_batch_time = fetch_in_progress_batch_time_start.elapsed();
+            let pending_completed_proofs = completed_blobs
+                .into_iter()
+                .filter_map(|blob| match blob {
+                    PreferredBlobToReplay::Batch(_) => None,
+                    PreferredBlobToReplay::Proof(proof) => Some(proof),
+                })
+                .collect::<Vec<_>>();
+
+            if !pending_completed_proofs.is_empty() {
+                debug!(
+                    pending_completed_proofs = pending_completed_proofs.len(),
+                    next_sequence_number,
+                    "Completed proofs found without a completed batch; carrying them into final catchup",
+                );
+            }
 
             drop(inner);
-            return FetchBatches {
+            return FetchProofsAndCompletedBatches {
                 metrics,
                 flow: Flow::Break {
+                    pending_completed_proofs,
                     in_progress_batch,
                     subscription,
                     fetch_in_progress_batch_time,
@@ -431,9 +469,9 @@ where
         }
 
         drop(inner);
-        FetchBatches {
+        FetchProofsAndCompletedBatches {
             metrics,
-            flow: Flow::Continue { completed_batches },
+            flow: Flow::Continue { completed_blobs },
         }
     }
 
@@ -451,15 +489,25 @@ where
 
         debug!(?info, "Processing state update info from update_state");
         let mut inner = self.get_inner_with_timing(reason).await;
-        let next_sequence_number = inner.sequence_number_of_next_blob;
-        let ((batches_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
+        let next_sequence_number = inner.next_unassigned_sequence_number;
+        let ((blobs_to_replay, fetch_batches_to_replay_metrics), is_startup) = {
             (
-                inner.completed_batches_to_replay(next_sequence_number_according_to_node, true),
+                inner.proofs_and_completed_batches_for_replay(
+                    next_sequence_number_according_to_node,
+                    true,
+                ),
                 !inner.has_finished_startup,
             )
         };
 
-        let seq_visible_slot_number = match batches_to_replay.iter().last() {
+        let seq_visible_slot_number = match blobs_to_replay
+            .iter()
+            .filter_map(|b| match b {
+                PreferredBlobToReplay::Batch(b) => Some(b),
+                PreferredBlobToReplay::Proof(_) => None,
+            })
+            .next_back()
+        {
             None => node_visible_slot_number,
             Some(b) => {
                 let _visible_slots_advance = b.batch.inner.visible_slots_to_advance.get();
@@ -494,11 +542,12 @@ where
             next_sequence_number_according_to_node > next_sequence_number;
 
         // There's an edge case on restart where the node hasn't synced to the chain tip yet but doesn't know it. We can check for it by seeing
-        // if the first batch to replay has a sequencer number that's more than 1 greater than the node's sequence number (because sequence numbers are contiguous, and
+        // if the first blob to replay has a sequencer number that's more than 1 greater than the node's sequence number (because sequence numbers are contiguous, and
         // we only prune a blob from the sequencer DB after it's been finalized on DA - so that blob must already exist on DA and the node just doesn't know that it isn't synced).
-        let oldest_unfinalized_sequence_number = batches_to_replay
-            .first()
-            .map(|b: &PreferredBatchToReplay| b.batch.inner.sequence_number);
+        let oldest_unfinalized_sequence_number = blobs_to_replay.first().map(|b| match b {
+            PreferredBlobToReplay::Batch(b) => b.batch.inner.sequence_number,
+            PreferredBlobToReplay::Proof(p) => p.sequence_number,
+        });
         let node_is_unsynced_and_doesnt_know_it = (next_sequence_number_according_to_node
             .saturating_add(1))
             < oldest_unfinalized_sequence_number.unwrap_or(0);
@@ -521,7 +570,7 @@ where
 
         // Are there ANY soft confirmations to replay at all?
         // Note that we're holding a lock on the sequencer, so this is guaranteed to be up to date.
-        let are_there_batches_to_replay = !batches_to_replay.is_empty();
+        let are_there_batches_to_replay = completed_blobs_contain_batch(&blobs_to_replay);
 
         let table = ConditionsTable {
             nodes_sequence_number_is_fresher,
@@ -659,12 +708,15 @@ where
                 &mut data.transactions_count,
                 &node_state_root,
                 &mut data.batch_is_in_progress,
+                &mut data.sequence_number_of_open_batch,
+                &mut data.unprocessed_proofs,
             )
             .await?;
         }
 
         // The executor is now caught up. Swap it in
         inner.executor.replace_state(*executor).await;
+        inner.sequence_number_of_open_batch = data.sequence_number_of_open_batch;
         Self::common_for_final_catchup_and_new_storage(&mut inner, info).await;
 
         drop(db_event_subscription);
@@ -680,9 +732,13 @@ where
         let node_sequence_number =
             get_next_sequence_number_according_to_node(&info, &mut Rt::default());
 
-        if node_sequence_number > inner.sequence_number_of_next_blob {
-            inner.sequence_number_of_next_blob = node_sequence_number;
+        if node_sequence_number > inner.next_unassigned_sequence_number {
+            inner.next_unassigned_sequence_number = node_sequence_number;
         }
+
+        inner.executor_rebase_height =
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+                .rollup_height_to_access();
 
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
@@ -754,7 +810,7 @@ where
         });
 
         let node_sequence_number = get_next_sequence_number_according_to_node(&info, &mut rt);
-        let our_sequence_number = inner.sequence_number_of_next_blob;
+        let our_sequence_number = inner.next_unassigned_sequence_number;
 
         if node_sequence_number > our_sequence_number {
             inner
@@ -777,33 +833,42 @@ where
 
     /// Closes the current batch
     #[cfg(feature = "test-utils")]
-    async fn process_force_close_current_batch(&mut self, reason: &'static str) {
+    async fn process_force_close_current_batch(
+        &mut self,
+        reason: &'static str,
+        result_sender: oneshot::Sender<bool>,
+    ) {
         let mut inner = self.get_inner_with_timing(reason).await;
+        if !inner.executor.has_in_progress_batch() {
+            let _ = result_sender.send(false); // If the receiver has dropped, we don't need to do anything about it.
+            return;
+        }
         inner.close_current_batch().await;
+        let _ = result_sender.send(true);
     }
 
     async fn process_proof_blob(
         &mut self,
         blob_id: BlobInternalId,
-        data: Arc<[u8]>,
+        data: SerializedProofWithDetailsBytes,
         reason: &'static str,
     ) {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let sequence_number = inner.get_and_inc_next_sequence_number();
+        let sequence_number = inner.take_sequence_number_for_proof();
+        let proof_bytes =
+            proof_bytes(&data.0, sequence_number).expect("Serialization to vec is infallible");
         inner
-            .executor_events_sender
-            .publish_proof_blob(blob_id, data, sequence_number)
+            .process_proof(blob_id, proof_bytes, sequence_number)
             .await;
     }
 
-    async fn process_trigger_batch_production_if_convenient(&mut self, reason: &'static str) {
+    async fn process_trigger_batch_production(&mut self, reason: &'static str) {
         // We don't run force_overwrite_state() here.
         // This is mostly fine, mainly the API state will be out of date until we've
         // finished sending our batches.
         // Adding parallel state update handling is not worth the complexity right now.
-
         let mut inner = self.get_inner_with_timing(reason).await;
-        inner.trigger_batch_production_if_convenient().await;
+        inner.trigger_batch_production().await;
     }
 
     async fn process_accept_tx(
@@ -884,8 +949,7 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-
-        let seq_nr_of_next_blob_for_this_executor = inner.sequence_number_of_next_blob;
+        let seq_nr_of_next_blob_for_this_executor = inner.next_unassigned_sequence_number;
         let seq_nr_from_master = batch_from_master.sequence_number;
 
         debug!(
@@ -901,6 +965,11 @@ where
             seq_nr_of_next_blob_for_this_executor,
             seq_nr_from_master,
         )?;
+
+        let batch_from_master =
+            Self::ensure_replica_batch_start_visible_slot_matches(&mut inner, batch_from_master)?;
+
+        Self::ensure_replica_batch_start_within_rebase_window(&mut inner, batch_from_master)?;
 
         inner
             .do_batch_start(
@@ -930,14 +999,13 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
-
-        validate_db_data_from_replica(
+        let db_data = DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash);
+        validate_db_data_from_replica_for_open_batch(
             inner.has_finished_startup,
             &inner.is_ready,
-            DbData::Transaction(seq_nr_from_master, baked_tx.clone(), tx_hash),
-            seq_nr_of_current_blob_for_this_executor,
-            seq_nr_from_master,
+            db_data.clone(),
+            inner.sequence_number_of_open_batch,
+            inner.next_unassigned_sequence_number,
         )?;
 
         let (res, _) = inner.do_new_tx(tx_hash, baked_tx).await;
@@ -952,22 +1020,24 @@ where
         reason: &'static str,
     ) -> Result<(), ReplicaError<S>> {
         let mut inner = self.get_inner_with_timing(reason).await;
-        let seq_nr_of_current_blob_for_this_executor = inner.current_sequence_number();
-        let seq_nr_from_master = batch_from_master.sequence_number;
+
+        let db_data = DbData::BatchEnd(batch_from_master);
+        let seq_nr_from_master = db_data.sequence_number();
+
+        let seq_nr_of_current_blob_for_this_executor =
+            validate_db_data_from_replica_for_open_batch(
+                inner.has_finished_startup,
+                &inner.is_ready,
+                db_data.clone(),
+                inner.sequence_number_of_open_batch,
+                inner.next_unassigned_sequence_number,
+            )?;
 
         debug!(
             % seq_nr_from_master,
             % seq_nr_of_current_blob_for_this_executor,
             "Entering process_close_current_batch_replica"
         );
-
-        validate_db_data_from_replica(
-            inner.has_finished_startup,
-            &inner.is_ready,
-            DbData::BatchEnd(batch_from_master),
-            seq_nr_of_current_blob_for_this_executor,
-            seq_nr_from_master,
-        )?;
 
         inner.close_current_batch().await;
 
@@ -978,6 +1048,113 @@ where
         );
 
         Ok(())
+    }
+
+    async fn process_new_proof_replica(
+        &mut self,
+        sequence_number_of_proof: u64,
+        proof_bytes: PreferredProofDataBytes,
+        reason: &'static str,
+    ) -> Result<(), ReplicaError<S>> {
+        let mut inner = self.get_inner_with_timing(reason).await;
+
+        let next_unassigned_sequence_number = inner.next_unassigned_sequence_number;
+        debug!(
+            % sequence_number_of_proof,
+            % next_unassigned_sequence_number,
+            "Entering process_new_proof_replica"
+        );
+
+        validate_db_data_from_replica(
+            inner.has_finished_startup,
+            &inner.is_ready,
+            DbData::NewProof(sequence_number_of_proof, proof_bytes.clone()),
+            next_unassigned_sequence_number,
+            sequence_number_of_proof,
+        )?;
+
+        let assigned_sequence_number = inner.take_sequence_number_for_proof();
+        assert_eq!(assigned_sequence_number, next_unassigned_sequence_number, "The sequence number for the proof should be the next unassigned sequence number. This is a bug, please report it.");
+        inner
+            .process_proof(new_blob_id(), proof_bytes, assigned_sequence_number)
+            .await;
+
+        debug!(
+            % sequence_number_of_proof,
+            % assigned_sequence_number,
+            "Exiting process_new_proof_replica"
+        );
+
+        Ok(())
+    }
+
+    fn ensure_replica_batch_start_visible_slot_matches(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<BatchToStore, ReplicaError<S>> {
+        let mut replica_vsn = inner.executor.checkpoint.current_visible_slot_number();
+        let replica_expected =
+            replica_vsn.advance(batch_from_master.visible_slots_to_advance.get().into());
+
+        if replica_expected == batch_from_master.visible_slot_number_after_increase {
+            return Ok(batch_from_master);
+        }
+
+        tracing::warn!(
+            %replica_expected,
+            master_expected = %batch_from_master.visible_slot_number_after_increase,
+            "Replica VSN diverged from master. Entering sync mode and retrying."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
+    }
+
+    fn ensure_replica_batch_start_within_rebase_window(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<(), ReplicaError<S>> {
+        let state_root_delay_blocks: u64 =
+            sov_modules_api::macros::config_value!("STATE_ROOT_DELAY_BLOCKS");
+        let current_height = inner.executor.checkpoint.rollup_height_to_access();
+        let rebase_height = inner.executor_rebase_height;
+
+        if current_height.get().saturating_sub(rebase_height.get())
+            <= state_root_delay_blocks.saturating_sub(1)
+        {
+            return Ok(());
+        }
+
+        let heights_since_rebase = current_height.get().saturating_sub(rebase_height.get());
+
+        tracing::warn!(
+            %current_height,
+            %rebase_height,
+            %heights_since_rebase,
+            %state_root_delay_blocks,
+            "Replica has accepted too many PG batches since the last executor rebase. Rejecting batch start until node replay catches up."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
     }
 }
 
@@ -1015,20 +1192,69 @@ fn validate_db_data_from_replica<S: Spec>(
     Ok(())
 }
 
+fn validate_db_data_from_replica_for_open_batch<S: Spec>(
+    has_finished_startup: bool,
+    is_ready: &Result<(), SequencerNotReadyDetails>,
+    ret: DbData,
+    sequence_number_of_open_batch: Option<u64>,
+    next_unassigned_sequence_number: u64,
+) -> Result<u64, ReplicaError<S>> {
+    let seq_nr_from_master = ret.sequence_number();
+    let seq_nr_for_this_executor = match sequence_number_of_open_batch {
+        Some(seq_nr_for_this_executor) => seq_nr_for_this_executor,
+        None => {
+            if next_unassigned_sequence_number > seq_nr_from_master {
+                tracing::debug!(
+                    %next_unassigned_sequence_number,
+                    %seq_nr_from_master,
+                    "Replica is ahead of a stale event from master."
+                );
+                return Err(ReplicaError::Rejected(DBDataRejected::ExecutorAhead(
+                    next_unassigned_sequence_number,
+                )));
+            }
+
+            tracing::debug!(
+                %seq_nr_from_master,
+                %next_unassigned_sequence_number,
+                "Replica is missing the matching batch start."
+            );
+            return Err(ReplicaError::Rejected(DBDataRejected::ExecutorBehind(ret)));
+        }
+    };
+
+    validate_db_data_from_replica(
+        has_finished_startup,
+        is_ready,
+        ret,
+        seq_nr_for_this_executor,
+        seq_nr_from_master,
+    )?;
+
+    Ok(seq_nr_for_this_executor)
+}
+
 #[derive(Debug)]
 pub(crate) enum Flow {
     Break {
+        pending_completed_proofs: Vec<PreferredProofToReplay>,
         in_progress_batch: Option<ReadBatch>,
         subscription: mpsc::Receiver<DbEvent>,
         fetch_in_progress_batch_time: Duration,
     },
     Continue {
-        completed_batches: Vec<PreferredBatchToReplay>,
+        completed_blobs: Vec<PreferredBlobToReplay>,
     },
 }
 
 #[derive(Debug)]
-pub(crate) struct FetchBatches {
+pub(crate) struct FetchProofsAndCompletedBatches {
     pub(crate) metrics: PreferredSequencerFetchBatchesToReplayMetrics,
     pub(crate) flow: Flow,
+}
+
+fn completed_blobs_contain_batch(blobs: &[PreferredBlobToReplay]) -> bool {
+    blobs
+        .iter()
+        .any(|blob| matches!(blob, PreferredBlobToReplay::Batch(_)))
 }

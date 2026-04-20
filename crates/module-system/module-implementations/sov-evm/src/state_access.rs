@@ -10,7 +10,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, Amount, InfallibleStateAccessor,
-    InfallibleStateReaderAndWriter, Spec, StateReader,
+    InfallibleStateReaderAndWriter, Spec, StateReader, VersionReader,
 };
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::RollupHeight;
@@ -125,6 +125,31 @@ impl<S: Spec> Evm<S> {
         state: &mut Accessor,
     ) -> Result<bool, Accessor::Error> {
         Ok(self.disable_max_fee_check.get(state)?.unwrap_or(false))
+    }
+
+    /// Returns true when the EIP-1559 fee-cap check should be enforced for this state.
+    pub fn is_max_fee_check_active<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<bool, Accessor::Error> {
+        let block_number: u64 = state.rollup_height_to_access().get();
+        if !crate::sov_fee_and_gas_utils::is_max_fee_check_height_active(block_number) {
+            return Ok(false);
+        }
+
+        Ok(!self.is_max_fee_check_disabled(state)?)
+    }
+
+    /// Returns the gas multiplier for the current state.
+    pub(crate) fn fee_multiplier<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<crate::sov_fee_and_gas_utils::GasMultiplier, Accessor::Error> {
+        if self.is_max_fee_check_active(state)? {
+            Ok(crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckActive)
+        } else {
+            Ok(crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive)
+        }
     }
 }
 

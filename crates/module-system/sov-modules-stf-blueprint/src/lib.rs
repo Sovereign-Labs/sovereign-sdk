@@ -252,7 +252,7 @@ where
     }
 }
 
-impl<S, RT> StateTransitionFunction<S::InnerZkvm, S::OuterZkvm, S::Da> for StfBlueprint<S, RT>
+impl<S, RT> StateTransitionFunction<S::Da> for StfBlueprint<S, RT>
 where
     S: Spec,
     RT: Runtime<S>,
@@ -370,7 +370,7 @@ where
         slot_header: &<S::Da as DaSpec>::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+    ) -> ApplySlotOutput<S::Da, Self> {
         self.apply_slot_with_control_flow(
             pre_state_root,
             pre_state,
@@ -429,7 +429,7 @@ where
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
         cf: CF,
-    ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+    ) -> ApplySlotOutput<S::Da, Self> {
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.
@@ -607,7 +607,7 @@ where
             }
         };
 
-        ApplySlotOutput::<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+        ApplySlotOutput::<S::Da, Self> {
             state_root,
             change_set,
             proof_receipts,
@@ -669,7 +669,9 @@ where
         // Note: The gas price should be computed after all the capabilities involving the [`KernelStateAccessor`] to have the
         // most recent version of the visible rollup height.
         let gas_price = runtime.chain_state().base_fee_per_gas(&mut state).expect("The base fee per gas for the current slot should be known at this point! This is a bug. Please report it");
-        let block_gas_limit = runtime.chain_state().block_gas_limit(&mut state).expect("The slot gas limit for the current slot should be known at this point! This is a bug. Please report it");
+        let block_gas_limit = runtime
+            .chain_state()
+            .block_gas_limit(state.rollup_height_to_access(), !creates_rollup_block);
 
         let preferred_sequencer = runtime
             .sequencer_remuneration()
@@ -786,7 +788,7 @@ where
                         &sequencer_address,
                         sequencer_bond,
                         gas_price,
-                        proof,
+                        &proof[..],
                         state,
                     );
 

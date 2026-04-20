@@ -8,7 +8,7 @@ use crate::{Paymaster, PaymasterPolicyInitializer};
 /// The genesis configuration of the paymaster module, consisting of a list of
 /// payers and their policies.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", bound = "S: Spec")]
+#[serde(rename_all = "snake_case", bound = "S: Spec", deny_unknown_fields)]
 pub struct PaymasterConfig<S: Spec> {
     #[allow(missing_docs)]
     // We set a conservative limit of 5 payers to prevent stack overflows, since
@@ -28,7 +28,7 @@ impl<S: Spec> Default for PaymasterConfig<S> {
 /// the genesis config for a payer needs to explicitly list which sequencers should
 /// use the payer.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(bound = "S: Spec")]
+#[serde(bound = "S: Spec", deny_unknown_fields)]
 pub struct PayerGenesisConfig<S: Spec> {
     /// The address of the newly registered payer.
     pub payer_address: S::Address,

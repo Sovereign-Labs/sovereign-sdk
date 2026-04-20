@@ -75,6 +75,7 @@ expression: "&slot"
           "hash": "0x95cd603fe577fa9548ec0c9b50b067566fe07c8af6acba45f6196f3a15d511f6",
           "number": 0,
           "receipt": {
+            "data": 0,
             "result": "successful"
           },
           "type": "tx"
@@ -136,6 +137,7 @@ expression: "&slot"
           "hash": "0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b",
           "number": 1,
           "receipt": {
+            "data": 1,
             "result": "successful"
           },
           "type": "tx"
@@ -210,6 +212,7 @@ expression: "&slot"
           "hash": "0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3",
           "number": 2,
           "receipt": {
+            "data": 2,
             "result": "successful"
           },
           "type": "tx"
@@ -271,6 +274,7 @@ expression: "&slot"
           "hash": "0x1f3cb18e896256d7d6bb8c11a6ec71f005c75de05e39beae5d93bbd1e2c8b7a9",
           "number": 3,
           "receipt": {
+            "data": 3,
             "result": "successful"
           },
           "type": "tx"

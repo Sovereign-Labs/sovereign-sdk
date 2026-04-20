@@ -19,6 +19,7 @@ serde = { workspace = true, default-features = false, features = [
     "derive",
 ] }
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 derivative = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 rand = { workspace = true }
@@ -28,6 +29,7 @@ reqwest = { workspace = true }
 sov-api-spec = { workspace = true }
 sov-metrics = { workspace = true }
 sov-modules-rollup-blueprint = { workspace = true }
+sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-transaction-generator = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
@@ -48,6 +50,10 @@ sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
 sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 sov-soak-testing-lib = { workspace = true }
+sov-db = { workspace = true }
+sov-sp1-adapter = { workspace = true, features = ["native", "arbitrary"] }
+sov-stf-runner = { workspace = true }
+sp1 = { path = "../provers/sp1" }
 
 [[bin]]
 name = "main"

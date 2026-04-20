@@ -2,8 +2,7 @@
 sp1_zkvm::entrypoint!(main);
 
 use demo_stf::runtime::Runtime;
-use demo_stf::MultiAddressEvmSolana;
-use demo_stf::StfVerifier;
+use demo_stf::{MultiAddressEvmSolana, StfVerifier};
 use sov_celestia_adapter::types::Namespace;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier};
 use sov_mock_zkvm::MockZkvm;
@@ -14,16 +13,27 @@ use sov_modules_stf_blueprint::StfBlueprint;
 use sov_rollup_interface::da::DaVerifier;
 use sov_sp1_adapter::guest::SP1Guest;
 use sov_sp1_adapter::SP1;
-use sov_state::ZkStorage;
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
+use sov_state::DefaultStorageSpec;
+
+type NomtStorage = NomtVerifierStorage<DefaultStorageSpec<sha2::Sha256>>;
 
 pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!("BATCH_NAMESPACE"));
 pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(config_value!("PROOF_NAMESPACE"));
 
 pub fn main() {
     let guest = SP1Guest::new();
-    let storage = ZkStorage::new();
+    let storage = NomtStorage::new();
     let stf: StfBlueprint<
-        ConfigurableSpec<CelestiaSpec, SP1, MockZkvm, MultiAddressEvmSolana, Zk>,
+        ConfigurableSpec<
+            CelestiaSpec,
+            SP1,
+            MockZkvm,
+            MultiAddressEvmSolana,
+            Zk,
+            sov_sp1_adapter::SP1CryptoSpec,
+            NomtStorage,
+        >,
         Runtime<_>,
     > = StfBlueprint::new();
 
@@ -32,8 +42,7 @@ pub fn main() {
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
     };
 
-    let stf_verifier =
-        StfVerifier::<_, _, _, SP1, MockZkvm>::new(stf, CelestiaVerifier::new(rollup_params));
+    let stf_verifier = StfVerifier::new(stf, CelestiaVerifier::new(rollup_params));
 
     stf_verifier
         .run_block(guest, storage)

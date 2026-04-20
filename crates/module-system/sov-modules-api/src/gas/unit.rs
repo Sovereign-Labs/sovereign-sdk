@@ -43,6 +43,17 @@ where
     }
 }
 
+impl<const N: usize> GasUnit<N> {
+    /// Creates a new [`GasUnit`] from an array of [`u64`].
+    pub fn from_dimensions(dimensions: [u64; N]) -> Self {
+        Self {
+            value: dimensions,
+            #[cfg(feature = "gas-constant-estimation")]
+            name: None,
+        }
+    }
+}
+
 impl<const N: usize> Debug for GasUnit<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self}")

@@ -1,8 +1,8 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
-pub mod address;
 pub mod authentication;
+mod delegation;
 #[cfg(feature = "native")]
 pub mod genesis_config;
 pub mod runtime;
@@ -13,7 +13,6 @@ use sov_modules_stf_blueprint::StfBlueprint;
 use sov_rollup_interface::stf::StateTransitionVerifier;
 
 /// Alias for StateTransitionVerifier.
-pub type StfVerifier<DA, ZkSpec, RT, InnerVm, OuterVm> =
-    StateTransitionVerifier<StfBlueprint<ZkSpec, RT>, DA, InnerVm, OuterVm>;
+pub type StfVerifier<DA, ZkSpec, RT> = StateTransitionVerifier<StfBlueprint<ZkSpec, RT>, DA>;
 
-pub use address::MultiAddressEvmSolana;
+pub use demo_stf_declaration::MultiAddressEvmSolana;

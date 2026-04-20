@@ -9,7 +9,7 @@ use futures::StreamExt;
 use serde::Deserialize;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
@@ -34,7 +34,7 @@ async fn trailing_slashes_handled() -> anyhow::Result<()> {
         TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
         0,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .enable_prover()
     .with_standard_sequencer()
     .start()
     .await?;
@@ -71,7 +71,7 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         0,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .enable_prover()
     .start()
     .await?;
 
@@ -242,18 +242,9 @@ async fn check_state_vec(client: &demo_stf_json_client::Client) -> anyhow::Resul
     let value_1_json = state_vec_element_1.clone().value;
     let value_last_json = state_vec_element_last.clone().value;
 
-    match (value_0_json, value_1_json, value_last_json) {
-        (
-            RuntimeAnyJsonValue::Number(value_0),
-            RuntimeAnyJsonValue::Number(value_1),
-            RuntimeAnyJsonValue::Number(value_last),
-        ) => {
-            assert_eq!(0.0, value_0);
-            assert_eq!(1.0, value_1);
-            assert_eq!(7.0, value_last);
-        }
-        (_, _, _) => panic!("Incorrect type returned in vector"),
-    }
+    assert_eq!(value_0_json, 0);
+    assert_eq!(value_1_json, 1);
+    assert_eq!(value_last_json, 7);
 
     let state_vec_out_of_bounds = client
         .synthetic_load_very_large_vec_get_state_vec_element(u32::MAX as u64, None, None)

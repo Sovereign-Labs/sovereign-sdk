@@ -14,16 +14,16 @@ use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_metrics::RunnerProcessStfChangesMetrics;
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::DaSyncState;
-use sov_rollup_interface::stf::TxReceiptContents;
+use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
-use tokio::sync::watch;
+use sov_rollup_interface::ProvableHeightTracker;
 
 /// Result of checking if a block is a valid continuation of the current chain.
 ///
@@ -113,6 +113,7 @@ pub struct StateManager<StateRoot, Witness, Sm, Da>
 where
     Da: DaService,
     Sm: HierarchicalStorageManager<Da::Spec>,
+    Sm::StfState: Clone,
 {
     storage_manager: Sm,
     ledger_db: LedgerDb,
@@ -127,7 +128,7 @@ where
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
-    state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+    state_channel: StateChannel<Sm::StfState>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
@@ -152,7 +153,7 @@ where
         storage_manager: Sm,
         ledger_db: LedgerDb,
         last_processed_finalized_state_root: StateRoot,
-        state_update_channel: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+        state_channel: StateChannel<Sm::StfState>,
         stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
@@ -167,7 +168,7 @@ where
             last_processed_finalized_header,
             state_on_block: Default::default(),
             seen_on_height: Default::default(),
-            state_update_sender: state_update_channel,
+            state_channel,
             stf_info_sender,
             max_provable_slot_number_tracker: state_height_tracker,
             is_initialized: false,
@@ -321,6 +322,8 @@ where
         S: SlotData,
         B: serde::Serialize,
         T: TxReceiptContents,
+        Address: Serialize + DeserializeOwned,
+        StorageProof: Serialize + DeserializeOwned,
     >(
         &mut self,
         stf_changes: Sm::StfChangeSet,
@@ -328,6 +331,7 @@ where
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
         aggregated_proofs: Vec<SerializedAggregatedProof>,
+        proof_receipts: Vec<PartialProofReceipt<Address, Da::Spec, StateRoot, StorageProof>>,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
@@ -346,10 +350,12 @@ where
         }
 
         let aggregated_proofs_count = aggregated_proofs.len();
+        let proof_receipts_count = proof_receipts.len();
         tracing::debug!(
             current_state_root = hex::encode(self.last_processed_finalized_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
+            proof_receipts = proof_receipts_count,
             "Saving changes after applying slot"
         );
 
@@ -433,6 +439,21 @@ where
             ledger_change_set.merge(this_height_data);
             tracing::trace!("Aggregated Proof is materialized into Ledger ChangeSet");
         }
+        let mut proof_receipt_hashes = Vec::with_capacity(proof_receipts.len());
+        for proof_receipt in proof_receipts {
+            proof_receipt_hashes.push(proof_receipt.blob_hash);
+            let this_height_data = self.ledger_db.materialize_proof_receipt(
+                proof_receipt.blob_hash,
+                proof_receipt,
+                slot_number,
+            )?;
+            ledger_change_set.merge(this_height_data);
+            tracing::trace!("Proof Receipt materialized into Ledger ChangeSet");
+        }
+        ledger_change_set.merge(
+            self.ledger_db
+                .materialize_proof_receipt_hashes(proof_receipt_hashes, slot_number)?,
+        );
         let ledger_materialization_time = ledger_materialization_start.elapsed();
         tracing::trace!(time = ?ledger_materialization_time, "Materialized all LegerDb changes");
 
@@ -524,12 +545,23 @@ where
             query_state_update_info(&self.ledger_db, stf_state, self.da_sync_state.as_ref())
                 .await?;
 
+        // Debug-only delay before notifying the sequencer about new state.
+        // Widens the window where archival reads must consult uncommitted_changes
+        // instead of NOMT, useful for reproducing race conditions in tests.
+        // Usage: SOV_TEST_DELAY_STATE_UPDATE_MS=500
+        #[cfg(debug_assertions)]
+        if let Ok(ms) = std::env::var("SOV_TEST_DELAY_STATE_UPDATE_MS") {
+            if let Ok(ms) = ms.parse::<u64>() {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+        }
+
         // `send_replace` is superior to `send` for our use case. It never fails
         // because it doesn't need to notify all receivers, unlike `send`, which
         // we don't need. It will also keep working even if there are no
         // receivers currently alive, which makes it easier to reason about the
         // code.
-        self.state_update_sender.send_replace(state_update_info);
+        self.state_channel.notify(state_update_info);
 
         Ok(())
     }

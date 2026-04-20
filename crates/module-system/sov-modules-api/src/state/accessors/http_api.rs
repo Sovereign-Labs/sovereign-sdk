@@ -321,29 +321,14 @@ const _: () = {
     {
         type Proof = <<S as Spec>::Storage as Storage>::Proof;
 
-        fn get_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>> {
-            // In this case, we need to use an exact slot number rather than an approximate one - otherwise
-            // the returned merkle proof will be useless.
-
-            // Temporarily give access to all visible slot numbers for the purpose of retrieving the mapping between true and visible slots.
-            // We'll set the value back to more scoped permissions at the end of this function
-            let safe_true_slot_number_to_use = self.safe_true_slot_number_to_use;
-            self.safe_true_slot_number_to_use = None;
-            let slot_num = match self.state_to_access {
-                StateToAccess::RollupHeight(rollup_height) => self
-                    .kernel
-                    .clone()
-                    .true_slot_number_at_historical_height(rollup_height, self),
-                StateToAccess::TrueSlotNumber(slot_number, _) => Some(slot_number),
-            };
-            // We set the permissions back to the original value here
-            self.safe_true_slot_number_to_use = safe_true_slot_number_to_use;
-            let slot_num = slot_num?;
-
-            match self.storage().get_with_proof::<N>(key, Some(slot_num)) {
-                Ok(storage_proof) => Some(storage_proof),
+        fn get_global_latest_with_proof(
+            &mut self,
+            key: SlotKey,
+        ) -> Option<StorageProof<Self::Proof>> {
+            match self.storage().get_with_proof::<N>(key) {
+                Ok(storage_proof) => Some(storage_proof.0),
                 Err(err) => {
-                    tracing::debug!(error = ?err, "Error requesting storage proof");
+                    tracing::error!(error = ?err, "Error requesting storage proof");
                     None
                 }
             }
@@ -477,12 +462,18 @@ impl<S: Spec> ApiStateAccessor<S> {
         version: Option<SlotNumber>,
     ) -> anyhow::Result<Option<SlotValue>> {
         // First, check if the user has written this value. This allows users to write during eth_call even if they're reading historical state.
-        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
-        // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
+        // IMPORTANT: Note that we do *not* read from the state checkpoint during archival queries (it's Arc'd and may contain
+        // unrelated data from the current state). However, reading from uncommitted_changes is safe because build_archival_state
+        // filters them via ignore_changes_after_height(height) to only contain data at heights <= the requested height.
         if let Some(entry) = self.local_user_writes.get(key) {
             return Ok(entry.clone());
         }
-        // If not, read it from storage
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::User, key) {
+                return Ok(entry);
+            }
+        }
+
         self.checkpoint_and_read_txn
             .state_checkpoint
             .storage()
@@ -495,12 +486,18 @@ impl<S: Spec> ApiStateAccessor<S> {
         version: Option<SlotNumber>,
     ) -> anyhow::Result<Option<SlotValue>> {
         // First, check if the kernel has written this value. This allows users to write during eth_call even if they're reading historical state.
-        // IMPORTANT: Note that we do *not* empty the statecheckpoint passed by the caller who creates the API state accessor (we can't because it's Arc'd)
-        // so it is imperative that we do *not* read from it during archival queries - it might have random data from the current state.
+        // IMPORTANT: Note that we do *not* read from the state checkpoint during archival queries (it's Arc'd and may contain
+        // unrelated data from the current state). However, reading from uncommitted_changes is safe because build_archival_state
+        // filters them via ignore_changes_after_height(height) to only contain data at heights <= the requested height.
         if let Some(entry) = self.local_kernel_writes.get(key) {
             return Ok(entry.clone());
         }
-        // If not, read it from storage
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Kernel, key) {
+                return Ok(entry);
+            }
+        }
+
         self.checkpoint_and_read_txn
             .state_checkpoint
             .storage()
@@ -516,7 +513,13 @@ impl<S: Spec> ApiStateAccessor<S> {
         if let Some(write) = self.local_accessory_writes.get(key) {
             return Ok(write.value.clone());
         }
-        // If not, read it from storage
+
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let MaybePresentValue::Present(entry) = changes.get(Namespace::Accessory, key) {
+                return Ok(entry);
+            }
+        }
+
         self.checkpoint_and_read_txn
             .state_checkpoint
             .storage()
@@ -793,11 +796,9 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                     if max_height < height {
                         return Err(ApiStateAccessorError::HeightNotAccessible);
                     }
-                    // Otherwise, drop any uncommitted changes that are after the requested height and use our latest slot number from storage as a safe commit.
-                    // (Anything not already in storage by that point will be in the uncommitted changes)
-                    if let Some(c) = state.uncommitted_changes.as_mut() {
-                        c.ignore_changes_after_height(height);
-                    }
+                    // Use our latest slot number from storage as a safe commit.
+                    // (Anything not already in storage by that point will be in the uncommitted changes,
+                    // which are pruned to the requested height below.)
                     latest_true_slot_number
                 } else if height == kernel.current_rollup_height(&mut state) {
                     // There's a tricky case here where the height exists in storage but the true slot number is not available via the kernel yet.
@@ -831,6 +832,11 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
                 result.unwrap_or_else(|| panic!("Visible slot number not available for slot_number {slot_number}, but that slot exists in storage. This is a bug. Please report it."))
             }
         };
+        // Prune uncommitted changes to only contain data at heights <= the requested rollup height.
+        // This ensures archival reads never return values from newer uncommitted blocks.
+        if let Some(c) = state.uncommitted_changes.as_mut() {
+            c.ignore_changes_after_height(rollup_height);
+        }
         // Use the slot number to find the visible slot number.
         let result = kernel.visible_slot_number_at(true_slot_number, &mut state);
 

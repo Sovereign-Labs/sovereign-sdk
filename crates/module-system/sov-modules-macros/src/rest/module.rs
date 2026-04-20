@@ -165,7 +165,7 @@ pub fn derive(tokens: &DeriveInput) -> syn::Result<TokenStream> {
                 #(#router_nest_ops)*
 
                 let custom_router = (self).custom_rest_api(api_state);
-                router = router.nest("/", custom_router);
+                router = router.merge(custom_router);
 
                 router
             }

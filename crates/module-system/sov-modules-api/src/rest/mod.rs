@@ -33,7 +33,6 @@ use axum::routing::get;
 use serde::{Deserialize, Serialize};
 use sov_rest_utils::{json_obj, ErrorObject, Query};
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::StateUpdateInfo;
 use tokio::sync::watch;
 use utoipa::openapi::OpenApi;
 
@@ -45,9 +44,6 @@ use crate::{ApiStateAccessor, ConcurrentStateCheckpoint, ModuleId, ModuleInfo, S
 /// change at any time.
 #[doc(hidden)]
 pub mod __private;
-
-/// A [`tokio::sync::watch::Receiver`] for a [`Spec`]'s storage.
-pub type StateUpdateReceiver<S> = tokio::sync::watch::Receiver<StateUpdateInfo<S>>;
 
 pub use sov_modules_macros::{ModuleRestApi, RuntimeRestApi};
 
@@ -66,7 +62,7 @@ pub extern crate sov_rest_utils as utils;
 ///   pagination for structured state items like
 ///   [`StateVec`](crate::containers::StateVec).
 pub trait HasRestApi<S: Spec> {
-    /// Returns an [`axum::Router`] on the provided [`StateUpdateReceiver`] instance for the REST API.
+    /// Returns an [`axum::Router`] on the provided [`ApiState`] instance for the REST API.
     fn rest_api(&self, _state: ApiState<S>) -> axum::Router<()>;
 
     /// Returns the OpenAPI specification for [`HasRestApi::rest_api`].
@@ -324,7 +320,6 @@ impl<'de> Deserialize<'de> for HeightParam {
         }
     }
 }
-#[axum::async_trait]
 impl<S, T> FromRequestParts<ApiState<S, T>> for ApiState<S, T>
 where
     S: Spec,
@@ -347,7 +342,6 @@ where
     }
 }
 
-#[axum::async_trait]
 impl<S, T> FromRequestParts<ApiState<S, T>> for ApiStateAccessor<S>
 where
     T: Send + Sync,

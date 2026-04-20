@@ -32,9 +32,9 @@ tracing = { workspace = true }
 sov-rest-utils = { path = ".", features = ["arbitrary"] }
 serde_urlencoded = "0.7"
 test-strategy = { workspace = true }
-tokio-tungstenite = { version = "0.28.0", default-features = false, features = ["connect"] }
+tokio-tungstenite = { workspace = true, features = ["connect"] }
 tokio-stream = { workspace = true }
-tungstenite = "0.28.0"
+tungstenite = { workspace = true }
 axum = { workspace = true, features = ["query", "ws", "json", "original-uri", "tokio", "http1"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 

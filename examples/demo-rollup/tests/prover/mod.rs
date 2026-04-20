@@ -3,47 +3,59 @@ use std::sync::Arc;
 
 use demo_stf::genesis_config::create_genesis_config;
 use demo_stf::runtime::Runtime;
+use sov_db::config::RollupDbConfig;
 use sov_db::schema::SchemaBatch;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
-use sov_modules_api::{OperatingMode, SlotData, Spec};
+use sov_modules_api::{CryptoSpec, OperatingMode, SlotData};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::{
-    StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
-};
-use sov_state::ProverStorage;
+use sov_rollup_interface::zk::StateTransitionWitness;
+use sov_sp1_adapter::SP1CryptoSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_utils::generators::BlobBuildingCtx;
-use sov_test_utils::TestStorageSpec;
 use tempfile::TempDir;
 
-use crate::prover::datagen::get_blocks_from_da;
+use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
 use crate::test_helpers::test_genesis_paths;
 
-type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
+type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
+type NativeStorage =
+    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+
+pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
-    sov_risc0_adapter::Risc0,
+    sov_sp1_adapter::SP1,
     sov_mock_zkvm::MockZkvm,
     demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
-    sov_mock_zkvm::MockZkvmCryptoSpec,
+    SP1CryptoSpec,
+    NativeStorage,
 >;
 
 mod datagen;
+mod network;
+mod parallel;
+mod sp1_cpu_prover;
 
-type TestSTF<'a> = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
+pub(super) type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
+pub(super) type ProofStateRoot = <TestSTF as StateTransitionFunction<MockDaSpec>>::StateRoot;
+pub(super) type ProofWitness = <TestSTF as StateTransitionFunction<MockDaSpec>>::Witness;
+pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
 
-/// This test reproduces the proof generation process for the rollup used in benchmarks.
-#[tokio::test(flavor = "multi_thread")]
-#[cfg_attr(skip_guest_build, ignore)]
-async fn test_proof_generation() {
+/// Executes the STF against mock DA blocks and produces per-block witnesses.
+///
+/// This is the shared data generation logic used by both the local (host) prover
+/// tests and the network prover tests.
+///
+/// Returns `(genesis_state_root, witnesses)`.
+pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     tracing::info!("Creating temp dir at {}", temp_dir.path().display());
     let da_service = MockDaService::new(MockAddress::default());
@@ -51,9 +63,11 @@ async fn test_proof_generation() {
         curr_sequence_number: Arc::new(AtomicU64::new(0)),
     };
 
-    let mut storage_manager =
-        NativeStorageManager::<MockDaSpec, ProverStorage<TestStorageSpec>>::new(temp_dir.path())
-            .expect("NativeStorageManager initialization has failed");
+    let mut storage_manager = NomtStorageManager::<MockDaSpec, Hasher, NativeStorage>::new(
+        RollupDbConfig::default_in_path(temp_dir.path().to_path_buf()),
+        true,
+    )
+    .expect("NomtStorageManager initialization has failed");
     let stf = TestSTF::new();
 
     let genesis_config = {
@@ -75,14 +89,16 @@ async fn test_proof_generation() {
     // Write it to the database immediately!
     storage_manager.finalize(&genesis_block.header).unwrap();
 
+    let genesis_state_root = prev_state_root;
+
     // TODO: Fix this with genesis logic.
     let mut blocks = get_blocks_from_da(sequencer_mode)
         .await
         .expect("Failed to get DA blocks");
 
-    let mut host = Risc0Host::new(risc0::MOCK_DA_ELF);
+    let mut witnesses = Vec::new();
 
-    for filtered_block in &mut blocks[..3] {
+    for filtered_block in &mut blocks[..(DEFAULT_BLOCKS as usize)] {
         let height = filtered_block.header().height();
         tracing::info!(
             "Requesting data for height {} and prev_state_root 0x{}",
@@ -106,31 +122,14 @@ async fn test_proof_generation() {
             ExecutionContext::Node,
         );
 
-        let data = StateTransitionWitness::<
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::StateRoot,
-            <TestSTF as StateTransitionFunction<Risc0, MockZkvm, MockDaSpec>>::Witness,
-            MockDaSpec,
-        > {
+        witnesses.push(StfWitness {
             initial_state_root: prev_state_root,
             da_block_header: filtered_block.header().clone(),
             relevant_proofs,
             witness: result.witness,
             relevant_blobs,
             final_state_root: result.state_root,
-        };
-
-        let data = StateTransitionWitnessWithAddress {
-            stf_witness: data,
-            prover_address: <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap(),
-        };
-
-        host.add_hint(data);
-
-        tracing::info!("Run prover without generating a proof for block {height}\n");
-        let _receipt = host
-            .run_without_proving()
-            .expect("Prover should run successfully");
-        tracing::info!("==================================================\n");
+        });
 
         prev_state_root = result.state_root;
         storage_manager
@@ -141,4 +140,6 @@ async fn test_proof_generation() {
             )
             .unwrap();
     }
+
+    (genesis_state_root, witnesses)
 }

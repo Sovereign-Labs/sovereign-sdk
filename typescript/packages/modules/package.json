@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/modules",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "description": "A package providing convenient helpers for interacting with core Sovereign SDK modules",
   "scripts": {
     "build": "tsup",
@@ -10,7 +10,10 @@
     "test": "vitest run **/*.test.ts",
     "test:integration": "vitest run **/*.integration-test.ts"
   },
-  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sovereign-Labs/sovereign-sdk.git"
+  },
   "files": ["dist", "README.md", "package.json"],
   "exports": {
     ".": {

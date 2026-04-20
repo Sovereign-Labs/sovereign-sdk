@@ -1,14 +1,11 @@
-use std::convert::Infallible;
-
 use serde::Serialize;
 use sov_bank::{config_gas_token_id, Bank};
 use sov_chain_state::ChainState;
-use sov_mock_zkvm::MockCodeCommitment;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
-    AggregatedProofPublicData, Amount, ApiStateAccessor, CodeCommitment, SerializedAggregatedProof,
-    Spec, Storage,
+    AggregatedProofPublicData, Amount, ApiStateAccessor, CodeCommitmentTrait,
+    SerializedAggregatedProof, Spec, Storage,
 };
 use sov_modules_rollup_blueprint::proof_sender::serialize_proof_blob_with_metadata;
 use sov_prover_incentives::ProverIncentives;
@@ -23,7 +20,6 @@ use sov_value_setter::ValueSetterConfig;
 pub(crate) type S = sov_test_utils::TestSpec;
 pub(crate) type TestProverIncentives = ProverIncentives<S>;
 pub(crate) type RT = TestRuntime<S>;
-pub(crate) const MOCK_CODE_COMMITMENT: MockCodeCommitment = MockCodeCommitment([0u8; 8]);
 
 generate_zk_runtime!(TestRuntime <= value_setter: sov_value_setter::ValueSetter<S>);
 
@@ -71,13 +67,12 @@ pub(crate) fn build_proof(
     initial_slot: SlotNumber,
     end_slot: SlotNumber,
     prover_address: <S as Spec>::Address,
-) -> Result<
+) -> anyhow::Result<
     AggregatedProofPublicData<
         <S as Spec>::Address,
         <S as Spec>::Da,
         <<S as Spec>::Storage as Storage>::Root,
     >,
-    Infallible,
 > {
     let chain_state = ChainState::<S>::default();
     let genesis_hash = chain_state
@@ -92,6 +87,16 @@ pub(crate) fn build_proof(
         .get_historical_transition_dangerous(end_slot, state)
         .unwrap()
         .unwrap();
+    let inner_vkey_hash = chain_state
+        .inner_code_commitment(state)
+        .unwrap()
+        .expect("Inner code commitment must be set at genesis")
+        .to_hash();
+    let outer_vk_hash = chain_state
+        .outer_code_commitment(state)
+        .unwrap()
+        .expect("Outer code commitment must be set at genesis")
+        .to_hash();
 
     Ok(AggregatedProofPublicData {
         initial_slot_number: initial_slot,
@@ -101,7 +106,8 @@ pub(crate) fn build_proof(
         final_state_root: *end_transition.post_state_root(),
         initial_slot_hash: *initial_transition.slot_hash(),
         final_slot_hash: *end_transition.slot().slot_hash(),
-        code_commitment: CodeCommitment(MOCK_CODE_COMMITMENT.0.to_vec()),
+        inner_vkey_hash,
+        outer_vk_hash,
         rewarded_addresses: vec![prover_address],
     })
 }
@@ -123,5 +129,11 @@ pub(crate) fn serialize_proof<T: Serialize>(agg_proof: T) -> Vec<u8> {
         raw_aggregated_proof: proof,
     };
 
-    borsh::to_vec(&serialize_proof_blob_with_metadata::<S>(serialized_proof).unwrap()).unwrap()
+    // Double serialzie because the blob selector deserialize a Vec<u8> and then that in turn gets deserialized by the STF
+    borsh::to_vec(
+        &serialize_proof_blob_with_metadata::<S>(serialized_proof)
+            .unwrap()
+            .0,
+    )
+    .unwrap()
 }

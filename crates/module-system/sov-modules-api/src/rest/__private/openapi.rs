@@ -11,7 +11,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_state::{CompileTimeNamespace, StateCodec, StateItemCodec};
 pub use utoipa::openapi::OpenApi;
 use utoipa::openapi::{PathItem, Response};
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 use super::StateItemInfo;
 use crate::containers::map::NamespacedStateMap;
@@ -146,7 +146,7 @@ impl<N, T, Codec> CustomStateItemPath
     for StateItemOpenApiSpecImpl<NamespacedStateValue<N, T, Codec>>
 where
     N: CompileTimeNamespace,
-    T: for<'a> ToSchema<'a> + Serialize + Send + Sync + 'static,
+    T: ToSchema + Serialize + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::ValueCodec: StateItemCodec<T>,
 {
@@ -156,7 +156,7 @@ where
         module_name: &str,
         field_name: &str,
     ) -> Option<(OpenApiPaths, String, Response)> {
-        let (name, _) = <T as ToSchema<'_>>::schema();
+        let name = <T as ToSchema>::name();
         let custom_element_response = format!("{name}StateItemResponse");
 
         Some((
@@ -176,7 +176,7 @@ impl<N, K, V, Codec> CustomStateItemPath
 where
     N: CompileTimeNamespace,
     K: Serialize + DeserializeOwned + FromStr + Display + Clone + Send + Sync + 'static,
-    V: for<'a> ToSchema<'a> + Serialize + Clone + Send + Sync + 'static,
+    V: ToSchema + Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
     Codec::ValueCodec: StateItemCodec<V>,
@@ -187,7 +187,7 @@ where
         module_name: &str,
         field_name: &str,
     ) -> Option<(OpenApiPaths, String, Response)> {
-        let (name, _) = <V as ToSchema<'_>>::schema();
+        let name = <V as ToSchema>::name();
         let custom_element_response = format!("{name}StateMapElementResponse");
 
         Some((
@@ -213,7 +213,7 @@ where
 impl<N, T, Codec> CustomStateItemPath for StateItemOpenApiSpecImpl<NamespacedStateVec<N, T, Codec>>
 where
     N: CompileTimeNamespace,
-    T: Serialize + Send + Sync + 'static + for<'a> ToSchema<'a>,
+    T: Serialize + Send + Sync + 'static + ToSchema,
     Codec: StateCodec,
     Codec::ValueCodec: StateItemCodec<T> + StateItemCodec<u64>,
     Codec::KeyCodec: StateItemCodec<u64>,
@@ -224,7 +224,7 @@ where
         module_name: &str,
         field_name: &str,
     ) -> Option<(OpenApiPaths, String, Response)> {
-        let (name, _) = <T as ToSchema<'_>>::schema();
+        let name = <T as ToSchema>::name();
         let custom_element_response = format!("{name}StateVecElementResponse");
 
         Some((
@@ -237,7 +237,7 @@ where
 
 impl<V, Codec> CustomStateItemPath for StateItemOpenApiSpecImpl<VersionedStateValue<V, Codec>>
 where
-    V: Serialize + Clone + Send + Sync + 'static + for<'a> ToSchema<'a>,
+    V: Serialize + Clone + Send + Sync + 'static + ToSchema,
     Codec: StateCodec,
     Codec::ValueCodec: StateItemCodec<V>,
     Codec::KeyCodec: StateItemCodec<SlotNumber>,
@@ -248,7 +248,7 @@ where
         module_name: &str,
         field_name: &str,
     ) -> Option<(OpenApiPaths, String, Response)> {
-        let (name, _) = <V as ToSchema<'_>>::schema();
+        let name = <V as ToSchema>::name();
         let custom_element_response = format!("{name}StateItemResponse");
 
         Some((
@@ -466,81 +466,81 @@ pub fn state_vec_paths_with_response(
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_simple_custom_response<'a, 'resp, T: ToSchema<'a>>(description: &str) -> Response {
+fn make_simple_custom_response<T: PartialSchema>(description: &str) -> Response {
     // Create a simple response with a basic schema
-    let response = utoipa::openapi::ResponseBuilder::new()
+    utoipa::openapi::ResponseBuilder::new()
         .description(description)
         .content(
             "application/json",
             utoipa::openapi::ContentBuilder::new()
-                .schema(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
+                .schema(Some(utoipa::openapi::Schema::Object(
                     utoipa::openapi::ObjectBuilder::new()
                         .description(Some(description.to_string()))
-                        .property("value", T::schema().1)
+                        .property("value", T::schema())
                         .required("value")
                         .build(),
                 )))
                 .build(),
         )
-        .build();
-
-    response
+        .build()
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_custom_response_map<'a, 'resp, T: ToSchema<'a>>(description: &str) -> Response {
+fn make_custom_response_map<T: PartialSchema>(description: &str) -> Response {
     // Create a simple response with a basic schema
-    let response = utoipa::openapi::ResponseBuilder::new()
+    utoipa::openapi::ResponseBuilder::new()
         .description(description)
         .content(
             "application/json",
             utoipa::openapi::ContentBuilder::new()
-                .schema(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
+                .schema(Some(utoipa::openapi::Schema::Object(
                     utoipa::openapi::ObjectBuilder::new()
                         .description(Some(description.to_string()))
                         .property(
                             "key",
-                            utoipa::openapi::ObjectBuilder::new()
-                                .schema_type(utoipa::openapi::SchemaType::String),
+                            utoipa::openapi::ObjectBuilder::new().schema_type(
+                                utoipa::openapi::schema::SchemaType::Type(
+                                    utoipa::openapi::schema::Type::String,
+                                ),
+                            ),
                         )
                         .required("key")
-                        .property("value", T::schema().1)
+                        .property("value", T::schema())
                         .required("value")
                         .build(),
                 )))
                 .build(),
         )
-        .build();
-
-    response
+        .build()
 }
 
 /// Add a simple custom response to the OpenAPI spec
-fn make_custom_response_vec<'a, 'resp, T: ToSchema<'a>>(description: &str) -> Response {
+fn make_custom_response_vec<T: PartialSchema>(description: &str) -> Response {
     // Create a simple response with a basic schema
-    let response = utoipa::openapi::ResponseBuilder::new()
+    utoipa::openapi::ResponseBuilder::new()
         .description(description)
         .content(
             "application/json",
             utoipa::openapi::ContentBuilder::new()
-                .schema(utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(
+                .schema(Some(utoipa::openapi::Schema::Object(
                     utoipa::openapi::ObjectBuilder::new()
                         .description(Some(description.to_string()))
                         .property(
                             "index",
-                            utoipa::openapi::ObjectBuilder::new()
-                                .schema_type(utoipa::openapi::SchemaType::Integer),
+                            utoipa::openapi::ObjectBuilder::new().schema_type(
+                                utoipa::openapi::schema::SchemaType::Type(
+                                    utoipa::openapi::schema::Type::Integer,
+                                ),
+                            ),
                         )
                         .required("index")
-                        .property("value", T::schema().1)
+                        .property("value", T::schema())
                         .required("value")
                         .build(),
                 )))
                 .build(),
         )
-        .build();
-
-    response
+        .build()
 }
 
 pub fn add_simple_custom_response(spec: &mut OpenApi, response_name: &str, response: Response) {

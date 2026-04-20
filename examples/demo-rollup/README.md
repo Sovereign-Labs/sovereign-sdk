@@ -53,18 +53,17 @@ If you don't need ZK guest to be compiled,
 for faster compilation time you can export `export SKIP_GUEST_BUILD=1`environment variable in each terminal you run.
 There are multiple options available:
 - `export SKIP_GUEST_BUILD=1` or `export SKIP_GUEST_BUILD=true`: both guest VMs builds are skipped
-* `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 guest is built.
-* `export SKIP_GUEST_BUILD=sp1`: only sp1 VM build is skipped, risc0 is built.
+* `export SKIP_GUEST_BUILD=sp1`: only sp1 VM build is skipped, risc0 guest is built.
+* `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 is built.
 * `export SKIP_GUEST_BUILD=0`, `export SKIP_GUEST_BUILD=false` or any other string: both guests are built.
 
-By default, demo-rollup disables proving. If you want to enable proving, several options are available:
+The default `MockDemoRollup` blueprint uses MockZkvm as the inner zkVM. Selecting `--zk-vm sp1` switches to SP1, which requires the SP1 guest ELF when proving is enabled.
 
-- `export SOV_PROVER_MODE=skip` Skips verification logic.
-- `export SOV_PROVER_MODE=simulate` Run the rollup verification logic inside the current process.
-- `export SOV_PROVER_MODE=execute` Run the rollup verifier in a zkVM executor.
+By default, demo-rollup disables proving. To enable proving:
+
 - `export SOV_PROVER_MODE=prove` Run the rollup verifier and create a SNARK of execution.
 
-(!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`), only `SOV_PROVER_MODE=skip` will work, otherwise error about missing binary occurs.
+(!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`) for a zkVM that requires a guest ELF, proving will fail with a missing binary error. Leave `SOV_PROVER_MODE` unset to disable proving.
 
 ### Run a local DA layer instance
 
@@ -76,8 +75,8 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
-$ export RISC0_DEV_MODE=true
-$ export SOV_PROVER_MODE=execute
+$ export SOV_PROVER_MODE=prove
+$ export SP1_PROVER=mock
 $ make build
 ```
 
@@ -91,7 +90,7 @@ $ make clean
 3. Now run the demo-rollup full node, as shown below.
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ RISC0_DEV_MODE=true ../../target/debug/sov-demo-rollup
+$ SP1_PROVER=mock ../../target/debug/sov-demo-rollup --zk-vm sp1
 ```
 
 Leave it running while you proceed with the rest of the demo.
@@ -110,9 +109,9 @@ Once a batch is submitted, the output should also contain the transaction hashes
 
 ```text
 2025-10-24T12:40:48.335845Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-10-24T12:40:48.348358Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0xcafedb6e4829db3d35d8490b11a3daa107d55086250411a8ab096d3564f095b7
+2025-10-24T12:40:48.348358Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x3989ba9503b672e91eb2b93fbbd5ae83bd2bee21faf30048b5bbe501b62d4803
 2025-10-24T12:40:48.348379Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
-2025-10-24T12:40:48.358028Z  INFO sov_node_client: Submitted tx hash="0xcafedb6e4829db3d35d8490b11a3daa107d55086250411a8ab096d3564f095b7"
+2025-10-24T12:40:48.358028Z  INFO sov_node_client: Submitted tx hash="0x3989ba9503b672e91eb2b93fbbd5ae83bd2bee21faf30048b5bbe501b62d4803"
 2025-10-24T12:40:48.358060Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
 2025-10-24T12:40:50.477229Z  INFO sov_node_client: Rollup has processed the submitted batch!
 ```
@@ -122,7 +121,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0x4790c218f0b517cd4394baf3388b6047ce4f0155d9f8cc8af1dc61d0fd5dc683/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x3989ba9503b672e91eb2b93fbbd5ae83bd2bee21faf30048b5bbe501b62d4803/events | jq
 [
   {
     "type": "event",
@@ -156,7 +155,7 @@ $ curl -sS http://127.0.0.1:12346/ledger/txs/0x4790c218f0b517cd4394baf3388b6047c
       "type": "moduleRef",
       "name": "Bank"
     },
-    "tx_hash": "0x4790c218f0b517cd4394baf3388b6047ce4f0155d9f8cc8af1dc61d0fd5dc683"
+    "tx_hash": "0x3989ba9503b672e91eb2b93fbbd5ae83bd2bee21faf30048b5bbe501b62d4803"
   }
 ]
 ```
@@ -295,19 +294,24 @@ Import a transaction from a JSON file at the provided path
 Usage: sov-cli transactions import from-file <COMMAND>
 
 Commands:
-  bank                 A subcommand for the `Bank` module
-  sequencer-registry   A subcommand for the `SequencerRegistry` module
-  operator-incentives  A subcommand for the `OperatorIncentives` module
-  attester-incentives  A subcommand for the `AttesterIncentives` module
-  prover-incentives    A subcommand for the `ProverIncentives` module
-  accounts             A subcommand for the `Accounts` module
-  uniqueness           A subcommand for the `Uniqueness` module
-  chain-state          A subcommand for the `ChainState` module
-  blob-storage         A subcommand for the `BlobStorage` module
-  paymaster            A subcommand for the `Paymaster` module
-  access-pattern       A subcommand for the `AccessPattern` module
-  synthetic-load       A subcommand for the `SyntheticLoad` module
-  help                 Print this message or the help of the given subcommand(s)
+  bank                      A subcommand for the `Bank` module
+  sequencer-registry        A subcommand for the `SequencerRegistry` module
+  operator-incentives       A subcommand for the `OperatorIncentives` module
+  attester-incentives       A subcommand for the `AttesterIncentives` module
+  prover-incentives         A subcommand for the `ProverIncentives` module
+  accounts                  A subcommand for the `Accounts` module
+  uniqueness                A subcommand for the `Uniqueness` module
+  chain-state               A subcommand for the `ChainState` module
+  blob-storage              A subcommand for the `BlobStorage` module
+  paymaster                 A subcommand for the `Paymaster` module
+  revenue-share             A subcommand for the `RevenueShare` module
+  mailbox                   A subcommand for the `Mailbox` module
+  interchain-gas-paymaster  A subcommand for the `InterchainGasPaymaster` module
+  merkle-tree-hook          A subcommand for the `MerkleTreeHook` module
+  warp                      A subcommand for the `Warp` module
+  access-pattern            A subcommand for the `AccessPattern` module
+  synthetic-load            A subcommand for the `SyntheticLoad` module
+  help                      Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help  Print help
@@ -330,7 +334,7 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x4982c5078a9a2ebd1e064a184837553c1d92ea31a44b85c9ba5854ad923080b2",
+  "chain_hash": "0x6ac7496d0e70518f8368d4771e5cd3cf056e9653987ce89e5c47e01d415fbcd3",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
@@ -368,15 +372,15 @@ $ curl -Ss http://127.0.0.1:12346/modules/bank/tokens/token_1nyl0e0yweragfsatygt
 
 #### 6. Wait for aggregated proof to be available
 
+
 After all transactions are submitted, let's check that aggregated proofs are available. This might take some time, because proof generation can take time and aggregated proof usually consist of several blocks.
 
 
-```bash,test-ci
-$ ./../../target/debug/sov-cli node wait-for-aggregated-proof 
- 2025-01-23T11:22:35.402610Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-01-23T11:22:35.434135Z  INFO sov_cli::workflows::node: Subscribing for aggregated proofs timeout=120s
-2025-01-23T11:22:40.368366Z  INFO sov_cli::workflows::node: Aggregated proof received aggregated_proof=AggregatedProof { proof: "AAAAAAGLAQAAAAAAAAMAAAAAAAAAAQEBAQAAAAAAAAADAAAAAAAAAEhdYi6hLFLAP89xCVsbdfDdYwxF/WcFFzZGuIp+kaZW15HRe2qk3GxFnMa2Xuo0MGJo7NASojDOchgMtAoCdO1IXWIuoSxSwD/PcQlbG3Xw3WMMRf1nBRc2RriKfpGmVteR0XtqpNxsRZzGtl7qNDBiaOzQEqIwznIYDLQKAnTtwEGc5yzNex7lJXLa3zVI9FW1bv1QdAjVwddcSdTdLnbzj92WaWwpooMcl4rhSsyMSA4p2B1oOwUmM/xOuzFVUwunpBZJt+gXzHoMpgncYUhRoy6g2nn0J3Upj03dcxgzJdTBKEsCYGa+ZG26p+d6YCYTKcxA+Q8421V1spejjb0AAAAAAAAAAAMAAAAAAAAAAAAAAP6mrFuHURIPti//Z7VNLqxmrvMHx93h05TeoeAAAAAA/qasW4dREg+2L/9ntU0urGau8wfH3eHTlN6h4AAAAAD+pqxbh1ESD7Yv/2e1TS6sZq7zB8fd4dOU3qHg", type_: AggregatedProof }
+```bash,test-ci,bashtestmd:compare-output
+$ curl -fsS http://127.0.0.1:12346/ledger/aggregated-proofs/latest | jq -e -r 'if (.proof | type == "string" and length > 0) then "proof-not-empty" else error("proof is empty") end'
+proof-not-empty
 ```
+
 
 ## Disclaimer
 

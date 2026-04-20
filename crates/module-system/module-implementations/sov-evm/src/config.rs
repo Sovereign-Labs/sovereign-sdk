@@ -11,6 +11,7 @@ use crate::AccountData;
 
 /// Core EVM chain parameters shared between genesis and runtime
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct EvmChainSpec {
     /// Maximum contract code size (None = default. Currently 512KiB)
     pub limit_contract_code_size: Option<usize>,
@@ -27,6 +28,7 @@ pub struct EvmChainSpec {
 
 /// Genesis configuration for EVM module initialization
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct EvmGenesisConfig<S: Spec> {
     /// Initial account states
     pub accounts: Vec<AccountData>,

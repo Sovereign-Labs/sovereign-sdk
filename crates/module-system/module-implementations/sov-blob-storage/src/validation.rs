@@ -4,7 +4,7 @@ use sov_modules_api::digest::Digest;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     as_u32_or_panic, Amount, BatchWithId, BlobDataWithId, CryptoSpec, DaSpec, Gas, GasArray,
-    GasSpec, KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, Spec,
+    GasSpec, KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, Spec, VersionReader,
 };
 
 use crate::{BlobStorage, Escrow, ValidatedBlob};
@@ -119,11 +119,18 @@ impl<S: Spec> BlobStorage<S> {
         let best_gas_price_estimate = self.get_new_gas_price(visible_height_increase, state);
 
         let gas_needed_for_pre_exec_checks = <S as GasSpec>::max_tx_check_costs();
-        let funds_needed = gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?;
+        // Disable preferred sequencer escrow after the gas limit change height.
+        let funds_needed = if state.checkpoint.rollup_height_to_access()
+            > <S as GasSpec>::change_gas_limit_after_height()
+        {
+            Amount::ZERO
+        } else {
+            gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?
+        };
+
         if funds_needed > available_balance {
             return None;
         }
-
         self.escrow_funds_for_preferred_sequencer(funds_needed, state)
             .ok()?;
 
