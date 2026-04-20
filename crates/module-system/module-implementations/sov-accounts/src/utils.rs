@@ -6,6 +6,13 @@ use sov_modules_api::{CredentialId, CryptoSpec, Spec};
 /// The derivation mixes the transaction sender into the hash so that a
 /// multisig registered by A does not alias A's own address — a later
 /// compromise of A's single key must not also control the multisig.
+///
+/// This derivation is only used by `InsertCredentialId`. A credential that
+/// skips explicit registration and first appears as the signer of a tx is
+/// auto-registered by `Accounts::resolve_sender_address` to
+/// `Address::from(credential_id)` instead — a different address. Callers
+/// that need a specific on-chain address for a credential (e.g. a multisig)
+/// must pre-register it via `InsertCredentialId` before its first tx.
 pub fn derive_address_for_new_credential<S: Spec>(
     new_credential_id: &CredentialId,
     sender: &S::Address,

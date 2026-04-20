@@ -5,8 +5,19 @@ use crate::{Account, Accounts};
 
 impl<S: Spec> Accounts<S> {
     /// Resolve the sender's public key to an address.
-    /// If the sender is not registered, but a fallback address if provided, immediately registers
-    /// the credential to the fallback and then returns it.
+    ///
+    /// If the credential is already registered (by a prior `InsertCredentialId`
+    /// or prior auto-registration), returns the stored address.
+    ///
+    /// Otherwise immediately auto-registers the credential to `default_address`
+    /// (typically `Address::from(credential_id)`) and returns that. Note that
+    /// this auto-registration produces a **different** address than
+    /// [`CallMessage::InsertCredentialId`](crate::CallMessage::InsertCredentialId)
+    /// would — the latter derives `hash(credential_id || registering_sender)`
+    /// via [`derive_address_for_new_credential`](crate::derive_address_for_new_credential).
+    /// Callers that need a specific on-chain address for a credential (e.g. a
+    /// multisig) must pre-register via `InsertCredentialId` before the
+    /// credential's first tx.
     pub fn resolve_sender_address<ST: StateAccessor>(
         &mut self,
         default_address: &S::Address,
