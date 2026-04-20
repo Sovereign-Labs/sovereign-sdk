@@ -20,7 +20,7 @@ impl Metric for ZkStfInfoChannelMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} channel_depth={},channel_capacity={}",
+            "{} channel_depth={}i,channel_capacity={}i",
             self.measurement_name(),
             self.channel_depth,
             self.channel_capacity,
@@ -49,7 +49,7 @@ impl Metric for ZkProofManagerMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} proving_lag={},proofs_to_create={},slot_number={}",
+            "{} proving_lag={}i,proofs_to_create={}i,slot_number={}i",
             self.measurement_name(),
             self.proving_lag,
             self.proofs_to_create,

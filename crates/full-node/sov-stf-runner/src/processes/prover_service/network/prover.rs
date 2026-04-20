@@ -143,7 +143,7 @@ where
         sov_metrics::track_metrics(|tracker| {
             tracker.submit_inline(
                 "sov_rollup_zk_network_proof_submit",
-                format!("duration_ms={}", submit_start.elapsed().as_millis()),
+                format!("duration_ms={}i", submit_start.elapsed().as_millis()),
             );
         });
 
