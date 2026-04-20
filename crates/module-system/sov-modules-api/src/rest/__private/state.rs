@@ -355,7 +355,7 @@ where
                         )
                     })?;
 
-                Ok(StateItemContents::MapElement { key: key, value })
+                Ok(StateItemContents::MapElement { key, value })
             })
             .collect::<Result<Vec<_>, Response>>()?;
 

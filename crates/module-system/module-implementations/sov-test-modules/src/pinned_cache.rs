@@ -69,7 +69,19 @@ pub struct StateMapTester<S: Spec> {
     _phantom: std::marker::PhantomData<S>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct StateKey {
     pub address: HexHash,
     pub index: u32,
@@ -183,7 +195,6 @@ impl<S: Spec> Module for StateMapTester<S> {
                     }
                 }
                 Ok(())
-                
             }
         }
     }
