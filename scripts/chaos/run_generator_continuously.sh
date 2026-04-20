@@ -15,6 +15,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 GENERATOR="$PROJECT_ROOT/target/release/generator"
 
+export NO_COLOR=1
+
 echo "[$(date -Iseconds)] Building generator (no-op if up-to-date)..."
 (cd "$PROJECT_ROOT" && cargo build --release -p sov-soak-testing --bin generator)
 
