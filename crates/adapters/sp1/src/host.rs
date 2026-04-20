@@ -124,10 +124,22 @@ impl SP1AggregationHost {
         stdin.write(&witness);
 
         let agg_proof = self.inner.host.run_helper(stdin)?;
-        let serialized = bincode::serialize(&agg_proof)?;
+        // Downstream consumers (`sov_prover_incentives::process_proof` on
+        // native, `SP1Verifier::verify` inside the STF guest) decode the same
+        // `SovSP1AggregatedProof` wrapper. Native uses `serialized_sp1_proof`
+        // for real verification; the guest consumes `public_values`. Emitting
+        // the wrapper keeps the two sides in lock-step on the witness hint
+        // stream. The full proof is also retained in `prev_agg_proof` for the
+        // next aggregation round's deferred-proof witness.
+        let public_values = agg_proof.public_values.to_vec();
+        let serialized_sp1_proof = bincode::serialize(&agg_proof)?;
         *prev_agg_proof = Some(agg_proof);
 
-        Ok(serialized)
+        let wrapper = crate::SovSP1AggregatedProof {
+            serialized_sp1_proof,
+            public_values,
+        };
+        Ok(bincode::serialize(&wrapper)?)
     }
 }
 
@@ -163,20 +175,29 @@ impl SP1Host {
         Ok(&self.pk)
     }
 
+    /// Prepares a compressed SP1 proof for deferred verification: registers the
+    /// compressed proof with `stdin` and returns the serialized
+    /// [`SovSP1AggregatedProof`] wrapper that downstream guest-side
+    /// `SP1Verifier::verify` expects.
     fn add_proof_helper(
         &self,
         stdin: &mut SP1Stdin,
         proof: &[u8],
         vk: &sp1_sdk::SP1VerifyingKey,
     ) -> anyhow::Result<Vec<u8>> {
-        let proof = crate::decode_sp1_proof(proof)?;
+        let decoded = crate::decode_sp1_proof(proof)?;
 
-        let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
+        let SP1Proof::Compressed(recursion_proof) = &decoded.proof else {
             anyhow::bail!("Expected a compressed SP1 proof");
         };
 
         stdin.write_proof((**recursion_proof).clone(), vk.vk.clone());
-        Ok(proof.public_values.to_vec())
+
+        let wrapper = crate::SovSP1AggregatedProof {
+            serialized_sp1_proof: proof.to_vec(),
+            public_values: decoded.public_values.to_vec(),
+        };
+        Ok(bincode::serialize(&wrapper)?)
     }
 
     fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {

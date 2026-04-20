@@ -74,6 +74,33 @@ impl CryptoSpec for SP1CryptoSpec {
     }
 }
 
+/// Envelope that both the native and guest `SP1Verifier::verify` decode.
+///
+/// The two impls previously had divergent contracts — native expected full
+/// `bincode(SP1ProofWithPublicValues)` bytes (and extracted `public_values`
+/// internally), while the guest expected bare public_values bytes. Because
+/// the single `process_proof` call site in `sov-prover-incentives` always
+/// passed the raw proof bytes, the guest would `bincode::deserialize` the
+/// full proof as the target public-values type and fail, silently taking the
+/// slashing branch and desynchronizing the witness hint stream with native.
+///
+/// Both sides now decode this wrapper. Native uses `serialized_sp1_proof`
+/// for real cryptographic verification; both sides deserialize `T` out of
+/// `public_values` (and the guest additionally SHA-256s them to issue the
+/// `verify_sp1_proof` deferred-verification syscall).
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct SovSP1AggregatedProof {
+    /// `bincode::serialize(&SP1ProofWithPublicValues)` — only consumed on
+    /// native to run real cryptographic verification. The guest never
+    /// touches this field.
+    pub serialized_sp1_proof: Vec<u8>,
+    /// Pre-extracted public values (`SP1PublicValues::to_vec()`). Used on
+    /// both sides to recover the committed `T` via `bincode::deserialize`,
+    /// and on the guest to compute the SHA-256 digest passed to
+    /// `sp1_zkvm::lib::verify::verify_sp1_proof`.
+    pub public_values: Vec<u8>,
+}
+
 /// A verifier for SP1 proofs.
 #[derive(Default, Clone)]
 pub struct SP1Verifier;
@@ -85,14 +112,15 @@ impl ZkVerifier for SP1Verifier {
     type Error = anyhow::Error;
 
     fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+        serialized_wrapper: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         use core::borrow::Borrow;
         use slop_algebra::AbstractField;
         use slop_algebra::PrimeField32;
 
-        let proof = decode_sp1_proof(serialized_proof)?;
+        let wrapper: SovSP1AggregatedProof = bincode::deserialize(serialized_wrapper)?;
+        let proof = decode_sp1_proof(&wrapper.serialized_sp1_proof)?;
         let is_mock = std::env::var("SP1_PROVER").ok().as_deref() == Some("mock");
 
         if !is_mock {
@@ -122,7 +150,7 @@ impl ZkVerifier for SP1Verifier {
             }
         }
 
-        Ok(bincode::deserialize(proof.public_values.as_slice())?)
+        Ok(bincode::deserialize(wrapper.public_values.as_slice())?)
     }
 }
 
@@ -153,13 +181,14 @@ impl ZkVerifier for SP1Verifier {
     type Error = anyhow::Error;
 
     fn verify<T: DeserializeOwned>(
-        public_values: &[u8],
+        serialized_wrapper: &[u8],
         vkey_hash: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         use sha2::Digest;
-        let public_values_digest: [u8; 32] = sha2::Sha256::digest(public_values).into();
+        let wrapper: SovSP1AggregatedProof = bincode::deserialize(serialized_wrapper)?;
+        let public_values_digest: [u8; 32] = sha2::Sha256::digest(&wrapper.public_values).into();
         sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
-        Ok(bincode::deserialize(public_values)?)
+        Ok(bincode::deserialize(wrapper.public_values.as_slice())?)
     }
 }
 

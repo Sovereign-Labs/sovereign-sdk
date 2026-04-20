@@ -189,12 +189,14 @@ impl<S: Spec> ProverIncentives<S> {
             Paycheck::Penalized => {
                 self.penalize_prover(old_balance, prover_address, state)?;
                 // The state won't be reverted.
+                tracing::debug!("Aggrgeated proof sucesfullt verified but prover was penalized");
                 Err(ProcessProofError::ProverPenalizedNoRevert(
                     "Prover penalized".to_string(),
                 ))
             }
             Paycheck::Rewarded(total_reward) => {
                 self.reward_prover(total_reward, prover_address, state)?;
+                tracing::debug!("Aggrgeated proof sucesfullt verified and prover was rewarded");
                 Ok(public_outputs)
             }
         }
