@@ -182,7 +182,6 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }

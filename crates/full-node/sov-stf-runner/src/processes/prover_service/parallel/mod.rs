@@ -11,7 +11,7 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
-use super::{ProverService, ProverServiceError, RollupProverConfig, Verifier};
+use super::{ProverService, ProverServiceError, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
 
 /// Prover service that generates proofs in parallel.
@@ -26,7 +26,6 @@ where
 {
     inner_vm: InnerVm::Host,
     outer_vm: OuterVm::OuterHost,
-    prover_config: RollupProverConfig,
 
     prover_state: Prover<Address, StateRoot, Witness, Da>,
 
@@ -45,12 +44,10 @@ where
     OuterVm: Zkvm,
 {
     /// Creates a new prover.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         inner_vm: InnerVm::Host,
         outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
-        config: RollupProverConfig,
         num_threads: usize,
         prover_address: Address,
     ) -> Self {
@@ -59,7 +56,6 @@ where
         Self {
             inner_vm,
             outer_vm,
-            prover_config: config,
             prover_state: Prover::new(prover_address, num_threads),
             verifier,
         }
@@ -70,7 +66,6 @@ where
         inner_vm: InnerVm::Host,
         outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
-        config: RollupProverConfig,
         prover_address: Address,
     ) -> Self {
         let num_cpus = num_cpus::get();
@@ -80,7 +75,6 @@ where
             inner_vm,
             outer_vm,
             da_verifier,
-            config,
             num_cpus - 1,
             prover_address,
         )
@@ -123,7 +117,6 @@ where
 
         self.prover_state.start_proving::<InnerVm>(
             state_transition_info,
-            self.prover_config,
             inner_vm,
             self.verifier.clone(),
         )

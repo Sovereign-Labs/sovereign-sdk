@@ -31,7 +31,7 @@ use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::NativeStorage;
 use sov_stf_runner::processes::{
-    start_zk_workflow_in_background, ParallelProverService, RollupProverConfig,
+    start_zk_workflow_in_background, ParallelProverService,
 };
 use sov_stf_runner::{
     initialize_state, query_state_update_info, HttpServerConfig, ProofManagerConfig, RollupConfig,
@@ -282,7 +282,6 @@ pub async fn initialize_runner(
                 inner_vm.clone(),
                 outer_vm.clone(),
                 verifier,
-                RollupProverConfig::Prove,
                 nb_of_prover_threads.unwrap(),
                 MockAddress::new([0u8; 32]),
             );

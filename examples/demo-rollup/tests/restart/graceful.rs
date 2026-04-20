@@ -193,7 +193,6 @@ fn initialize_logging_for_restart(collector: LogCollector, with_stdout: bool) {
 async fn start_stop_empty(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig,
     seed: u64,
     collector: &LogCollector,
 ) -> anyhow::Result<()> {
@@ -225,7 +224,7 @@ async fn start_stop_empty(
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-                c.rollup_prover_config = Some(rollup_prover_config);
+                c.rollup_prover_config = Some(RollupProverConfig::Prove);
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
                     sequencer_conf.ideal_lag_behind_finalized_slot = 3;
@@ -254,14 +253,7 @@ async fn flaky_test_start_stop_zk_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Zk,
-            0,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Zk, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -271,14 +263,7 @@ async fn flaky_test_start_stop_zk_non_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Zk,
-            3,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Zk, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -288,14 +273,7 @@ async fn flaky_test_start_stop_optimistic_instant_finality() -> anyhow::Result<(
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Optimistic,
-            0,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Optimistic, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -305,14 +283,7 @@ async fn flaky_test_start_stop_optimistic_non_instant_finality() -> anyhow::Resu
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Optimistic,
-            3,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Optimistic, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -324,7 +295,6 @@ async fn flaky_test_start_stop_optimistic_non_instant_finality() -> anyhow::Resu
 async fn start_stop_under_load(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig,
     seed: u64,
     collector: &LogCollector,
 ) -> anyhow::Result<()> {
@@ -365,7 +335,7 @@ async fn start_stop_under_load(
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-                c.rollup_prover_config = Some(rollup_prover_config);
+                c.rollup_prover_config = Some(RollupProverConfig::Prove);
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
                     sequencer_conf.ideal_lag_behind_finalized_slot = 3;
@@ -468,14 +438,7 @@ async fn flaky_test_start_stop_under_load_zk_instant_finality() -> anyhow::Resul
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Zk,
-            0,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Zk, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -485,14 +448,7 @@ async fn flaky_test_start_stop_under_load_zk_non_instant_finality() -> anyhow::R
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Zk,
-            3,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Zk, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -502,14 +458,7 @@ async fn flaky_test_start_stop_under_load_optimistic_instant_finality() -> anyho
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Optimistic,
-            0,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Optimistic, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -519,14 +468,7 @@ async fn flaky_test_start_stop_under_load_optimistic_non_instant_finality() -> a
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Optimistic,
-            3,
-            RollupProverConfig::Prove,
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Optimistic, 3, seed, &collector).await?;
     }
     Ok(())
 }

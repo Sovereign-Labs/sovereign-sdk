@@ -76,7 +76,6 @@ where
             inner_vm,
             outer_vm,
             Default::default(),
-            RollupProverConfig::Prove,
             rollup_config.proof_manager.prover_address,
         )
     }
