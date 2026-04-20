@@ -1,5 +1,6 @@
 mod db;
 mod in_flight_blob;
+mod metrics;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,10 +11,8 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use db::BlobSenderDb;
 pub use db::BlobToSend;
-use in_flight_blob::{
-    track_num_of_in_flight_blobs, BlobsEnterScopeMarker, BlobsExitScopeMarker, InFlightBlob,
-    InFlightBlobInfo,
-};
+use in_flight_blob::{InFlightBlob, InFlightBlobInfo};
+use metrics::{track_num_of_in_flight_blobs, BlobsEnterScopeMarker, BlobsExitScopeMarker};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{DaSpec, EventModuleName, RuntimeEventResponse};
 use sov_rollup_interface::common::HexHash;
