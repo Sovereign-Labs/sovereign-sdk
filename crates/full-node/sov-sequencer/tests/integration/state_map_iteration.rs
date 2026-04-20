@@ -63,7 +63,8 @@ generate_optimistic_runtime_with_kernel!(
     modules: [state_map_tester: StateMapTester<S>],
 );
 
-async fn create_test_nomt_rollup() -> (TestRollup<TestNomtBlueprint>, TestUser<TestSpec>) {
+async fn create_test_nomt_rollup_with_long_finalization(
+) -> (TestRollup<TestNomtBlueprint>, TestUser<TestSpec>) {
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
     let admin = genesis_config.additional_accounts()[0].clone();
@@ -97,6 +98,7 @@ async fn create_test_nomt_rollup() -> (TestRollup<TestNomtBlueprint>, TestUser<T
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 6000;
+            config.ideal_lag_behind_finalized_slot = 10;
         }
     })
     .set_da_config(|c| {
@@ -156,9 +158,32 @@ async fn do_step(
     values: &mut BTreeMap<StateKey, u32>,
     iter: u32,
 ) {
+    // Step 1: Send a tx to update the state map.
     send_value_and_update_values(test_rollup, user, key, new_value, values, iter).await;
-    da_layer.produce_and_wait_for_slot().await;
-    assert_state_map_values(test_rollup, values).await;
+
+    // Step 2: Produce a new block, maybe notifying the sequencer
+    //
+    // This if/else is used to exercise the `uncommited changes` path in the sequencer.
+    // For a few blocks (from 20-25), we skip state updates from the node but force close batches. This
+    // causes the sequencer to store multiple blocks worth of updates in its uncommitted changes.
+    //
+    // The rest of the time, we produce a new block and let the state update flow to the sequencer normally.
+    if iter >= 20 && iter < 25 {
+        if iter == 20 {
+            test_rollup.pause_preferred_batches().await;
+        }
+        da_layer.produce_block().await.unwrap();
+        test_rollup.force_close_batch().await.unwrap();
+    } else {
+        if iter == 25 {
+            test_rollup.resume_preferred_batches().await;
+        }
+        // The normal path:
+        da_layer.produce_and_wait_for_slot().await;
+    }
+
+    // Step 3: Assert that the state map values returned from the REST API match the local BTreeMap of expected items.
+    fetch_and_assert_state_map_values(test_rollup, values).await;
 }
 
 /// Test that state map iteration yields the correct values.
@@ -169,7 +194,7 @@ async fn do_step(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_state_map_iteration() {
     let nb_of_blocks = 15;
-    let (test_rollup, user) = create_test_nomt_rollup().await;
+    let (test_rollup, user) = create_test_nomt_rollup_with_long_finalization().await;
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(nb_of_blocks).await;
@@ -216,7 +241,7 @@ async fn test_state_map_iteration() {
     test_rollup.shutdown().await.unwrap();
 }
 
-async fn assert_state_map_values(
+async fn fetch_and_assert_state_map_values(
     test_rollup: &TestRollup<TestNomtBlueprint>,
     values: &BTreeMap<StateKey, u32>,
 ) {
