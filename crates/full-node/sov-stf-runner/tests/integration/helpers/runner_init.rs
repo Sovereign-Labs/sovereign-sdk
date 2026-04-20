@@ -30,9 +30,7 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::NativeStorage;
-use sov_stf_runner::processes::{
-    start_zk_workflow_in_background, ParallelProverService,
-};
+use sov_stf_runner::processes::{start_zk_workflow_in_background, ParallelProverService};
 use sov_stf_runner::{
     initialize_state, query_state_update_info, HttpServerConfig, ProofManagerConfig, RollupConfig,
     RunnerConfig, StateTransitionRunner,

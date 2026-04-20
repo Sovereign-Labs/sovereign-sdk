@@ -39,6 +39,13 @@ pub enum RollupProverConfig {
     Disabled,
 }
 
+impl RollupProverConfig {
+    /// Returns `true` unless the prover is disabled.
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, RollupProverConfig::Disabled)
+    }
+}
+
 impl Debug for RollupProverConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_string())

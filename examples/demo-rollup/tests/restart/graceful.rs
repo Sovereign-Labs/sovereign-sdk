@@ -224,7 +224,7 @@ async fn start_stop_empty(
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-                c.rollup_prover_config = Some(RollupProverConfig::Prove);
+                c.rollup_prover_config = RollupProverConfig::Prove;
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
                     sequencer_conf.ideal_lag_behind_finalized_slot = 3;
@@ -335,7 +335,7 @@ async fn start_stop_under_load(
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-                c.rollup_prover_config = Some(RollupProverConfig::Prove);
+                c.rollup_prover_config = RollupProverConfig::Prove;
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
                     sequencer_conf.ideal_lag_behind_finalized_slot = 3;
@@ -498,7 +498,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-        c.rollup_prover_config = Some(RollupProverConfig::Prove);
+        c.rollup_prover_config = RollupProverConfig::Prove;
         // Since we have the prover enabled, we need to disable state root consistency checks.
         if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
             sequencer_conf.disable_state_root_consistency_checks = true;
@@ -655,7 +655,7 @@ async fn check_with_increasing_stf_infos(
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-        c.rollup_prover_config = Some(RollupProverConfig::Prove);
+        c.rollup_prover_config = RollupProverConfig::Prove;
         c.aggregated_proof_block_jump = aggregated_proof_jump;
         c.max_channel_size = max_channel_size;
         c.max_infos_in_db = max_infos_in_db;

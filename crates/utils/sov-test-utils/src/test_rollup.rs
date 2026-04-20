@@ -107,7 +107,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub max_infos_in_db: u64,
     pub max_channel_size: u64,
     pub telegraf_address: sov_stf_runner::TelegrafSocketConfig,
-    pub rollup_prover_config: Option<RollupProverConfig>,
+    pub rollup_prover_config: RollupProverConfig,
     pub storage: StoragePath,
     pub axum_host: String,
     pub axum_port: u16,
@@ -193,9 +193,9 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     /// Enables the prover for this rollup. Equivalent to setting
-    /// [`RollupBuilderConfig::rollup_prover_config`] to `Some(RollupProverConfig::Prove)`.
+    /// [`RollupBuilderConfig::rollup_prover_config`] to [`RollupProverConfig::Prove`].
     pub fn enable_prover(mut self) -> Self {
-        self.config.rollup_prover_config = Some(RollupProverConfig::Prove);
+        self.config.rollup_prover_config = RollupProverConfig::Prove;
 
         self.disable_state_root_consistency_checks()
     }
@@ -247,7 +247,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
 
         let mut node_id = None;
         if let SequencerKindConfig::Preferred(sequencer_conf) = &self.config.sequencer_config {
-            if self.config.rollup_prover_config.is_some()
+            if self.config.rollup_prover_config.is_enabled()
                 && !sequencer_conf.disable_state_root_consistency_checks
             {
                 tracing::warn!("Prover process is enabled, but state root consistency checks are not disabled. This will cause crashes in the sequencer since proofs are created but not yet handled by the sequencer. Consider disabling one of the two options.");
@@ -414,7 +414,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             prover_address: TEST_DEFAULT_PROVER_ADDRESS.to_string(),
             sequencer_address: TEST_DEFAULT_SEQUENCER_ADDRESS.to_string(),
             aggregated_proof_block_jump: 1,
-            rollup_prover_config: None,
+            rollup_prover_config: RollupProverConfig::Disabled,
             storage: storage_path,
             telegraf_address: MonitoringConfig::standard().telegraf_address,
             axum_host: "127.0.0.1".to_string(),

@@ -6,6 +6,7 @@ use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::macros::config_value;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_sequencer::{SeqConfigExtension, SequencerKindConfig, SovRateLimiterConfig};
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
 use tempfile::TempDir;
 
@@ -53,7 +54,7 @@ async fn start_node_with_genesis(
         .set_config(|c| {
             c.storage = StoragePath::Tmp(dir.into());
             c.max_concurrent_blobs = 65536;
-            c.rollup_prover_config = None;
+            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 5;
             c.max_infos_in_db = 30;
             c.max_channel_size = 20;

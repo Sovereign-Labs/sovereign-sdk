@@ -4,6 +4,7 @@ use sov_modules_api::Runtime;
 use sov_modules_rollup_blueprint::logging::initialize_logging;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
 use sov_test_utils::{
@@ -46,7 +47,7 @@ async fn start_and_stop_node_in_dir(dir: Arc<TempDir>) {
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
     })
     .with_standard_sequencer()
     .start()

@@ -22,6 +22,7 @@ use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
 use sov_sequencer::{SeqConfigExtension, SovRateLimiterConfig};
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 
 use crate::test_helpers::test_genesis_source;
@@ -52,7 +53,7 @@ async fn start_node(
     .with_rate_limiter(rate_limiter)
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
@@ -137,7 +138,7 @@ pub async fn setup_test_rollup_with_paymaster(
     .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
@@ -169,7 +170,7 @@ pub async fn setup_test_rollup_with_selective_paymaster(
     .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;

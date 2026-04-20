@@ -24,7 +24,7 @@ use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::docker::pull_image_with_retries;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult};
 use testcontainers::runners::AsyncRunner;
@@ -165,7 +165,7 @@ pub async fn setup_rollup(
         DEFAULT_FINALIZATION_BLOCKS,
     )
     .set_config(|config| {
-        config.rollup_prover_config = None;
+        config.rollup_prover_config = RollupProverConfig::Disabled;
         config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
             minimum_profit_per_tx: 0,
             ..Default::default()

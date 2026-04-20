@@ -17,6 +17,7 @@ use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, RawTx, Runtime, Spec, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::logging::LogCollector;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
@@ -108,7 +109,7 @@ async fn start_rollup(
         )
         .enable_prover()
         .set_config(|c| {
-            c.rollup_prover_config = None;
+            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 10;
             c.max_concurrent_blobs = 92;
             if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {

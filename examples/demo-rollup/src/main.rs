@@ -95,11 +95,6 @@ async fn run() -> anyhow::Result<()> {
     let prover_config = parse_prover_config().expect("Failed to parse prover config");
     tracing::info!(?prover_config, "Running demo rollup with prover config");
 
-    let prover_config = match prover_config {
-        RollupProverConfig::Disabled => None,
-        other => Some(other),
-    };
-
     let start_at_rollup_height = args.start_at_rollup_height.map(RollupHeight::new);
     let stop_at_rollup_height = args.stop_at_rollup_height.map(RollupHeight::new);
 
@@ -230,7 +225,7 @@ fn example_tune_live_nomt_table_for_small_writes(
 async fn new_rollup_with_celestia_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
@@ -257,7 +252,7 @@ async fn new_rollup_with_celestia_da(
 async fn new_rollup_with_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {
@@ -287,7 +282,7 @@ async fn new_rollup_with_mock_da(
 async fn new_rollup_with_sp1_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
@@ -317,7 +312,7 @@ async fn new_rollup_with_sp1_mock_da(
 async fn new_rollup_with_external_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {
