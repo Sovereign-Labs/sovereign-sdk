@@ -1,0 +1,60 @@
+use std::io::Write;
+
+use sov_metrics::Metric;
+
+/// Metrics tracking the depth of the STF info channel between the state manager and the ZK prover.
+/// Emitted after each `Sender::notify()` batch to detect backpressure.
+#[derive(Debug)]
+pub(crate) struct ZkStfInfoChannelMetrics {
+    /// Number of items currently in the mpsc channel.
+    pub channel_depth: usize,
+    /// Maximum capacity of the channel.
+    pub channel_capacity: usize,
+}
+
+impl Metric for ZkStfInfoChannelMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_zk_stf_info_channel"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} channel_depth={},channel_capacity={}",
+            self.measurement_name(),
+            self.channel_depth,
+            self.channel_capacity,
+        )
+    }
+}
+
+/// Metrics tracking the state of the ZK proof manager pipeline.
+/// Emitted on every `process_stf_info()` call.
+#[derive(Debug)]
+pub(crate) struct ZkProofManagerMetrics {
+    /// Difference between latest received slot and the first unproven height.
+    /// Represents the total proving lag across the pipeline.
+    pub proving_lag: u64,
+    /// Number of blocks in the current aggregation batch.
+    pub proofs_to_create: usize,
+    /// The slot number of the most recently received state transition.
+    pub slot_number: u64,
+}
+
+impl Metric for ZkProofManagerMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_zk_proof_manager"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} proving_lag={},proofs_to_create={},slot_number={}",
+            self.measurement_name(),
+            self.proving_lag,
+            self.proofs_to_create,
+            self.slot_number,
+        )
+    }
+}
+
