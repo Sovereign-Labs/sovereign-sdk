@@ -63,46 +63,52 @@ updated during consecutive runs.
 
 ## Chaos Engineering
 
-[Toxiproxy](https://github.com/Shopify/toxiproxy) enables chaos engineering by simulating network failures and instabilities. 
-Use it to test how the rollup behaves when the connection to celestia-node is unreliable.
+[Toxiproxy](https://github.com/Shopify/toxiproxy) sits between the rollup and its
+upstreams (Postgres + Celestia DA RPC/gRPC) so we can inject latency, timeouts, and
+connection resets. The toxiproxy scripts live in [`../scripts/chaos/`](../scripts/chaos/)
+and work for both baremetal and docker — baremetal is the default; docker mode is
+selected via env vars.
 
 ### Setup
 
-1. Uncomment the toxiproxy service in [`docker-compose.yml`](./docker-compose.yml)
-2. Configure your rollup to connect to port `26659` (proxied) instead of `26658` (direct)
+1. Uncomment the `toxiproxy` service in [`docker-compose.yml`](./docker-compose.yml).
+2. Start it: `docker compose up -d toxiproxy`.
+3. Populate the seven proxies from the host shell:
+   ```bash
+   LISTEN_ADDR=0.0.0.0 POSTGRES_UPSTREAM=host.docker.internal:5432 \
+     ../scripts/chaos/toxi_apply_config.sh
+   ```
+4. Point the rollup at the proxied ports (`5433` for postgres, `26678` for celestia
+   RPC, `9091` for celestia gRPC).
 
 ### Usage
 
-The proxy starts without any network toxics enabled. Use the provided scripts to control network conditions:
+Apply chaos via the scenario CLI (or the `make` shortcuts below):
 
 ```bash
-# Enable standard toxics (light network issues)
-docker/toxiproxy/enable_standard_toxics.sh
+# Steady DA latency on the primary rollup
+make enable-chaos-std
 
-# Enable brutal toxics (severe network issues)
-docker/toxiproxy/enable_brutal_toxics.sh
+# Compound failure: DA latency + postgres connection resets
+make enable-chaos-brutal
 
-# Remove all toxics (restore normal network)
-docker/toxiproxy/remove_toxics.sh
-
-# Check current toxic status
-docker/toxiproxy/status_chaos.sh
+# Or run scenarios directly:
+../scripts/chaos/toxi_scenario.sh scenario P5 primary
+../scripts/chaos/toxi_scenario.sh clear all
+../scripts/chaos/toxi_scenario.sh list
 ```
 
-Available toxic types include latency, timeouts, connection resets, and bandwidth limiting. 
-This allows you to test rollup resilience under various network failure scenarios.
+See `../scripts/chaos/toxi_scenario.sh --help` for the full list of named toxics
+(`rpc-latency`, `rpc-timeout`, `pg-reset`, `pg-latency`) and scenarios (`P1`–`P7`,
+`R1`–`R2`).
 
 ### Troubleshooting
 
-**Toxiproxy crashes when adding toxics:**
-- This happens when trying to add toxics to a proxy with active connections
-- Solution: Restart toxiproxy and try again:
-  ```bash
-  docker compose restart toxiproxy
-  # Wait a few seconds, then try adding toxics again
-  ```
+**Toxiproxy crashes when adding toxics to a proxy with active connections:**
+```bash
+make restart-toxiproxy
+```
+This restarts the container and re-populates all seven proxies in one shot.
 
-**Best practices:**
-- Add toxics immediately after starting toxiproxy, before connections are established
-- Use the remove script to clean up toxics before stopping services
-- Monitor toxiproxy logs for crash indicators: `docker compose logs toxiproxy`
+Add toxics immediately after starting toxiproxy, before connections are established.
+Tail logs with `docker compose logs toxiproxy`.

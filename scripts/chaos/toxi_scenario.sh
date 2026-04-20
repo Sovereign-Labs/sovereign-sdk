@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
-# scenario.sh — toxic + scenario CLI for the sovereign-soak toxiproxy setup.
+# toxi_scenario.sh — toxic + scenario CLI for the sovereign-soak toxiproxy setup.
 #
 # Targets:
 #   primary   → *_1 proxies   (default)
 #   replica   → *_2 proxies
 #   both      → *_1 and *_2
+#   tertiary  → postgres_3    (postgres class only — no celestia _3 proxies exist)
 #   all       → every proxy   (clear only)
 #
 # Usage:
-#   scenario.sh list
-#   scenario.sh clear [primary|replica|both|all]          # default: all
-#   scenario.sh toxic <NAME> [primary|replica|both]       # default: primary
-#   scenario.sh scenario <ID> [primary|replica|both]      # default: primary
+#   toxi_scenario.sh list
+#   toxi_scenario.sh clear [primary|replica|both|tertiary|all]   # default: all
+#   toxi_scenario.sh toxic <NAME> [primary|replica|both|tertiary]  # default: primary
+#   toxi_scenario.sh scenario <ID> [primary|replica|both|tertiary] # default: primary
+#
+# tertiary is only valid for pg-* toxics and pg-only scenarios (P1/P3/P4).
+# Reaching for tertiary on an rpc/grpc class is a hard error.
 #
 # Named toxics:
 #   rpc-latency    celestia_rpc  latency 300ms ±200ms
@@ -41,6 +45,10 @@ export TOXIPROXY_URL="http://${HOST}"
 
 die() { echo "error: $*" >&2; exit 2; }
 
+for bin in "${CLI}" curl jq; do
+  command -v "${bin}" >/dev/null || die "${bin} not found in PATH"
+done
+
 # ----- proxy name expansion --------------------------------------------------
 
 # class_proxies <class> <target>   → prints proxy names, one per line
@@ -50,7 +58,12 @@ class_proxies() {
     primary) printf '%s_1\n' "${class}" ;;
     replica) printf '%s_2\n' "${class}" ;;
     both)    printf '%s_1\n%s_2\n' "${class}" "${class}" ;;
-    *) die "bad target '${target}' (expected primary|replica|both)" ;;
+    tertiary)
+      [[ "${class}" == "postgres" ]] \
+        || die "tertiary target only valid for postgres class (got '${class}')"
+      printf 'postgres_3\n'
+      ;;
+    *) die "bad target '${target}' (expected primary|replica|both|tertiary)" ;;
   esac
 }
 
@@ -58,11 +71,12 @@ class_proxies() {
 all_proxies_for_target() {
   local target="$1"
   case "${target}" in
-    primary) echo "postgres_1 celestia_rpc_1 celestia_grpc_1" ;;
-    replica) echo "postgres_2 celestia_rpc_2 celestia_grpc_2" ;;
-    both)    echo "postgres_1 celestia_rpc_1 celestia_grpc_1 postgres_2 celestia_rpc_2 celestia_grpc_2" ;;
-    all)     echo "postgres_1 postgres_2 celestia_rpc_1 celestia_rpc_2 celestia_grpc_1 celestia_grpc_2" ;;
-    *) die "bad target '${target}' (expected primary|replica|both|all)" ;;
+    primary)  echo "postgres_1 celestia_rpc_1 celestia_grpc_1" ;;
+    replica)  echo "postgres_2 celestia_rpc_2 celestia_grpc_2" ;;
+    both)     echo "postgres_1 celestia_rpc_1 celestia_grpc_1 postgres_2 celestia_rpc_2 celestia_grpc_2" ;;
+    tertiary) echo "postgres_3" ;;
+    all)      echo "postgres_1 postgres_2 postgres_3 celestia_rpc_1 celestia_rpc_2 celestia_grpc_1 celestia_grpc_2" ;;
+    *) die "bad target '${target}' (expected primary|replica|both|tertiary|all)" ;;
   esac
 }
 
@@ -191,7 +205,7 @@ cmd_list() {
   "${CLI}" list
   echo
   local p
-  for p in postgres_1 celestia_rpc_1 celestia_grpc_1; do
+  for p in postgres_1 postgres_2 postgres_3 celestia_rpc_1 celestia_rpc_2 celestia_grpc_1 celestia_grpc_2; do
     echo "---- ${p} ----"
     "${CLI}" inspect "${p}" || true
   done
@@ -207,21 +221,24 @@ cmd_clear() {
 }
 
 cmd_toxic() {
-  [[ $# -ge 1 ]] || die "usage: scenario.sh toxic <NAME> [primary|replica|both]"
+  [[ $# -ge 1 ]] || die "usage: toxi_scenario.sh toxic <NAME> [primary|replica|both|tertiary]"
   apply_named_toxic "$1" "${2:-primary}"
   echo "applied toxic '$1' on target: ${2:-primary}"
 }
 
 cmd_scenario() {
-  [[ $# -ge 1 ]] || die "usage: scenario.sh scenario <ID> [primary|replica|both]"
+  [[ $# -ge 1 ]] || die "usage: toxi_scenario.sh scenario <ID> [primary|replica|both|tertiary]"
   local id="$1" target="${2:-primary}"
   case "${id}" in
-    P1|P2|P3|P4|P5|P6|P7) "scenario_${id}" "${target}" ;;
+    P2|P5|P6|P7)
+      [[ "${target}" != "tertiary" ]] \
+        || die "scenario ${id} touches a celestia class — tertiary is postgres-only"
+      "scenario_${id}" "${target}"
+      ;;
+    P1|P3|P4) "scenario_${id}" "${target}" ;;
     R1|R2)
-      # Replica scenarios only ever touch *_2 proxies; warn if user asked for primary.
-      if [[ "${target}" != "replica" && "${target}" != "both" ]]; then
-        echo "note: scenario ${id} targets the replica regardless of '${target}' arg" >&2
-      fi
+      [[ -z "${2:-}" || "${2}" == "replica" ]] \
+        || die "scenario ${id} is replica-only; do not pass '${2}'"
       "scenario_${id}"
       ;;
     *) die "unknown scenario '${id}' (expected P1..P7 or R1..R2)" ;;
@@ -230,14 +247,14 @@ cmd_scenario() {
 }
 
 main() {
-  [[ $# -ge 1 ]] || { sed -n '2,40p' "$0"; exit 1; }
+  [[ $# -ge 1 ]] || { awk 'NR>1 && /^[^#]/{exit} NR>1{print}' "$0"; exit 1; }
   local cmd="$1"; shift
   case "${cmd}" in
     list)     cmd_list "$@" ;;
     clear)    cmd_clear "$@" ;;
     toxic)    cmd_toxic "$@" ;;
     scenario) cmd_scenario "$@" ;;
-    -h|--help|help) sed -n '2,40p' "$0" ;;
+    -h|--help|help) awk 'NR>1 && /^[^#]/{exit} NR>1{print}' "$0" ;;
     *) die "unknown command '${cmd}'" ;;
   esac
 }

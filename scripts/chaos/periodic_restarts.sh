@@ -1,15 +1,38 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# periodic_restarts.sh — restart the rollup process on a random cadence.
+#
+# Each loop iteration: stop, sleep 3-7s, start, wait for ready, sleep 5-10min, repeat.
+#
+# Env (all overridable; defaults are baremetal+systemd):
+#   STOP_CMD       graceful stop          default: systemctl stop rollup
+#   KILL_CMD       SIGKILL                default: bash -c 'pid=$(systemctl show -p MainPID --value rollup);
+#                                                          [ "$pid" -gt 0 ] && kill -9 "$pid" || true'
+#   START_CMD      start                  default: systemctl start rollup
+#   READY_URL      readiness probe URL    default: http://127.0.0.1:12346/sequencer/ready
+#   READY_TIMEOUT  seconds to wait ready  default: 120
+#
+# Docker example:
+#   STOP_CMD="docker compose stop rollup" \
+#     KILL_CMD="docker compose kill -s KILL rollup" \
+#     START_CMD="docker compose start rollup" \
+#     ./periodic_restarts.sh
 
-set -e
+set -euo pipefail
 
-SERVICE="rollup"
-READY_URL="http://127.0.0.1:12346/sequencer/ready"
-READY_TIMEOUT=120
+STOP_CMD="${STOP_CMD:-systemctl stop rollup}"
+# shellcheck disable=SC2016  # the inner $pid expansion happens in the bash -c subshell, not here
+KILL_CMD="${KILL_CMD:-bash -c 'pid=\$(systemctl show -p MainPID --value rollup); [ \"\$pid\" -gt 0 ] && kill -9 \"\$pid\" || true'}"
+START_CMD="${START_CMD:-systemctl start rollup}"
+READY_URL="${READY_URL:-http://127.0.0.1:12346/sequencer/ready}"
+READY_TIMEOUT="${READY_TIMEOUT:-120}"
+
 FORCE_KILL=false
 
 usage() {
     echo "Usage: $0 [-f|--force]"
-    echo "  -f, --force    Kill service with SIGKILL instead of graceful stop"
+    echo "  -f, --force    Kill via KILL_CMD (SIGKILL) instead of STOP_CMD"
+    echo
+    echo "Override behavior with STOP_CMD / KILL_CMD / START_CMD / READY_URL env vars."
     exit 1
 }
 
@@ -17,24 +40,20 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -f|--force) FORCE_KILL=true; shift ;;
         -h|--help) usage ;;
-        *) echo "Unknown option: $1"; usage ;;
+        *) echo "Unknown option: $1" >&2; usage ;;
     esac
 done
 
+command -v curl >/dev/null || { echo "curl required" >&2; exit 1; }
+
 stop_service() {
     if $FORCE_KILL; then
-        pid=$(systemctl show -p MainPID --value "$SERVICE")
-        if [[ "$pid" -gt 0 ]]; then
-            echo "$(date): Killing $SERVICE (PID $pid) with SIGKILL"
-            kill -9 "$pid" 2>/dev/null || true
-            # Wait for systemd to notice
-            sleep 1
-        else
-            echo "$(date): Service not running, nothing to kill"
-        fi
+        echo "$(date): Force-killing service"
+        eval "$KILL_CMD" || true
+        sleep 1
     else
-        echo "$(date): Stopping $SERVICE gracefully"
-        systemctl stop "$SERVICE"
+        echo "$(date): Stopping service gracefully"
+        eval "$STOP_CMD"
     fi
 }
 
@@ -45,13 +64,13 @@ while true; do
     echo "$(date): Sleeping $sleep_sec seconds"
     sleep "$sleep_sec"
 
-    echo "$(date): Starting $SERVICE"
-    systemctl start "$SERVICE"
+    echo "$(date): Starting service"
+    eval "$START_CMD"
 
     echo "$(date): Waiting for ready (timeout: ${READY_TIMEOUT}s)"
     start_time=$(date +%s)
     while true; do
-        if curl -s -o /dev/null -w '' --max-time 5 "$READY_URL"; then
+        if curl -s -o /dev/null --max-time 5 "$READY_URL"; then
             echo "$(date): Ready"
             break
         fi
