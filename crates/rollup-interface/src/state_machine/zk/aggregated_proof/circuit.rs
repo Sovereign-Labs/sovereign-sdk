@@ -10,7 +10,7 @@ use super::common::{AggregatedProofWitness, DeferredProofInput};
 use super::{AggregatedProofPublicData, CodeCommitmentHash};
 use crate::common::SlotNumber;
 use crate::da::{BlockHeaderTrait, DaSpec};
-use crate::zk::{StateTransitionPublicData, ZkVerifier, ZkvmGuest};
+use crate::zk::{CodeCommitmentTrait, StateTransitionPublicData, ZkVerifier, ZkvmGuest};
 
 struct BoundaryData<Hash, Root> {
     slot_hash: Hash,
@@ -34,7 +34,7 @@ where
     Address: Clone + Serialize + DeserializeOwned,
     Da: DaSpec,
     Root: Clone + Debug + PartialEq + Serialize + DeserializeOwned,
-    V: ZkVerifier<CodeCommitment = CodeCommitmentHash>,
+    V: ZkVerifier,
     G: ZkvmGuest<Verifier = V>,
 {
     let AggregatedProofWitness {
@@ -49,7 +49,7 @@ where
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
         let public_data = V::verify::<AggregatedProofPublicData<Address, Da, Root>>(
             &prev_outer_proof_witness.public_values,
-            &outer_vkey_hash,
+            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
         )
         .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
 
@@ -64,7 +64,7 @@ where
     let verified_proof_data: VerifyResult<Address, Da, Root> =
         verify_proof_chain::<Address, Da, Root, V>(
             proof_inputs,
-            &inner_vkey_hash,
+            inner_vkey_hash.clone(),
             previous_public_data.as_ref(),
         );
 
@@ -102,14 +102,14 @@ where
 
 fn verify_proof_chain<Address, Da, Root, V>(
     proof_inputs: Vec<DeferredProofInput<Da>>,
-    vkey_hash: &CodeCommitmentHash,
+    vkey_hash: CodeCommitmentHash,
     previous_agg_proof_public_data: Option<&AggregatedProofPublicData<Address, Da, Root>>,
 ) -> VerifyResult<Address, Da, Root>
 where
     Address: Clone + Serialize + DeserializeOwned,
     Da: DaSpec,
     Root: Clone + Debug + PartialEq + Serialize + DeserializeOwned,
-    V: ZkVerifier<CodeCommitment = CodeCommitmentHash>,
+    V: ZkVerifier,
 {
     assert!(
         !proof_inputs.is_empty(),
@@ -134,7 +134,7 @@ where
     for (index, proof_input) in proof_inputs.iter().enumerate() {
         let stf_public_data = V::verify::<StateTransitionPublicData<Address, Da, Root>>(
             &proof_input.public_values,
-            vkey_hash,
+            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
         )
         .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 

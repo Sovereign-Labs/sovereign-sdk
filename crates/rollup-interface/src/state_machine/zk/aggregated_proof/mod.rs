@@ -83,12 +83,6 @@ impl core::fmt::Display for CodeCommitmentHash {
     }
 }
 
-impl crate::zk::CodeCommitmentTrait for CodeCommitmentHash {
-    fn to_hash(&self) -> anyhow::Result<CodeCommitmentHash> {
-        Ok(self.clone())
-    }
-}
-
 /// Public data of an aggregated proof.
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {

@@ -4,14 +4,13 @@ use sov_mock_da::{MockDaService, MockDaSpec};
 use sov_modules_api::{AggregatedProofPublicData, Spec, Storage, ZkVerifier};
 use sov_rollup_interface::common::SlotNumber;
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::{SP1MethodId, SP1Verifier, SP1};
+use sov_sp1_adapter::{SP1Verifier, SP1};
 use sov_stf_runner::processes::{
     ParallelProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
     RollupProverConfigDiscriminants, StateTransitionInfo,
 };
 
 use super::{DefaultSpec, ProofStateRoot, ProofWitness};
-use sov_rollup_interface::zk::ZkvmHost;
 
 type TestParallelProverService = ParallelProverService<
     <DefaultSpec as Spec>::Address,
@@ -43,20 +42,12 @@ async fn test_parallel_proof_generation() {
         .await
         .unwrap();
 
-    let inner_vm_clone = inner_vm.clone();
-
-    let code_commitment: SP1MethodId = tokio::task::spawn_blocking(move || -> SP1MethodId {
-        inner_vm_clone
-            .code_commitment()
-            .expect("SP1 code commitment should be created successfully")
-    })
-    .await
-    .unwrap();
-
     let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
+    let inner_vm_clone = inner_vm.clone();
+
     let outer_vm = tokio::task::spawn_blocking(move || {
-        SP1AggregationHost::new(agg_elf, code_commitment).unwrap()
+        SP1AggregationHost::new(agg_elf, inner_vm_clone.verifying_key().clone()).unwrap()
     })
     .await
     .unwrap();
@@ -131,9 +122,5 @@ async fn test_parallel_proof_generation() {
         <DefaultSpec as Spec>::Address,
         MockDaSpec,
         <<DefaultSpec as Spec>::Storage as Storage>::Root,
-    > = tokio::task::spawn_blocking(move || {
-        SP1Verifier::verify(&status.raw_aggregated_proof, &outer_code_commitment).unwrap()
-    })
-    .await
-    .unwrap();
+    > = SP1Verifier::verify(&status.raw_aggregated_proof, &outer_code_commitment).unwrap();
 }
