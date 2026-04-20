@@ -148,6 +148,13 @@ impl SP1AggregationHost {
 pub struct SP1Host {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
+    /// Verifying key of the *outer* (aggregation) program. Required whenever
+    /// the STF guest driven by this host may call `V::verify` on a proof blob
+    /// at runtime — which happens inside `sov_prover_incentives::process_proof`.
+    /// Without it, `add_hint_deferred_and_run` refuses to inject deferred
+    /// proofs. Left `None` for hosts that only prove programs which never call
+    /// `V::verify`.
+    outer_vk: Option<Arc<SP1VerifyingKey>>,
 }
 
 /// Instantiate a new SP1 Host.
@@ -163,7 +170,21 @@ impl SP1Host {
         Ok(Self {
             prover,
             pk: Arc::new(pk),
+            outer_vk: None,
         })
+    }
+
+    /// Configure the aggregation-program verifying key used to validate
+    /// deferred proofs emitted by the STF guest's `V::verify` calls.
+    ///
+    /// Under `SP1_PROVER=mock` this is not required (the SP1 executor runs
+    /// with `deferred_proof_verification(false)`, turning the verify syscall
+    /// into a no-op). Under real backends, failing to set it and then trying
+    /// to prove an STF slot that contains a proof blob will panic inside the
+    /// SP1 executor on an unmatched `syscall_verify_sp1_proof`.
+    pub fn with_outer_vk(mut self, vk: SP1VerifyingKey) -> Self {
+        self.outer_vk = Some(Arc::new(vk));
+        self
     }
 
     /// Create a new `Sp1Guest` that reads the provided hints
@@ -246,6 +267,44 @@ impl ZkvmHost for SP1Host {
 
     fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
         let mut stdin = SP1Stdin::new();
+        stdin.write(item);
+        let output = self.run_helper(stdin)?;
+        Ok(bincode::serialize(&output)?)
+    }
+
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        deferred_proofs: &[Vec<u8>],
+    ) -> anyhow::Result<Vec<u8>> {
+        if deferred_proofs.is_empty() {
+            return self.add_hint_and_run(item);
+        }
+
+        let outer_vk = self.outer_vk.clone().ok_or_else(|| {
+            anyhow::anyhow!(
+                "SP1Host: outer_vk must be set via `with_outer_vk` before proving an STF \
+                 slot that contains proof blobs; the aggregation vk is required to inject \
+                 deferred proofs that the STF guest's `V::verify` calls can satisfy"
+            )
+        })?;
+
+        let mut stdin = SP1Stdin::new();
+        for raw_agg_proof in deferred_proofs {
+            // `raw_agg_proof` is the bytes the STF guest hands to
+            // `SP1Verifier::verify` — i.e. the `SovSP1AggregatedProof` wrapper.
+            // Unwrap to get the underlying SP1ProofWithPublicValues bytes that
+            // `add_proof_helper` expects, which will register the compressed
+            // proof as a deferred verification against `outer_vk`.
+            let wrapper: crate::SovSP1AggregatedProof = bincode::deserialize(raw_agg_proof)
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "SP1Host: failed to decode `SovSP1AggregatedProof` wrapper from proof \
+                         blob: {e}"
+                    )
+                })?;
+            self.add_proof_helper(&mut stdin, &wrapper.serialized_sp1_proof, &outer_vk)?;
+        }
         stdin.write(item);
         let output = self.run_helper(stdin)?;
         Ok(bincode::serialize(&output)?)

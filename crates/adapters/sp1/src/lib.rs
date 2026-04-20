@@ -150,7 +150,12 @@ impl ZkVerifier for SP1Verifier {
             }
         }
 
-        Ok(bincode::deserialize(wrapper.public_values.as_slice())?)
+        // Decode `T` from the public_values embedded *inside* the decoded SP1
+        // proof — those are the bytes cryptographically bound by the proof
+        // above. The `wrapper.public_values` field is only a convenience for
+        // the guest (which cannot decode the full proof) and is not trusted
+        // here.
+        Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
 

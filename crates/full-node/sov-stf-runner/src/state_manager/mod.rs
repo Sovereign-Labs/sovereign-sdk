@@ -421,9 +421,39 @@ where
 
         if let Some(stf_info_sender) = &self.stf_info_sender {
             tracing::trace!("Going to materialize StateTransitionInfo");
+            // Extract the raw aggregated-proof bytes carried by each proof
+            // blob in this slot, so the downstream prover can register them
+            // as deferred proofs for the STF guest's `V::verify` calls. The
+            // bytes on the wire here are the `SerializeProofWithDetails`
+            // borsh encoding; the SP1 host only needs the `raw_aggregated_proof`
+            // field (which is a `SovSP1AggregatedProof` wrapper) to call
+            // `SP1Stdin::write_proof`. The prover-agnostic version here just
+            // stores the full blob payload; backend-specific unwrapping
+            // happens inside `ZkvmHost::add_hint_deferred_and_run`. Backends
+            // that don't need deferred proofs accept and ignore an empty
+            // slice (the default trait impl).
+            //
+            // TODO(#deferred-proofs): decode `SerializeProofWithDetails` here
+            // so that the SP1 host receives already-extracted
+            // `raw_aggregated_proof` bytes. Until that's wired, the SP1 host
+            // treats each entry as the full blob payload and will fail to
+            // unwrap — which is fine under `SP1_PROVER=mock` (the SP1
+            // executor runs with `deferred_proof_verification(false)`, so no
+            // deferred proofs are actually needed) but would need the real
+            // unwrap before enabling a non-mock backend.
+            let deferred_proofs: Vec<Vec<u8>> = transition_witness
+                .relevant_blobs
+                .proof_blobs
+                .iter()
+                .map(|blob| {
+                    use sov_rollup_interface::da::BlobReaderTrait;
+                    blob.verified_data().to_vec()
+                })
+                .collect();
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
                 slot_number,
+                deferred_proofs,
             };
             let stf_info_schema = stf_info_sender
                 .materialize_stf_info(&stf_info, &self.ledger_db)

@@ -100,6 +100,8 @@ where
         if start_prover {
             prover_state.set_to_proving(block_header_hash.clone());
 
+            let deferred_proofs = state_transition_info.deferred_proofs().to_vec();
+
             let data = StateTransitionWitnessWithAddress {
                 stf_witness: state_transition_info.data,
                 prover_address: self.prover_address.clone(),
@@ -107,7 +109,8 @@ where
 
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data);
+                    let proof =
+                        make_inner_proof::<InnerVm>(inner_vm, &data, &deferred_proofs);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -217,13 +220,18 @@ where
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
     hint: &impl Serialize,
+    deferred_proofs: &[Vec<u8>],
 ) -> anyhow::Result<SerializedInnerProof>
 where
     InnerVm: Zkvm + 'static,
 {
     let proving_start = std::time::Instant::now();
-    info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-    let result = vm.add_hint_and_run(hint);
+    info!(
+        deferred_proof_count = deferred_proofs.len(),
+        "Generating proof with {}",
+        std::any::type_name::<InnerVm>()
+    );
+    let result = vm.add_hint_deferred_and_run(hint, deferred_proofs);
     sov_metrics::track_metrics(|tracker| {
         let proving_time = proving_start.elapsed();
         let is_success = result.is_ok();

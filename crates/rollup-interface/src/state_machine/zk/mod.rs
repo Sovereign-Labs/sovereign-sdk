@@ -108,6 +108,30 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     /// Provide a single non-deterministic advice item to the guest and
     /// synchronously generate a SNARK of correct execution over that hint.
     fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>>;
+
+    /// Prove `item` with zero or more proofs pre-registered as deferred
+    /// verifications. Each entry of `deferred_proofs` is the raw proof-blob
+    /// payload the STF guest will hand to `V::verify` at runtime (for SP1
+    /// this is a `SovSP1AggregatedProof` wrapper).
+    ///
+    /// Backends without recursive verification (e.g. mock, risc0) can accept
+    /// an empty `deferred_proofs` and fall through to `add_hint_and_run`;
+    /// they should refuse non-empty input. SP1 overrides this to register
+    /// each proof via `sp1_sdk::SP1Stdin::write_proof` so the guest's
+    /// `syscall_verify_sp1_proof` can satisfy its deferred-verification
+    /// requirement in non-mock mode.
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        deferred_proofs: &[Vec<u8>],
+    ) -> anyhow::Result<Vec<u8>> {
+        anyhow::ensure!(
+            deferred_proofs.is_empty(),
+            "this ZkvmHost does not support deferred proofs; override \
+             `add_hint_deferred_and_run` or pass an empty slice"
+        );
+        self.add_hint_and_run(item)
+    }
 }
 
 /// A commitment to a zkVM program binary. Every concrete [`ZkVerifier::CodeCommitment`]

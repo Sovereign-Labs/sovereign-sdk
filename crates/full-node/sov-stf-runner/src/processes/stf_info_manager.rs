@@ -25,6 +25,13 @@ pub struct StateTransitionInfo<StateRoot, Witness, Da: DaSpec> {
     pub(crate) data: StateTransitionWitness<StateRoot, Witness, Da>,
     /// Rollup height.
     pub(crate) slot_number: SlotNumber,
+    /// Raw bytes of any aggregated proof blobs in this slot that the STF
+    /// guest will feed into `V::verify`. The prover registers each entry
+    /// as a deferred proof via `ZkvmHost::add_hint_deferred_and_run`. Empty
+    /// for slots that don't contain proof blobs, and ignored by backends
+    /// without recursive verification.
+    #[serde(default)]
+    pub(crate) deferred_proofs: Vec<Vec<u8>>,
 }
 
 impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da> {
@@ -33,7 +40,23 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
         data: StateTransitionWitness<StateRoot, Witness, Da>,
         slot_number: SlotNumber,
     ) -> Self {
-        Self { data, slot_number }
+        Self {
+            data,
+            slot_number,
+            deferred_proofs: Vec::new(),
+        }
+    }
+
+    /// Attach raw deferred-proof bytes extracted from this slot's proof blobs.
+    /// See [`StateTransitionInfo::deferred_proofs`] for the expected format.
+    pub fn with_deferred_proofs(mut self, deferred_proofs: Vec<Vec<u8>>) -> Self {
+        self.deferred_proofs = deferred_proofs;
+        self
+    }
+
+    /// Access the raw deferred-proof bytes attached to this slot.
+    pub(crate) fn deferred_proofs(&self) -> &[Vec<u8>] {
+        &self.deferred_proofs
     }
 
     pub(crate) fn da_block_header(&self) -> &Da::BlockHeader {
