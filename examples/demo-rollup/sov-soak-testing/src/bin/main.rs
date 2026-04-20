@@ -42,7 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
         )
         .set_config(|config| {
             // Enable witness generation so proofs can be submitted to the network.
-            config.rollup_prover_config = Some(RollupProverConfig::Prove);
+            config.rollup_prover_config = RollupProverConfig::Prove;
         });
         start_and_wait(builder).await?;
     } else {
@@ -54,7 +54,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.db_connection_url,
         )
         .set_config(|config| {
-            config.rollup_prover_config = None;
+            config.rollup_prover_config = RollupProverConfig::Disabled;
         });
         start_and_wait(builder).await?;
     };

@@ -35,6 +35,15 @@ where
 pub enum RollupProverConfig {
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
+    /// Proving is disabled.
+    Disabled,
+}
+
+impl RollupProverConfig {
+    /// Returns `true` unless the prover is disabled.
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, RollupProverConfig::Disabled)
+    }
 }
 
 impl Debug for RollupProverConfig {

@@ -156,21 +156,19 @@ async fn run() -> anyhow::Result<()> {
     }
 }
 
-fn parse_prover_config() -> anyhow::Result<Option<RollupProverConfig>> {
-    if let Some(value) = option_env!("SOV_PROVER_MODE") {
-        let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
-            tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
-        })?;
-        #[cfg(debug_assertions)]
-        {
-            if config == RollupProverConfig::Prove {
-                tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
-            }
-        }
-        Ok(Some(config))
-    } else {
-        Ok(None)
+fn parse_prover_config() -> anyhow::Result<RollupProverConfig> {
+    let Some(value) = option_env!("SOV_PROVER_MODE") else {
+        return Ok(RollupProverConfig::Disabled);
+    };
+    let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
+        tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
+    })?;
+
+    if config == RollupProverConfig::Prove {
+        tracing::warn!(prover_config = ?config, "Given RollupProverConfig might cause slow rollup progression if not compiled in release mode.");
     }
+
+    Ok(config)
 }
 
 /// Example: tune the live flat-state RocksDB instance for a workload with frequent small writes.
@@ -227,7 +225,7 @@ fn example_tune_live_nomt_table_for_small_writes(
 async fn new_rollup_with_celestia_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
@@ -254,7 +252,7 @@ async fn new_rollup_with_celestia_da(
 async fn new_rollup_with_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {
@@ -284,7 +282,7 @@ async fn new_rollup_with_mock_da(
 async fn new_rollup_with_sp1_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
@@ -314,7 +312,7 @@ async fn new_rollup_with_sp1_mock_da(
 async fn new_rollup_with_external_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
-    prover_config: Option<RollupProverConfig>,
+    prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
 ) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {

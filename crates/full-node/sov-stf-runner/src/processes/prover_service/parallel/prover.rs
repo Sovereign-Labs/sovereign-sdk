@@ -18,9 +18,7 @@ use tracing::{error, info, trace};
 
 use super::state::{ProverState, ProverStatus};
 use super::{ProverServiceError, Verifier};
-use crate::processes::{
-    ProofAggregationStatus, ProofProcessingStatus, RollupProverConfig, StateTransitionInfo,
-};
+use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
 
 // A prover that generates proofs in parallel using a thread pool. If the pool is saturated,
 // the prover will reject new jobs.
@@ -67,7 +65,6 @@ where
     pub(crate) fn start_proving<InnerVm>(
         &self,
         state_transition_info: StateTransitionInfo<StateRoot, Witness, <Da as DaService>::Spec>,
-        config: RollupProverConfig,
         inner_vm: InnerVm::Host,
         verifier: Arc<Verifier<Da>>,
     ) -> Result<
@@ -110,7 +107,7 @@ where
 
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data, config);
+                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -220,7 +217,6 @@ where
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
     hint: &impl Serialize,
-    _config: RollupProverConfig,
 ) -> anyhow::Result<SerializedInnerProof>
 where
     InnerVm: Zkvm + 'static,

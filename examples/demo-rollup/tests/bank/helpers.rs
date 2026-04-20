@@ -270,8 +270,8 @@ pub async fn start_test_rollup(
     operating_mode: OperatingMode,
 ) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let prover_config = match &operating_mode {
-        OperatingMode::Operator => None,
-        OperatingMode::Zk | OperatingMode::Optimistic => Some(RollupProverConfig::Prove),
+        OperatingMode::Operator => RollupProverConfig::Disabled,
+        OperatingMode::Zk | OperatingMode::Optimistic => RollupProverConfig::Prove,
     };
     let disable_state_root_consistency_check = match &operating_mode {
         OperatingMode::Operator => false,

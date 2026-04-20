@@ -360,7 +360,7 @@ impl<S: Spec> ProverIncentives<S> {
             return Ok(Some(SlashingReason::IncorrectFinalSlotHash));
         }
 
-        // TDOD uncomment after NOMT bug is fixed: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739
+        // TODO uncomment after NOMT bug is fixed: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739
         /*
         if expected_final_transition.post_state_root() != &public_outputs.final_state_root {
             return Ok(Some(SlashingReason::IncorrectFinalStateRoot));

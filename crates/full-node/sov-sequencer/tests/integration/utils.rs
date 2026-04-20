@@ -310,7 +310,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         finalization_blocks,
     )
     .set_config(|c| {
-        c.rollup_prover_config = rollup_prover_config;
+        c.rollup_prover_config = rollup_prover_config.unwrap_or(RollupProverConfig::Disabled);
         c.automatic_batch_production = automatic_batch_production;
         c.storage = StoragePath::Tmp(dir);
         c.max_batch_size_bytes = max_batch_size_bytes;
@@ -322,7 +322,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
                 max_batch_execution_time_millis;
             // Proof generation and sequencer state-root consistency checks are currently
             // incompatible in these integration tests.
-            if c.rollup_prover_config.is_some() {
+            if c.rollup_prover_config.is_enabled() {
                 preferred_sequencer_config.disable_state_root_consistency_checks = true;
             }
         }

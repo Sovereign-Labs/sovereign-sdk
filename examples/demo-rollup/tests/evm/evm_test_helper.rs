@@ -37,7 +37,6 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
 pub(crate) const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 
 async fn start_node(
-    _rollup_prover_config: RollupProverConfig,
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
@@ -54,7 +53,7 @@ async fn start_node(
     .with_rate_limiter(rate_limiter)
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
@@ -117,14 +116,7 @@ pub async fn setup_test_rollup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
-    start_node(
-        RollupProverConfig::Prove,
-        finalization_blocks,
-        Some(extension),
-        None,
-        3,
-    )
-    .await
+    start_node(finalization_blocks, Some(extension), None, 3).await
 }
 
 pub async fn setup_test_rollup_with_paymaster(
@@ -146,7 +138,7 @@ pub async fn setup_test_rollup_with_paymaster(
     .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
@@ -178,7 +170,7 @@ pub async fn setup_test_rollup_with_selective_paymaster(
     .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;

@@ -165,7 +165,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         runtime_genesis_paths: &<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisInput,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -306,7 +306,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig>,
+        prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -346,7 +346,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
         info!(?operating_mode, "Instantiating a new rollup");
 
-        if let (OperatingMode::Operator, Some(prover_config)) = (operating_mode, prover_config) {
+        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
             panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
         }
 
@@ -366,7 +366,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         .await?;
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
-        let witness_generation = prover_config.is_some();
+        let witness_generation = prover_config.is_enabled();
         let mut storage_manager =
             self.create_storage_manager(&rollup_config, witness_generation)?;
 
@@ -491,7 +491,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
-            if prover_config.is_some() {
+            if prover_config.is_enabled() {
                 Some(rollup_config.proof_manager)
             } else {
                 None
@@ -528,9 +528,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .await?;
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
-            let prover_config = prover_config
-                .expect("This code path should not be possible; this is a bug, please report it");
-
             let prover_service = self
                 .create_prover_service(prover_config, &rollup_config, &da_service)
                 .await;

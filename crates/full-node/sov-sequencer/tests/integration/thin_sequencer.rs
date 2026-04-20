@@ -16,6 +16,7 @@ use sov_rollup_interface::common::SafeVec;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
@@ -58,7 +59,7 @@ async fn test_thin_direct_same_transactions() {
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir1);
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
     })
     .set_da_config(|c| {
         c.sender_address = genesis_conf_seq_da_address;
