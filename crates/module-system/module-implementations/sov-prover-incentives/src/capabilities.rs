@@ -196,7 +196,8 @@ impl<S: Spec> ProverIncentives<S> {
             }
             Paycheck::Rewarded(total_reward) => {
                 self.reward_prover(total_reward, prover_address, state)?;
-                tracing::debug!("Aggrgeated proof sucesfullt verified and prover was rewarded");
+
+                tracing::debug!("Aggrgeated proof sucesfullt verified and prover was rewarded. FinaInitial slot number {}. Final slot number {}", public_outputs.initial_slot_number, public_outputs.final_slot_number);
                 Ok(public_outputs)
             }
         }
