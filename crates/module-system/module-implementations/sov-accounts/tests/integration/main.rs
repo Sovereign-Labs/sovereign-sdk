@@ -112,7 +112,7 @@ fn test_update_account() {
             assert_eq!(
                 accounts.get_account(new_credential, state),
                 Response::AccountExists {
-                    addr: derive_address_for_new_credential::<S>(&new_credential, &user.address(),),
+                    addr: derive_address_for_new_credential::<S>(&new_credential, &user.address()),
                 }
             );
             // Account corresponding to the old credential still exists.

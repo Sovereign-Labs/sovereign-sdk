@@ -13,7 +13,7 @@ pub fn derive_address_for_new_credential<S: Spec>(
     sender: &S::Address,
 ) -> S::Address {
     let mut hasher = <S::CryptoSpec as CryptoSpec>::Hasher::new();
-    hasher.update(new_credential_id.0 .0);
+    hasher.update(&new_credential_id.0 .0);
     hasher.update(sender.as_ref());
     let hash: [u8; 32] = hasher.finalize().into();
     // Route through `CredentialId` so each Spec's existing `From<CredentialId>`
