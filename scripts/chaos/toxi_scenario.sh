@@ -165,7 +165,7 @@ scenario_P5() { # celestia_rpc latency 6000ms ±1000ms toxicity 1.00
   local target="$1" p
   for p in $(class_proxies celestia_rpc "${target}"); do
     clear_proxy "${p}"
-    add_toxic "${p}" "P5" latency 0.4 latency=4000 jitter=1000
+    add_toxic "${p}" "P5" latency 1.0 latency=6000 jitter=1000
   done
 }
 

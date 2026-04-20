@@ -70,7 +70,7 @@ while true; do
     echo "$(date): Waiting for ready (timeout: ${READY_TIMEOUT}s)"
     start_time=$(date +%s)
     while true; do
-        if curl -s -o /dev/null --max-time 5 "$READY_URL"; then
+        if curl --fail -s -o /dev/null --max-time 5 "$READY_URL"; then
             echo "$(date): Ready"
             break
         fi
