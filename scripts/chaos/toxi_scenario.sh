@@ -34,8 +34,9 @@
 #   R1  postgres_2    latency 8000ms ±500ms,  toxicity 1.00   (target: replica)
 #   R2  postgres_2    reset_peer 0ms,         toxicity 0.20   (target: replica)
 #
-# Apply semantics: `toxic` and `scenario` clear the proxies they touch (for the chosen
-# target) before applying, so calling the same scenario twice never stacks toxics.
+# Apply semantics: `scenario` clears the proxies it touches (for the chosen target)
+# before applying, so calling the same scenario twice never stacks toxics. `toxic`
+# adds to the existing toxic set without clearing — run `clear` first for a clean slate.
 
 set -euo pipefail
 
@@ -115,8 +116,6 @@ apply_named_toxic() {
 
   local proxies; proxies="$(class_proxies "${class}" "${target}")"
   local p
-  for p in ${proxies}; do clear_proxy "${p}"; done
-
   for p in ${proxies}; do
     case "${name}" in
       rpc-latency) add_toxic "${p}" "${name}" latency    1.0 latency=300  jitter=200 ;;
