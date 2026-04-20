@@ -57,11 +57,7 @@ fn validate_path_proofs_for_multi_proof(path_proofs: &[PathProof]) -> anyhow::Re
 
             if lower_path[range.path_bit_index] != upper_path[range.path_bit_index] {
                 let mut mid = None;
-                for (idx, path_proof) in path_proofs
-                    .iter()
-                    .enumerate()
-                    .take(range.upper)
-                    .skip(range.lower)
+                for (offset, path_proof) in path_proofs[range.lower..range.upper].iter().enumerate()
                 {
                     let path = path_proof.terminal.path();
                     if path.len() <= range.path_bit_index {
@@ -70,7 +66,7 @@ fn validate_path_proofs_for_multi_proof(path_proofs: &[PathProof]) -> anyhow::Re
                         );
                     }
                     if mid.is_none() && path[range.path_bit_index] {
-                        mid = Some(idx);
+                        mid = Some(range.lower + offset);
                     }
                 }
 
@@ -151,11 +147,8 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
         //
         // `path_proofs` is already in ascending path order, so `verified_paths` inherits
         // the ordering that `verify_update`'s PathsOutOfOrder check requires below.
-        #[allow(clippy::type_complexity)]
-        let mut verified_paths: Vec<(
-            VerifiedPathProof,
-            Vec<(KeyPath, Option<ValueHash>)>,
-        )> = path_proofs
+        type VerifiedPathWithPendingWrites = (VerifiedPathProof, Vec<(KeyPath, Option<ValueHash>)>);
+        let mut verified_paths: Vec<VerifiedPathWithPendingWrites> = path_proofs
             .iter()
             .map(|pp| {
                 let verified = pp
