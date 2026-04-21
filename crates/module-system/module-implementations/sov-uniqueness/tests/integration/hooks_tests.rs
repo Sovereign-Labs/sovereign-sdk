@@ -1,12 +1,20 @@
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{CredentialId, HexHash, TxEffect};
-use sov_test_utils::{TransactionTestCase, TxProcessingError};
+use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
+use sov_modules_api::{
+    CredentialId, CryptoSpec, EncodeCall, HexHash, Multisig, PrivateKey, RawTx, Runtime, Spec,
+    TxEffect,
+};
+use sov_test_utils::{
+    default_test_tx_details, TestPrivateKey, TestUser, TransactionTestCase, TransactionType,
+    TxProcessingError,
+};
 use sov_uniqueness::{Uniqueness, Window};
+use sov_value_setter::ValueSetter;
 
-use crate::runtime::S;
-use crate::utils::{generate_default_tx, setup};
+use crate::runtime::{RT, S};
+use crate::utils::{generate_default_tx, setup, setup_with_admin};
 
 #[test]
 fn send_tx_works_nonce() {
@@ -123,6 +131,89 @@ fn send_tx_bad_generation_duplicate() {
                     "Expected Skipped error, but got a different TxEffect: {:?}",
                     ctx.tx_receipt
                 );
+            }
+        }),
+    });
+}
+
+#[test]
+fn send_tx_bad_generation_duplicate_with_malleated_v1_envelope() {
+    let multisig_keys = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let runtime_msg =
+        <RT as EncodeCall<ValueSetter<S>>>::to_decodable(sov_value_setter::CallMessage::SetValue {
+            value: 10,
+            gas: None,
+        });
+    let multisig = Multisig::new(2, multisig_keys.iter().map(|key| key.pub_key()).collect());
+    let multisig_credential_id =
+        multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+    let (_, mut runner, _) = setup_with_admin(
+        TestUser::<S>::generate_with_default_balance().add_credential_id(multisig_credential_id),
+    );
+
+    let mut original_tx = UnsignedTransactionV0::<RT, S>::new_with_details(
+        runtime_msg,
+        UniquenessData::Generation(0),
+        default_test_tx_details::<S>(),
+    )
+    .to_multisig_tx(multisig);
+    original_tx
+        .sign(&multisig_keys[0], &RT::CHAIN_HASH)
+        .unwrap();
+    original_tx
+        .sign(&multisig_keys[1], &RT::CHAIN_HASH)
+        .unwrap();
+
+    let mut malleated_tx = original_tx.clone();
+    malleated_tx.unused_pub_keys.swap(0, 1);
+
+    assert_eq!(
+        original_tx.serialize_for_signing(&RT::CHAIN_HASH),
+        malleated_tx.serialize_for_signing(&RT::CHAIN_HASH),
+        "The signable payload should be unchanged by V1 envelope malleation"
+    );
+    assert_ne!(
+        Transaction::<RT, S>::from(original_tx.clone()).hash(),
+        Transaction::<RT, S>::from(malleated_tx.clone()).hash(),
+        "The raw transaction hash should change when the V1 envelope is malleated"
+    );
+
+    runner.execute_transaction(TransactionTestCase {
+        input: TransactionType::PreSigned(RawTx {
+            data: borsh::to_vec(&Transaction::<RT, S>::from(original_tx)).unwrap(),
+        }),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful(), "{:?}", ctx.tx_receipt);
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: TransactionType::PreSigned(RawTx {
+            data: borsh::to_vec(&Transaction::<RT, S>::from(malleated_tx)).unwrap(),
+        }),
+        assert: Box::new(move |ctx, _state| {
+            let TxEffect::Skipped(skipped) = &ctx.tx_receipt else {
+                panic!(
+                    "Expected Skipped error from uniqueness check, got {:?}",
+                    ctx.tx_receipt
+                );
+            };
+
+            match &skipped.error {
+                TxProcessingError::CheckUniquenessFailed(reason) => {
+                    assert!(reason.contains("Duplicate transaction"));
+                }
+                _ => {
+                    panic!(
+                        "Expected uniqueness rejection, got a different error: {:?}",
+                        skipped.error
+                    );
+                }
             }
         }),
     });
