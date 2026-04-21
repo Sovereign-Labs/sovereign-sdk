@@ -1,3 +1,8 @@
+# 2026-04-21
+- #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
+  The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.
+  Downstream runtimes with a manual `Runtime` impl should delete their `resolve_address` function.
+
 # 2026-04-16
 - #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
 - #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
