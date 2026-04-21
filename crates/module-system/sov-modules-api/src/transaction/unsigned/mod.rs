@@ -3,7 +3,7 @@ pub(crate) mod v1;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 pub use v0::UnsignedTransactionV0;
 pub use v1::UnsignedTransactionV1;

@@ -113,10 +113,15 @@ pub(crate) fn generate_value_setter_tx(
 }
 
 pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAccount) {
+    setup_with_admin(TestUser::generate_with_default_balance())
+}
+
+pub(crate) fn setup_with_admin(
+    admin: TestUser<S>,
+) -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAccount) {
     // Generate a genesis config, then overwrite the attester key/address with ones that
     // we know. We leave the other values untouched.
-    let genesis_config =
-        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![admin]);
 
     let admin = genesis_config
         .additional_accounts()

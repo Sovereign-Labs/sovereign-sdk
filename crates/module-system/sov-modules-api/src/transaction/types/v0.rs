@@ -57,6 +57,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
     pub fn auth_data<M: GasMeter<Spec = S>>(
         &self,
         raw_tx_hash: TxHash,
+        non_malleable_hash: TxHash,
         meter: &mut M,
     ) -> Result<AuthorizationData<S>, AuthenticationError> {
         let pub_key = self.pub_key.clone();
@@ -66,6 +67,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
         Ok(AuthorizationData {
             uniqueness: self.uniqueness,
             tx_hash: raw_tx_hash,
+            non_malleable_hash,
             credential_id,
             credentials: Credentials::new(pub_key),
             default_address: credential_id.into(),
