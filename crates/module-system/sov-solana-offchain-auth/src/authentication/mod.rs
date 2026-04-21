@@ -5,8 +5,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput, FatalError,
-    UniquenessData,
+    calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_id,
+    AuthenticationError, AuthenticationOutput, FatalError, ReplayHashMaterial, UniquenessData,
 };
 use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::transaction::Credentials;
@@ -128,6 +128,19 @@ fn build_auth_data<S: Spec>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
+    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+        match unpacked {
+            UnpackedSolanaMessage::V0 { .. } => {
+                ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash)
+            }
+            UnpackedSolanaMessage::V1 { .. } => {
+                ReplayHashMaterial::VerifiedSignatureMessage(unpacked.signed_bytes())
+            }
+        },
+        meter,
+    )
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+
     match unpacked {
         UnpackedSolanaMessage::V0 { pub_key, .. } => {
             let credential_id =
@@ -137,6 +150,7 @@ fn build_auth_data<S: Spec>(
             Ok(AuthorizationData {
                 uniqueness,
                 tx_hash: raw_tx_hash,
+                non_malleable_hash,
                 credential_id,
                 credentials: Credentials::new(pub_key.clone()),
                 default_address: credential_id.into(),
@@ -164,6 +178,7 @@ fn build_auth_data<S: Spec>(
             Ok(AuthorizationData {
                 uniqueness,
                 tx_hash: raw_tx_hash,
+                non_malleable_hash,
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
