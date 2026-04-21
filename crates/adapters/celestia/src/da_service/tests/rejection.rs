@@ -4,7 +4,6 @@ use super::*;
 
 #[test]
 fn extraction_proof_fails_if_sender_changed() {
-    // This is the preparation part, consider it as malicious native code:
     let mut block = with_rollup_batch_data::filtered_block();
     let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
     let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
@@ -56,7 +55,6 @@ fn verification_fails_if_tx_missing() {
         proof_blobs: Default::default(),
         batch_blobs: Default::default(),
     };
-    // give to verifier an empty transactions list
     let error = verifier
         .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
         .unwrap_err();
@@ -125,7 +123,6 @@ fn verification_fails_if_not_all_blobs_are_proven() {
     let relevant_blobs = extract_relevant_blobs(&block);
 
     let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
-    // drop the proof for last batch
     relevant_proofs.batch.inclusion_proof.pop();
 
     let verifier = CelestiaVerifier::new(rollup_params);
@@ -179,7 +176,6 @@ fn verification_fails_if_there_is_less_blobs_than_proofs() {
     let relevant_blobs = extract_relevant_blobs(&block);
     let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
-    // push one extra blob proof
     relevant_proofs
         .batch
         .inclusion_proof
@@ -204,7 +200,6 @@ fn verification_fails_for_incorrect_namespace() {
     let relevant_blobs = extract_relevant_blobs(&block);
     let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
-    // create a verifier with a different namespace than the da_service
     let verifier = CelestiaVerifier::new(RollupParams {
         rollup_proof_namespace: Namespace::new_v0(b"abc").unwrap(),
         rollup_batch_namespace: Namespace::new_v0(b"xyz").unwrap(),

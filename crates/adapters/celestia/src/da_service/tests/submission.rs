@@ -334,6 +334,184 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let base_config = dev_node.get_config().await?;
+
+    // 5 namespaces in lexicographic order. Batch and proof are the rollup's own.
+    const NS_A_PREV: Namespace = Namespace::const_v0(*b"a-prev____");
+    const NS_BATCH: Namespace = Namespace::const_v0(*b"batch_____");
+    const NS_MIDDLE: Namespace = Namespace::const_v0(*b"middle____");
+    const NS_PROOF: Namespace = Namespace::const_v0(*b"proof_____");
+    const NS_Z_LAST: Namespace = Namespace::const_v0(*b"z-last____");
+    const ALL_NAMESPACES: [Namespace; 5] = [NS_A_PREV, NS_BATCH, NS_MIDDLE, NS_PROOF, NS_Z_LAST];
+
+    let rollup_params = RollupParams {
+        rollup_batch_namespace: NS_BATCH,
+        rollup_proof_namespace: NS_PROOF,
+    };
+
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let _ = sov_metrics::init_metrics_tracker(
+        &sov_metrics::MonitoringConfig::standard(),
+        shutdown_rx.clone(),
+    );
+    let da_service = CelestiaService::new(base_config.clone(), rollup_params, shutdown_rx).await;
+    let verifier = CelestiaVerifier::new(rollup_params);
+
+    // Build 6 raw clients with different signers (keys 1-6).
+    let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
+    let grpc_url = format!("http://127.0.0.1:{}", dev_node.validator_port_ipv4().await?);
+
+    let mut raw_clients = Vec::new();
+    for key_idx in 1u8..=6 {
+        let key_hex = dev_node.export_signer_key(key_idx).await?;
+        let address = dev_node.get_signer_address(key_idx).await?;
+        let client = celestia_client::ClientBuilder::new()
+            .rpc_url(&rpc_url)
+            .grpc_url(&grpc_url)
+            .private_key_hex(&key_hex)
+            .build()
+            .await?;
+        raw_clients.push((std::sync::Arc::new(client), address));
+    }
+
+    let head_before = da_service.get_head_block_header().await?.height();
+
+    let mut expected_batch: Vec<BlobRecord> = Vec::new();
+    let mut expected_proof: Vec<BlobRecord> = Vec::new();
+
+    // 2 rounds: each round, each of 6 clients submits 10 blobs
+    // (v0 + v1 for each of 5 namespaces).
+    for round in 0..2usize {
+        let mut join_set: JoinSet<anyhow::Result<()>> = JoinSet::new();
+
+        for (client_idx, (client, signer)) in raw_clients.iter().enumerate() {
+            let mut blobs_to_submit = Vec::new();
+            let mut batch_records = Vec::new();
+            let mut proof_records = Vec::new();
+
+            for (ns_idx, ns) in ALL_NAMESPACES.iter().enumerate() {
+                let seq_base = round * 2;
+                let data_a =
+                    deterministic_payload(128, ns_idx, client_idx, SubmissionKind::Batch, seq_base);
+                let data_b = deterministic_payload(
+                    128,
+                    ns_idx,
+                    client_idx,
+                    SubmissionKind::Batch,
+                    seq_base + 1,
+                );
+
+                let v0_blob =
+                    celestia_types::Blob::new(*ns, data_a, None).context("v0 blob creation")?;
+                blobs_to_submit.push(v0_blob);
+
+                let v1_blob = celestia_types::Blob::new(*ns, data_b.clone(), Some(signer.0))
+                    .context("v1 blob creation")?;
+
+                // Only v1 blobs in batch/proof namespaces are expected in output.
+                if *ns == NS_BATCH {
+                    batch_records.push(BlobRecord {
+                        sender: *signer,
+                        hash: HexHash::new(*v1_blob.commitment.hash()),
+                        payload: data_b,
+                    });
+                } else if *ns == NS_PROOF {
+                    proof_records.push(BlobRecord {
+                        sender: *signer,
+                        hash: HexHash::new(*v1_blob.commitment.hash()),
+                        payload: data_b,
+                    });
+                }
+                blobs_to_submit.push(v1_blob);
+            }
+
+            expected_batch.extend(batch_records);
+            expected_proof.extend(proof_records);
+
+            let client_clone = client.clone();
+            join_set.spawn(async move {
+                let tx_config = celestia_client::tx::TxConfig::default();
+                client_clone
+                    .state()
+                    .submit_pay_for_blob(&blobs_to_submit, tx_config)
+                    .await
+                    .with_context(|| {
+                        format!("submit_pay_for_blob failed for client {client_idx} round {round}")
+                    })?;
+                Ok(())
+            });
+        }
+
+        while let Some(joined) = join_set.join_next().await {
+            joined.context("join failure")??;
+        }
+    }
+
+    let target_height = da_service
+        .get_head_block_header()
+        .await?
+        .height()
+        .saturating_add(2);
+    let scan_end = wait_until_head_at_least(&da_service, target_height).await?;
+
+    let mut observed_batch: Vec<BlobRecord> = Vec::new();
+    let mut observed_proof: Vec<BlobRecord> = Vec::new();
+
+    for height in head_before..=scan_end {
+        let block = da_service.get_block_at(height).await?;
+        let mut relevant_blobs = da_service.extract_relevant_blobs(&block);
+
+        for blob in relevant_blobs.batch_blobs.iter_mut() {
+            blob.advance(blob.total_len());
+            observed_batch.push(BlobRecord {
+                sender: blob.sender,
+                hash: blob.hash,
+                payload: blob.verified_data().to_vec(),
+            });
+        }
+
+        for blob in relevant_blobs.proof_blobs.iter_mut() {
+            blob.advance(blob.total_len());
+            observed_proof.push(BlobRecord {
+                sender: blob.sender,
+                hash: blob.hash,
+                payload: blob.verified_data().to_vec(),
+            });
+        }
+
+        let relevant_proofs = da_service
+            .get_extraction_proof(&block, &relevant_blobs)
+            .await;
+        verifier
+            .verify_relevant_tx_list(block.header(), &relevant_blobs, relevant_proofs)
+            .with_context(|| format!("Verification failed at height {height}"))?;
+    }
+
+    assert_eq!(
+        multiset_counts(&observed_batch),
+        multiset_counts(&expected_batch),
+        "Batch blob mismatch: v0 blobs should be excluded, all v1 batch blobs should appear"
+    );
+    assert_eq!(
+        multiset_counts(&observed_proof),
+        multiset_counts(&expected_proof),
+        "Proof blob mismatch: v0 blobs should be excluded, all v1 proof blobs should appear"
+    );
+    assert!(
+        !observed_batch.is_empty(),
+        "Should have observed at least one batch blob"
+    );
+    assert!(
+        !observed_proof.is_empty(),
+        "Should have observed at least one proof blob"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn bytes_for_shares_accounts_for_signer_overhead() {
     let unsigned_first = appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE;

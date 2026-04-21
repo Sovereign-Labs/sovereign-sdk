@@ -5,50 +5,7 @@ use crate::test_support::{
 use crate::types::FilteredCelestiaBlock;
 use crate::verifier::RollupParams;
 
-/// Synthetic multi-row absence fixture with multiple candidate rows and no `NS_BATCH` shares.
-///
-/// ```text
-/// ODS 4x4
-/// row0: L L H H
-/// row1: L L H H
-/// row2: L L H H
-/// row3: L L H H
-///
-/// row-major: L L H H | L L H H | L L H H | L L H H
-/// verdict: non-canonical
-/// reason: row-major order decreases H -> L at each row boundary
-/// ```
-///
-/// This is a synthetic adversarial test shape used to exercise verifier behavior, not an
-/// honest-proposer Celestia ODS layout.
-pub(super) fn synthetic_noncanonical_multirow_absence_fixture(
-) -> (FilteredCelestiaBlock, RollupParams) {
-    let ods_width = 4usize;
-    let mut ods_shares = Vec::with_capacity(ods_width * ods_width);
-    for row in 0..ods_width {
-        ods_shares.extend(make_blob_shares(NS_LOW_A, ods_width / 2, None, row as u8));
-        ods_shares.extend(make_blob_shares(
-            NS_HIGH_A,
-            ods_width / 2,
-            None,
-            row as u8 + 0x40,
-        ));
-    }
-
-    let block = build_block_from_ods(ods_shares);
-    let batch_rows = block.rollup_batch_data.data.rows();
-
-    assert!(
-        batch_rows.len() > 1,
-        "synthetic fixture must contain multiple candidate rows"
-    );
-    assert!(
-        batch_rows.iter().all(|row| row.shares.is_empty()),
-        "synthetic fixture must represent namespace absence for all candidate rows"
-    );
-
-    (block, rollup_params())
-}
+pub(super) use crate::test_support::synthetic_noncanonical_multirow_absence_fixture;
 
 /// Canonical single-row absence fixture with one candidate row and no `NS_BATCH` shares.
 ///

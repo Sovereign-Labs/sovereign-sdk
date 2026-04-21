@@ -4,6 +4,7 @@ use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use sov_rollup_interface::da::RelevantProofs;
 
 use super::*;
+use crate::test_support::{shift_namespace_proof_range, skipped_proof_index};
 use crate::verifier::proofs::BlobProof;
 
 #[derive(Debug)]
@@ -23,7 +24,7 @@ fn load_case(
 
     let proofs = get_extraction_proof(&block, &blobs);
     CelestiaVerifier::new(params)
-        .verify_relevant_tx_list(&block.header, &blobs, get_extraction_proof(&block, &blobs))
+        .verify_relevant_tx_list(&block.header, &blobs, proofs.clone())
         .expect("baseline block should verify");
 
     AdversarialCase {
@@ -35,27 +36,8 @@ fn load_case(
 }
 
 fn skipped_batch_proof_index(case: &AdversarialCase) -> usize {
-    case.proofs
-        .batch
-        .inclusion_proof
-        .iter()
-        .position(|proof| matches!(proof.is_supported_blob(), Ok(false)))
+    skipped_proof_index(&case.proofs.batch.inclusion_proof)
         .expect("expected at least one skipped blob proof")
-}
-
-fn shift_namespace_proof_range(
-    namespace_proof: &mut celestia_types::nmt::NamespaceProof,
-    shift_end: bool,
-) {
-    match &mut **namespace_proof {
-        NmtNamespaceProof::PresenceProof { proof, .. }
-        | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-            proof.range.start = proof.range.start.saturating_add(1);
-            if shift_end {
-                proof.range.end = proof.range.end.saturating_add(1);
-            }
-        }
-    }
 }
 
 fn expect_verification_error(

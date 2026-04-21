@@ -2,7 +2,6 @@ mod cases;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use celestia_types::state::AddressTrait;
-use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use proptest::prelude::*;
 use sov_rollup_interface::da::{BlobReaderTrait, DaVerifier, RelevantBlobs, RelevantProofs};
 
@@ -12,8 +11,9 @@ use crate::test_helper::files::{
     with_mixed_v0_and_v1_multi_v1_parity_boundary, with_rollup_proof_data,
 };
 use crate::test_support::{
-    assert_subproof_start_indices_align, build_block_from_ods, make_blob_shares, rollup_params,
-    signer_for_index, NS_BATCH, NS_HIGH_A, NS_LOW_A,
+    assert_subproof_start_indices_align, rollup_params, shift_namespace_proof_range,
+    signer_for_index, skipped_proof_index, synthetic_noncanonical_multirow_absence_fixture,
+    NS_BATCH,
 };
 use crate::types::{
     BlobWithSender, FilteredCelestiaBlock, IncompleteNamespaceError, NamespaceBoundaryProof,
@@ -90,60 +90,6 @@ fn load_proof_fixture(kind: ProofFixtureKind) -> (FilteredCelestiaBlock, RollupP
     }
 }
 
-fn skipped_proof_index(inclusion_proof: &[BlobProof]) -> Option<usize> {
-    inclusion_proof
-        .iter()
-        .position(|proof| matches!(proof.is_supported_blob(), Ok(false)))
-}
-
-fn shift_namespace_proof_range(namespace_proof: &mut celestia_types::nmt::NamespaceProof) {
-    match &mut **namespace_proof {
-        NmtNamespaceProof::PresenceProof { proof, .. }
-        | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-            proof.range.start = proof.range.start.saturating_add(1);
-            proof.range.end = proof.range.end.saturating_add(1);
-        }
-    }
-}
-
-fn ambiguous_empty_namespace_fixture() -> (FilteredCelestiaBlock, RollupParams) {
-    let ods_width = 4usize;
-    let mut ods_shares = Vec::with_capacity(ods_width * ods_width);
-
-    for row_idx in 0..ods_width {
-        ods_shares.extend(make_blob_shares(
-            NS_LOW_A,
-            ods_width / 2,
-            None,
-            row_idx as u8,
-        ));
-        ods_shares.extend(make_blob_shares(
-            NS_HIGH_A,
-            ods_width / 2,
-            None,
-            row_idx as u8 + 0x40,
-        ));
-    }
-
-    let block = build_block_from_ods(ods_shares);
-    let params = rollup_params();
-    let row_root_count = block
-        .header
-        .get_row_roots_for_namespace(params.rollup_batch_namespace)
-        .count();
-    let relevant_blobs = extract_relevant_blobs(&block);
-    assert!(
-        row_root_count > 1,
-        "synthetic fixture should expose multiple candidate row roots"
-    );
-    assert!(
-        relevant_blobs.batch_blobs.is_empty(),
-        "synthetic fixture should not expose supported batch blobs"
-    );
-
-    (block, params)
-}
-
 fn assert_err_without_panic(
     verifier: &CelestiaVerifier,
     block: &FilteredCelestiaBlock,
@@ -214,8 +160,6 @@ proptest! {
         );
     }
 
-    // Multi-candidate empty-namespace ambiguity is covered by deterministic tests in
-    // `da_service/tests.rs` and `verifier/mod.rs`, not by generated end-to-end ODS layouts.
     #[test]
     fn proptest_single_row_empty_namespace_with_boundary_proof_verifies(
         case in single_row_absence_case_strategy()
@@ -337,13 +281,7 @@ proptest! {
             return Ok(());
         };
 
-        match &mut *boundary.last_share_proof {
-            NmtNamespaceProof::PresenceProof { proof, .. }
-            | NmtNamespaceProof::AbsenceProof { proof, .. } => {
-                proof.range.start = proof.range.start.saturating_add(1);
-                proof.range.end = proof.range.end.saturating_add(1);
-            }
-        }
+        shift_namespace_proof_range(&mut boundary.last_share_proof, true);
 
         assert_err_without_panic(
             &CelestiaVerifier::new(rollup_params()),
@@ -453,7 +391,10 @@ proptest! {
             return Ok(());
         };
 
-        shift_namespace_proof_range(&mut proofs.batch.inclusion_proof[skipped_idx].range_proofs[0].proof);
+        shift_namespace_proof_range(
+            &mut proofs.batch.inclusion_proof[skipped_idx].range_proofs[0].proof,
+            true,
+        );
 
         assert_err_without_panic(
             &CelestiaVerifier::new(params),
@@ -522,7 +463,7 @@ proptest! {
 
 #[test]
 fn protocol_fixture_with_ambiguous_empty_namespace_is_rejected() {
-    let (block, params) = ambiguous_empty_namespace_fixture();
+    let (block, params) = synthetic_noncanonical_multirow_absence_fixture();
     let relevant_blobs = RelevantBlobs {
         batch_blobs: Vec::new(),
         proof_blobs: Vec::new(),

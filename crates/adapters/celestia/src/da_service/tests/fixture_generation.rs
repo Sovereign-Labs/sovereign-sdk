@@ -1,10 +1,5 @@
 use super::*;
 
-// This test is supposed to be run manually when celestia data format is updated.
-// Run celestia dev environment.
-// It does not require authentication.
-// The script will take payload for each test block and regenerate test data.
-// The Payload was generated ages ago, so we just read it from the file
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn regenerate_test_data() -> anyhow::Result<()> {

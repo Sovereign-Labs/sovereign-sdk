@@ -3,10 +3,11 @@ use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use celestia_types::state::AccAddress;
 use celestia_types::{Blob, DataAvailabilityHeader, ExtendedDataSquare};
+use nmt_rs::nmt_proof::NamespaceProof as NmtNamespaceProof;
 use tendermint::Hash;
 
 use crate::celestia::{CelestiaHeader, CompactHeader, ProtobufHash};
-use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData, APP_VERSION};
+use crate::types::{FilteredCelestiaBlock, NamespaceRelevantData};
 use crate::verifier::proofs::BlobProof;
 use crate::verifier::RollupParams;
 
@@ -54,7 +55,7 @@ pub(crate) fn make_blob_shares(
     assert!(share_count > 0, "share count must be positive");
     let payload_len = payload_len_for_share_count(share_count, signer.is_some());
     let payload = vec![seed; payload_len];
-    let blob = Blob::new(namespace, payload, signer, APP_VERSION).expect("blob creation failed");
+    let blob = Blob::new(namespace, payload, signer).expect("blob creation failed");
     let shares = blob.to_shares().expect("blob to shares failed");
     assert_eq!(shares.len(), share_count, "unexpected share count");
     shares.into_iter().map(|share| share.to_vec()).collect()
@@ -95,7 +96,7 @@ pub(crate) fn namespace_rows(
 }
 
 pub(crate) fn build_block_from_ods(ods_shares: Vec<Vec<u8>>) -> FilteredCelestiaBlock {
-    let eds = ExtendedDataSquare::from_ods(ods_shares, APP_VERSION).expect("EDS creation failed");
+    let eds = ExtendedDataSquare::from_ods(ods_shares).expect("EDS creation failed");
     let dah = DataAvailabilityHeader::from_eds(&eds);
     let batch_rows = namespace_rows(&eds, &dah, NS_BATCH);
     let proof_rows = namespace_rows(&eds, &dah, NS_PROOF);
@@ -131,6 +132,71 @@ pub(crate) fn build_header(dah: DataAvailabilityHeader) -> CelestiaHeader {
     };
 
     CelestiaHeader::new(dah, compact)
+}
+
+/// Synthetic multi-row absence fixture with multiple candidate rows and no `NS_BATCH` shares.
+///
+/// ```text
+/// ODS 4x4
+/// row0: L L H H
+/// row1: L L H H
+/// row2: L L H H
+/// row3: L L H H
+///
+/// row-major: L L H H | L L H H | L L H H | L L H H
+/// verdict: non-canonical
+/// reason: row-major order decreases H -> L at each row boundary
+/// ```
+///
+/// Synthetic adversarial shape used to exercise verifier behavior, not an honest-proposer layout.
+pub(crate) fn synthetic_noncanonical_multirow_absence_fixture(
+) -> (FilteredCelestiaBlock, RollupParams) {
+    let ods_width = 4usize;
+    let mut ods_shares = Vec::with_capacity(ods_width * ods_width);
+    for row in 0..ods_width {
+        ods_shares.extend(make_blob_shares(NS_LOW_A, ods_width / 2, None, row as u8));
+        ods_shares.extend(make_blob_shares(
+            NS_HIGH_A,
+            ods_width / 2,
+            None,
+            row as u8 + 0x40,
+        ));
+    }
+
+    let block = build_block_from_ods(ods_shares);
+    let batch_rows = block.rollup_batch_data.data.rows();
+
+    assert!(
+        batch_rows.len() > 1,
+        "synthetic fixture must contain multiple candidate rows"
+    );
+    assert!(
+        batch_rows.iter().all(|row| row.shares.is_empty()),
+        "synthetic fixture must represent namespace absence for all candidate rows"
+    );
+
+    (block, rollup_params())
+}
+
+pub(crate) fn skipped_proof_index(inclusion_proof: &[BlobProof]) -> Option<usize> {
+    inclusion_proof
+        .iter()
+        .position(|proof| matches!(proof.is_supported_blob(), Ok(false)))
+}
+
+pub(crate) fn shift_namespace_proof_range(
+    namespace_proof: &mut celestia_types::nmt::NamespaceProof,
+    shift_end: bool,
+) {
+    match &mut **namespace_proof {
+        NmtNamespaceProof::PresenceProof { proof, .. }
+        | NmtNamespaceProof::AbsenceProof { proof, .. } => {
+            proof.range.start = proof.range.start.saturating_add(1);
+            if shift_end {
+                proof.range.end = proof.range.end.saturating_add(1);
+            }
+        }
+    }
 }
 
 pub(crate) fn assert_subproof_start_indices_align(
