@@ -227,10 +227,10 @@ are rules of thumb, not hard limits.
 
 | Name | Kind | Defined in | What to look for |
 |---|---|---|---|
-| `sov_rollup_in_flight_blobs_snapshot` | snapshot | `sov-blob-sender/src/in_flight_blob.rs` | Per-blob lifecycle snapshot. `duration_ms` high with stable `last_known_state` = blob stuck in that state (DA submission hanging or resurrection loop). |
-| `sov_rollup_num_of_in_flight_blobs` | gauge | `sov-blob-sender/src/in_flight_blob.rs` | Growing unboundedly = DA submission is not keeping up with blob production. |
-| `sov_rollup_blobs_enter_scope` | counter | `sov-blob-sender/src/lib.rs` | Rate of new blobs being handed to the sender. Compare with `exit_scope` for throughput balance. |
-| `sov_rollup_blobs_exit_scope` | counter | `sov-blob-sender/src/lib.rs` | Rate of blobs leaving the sender (success or drop). `enter - exit` over a window ≈ backlog growth. |
+| `sov_rollup_in_flight_blobs_snapshot` | snapshot | `sov-blob-sender/src/metrics.rs` | Per-blob lifecycle snapshot. `duration_ms` high with stable `last_known_state` = blob stuck in that state (DA submission hanging or resurrection loop). |
+| `sov_rollup_num_of_in_flight_blobs` | gauge | `sov-blob-sender/src/metrics.rs` | Growing unboundedly = DA submission is not keeping up with blob production. |
+| `sov_rollup_blobs_enter_scope` | counter | `sov-blob-sender/src/metrics.rs` | Rate of new blobs being handed to the sender. Compare with `exit_scope` for throughput balance. |
+| `sov_rollup_blobs_exit_scope` | counter | `sov-blob-sender/src/metrics.rs` | Rate of blobs leaving the sender (success or drop). `enter - exit` over a window ≈ backlog growth. |
 
 ### Celestia adapter
 
