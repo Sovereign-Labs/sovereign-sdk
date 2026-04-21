@@ -1,6 +1,6 @@
 # 2026-04-20
 - #2764 Celestia adapter: re-adds block integrity verification on fetch. Replaces the previously-reverted boolean toggle (PR #2489 / reverted in PR #2520) with a
-  `verify_on_fetch_mode` enum accepting `"off"` (default), `"log_error"` ,or `"return_error"`. `log_error` runs verification and logs via `tracing::error!` on failure while still returning the block, enabling staged rollouts without breaking the node.
+  `verify_on_fetch_mode` enum accepting `"off"` (default), `"log_error"`, or `"return_error"`. `log_error` runs verification and logs via `tracing::error!` on failure while still returning the block, enabling staged rollouts without breaking the node.
   The underlying verifier bug fix from PR #2525 is already in place.
 
 # 2026-04-16
