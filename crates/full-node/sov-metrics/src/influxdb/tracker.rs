@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 
 use crate::influxdb::KnownMetric;
 use crate::influxdb::{
-    publisher, safe_telegraf_string, Metric, SubmittableMetric, SubmittableMetricKind,
-    DROPPED_METRICS_COUNT,
+    publisher, safe_telegraf_string, write_metadata_fields_for_telegraf, Metric, SubmittableMetric,
+    SubmittableMetricKind, DROPPED_METRICS_COUNT,
 };
 use crate::{MetricsTracker, MonitoringConfig};
 
@@ -649,12 +649,7 @@ impl Metric for ZkVmExecutionChunk {
             self.free_heap_bytes,
             self.memory_used
         )?;
-        for (key, value) in &self.metadata {
-            let safe_key = safe_telegraf_string(key);
-            let safe_value = value.replace('\\', "\\\\").replace('"', "\\\"");
-            write!(buffer, ",{safe_key}=\"{safe_value}\"")?;
-        }
-        Ok(())
+        write_metadata_fields_for_telegraf(buffer, &self.metadata)
     }
 }
 

@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use tokio::task_local;
 
-use crate::influxdb::safe_telegraf_string;
+use crate::influxdb::write_metadata_fields_for_telegraf;
 use crate::{timestamp, Metric, MetricsTracker};
 
 task_local! {
@@ -109,11 +109,6 @@ impl Metric for GasConstantMetric {
             self.constant,
             self.num_invocations,
         )?;
-        for (key, value) in &self.metadata {
-            let safe_key = safe_telegraf_string(key);
-            let safe_value = value.replace('\\', "\\\\").replace('"', "\\\"");
-            write!(buffer, ",{safe_key}=\"{safe_value}\"")?;
-        }
-        Ok(())
+        write_metadata_fields_for_telegraf(buffer, &self.metadata)
     }
 }

@@ -139,7 +139,8 @@ fn some_expensive_operation(input: u64) -> u64 {
 All measurement names emitted by the SDK are listed below. Every name is prefixed with
 `sov_` for discoverability in InfluxDB / Grafana. New metrics should follow the same
 convention; prefer the `sov_rollup_`, `sov_nomt_`, `sov_db_`, `sov_evm_`, `sov_sequencer_`,
-or `sov_celestia_adapter_` namespaces that match the emitting subsystem.
+`sov_hyperlane_`, `sov_proxy_`, or `sov_celestia_adapter_` namespaces that match the
+emitting subsystem.
 
 The "What to look for" column is aimed at both human operators and autonomous agents
 diagnosing a running rollup: it names the dominant diagnostic signal in each metric and
@@ -190,6 +191,7 @@ are rules of thumb, not hard limits.
 | `sov_evm_tx` | timer | `sov-evm/src/metrics.rs` | EVM tx timing breakdown (`fetch_state`, `execution`, `state_commit`, `receipt`, `get_head`). Which stage dominates identifies whether the bottleneck is revm, state I/O, or commit. |
 | `sov_evm_db_metrics` | timer + counter | `sov-evm/src/db/metrics.rs` | revm DB access counts and durations per access type (`account`, `code`, `storage`, `block_hash`). High `storage_count` = tx is doing many slot reads. |
 | `sov_rollup_value_setter` | timer | `sov-synthetic-load/src/metrics.rs` | Only emitted in synthetic-load benchmarks (`sov-synthetic-load`); tag `context` distinguishes the workload shape. Ignore in production. |
+| `sov_hyperlane_rate_limiter_capacity` | gauge | `hyperlane/src/warp/metrics.rs` | Current and max rate-limiter capacity by route, remote domain, and direction. Watch `current_capacity` near zero for throttled bridge traffic. |
 
 ### Storage (sov-db / NOMT)
 
@@ -238,8 +240,21 @@ are rules of thumb, not hard limits.
 | `sov_celestia_adapter_header_network_head` | timer + status | `celestia/src/metrics/client.rs` | Polling for network head; similar failure-mode semantics as `header_get_by_height`. |
 | `sov_celestia_adapter_share_get_namespace_data` | timer + status | `celestia/src/metrics/client.rs` | Data-share retrieval per namespace. Failures here often surface upstream as `sov_rollup_runner_da` gaps. |
 | `sov_celestia_adapter_state_submit_pay_for_blob` | timer + status | `celestia/src/metrics/client.rs` | PFB submission to Celestia; failures block DA posting entirely. Pair with `sov_rollup_in_flight_blobs_snapshot` to confirm blobs are stuck here vs. elsewhere. |
+| `sov_celestia_adapter_blob_get_all` | timer + status | `celestia/src/metrics/client.rs` | Blob lookup RPC; failures mean submitted blobs cannot be fetched back from Celestia. |
+| `sov_celestia_adapter_state_balance_for_address` | timer + status | `celestia/src/metrics/client.rs` | Balance lookup for the Celestia account; failures block balance-aware health checks and funding diagnostics. |
+| `sov_celestia_adapter_header_sync_state` | timer + status | `celestia/src/metrics/client.rs` | Header sync-state RPC; failures or high latency make DA-head visibility unreliable. |
+| `sov_celestia_adapter_state_estimate_gas_price` | timer + status | `celestia/src/metrics/client.rs` | Gas-price estimation RPC; failures can prevent cost-aware PFB submission. |
 | `sov_celestia_adapter_get_block` | timer | `celestia/src/metrics/full.rs` | Block-level fetch latency (full-node path). `height` and `square_width` are fields (not tags); `square_width` is a useful indicator of on-chain activity. |
 | `sov_celestia_adapter_submit_blob` | timer | `celestia/src/metrics/full.rs` | Full-node blob submission path; tag `namespace` is low-cardinality. |
+| `sov_celestia_adapter_periodic_data` | gauge | `celestia/src/metrics/full.rs` | Periodic adapter health snapshot: balance, gas price, and sync distance. Low balance or growing sync distance points to operator intervention. |
+
+### Proxy utilities
+
+| Name | Kind | Defined in | What to look for |
+|---|---|---|---|
+| `sov_proxy_latest_height_check` | gauge | `sov-proxy-utils/src/node_check_metric.rs` | Cross-node latest-height health: `nodes_failed` non-zero or `height_diff` widening means the proxy pool is inconsistent. |
+| `sov_proxy_root_hash_check` | gauge | `sov-proxy-utils/src/node_check_metric.rs` | Cross-node state-root consistency at a slot. `unique_state_roots > 1` is a consensus-critical disagreement signal. |
+| `sov_proxy_cluster_update_failure` | counter | `sov-proxy-utils/src/node_discovery_metrics.rs` | Node-discovery refresh failures by `stage`; sustained increments mean proxy membership is stale. |
 
 ### Known cardinality caveats
 

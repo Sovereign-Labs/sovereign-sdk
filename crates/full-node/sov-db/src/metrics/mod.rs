@@ -22,11 +22,17 @@ pub mod nomt;
 /// processing) and `sov_nomt_commit_detailed` (downstream commit cost).
 #[derive(Debug)]
 pub struct StateMaterializationMetrics {
+    /// How many key-value items have been materialized for user space.
     pub user_items: usize,
+    /// How many key-value items have been materialized for kernel space.
     pub kernel_items: usize,
+    /// Cumulative size of keys across both namespaces.
     pub cumulative_keys_size: usize,
+    /// Cumulative size of values across both namespaces.
     pub cumulative_values_size: usize,
+    /// Max key size across all namespaces.
     pub max_key_size: usize,
+    /// Max value size across all namespaces.
     pub max_value_size: usize,
 }
 
