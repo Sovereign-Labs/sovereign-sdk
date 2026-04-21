@@ -248,6 +248,14 @@ pub type AuthenticationOutput<S, Decodable> = (
     Decodable,
 );
 
+/// The material from which a non-malleable transaction hash can be derived.
+pub enum ReplayHashMaterial<'a> {
+    /// The raw transaction hash is already non-malleable and can be used directly.
+    AlreadyNonMalleableHash(TxHash),
+    /// The verified message bytes are the non-malleable material and should be hashed.
+    VerifiedSignatureMessage(&'a [u8]),
+}
+
 /// Error variants that can be raised as a [`AuthenticationError::FatalError`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
 #[serde(rename_all = "snake_case")]
@@ -370,7 +378,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<(), AuthenticationError> {
+) -> Result<Vec<u8>, AuthenticationError> {
     let serialized_tx = tx.serialized_with_chain_hash(chain_hash).map_err(|e| {
         AuthenticationError::FatalError(
             FatalError::DeserializationFailed(e.to_string()),
@@ -391,7 +399,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
-        return known_result;
+        return known_result.map(|()| serialized_tx);
     }
 
     let res = tx
@@ -409,7 +417,20 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
 
-    res
+    res.map(|()| serialized_tx)
+}
+
+/// Calculates the non-malleable hash to use for replay protection.
+pub fn calculate_non_malleable_hash_metered<G: GasMeter<Spec = S>, S: Spec>(
+    material: ReplayHashMaterial<'_>,
+    gas_meter: &mut G,
+) -> Result<TxHash, GasMeteringError<S::Gas>> {
+    match material {
+        ReplayHashMaterial::AlreadyNonMalleableHash(hash) => Ok(hash),
+        ReplayHashMaterial::VerifiedSignatureMessage(message) => {
+            calculate_hash_metered::<G, S>(message, gas_meter)
+        }
+    }
 }
 
 /// Authenticate and verify deserialized sov-tx. See `authenticate`.
@@ -496,16 +517,9 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    // Extract auth_data and verify chain_id (these don't depend on chain_hash)
-    let (auth_data, details, runtime_call) = match &tx {
-        Transaction::V0(tx_v0) => {
-            let auth_data = tx_v0.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v0.details, &tx_v0.runtime_call)
-        }
-        Transaction::V1(tx_v1) => {
-            let auth_data = tx_v1.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v1.details, &tx_v1.runtime_call)
-        }
+    let (details, runtime_call) = match &tx {
+        Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
+        Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
     verify_chain_id(details, raw_tx_hash)?;
@@ -514,7 +528,27 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     let mut last_error = None;
     for chain_hash in resolved_hashes.iter() {
         match verify_signature(&tx, chain_hash, raw_tx_hash, meter) {
-            Ok(()) => {
+            Ok(serialized_tx) => {
+                let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+                    match &tx {
+                        Transaction::V0(_) => {
+                            ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash)
+                        }
+                        Transaction::V1(_) => {
+                            ReplayHashMaterial::VerifiedSignatureMessage(&serialized_tx)
+                        }
+                    },
+                    meter,
+                )
+                .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+                let auth_data = match &tx {
+                    Transaction::V0(tx_v0) => {
+                        tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?
+                    }
+                    Transaction::V1(tx_v1) => {
+                        tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?
+                    }
+                };
                 let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
                     raw_tx_hash,
                     authenticated_tx: details.clone().into(),

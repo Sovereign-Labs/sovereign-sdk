@@ -326,6 +326,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
 
         Ok(AuthorizationData {
             tx_hash: NULL_TX_HASH,
+            non_malleable_hash: NULL_TX_HASH,
             uniqueness,
             credential_id,
             default_address: credential_id.into(),

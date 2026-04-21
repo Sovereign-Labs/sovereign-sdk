@@ -142,6 +142,7 @@ Temporary section for maintaining breaking changes from individual PRs, which wi
   * Previous signatures are no longer valid. Clients will need to upgrade to our latest SDKs to be able to sign transactions in the new format.
   * The `UnsignedTransaction` type, and multiple member methods of `Transaction`, have changed. Our client SDKs have been updated, but for users manually constructing an UnsignedTransaction in Rust, we recommend explicitly using `UnsignedTransactionV0`. For creating a multisig, use `UnsignedTransactionV0::to_multisig_tx()`.
   * The CHAIN_HASH has changed.
+  * The `Generation` uniqueness (replay protection) mechanism has been amended to fix a transaction hash malleability vulnerability with V1 transactions. New, non-malleable hashes are used to prevent replay. **If the rollup has had public V1 transactions submitted**, a migration script must increment the current generation of every user that has submitted a V1 transaction by `PAST_TRANSACTION_GENERATIONS` to invalidate prior existing hashes. No action is needed if there are no users with a prior V1 submission.
 
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.

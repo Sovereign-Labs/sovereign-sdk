@@ -219,6 +219,7 @@ where
     AuthorizationData {
         uniqueness: UniquenessData::Nonce(nonce),
         tx_hash,
+        non_malleable_hash: tx_hash,
         credential_id,
         credentials,
         default_address: S::Address::from_vm_address(ethereum_address),
