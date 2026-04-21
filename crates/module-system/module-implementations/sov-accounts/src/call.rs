@@ -1,20 +1,22 @@
+use anyhow::anyhow;
 use anyhow::bail;
-use anyhow::{anyhow, Result};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
 use sov_state::namespaces::User;
 
-use crate::{Account, Accounts};
+use crate::{AccountOwnerKey, Accounts};
 
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
 #[serialize(Borsh, Serde)]
 #[serde(rename_all = "snake_case")]
 pub enum CallMessage {
-    /// Inserts a new credential id for the corresponding Account.
+    /// Authorizes a credential to sign transactions that execute as the
+    /// caller's address. Does not affect the credential's stateless default
+    /// routing (`credential_id.into()`).
     InsertCredentialId(
-        /// The new credential id.
+        /// The credential id being authorized.
         CredentialId,
     ),
 }
@@ -25,35 +27,30 @@ impl<S: Spec> Accounts<S> {
         new_credential_id: CredentialId,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if !self.enable_custom_account_mappings.get(state)?.expect(
             "`enable_custom_account_mappings` should not be None; it must be set at genesis.",
         ) {
             bail!("Custom account mappings are disabled");
         }
 
-        self.exit_if_credential_exists(&new_credential_id, state)?;
-
-        // Insert the new credential id -> account mapping
-        let account = Account {
-            addr: *context.sender(),
-        };
-        self.accounts.set(&new_credential_id, &account, state)?;
-
+        let key = AccountOwnerKey::new(*context.sender(), new_credential_id);
+        self.exit_if_authorization_exists(&key, state)?;
+        self.account_owners.set(&key, &true, state)?;
         Ok(())
     }
 
-    fn exit_if_credential_exists(
+    fn exit_if_authorization_exists(
         &self,
-        new_credential_id: &CredentialId,
+        key: &AccountOwnerKey<S>,
         state: &mut impl StateReader<User>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            self.accounts
-                .get(new_credential_id, state)
-                .map_err(|err| anyhow!("Error raised while getting account: {err:?}"))?
+            self.account_owners
+                .get(key, state)
+                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
                 .is_none(),
-            "New CredentialId already exists"
+            "CredentialId already authorized for this address"
         );
         Ok(())
     }

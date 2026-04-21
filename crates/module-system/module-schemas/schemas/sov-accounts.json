@@ -4,7 +4,7 @@
   "description": "Represents the available call messages for interacting with the sov-accounts module.",
   "oneOf": [
     {
-      "description": "Inserts a new credential id for the corresponding Account.",
+      "description": "Authorizes a credential to sign transactions that execute as the caller's address. Does not affect the credential's stateless default routing (`credential_id.into()`).",
       "type": "object",
       "required": [
         "insert_credential_id"

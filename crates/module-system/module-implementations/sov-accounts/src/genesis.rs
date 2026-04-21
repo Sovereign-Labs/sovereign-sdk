@@ -4,7 +4,7 @@ use serde_with::{serde_as, DisplayFromStr};
 use sov_modules_api::prelude::*;
 use sov_modules_api::{CredentialId, GenesisState};
 
-use crate::{Account, Accounts};
+use crate::{AccountOwnerKey, Accounts};
 
 /// Account data for the genesis.
 #[serde_as]
@@ -25,7 +25,7 @@ pub struct AccountData<Address> {
 pub struct AccountConfig<S: Spec> {
     /// Accounts to initialize the rollup.
     pub accounts: Vec<AccountData<S::Address>>,
-    /// Enable custom `CredentailId` => `Account` mapping.
+    /// Enable custom `CredentialId` => `Account` mapping.
     #[serde(default = "default_true")]
     pub enable_custom_account_mappings: bool,
 }
@@ -51,13 +51,11 @@ impl<S: Spec> Accounts<S> {
         }
 
         for acc in &config.accounts {
-            if self.accounts.get(&acc.credential_id, state)?.is_some() {
+            let key = AccountOwnerKey::new(acc.address, acc.credential_id);
+            if self.account_owners.get(&key, state)?.is_some() {
                 bail!("Account already exists")
             }
-
-            let new_account = Account { addr: acc.address };
-
-            self.accounts.set(&acc.credential_id, &new_account, state)?;
+            self.account_owners.set(&key, &true, state)?;
         }
 
         Ok(())
