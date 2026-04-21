@@ -87,8 +87,15 @@ pub struct AuthorizationData<S: Spec> {
     /// The nonce of the transaction.
     pub uniqueness: UniquenessData,
 
-    /// The hash of the transaction.
+    /// The hash of the transaction as received on the wire.
     pub tx_hash: TxHash,
+
+    /// The non-malleable hash used for replay protection.
+    ///
+    /// This is equal to [`Self::tx_hash`] for non-malleable transaction envelopes. For malleable
+    /// envelopes such as V1 rollup transactions, this instead hashes the witnessless bytes that
+    /// were actually signed.
+    pub non_malleable_hash: TxHash,
 
     /// Credential identifier used to retrieve relevant rollup address.
     pub credential_id: CredentialId,
