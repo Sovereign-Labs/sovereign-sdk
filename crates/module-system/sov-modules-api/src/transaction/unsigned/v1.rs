@@ -31,6 +31,10 @@ pub struct UnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// and prevent credential malleability from reusing signed bytes in a different
     /// multisig envelope.
     pub credential_address: S::Address,
+    /// Signer-declared target address. `None` routes through `resolve_sender_address`
+    /// (default-address resolver). `Some(X)` requires the multisig credential to be
+    /// authorized for `X` via `account_owners`; otherwise the tx is skipped.
+    pub target_address: Option<S::Address>,
 }
 
 impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV1<R, S> {
@@ -40,6 +44,7 @@ impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV1<R, S> {
             uniqueness: self.uniqueness,
             details: self.details.clone(),
             credential_address: self.credential_address,
+            target_address: self.target_address,
         }
     }
 }
@@ -49,6 +54,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV1<R, S> 
             && self.uniqueness == other.uniqueness
             && self.details == other.details
             && self.credential_address == other.credential_address
+            && self.target_address == other.target_address
     }
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV1<R, S> {}

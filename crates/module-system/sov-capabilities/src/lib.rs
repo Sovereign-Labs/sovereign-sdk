@@ -60,6 +60,33 @@ impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
 
         rewarded_token_holder
     }
+
+    fn resolve_sender(
+        &mut self,
+        auth_data: &AuthorizationData<S>,
+        state: &mut impl StateAccessor,
+    ) -> anyhow::Result<S::Address> {
+        match auth_data.address {
+            Some(requested) => {
+                if !self
+                    .accounts
+                    .is_authorized(&requested, &auth_data.credential_id, state)?
+                {
+                    anyhow::bail!(
+                        "credential {} not authorized for target address {}",
+                        auth_data.credential_id,
+                        requested,
+                    );
+                }
+                Ok(requested)
+            }
+            None => Ok(self.accounts.resolve_sender_address(
+                &auth_data.default_address,
+                &auth_data.credential_id,
+                state,
+            )?),
+        }
+    }
 }
 
 trait HasGasPayer<S: Spec> {
@@ -316,12 +343,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
-        // This should be resolved by the sequencer registry during blob selection
-        let sender = self.accounts.resolve_sender_address(
-            &auth_data.default_address,
-            &auth_data.credential_id,
-            state,
-        )?;
+        let sender = self.resolve_sender(auth_data, state)?;
         Ok(Context::new(
             sender,
             auth_data.credentials.clone(),
@@ -340,11 +362,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        let sender = self.accounts.resolve_sender_address(
-            &auth_data.default_address,
-            &auth_data.credential_id,
-            state,
-        )?;
+        let sender = self.resolve_sender(auth_data, state)?;
         // The tx sender & sequencer are the same entity
         Ok(Context::new(
             sender,
