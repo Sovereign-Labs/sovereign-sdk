@@ -206,7 +206,7 @@ impl CelestiaService {
 
         let tx_priority = config.tx_priority.clone().into();
         if config.background_stat_polling_interval_secs > 0 {
-            if let Ok(signer) = client.address() {
+            if let Some(signer) = fetched_signer {
                 let bg_client = config
                     .build_client()
                     .await
@@ -617,7 +617,7 @@ fn flatten_timeout<T>(
 
 async fn stat_collection_task(
     client: celestia_client::Client,
-    signer: celestia_types::state::AccAddress,
+    signer: CelestiaAddress,
     priority: celestia_client::tx::TxPriority,
     mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
     period: Duration,
@@ -655,14 +655,17 @@ async fn stat_collection_task(
 
 async fn gather_stat(
     client: &celestia_client::Client,
-    signer: &celestia_types::state::AccAddress,
+    signer: &CelestiaAddress,
     priority: celestia_client::tx::TxPriority,
     request_timeout: Duration,
 ) -> anyhow::Result<CelestiaAdapterStateMeasurement> {
     // Balance
     let balance_start = std::time::Instant::now();
-    let balance_response =
-        tokio::time::timeout(request_timeout, client.state().balance_for_address(signer)).await;
+    let balance_response = tokio::time::timeout(
+        request_timeout,
+        client.state().balance_for_address(&signer.0),
+    )
+    .await;
     let response_time = balance_start.elapsed();
     let is_success = matches!(balance_response, Ok(Ok(_)));
     sov_metrics::track_metrics(|tracker| {
@@ -700,6 +703,7 @@ async fn gather_stat(
     let gas_price = flatten_timeout(gas_price_response).context("state.EstimateGasPrice")?;
 
     Ok(CelestiaAdapterStateMeasurement {
+        signer: *signer,
         balance,
         gas_price,
         sync_distance,

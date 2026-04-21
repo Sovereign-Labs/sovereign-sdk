@@ -12,6 +12,7 @@ use crate::{BlockGasInfo, ChainState, SlotInformation};
 
 /// Initial configuration of the chain state
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct ChainStateConfig<S: Spec> {
     /// The time at `genesis_da_height` slot according to the DA layer.
     /// So the format depends on DA layer time representation.

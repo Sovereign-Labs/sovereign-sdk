@@ -5,7 +5,6 @@ mod signatures;
 pub use signatures::*;
 use sov_universal_wallet::UniversalWallet;
 
-use crate as sov_rollup_interface; // Needed for UniversalWallet, as it requires global paths
 use crate::common::HexHash;
 
 /// Type that represents an identifier for an authorizer of the transaction.

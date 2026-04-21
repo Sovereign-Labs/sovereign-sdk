@@ -2,14 +2,14 @@
 //!
 //! Submits proof requests to the Succinct proving network and polls for results.
 
+use crate::guest::SP1Guest;
 use serde::Serialize;
 use sov_rollup_interface::zk::{ZkVerifier, ZkvmGuest, ZkvmNetwork};
 use sp1_sdk::network::proto::auction_types::FulfillmentStatus;
 use sp1_sdk::network::{NetworkMode, B256};
 use sp1_sdk::prover::{ProveRequest, Prover};
+use sp1_sdk::HashableKey;
 use sp1_sdk::{NetworkProver, ProverClient, ProvingKey, SP1ProvingKey, SP1Stdin};
-
-use crate::guest::SP1Guest;
 
 /// Re-export of the proof handle type used by the SP1 network.
 pub type ProofHandle = B256;
@@ -76,8 +76,6 @@ impl ZkvmNetwork for SP1Network {
     fn code_commitment(
         &self,
     ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment> {
-        Ok(crate::SP1MethodId(bincode::serialize(
-            self.pk.verifying_key(),
-        )?))
+        Ok(crate::SP1MethodId(self.pk.verifying_key().hash_u32()))
     }
 }

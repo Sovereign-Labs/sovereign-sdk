@@ -9,6 +9,7 @@ use crate::{Account, Accounts};
 /// Account data for the genesis.
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AccountData<Address> {
     /// Credential ID of the account.
     #[serde_as(as = "DisplayFromStr")]
@@ -19,6 +20,7 @@ pub struct AccountData<Address> {
 
 /// Initial configuration for sov-accounts module.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 #[schemars(bound = "S: ::sov_modules_api::Spec", rename = "AccountConfig")]
 pub struct AccountConfig<S: Spec> {
     /// Accounts to initialize the rollup.

@@ -51,7 +51,7 @@ fn emit_ws_metrics(
     track_metrics(|tracker| {
         let point = HttpMetrics {
             request_method: http::Method::GET,
-            request_uri: http::Uri::from_static("/sequencer/txs/submit/ws"),
+            request_path: "/sequencer/txs/submit/ws".to_owned(),
             response_status,
             response_body_size,
             handler_processing_time,

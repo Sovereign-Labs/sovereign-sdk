@@ -10,7 +10,8 @@ pub use error::*;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::schema::OverrideSchema;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
@@ -27,7 +28,7 @@ pub struct TmHash(pub tendermint::Hash);
 #[doc(hidden)]
 pub struct TmHashSchema(#[sov_wallet(display(hex))] [u8; 32]);
 
-impl sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema for TmHash {
+impl OverrideSchema for TmHash {
     type Output = TmHashSchema;
 }
 

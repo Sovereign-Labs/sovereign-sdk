@@ -28,7 +28,7 @@ pub fn make_multisig_preamble_for_message(
     chain_hash: &[u8; 32],
     message_length: u16,
 ) -> Vec<u8> {
-    use crate::authentication::{PREAMBLE_FIXED_LEN, PUBKEY_LEN};
+    use crate::authentication::spec_compliant_constants::{PREAMBLE_FIXED_LEN, PUBKEY_LEN};
     assert!(
         pubkeys.len() >= 2 && pubkeys.len() <= 255,
         "multisig preamble requires 2..=255 signers"

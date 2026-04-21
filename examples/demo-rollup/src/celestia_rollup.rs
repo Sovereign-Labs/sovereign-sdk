@@ -12,8 +12,7 @@ use sov_ethereum::EthRpcConfig;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::rest::StateUpdateReceiver;
-use sov_modules_api::{NodeEndpoints, Spec, Storage, SyncStatus, ZkVerifier};
+use sov_modules_api::{NodeEndpoints, Spec, Storage, ZkVerifier};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{
@@ -21,8 +20,10 @@ use sov_modules_rollup_blueprint::{
 };
 use sov_risc0_adapter::host::Risc0Host;
 use sov_risc0_adapter::{Risc0, Risc0CryptoSpec};
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::execution_mode::WitnessGeneration;
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
@@ -162,12 +163,11 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let (elf, prover_config_disc) = prover_config.split();
-        let inner_vm = Risc0Host::new(*elf);
+        let inner_vm = Risc0Host::new(risc0::ROLLUP_ELF);
 
         let outer_vm = MockZkvmHost::new_non_blocking();
 
@@ -182,7 +182,6 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             inner_vm,
             outer_vm,
             da_verifier,
-            prover_config_disc,
             rollup_config.proof_manager.prover_address,
         )
     }

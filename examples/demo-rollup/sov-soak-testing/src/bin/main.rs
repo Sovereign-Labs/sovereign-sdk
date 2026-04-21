@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use clap::Parser;
 use sov_modules_api::prelude::tracing;
 use sov_modules_rollup_blueprint::FullNodeBlueprint;
@@ -44,10 +42,7 @@ async fn main() -> Result<(), anyhow::Error> {
         )
         .set_config(|config| {
             // Enable witness generation so proofs can be submitted to the network.
-            // The actual host args are unused by NetworkProverService.
-            config.rollup_prover_config = Some(RollupProverConfig::Prove(Arc::new(
-                *sp1::SP1_GUEST_MOCK_ELF,
-            )));
+            config.rollup_prover_config = RollupProverConfig::Prove;
         });
         start_and_wait(builder).await?;
     } else {
@@ -59,7 +54,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.db_connection_url,
         )
         .set_config(|config| {
-            config.rollup_prover_config = None;
+            config.rollup_prover_config = RollupProverConfig::Disabled;
         });
         start_and_wait(builder).await?;
     };

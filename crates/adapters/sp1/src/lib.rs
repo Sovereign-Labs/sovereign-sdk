@@ -10,6 +10,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 
 #[cfg(feature = "native")]
@@ -28,8 +29,8 @@ pub mod metrics;
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
 ///
 /// Use the [`ZkvmHost::code_commitment`](sov_rollup_interface::zk::ZkvmHost) method to get the MethodId for a given binary.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SP1MethodId(pub Vec<u8>);
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SP1MethodId(pub [u32; 8]);
 
 impl Debug for SP1MethodId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -37,19 +38,13 @@ impl Debug for SP1MethodId {
     }
 }
 
-#[cfg(not(target_os = "zkvm"))]
 impl sov_rollup_interface::zk::CodeCommitmentTrait for SP1MethodId {
-    fn to_hash(
-        &self,
-    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
-        use sp1_sdk::HashableKey;
-        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&self.0)
-            .map_err(|e| anyhow::anyhow!("Failed to deserialize SP1VerifyingKey: {e}"))?;
-        Ok(
-            sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(
-                verifying_key.hash_u32(),
-            ),
-        )
+    fn to_hash(&self) -> CodeCommitmentHash {
+        CodeCommitmentHash::from_u32_array(self.0)
+    }
+
+    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+        Self(hash.to_u32_array())
     }
 }
 
@@ -93,11 +88,40 @@ impl ZkVerifier for SP1Verifier {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof = decode_sp1_proof(serialized_proof)?;
-        let prover = sp1_sdk::blocking::ProverClient::builder().cpu().build();
-        let verifying_key: sp1_sdk::SP1VerifyingKey = bincode::deserialize(&code_commitment.0)?;
+        use core::borrow::Borrow;
+        use slop_algebra::AbstractField;
+        use slop_algebra::PrimeField32;
 
-        sp1_sdk::blocking::Prover::verify(&prover, &proof, &verifying_key, None)?;
+        let proof = decode_sp1_proof(serialized_proof)?;
+        let is_mock = std::env::var("SP1_PROVER").ok().as_deref() == Some("mock");
+
+        if !is_mock {
+            let sp1_sdk::SP1Proof::Compressed(ref compressed) = proof.proof else {
+                anyhow::bail!("SP1Verifier only supports compressed proofs");
+            };
+
+            let vkey_hash: [sp1_primitives::SP1Field; 8] = code_commitment
+                .0
+                .map(sp1_primitives::SP1Field::from_canonical_u32);
+
+            sp1_verifier::compressed::SP1CompressedVerifier::new()
+                .verify_compressed_with_public_values(
+                    compressed.as_ref(),
+                    proof.public_values.as_slice(),
+                    &vkey_hash,
+                )?;
+
+            // `SP1CompressedVerifier` does not inspect `exit_code`; the SDK's
+            // verifier does. Enforce SUCCESS here after the proof shape has been validated.
+            let recursion_public_values: &sp1_recursion_executor::RecursionPublicValues<
+                sp1_primitives::SP1Field,
+            > = compressed.proof.public_values.as_slice().borrow();
+            let exit_code = recursion_public_values.exit_code.as_canonical_u32();
+            if exit_code != 0 {
+                anyhow::bail!("SP1 proof has non-success exit code: {exit_code}");
+            }
+        }
+
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
 }
@@ -111,7 +135,10 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
     type Verifier = SP1Verifier;
 
     #[cfg(feature = "native")]
-    type Host = crate::host::SP1Host<'static>;
+    type Host = crate::host::SP1Host;
+
+    #[cfg(feature = "native")]
+    type OuterHost = crate::host::SP1AggregationHost;
 
     #[cfg(feature = "native")]
     type Network = crate::network::SP1Network;
@@ -119,7 +146,7 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
 
 #[cfg(target_os = "zkvm")]
 impl ZkVerifier for SP1Verifier {
-    type CodeCommitment = sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
+    type CodeCommitment = SP1MethodId;
 
     type CryptoSpec = SP1CryptoSpec;
 
@@ -130,10 +157,8 @@ impl ZkVerifier for SP1Verifier {
         vkey_hash: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         use sha2::Digest;
-
         let public_values_digest: [u8; 32] = sha2::Sha256::digest(public_values).into();
-        let vkey_u32 = vkey_hash.to_u32_array();
-        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_u32, &public_values_digest);
+        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
         Ok(bincode::deserialize(public_values)?)
     }
 }

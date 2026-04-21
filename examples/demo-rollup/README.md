@@ -53,16 +53,17 @@ If you don't need ZK guest to be compiled,
 for faster compilation time you can export `export SKIP_GUEST_BUILD=1`environment variable in each terminal you run.
 There are multiple options available:
 - `export SKIP_GUEST_BUILD=1` or `export SKIP_GUEST_BUILD=true`: both guest VMs builds are skipped
-* `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 guest is built.
-* `export SKIP_GUEST_BUILD=sp1`: only sp1 VM build is skipped, risc0 is built.
+* `export SKIP_GUEST_BUILD=sp1`: only sp1 VM build is skipped, risc0 guest is built.
+* `export SKIP_GUEST_BUILD=risc0`: only risc0 VM build is skipped, sp1 is built.
 * `export SKIP_GUEST_BUILD=0`, `export SKIP_GUEST_BUILD=false` or any other string: both guests are built.
 
-By default, demo-rollup disables proving. If you want to enable proving, several options are available:
+The default `MockDemoRollup` blueprint uses MockZkvm as the inner zkVM. Selecting `--zk-vm sp1` switches to SP1, which requires the SP1 guest ELF when proving is enabled.
 
-- `export SOV_PROVER_MODE=skip` Skips verification logic.
+By default, demo-rollup disables proving. To enable proving:
+
 - `export SOV_PROVER_MODE=prove` Run the rollup verifier and create a SNARK of execution.
 
-(!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`), only `SOV_PROVER_MODE=skip` will work, otherwise error about missing binary occurs.
+(!) Please note, that if guest binary building is skipped (`SKIP_GUEST_BUILD`) for a zkVM that requires a guest ELF, proving will fail with a missing binary error. Leave `SOV_PROVER_MODE` unset to disable proving.
 
 ### Run a local DA layer instance
 
@@ -74,8 +75,8 @@ This setup works with an in-memory DA that is easy to set up for testing purpose
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
-$ export RISC0_DEV_MODE=true
 $ export SOV_PROVER_MODE=prove
+$ export SP1_PROVER=mock
 $ make build
 ```
 
@@ -89,7 +90,7 @@ $ make clean
 3. Now run the demo-rollup full node, as shown below.
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-$ RISC0_DEV_MODE=true ../../target/debug/sov-demo-rollup
+$ SP1_PROVER=mock ../../target/debug/sov-demo-rollup --zk-vm sp1
 ```
 
 Leave it running while you proceed with the rest of the demo.

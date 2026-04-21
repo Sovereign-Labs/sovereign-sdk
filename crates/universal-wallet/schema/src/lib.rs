@@ -1,4 +1,5 @@
 mod visitors;
+extern crate self as sov_universal_wallet;
 pub use visitors::display;
 #[cfg(feature = "serde")]
 pub use visitors::json_to_borsh;
@@ -35,8 +36,8 @@ pub extern crate bech32;
 /// This annotation may only be applied to fields, not items.
 ///
 /// ```rust
-/// use sov_rollup_interface::sov_universal_wallet::schema::{Schema, safe_string::SafeString};
-/// use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+/// use sov_universal_wallet::schema::{Schema, safe_string::SafeString};
+/// use sov_universal_wallet::UniversalWallet;
 ///
 /// #[derive(UniversalWallet, borsh::BorshSerialize)]
 /// pub struct Unreadable {
@@ -61,7 +62,7 @@ pub extern crate bech32;
 /// or when you want to override the default schema for a type in a particular context.
 ///
 /// ```rust
-/// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+/// use sov_universal_wallet::{schema::Schema, UniversalWallet};
 ///
 /// // A foreign type that doesn't derive UniversalWallet
 /// #[derive(borsh::BorshSerialize)]
@@ -84,7 +85,7 @@ pub extern crate bech32;
 /// use `#[sov_wallet(hidden)]` instead.
 ///
 /// ```rust
-/// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+/// use sov_universal_wallet::{schema::Schema, UniversalWallet};
 /// #[derive(UniversalWallet, borsh::BorshSerialize)]
 /// pub struct File {
 ///     #[borsh(skip)]
@@ -107,7 +108,7 @@ pub extern crate bech32;
 ///    fixed-point number.
 ///
 /// ```rust
-/// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+/// use sov_universal_wallet::{schema::Schema, UniversalWallet};
 /// #[derive(UniversalWallet, borsh::BorshSerialize)]
 /// pub struct Coins {
 ///     #[sov_wallet(fixed_point(from_field(1)))]
@@ -138,7 +139,7 @@ pub extern crate bech32;
 /// This annotation may only be applied to fields, not items. The field must have type `[u8;N]` or `Vec<u8>` to use this attribute.
 ///
 /// ```rust
-/// use sov_rollup_interface::sov_universal_wallet::{schema::Schema, UniversalWallet};
+/// use sov_universal_wallet::{schema::Schema, UniversalWallet};
 ///
 /// fn prefix() -> &'static str {
 ///   "celestia"

@@ -6,7 +6,7 @@ use sov_modules_api::Spec;
 /// Genesis configuration for the blacklist module.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[serialize(Serde)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct BlacklistConfig<S: Spec> {
     /// Has authority for changing `manager` and toggling enforcement.
     pub owner: S::Address,

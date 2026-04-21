@@ -12,6 +12,14 @@ use std::sync::RwLock;
 use crate::Evm;
 
 /// Global storage for the EVM execution configuration.
+///
+/// Process-scoped: [`ModuleExecutionConfig::configure`] uses [`OnceLock::set`],
+/// which is a one-shot per process. In production each node runs in its own
+/// process so this is fine. In the test harness we rely on `cargo nextest`
+/// (see `.config/nextest.toml`), which isolates every `#[tokio::test]` in a
+/// fresh process — giving each test a virgin `OnceLock`. Invoking these
+/// tests via `cargo test` (which shares a process per test binary) would
+/// panic on the second call and is not supported.
 pub static EVM_EXECUTION_CONFIG: OnceLock<RwLock<EvmExecutionConfig>> = OnceLock::new();
 
 /// Configuration for EVM ram pinning.

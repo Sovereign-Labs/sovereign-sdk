@@ -1,14 +1,13 @@
-use std::collections::VecDeque;
-
 use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
 pub struct MockZkvmHost {
     notification_manager: NotificationManager,
-    committed_data: VecDeque<Vec<u8>>,
     wait_for_proof: bool,
 }
 
@@ -18,16 +17,14 @@ impl MockZkvmHost {
         Self {
             wait_for_proof: true,
             notification_manager: Default::default(),
-            committed_data: Default::default(),
         }
     }
 
-    /// Creates a new MockZkvm, the `ZkvmHost::run` will return immediately.
+    /// Creates a new MockZkvm, the `ZkvmHost::add_hint_and_run` will return immediately.
     pub fn new_non_blocking() -> Self {
         Self {
             wait_for_proof: false,
             notification_manager: Default::default(),
-            committed_data: Default::default(),
         }
     }
 
@@ -46,6 +43,17 @@ impl MockZkvmHost {
         })
         .unwrap()
     }
+
+    fn add_hint_and_run_inner<T: Serialize>(&self, item: &T) -> anyhow::Result<Vec<u8>> {
+        let pub_data = bincode::serialize(item)?;
+        if self.wait_for_proof {
+            self.notification_manager.wait();
+        }
+        Ok(bincode::serialize(&MockProof {
+            is_valid: true,
+            pub_data,
+        })?)
+    }
 }
 
 impl Default for MockZkvmHost {
@@ -59,27 +67,37 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
 
     type HostArgs = ();
 
-    fn add_hint<T: Serialize>(&mut self, item: T) {
-        let data = bincode::serialize(&item).unwrap();
-        self.committed_data.push_back(data);
-    }
-
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
         Ok(MockCodeCommitment::default())
     }
 
-    fn run(&mut self) -> anyhow::Result<Vec<u8>> {
-        if self.wait_for_proof {
-            self.notification_manager.wait();
-        }
-        let data = self.committed_data.pop_front().unwrap_or_default();
-        Ok(bincode::serialize(&MockProof {
-            is_valid: true,
-            pub_data: data,
-        })?)
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+        self.add_hint_and_run_inner(item)
     }
 
     fn from_args(_args: &Self::HostArgs) -> Self {
-        Self::default()
+        Self::new_non_blocking()
+    }
+}
+
+impl OuterZkvmHost for MockZkvmHost {
+    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+        &self,
+        genesis_state_root: Root,
+        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+    ) -> anyhow::Result<Vec<u8>> {
+        use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
+
+        let block_proofs_data = headers_with_block_proofs
+            .iter()
+            .map(|(_, bp)| bp)
+            .collect::<Vec<_>>();
+
+        let public_data = AggregatedProofPublicData::from_block_proofs(
+            block_proofs_data.as_slice(),
+            genesis_state_root,
+        );
+
+        self.add_hint_and_run_inner(&public_data)
     }
 }

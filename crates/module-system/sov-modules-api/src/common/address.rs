@@ -356,7 +356,7 @@ impl PartialOrd for Address {
 
 // Serialize Address without field labels. This changes the output from `{ addr: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9stup8tx}`
 // to just `sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9stup8tx`
-impl sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema for Address {
+impl sov_universal_wallet::schema::OverrideSchema for Address {
     type Output = AddressSchema;
 }
 
@@ -365,7 +365,7 @@ pub const fn address_prefix() -> &'static str {
     config_value_private!("ADDRESS_PREFIX")
 }
 
-#[derive(sov_rollup_interface::sov_universal_wallet::UniversalWallet)]
+#[derive(sov_universal_wallet::UniversalWallet)]
 #[allow(dead_code)]
 #[doc(hidden)]
 pub struct AddressSchema(#[sov_wallet(display(bech32m(prefix = "address_prefix()")))] [u8; 28]);
@@ -471,7 +471,7 @@ impl BasicAddress for Address {}
     Hash,
     BorshDeserialize,
     BorshSerialize,
-    sov_rollup_interface::sov_universal_wallet::UniversalWallet,
+    sov_universal_wallet::UniversalWallet,
 )]
 #[cfg_attr(
     feature = "arbitrary",
