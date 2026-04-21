@@ -14,10 +14,9 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use sov_bank::config_gas_token_id;
-use sov_demo_rollup::{mock_zkvm_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::{BlockProducingConfig, MockDaConfig};
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, PrivateKey, PublicKey, Spec};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
@@ -194,7 +193,6 @@ fn initialize_logging_for_restart(collector: LogCollector, with_stdout: bool) {
 async fn start_stop_empty(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig<MockZkvm>,
     seed: u64,
     collector: &LogCollector,
 ) -> anyhow::Result<()> {
@@ -222,11 +220,11 @@ async fn start_stop_empty(
                 TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
                 finalization_blocks,
             )
-            .with_zkvm_host_args(mock_zkvm_host_args())
+            .enable_prover()
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-                c.rollup_prover_config = Some(rollup_prover_config.clone());
+                c.rollup_prover_config = RollupProverConfig::Prove;
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
                     sequencer_conf.ideal_lag_behind_finalized_slot = 3;
@@ -255,16 +253,7 @@ async fn flaky_test_start_stop_zk_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Zk,
-            0,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Zk, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -274,16 +263,7 @@ async fn flaky_test_start_stop_zk_non_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Zk,
-            3,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Zk, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -293,16 +273,7 @@ async fn flaky_test_start_stop_optimistic_instant_finality() -> anyhow::Result<(
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Optimistic,
-            0,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Optimistic, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -312,16 +283,7 @@ async fn flaky_test_start_stop_optimistic_non_instant_finality() -> anyhow::Resu
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_empty(
-            OperatingMode::Optimistic,
-            3,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_empty(OperatingMode::Optimistic, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -333,7 +295,6 @@ async fn flaky_test_start_stop_optimistic_non_instant_finality() -> anyhow::Resu
 async fn start_stop_under_load(
     operation_mode: OperatingMode,
     finalization_blocks: u32,
-    rollup_prover_config: RollupProverConfig<MockZkvm>,
     seed: u64,
     collector: &LogCollector,
 ) -> anyhow::Result<()> {
@@ -370,11 +331,11 @@ async fn start_stop_under_load(
                 TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
                 finalization_blocks,
             )
-            .with_zkvm_host_args(mock_zkvm_host_args())
+            .enable_prover()
             .set_config(|c| {
                 c.max_concurrent_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-                c.rollup_prover_config = Some(rollup_prover_config.clone());
+                c.rollup_prover_config = RollupProverConfig::Prove;
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
                     sequencer_conf.disable_state_root_consistency_checks = true;
                     sequencer_conf.ideal_lag_behind_finalized_slot = 3;
@@ -477,16 +438,7 @@ async fn flaky_test_start_stop_under_load_zk_instant_finality() -> anyhow::Resul
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Zk,
-            0,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Zk, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -496,16 +448,7 @@ async fn flaky_test_start_stop_under_load_zk_non_instant_finality() -> anyhow::R
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Zk,
-            3,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Zk, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -515,16 +458,7 @@ async fn flaky_test_start_stop_under_load_optimistic_instant_finality() -> anyho
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Optimistic,
-            0,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Optimistic, 0, seed, &collector).await?;
     }
     Ok(())
 }
@@ -534,16 +468,7 @@ async fn flaky_test_start_stop_under_load_optimistic_non_instant_finality() -> a
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
-        start_stop_under_load(
-            OperatingMode::Optimistic,
-            3,
-            RollupProverConfig {
-                host_args: mock_zkvm_host_args(),
-            },
-            seed,
-            &collector,
-        )
-        .await?;
+        start_stop_under_load(OperatingMode::Optimistic, 3, seed, &collector).await?;
     }
     Ok(())
 }
@@ -569,13 +494,11 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-        c.rollup_prover_config = Some(RollupProverConfig {
-            host_args: mock_zkvm_host_args(),
-        });
+        c.rollup_prover_config = RollupProverConfig::Prove;
         // Since we have the prover enabled, we need to disable state root consistency checks.
         if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
             sequencer_conf.disable_state_root_consistency_checks = true;
@@ -728,13 +651,11 @@ async fn check_with_increasing_stf_infos(
         BlockProducingConfig::Manual,
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
-        c.rollup_prover_config = Some(RollupProverConfig {
-            host_args: mock_zkvm_host_args(),
-        });
+        c.rollup_prover_config = RollupProverConfig::Prove;
         c.aggregated_proof_block_jump = aggregated_proof_jump;
         c.max_channel_size = max_channel_size;
         c.max_infos_in_db = max_infos_in_db;

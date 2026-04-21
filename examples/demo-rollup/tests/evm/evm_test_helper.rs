@@ -15,18 +15,15 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::rpc_params;
 use reqwest::Url;
 use serde::Serialize;
-use sov_demo_rollup::{mock_zkvm_host_args, MockDemoRollup, MockRollupSpec};
+use sov_demo_rollup::{MockDemoRollup, MockRollupSpec};
 use sov_eth_client::SimpleStorageClient;
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_mock_da::BlockProducingConfig;
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
 use sov_sequencer::{SeqConfigExtension, SovRateLimiterConfig};
 use sov_stf_runner::processes::RollupProverConfig;
-use sov_test_utils::test_rollup::{
-    get_appropriate_rollup_prover_config, RollupBuilder, TestRollup,
-};
+use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 
 use crate::test_helpers::test_genesis_source;
 
@@ -40,7 +37,6 @@ pub(crate) const EVM_EXTENSION: SeqConfigExtension = SeqConfigExtension {
 pub(crate) const MAX_FEE_PER_GAS: u128 = 1_000_000_000;
 
 async fn start_node(
-    _rollup_prover_config: RollupProverConfig<MockZkvm>,
     finalization_blocks: u32,
     extension: Option<SeqConfigExtension>,
     rate_limiter: Option<SovRateLimiterConfig<<MockRollupSpec<Native> as Spec>::Address>>,
@@ -53,11 +49,11 @@ async fn start_node(
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .with_rate_limiter(rate_limiter)
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
@@ -120,9 +116,7 @@ pub async fn setup_test_rollup(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> TestRollup<MockDemoRollup<Native>> {
-    let host_args = mock_zkvm_host_args();
-    let config = get_appropriate_rollup_prover_config::<MockRollupSpec<Native>>(host_args);
-    start_node(config, finalization_blocks, Some(extension), None, 3).await
+    start_node(finalization_blocks, Some(extension), None, 3).await
 }
 
 pub async fn setup_test_rollup_with_paymaster(
@@ -141,10 +135,10 @@ pub async fn setup_test_rollup_with_paymaster(
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
@@ -173,10 +167,10 @@ pub async fn setup_test_rollup_with_selective_paymaster(
         },
         finalization_blocks,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;

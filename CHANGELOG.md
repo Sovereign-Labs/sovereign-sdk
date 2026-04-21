@@ -2,6 +2,10 @@
 - #2764 Celestia adapter: re-adds block integrity verification on fetch. Replaces the previously-reverted boolean toggle (PR #2489 / reverted in PR #2520) with a
   `verify_on_fetch_mode` enum accepting `"off"` (default), `"log_error"`, or `"return_error"`. `log_error` runs verification and logs via `tracing::error!` on failure while still returning the block, enabling staged rollouts without breaking the node.
   The underlying verifier bug fix from PR #2525 is already in place.
+# 2026-04-21
+- #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
+  The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.
+  Downstream runtimes with a manual `Runtime` impl should delete their `resolve_address` function.
 
 # 2026-04-16
 - #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly

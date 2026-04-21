@@ -2618,7 +2618,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
             FINALIZATION_BLOCKS,
         )
         .set_config(|c| {
-            c.rollup_prover_config = None;
+            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.storage = StoragePath::Tmp(dir);
             c.axum_port = port;
         })
@@ -3042,7 +3042,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
             FINALIZATION_BLOCKS,
         )
         .set_config(|c| {
-            c.rollup_prover_config = None;
+            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.storage = StoragePath::Tmp(dir);
         })
         .set_da_config(|c| {
@@ -3321,7 +3321,7 @@ async fn flaky_test_hooks_state_is_visible() {
         )
         .set_config(|c| {
             c.automatic_batch_production = false;
-            c.rollup_prover_config = None;
+            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.storage = StoragePath::Tmp(dir);
         })
         .set_da_config(|c| {
@@ -3661,9 +3661,7 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
         false,
         TEST_MAX_BATCH_SIZE,
         DEFAULT_BLOCK_PRODUCING_CONFIG,
-        Some(RollupProverConfig {
-            host_args: std::sync::Arc::new(()),
-        }),
+        Some(RollupProverConfig::Prove),
         60,
         MAX_BATCH_EXECUTION_TIME_MILLIS,
         None,

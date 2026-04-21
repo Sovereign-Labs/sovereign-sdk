@@ -2,6 +2,7 @@
 //! Can include multiple API calls.
 //! Always measured on success.
 use crate::metrics::RollupNamespace;
+use crate::verifier::address::CelestiaAddress;
 use celestia_types::namespace_data::NamespaceData;
 use sov_metrics::Metric;
 use std::io::Write;
@@ -90,6 +91,7 @@ impl Metric for BlobSubmitMeasurement {
 
 #[derive(Debug)]
 pub struct CelestiaAdapterStateMeasurement {
+    pub signer: CelestiaAddress,
     pub balance: u64,
     pub gas_price: f64,
     pub sync_distance: u64,
@@ -102,6 +104,7 @@ impl Metric for CelestiaAdapterStateMeasurement {
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         let name = self.measurement_name();
+        let signer = &self.signer;
         let balance = self.balance;
         let gas_price = self.gas_price;
         let sync_distance = self.sync_distance;
@@ -109,7 +112,7 @@ impl Metric for CelestiaAdapterStateMeasurement {
         // See: https://forum.celestia.org/t/cip-price-enforcement/1351/5
         write!(
             buffer,
-            "{name} balance={balance},gas_price={gas_price:.6},sync_distance={sync_distance}"
+            "{name},signer={signer} balance={balance},gas_price={gas_price:.6},sync_distance={sync_distance}"
         )
     }
 }

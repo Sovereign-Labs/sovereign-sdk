@@ -2,7 +2,6 @@ mod network;
 mod parallel;
 
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
@@ -13,7 +12,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{ZkVerifier, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::ZkVerifier;
 use strum::{Display, EnumString};
 use thiserror::Error;
 
@@ -26,58 +25,30 @@ where
     pub(crate) da_verifier: Da::Verifier,
 }
 
-/// The configuration of the prover: runs the rollup verifier and creates a SNARK of execution.
-// We use arcs for cheap cloning
-#[derive(Clone)]
-pub struct RollupProverConfig<Vm: Zkvm> {
-    /// Host arguments used to instantiate the zkVM prover.
-    pub host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-}
-
-/// The associated discriminants of [`RollupProverConfig`]. Possible configurations of the prover
-// Note: it's best if all string conversions to and from this type (even
-// `Debug`) use the same casing, to avoid bad UX or confusion around env. vars
-// expected behavior.
+/// Prover mode, parsed from the `SOV_PROVER_MODE` env var / CLI flag.
+///
+/// Blueprints that need more configuration (e.g., which guest ELF to prove) should source
+/// that directly in [`crate::processes::ProverService`] construction rather than threading
+/// it through this type.
 #[derive(Clone, Copy, PartialEq, Eq, EnumString, Display)]
 #[strum(serialize_all = "snake_case")]
-pub enum RollupProverConfigDiscriminants {
+pub enum RollupProverConfig {
     /// Run the rollup verifier and create a SNARK of execution.
     Prove,
+    /// Proving is disabled.
+    Disabled,
 }
 
-impl Debug for RollupProverConfigDiscriminants {
+impl RollupProverConfig {
+    /// Returns `true` unless the prover is disabled.
+    pub fn is_enabled(&self) -> bool {
+        !matches!(self, RollupProverConfig::Disabled)
+    }
+}
+
+impl Debug for RollupProverConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.to_string())
-    }
-}
-
-impl<Vm: Zkvm> From<RollupProverConfig<Vm>> for RollupProverConfigDiscriminants {
-    fn from(_value: RollupProverConfig<Vm>) -> Self {
-        RollupProverConfigDiscriminants::Prove
-    }
-}
-
-impl RollupProverConfigDiscriminants {
-    /// Converts the discriminant into a config
-    pub fn into_config<Vm: Zkvm>(
-        self,
-        host_args: Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-    ) -> RollupProverConfig<Vm> {
-        match self {
-            RollupProverConfigDiscriminants::Prove => RollupProverConfig { host_args },
-        }
-    }
-}
-
-impl<Vm: Zkvm> RollupProverConfig<Vm> {
-    /// Splits the rollup prover config into host arguments and an associated discriminant
-    pub fn split(
-        self,
-    ) -> (
-        Arc<<Vm::Host as ZkvmHost>::HostArgs>,
-        RollupProverConfigDiscriminants,
-    ) {
-        (self.host_args, RollupProverConfigDiscriminants::Prove)
     }
 }
 
@@ -177,15 +148,15 @@ mod tests {
 
     #[test]
     fn prover_config_debug_and_display_are_the_same() {
-        let config = RollupProverConfigDiscriminants::Prove;
+        let config = RollupProverConfig::Prove;
         assert_eq!(format!("{config:?}"), format!("{}", config));
     }
 
     #[test]
     fn prover_config_display_from_str() {
-        let config = RollupProverConfigDiscriminants::Prove;
+        let config = RollupProverConfig::Prove;
         assert_eq!(
-            RollupProverConfigDiscriminants::from_str(&config.to_string()).unwrap(),
+            RollupProverConfig::from_str(&config.to_string()).unwrap(),
             config
         );
     }

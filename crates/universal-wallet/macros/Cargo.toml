@@ -1,6 +1,7 @@
 [package]
 name = "sov-universal-wallet-macros"
-description = "Macros for sov-universall-wallet"
+description = "Derive macros for sov-universal-wallet"
+authors = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 license = "MIT OR Apache-2.0"

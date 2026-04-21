@@ -140,9 +140,7 @@ where
 
     async fn create_prover_service(
         &self,
-        prover_config: sov_stf_runner::processes::RollupProverConfig<
-            <Self::Spec as Spec>::InnerZkvm,
-        >,
+        prover_config: sov_stf_runner::processes::RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
     ) -> Self::ProverService {

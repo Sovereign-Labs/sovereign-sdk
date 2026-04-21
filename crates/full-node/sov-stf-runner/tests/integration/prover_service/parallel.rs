@@ -4,7 +4,7 @@ use sov_modules_api::ZkVerifier;
 use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
 use sov_stf_runner::processes::{
     ParallelProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
-    ProverServiceError, RollupProverConfigDiscriminants,
+    ProverServiceError,
 };
 
 use super::{make_header, make_transition_info, wait_for_aggregated_proof, Address, StateRoot};
@@ -22,14 +22,12 @@ fn make_new_prover() -> TestProver {
     let inner_vm = MockZkvmHost::new();
     let outer_vm = MockZkvmHost::new_non_blocking();
 
-    let prover_config = RollupProverConfigDiscriminants::Prove;
     let da_verifier = MockDaVerifier::default();
     TestProver {
         prover_service: ParallelProverService::new(
             inner_vm.clone(),
             outer_vm,
             da_verifier,
-            prover_config,
             num_threads,
             Default::default(),
         ),

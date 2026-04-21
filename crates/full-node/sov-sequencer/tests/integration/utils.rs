@@ -8,7 +8,6 @@ use sov_chain_state::ChainState;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::rest::HasRestApi;
@@ -299,7 +298,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     automatic_batch_production: bool,
     max_batch_size_bytes: usize,
     block_producing_config: BlockProducingConfig,
-    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    rollup_prover_config: Option<RollupProverConfig>,
     blob_processing_timeout_secs: u64,
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -311,7 +310,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         finalization_blocks,
     )
     .set_config(|c| {
-        c.rollup_prover_config = rollup_prover_config;
+        c.rollup_prover_config = rollup_prover_config.unwrap_or(RollupProverConfig::Disabled);
         c.automatic_batch_production = automatic_batch_production;
         c.storage = StoragePath::Tmp(dir);
         c.max_batch_size_bytes = max_batch_size_bytes;
@@ -323,7 +322,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
                 max_batch_execution_time_millis;
             // Proof generation and sequencer state-root consistency checks are currently
             // incompatible in these integration tests.
-            if c.rollup_prover_config.is_some() {
+            if c.rollup_prover_config.is_enabled() {
                 preferred_sequencer_config.disable_state_root_consistency_checks = true;
             }
         }

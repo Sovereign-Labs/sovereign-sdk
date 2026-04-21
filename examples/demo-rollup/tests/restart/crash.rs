@@ -8,7 +8,6 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
 use sov_db::test_utils::CommitFaultInjectionLocation;
 use sov_db::test_utils::CRASH_ON_COMMIT_ENV_NAME;
-use sov_demo_rollup::mock_zkvm_host_args;
 use sov_demo_rollup::MockDemoRollup;
 use sov_demo_rollup::MockRollupSpec;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
@@ -20,6 +19,7 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_sequencer::SeqConfigExtension;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use std::sync::Arc;
@@ -38,14 +38,14 @@ async fn start_node(
         BlockProducingConfig::Manual,
         0,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_da_config(|da_config: &mut MockDaConfig| {
         da_config.da_layer = Some(da_layer);
     })
     .set_config(|c| {
         c.storage = StoragePath::Tmp(location);
         c.max_concurrent_blobs = 65536;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;

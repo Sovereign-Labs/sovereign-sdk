@@ -19,7 +19,7 @@ use secp256k1::SecretKey;
 use sov_api_spec::types as api_types;
 use sov_bank::config_gas_token_id;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_zkvm_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
@@ -34,6 +34,7 @@ use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as Runti
 use sov_modules_macros::config_value;
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::ForcedTxBatchNotification;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_synthetic_load::CallMessage as SyntheticLoadCall;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
@@ -352,11 +353,11 @@ async fn setup_with_block_producing(
         block_producing,
         FINALIZATION_BLOCKS,
     )
-    .with_zkvm_host_args(mock_zkvm_host_args())
+    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_blobs = 65536;
         c.automatic_batch_production = true;
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
         c.max_channel_size = 1;
         c.max_infos_in_db = 1;
         if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
