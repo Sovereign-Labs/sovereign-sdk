@@ -123,6 +123,7 @@ const simulation = await rollup.simulate(
 ```typescript
 import { Multisig } from "@sovereign-sdk/multisig";
 import type { UnsignedTransactionV0 } from "@sovereign-sdk/types";
+import { bytesToHex } from "@sovereign-sdk/utils";
 
 const unsignedTx: UnsignedTransactionV0<YourRuntimeCall> =
   await rollup.buildUnsignedTransaction(runtimeCall, {
@@ -134,14 +135,23 @@ const multisig = Multisig.fromPubKeys(
   2,
 );
 
-await rollup.signMultisigTransaction(unsignedTx, multisig, { signer: signer1 });
-await rollup.signMultisigTransaction(unsignedTx, multisig, { signer: signer2 });
+const signer1Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+multisig.addSignature(
+  bytesToHex(await signer1.sign(signer1Bytes)),
+  bytesToHex(await signer1.publicKey()),
+);
 
-const tx = rollup.finalizeMultisigTransaction(unsignedTx, multisig);
-await rollup.submitMultisigTransaction(unsignedTx, multisig);
+const signer2Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+multisig.addSignature(
+  bytesToHex(await signer2.sign(signer2Bytes)),
+  bytesToHex(await signer2.publicKey()),
+);
+
+const tx = multisig.toTransaction(unsignedTx);
+await rollup.submitTransaction(tx);
 ```
 
-`SolanaSignableRollup` exposes the same multisig flow for `"standard"`, `"solanaSimple"`, and `"solana"` authenticators. The Solana multisig helpers derive canonical signer ordering and the multisig ID internally, so callers no longer pass `multisigPubkeys` or `multisigAddress`.
+`SolanaSignableRollup` exposes the same multisig flow for `"standard"`, `"solanaSimple"`, and `"solana"` authenticators. Use `multisigSigningBytes(unsignedTx, multisig, authenticator)` and `submitTransaction(tx, authenticator)` with the same explicit authenticator for every signer. The Solana multisig helpers derive canonical signer ordering and the multisig ID internally, so callers no longer pass `multisigPubkeys` or `multisigAddress`.
 
 ## API Reference
 

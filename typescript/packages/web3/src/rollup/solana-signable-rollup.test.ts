@@ -467,19 +467,27 @@ describe("SolanaSignableRollup", () => {
       },
     };
 
-    await rollup.signMultisigTransaction(unsignedTx, multisig, {
-      signer: signer3,
-      authenticator: "solanaSimple",
-    });
-    await rollup.signMultisigTransaction(unsignedTx, multisig, {
-      signer: signer1,
-      authenticator: "solanaSimple",
-    });
-    const multisigV1 = rollup.finalizeMultisigTransaction(unsignedTx, multisig);
+    const signer3Bytes = await rollup.multisigSigningBytes(
+      unsignedTx,
+      multisig,
+      "solanaSimple",
+    );
+    multisig.addSignature(
+      bytesToHex(await signer3.sign(signer3Bytes)),
+      bytesToHex(await signer3.publicKey()),
+    );
+    const signer1Bytes = await rollup.multisigSigningBytes(
+      unsignedTx,
+      multisig,
+      "solanaSimple",
+    );
+    multisig.addSignature(
+      bytesToHex(await signer1.sign(signer1Bytes)),
+      bytesToHex(await signer1.publicKey()),
+    );
+    const multisigV1 = multisig.toTransaction(unsignedTx);
 
-    await rollup.submitMultisigTransaction(multisigV1 as any, {
-      authenticator: "solanaSimple",
-    });
+    await rollup.submitTransaction(multisigV1 as any, "solanaSimple");
 
     const actualJson = JSON.stringify(capturedPayload);
     expect(actualJson).toBe(expectedJson);
@@ -520,20 +528,22 @@ describe("SolanaSignableRollup", () => {
     const otherPubKeyHex = bytesToHex(new Uint8Array(32).fill(9));
     const multisig = Multisig.fromPubKeys([pubKeyHex, otherPubKeyHex], 1);
 
-    await rollup.signMultisigTransaction(unsignedTx as any, multisig, {
-      signer,
-      authenticator: "standard",
-    });
+    const signingBytes = await rollup.multisigSigningBytes(
+      unsignedTx as any,
+      multisig,
+      "standard",
+    );
+    multisig.addSignature(
+      bytesToHex(await signer.sign(signingBytes)),
+      bytesToHex(await signer.publicKey()),
+    );
 
     expect(multisig.signaturesAndPubKeys).toHaveLength(1);
     expect(signer.sign).toHaveBeenCalledTimes(1);
 
-    await rollup.submitMultisigTransaction(
-      unsignedTx as any,
-      multisig,
-      {
-        authenticator: "standard",
-      },
+    await rollup.submitTransaction(
+      multisig.toTransaction(unsignedTx as any),
+      "standard",
     );
 
     expect(capturedEndpoint).toBe("/sequencer/txs");
@@ -609,19 +619,27 @@ describe("SolanaSignableRollup", () => {
       },
     };
 
-    await rollup.signMultisigTransaction(unsignedTx, multisig, {
-      signer: signer3,
-      authenticator: "solana",
-    });
-    await rollup.signMultisigTransaction(unsignedTx, multisig, {
-      signer: signer1,
-      authenticator: "solana",
-    });
-    const multisigV1 = rollup.finalizeMultisigTransaction(unsignedTx, multisig);
+    const signer3Bytes = await rollup.multisigSigningBytes(
+      unsignedTx,
+      multisig,
+      "solana",
+    );
+    multisig.addSignature(
+      bytesToHex(await signer3.sign(signer3Bytes)),
+      bytesToHex(await signer3.publicKey()),
+    );
+    const signer1Bytes = await rollup.multisigSigningBytes(
+      unsignedTx,
+      multisig,
+      "solana",
+    );
+    multisig.addSignature(
+      bytesToHex(await signer1.sign(signer1Bytes)),
+      bytesToHex(await signer1.publicKey()),
+    );
+    const multisigV1 = multisig.toTransaction(unsignedTx);
 
-    await rollup.submitMultisigTransaction(multisigV1 as any, {
-      authenticator: "solana",
-    });
+    await rollup.submitTransaction(multisigV1 as any, "solana");
 
     const actualJson = JSON.stringify(capturedPayload.body);
     expect(actualJson).toBe(expectedJson);

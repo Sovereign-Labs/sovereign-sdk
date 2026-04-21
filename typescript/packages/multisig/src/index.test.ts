@@ -149,6 +149,46 @@ describe("Multisig", () => {
     });
   });
 
+  describe("toTransaction", () => {
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: {
+        max_priority_fee_bips: 0,
+        max_fee: "1000",
+        gas_limit: null,
+        chain_id: 1,
+      },
+    };
+
+    it("should reject incomplete multisig transactions", () => {
+      const multisig = new Multisig(createParams());
+
+      expect(() => multisig.toTransaction(unsignedTx)).toThrow(
+        "Multisig transaction is incomplete",
+      );
+    });
+
+    it("should convert a complete multisig into a V1 transaction", () => {
+      const multisig = new Multisig(createParams());
+
+      multisig.addSignature("aa", pubkey1);
+      multisig.addSignature("bb", pubkey2);
+
+      expect(multisig.toTransaction(unsignedTx)).toEqual({
+        V1: {
+          ...unsignedTx,
+          signatures: [
+            { pub_key: pubkey1, signature: "aa" },
+            { pub_key: pubkey2, signature: "bb" },
+          ],
+          unused_pub_keys: [pubkey3],
+          min_signers: 2,
+        },
+      });
+    });
+  });
+
   describe("getMultisigAddress", () => {
     it("should match the Rust test vector", () => {
       const multisig = Multisig.fromPubKeys([pubkey1, pubkey2, pubkey3], 2);

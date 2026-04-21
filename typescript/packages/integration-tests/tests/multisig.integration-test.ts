@@ -74,10 +74,16 @@ describe("multisig", async () => {
     );
 
     for (const signer of multiSigSigners) {
-      await rollup.signMultisigTransaction(unsignedTx, multisig, { signer });
+      const signingBytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+      multisig.addSignature(
+        bytesToHex(await signer.sign(signingBytes)),
+        bytesToHex(await signer.publicKey()),
+      );
     }
 
-    const response = await rollup.submitMultisigTransaction(unsignedTx, multisig);
+    const response = await rollup.submitTransaction(
+      multisig.toTransaction(unsignedTx),
+    );
 
     expect(response.status).toEqual("submitted");
   });

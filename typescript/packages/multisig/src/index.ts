@@ -1,5 +1,9 @@
 import { sha256 } from "@noble/hashes/sha2";
-import type { SignatureAndPubKey } from "@sovereign-sdk/types";
+import type {
+  SignatureAndPubKey,
+  TransactionV1,
+  UnsignedTransactionV0,
+} from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
 import { hexToBytes, normalizeHexString } from "@sovereign-sdk/utils";
 import * as borsh from "borsh";
@@ -108,6 +112,23 @@ export class Multisig {
       ...this.signatures.map((signature) => signature.pub_key),
       ...this.unusedPubKeys,
     ];
+  }
+
+  toTransaction<RuntimeCall>(
+    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+  ): TransactionV1<RuntimeCall> {
+    if (!this.isComplete) {
+      throw new MultisigError("Multisig transaction is incomplete");
+    }
+
+    return {
+      V1: {
+        ...unsignedTx,
+        signatures: [...this.signaturesAndPubKeys],
+        unused_pub_keys: [...this.remainingPubKeys],
+        min_signers: this.threshold,
+      },
+    };
   }
 
   getMultisigAddress(hasher: "sha256" = "sha256"): Uint8Array {

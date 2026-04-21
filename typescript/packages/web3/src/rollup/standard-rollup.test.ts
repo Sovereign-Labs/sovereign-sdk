@@ -321,7 +321,7 @@ describe("createStandardRollup", () => {
     expect(dedup).toHaveBeenCalledWith("aabb");
   });
 
-  it("should create and finalize multisig signatures using V1 signing bytes", async () => {
+  it("should create multisig signing bytes and finalize via Multisig.toTransaction()", async () => {
     const client = createMockStandardClient();
     const serializer = {
       ...mockSerializer,
@@ -340,7 +340,7 @@ describe("createStandardRollup", () => {
     const otherPublicKey = new Uint8Array(32).fill(9);
     const multisig = Multisig.fromPubKeys(
       [bytesToHex(signerPublicKey), bytesToHex(otherPublicKey)],
-      2,
+      1,
     );
     const unsignedTx = {
       runtime_call: { test: "call" },
@@ -348,10 +348,9 @@ describe("createStandardRollup", () => {
       details: mockConfig.context.defaultTxDetails,
     };
 
-    const signature = await rollup.createMultisigSignature(
+    const signingBytes = await rollup.multisigSigningBytes(
       unsignedTx,
       multisig,
-      { signer: signer as any },
     );
 
     expect(serializer.serializeUnsignedTx).toHaveBeenCalledWith({
@@ -363,33 +362,26 @@ describe("createStandardRollup", () => {
         ),
       },
     });
-    expect(signature).toEqual({
+    expect(signingBytes).toEqual(new Uint8Array([7, 8, 9, ...new Array(32).fill(0)]));
+
+    const signatureBytes = await signer.sign(signingBytes);
+    const signature = {
       pub_key: bytesToHex(signerPublicKey),
-      signature: bytesToHex(new Uint8Array(64).fill(8)),
-    });
+      signature: bytesToHex(signatureBytes),
+    };
+    multisig.addSignature(signature);
 
-    await rollup.signMultisigTransaction(unsignedTx, multisig, {
-      signer: signer as any,
-    });
-    const finalized = rollup.finalizeMultisigTransaction(unsignedTx, multisig);
-
-    expect(finalized).toEqual({
+    expect(multisig.toTransaction(unsignedTx)).toEqual({
       V1: {
         ...unsignedTx,
         signatures: [signature],
         unused_pub_keys: [bytesToHex(otherPublicKey)],
-        min_signers: 2,
+        min_signers: 1,
       },
     });
   });
 
-  it("should fail fast when submitting an incomplete multisig transaction", async () => {
-    const client = createMockStandardClient();
-    const rollup = await createStandardRollup({
-      client,
-      getSerializer,
-      context: mockConfig.context,
-    });
+  it("should fail fast when converting an incomplete multisig transaction", () => {
     const multisig = Multisig.fromPubKeys(
       [bytesToHex(new Uint8Array(32).fill(1)), bytesToHex(new Uint8Array(32).fill(2))],
       2,
@@ -400,8 +392,8 @@ describe("createStandardRollup", () => {
       details: mockConfig.context.defaultTxDetails,
     };
 
-    await expect(
-      rollup.submitMultisigTransaction(unsignedTx, multisig),
-    ).rejects.toThrow("Multisig transaction is incomplete");
+    expect(() => multisig.toTransaction(unsignedTx)).toThrow(
+      "Multisig transaction is incomplete",
+    );
   });
 });

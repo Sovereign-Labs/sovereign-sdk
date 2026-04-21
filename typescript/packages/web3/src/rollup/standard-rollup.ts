@@ -2,9 +2,7 @@ import SovereignClient from "@sovereign-sdk/client";
 import { Multisig } from "@sovereign-sdk/multisig";
 import { JsSerializer } from "@sovereign-sdk/serializers";
 import type {
-  SignatureAndPubKey,
   Transaction,
-  TransactionV1,
   TxDetails,
   UnsignedTransaction,
   UnsignedTransactionV0,
@@ -136,76 +134,21 @@ export class StandardRollup<RuntimeCall> extends Rollup<
     };
   }
 
-  private async signVersionedUnsignedTx(
+  private async signingBytesForUnsignedTx(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
-    signer: SignerParams["signer"],
-  ): Promise<SignatureAndPubKey> {
+  ): Promise<Uint8Array> {
     const serializer = await this.serializer();
     const serializedUnsignedTx = serializer.serializeUnsignedTx(unsignedTx);
     const chainHash = await this.chainHash();
-    const signature = await signer.sign(
-      new Uint8Array([...serializedUnsignedTx, ...chainHash]),
-    );
-    const publicKey = await signer.publicKey();
-
-    return {
-      pub_key: bytesToHex(publicKey),
-      signature: bytesToHex(signature),
-    };
+    return new Uint8Array([...serializedUnsignedTx, ...chainHash]);
   }
 
-  async createMultisigSignature(
+  async multisigSigningBytes(
     unsignedTx: UnsignedTransactionV0<RuntimeCall>,
     multisig: Multisig,
-    { signer }: SignerParams,
-  ): Promise<SignatureAndPubKey> {
-    const signingUnsignedTx = await this.multisigUnsignedTxForSigning(
-      unsignedTx,
-      multisig,
-    );
-
-    return this.signVersionedUnsignedTx(signingUnsignedTx, signer);
-  }
-
-  async signMultisigTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
-    multisig: Multisig,
-    params: SignerParams,
-  ): Promise<void> {
-    const signature = await this.createMultisigSignature(
-      unsignedTx,
-      multisig,
-      params,
-    );
-    multisig.addSignature(signature);
-  }
-
-  finalizeMultisigTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
-    multisig: Multisig,
-  ): TransactionV1<RuntimeCall> {
-    return {
-      V1: {
-        ...unsignedTx,
-        signatures: [...multisig.signaturesAndPubKeys],
-        unused_pub_keys: [...multisig.remainingPubKeys],
-        min_signers: multisig.threshold,
-      },
-    };
-  }
-
-  async submitMultisigTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
-    multisig: Multisig,
-    options?: SovereignClient.RequestOptions,
-  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
-    if (!multisig.isComplete) {
-      throw new Error("Multisig transaction is incomplete");
-    }
-
-    return this.submitTransaction(
-      this.finalizeMultisigTransaction(unsignedTx, multisig),
-      options,
+  ): Promise<Uint8Array> {
+    return this.signingBytesForUnsignedTx(
+      await this.multisigUnsignedTxForSigning(unsignedTx, multisig),
     );
   }
 

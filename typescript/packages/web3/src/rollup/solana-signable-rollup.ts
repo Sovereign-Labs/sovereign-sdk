@@ -2,7 +2,6 @@ import type SovereignClient from "@sovereign-sdk/client";
 import { Multisig } from "@sovereign-sdk/multisig";
 import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type {
-  SignatureAndPubKey,
   Transaction,
   TransactionV1,
   UnsignedTransactionV0,
@@ -70,17 +69,7 @@ export type Authenticator =
   | "solana"
   | "solanaAuto";
 
-export type SolanaMultisigAuthenticator = "solanaSimple" | "solana";
-
-export type SolanaMultisigSubmitParams =
-  | {
-      authenticator: "standard";
-    }
-  | { authenticator: SolanaMultisigAuthenticator };
-
-export type SolanaMultisigSignParams = SolanaMultisigSubmitParams & {
-  signer: Signer;
-};
+export type SubmissionAuthenticator = Exclude<Authenticator, "solanaAuto">;
 
 /**
  * Discriminator byte prepended to the wire bytes in the multisig simple format.
@@ -581,28 +570,6 @@ export class SolanaSignableRollup<RuntimeCall> {
     };
   }
 
-  private async createMultisigMessageSignature(
-    multisig: Multisig,
-    signer: Signer,
-    message: Uint8Array,
-  ): Promise<SignatureAndPubKey> {
-    const pubkey = await signer.publicKey();
-    const signerPubkeyHex = bytesToHex(pubkey);
-
-    if (!multisig.allPubKeys.includes(signerPubkeyHex)) {
-      throw new Error(
-        `Signer public key ${signerPubkeyHex} is not present in the multisig signer set`,
-      );
-    }
-
-    const signature = await signer.sign(message);
-
-    return {
-      pub_key: signerPubkeyHex,
-      signature: bytesToHex(signature),
-    };
-  }
-
   /**
    * Creates the preamble+JSON bytes signed by every signer in a spec-compliant multisig flow.
    */
@@ -624,60 +591,27 @@ export class SolanaSignableRollup<RuntimeCall> {
     return this.combinePreambleAndMessage(preamble, jsonBytes);
   }
 
-  async createMultisigSignature(
+  async multisigSigningBytes(
     unsignedTx: UnsignedTransactionV0<RuntimeCall>,
     multisig: Multisig,
-    params: SolanaMultisigSignParams,
-  ): Promise<SignatureAndPubKey> {
-    switch (params.authenticator) {
+    authenticator: SubmissionAuthenticator,
+  ): Promise<Uint8Array> {
+    switch (authenticator) {
       case "standard":
-        return this.inner.createMultisigSignature(unsignedTx, multisig, {
-          signer: params.signer,
-        });
-      case "solanaSimple": {
-        const jsonBytes = await this.createMultisigJsonBytes(
+        return this.inner.multisigSigningBytes(unsignedTx, multisig);
+      case "solanaSimple":
+        return this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),
         );
-        return this.createMultisigMessageSignature(
+      case "solana":
+        return this.createSpecCompliantMultisigSignedMessage(
+          unsignedTx,
           multisig,
-          params.signer,
-          jsonBytes,
         );
-      }
-      case "solana": {
-        const signedMessageWithPreamble =
-          await this.createSpecCompliantMultisigSignedMessage(
-            unsignedTx,
-            multisig,
-          );
-        return this.createMultisigMessageSignature(
-          multisig,
-          params.signer,
-          signedMessageWithPreamble,
-        );
-      }
     }
-  }
 
-  async signMultisigTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
-    multisig: Multisig,
-    params: SolanaMultisigSignParams,
-  ): Promise<void> {
-    const signature = await this.createMultisigSignature(
-      unsignedTx,
-      multisig,
-      params,
-    );
-    multisig.addSignature(signature);
-  }
-
-  finalizeMultisigTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
-    multisig: Multisig,
-  ): TransactionV1<RuntimeCall> {
-    return this.inner.finalizeMultisigTransaction(unsignedTx, multisig);
+    throw new Error(`Unsupported authenticator: ${authenticator}`);
   }
 
   /**
@@ -759,67 +693,26 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Submits a multisig transaction. Accepts either unsigned V0 fields plus multisig
-   * state or an already-finalized V1 transaction.
+   * Submits a finalized V1 multisig transaction using a Solana authenticator.
    */
-  async submitMultisigTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
-    multisig: Multisig,
-    params: SolanaMultisigSubmitParams,
-    options?: SovereignClient.RequestOptions,
-  ): Promise<SovereignClient.Sequencer.TxCreateResponse>;
-  async submitMultisigTransaction(
-    multisigTx: TransactionV1<RuntimeCall>,
-    params: SolanaMultisigSubmitParams,
-    options?: SovereignClient.RequestOptions,
-  ): Promise<SovereignClient.Sequencer.TxCreateResponse>;
-  async submitMultisigTransaction(
-    unsignedTxOrTx: UnsignedTransactionV0<RuntimeCall> | TransactionV1<RuntimeCall>,
-    multisigOrParams: Multisig | SolanaMultisigSubmitParams,
-    paramsOrOptions?: SolanaMultisigSubmitParams | SovereignClient.RequestOptions,
+  private async submitMultisigTransactionWithAuthenticator(
+    transaction: TransactionV1<RuntimeCall>,
+    authenticator: Exclude<SubmissionAuthenticator, "standard">,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
-    const hasFinalizedTx = "V1" in unsignedTxOrTx;
-    const params = (
-      hasFinalizedTx ? multisigOrParams : paramsOrOptions
-    ) as SolanaMultisigSubmitParams;
-    const requestOptions = (
-      hasFinalizedTx ? paramsOrOptions : options
-    ) as SovereignClient.RequestOptions | undefined;
-    const finalizedTx = hasFinalizedTx
-      ? ({
-          V1: this.normalizeMultisigTransaction(
-            (unsignedTxOrTx as TransactionV1<RuntimeCall>).V1,
-          ),
-        } as TransactionV1<RuntimeCall>)
-      : this.finalizeMultisigTransaction(
-          unsignedTxOrTx as UnsignedTransactionV0<RuntimeCall>,
-          multisigOrParams as Multisig,
-        );
-    const multisig = hasFinalizedTx
-      ? this.multisigFromTransaction(finalizedTx.V1)
-      : (multisigOrParams as Multisig);
+    const finalizedTx = {
+      V1: this.normalizeMultisigTransaction(transaction.V1),
+    } as TransactionV1<RuntimeCall>;
+    const multisig = this.multisigFromTransaction(finalizedTx.V1);
 
     if (!multisig.isComplete) {
       throw new Error("Multisig transaction is incomplete");
     }
 
-    switch (params.authenticator) {
-      case "standard":
-        if (hasFinalizedTx) {
-          return this.inner.submitTransaction(
-            finalizedTx as StandardRollupSpec<RuntimeCall>["Transaction"],
-            requestOptions,
-          );
-        }
-        return this.inner.submitMultisigTransaction(
-          unsignedTxOrTx as UnsignedTransactionV0<RuntimeCall>,
-          multisig,
-          requestOptions,
-        );
-      case "solanaSimple": {
-        const unsignedTx = this.unsignedTxFromTransaction(finalizedTx.V1);
+    const unsignedTx = this.unsignedTxFromTransaction(finalizedTx.V1);
 
+    switch (authenticator) {
+      case "solanaSimple": {
         const jsonBytes = await this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),
@@ -842,10 +735,9 @@ export class SolanaSignableRollup<RuntimeCall> {
           min_signers: finalizedTx.V1.min_signers,
         });
 
-        return this.submitSerializedMessage(serialized, requestOptions);
+        return this.submitSerializedMessage(serialized, options);
       }
       case "solana": {
-        const unsignedTx = this.unsignedTxFromTransaction(finalizedTx.V1);
         const signedMessageWithPreamble =
           await this.createSpecCompliantMultisigSignedMessage(
             unsignedTx,
@@ -856,52 +748,65 @@ export class SolanaSignableRollup<RuntimeCall> {
           signedMessageWithPreamble,
         );
 
-        return this.submitSolanaSpecMultisigMessage(message, requestOptions);
+        return this.submitSolanaSpecMultisigMessage(message, options);
       }
     }
   }
 
   /**
-   * Submits a standard transaction.
+   * Submits a finalized V0 transaction using a Solana authenticator.
    */
-  async submitTransaction(
-    transaction: StandardRollupSpec<RuntimeCall>["Transaction"],
-    authenticator: "standard",
+  private async submitSingleSignatureTransactionWithAuthenticator(
+    transaction: Extract<Transaction<RuntimeCall>, { V0: unknown }>["V0"],
+    authenticator: Exclude<SubmissionAuthenticator, "standard">,
     options?: SovereignClient.RequestOptions,
-  ): Promise<SovereignClient.Sequencer.TxCreateResponse>;
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    const unsignedTx: UnsignedTransactionV0<RuntimeCall> = {
+      runtime_call: transaction.runtime_call,
+      uniqueness: transaction.uniqueness,
+      details: transaction.details,
+    };
+    const pubkey = hexToBytes(normalizeHexString(transaction.pub_key));
+    const signature = hexToBytes(normalizeHexString(transaction.signature));
 
-  /**
-   * Submits a Solana offchain message.
-   */
-  async submitTransaction(
-    transaction: SolanaOffchainSimpleMessage,
-    authenticator: "solanaSimple",
-    options?: SovereignClient.RequestOptions,
-  ): Promise<SovereignClient.Sequencer.TxCreateResponse>;
-
-  /**
-   * Submits a Solana spec-compliant message.
-   */
-  async submitTransaction(
-    transaction: SolanaOffchainSpecCompliantMessage,
-    authenticator: "solana",
-    options?: SovereignClient.RequestOptions,
-  ): Promise<SovereignClient.Sequencer.TxCreateResponse>;
+    switch (authenticator) {
+      case "solanaSimple": {
+        const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
+        const chainHash = await this.inner.chainHash();
+        const message: SolanaOffchainSimpleMessage = {
+          signed_message: signedMessage,
+          chain_hash: chainHash,
+          pubkey,
+          signature,
+        };
+        return this.submitSolanaMessage(message, options);
+      }
+      case "solana": {
+        const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
+        const chainHash = await this.inner.chainHash();
+        const preamble = createSolanaPreamble(
+          [pubkey],
+          chainHash,
+          signedMessage.length,
+        );
+        const message: SolanaOffchainSpecCompliantMessage = {
+          signed_message_with_preamble: this.combinePreambleAndMessage(
+            preamble,
+            signedMessage,
+          ),
+          signature,
+        };
+        return this.submitSolanaSpecMessage(message, options);
+      }
+    }
+  }
 
   /**
    * Submits a transaction with the specified authenticator.
-   *
-   * @param transaction - Either a standard transaction or a Solana message
-   * @param authenticator - The authenticator type to use
-   * @param options - Optional request options
-   * @returns The transaction response
    */
   async submitTransaction(
-    transaction:
-      | StandardRollupSpec<RuntimeCall>["Transaction"]
-      | SolanaOffchainSimpleMessage
-      | SolanaOffchainSpecCompliantMessage,
-    authenticator: Authenticator,
+    transaction: Transaction<RuntimeCall>,
+    authenticator: SubmissionAuthenticator,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     switch (authenticator) {
@@ -910,19 +815,35 @@ export class SolanaSignableRollup<RuntimeCall> {
           transaction as StandardRollupSpec<RuntimeCall>["Transaction"],
           options,
         );
-      case "solanaSimple": {
-        // For Solana simple, we expect a SolanaOffchainSimpleMessage
-        const solanaMessage = transaction as SolanaOffchainSimpleMessage;
-        return await this.submitSolanaMessage(solanaMessage, options);
-      }
-      case "solana": {
-        // For Solana spec-compliant, we expect a SolanaOffchainSpecCompliantMessage
-        const solanaMessage = transaction as SolanaOffchainSpecCompliantMessage;
-        return await this.submitSolanaSpecMessage(solanaMessage, options);
-      }
-      default:
-        throw new Error(`Unsupported authenticator: ${authenticator}`);
+      case "solanaSimple":
+        if ("V1" in transaction) {
+          return this.submitMultisigTransactionWithAuthenticator(
+            transaction,
+            "solanaSimple",
+            options,
+          );
+        }
+        return this.submitSingleSignatureTransactionWithAuthenticator(
+          transaction.V0,
+          "solanaSimple",
+          options,
+        );
+      case "solana":
+        if ("V1" in transaction) {
+          return this.submitMultisigTransactionWithAuthenticator(
+            transaction,
+            "solana",
+            options,
+          );
+        }
+        return this.submitSingleSignatureTransactionWithAuthenticator(
+          transaction.V0,
+          "solana",
+          options,
+        );
     }
+
+    throw new Error(`Unsupported authenticator: ${authenticator}`);
   }
 
   async simulate(

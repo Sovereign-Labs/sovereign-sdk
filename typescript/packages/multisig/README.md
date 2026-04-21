@@ -13,8 +13,9 @@ Payload-agnostic multisig signer state for Sovereign SDK applications.
 - the threshold
 - collected signatures
 - credential ID derivation
+- finalization into `TransactionV1`
 
-It does not own unsigned transaction payloads or finalize rollup transactions. Those responsibilities now live in `@sovereign-sdk/web3`.
+It does not own rollup-specific signing-byte derivation. That responsibility lives in `@sovereign-sdk/web3`.
 
 ## Usage
 
@@ -22,6 +23,7 @@ It does not own unsigned transaction payloads or finalize rollup transactions. T
 import { Multisig } from "@sovereign-sdk/multisig";
 import { createStandardRollup } from "@sovereign-sdk/web3";
 import type { UnsignedTransactionV0 } from "@sovereign-sdk/types";
+import { bytesToHex } from "@sovereign-sdk/utils";
 
 const rollup = await createStandardRollup<YourRuntimeCall>();
 
@@ -43,11 +45,20 @@ const multisig = Multisig.fromPubKeys(
   2,
 );
 
-await rollup.signMultisigTransaction(unsignedTx, multisig, { signer: signer1 });
-await rollup.signMultisigTransaction(unsignedTx, multisig, { signer: signer2 });
+const signer1Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+multisig.addSignature(
+  bytesToHex(await signer1.sign(signer1Bytes)),
+  bytesToHex(await signer1.publicKey()),
+);
+
+const signer2Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+multisig.addSignature(
+  bytesToHex(await signer2.sign(signer2Bytes)),
+  bytesToHex(await signer2.publicKey()),
+);
 
 if (multisig.isComplete) {
-  await rollup.submitMultisigTransaction(unsignedTx, multisig);
+  await rollup.submitTransaction(multisig.toTransaction(unsignedTx));
 }
 ```
 
@@ -60,5 +71,5 @@ if (multisig.isComplete) {
 ## Migration Notes
 
 - Replace `MultisigTransaction` with `Multisig`.
-- Move transaction finalization to `rollup.finalizeMultisigTransaction(...)`.
+- Move transaction finalization to `multisig.toTransaction(...)`.
 - The multisig package no longer restricts transactions to nonce-based uniqueness because it no longer owns transaction payloads.
