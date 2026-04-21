@@ -13,6 +13,7 @@
 
 use axum::response::Response;
 use sov_state::Prefix;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -81,6 +82,51 @@ where
                     "error": e.to_string(),
                 }),
             })
+    }
+}
+
+struct StateMapItemsQuery {
+    pagination: sov_rest_utils::Pagination<String>,
+    historical_height_requested: bool,
+}
+
+impl<S> FromRequestParts<S> for StateMapItemsQuery
+where
+    S: Send + Sync,
+{
+    type Rejection = ErrorObject;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        if parts.uri.query().is_none() {
+            return Ok(Self {
+                pagination: Default::default(),
+                historical_height_requested: false,
+            });
+        }
+
+        let query_params = Query::<HashMap<String, String>>::try_from_uri(&parts.uri)?.0;
+        let historical_height_requested =
+            query_params.contains_key("rollup_height") || query_params.contains_key("slot_number");
+        if historical_height_requested {
+            Query::<HeightParam>::try_from_uri(&parts.uri)?;
+        }
+
+        let pagination = if query_params.contains_key("page")
+            || query_params.contains_key("page[size]")
+            || query_params.contains_key("page[cursor]")
+        {
+            Query::<sov_rest_utils::Pagination<String>>::try_from_uri(&parts.uri)?.0
+        } else {
+            Default::default()
+        };
+
+        Ok(Self {
+            pagination,
+            historical_height_requested,
+        })
     }
 }
 
@@ -270,16 +316,13 @@ where
 {
     async fn get_state_map_items_route(
         State(state): State<Self>,
-        pagination_opt: Option<Query<sov_rest_utils::Pagination<String>>>,
-        historical_height_opt: Option<Query<HeightParam>>,
+        query: StateMapItemsQuery,
     ) -> ApiResult<sov_rest_utils::PaginatedResponse<StateItemContents<K, V>, String>> {
-        if historical_height_opt.is_some() {
+        if query.historical_height_requested {
             return Err(sov_rest_utils::errors::not_implemented_501());
         }
 
-        let pagination = pagination_opt
-            .map(|Query(pagination)| pagination)
-            .unwrap_or_default();
+        let pagination = query.pagination;
         let prefix = Prefix::new(
             state.module_discriminant,
             state.state_item_info.item_discriminant,

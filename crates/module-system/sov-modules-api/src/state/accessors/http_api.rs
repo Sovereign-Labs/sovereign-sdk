@@ -460,6 +460,8 @@ where
                         }
                     }
                 }
+            } else {
+                return Ok(None);
             }
         }
 
