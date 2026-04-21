@@ -1,5 +1,5 @@
 # 2026-04-21
-- #XXXX *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
+- #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
   The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.
   Downstream runtimes with a manual `Runtime` impl should delete their `resolve_address` function.
 
