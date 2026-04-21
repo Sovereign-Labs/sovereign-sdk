@@ -1,4 +1,4 @@
-use sov_accounts::{Accounts, CallMessage};
+use sov_accounts::{Accounts, CallMessage, Response};
 use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
     CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
@@ -74,7 +74,8 @@ fn test_config_account() {
     ) = setup();
 
     // The account is registered at genesis: `(user.address(), user.credential_id())`
-    // must appear in `account_owners`.
+    // must appear in `account_owners`, and `get_account` must see the
+    // credential's primary address.
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
         assert!(
@@ -82,6 +83,12 @@ fn test_config_account() {
                 .is_authorized(&user.address(), &user.credential_id(), state)
                 .unwrap(),
             "genesis-registered credential should be authorized for its address"
+        );
+        assert_eq!(
+            accounts.get_account(user.credential_id(), state),
+            Response::AccountExists {
+                addr: user.address()
+            }
         );
     });
 }
@@ -114,6 +121,12 @@ fn test_update_account() {
                     .unwrap(),
                 "InsertCredentialId must authorize the new credential for the sender"
             );
+            assert_eq!(
+                accounts.get_account(new_credential, state),
+                Response::AccountExists {
+                    addr: user.address()
+                }
+            );
             // The sender's own credential is still authorized (auto-registered on
             // first use when the tx was processed).
             assert!(
@@ -122,19 +135,22 @@ fn test_update_account() {
                     .unwrap(),
                 "the sender's own credential stays authorized"
             );
+            assert_eq!(
+                accounts.get_account(user.credential_id(), state),
+                Response::AccountExists {
+                    addr: user.address()
+                }
+            );
 
             assert_ne!(new_credential, user.credential_id());
         }),
     });
 }
 
-/// In the new many-to-many model, authorizing another user's credential for
-/// one's own address is a no-op (the attacker still needs the other party's
-/// private key to sign). The duplicate guard only checks the exact
-/// `(sender, credential)` tuple, so inserting a peer's credential succeeds.
-/// A second `InsertCredentialId` with the same tuple must still revert.
+/// A credential already mapped to one address cannot be inserted for another
+/// address. Existing consumers rely on this global credential uniqueness check.
 #[test]
-fn test_insert_peer_credential_succeeds_but_duplicate_fails() {
+fn test_insert_existing_credential_fails() {
     let (
         TestData {
             account_1,
@@ -145,30 +161,7 @@ fn test_insert_peer_credential_succeeds_but_duplicate_fails() {
     ) = setup();
 
     let peer_credential = account_1.credential_id();
-    let sender_address = sender.address();
 
-    // First insert: authorizing a peer's credential for the sender's own
-    // address is permitted.
-    runner.execute_transaction(TransactionTestCase {
-        input: sender.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
-            peer_credential,
-        )),
-        assert: Box::new(move |result, state| {
-            assert!(
-                result.tx_receipt.is_successful(),
-                "authorizing a peer's credential for your own address should succeed"
-            );
-            let accounts = Accounts::<S>::default();
-            assert!(
-                accounts
-                    .is_authorized(&sender_address, &peer_credential, state)
-                    .unwrap(),
-                "peer credential should now be authorized for the sender's address"
-            );
-        }),
-    });
-
-    // Second insert with the same tuple reverts via the duplicate guard.
     runner.execute_transaction(TransactionTestCase {
         input: sender.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
             peer_credential,
@@ -177,10 +170,10 @@ fn test_insert_peer_credential_succeeds_but_duplicate_fails() {
             TxEffect::Reverted(contents) => {
                 assert_eq!(
                     contents.reason.to_string(),
-                    "CredentialId already authorized for this address"
+                    "New CredentialId already exists"
                 );
             }
-            _ => panic!("Expected reverted transaction on duplicate authorization"),
+            _ => panic!("Expected reverted transaction for existing credential"),
         }),
     });
 }
@@ -190,8 +183,8 @@ fn test_insert_peer_credential_succeeds_but_duplicate_fails() {
 /// The multisig's effective signing address is its stateless default
 /// (`multisig_credential_id.into()`). We seed genesis with a `TestUser` whose
 /// custom `credential_id` matches the multisig, so the default address has a
-/// gas balance and is already authorized in `account_owners` before any tx is
-/// submitted. This keeps the focus on signature-level invariants.
+/// gas balance and is already mapped before any tx is submitted. This keeps the
+/// focus on signature-level invariants.
 #[test]
 fn test_setup_multisig_and_act() {
     use sov_modules_api::Multisig;
@@ -401,6 +394,10 @@ fn test_register_new_account() {
 
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
+        assert_eq!(
+            accounts.get_account(non_registered_account.credential_id(), state),
+            Response::AccountEmpty
+        );
         assert!(
             !accounts
                 .is_authorized(
@@ -431,6 +428,12 @@ fn test_register_new_account() {
                     .unwrap(),
                 "new credential should be authorized for the sender's address"
             );
+            assert_eq!(
+                accounts.get_account(new_credential, state),
+                Response::AccountExists {
+                    addr: non_registered_account.address()
+                }
+            );
 
             // The sender's own credential is auto-registered for the same
             // address when the tx flowed through `resolve_sender_address`.
@@ -443,6 +446,12 @@ fn test_register_new_account() {
                     )
                     .unwrap(),
                 "the sender's own credential is auto-registered on first tx"
+            );
+            assert_eq!(
+                accounts.get_account(non_registered_account.credential_id(), state),
+                Response::AccountExists {
+                    addr: non_registered_account.address()
+                }
             );
 
             assert_ne!(new_credential, non_registered_account.credential_id());
@@ -475,11 +484,8 @@ fn test_resolve_sender_address_with_default_address_non_registered() {
     });
 }
 
-/// Genesis-registered credentials are authorized for their configured address
-/// in `account_owners`. The resolver returns that address when queried with it
-/// as the default; passing a different fallback auto-registers a new tuple for
-/// the fallback (since the many-to-many model allows a credential to own
-/// multiple addresses).
+/// Genesis-registered credentials resolve to their configured address even when
+/// a different fallback address is supplied.
 #[test]
 fn test_resolve_sender_address_registered() {
     let (
@@ -503,23 +509,17 @@ fn test_resolve_sender_address_registered() {
             account_1.address()
         );
 
-        // Resolving with a different default for the same credential returns
-        // that different default (auto-registered); the many-to-many model
-        // allows the credential to own both addresses.
         assert_eq!(
             accounts
                 .resolve_sender_address(&account_2.address(), &account_1.credential_id(), state)
                 .unwrap(),
-            account_2.address()
+            account_1.address()
         );
     });
 }
 
 /// After `InsertCredentialId` from a user, the new credential is authorized
-/// for that user's address but its stateless default routing
-/// (`credential_id.into()`) is unchanged. Resolving with the user's address as
-/// default returns it; resolving with the credential's own default returns the
-/// default (auto-registered).
+/// for that user's address and resolves to that user's address.
 #[test]
 fn test_resolve_address_with_multi_credential_ownership() {
     let (
@@ -567,11 +567,23 @@ fn test_resolve_address_with_multi_credential_ownership() {
         assert!(accounts
             .is_authorized(&non_registered_account.address(), &credential_2, state)
             .unwrap());
+        assert_eq!(
+            accounts.get_account(credential_1, state),
+            Response::AccountExists {
+                addr: non_registered_account.address()
+            }
+        );
+        assert_eq!(
+            accounts.get_account(credential_2, state),
+            Response::AccountExists {
+                addr: non_registered_account.address()
+            }
+        );
     });
 }
 
 /// This test should verify that when a new credential is specified with an existing account's
-/// address as fallback, that the credential is appended to that address. However
+/// address as fallback, the credential is registered to that address. However
 /// query_visible_state doesn't mutate the state so it simply verifies that the fallback address is
 /// returned correctly
 #[test]
@@ -592,16 +604,10 @@ fn test_resolve_with_different_default_address() {
     });
 }
 
-/// Verifies the PR 1 invariant: every write to the routing `accounts` map must
-/// also write the matching `(address, credential_id)` tuple into
-/// `account_owners`. This covers the three write paths (genesis,
-/// `InsertCredentialId`, and auto-register on first resolve).
-/// Verifies the PR 1 invariant: every write path (genesis, auto-register on
-/// first resolve, and `InsertCredentialId`) lands its tuple in
-/// `account_owners`. The legacy `accounts` map is never written post-freeze,
-/// so these paths are the only sources of post-upgrade authorization state.
+/// Verifies every write path (genesis, auto-register on first resolve, and
+/// `InsertCredentialId`) updates both the `accounts` index and `account_owners`.
 #[test]
-fn test_account_owners_write_paths() {
+fn test_account_write_paths() {
     let (
         TestData {
             account_1,
@@ -619,6 +625,12 @@ fn test_account_owners_write_paths() {
                 .is_authorized(&account_1.address(), &account_1.credential_id(), state)
                 .unwrap(),
             "genesis-registered credential should be present in account_owners"
+        );
+        assert_eq!(
+            accounts.get_account(account_1.credential_id(), state),
+            Response::AccountExists {
+                addr: account_1.address()
+            }
         );
     });
 
@@ -644,6 +656,12 @@ fn test_account_owners_write_paths() {
                 .unwrap(),
             "auto-registered credential should be present in account_owners"
         );
+        assert_eq!(
+            accounts.get_account(non_registered_account.credential_id(), state),
+            Response::AccountExists {
+                addr: non_registered_account.address()
+            }
+        );
     });
 
     // InsertCredentialId path.
@@ -660,6 +678,12 @@ fn test_account_owners_write_paths() {
                     .is_authorized(&non_registered_account.address(), &new_credential, state)
                     .unwrap(),
                 "InsertCredentialId should populate account_owners under sender's address"
+            );
+            assert_eq!(
+                accounts.get_account(new_credential, state),
+                Response::AccountExists {
+                    addr: non_registered_account.address()
+                }
             );
         }),
     });

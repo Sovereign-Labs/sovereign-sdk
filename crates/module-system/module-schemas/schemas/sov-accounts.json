@@ -4,7 +4,7 @@
   "description": "Represents the available call messages for interacting with the sov-accounts module.",
   "oneOf": [
     {
-      "description": "Authorizes a credential to sign transactions that execute as the caller's address. Does not affect the credential's stateless default routing (`credential_id.into()`).",
+      "description": "Registers `credential_id` as an authorized signer whose transactions execute as the caller's address. Fails if the credential is already mapped to any address in this module (credentials are globally unique).",
       "type": "object",
       "required": [
         "insert_credential_id"
