@@ -170,13 +170,10 @@ where
         let first_height_unproven = self.stf_info_receiver.next_height_to_receive();
         let received_slot_number = stf_info.slot_number;
 
-        if received_slot_number.get() < first_height_unproven.get() {
-            tracing::warn!(
-                %received_slot_number,
-                %first_height_unproven,
-                "Received slot is behind first unproven height — this is a bug"
-            );
-        }
+        assert!(
+            received_slot_number.get() >= first_height_unproven.get(),
+            "Received slot {received_slot_number} is behind first unproven height {first_height_unproven}"
+        );
 
         let prover_service = &self.prover_service;
 
@@ -244,9 +241,7 @@ where
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(super::metrics::ZkProofManagerMetrics {
-                proving_lag: received_slot_number
-                    .get()
-                    .saturating_sub(first_height_unproven.get()),
+                proving_lag: received_slot_number.get() - first_height_unproven.get(),
                 proofs_to_create: self.proofs_to_create.current_proof_jump(),
                 slot_number: received_slot_number.get(),
             });
