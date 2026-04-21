@@ -1,6 +1,7 @@
 [package]
 name = "sov-universal-wallet"
-description = "UniversallWallet for Sovereign rollups"
+description = "Universal wallet schema and display utilities for Sovereign rollups"
+authors = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 license = "MIT OR Apache-2.0"

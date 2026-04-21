@@ -121,7 +121,10 @@ pub trait CodeCommitmentTrait:
     /// form of this commitment. Implementations that decode an opaque byte
     /// representation (e.g. SP1's serialized verifying key) may fail if the
     /// bytes are malformed.
-    fn to_hash(&self) -> anyhow::Result<aggregated_proof::CodeCommitmentHash>;
+    fn to_hash(&self) -> aggregated_proof::CodeCommitmentHash;
+
+    /// Constructs the code commitment from its canonical hash.
+    fn from_hash(hash: aggregated_proof::CodeCommitmentHash) -> Self;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code

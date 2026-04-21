@@ -31,10 +31,12 @@ pub mod metrics;
 pub struct Risc0MethodId([u32; 8]);
 
 impl sov_rollup_interface::zk::CodeCommitmentTrait for Risc0MethodId {
-    fn to_hash(
-        &self,
-    ) -> anyhow::Result<sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash> {
-        Ok(sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(self.0))
+    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(self.0)
+    }
+
+    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+        Self(hash.to_u32_array())
     }
 }
 

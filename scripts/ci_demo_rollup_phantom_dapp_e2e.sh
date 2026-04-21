@@ -19,12 +19,12 @@ cleanup() {
 
 trap cleanup EXIT
 
-SOV_PROVER_MODE=skip cargo build -p sov-demo-rollup --bin sov-demo-rollup
+cargo build -p sov-demo-rollup --bin sov-demo-rollup
 
 cd "$DEMO_DIR"
 rm -rf demo_data mock_da.sqlite "$ROLLUP_LOG"
 
-SOV_PROVER_MODE=skip "$ROLLUP_BIN" >"$ROLLUP_LOG" 2>&1 &
+"$ROLLUP_BIN" >"$ROLLUP_LOG" 2>&1 &
 ROLLUP_PID="$!"
 
 for i in $(seq 1 30); do

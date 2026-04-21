@@ -13,6 +13,7 @@ use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::Amount;
 use sov_modules_stf_blueprint::GenesisParams;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
 
@@ -109,7 +110,7 @@ async fn test_eth_send_raw_transaction() {
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir.into());
-        c.rollup_prover_config = None;
+        c.rollup_prover_config = RollupProverConfig::Disabled;
     })
     .set_da_config(|c| {
         c.sender_address = seq_da_address;

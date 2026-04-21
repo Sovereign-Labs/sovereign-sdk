@@ -2,6 +2,10 @@
 - #2196 Renames 5 metrics to add the `sov_` prefix; update Grafana/Flux dashboards accordingly: `state_db_materialization` → `sov_state_db_materialization`, `nomt_db_stats` → `sov_nomt_db_stats`, `nomt_begin_session` → `sov_nomt_begin_session`, `storage_manager_finalization` → `sov_storage_manager_finalization`, `pruner` → `sov_db_pruner`. Also adds a metric inventory to the `sov-metrics` crate README.
 - #2196 The previously-inline metrics emitted by the SDK (`sov_rollup_num_of_in_flight_blobs`, `sov_rollup_blobs_enter_scope`, `sov_rollup_blobs_exit_scope`, `sov_rollup_current_sequence_number`, `sov_rollup_in_progress_batch_size`, `sov_rollup_sequence_number_delta`) now go through dedicated types implementing `Metric`. The blob-sender scope markers intentionally changed their placeholder field from `foo=1` to `marker=1i`; update Grafana/Flux dashboards accordingly. `MetricsTracker::submit_inline` is retained for external SDK users whose downstream code depends on it.
 - #2196 *Internal*: `sov_rollup_zkvm` and `sov_rollup_gas_constant` now emit caller-supplied `metadata` as InfluxDB string fields rather than tags. Previously these tags could explode series cardinality when the `bench` / `gas-constant-estimation` features were enabled. The on-the-wire field keys are unchanged; if you were selecting them via `group by` (a tag operation) you'll need to switch to field-based filtering.
+# 2026-04-21
+- #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
+  The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.
+  Downstream runtimes with a manual `Runtime` impl should delete their `resolve_address` function.
 
 # 2026-04-16
 - #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly

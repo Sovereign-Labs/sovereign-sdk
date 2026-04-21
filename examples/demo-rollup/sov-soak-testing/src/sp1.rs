@@ -59,7 +59,7 @@ impl ProverFactory<SP1Spec> for NetworkProverFactory {
     >;
 
     async fn create(
-        _prover_config: RollupProverConfig<SP1>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<SP1Spec as Spec>::Address, StorableMockDaService>,
     ) -> Self::ProverService {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
