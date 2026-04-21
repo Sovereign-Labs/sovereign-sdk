@@ -135,13 +135,24 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
 }
 
 pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransactionV0<RT, S> {
+    create_utx_with_generation::<S, RT>(message, 0)
+}
+
+pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
+    message: RT::Decodable,
+    generation: u64,
+) -> UnsignedTransactionV0<RT, S> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     };
-    UnsignedTransactionV0::new_with_details(message, UniquenessData::Generation(0), details)
+    UnsignedTransactionV0::new_with_details(
+        message,
+        UniquenessData::Generation(generation),
+        details,
+    )
 }
 
 pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
@@ -286,16 +297,22 @@ fn test_multisig_signature_verification() {
         }),
     });
 
-    // Create a multisig transaction — signers must sign V1 bytes (with credential_address)
-    let utx = create_utx::<S, RT>(encode_message::<_, RT>());
-    let mut signatures = Vec::new();
-    for key in multisig_keys.iter() {
-        signatures.push(sign_utx_v1_in_place(&utx, &multisig, key));
-    }
     // Generate a signature from a random private key that's not part of the multisig. We'll use this in some of the test cases.
     let random_private_key = TestPrivateKey::generate();
-    let random_signature = sign_utx_v1_in_place(&utx, &multisig, &random_private_key);
-    let tx = utx.to_multisig_tx(multisig);
+    let make_multisig_tx = |generation| {
+        let utx = create_utx_with_generation::<S, RT>(encode_message::<_, RT>(), generation);
+        let signatures = multisig_keys
+            .iter()
+            .map(|key| sign_utx_v1_in_place(&utx, &multisig, key))
+            .collect::<Vec<_>>();
+        let random_signature = sign_utx_v1_in_place(&utx, &multisig, &random_private_key);
+
+        (
+            utx.to_multisig_tx(multisig.clone()),
+            signatures,
+            random_signature,
+        )
+    };
 
     // Helper functions to assert the expected behavior of the transaction
     let assert_tx_success = |tx: Transaction<RT, S>, runner: &mut TestRunner<RT, S>| {
@@ -319,7 +336,7 @@ fn test_multisig_signature_verification() {
 
     // A transaction with three valid signatures should succeed
     let tx_with_three_sigs = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(0);
         for (key, signature) in multisig_keys.iter().zip(signatures.iter()) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
@@ -329,7 +346,7 @@ fn test_multisig_signature_verification() {
 
     // A transaction with only two valid signatures should succeed
     let tx_with_two_sigs = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(1);
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(2)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
@@ -337,10 +354,15 @@ fn test_multisig_signature_verification() {
     };
     assert_tx_success(tx_with_two_sigs, &mut runner);
 
+    let (base_skipped_tx, skipped_tx_signatures, random_signature) = make_multisig_tx(2);
+
     // A transaction with only one valid signature should be skipped, since this is a 2/3 multisig.
     let tx_with_one_sig = {
-        let mut tx = tx.clone();
-        for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(1)) {
+        let mut tx = base_skipped_tx.clone();
+        for (key, signature) in multisig_keys
+            .iter()
+            .zip(skipped_tx_signatures.iter().take(1))
+        {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
         Transaction::<RT, S>::from(tx)
@@ -353,8 +375,8 @@ fn test_multisig_signature_verification() {
 
     // A transaction where one of the signatures isn't from this account should be skipped, since this changes the computed credential ID.
     let tx_with_random_sig = {
-        let mut tx = tx.clone();
-        tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
+        let mut tx = base_skipped_tx.clone();
+        tx.add_signature(skipped_tx_signatures[0].clone(), multisig_keys[0].pub_key())
             .unwrap();
         tx.signatures
             .try_push(PubKeyAndSignature {
@@ -371,12 +393,12 @@ fn test_multisig_signature_verification() {
     // A transaction with a duplicate signature should be skipped — the duplicate changes
     // the credential_address, causing signature verification failure.
     let tx_with_duplicate_sig = {
-        let mut tx = tx.clone();
-        tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
+        let mut tx = base_skipped_tx.clone();
+        tx.add_signature(skipped_tx_signatures[0].clone(), multisig_keys[0].pub_key())
             .unwrap();
         tx.signatures
             .try_push(PubKeyAndSignature {
-                signature: signatures[0].clone(),
+                signature: skipped_tx_signatures[0].clone(),
                 pub_key: multisig_keys[0].pub_key(),
             })
             .unwrap();
@@ -386,8 +408,8 @@ fn test_multisig_signature_verification() {
 
     // A transaction with a bad signature should be skipped
     let tx_with_bad_sig = {
-        let mut tx = tx.clone();
-        tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
+        let mut tx = base_skipped_tx;
+        tx.add_signature(skipped_tx_signatures[0].clone(), multisig_keys[0].pub_key())
             .unwrap();
         tx.add_signature(
             multisig_keys[1].sign(&[1, 2, 3]),
