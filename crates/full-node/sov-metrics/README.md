@@ -220,7 +220,7 @@ are rules of thumb, not hard limits.
 | `sov_rollup_nonce_buffer_main_queue_blocked` | timer | `sov-sequencer/src/metrics.rs` | **Only emitted when send blocked** (`blocked_for_us > 0`); presence of this metric = main queue capacity pressure. |
 | `sov_rollup_nonce_buffer_main_queue_depth` | gauge | `sov-sequencer/src/metrics.rs` | Instantaneous main queue depth. Compare against configured capacity to spot near-full saturation. |
 | `sov_rollup_nonce_buffer_timeout_queue` | timer + gauge | `sov-sequencer/src/metrics.rs` | Timeout queue activity (txs parked waiting for their nonce to become current). Deep queue = out-of-order nonces from clients. |
-| `sov_rollup_sequence_number_delta` | gauge | `sov-sequencer/src/preferred/sync_sequencer_state/inner.rs` | Gap between expected and observed sequence numbers. Non-zero briefly is normal during rebase; sustained non-zero = desync. |
+| `sov_rollup_sequence_number_delta` | gauge | `sov-sequencer/src/metrics.rs` | Gap between expected and observed sequence numbers. Non-zero briefly is normal during rebase; sustained non-zero = desync. |
 | `sov_sequencer_cache_warmup_metrics` | gauge | `sov-sequencer/src/preferred/cache_warm_up_executor.rs` | Tx-channel size seen by the cache warm-up executor; use as a sanity check that warm-up is receiving work. |
 
 ### Blob sender
