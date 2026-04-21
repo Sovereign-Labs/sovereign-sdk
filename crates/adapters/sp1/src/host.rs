@@ -13,7 +13,7 @@ use sov_rollup_interface::zk::aggregated_proof::common::{
 use sov_rollup_interface::zk::aggregated_proof::{
     BlockHeaderWithProof, BlockProof, CodeCommitmentHash, OuterZkvmHost,
 };
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::{SerializedInnerProof, ZkvmHost};
 use sp1_sdk::blocking::ProveRequest;
 use sp1_sdk::blocking::{EnvProver, EnvProvingKey, Prover, ProverClient};
 use sp1_sdk::ProvingKey;
@@ -223,11 +223,13 @@ impl ZkvmHost for SP1Host {
         Self::new(args).unwrap_or_else(|e| panic!("Failed to create SP1Host: {e:?}"))
     }
 
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedInnerProof> {
         let mut stdin = SP1Stdin::new();
         stdin.write(item);
         let output = self.run_helper(stdin)?;
-        Ok(bincode::serialize(&output)?)
+        Ok(SerializedInnerProof {
+            raw_inner_proof: bincode::serialize(&output)?,
+        })
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{

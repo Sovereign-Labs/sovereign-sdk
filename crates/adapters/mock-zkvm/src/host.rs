@@ -3,6 +3,7 @@ use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
+use sov_rollup_interface::zk::SerializedInnerProof;
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
@@ -71,8 +72,9 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         Ok(MockCodeCommitment::default())
     }
 
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedInnerProof> {
         self.add_hint_and_run_inner(item)
+            .map(|raw_inner_proof| SerializedInnerProof { raw_inner_proof })
     }
 
     fn from_args(_args: &Self::HostArgs) -> Self {

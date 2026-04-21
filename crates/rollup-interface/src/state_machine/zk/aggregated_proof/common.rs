@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use super::CodeCommitmentHash;
 use crate::da::DaSpec;
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+/// TODO
+pub struct SerializedPubValuse {
+    /// TODO
+    pub public_values: Vec<u8>,
+}
+
 /// A single deferred proof input containing its public values and associated DA block header.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(bound(

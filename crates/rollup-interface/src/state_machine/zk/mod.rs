@@ -86,6 +86,13 @@ pub struct SerializedInnerProof {
     pub raw_inner_proof: Vec<u8>,
 }
 
+impl SerializedInnerProof {
+    /// TODO
+    pub fn len(&self) -> usize {
+        self.raw_inner_proof.len()
+    }
+}
+
 /// A prover instance for a particular Zkvm program/circuit.
 pub trait ZkvmHost: Clone + Send + Sync + 'static {
     /// The associated guest type
@@ -107,7 +114,7 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
 
     /// Provide a single non-deterministic advice item to the guest and
     /// synchronously generate a SNARK of correct execution over that hint.
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>>;
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedInnerProof>;
 }
 
 /// A commitment to a zkVM program binary. Every concrete [`ZkVerifier::CodeCommitment`]

@@ -7,6 +7,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
+use sov_rollup_interface::zk::SerializedInnerProof;
 use sov_rollup_interface::zk::ZkvmHost;
 
 /// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
@@ -99,11 +100,16 @@ impl ZkvmHost for Risc0Host<'static> {
 
     type Guest = Risc0Guest;
 
-    fn add_hint_and_run<T: serde::Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_and_run<T: serde::Serialize>(
+        &mut self,
+        item: &T,
+    ) -> anyhow::Result<SerializedInnerProof> {
         self.replace_hints(item);
         let session = self.run_without_proving()?;
         let receipt = session.prove()?.receipt;
-        Ok(bincode::serialize(&receipt)?)
+        Ok(SerializedInnerProof {
+            raw_inner_proof: bincode::serialize(&receipt)?,
+        })
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{

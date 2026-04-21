@@ -97,10 +97,10 @@ async fn generate_proof(
         prover_address,
     };
 
-    let raw_inner_proof = host.run(data).await;
+    let inner_proof = host.run(data).await;
     BlockHeaderWithProof {
         da_block_header,
-        proof: SerializedInnerProof { raw_inner_proof },
+        proof: inner_proof,
     }
 }
 
@@ -125,9 +125,9 @@ impl TestHost {
         Self { host }
     }
 
-    async fn run(&self, data: ProofInput) -> Vec<u8> {
+    async fn run(&self, data: ProofInput) -> SerializedInnerProof {
         let mut host = self.host.clone();
-        tokio::task::spawn_blocking(move || -> Vec<u8> {
+        tokio::task::spawn_blocking(move || -> SerializedInnerProof {
             host.add_hint_and_run(&data)
                 .expect("Prover should run successfully")
         })

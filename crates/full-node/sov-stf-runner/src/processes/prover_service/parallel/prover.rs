@@ -107,7 +107,7 @@ where
 
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data);
+                    let inner_proof = make_inner_proof::<InnerVm>(inner_vm, &data);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -129,8 +129,8 @@ where
                         .verify_relevant_tx_list(&da_block_header, &blobs, relevant_proofs)
                         .expect("An honest prover provided an invalid list of relevant txs. This is a bug in the prover - please report it.");
 
-                    let block_proof = proof.map(|p| BlockProof {
-                        proof: p,
+                    let block_proof = inner_proof.map(|proof| BlockProof {
+                        proof,
                         st: StateTransitionPublicData::<Address, Da::Spec, StateRoot> {
                             initial_state_root,
                             final_state_root,
@@ -244,5 +244,5 @@ where
             error!("Proof generation failed: {:?}", e);
         }
     }
-    result.map(|raw_inner_proof| SerializedInnerProof { raw_inner_proof })
+    result
 }
