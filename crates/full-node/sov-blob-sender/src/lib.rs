@@ -12,7 +12,9 @@ use async_trait::async_trait;
 use db::BlobSenderDb;
 pub use db::BlobToSend;
 use in_flight_blob::{InFlightBlob, InFlightBlobInfo};
-use metrics::{track_num_of_in_flight_blobs, BlobsEnterScopeMarker, BlobsExitScopeMarker};
+use metrics::{
+    submit_blobs_enter_scope_marker, submit_blobs_exit_scope_marker, track_num_of_in_flight_blobs,
+};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{DaSpec, EventModuleName, RuntimeEventResponse};
 use sov_rollup_interface::common::HexHash;
@@ -368,11 +370,11 @@ where
 
                         let len = infos.len();
                         sov_metrics::track_metrics(|tracker| {
-                            tracker.submit(BlobsEnterScopeMarker);
+                            submit_blobs_enter_scope_marker(tracker);
                             for b in infos {
                                 tracker.submit(b);
                             }
-                            tracker.submit(BlobsExitScopeMarker);
+                            submit_blobs_exit_scope_marker(tracker);
                         });
 
                         track_num_of_in_flight_blobs(len as u64);

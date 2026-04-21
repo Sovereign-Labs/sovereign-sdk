@@ -39,6 +39,29 @@ pub fn init_metrics_tracker(
 }
 
 impl MetricsTracker {
+    /// Quick way to submit a string metric without dealing with [`Metric`].
+    ///
+    /// Prefer defining a dedicated struct that implements [`Metric`] and calling
+    /// [`MetricsTracker::submit`] — this keeps the wire format reviewable and avoids the
+    /// per-call allocation that `ToString` forces. `submit_inline` is retained for
+    /// external SDK users whose downstream code still depends on it.
+    pub fn submit_inline(&self, measurement: &'static str, rest: impl ToString) {
+        #[derive(Debug)]
+        struct InlineMetric(&'static str, String);
+
+        impl Metric for InlineMetric {
+            fn measurement_name(&self) -> &'static str {
+                self.0
+            }
+
+            fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+                write!(buffer, "{} {}", self.measurement_name(), self.1)
+            }
+        }
+
+        self.submit(InlineMetric(measurement, rest.to_string()));
+    }
+
     /// Submits a metric.
     pub fn submit(&self, measurement: impl Metric + 'static) {
         self.submit_with_time(timestamp(), measurement);

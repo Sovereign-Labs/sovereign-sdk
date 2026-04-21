@@ -6,9 +6,9 @@ use sov_metrics::Metric;
 /// Emitted as `sov_rollup_current_sequence_number`. Should increase monotonically;
 /// flatlining while the rollup is live indicates the sequencer is stalled.
 #[derive(Debug)]
-pub struct CurrentSequenceNumberMetric {
+struct CurrentSequenceNumberMetric {
     /// Latest sequence number emitted.
-    pub sequence_number: u64,
+    sequence_number: u64,
 }
 
 impl Metric for CurrentSequenceNumberMetric {
@@ -30,9 +30,9 @@ impl Metric for CurrentSequenceNumberMetric {
 /// Emitted as `sov_rollup_in_progress_batch_size`. Growing unboundedly means the sequencer
 /// is accumulating txs but not closing the batch; cross-check `sov_rollup_preferred_sequencer_channel`.
 #[derive(Debug)]
-pub struct InProgressBatchSizeMetric {
+struct InProgressBatchSizeMetric {
     /// Number of transactions in the currently-open batch.
-    pub num_txs: u64,
+    num_txs: u64,
 }
 
 impl Metric for InProgressBatchSizeMetric {
@@ -68,9 +68,9 @@ pub fn track_in_progress_batch_size(num_txs: u64) {
 /// Brief non-zero values during rebase are normal; sustained non-zero = desync between
 /// sequencer and node.
 #[derive(Debug)]
-pub struct SequenceNumberDeltaMetric {
+struct SequenceNumberDeltaMetric {
     /// `sequencer_next - node_next`. Signed because either side can be ahead transiently.
-    pub delta: i64,
+    delta: i64,
 }
 
 impl Metric for SequenceNumberDeltaMetric {
@@ -81,6 +81,12 @@ impl Metric for SequenceNumberDeltaMetric {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(buffer, "{} delta={}i", self.measurement_name(), self.delta,)
     }
+}
+
+pub fn track_sequence_number_delta(delta: i64) {
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(SequenceNumberDeltaMetric { delta });
+    });
 }
 
 #[derive(Debug)]

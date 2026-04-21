@@ -33,9 +33,9 @@ impl<Da: DaSpec> Metric for InFlightBlobInfo<Da> {
 /// Growing unboundedly indicates the DA submission pipeline cannot keep up with blob
 /// production; correlate with `sov_rollup_in_flight_blobs_snapshot` to see per-blob state.
 #[derive(Debug)]
-pub struct InFlightBlobCountMetric {
+struct InFlightBlobCountMetric {
     /// Number of blobs currently in-flight.
-    pub count: u64,
+    count: u64,
 }
 
 impl Metric for InFlightBlobCountMetric {
@@ -53,7 +53,7 @@ impl Metric for InFlightBlobCountMetric {
     }
 }
 
-pub fn track_num_of_in_flight_blobs(count: u64) {
+pub(super) fn track_num_of_in_flight_blobs(count: u64) {
     sov_metrics::track_metrics(|tracker| {
         tracker.submit(InFlightBlobCountMetric { count });
     });
@@ -63,15 +63,14 @@ pub fn track_num_of_in_flight_blobs(count: u64) {
 /// of their own, so we emit a constant marker field.
 const MARKER_FIELD: &str = "marker=1i";
 
-/// Marker emitted immediately before a batch of `InFlightBlobInfo` snapshots.
-/// Emitted as `sov_rollup_blobs_enter_scope`; use together with `BlobsExitScopeMarker`
-/// to group snapshots belonging to a single reporting cycle.
 #[derive(Debug)]
-pub struct BlobsEnterScopeMarker;
+struct BlobScopeMarker {
+    measurement_name: &'static str,
+}
 
-impl Metric for BlobsEnterScopeMarker {
+impl Metric for BlobScopeMarker {
     fn measurement_name(&self) -> &'static str {
-        "sov_rollup_blobs_enter_scope"
+        self.measurement_name
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
@@ -79,17 +78,14 @@ impl Metric for BlobsEnterScopeMarker {
     }
 }
 
-/// Marker emitted immediately after a batch of `InFlightBlobInfo` snapshots.
-/// Emitted as `sov_rollup_blobs_exit_scope`; see `BlobsEnterScopeMarker` for the paired event.
-#[derive(Debug)]
-pub struct BlobsExitScopeMarker;
+pub(super) fn submit_blobs_enter_scope_marker(tracker: &sov_metrics::MetricsTracker) {
+    tracker.submit(BlobScopeMarker {
+        measurement_name: "sov_rollup_blobs_enter_scope",
+    });
+}
 
-impl Metric for BlobsExitScopeMarker {
-    fn measurement_name(&self) -> &'static str {
-        "sov_rollup_blobs_exit_scope"
-    }
-
-    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        write!(buffer, "{} {MARKER_FIELD}", self.measurement_name())
-    }
+pub(super) fn submit_blobs_exit_scope_marker(tracker: &sov_metrics::MetricsTracker) {
+    tracker.submit(BlobScopeMarker {
+        measurement_name: "sov_rollup_blobs_exit_scope",
+    });
 }
