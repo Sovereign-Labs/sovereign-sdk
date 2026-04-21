@@ -34,17 +34,15 @@ pub struct Account<S: Spec> {
     pub addr: S::Address,
 }
 
-/// Composite key used by [`Accounts::account_owners`]. A present entry
-/// `(address, credential_id)` means `credential_id` is authorized to spend as
-/// `address`. The key shape supports many-to-many authorization, while the
-/// current compatibility index in [`Accounts::accounts`] preserves one primary
-/// address per credential for existing resolution and query consumers.
+/// Composite key for [`Accounts::account_owners`]. A present entry
+/// `(address, credential_id)` means `credential_id` is authorized to sign
+/// transactions that execute as `address`.
 #[derive(
     borsh::BorshDeserialize, borsh::BorshSerialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
 )]
 pub(crate) struct AccountOwnerKey<S: Spec> {
-    pub(crate) address: S::Address,
-    pub(crate) credential_id: CredentialId,
+    address: S::Address,
+    credential_id: CredentialId,
 }
 
 impl<S: Spec> AccountOwnerKey<S> {
@@ -56,9 +54,8 @@ impl<S: Spec> AccountOwnerKey<S> {
     }
 }
 
-// `Display` and `FromStr` are required by `StateMap`'s struct-level trait bound
-// (see `sov-modules-api/src/containers/map.rs`). The encoding is only used for
-// REST API paths and debug output; on-chain keys are Borsh-serialized.
+// `Display` / `FromStr` exist only to satisfy `StateMap`'s trait bound; on-chain
+// keys are Borsh-serialized.
 impl<S: Spec> std::fmt::Display for AccountOwnerKey<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.address, self.credential_id)
@@ -69,7 +66,7 @@ impl<S: Spec> std::str::FromStr for AccountOwnerKey<S> {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (addr_str, cred_str) = s
-            .split_once('/')
+            .rsplit_once('/')
             .ok_or_else(|| anyhow::anyhow!("invalid AccountOwnerKey: missing '/' separator"))?;
         Ok(Self {
             address: addr_str
@@ -90,9 +87,9 @@ pub struct Accounts<S: Spec> {
     #[id]
     pub id: ModuleId,
 
-    /// `credential_id -> address` routing index. This map is maintained with
-    /// [`Self::account_owners`] so existing consumers can resolve and query the
-    /// primary address for a credential without scanning the authorization map.
+    /// `credential_id -> address` routing index, kept in lockstep with
+    /// [`Self::account_owners`] so `get_account` and `resolve_sender_address`
+    /// can answer with one lookup instead of scanning the authorization map.
     #[state]
     pub(crate) accounts: StateMap<CredentialId, Account<S>>,
 
@@ -100,11 +97,9 @@ pub struct Accounts<S: Spec> {
     #[state]
     enable_custom_account_mappings: StateValue<bool>,
 
-    /// Authorization relation. A present entry `(address, credential_id)` means
-    /// `credential_id` is authorized to sign transactions that execute as
-    /// `address`. Current write paths also maintain [`Self::accounts`] as the
-    /// primary address index for compatibility with existing resolution and
-    /// query APIs.
+    /// Authorization set: a present entry means `credential_id` may sign as
+    /// `address`. Every write is paired with [`Self::accounts`], so
+    /// [`Self::is_authorized`] can rely on this map alone.
     #[state]
     pub(crate) account_owners: StateMap<AccountOwnerKey<S>, bool>,
 }

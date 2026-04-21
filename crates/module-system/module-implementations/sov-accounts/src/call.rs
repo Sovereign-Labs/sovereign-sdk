@@ -4,7 +4,7 @@ use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
 use sov_state::namespaces::User;
 
-use crate::{Account, AccountOwnerKey, Accounts};
+use crate::Accounts;
 
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
@@ -35,13 +35,7 @@ impl<S: Spec> Accounts<S> {
 
         self.exit_if_credential_exists(&new_credential_id, state)?;
 
-        let account = Account {
-            addr: *context.sender(),
-        };
-        self.accounts.set(&new_credential_id, &account, state)?;
-
-        let key = AccountOwnerKey::new(*context.sender(), new_credential_id);
-        self.account_owners.set(&key, &true, state)?;
+        self.register_credential(context.sender(), &new_credential_id, state)?;
         Ok(())
     }
 
