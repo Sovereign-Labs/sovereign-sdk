@@ -28,13 +28,14 @@ pub use stub_evm_rpc::stub_evm_rpc;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
 
-#[cfg(feature = "native")]
-static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
-    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
-
 /// The length of an EIP712 signing hash in bytes.
 /// EIP712 hashes are 66 bytes: 1 byte prefix (0x19) + 1 byte version (0x01) + 32 bytes domain separator + 32 bytes struct hash.
 const EIP712_HASH_LENGTH: usize = 66;
+type Eip712Hash = [u8; EIP712_HASH_LENGTH];
+
+#[cfg(feature = "native")]
+static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Eip712Hash>> =
+    std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 /// Trait for providing schema to the EIP-712 authenticator.
 pub trait SchemaProvider {
@@ -268,7 +269,7 @@ fn get_eip712_hash<
 >(
     tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
-) -> Result<[u8; EIP712_HASH_LENGTH], AuthenticationError> {
+) -> Result<Eip712Hash, AuthenticationError> {
     // Convert the transaction to unsigned transaction (removes signature)
     let unsigned_tx = tx.as_unsigned_transaction();
 
@@ -310,7 +311,7 @@ fn verify_eip712_signature<
     tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<[u8; EIP712_HASH_LENGTH], AuthenticationError> {
+) -> Result<Eip712Hash, AuthenticationError> {
     tx.charge_gas_for_signature(EIP712_HASH_LENGTH, meter)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
@@ -322,12 +323,12 @@ fn verify_eip712_signature<
             ),
         })?;
 
-    let eip712_hash = get_eip712_hash::<S, D, SP>(tx, raw_tx_hash)?;
-
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
-        return known_result.map(|()| eip712_hash);
+        return known_result;
     }
+
+    let eip712_hash = get_eip712_hash::<S, D, SP>(tx, raw_tx_hash)?;
 
     let res = tx
         .verify_signature_unmetered(&eip712_hash)
@@ -340,9 +341,10 @@ fn verify_eip712_signature<
                 raw_tx_hash,
             ),
         });
+    let res = res.map(|()| eip712_hash);
 
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
 
-    res.map(|()| eip712_hash)
+    res
 }
