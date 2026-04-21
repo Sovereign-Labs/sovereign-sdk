@@ -8,7 +8,7 @@ import type {
   UnsignedTransactionV0,
 } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
-import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
+import { bytesToHex, hexToBytes, normalizeHexString } from "@sovereign-sdk/utils";
 import bs58 from "bs58";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
@@ -191,12 +191,16 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async submitSerializedMessage(
     serializedMessage: Uint8Array,
+    options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    const { body: _, query: __, path, ...requestOptions } = options || {};
+
     return await this.inner.http.post<SovereignClient.Sequencer.TxCreateResponse>(
-      this.solanaEndpoint,
+      path || this.solanaEndpoint,
       {
         // Match AcceptTx shape used by standard sequencer endpoints.
         body: { body: Base64.fromUint8Array(serializedMessage) },
+        ...requestOptions,
       },
     );
   }
@@ -206,9 +210,10 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async submitSolanaMessage(
     solanaMessage: SolanaOffchainSimpleMessage,
+    options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const serializedMessage = this.serializeSolanaMessage(solanaMessage);
-    return this.submitSerializedMessage(serializedMessage);
+    return this.submitSerializedMessage(serializedMessage, options);
   }
 
   /**
@@ -216,9 +221,10 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async submitSolanaSpecMessage(
     solanaMessage: SolanaOffchainSpecCompliantMessage,
+    options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const serializedMessage = this.serializeSolanaSpecMessage(solanaMessage);
-    return this.submitSerializedMessage(serializedMessage);
+    return this.submitSerializedMessage(serializedMessage, options);
   }
 
   /**
@@ -226,10 +232,11 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async submitSolanaSpecMultisigMessage(
     solanaMessage: SolanaOffchainSpecCompliantMultisigMessage,
+    options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const serializedMessage =
       this.serializeSolanaSpecMultisigMessage(solanaMessage);
-    return this.submitSerializedMessage(serializedMessage);
+    return this.submitSerializedMessage(serializedMessage, options);
   }
 
   /**
@@ -280,7 +287,8 @@ export class SolanaSignableRollup<RuntimeCall> {
     }
 
     const seenPubkeys = new Set<string>();
-    const pubkeyBytes = multisigPubkeys.map((pubkey) => hexToBytes(pubkey));
+    const normalizedPubkeys = multisigPubkeys.map(normalizeHexString);
+    const pubkeyBytes = normalizedPubkeys.map((pubkey) => hexToBytes(pubkey));
 
     for (const pubkey of pubkeyBytes) {
       if (pubkey.length !== PUBKEY_SIZE) {
@@ -327,6 +335,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   private async signWithSolanaSimpleAndSubmit(
     unsignedTx: UnsignedTransactionV0<RuntimeCall>,
     signer: Signer,
+    options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
     const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
 
@@ -343,7 +352,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       signature: signature,
     };
 
-    const response = await this.submitSolanaMessage(solanaMessage);
+    const response = await this.submitSolanaMessage(solanaMessage, options);
     return this.buildTransactionResult(response, unsignedTx, pubkey, signature);
   }
 
@@ -354,6 +363,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   private async signWithSolanaSpecAndSubmit(
     unsignedTx: UnsignedTransactionV0<RuntimeCall>,
     signer: Signer,
+    options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
     const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
 
@@ -378,7 +388,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       signature: signature,
     };
 
-    const response = await this.submitSolanaSpecMessage(solanaMessage);
+    const response = await this.submitSolanaSpecMessage(solanaMessage, options);
     return this.buildTransactionResult(response, unsignedTx, pubkey, signature);
   }
 
@@ -419,13 +429,21 @@ export class SolanaSignableRollup<RuntimeCall> {
         const unsignedTx = await this.inner.buildUnsignedTransaction(runtimeCall, {
           overrides: params.overrides,
         });
-        return this.signWithSolanaSimpleAndSubmit(unsignedTx, params.signer);
+        return this.signWithSolanaSimpleAndSubmit(
+          unsignedTx,
+          params.signer,
+          options,
+        );
       }
       case "solana": {
         const unsignedTx = await this.inner.buildUnsignedTransaction(runtimeCall, {
           overrides: params.overrides,
         });
-        return this.signWithSolanaSpecAndSubmit(unsignedTx, params.signer);
+        return this.signWithSolanaSpecAndSubmit(
+          unsignedTx,
+          params.signer,
+          options,
+        );
       }
       default:
         throw new Error(`Unsupported authenticator: ${authenticator}`);
@@ -460,9 +478,17 @@ export class SolanaSignableRollup<RuntimeCall> {
           options,
         );
       case "solanaSimple":
-        return this.signWithSolanaSimpleAndSubmit(unsignedTx, params.signer);
+        return this.signWithSolanaSimpleAndSubmit(
+          unsignedTx,
+          params.signer,
+          options,
+        );
       case "solana":
-        return this.signWithSolanaSpecAndSubmit(unsignedTx, params.signer);
+        return this.signWithSolanaSpecAndSubmit(
+          unsignedTx,
+          params.signer,
+          options,
+        );
       default:
         throw new Error(`Unsupported authenticator: ${authenticator}`);
     }
@@ -527,6 +553,19 @@ export class SolanaSignableRollup<RuntimeCall> {
       unusedPubKeys: tx.unused_pub_keys,
       minSigners: tx.min_signers,
     });
+  }
+
+  private normalizeMultisigTransaction(
+    tx: TransactionV1<RuntimeCall>["V1"],
+  ): TransactionV1<RuntimeCall>["V1"] {
+    return {
+      ...tx,
+      signatures: tx.signatures.map((signature) => ({
+        signature: normalizeHexString(signature.signature),
+        pub_key: normalizeHexString(signature.pub_key),
+      })),
+      unused_pub_keys: tx.unused_pub_keys.map(normalizeHexString),
+    };
   }
 
   /**
@@ -664,36 +703,41 @@ export class SolanaSignableRollup<RuntimeCall> {
     let signerBitfield = 0;
 
     for (const signer of tx.signatures) {
-      const signerIndex = indexByPubkey.get(signer.pub_key);
+      const normalizedSignerPubkey = normalizeHexString(signer.pub_key);
+      const signerIndex = indexByPubkey.get(normalizedSignerPubkey);
       if (signerIndex === undefined) {
         throw new Error(
-          `Signed pubkey ${signer.pub_key} is not present in multisigPubkeys`,
+          `Signed pubkey ${normalizedSignerPubkey} is not present in multisigPubkeys`,
         );
       }
-      if (accountedPubkeys.has(signer.pub_key)) {
+      if (accountedPubkeys.has(normalizedSignerPubkey)) {
         throw new Error(
-          `Duplicate signed pubkey in multisig transaction: ${signer.pub_key}`,
+          `Duplicate signed pubkey in multisig transaction: ${normalizedSignerPubkey}`,
         );
       }
 
-      accountedPubkeys.add(signer.pub_key);
-      signaturesByIndex.set(signerIndex, hexToBytes(signer.signature));
+      accountedPubkeys.add(normalizedSignerPubkey);
+      signaturesByIndex.set(
+        signerIndex,
+        hexToBytes(normalizeHexString(signer.signature)),
+      );
       signerBitfield = (signerBitfield | (1 << signerIndex)) >>> 0;
     }
 
     for (const unusedPubkey of tx.unused_pub_keys) {
-      if (!indexByPubkey.has(unusedPubkey)) {
+      const normalizedUnusedPubkey = normalizeHexString(unusedPubkey);
+      if (!indexByPubkey.has(normalizedUnusedPubkey)) {
         throw new Error(
-          `Unused pubkey ${unusedPubkey} is not present in multisigPubkeys`,
+          `Unused pubkey ${normalizedUnusedPubkey} is not present in multisigPubkeys`,
         );
       }
-      if (accountedPubkeys.has(unusedPubkey)) {
+      if (accountedPubkeys.has(normalizedUnusedPubkey)) {
         throw new Error(
-          `Duplicate pubkey in multisig transaction payload: ${unusedPubkey}`,
+          `Duplicate pubkey in multisig transaction payload: ${normalizedUnusedPubkey}`,
         );
       }
 
-      accountedPubkeys.add(unusedPubkey);
+      accountedPubkeys.add(normalizedUnusedPubkey);
     }
 
     if (accountedPubkeys.size !== multisigPubkeys.length) {
@@ -743,7 +787,11 @@ export class SolanaSignableRollup<RuntimeCall> {
       hasFinalizedTx ? paramsOrOptions : options
     ) as SovereignClient.RequestOptions | undefined;
     const finalizedTx = hasFinalizedTx
-      ? (unsignedTxOrTx as TransactionV1<RuntimeCall>)
+      ? ({
+          V1: this.normalizeMultisigTransaction(
+            (unsignedTxOrTx as TransactionV1<RuntimeCall>).V1,
+          ),
+        } as TransactionV1<RuntimeCall>)
       : this.finalizeMultisigTransaction(
           unsignedTxOrTx as UnsignedTransactionV0<RuntimeCall>,
           multisigOrParams as Multisig,
@@ -794,7 +842,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           min_signers: finalizedTx.V1.min_signers,
         });
 
-        return this.submitSerializedMessage(serialized);
+        return this.submitSerializedMessage(serialized, requestOptions);
       }
       case "solana": {
         const unsignedTx = this.unsignedTxFromTransaction(finalizedTx.V1);
@@ -808,7 +856,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           signedMessageWithPreamble,
         );
 
-        return this.submitSolanaSpecMultisigMessage(message);
+        return this.submitSolanaSpecMultisigMessage(message, requestOptions);
       }
     }
   }
@@ -865,12 +913,12 @@ export class SolanaSignableRollup<RuntimeCall> {
       case "solanaSimple": {
         // For Solana simple, we expect a SolanaOffchainSimpleMessage
         const solanaMessage = transaction as SolanaOffchainSimpleMessage;
-        return await this.submitSolanaMessage(solanaMessage);
+        return await this.submitSolanaMessage(solanaMessage, options);
       }
       case "solana": {
         // For Solana spec-compliant, we expect a SolanaOffchainSpecCompliantMessage
         const solanaMessage = transaction as SolanaOffchainSpecCompliantMessage;
-        return await this.submitSolanaSpecMessage(solanaMessage);
+        return await this.submitSolanaSpecMessage(solanaMessage, options);
       }
       default:
         throw new Error(`Unsupported authenticator: ${authenticator}`);

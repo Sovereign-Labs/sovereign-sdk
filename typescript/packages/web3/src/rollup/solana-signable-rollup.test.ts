@@ -124,6 +124,10 @@ describe("SolanaSignableRollup", () => {
   it("should allow custom Solana endpoint configuration", async () => {
     const mockClient = createMockClient();
     const customEndpoint = "/custom/solana-tx-endpoint";
+    const requestOptions = {
+      timeout: 1234,
+      headers: { "x-test-header": "solana" },
+    };
 
     // Capture the endpoint and payload sent to the client
     let capturedEndpoint: string | undefined;
@@ -163,10 +167,13 @@ describe("SolanaSignableRollup", () => {
         signer: createMockSigner(),
         authenticator: "solanaSimple",
       },
+      requestOptions,
     );
 
     expect(capturedEndpoint).toBe(customEndpoint);
     expect(capturedPayload).toHaveProperty("body");
+    expect(capturedPayload.timeout).toBe(requestOptions.timeout);
+    expect(capturedPayload.headers).toEqual(requestOptions.headers);
   });
 
   it("should read chain_name from schema.chain_data in fixture schema", async () => {
@@ -510,7 +517,8 @@ describe("SolanaSignableRollup", () => {
     };
 
     const pubKeyHex = bytesToHex(await signer.publicKey());
-    const multisig = Multisig.fromPubKeys([pubKeyHex], 1);
+    const otherPubKeyHex = bytesToHex(new Uint8Array(32).fill(9));
+    const multisig = Multisig.fromPubKeys([pubKeyHex, otherPubKeyHex], 1);
 
     await rollup.signMultisigTransaction(unsignedTx as any, multisig, {
       signer,

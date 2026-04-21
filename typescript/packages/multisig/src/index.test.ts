@@ -59,6 +59,18 @@ describe("Multisig", () => {
           ),
       ).toThrow(InvalidMultisigParameterError);
     });
+
+    it("should reject a single-signer multisig", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              unusedPubKeys: [pubkey1],
+              minSigners: 1,
+            }),
+          ),
+      ).toThrow(InvalidMultisigParameterError);
+    });
   });
 
   describe("fromPubKeys", () => {
@@ -105,6 +117,21 @@ describe("Multisig", () => {
       expect(() => multisig.addSignature("bb", pubkey1)).toThrow(
         InvalidMultisigParameterError,
       );
+    });
+
+    it("should normalize user-supplied hex strings", () => {
+      const multisig = new Multisig({
+        signatures: [],
+        unusedPubKeys: [`0x${pubkey1.toUpperCase()}`, `0x${pubkey2.toUpperCase()}`],
+        minSigners: 1,
+      });
+
+      multisig.addSignature(`0xAA`, `0x${pubkey1.toUpperCase()}`);
+
+      expect(multisig.signaturesAndPubKeys).toEqual([
+        { pub_key: pubkey1, signature: "aa" },
+      ]);
+      expect([...multisig.remainingPubKeys]).toEqual([pubkey2]);
     });
   });
 

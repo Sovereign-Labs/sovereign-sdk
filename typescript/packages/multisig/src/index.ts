@@ -1,7 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2";
 import type { SignatureAndPubKey } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
-import { hexToBytes } from "@sovereign-sdk/utils";
+import { hexToBytes, normalizeHexString } from "@sovereign-sdk/utils";
 import * as borsh from "borsh";
 
 const MAX_SIGNERS = 21;
@@ -41,10 +41,17 @@ export class Multisig {
   private unusedPubKeys: Set<HexString>;
 
   constructor({ signatures = [], unusedPubKeys, minSigners }: MultisigParams) {
-    assertValidSignerSet(signatures, unusedPubKeys, minSigners);
+    const normalizedSignatures = signatures.map(normalizeSignatureAndPubKey);
+    const normalizedUnusedPubKeys = unusedPubKeys.map(normalizeHexString);
 
-    this.signatures = [...signatures];
-    this.unusedPubKeys = new Set(unusedPubKeys);
+    assertValidSignerSet(
+      normalizedSignatures,
+      normalizedUnusedPubKeys,
+      minSigners,
+    );
+
+    this.signatures = normalizedSignatures;
+    this.unusedPubKeys = new Set(normalizedUnusedPubKeys);
     this.minSigners = minSigners;
   }
 
@@ -62,10 +69,14 @@ export class Multisig {
     signatureOrPair: HexString | SignatureAndPubKey,
     pubKey?: HexString,
   ): void {
-    const pair =
+    const pair = normalizeSignatureAndPubKey(
       typeof signatureOrPair === "string"
-        ? { signature: signatureOrPair, pub_key: assertDefined(pubKey) }
-        : signatureOrPair;
+        ? {
+            signature: normalizeHexString(signatureOrPair),
+            pub_key: normalizeHexString(assertDefined(pubKey)),
+          }
+        : signatureOrPair,
+    );
 
     if (!this.unusedPubKeys.delete(pair.pub_key)) {
       throw new InvalidMultisigParameterError(
@@ -136,9 +147,9 @@ function assertValidSignerSet(
     );
   }
 
-  if (allPubKeys.length < 1 || allPubKeys.length > MAX_SIGNERS) {
+  if (allPubKeys.length < 2 || allPubKeys.length > MAX_SIGNERS) {
     throw new InvalidMultisigParameterError(
-      `expected 1-${MAX_SIGNERS} total signers, got ${allPubKeys.length}`,
+      `expected 2-${MAX_SIGNERS} total signers, got ${allPubKeys.length}`,
     );
   }
 
@@ -158,6 +169,15 @@ function assertValidSignerSet(
     seenPubKeys.add(pubKey);
     hexToBytes(pubKey);
   }
+}
+
+function normalizeSignatureAndPubKey(
+  pair: SignatureAndPubKey,
+): SignatureAndPubKey {
+  return {
+    signature: normalizeHexString(pair.signature),
+    pub_key: normalizeHexString(pair.pub_key),
+  };
 }
 
 function assertDefined<T>(value: T | undefined): T {
