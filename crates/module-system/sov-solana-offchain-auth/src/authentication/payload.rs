@@ -107,6 +107,7 @@ where
             uniqueness: self.uniqueness,
             details: self.details,
             credential_address: self.multisig_id,
+            target_address: None,
         })
     }
 

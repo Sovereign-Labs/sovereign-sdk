@@ -114,9 +114,14 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
     }
 
     /// Creates a new `V1` transaction from this unsigned transaction.
+    ///
+    /// `target_address = None` routes the tx through `resolve_sender_address`
+    /// (default address / legacy fallback). `target_address = Some(X)` requires
+    /// `(X, credential_id) ∈ account_owners`, else the tx is skipped at authorization.
     pub fn to_multisig_tx(
         self,
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+        target_address: Option<S::Address>,
     ) -> Version1<R, S> {
         Version1 {
             signatures: SafeVec::new(),
@@ -128,6 +133,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
+            target_address,
         }
     }
 

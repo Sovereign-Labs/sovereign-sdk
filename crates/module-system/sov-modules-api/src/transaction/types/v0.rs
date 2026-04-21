@@ -71,6 +71,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
             credential_id,
             credentials: Credentials::new(pub_key),
             default_address: credential_id.into(),
+            address: None,
         })
     }
 }

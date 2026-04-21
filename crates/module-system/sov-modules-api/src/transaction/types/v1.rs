@@ -87,6 +87,11 @@ pub struct Version1<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
+    /// Signer-declared target address for execution. `None` routes through
+    /// `resolve_sender_address` (default-address / legacy fallback). `Some(X)` requires
+    /// the multisig credential to be authorized for `X` in `account_owners`; the tx
+    /// is skipped otherwise. This field is part of the signed bytes.
+    pub target_address: Option<S::Address>,
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
@@ -111,6 +116,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
             uniqueness: self.uniqueness,
             details: self.details.clone(),
             credential_address: self.credential_address(),
+            target_address: self.target_address,
         })
     }
 }
@@ -188,6 +194,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
             credential_id,
             credentials: Credentials::new(multisig),
             default_address: credential_id.into(),
+            address: self.target_address,
         })
     }
 }

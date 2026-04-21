@@ -60,6 +60,33 @@ impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
 
         rewarded_token_holder
     }
+
+    fn resolve_sender(
+        &mut self,
+        auth_data: &AuthorizationData<S>,
+        state: &mut impl StateAccessor,
+    ) -> anyhow::Result<S::Address> {
+        match auth_data.address {
+            Some(requested) => {
+                if !self
+                    .accounts
+                    .is_authorized(&requested, &auth_data.credential_id, state)?
+                {
+                    anyhow::bail!(
+                        "credential {} not authorized for target address {}",
+                        auth_data.credential_id,
+                        requested,
+                    );
+                }
+                Ok(requested)
+            }
+            None => Ok(self.accounts.resolve_sender_address(
+                &auth_data.default_address,
+                &auth_data.credential_id,
+                state,
+            )?),
+        }
+    }
 }
 
 trait HasGasPayer<S: Spec> {

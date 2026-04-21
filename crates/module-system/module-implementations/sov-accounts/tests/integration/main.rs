@@ -1,4 +1,4 @@
-use sov_accounts::{Accounts, CallMessage};
+use sov_accounts::{AccountData, Accounts, CallMessage};
 use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
     CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
@@ -180,7 +180,8 @@ fn test_setup_multisig_and_act() {
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user.clone()]);
     let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
-    let mut runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
 
     // Define utilities for...
     // - Generating a valid multisig (version 1) transaction
@@ -196,7 +197,7 @@ fn test_setup_multisig_and_act() {
             sov_modules_api::capabilities::UniquenessData::Generation(0),
             default_test_tx_details::<S>(),
         )
-        .to_multisig_tx(multisig.clone())
+        .to_multisig_tx(multisig.clone(), None)
     };
 
     let sign = |tx: &mut Version1<RT, S>, key: &TestPrivateKey| {
@@ -482,6 +483,250 @@ fn test_disable_custom_account_mappings() {
                 );
             }
             _ => panic!("Expected reverted transaction"),
+        }),
+    });
+}
+
+/// A multisig test fixture: keys, envelope, credential id, and a funded `TestUser`
+/// registered at the multisig's default address in genesis.
+struct MultisigEnv {
+    keys: [TestPrivateKey; 3],
+    multisig: sov_modules_api::Multisig<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey>,
+    credential_id: sov_modules_api::CredentialId,
+    user: TestUser<S>,
+}
+
+fn make_multisig_env() -> MultisigEnv {
+    let keys = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let multisig = sov_modules_api::Multisig::new(2, keys.iter().map(|k| k.pub_key()).collect());
+    let credential_id = multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+    let user = TestUser::generate_with_default_balance().add_credential_id(credential_id);
+    MultisigEnv {
+        keys,
+        multisig,
+        credential_id,
+        user,
+    }
+}
+
+/// Builds an unsigned V1 tx carrying an `InsertCredentialId` call.
+fn make_v1_tx(
+    multisig: &sov_modules_api::Multisig<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey>,
+    inner_credential: sov_modules_api::CredentialId,
+    target_address: Option<<S as Spec>::Address>,
+) -> Version1<RT, S> {
+    UnsignedTransactionV0::<RT, S>::new_with_details(
+        TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
+        sov_modules_api::capabilities::UniquenessData::Generation(0),
+        default_test_tx_details::<S>(),
+    )
+    .to_multisig_tx(multisig.clone(), target_address)
+}
+
+fn sign_v1(tx: &mut Version1<RT, S>, key: &TestPrivateKey) {
+    tx.sign(key, &<RT as Runtime<S>>::CHAIN_HASH).unwrap();
+}
+
+fn submit_v1(tx: Version1<RT, S>) -> TransactionType<RT, S> {
+    let tx = Transaction::<RT, S>::from(tx);
+    TransactionType::<RT, S>::PreSigned(RawTx {
+        data: borsh::to_vec(&tx).unwrap(),
+    })
+}
+
+/// V1 tx with `target_address = None` routes through `resolve_sender_address`
+/// and executes as the multisig's default address. Evidence: the `InsertCredentialId`
+/// call writes `(multisig_default, inner_credential)` to `account_owners`.
+#[test]
+fn test_v1_target_none_uses_default_resolver() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        user: multisig_user,
+        ..
+    } = make_multisig_env();
+    let multisig_default_address = multisig_user.address();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut tx = make_v1_tx(&multisig, inner_credential, None);
+    sign_v1(&mut tx, &keys[0]);
+    sign_v1(&mut tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(
+                accounts
+                    .is_authorized(&multisig_default_address, &inner_credential, state)
+                    .unwrap(),
+                "target=None should route to multisig default; the InsertCredentialId \
+                 call must write the new credential under that address"
+            );
+        }),
+    });
+}
+
+/// V1 tx with `target_address = Some(X)` where `(X, multisig_credential_id)` is
+/// authorized resolves context as `X`. Evidence: `InsertCredentialId` writes
+/// `(X, inner_credential)` — not `(multisig_default, inner_credential)`.
+#[test]
+fn test_v1_target_some_authorized_succeeds() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        credential_id: multisig_credential_id,
+        user: multisig_user,
+    } = make_multisig_env();
+
+    // Alice is a regular funded user; we authorize the multisig for her address.
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user, alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut tx = make_v1_tx(&multisig, inner_credential, Some(alice_address));
+    sign_v1(&mut tx, &keys[0]);
+    sign_v1(&mut tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(tx),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "V1 target=Some(authorized) should succeed, got {:?}",
+                result.tx_receipt
+            );
+            let accounts = Accounts::<S>::default();
+            assert!(
+                accounts
+                    .is_authorized(&alice_address, &inner_credential, state)
+                    .unwrap(),
+                "InsertCredentialId should write under target_address, not multisig default"
+            );
+        }),
+    });
+}
+
+/// V1 tx with `target_address = Some(Y)` where `(Y, credential_id) ∉ account_owners`
+/// is skipped, not reverted. No state is mutated — in particular, no auto-register
+/// on the `Some` path.
+#[test]
+fn test_v1_target_some_unauthorized_skipped() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        user: multisig_user,
+        ..
+    } = make_multisig_env();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    // Unowned: nothing in `account_owners` points to this address.
+    let unowned_address = TestUser::<S>::generate_with_default_balance().address();
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    let mut tx = make_v1_tx(&multisig, inner_credential, Some(unowned_address));
+    sign_v1(&mut tx, &keys[0]);
+    sign_v1(&mut tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(tx),
+        assert: Box::new(move |result, state| {
+            match result.tx_receipt {
+                TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                    let msg = error.to_string();
+                    assert!(
+                        msg.contains("not authorized for target address"),
+                        "unexpected skip reason: {msg}"
+                    );
+                }
+                other => panic!("expected skipped tx, got {other:?}"),
+            }
+            // No auto-register on the `Some` path: the unauthorized lookup must
+            // not have created an entry.
+            let accounts = Accounts::<S>::default();
+            assert!(
+                !accounts
+                    .is_authorized(&unowned_address, &inner_credential, state)
+                    .unwrap(),
+                "unauthorized target path must not auto-register any tuple"
+            );
+        }),
+    });
+}
+
+/// `target_address` is part of the signed bytes: tampering with it after signing
+/// invalidates the signature.
+#[test]
+fn test_v1_target_tamper_breaks_signature() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        credential_id: multisig_credential_id,
+        user: multisig_user,
+    } = make_multisig_env();
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user, alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    // Authorize the multisig for both alice and a second, unrelated address so
+    // the "tampered-to" address is also in the account_owners map. This isolates
+    // the failure to signature verification rather than authorization.
+    let tampered_address = TestUser::<S>::generate_with_default_balance().address();
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: tampered_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut tx = make_v1_tx(&multisig, inner_credential, Some(alice_address));
+    sign_v1(&mut tx, &keys[0]);
+    sign_v1(&mut tx, &keys[1]);
+    // Mutate after signing.
+    tx.target_address = Some(tampered_address);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("Verification equation was not satisfied"),
+                    "expected signature failure after target_address tamper, got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx, got {other:?}"),
         }),
     });
 }

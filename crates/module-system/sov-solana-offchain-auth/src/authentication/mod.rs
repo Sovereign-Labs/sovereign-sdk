@@ -154,6 +154,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(pub_key.clone()),
                 default_address: credential_id.into(),
+                address: None,
             })
         }
         UnpackedSolanaMessage::V1 {
@@ -182,6 +183,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
+                address: None,
             })
         }
     }
