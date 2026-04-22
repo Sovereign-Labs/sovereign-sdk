@@ -842,9 +842,7 @@ describe("SolanaSignableRollup", () => {
       const multisigPubkeys = [pub1, pub2, pub3];
 
       const sortedPubKeys = [pub1Hex, pub2Hex, pub3Hex].sort();
-      const pubKeyBytes = sortedPubKeys.map((pk) =>
-        Array.from(hexToBytes(pk)),
-      );
+      const pubKeyBytes = sortedPubKeys.map((pk) => Array.from(hexToBytes(pk)));
       const borshData = new Uint8Array(1 + 4 + 3 * 32);
       const dv = new DataView(borshData.buffer);
       borshData[0] = minSigners;
@@ -1006,7 +1004,9 @@ describe("SolanaSignableRollup", () => {
       const submittedBody = capturedPayloadRef.current.body.body as string;
       const submittedBytes = Buffer.from(submittedBody, "base64");
       const submittedText = new TextDecoder().decode(submittedBytes);
-      expect(submittedText).toContain(`"target_address":"${targetAddressBs58}"`);
+      expect(submittedText).toContain(
+        `"target_address":"${targetAddressBs58}"`,
+      );
     });
   });
 });
