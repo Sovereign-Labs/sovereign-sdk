@@ -48,7 +48,7 @@ impl<S: Spec> Accounts<S> {
     }
 
     /// Returns `true` if `credential_id` is authorized to sign transactions
-    /// that execute as `address`.
+    /// that execute as `address` via explicit `account_owners` state.
     pub fn is_authorized<ST: StateReader<User>>(
         &self,
         address: &S::Address,
@@ -58,7 +58,7 @@ impl<S: Spec> Accounts<S> {
         Ok(self
             .account_owners
             .get(&AccountOwnerKey::new(*address, *credential_id), state)?
-            .is_some())
+            .unwrap_or(false))
     }
 
     /// Returns `true` if `credential_id` is authorized to act as `address`
@@ -71,6 +71,13 @@ impl<S: Spec> Accounts<S> {
         credential_id: &CredentialId,
         state: &mut ST,
     ) -> Result<bool, ST::Error> {
+        if let Some(is_authorized) = self
+            .account_owners
+            .get(&AccountOwnerKey::new(*address, *credential_id), state)?
+        {
+            return Ok(is_authorized);
+        }
+
         if let Some(account) = self.accounts.get(credential_id, state)? {
             return Ok(account.addr == *address);
         }
@@ -80,6 +87,6 @@ impl<S: Spec> Accounts<S> {
             return Ok(true);
         }
 
-        self.is_authorized(address, credential_id, state)
+        Ok(false)
     }
 }

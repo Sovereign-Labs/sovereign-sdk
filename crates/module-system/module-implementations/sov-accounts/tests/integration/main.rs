@@ -1099,6 +1099,37 @@ fn test_remove_credential_from_address_by_owner() {
     });
 }
 
+/// Removing a credential from its own canonical address writes an explicit
+/// denial, because there is no legacy map entry to delete for that fallback.
+#[test]
+fn test_remove_canonical_credential_blocks_fallback_authorization() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let owner_credential = owner.credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address: owner_address,
+                credential: owner_credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized_for(&owner_address, &owner_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
 /// A caller cannot revoke a credential from an address they don't own. Uses
 /// two canonical-address users (no custom credential_id) so the V0 gas path
 /// resolves correctly to the funded address.
@@ -1728,6 +1759,31 @@ fn test_multisig_key_rotation_atomic() {
             assert!(accounts
                 .is_authorized(&target_address, &credential_id_2, state)
                 .unwrap());
+        }),
+    });
+
+    // M1 cannot bypass the revocation by omitting target_address and falling
+    // back to its canonical address.
+    let stale_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut m1_target_none_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::InsertCredentialId(stale_credential),
+        None,
+        1,
+    );
+    sign_v1(&mut m1_target_none_tx, &keys_1[0]);
+    sign_v1(&mut m1_target_none_tx, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(m1_target_none_tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("not authorized for resolved address"),
+                    "expected resolver skip after target-less rotation fallback; got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx after target-less fallback, got {other:?}"),
         }),
     });
 

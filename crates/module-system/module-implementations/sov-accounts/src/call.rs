@@ -90,10 +90,11 @@ impl<S: Spec> Accounts<S> {
 
         let key = AccountOwnerKey::new(address, credential);
         anyhow::ensure!(
-            self.account_owners
+            !self
+                .account_owners
                 .get(&key, state)
                 .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_none(),
+                .unwrap_or(false),
             "CredentialId already authorized for this address"
         );
 
@@ -111,16 +112,13 @@ impl<S: Spec> Accounts<S> {
         self.ensure_custom_account_mappings_enabled(state)?;
         self.ensure_caller_owns(&address, context)?;
 
-        let key = AccountOwnerKey::new(address, credential);
         anyhow::ensure!(
-            self.account_owners
-                .get(&key, state)
-                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_some(),
+            self.is_authorized_for(&address, &credential, state)
+                .map_err(|err| anyhow!("Error raised while checking authorization: {err:?}"))?,
             "CredentialId is not authorized for this address"
         );
 
-        self.account_owners.delete(&key, state)?;
+        self.revoke_credential(&address, &credential, state)?;
         Ok(())
     }
 
@@ -135,26 +133,45 @@ impl<S: Spec> Accounts<S> {
         self.ensure_custom_account_mappings_enabled(state)?;
         self.ensure_caller_owns(&address, context)?;
 
-        let old_key = AccountOwnerKey::new(address, old_credential);
         anyhow::ensure!(
-            self.account_owners
-                .get(&old_key, state)
-                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_some(),
+            self.is_authorized_for(&address, &old_credential, state)
+                .map_err(|err| anyhow!("Error raised while checking authorization: {err:?}"))?,
             "CredentialId is not authorized for this address"
         );
 
         let new_key = AccountOwnerKey::new(address, new_credential);
         anyhow::ensure!(
-            self.account_owners
+            !self
+                .account_owners
                 .get(&new_key, state)
                 .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_none(),
+                .unwrap_or(false),
             "CredentialId already authorized for this address"
         );
 
-        self.account_owners.delete(&old_key, state)?;
+        self.revoke_credential(&address, &old_credential, state)?;
         self.authorize_credential(&address, &new_credential, state)?;
+        Ok(())
+    }
+
+    fn revoke_credential(
+        &mut self,
+        address: &S::Address,
+        credential: &CredentialId,
+        state: &mut impl TxState<S>,
+    ) -> Result<()> {
+        let key = AccountOwnerKey::new(*address, *credential);
+        self.account_owners.set(&key, &false, state)?;
+
+        if self
+            .accounts
+            .get(credential, state)
+            .map_err(|err| anyhow!("Error raised while getting account: {err:?}"))?
+            .is_some_and(|account| account.addr == *address)
+        {
+            self.accounts.delete(credential, state)?;
+        }
+
         Ok(())
     }
 
@@ -202,10 +219,11 @@ impl<S: Spec> Accounts<S> {
             "New CredentialId already exists"
         );
         anyhow::ensure!(
-            self.account_owners
+            !self
+                .account_owners
                 .get(&AccountOwnerKey::new(*address, *new_credential_id), state)
                 .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_none(),
+                .unwrap_or(false),
             "CredentialId already authorized for this address"
         );
         Ok(())

@@ -34,9 +34,7 @@ pub struct Account<S: Spec> {
     pub addr: S::Address,
 }
 
-/// Composite key for [`Accounts::account_owners`]. A present entry
-/// `(address, credential_id)` means `credential_id` is authorized to sign
-/// transactions that execute as `address`.
+/// Composite key for [`Accounts::account_owners`].
 #[derive(
     borsh::BorshDeserialize, borsh::BorshSerialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
 )]
@@ -96,8 +94,9 @@ pub struct Accounts<S: Spec> {
     #[state]
     enable_custom_account_mappings: StateValue<bool>,
 
-    /// Authorization set: a present entry means `credential_id` may sign as
-    /// `address`.
+    /// Authorization overrides. `Some(true)` means `credential_id` may sign as
+    /// `address`; `Some(false)` explicitly revokes fallback authorization for
+    /// the pair.
     #[state]
     pub(crate) account_owners: StateMap<AccountOwnerKey<S>, bool>,
 }

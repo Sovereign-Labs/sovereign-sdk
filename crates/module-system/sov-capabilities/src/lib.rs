@@ -80,11 +80,24 @@ impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
                 }
                 Ok(requested)
             }
-            None => Ok(self.accounts.resolve_sender_address(
-                &auth_data.default_address,
-                &auth_data.credential_id,
-                state,
-            )?),
+            None => {
+                let resolved = self.accounts.resolve_sender_address(
+                    &auth_data.default_address,
+                    &auth_data.credential_id,
+                    state,
+                )?;
+                if !self
+                    .accounts
+                    .is_authorized_for(&resolved, &auth_data.credential_id, state)?
+                {
+                    anyhow::bail!(
+                        "credential {} not authorized for resolved address {}",
+                        auth_data.credential_id,
+                        resolved,
+                    );
+                }
+                Ok(resolved)
+            }
         }
     }
 }
