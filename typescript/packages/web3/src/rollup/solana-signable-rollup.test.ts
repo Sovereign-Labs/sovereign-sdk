@@ -945,6 +945,34 @@ describe("SolanaSignableRollup", () => {
       expect(parsed.target_address).toBe(bs58.encode(targetAddress));
     });
 
+    it("places target_address before version in the signed JSON to match Rust field order", async () => {
+      // The Rust `SolanaOffchainUnsignedTransactionV1` struct declares `target_address` before
+      // `version`. Multisig signers sign the raw JSON bytes, so TS and Rust must serialize the
+      // fields in the same order — otherwise signatures produced in one language won't verify
+      // against JSON produced in the other.
+      const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
+        await setupMultisigContext();
+
+      const targetAddress = new Uint8Array(32);
+      targetAddress.fill(0x42);
+
+      const { mock, captured } = captureSignerInput(signers.signer1);
+      await rollup.signTransactionForMultisig(unsignedTx, {
+        signer: mock,
+        authenticator: "solanaSimple",
+        multisigAddress,
+        multisigPubkeys,
+        targetAddress,
+      });
+
+      const signedJson = new TextDecoder().decode(captured.bytes!);
+      const targetIdx = signedJson.indexOf('"target_address"');
+      const versionIdx = signedJson.indexOf('"version"');
+      expect(targetIdx).toBeGreaterThanOrEqual(0);
+      expect(versionIdx).toBeGreaterThanOrEqual(0);
+      expect(targetIdx).toBeLessThan(versionIdx);
+    });
+
     it("forwards tx.target_address into the submitted JSON via submitMultisigTransaction", async () => {
       const {
         rollup,

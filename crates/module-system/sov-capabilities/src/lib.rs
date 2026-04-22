@@ -354,6 +354,10 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         ))
     }
 
+    /// V1 `target_address` semantics apply uniformly here: when `auth_data.address` is
+    /// `Some(X)`, `resolve_sender` enforces `is_authorized(X, credential_id)` and uses `X` as both
+    /// the sender and the sequencer's rollup address. V0 transactions set `address = None` and
+    /// hit the legacy `resolve_sender_address` path unchanged.
     fn resolve_unregistered_context(
         &mut self,
         auth_data: &AuthorizationData<S>,

@@ -313,8 +313,8 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             .as_deref()
             .map(S::Address::from_str)
             .transpose()
-            .map_err(|_| {
-                SimulateError::InvalidInput("failed to parse target address".to_owned())
+            .map_err(|e| {
+                SimulateError::InvalidInput(format!("failed to parse target address: {e:?}"))
             })?;
         let uniqueness = params.uniqueness.unwrap_or_else(|| {
             let generation = Uniqueness::<S>::default()

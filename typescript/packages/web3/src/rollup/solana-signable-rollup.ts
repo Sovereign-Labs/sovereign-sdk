@@ -521,6 +521,10 @@ export class SolanaSignableRollup<RuntimeCall> {
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
+    // Field order matches the Rust `SolanaOffchainUnsignedTransactionV1` struct
+    // (`crates/module-system/sov-solana-offchain-auth/src/authentication/payload.rs`):
+    // `target_address` must sit between `multisig_id` and `version` so TS- and Rust-generated
+    // JSON bytes are byte-identical — the multisig signatures cover these bytes directly.
     const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV1<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
@@ -530,12 +534,11 @@ export class SolanaSignableRollup<RuntimeCall> {
       // primary address type. Will be replaced with rollup-aware address formatting once the
       // SDK supports flexible address encoding (see #2673).
       multisig_id: bs58.encode(multisigAddress),
+      ...(targetAddress !== undefined && {
+        target_address: bs58.encode(targetAddress),
+      }),
       version: 1,
     };
-
-    if (targetAddress !== undefined) {
-      solanaUnsignedTx.target_address = bs58.encode(targetAddress);
-    }
 
     return new TextEncoder().encode(JSON.stringify(solanaUnsignedTx));
   }
