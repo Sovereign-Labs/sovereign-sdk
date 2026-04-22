@@ -120,7 +120,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 
     #[cfg(target_os = "zkvm")]
     fn verify_with_pub_values<T: DeserializeOwned>(
-        serialized_proof: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValuse,
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         todo!("MockZkVerifier does not support `verify_with_pub_values`")

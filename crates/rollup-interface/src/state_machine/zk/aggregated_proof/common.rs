@@ -3,10 +3,14 @@ use serde::{Deserialize, Serialize};
 use super::CodeCommitmentHash;
 use crate::da::DaSpec;
 
+/// Serialized public values committed to by a ZK proof.
+///
+/// Passed to [`crate::zk::ZkVerifier::verify_with_pub_values`] when the
+/// proof itself is read from the guest's implicit proof input channel and
+/// only the public values need to be supplied explicitly.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-/// TODO
-pub struct SerializedPubValuse {
-    /// TODO
+pub struct SerializedPubValues {
+    #[allow(missing_docs)]
     pub pub_values: Vec<u8>,
 }
 
@@ -18,7 +22,7 @@ pub struct SerializedPubValuse {
 ))]
 pub struct DeferredProofInput<Da: DaSpec> {
     /// The public values of the proof.
-    pub public_values: SerializedPubValuse,
+    pub public_values: SerializedPubValues,
     /// The DA block header associated with this proof.
     pub da_block_header: Da::BlockHeader,
 }
@@ -44,5 +48,5 @@ pub struct AggregatedProofWitness<Da: DaSpec> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PreviousOuterProofWitness {
     /// Serialized public values of the previous proof.
-    pub public_values: SerializedPubValuse,
+    pub public_values: SerializedPubValues,
 }

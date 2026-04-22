@@ -181,7 +181,7 @@ impl ZkVerifier for SP1Verifier {
     type Error = anyhow::Error;
 
     fn verify_with_pub_values<T: DeserializeOwned>(
-        public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValuse,
+        public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
         vkey_hash: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         use sha2::Digest;

@@ -137,7 +137,7 @@ impl ZkVerifier for Risc0Verifier {
     type Error = anyhow::Error;
 
     fn verify_with_pub_values<T: DeserializeOwned>(
-        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValuse,
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         // Implement this method once risc0 supports recursion: issue #633

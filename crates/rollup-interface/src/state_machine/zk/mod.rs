@@ -160,7 +160,7 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// proven.
     #[cfg(target_os = "zkvm")]
     fn verify_with_pub_values<T: DeserializeOwned>(
-        pub_values: &aggregated_proof::common::SerializedPubValuse,
+        pub_values: &aggregated_proof::common::SerializedPubValues,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error>;
 

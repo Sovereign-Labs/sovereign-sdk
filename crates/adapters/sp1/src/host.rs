@@ -8,7 +8,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
-    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness, SerializedPubValuse,
+    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness, SerializedPubValues,
 };
 use sov_rollup_interface::zk::aggregated_proof::{
     BlockHeaderWithProof, BlockProof, CodeCommitmentHash, OuterZkvmHost, SerializedAggregatedProof,
@@ -170,7 +170,7 @@ impl SP1Host {
         stdin: &mut SP1Stdin,
         proof: &SerializedZkProof,
         vk: &sp1_sdk::SP1VerifyingKey,
-    ) -> anyhow::Result<SerializedPubValuse> {
+    ) -> anyhow::Result<SerializedPubValues> {
         let proof = crate::decode_sp1_proof(proof)?;
 
         let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
@@ -178,7 +178,7 @@ impl SP1Host {
         };
 
         stdin.write_proof((**recursion_proof).clone(), vk.vk.clone());
-        Ok(SerializedPubValuse {
+        Ok(SerializedPubValues {
             pub_values: proof.public_values.to_vec(),
         })
     }

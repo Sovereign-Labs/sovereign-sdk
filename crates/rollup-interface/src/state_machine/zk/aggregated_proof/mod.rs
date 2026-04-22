@@ -173,7 +173,7 @@ pub struct SerializedAggregatedProof {
 }
 
 impl SerializedAggregatedProof {
-    /// COnverts [`SerializedAggregatedProof`] toproof to [`SerializedZkProof`].
+    /// Converts a [`SerializedAggregatedProof`] into a [`SerializedZkProof`].
     pub fn to_serialized_zk_proof(self) -> SerializedZkProof {
         SerializedZkProof {
             raw_proof: self.raw_aggregated_proof,
