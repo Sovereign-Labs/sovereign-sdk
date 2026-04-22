@@ -258,7 +258,7 @@ export class MultisigTransaction {
    * Converts the multisig to a V1 transaction that can be submitted to the network.
    * @returns A V1 transaction containing all collected signatures and unused public keys
    */
-  asTransaction(): Transaction<unknown> {
+  asTransaction(targetAddress: string | null = null): Transaction<unknown> {
     return {
       V1: {
         runtime_call: this.unsignedTx.runtime_call,
@@ -267,6 +267,7 @@ export class MultisigTransaction {
         unused_pub_keys: Array.from(this.unusedPubKeys),
         signatures: this.signatures,
         min_signers: this.minSigners,
+        target_address: targetAddress,
       },
     };
   }

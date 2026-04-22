@@ -1,10 +1,15 @@
 use sov_api_spec::types;
 use sov_bank::{config_gas_token_id, Bank};
 use sov_modules_api::prelude::tokio::{self};
-use sov_modules_api::{Amount, Gas, GasArray, GasSpec, Spec};
+use sov_modules_api::sov_universal_wallet::schema::RollupRoots;
+use sov_modules_api::{
+    get_runtime_schema, Amount, CredentialId, Gas, GasArray, GasSpec, Runtime, Spec,
+};
 use sov_rest_utils::json_obj;
 use sov_rollup_interface::node::SyncStatus;
-use sov_test_utils::{AsUser, TestUser, TransactionTestCase};
+use sov_test_utils::{
+    default_test_tx_details, AsUser, TestUser, TransactionTestCase, TransactionType,
+};
 
 use crate::{TestData, RT, S};
 
@@ -153,6 +158,90 @@ async fn test_simulation_success() {
                 "token_transferred": {
                     "from": {
                         "user": data.user.address()
+                    },
+                    "to": {
+                        "user": receiver
+                    },
+                    "coins": {
+                        "amount": "1000",
+                        "token_id": "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"
+                    }
+                }
+            }
+        })
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_simulation_success_with_target_address() {
+    let mut data = TestData::setup().await;
+    let delegated_credential: CredentialId = [9u8; 32].into();
+    let registration_call = json_obj!({
+        "accounts": {
+            "insert_credential_id": delegated_credential,
+        },
+    });
+    let schema = get_runtime_schema::<S, RT>().unwrap();
+    let registration_call_bytes = schema
+        .json_to_borsh(
+            schema
+                .rollup_expected_index(RollupRoots::RuntimeCall)
+                .unwrap(),
+            &serde_json::to_string(&registration_call).unwrap(),
+        )
+        .unwrap();
+
+    data.runner.execute_transaction(TransactionTestCase {
+        input: TransactionType::Plain {
+            message: RT::decode_call(&registration_call_bytes).unwrap(),
+            key: data.user.private_key().clone(),
+            details: default_test_tx_details::<S>(),
+        },
+        assert: Box::new(move |result, _state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "The credential registration should have succeeded"
+            );
+        }),
+    });
+    data.send_storage();
+
+    let target_address = data.user.address();
+    let receiver = TestUser::<S>::generate_with_default_balance().address();
+    let call = sov_bank::CallMessage::<S>::Transfer {
+        to: receiver,
+        coins: sov_bank::Coins {
+            amount: Amount::new(1000),
+            token_id: config_gas_token_id(),
+        },
+    };
+    let params = json_obj!({
+        "sender": delegated_credential.to_string(),
+        "target_address": target_address.to_string(),
+        "call": {
+            "bank": call,
+        },
+    });
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("http://{}/rollup/simulate", data.axum_addr))
+        .json(&params)
+        .send()
+        .await
+        .unwrap();
+    let actual = response.json::<serde_json::Value>().await.unwrap();
+
+    assert_eq!(actual["outcome"], "success");
+    assert_eq!(
+        actual["events"][0],
+        serde_json::json!({
+            "key": "Bank/TokenTransferred",
+            "module": "Bank",
+            "value": {
+                "token_transferred": {
+                    "from": {
+                        "user": target_address
                     },
                     "to": {
                         "user": receiver

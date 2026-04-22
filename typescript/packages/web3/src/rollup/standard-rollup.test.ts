@@ -254,4 +254,43 @@ describe("createStandardRollup", () => {
       },
     });
   });
+
+  it("should pass optional simulation parameters to the client", async () => {
+    const client = new SovereignClient({ fetch: vi.fn() });
+    client.rollup.simulate = vi.fn().mockResolvedValue({ outcome: "success" });
+    const rollup = await createStandardRollup({
+      ...mockConfig,
+      client,
+    });
+    const signer = {
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([0xab, 0xcd])),
+    };
+    const runtimeCall = {
+      bank: {
+        transfer: {
+          to: "receiver",
+          coins: { amount: "1", token_id: "token" },
+        },
+      },
+    };
+    const txDetails = {
+      max_fee: "1234",
+      gas_limit: null,
+    };
+
+    await rollup.simulate(runtimeCall, {
+      signer: signer as any,
+      target_address: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+
+    expect(client.rollup.simulate).toHaveBeenCalledWith({
+      sender: "abcd",
+      call: runtimeCall,
+      target_address: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+  });
 });

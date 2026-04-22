@@ -67,6 +67,7 @@ describe("MultisigTransaction", () => {
           unused_pub_keys: ["pubkey2"],
           signatures: [{ pub_key: "pubkey1", signature: "sig1" }],
           min_signers: 1,
+          target_address: null,
           ...unsignedTx,
         },
       };
@@ -241,6 +242,32 @@ describe("MultisigTransaction", () => {
 
       expect(() => multisig.addSignature("sig2", "pubkey1")).toThrow(
         InvalidMultisigParameterError,
+      );
+    });
+  });
+
+  describe("asTransaction", () => {
+    it("should include a null target address by default", () => {
+      const multisig = MultisigTransaction.empty(createUnsignedTx(), 1, [
+        "pubkey1",
+      ]);
+
+      const result = multisig.asTransaction() as TransactionV1<string>;
+
+      expect(result.V1.target_address).toBeNull();
+    });
+
+    it("should include the provided target address", () => {
+      const multisig = MultisigTransaction.empty(createUnsignedTx(), 1, [
+        "pubkey1",
+      ]);
+
+      const result = multisig.asTransaction(
+        "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4",
+      ) as TransactionV1<string>;
+
+      expect(result.V1.target_address).toBe(
+        "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4",
       );
     });
   });

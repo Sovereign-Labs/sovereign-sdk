@@ -27,6 +27,14 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
 export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
     multisig_id: string;
+    /**
+     * Signer-declared target address. Omitted (or `null`) routes through
+     * `resolve_sender_address` on-chain. A concrete value requires the multisig credential to be
+     * authorized for that address in `account_owners`; otherwise the transaction is skipped.
+     * Omitted from the serialized JSON when not set, preserving byte equivalence with
+     * pre-change signed messages so existing signatures continue to verify.
+     */
+    target_address?: string;
     version: number;
   };
 
@@ -79,6 +87,15 @@ export type SolanaMultisigSubmitParams =
 
 export type SolanaMultisigSignParams = SolanaMultisigSubmitParams & {
   signer: Signer;
+  /**
+   * Optional target address to embed in the signed V1 payload. When omitted, the signed message
+   * does not carry a `target_address` field, matching pre-change byte layout. When provided, the
+   * multisig credential must be authorized for this address in `account_owners` on-chain or the
+   * transaction will be skipped at authorization time.
+   *
+   * Unused by the `"standard"` authenticator.
+   */
+  targetAddress?: Uint8Array;
 };
 
 /**
@@ -490,10 +507,15 @@ export class SolanaSignableRollup<RuntimeCall> {
   /**
    * Creates V1 JSON bytes for a multisig transaction, including multisig_id and version.
    * The resulting JSON is what each signer signs directly (no discriminator prefix).
+   *
+   * When `targetAddress` is omitted the JSON has no `target_address` key — this preserves
+   * byte equivalence with pre-change signed messages, so signatures produced by older clients
+   * keep verifying.
    */
   private async createMultisigJsonBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisigAddress: Uint8Array,
+    targetAddress?: Uint8Array,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
     const schema = serializer.schema;
@@ -511,6 +533,10 @@ export class SolanaSignableRollup<RuntimeCall> {
       version: 1,
     };
 
+    if (targetAddress !== undefined) {
+      solanaUnsignedTx.target_address = bs58.encode(targetAddress);
+    }
+
     return new TextEncoder().encode(JSON.stringify(solanaUnsignedTx));
   }
 
@@ -521,10 +547,12 @@ export class SolanaSignableRollup<RuntimeCall> {
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisigAddress: Uint8Array,
     multisigPubkeys: Uint8Array[],
+    targetAddress?: Uint8Array,
   ): Promise<Uint8Array> {
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
       multisigAddress,
+      targetAddress,
     );
     const chainHash = await this.inner.chainHash();
     const preamble = createSolanaPreamble(
@@ -544,6 +572,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     multisigAddress: Uint8Array,
     multisigPubkeys: Uint8Array[],
+    targetAddress?: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
     const pubkey = await signer.publicKey();
     const signerPubkeyHex = bytesToHex(pubkey);
@@ -558,6 +587,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
       multisigAddress,
+      targetAddress,
     );
 
     const signature = await signer.sign(jsonBytes);
@@ -578,6 +608,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     multisigAddress: Uint8Array,
     multisigPubkeys: Uint8Array[],
+    targetAddress?: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
     const pubkey = await signer.publicKey();
     const signerPubkeyHex = bytesToHex(pubkey);
@@ -594,6 +625,7 @@ export class SolanaSignableRollup<RuntimeCall> {
         unsignedTx,
         multisigAddress,
         multisigPubkeys,
+        targetAddress,
       );
     const signature = await signer.sign(signedMessageWithPreamble);
 
@@ -627,6 +659,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           params.signer,
           params.multisigAddress,
           this.canonicalizeMultisigPubkeys(params.multisigPubkeys),
+          params.targetAddress,
         );
       case "solana":
         return this.signForSolanaSpecMultisig(
@@ -634,6 +667,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           params.signer,
           params.multisigAddress,
           this.canonicalizeMultisigPubkeys(params.multisigPubkeys),
+          params.targetAddress,
         );
     }
   }
@@ -728,6 +762,14 @@ export class SolanaSignableRollup<RuntimeCall> {
       details: tx.details,
     };
 
+    // Decode the signed `target_address` back to bytes so we can pass it through the same
+    // `createMultisigJsonBytes` path used by signers. Re-encoding is idempotent under base58, so
+    // the produced JSON bytes match what the signer signed over.
+    const targetAddress: Uint8Array | undefined =
+      tx.target_address !== null && tx.target_address !== undefined
+        ? bs58.decode(tx.target_address)
+        : undefined;
+
     switch (params.authenticator) {
       case "standard":
         return this.inner.submitTransaction(
@@ -739,6 +781,7 @@ export class SolanaSignableRollup<RuntimeCall> {
         const jsonBytes = await this.createMultisigJsonBytes(
           unsignedTx,
           params.multisigAddress,
+          targetAddress,
         );
         const wireBytes = new Uint8Array(1 + jsonBytes.length);
         wireBytes[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
@@ -767,6 +810,7 @@ export class SolanaSignableRollup<RuntimeCall> {
             unsignedTx,
             params.multisigAddress,
             multisigPubkeys,
+            targetAddress,
           );
         const message = this.buildSpecCompliantMultisigEnvelope(
           tx,

@@ -4,6 +4,7 @@ import { JsSerializer } from "@sovereign-sdk/serializers";
 import { Ed25519Signer } from "@sovereign-sdk/signers";
 import { LedgerSolanaSigner } from "@sovereign-sdk/signers/ledger-solana";
 import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
+import bs58 from "bs58";
 import { describe, expect, it, vi } from "vitest";
 import demoRollupSchema from "../../../__fixtures__/demo-rollup-schema.json";
 import {
@@ -783,6 +784,229 @@ describe("SolanaSignableRollup", () => {
       // Simple message starts with a length prefix (4 bytes) followed by the JSON message
       // It should NOT have the 0xff signing domain marker
       expect(decodedBody[0]).not.toBe(0xff);
+    });
+  });
+
+  describe("V1 target_address", () => {
+    // Shared fixture: builds a rollup + multisig context the same way the byte-compatibility
+    // tests above do, then exposes the pieces each test needs.
+    async function setupMultisigContext(): Promise<{
+      rollup: SolanaSignableRollup<unknown>;
+      capturedPayloadRef: { current: any };
+      multisigAddress: Uint8Array;
+      multisigPubkeys: Uint8Array[];
+      pubHexes: { pub1: string; pub2: string; pub3: string };
+      signers: {
+        signer1: Ed25519Signer;
+        signer2: Ed25519Signer;
+        signer3: Ed25519Signer;
+      };
+      unsignedTx: any;
+    }> {
+      const key1PrivHex =
+        "09817894bf1e858df8d9bb3b931646c558ec4cacb9e4f9c05e91d0d788ec1142";
+      const key2PrivHex =
+        "71d81253990513758c7014bec174b4405988c133fc616d6f3d633170858f3dc9";
+      const key3PrivHex =
+        "90f1cca556a78435468bb17f116a923c8eb5c6074619a9bf39f28eb673a22a50";
+
+      const mockClient = createMockClient({
+        chainId: 4321,
+        chainName: "TestChain",
+        chainHash:
+          "0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      });
+      const capturedPayloadRef: { current: any } = { current: undefined };
+      mockClient.post = vi
+        .fn()
+        .mockImplementation((_path: string, options: any) => {
+          capturedPayloadRef.current = options;
+          return Promise.resolve({ id: "test-tx-hash" });
+        });
+
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: (schema: any) => ({ schema }) as any,
+      });
+
+      const signer1 = new Ed25519Signer(key1PrivHex);
+      const signer2 = new Ed25519Signer(key2PrivHex);
+      const signer3 = new Ed25519Signer(key3PrivHex);
+      const pub1 = await signer1.publicKey();
+      const pub2 = await signer2.publicKey();
+      const pub3 = await signer3.publicKey();
+      const pub1Hex = bytesToHex(pub1);
+      const pub2Hex = bytesToHex(pub2);
+      const pub3Hex = bytesToHex(pub3);
+      const minSigners = 2;
+      const multisigPubkeys = [pub1, pub2, pub3];
+
+      const sortedPubKeys = [pub1Hex, pub2Hex, pub3Hex].sort();
+      const pubKeyBytes = sortedPubKeys.map((pk) =>
+        Array.from(hexToBytes(pk)),
+      );
+      const borshData = new Uint8Array(1 + 4 + 3 * 32);
+      const dv = new DataView(borshData.buffer);
+      borshData[0] = minSigners;
+      dv.setUint32(1, 3, true);
+      pubKeyBytes.forEach((pk, i) => borshData.set(pk, 5 + i * 32));
+      const multisigAddress = sha256(borshData);
+
+      const unsignedTx = {
+        runtime_call: {
+          bank: {
+            transfer: {
+              to: "4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL",
+              coins: {
+                amount: "7000",
+                token_id:
+                  "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7",
+              },
+            },
+          },
+        },
+        uniqueness: { nonce: 0 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "100000000000",
+          gas_limit: [1000000000, 1000000000],
+          chain_id: 4321,
+        },
+      };
+
+      return {
+        rollup,
+        capturedPayloadRef,
+        multisigAddress,
+        multisigPubkeys,
+        pubHexes: { pub1: pub1Hex, pub2: pub2Hex, pub3: pub3Hex },
+        signers: { signer1, signer2, signer3 },
+        unsignedTx,
+      };
+    }
+
+    /**
+     * Extracts the JSON payload a signer signed. The `solanaSimple` flow has each signer sign
+     * the JSON bytes directly (no preamble), so the signer's `sign()` call receives exactly
+     * what was JSON-serialized.
+     */
+    function captureSignerInput(signer: Ed25519Signer): {
+      mock: Ed25519Signer;
+      captured: { bytes?: Uint8Array };
+    } {
+      const captured: { bytes?: Uint8Array } = {};
+      const originalSign = signer.sign.bind(signer);
+      const mock = {
+        publicKey: () => signer.publicKey(),
+        sign: async (data: Uint8Array) => {
+          captured.bytes = new Uint8Array(data);
+          return originalSign(data);
+        },
+      } as unknown as Ed25519Signer;
+      return { mock, captured };
+    }
+
+    it("omits target_address from the signed JSON when no targetAddress is provided (backward compat)", async () => {
+      const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
+        await setupMultisigContext();
+
+      const { mock, captured } = captureSignerInput(signers.signer1);
+      await rollup.signTransactionForMultisig(unsignedTx, {
+        signer: mock,
+        authenticator: "solanaSimple",
+        multisigAddress,
+        multisigPubkeys,
+      });
+
+      expect(captured.bytes).toBeDefined();
+      const signedJson = new TextDecoder().decode(captured.bytes!);
+      expect(signedJson).not.toContain("target_address");
+      const parsed = JSON.parse(signedJson);
+      expect(parsed).not.toHaveProperty("target_address");
+    });
+
+    it("includes target_address in the signed JSON when targetAddress is provided (solanaSimple)", async () => {
+      const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
+        await setupMultisigContext();
+
+      const targetAddress = new Uint8Array(32);
+      targetAddress.fill(0x42);
+
+      const { mock, captured } = captureSignerInput(signers.signer1);
+      await rollup.signTransactionForMultisig(unsignedTx, {
+        signer: mock,
+        authenticator: "solanaSimple",
+        multisigAddress,
+        multisigPubkeys,
+        targetAddress,
+      });
+
+      expect(captured.bytes).toBeDefined();
+      const signedJson = new TextDecoder().decode(captured.bytes!);
+      const parsed = JSON.parse(signedJson);
+      expect(parsed.target_address).toBe(bs58.encode(targetAddress));
+    });
+
+    it("forwards tx.target_address into the submitted JSON via submitMultisigTransaction", async () => {
+      const {
+        rollup,
+        capturedPayloadRef,
+        multisigAddress,
+        multisigPubkeys,
+        pubHexes,
+        signers,
+        unsignedTx,
+      } = await setupMultisigContext();
+
+      const targetAddress = new Uint8Array(32);
+      targetAddress.fill(0x99);
+      const targetAddressBs58 = bs58.encode(targetAddress);
+
+      // Each signer signs with the same target_address — the signatures cover the full JSON
+      // including the target_address field.
+      const signedTx3 = await rollup.signTransactionForMultisig(unsignedTx, {
+        signer: signers.signer3,
+        authenticator: "solanaSimple",
+        multisigAddress,
+        multisigPubkeys,
+        targetAddress,
+      });
+      const signedTx1 = await rollup.signTransactionForMultisig(unsignedTx, {
+        signer: signers.signer1,
+        authenticator: "solanaSimple",
+        multisigAddress,
+        multisigPubkeys,
+        targetAddress,
+      });
+
+      const v0_3 = (signedTx3 as any).V0;
+      const v0_1 = (signedTx1 as any).V0;
+      const multisigV1 = {
+        V1: {
+          ...unsignedTx,
+          signatures: [
+            { pub_key: v0_3.pub_key, signature: v0_3.signature },
+            { pub_key: v0_1.pub_key, signature: v0_1.signature },
+          ],
+          unused_pub_keys: [pubHexes.pub2],
+          min_signers: 2,
+          target_address: targetAddressBs58,
+        },
+      };
+
+      await rollup.submitMultisigTransaction(multisigV1 as any, {
+        authenticator: "solanaSimple",
+        multisigAddress,
+        multisigPubkeys,
+      });
+
+      // The endpoint payload is a base64-wrapped borsh blob whose tail is the signed JSON. We
+      // don't need to re-parse the borsh layout — it's sufficient to check that the target
+      // address bytes appear in the submitted blob (via its base58 ASCII representation).
+      const submittedBody = capturedPayloadRef.current.body.body as string;
+      const submittedBytes = Buffer.from(submittedBody, "base64");
+      const submittedText = new TextDecoder().decode(submittedBytes);
+      expect(submittedText).toContain(`"target_address":"${targetAddressBs58}"`);
     });
   });
 });

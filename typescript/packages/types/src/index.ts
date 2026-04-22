@@ -73,6 +73,8 @@ export type TransactionV1<RuntimeCall> = {
     signatures: SignatureAndPubKey[];
     /** Minimum number of signatures required for transaction validity */
     min_signers: number;
+    /** Optional target address for execution; null uses default routing */
+    target_address: string | null;
   } & UnsignedTransaction<RuntimeCall>;
 };
 

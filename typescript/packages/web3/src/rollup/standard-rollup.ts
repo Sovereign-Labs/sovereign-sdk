@@ -84,10 +84,11 @@ export function standardTypeBuilder<
 /**
  * The parameters for simulating a runtime call transaction.
  */
-export type SimulateParams = Omit<
-  SovereignClient.RollupSimulateParams,
-  "call" | "sender"
-> &
+type RollupSimulateParams = SovereignClient.RollupSimulateParams & {
+  target_address?: string | null;
+};
+
+export type SimulateParams = Omit<RollupSimulateParams, "call" | "sender"> &
   SignerParams;
 
 export class StandardRollup<RuntimeCall> extends Rollup<
@@ -103,13 +104,17 @@ export class StandardRollup<RuntimeCall> extends Rollup<
    */
   async simulate(
     runtimeMessage: StandardRollupSpec<RuntimeCall>["RuntimeCall"],
-    { signer }: SimulateParams,
+    { signer, ...params }: SimulateParams,
   ): Promise<SovereignClient.Rollup.RollupSimulateResponse> {
     const publicKey = await signer.publicKey();
     const sender = bytesToHex(publicKey);
     const call = runtimeMessage as { [key: string]: unknown };
 
-    return this.rollup.simulate({ sender, call });
+    return this.rollup.simulate({
+      ...params,
+      sender,
+      call,
+    } as SovereignClient.RollupSimulateParams);
   }
 }
 

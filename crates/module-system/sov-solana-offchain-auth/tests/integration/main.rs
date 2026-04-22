@@ -94,13 +94,34 @@ async fn create_test_rollup() -> anyhow::Result<(
     TestRollup<SolanaOffchainAuthBlueprint<SolanaTestSpec, RT>>,
     TestUser<SolanaTestSpec>,
 )> {
+    create_test_rollup_with_extra_account_owners(|_| vec![]).await
+}
+
+/// Variant of [`create_test_rollup`] that seeds additional `(credential_id, address)` pairs
+/// into `sov-accounts` at genesis. Callers use this to authorize a multisig credential for a
+/// specific target address so V1 transactions carrying `target_address = Some(X)` can resolve
+/// their sender to `X` instead of the multisig's default address.
+///
+/// `extra_account_owners_for` is a closure invoked with the generated admin user so the caller
+/// can bind extra `AccountData` entries to admin's address without needing to materialize admin
+/// before calling this helper.
+async fn create_test_rollup_with_extra_account_owners(
+    extra_account_owners_for: impl FnOnce(
+        &TestUser<SolanaTestSpec>,
+    ) -> Vec<
+        sov_test_utils::runtime::sov_accounts::AccountData<<SolanaTestSpec as Spec>::Address>,
+    >,
+) -> anyhow::Result<(
+    TestRollup<SolanaOffchainAuthBlueprint<SolanaTestSpec, RT>>,
+    TestUser<SolanaTestSpec>,
+)> {
     // Create genesis config
     let genesis_config = HighLevelOptimisticGenesisConfig::<SolanaTestSpec>::generate()
         .add_accounts_with_default_balance(1);
     let sequencer = genesis_config.initial_sequencer.clone();
     let admin = genesis_config.additional_accounts()[0].clone();
 
-    let rt_genesis_config = <RT as Runtime<SolanaTestSpec>>::GenesisConfig::from_minimal_config(
+    let mut rt_genesis_config = <RT as Runtime<SolanaTestSpec>>::GenesisConfig::from_minimal_config(
         genesis_config.clone().into(),
         ValueSetterConfig {
             admin: admin.address(),
@@ -126,6 +147,10 @@ async fn create_test_rollup() -> anyhow::Result<(
             .unwrap(),
         },
     );
+    rt_genesis_config
+        .accounts
+        .accounts
+        .extend(extra_account_owners_for(&admin));
 
     let genesis_params = GenesisParams {
         runtime: rt_genesis_config,
@@ -442,6 +467,7 @@ fn create_multisig_transfer_tx_json(
     amount: Amount,
     recipient: &str,
     multisig_id: <S as Spec>::Address,
+    target_address: Option<<S as Spec>::Address>,
 ) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -464,6 +490,7 @@ fn create_multisig_transfer_tx_json(
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
         multisig_id,
+        target_address,
         version: 1,
     };
     serde_json::to_string(&solana_unsigned_tx).unwrap()
@@ -528,7 +555,7 @@ async fn test_submit_multisig_simple_message_transaction() {
     // Build a transfer from the multisig to the recipient, using V1 format which commits
     // to the credential_id in the signed message.
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address, None);
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_simple_wire_bytes(&transfer_json);
 
@@ -624,7 +651,7 @@ async fn test_submit_multisig_insufficient_signatures() {
 
     // Only 1 signer for a 2-of-3 multisig — should fail
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address, None);
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_simple_wire_bytes(&transfer_json);
     let sig1 = key1.sign(json_bytes);
@@ -689,7 +716,7 @@ async fn test_submit_multisig_invalid_signature() {
 
     // Corrupt the second signature
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address, None);
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_simple_wire_bytes(&transfer_json);
     let sig1 = key1.sign(json_bytes);
@@ -776,7 +803,7 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
 
     // Build a transfer from the multisig using spec-compliant format.
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(7_000), RECIPIENT_ADDRESS, multisig_address, None);
     let json_bytes = transfer_json.as_bytes();
 
     // Build the multisig preamble with a canonical signer ordering so the emitted payload
@@ -884,7 +911,7 @@ async fn test_submit_spec_compliant_multisig_insufficient_signatures() {
 
     // Only 1 signer when 2 are required
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address, None);
     let json_bytes = transfer_json.as_bytes();
 
     let preamble = make_multisig_preamble_for_message(
@@ -952,7 +979,7 @@ async fn test_submit_spec_compliant_multisig_invalid_signature() {
     }
 
     let transfer_json =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address, None);
     let json_bytes = transfer_json.as_bytes();
 
     let preamble = make_multisig_preamble_for_message(
@@ -1045,7 +1072,7 @@ async fn test_submit_ledger_signed_multisig_transaction() {
 
     // Build the V1 multisig transfer transaction
     let transfer_json_tx =
-        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address);
+        create_multisig_transfer_tx_json(Amount(5_000), RECIPIENT_ADDRESS, multisig_address, None);
     let encoded_tx = transfer_json_tx.as_bytes();
 
     // Build the multisig preamble with all 3 pubkeys (Ledger at index 0)
@@ -1108,4 +1135,190 @@ async fn test_submit_ledger_signed_multisig_transaction() {
         Some(Amount::new(5_000)),
         "Expected recipient to have received 5,000 tokens"
     );
+}
+
+/// End-to-end plumbing test: a V1 transaction carrying `target_address = Some(admin)` — where
+/// genesis authorizes `(admin.address(), multisig_credential_id)` in `account_owners` — routes
+/// execution as `admin`, not as the multisig's default address. Proves that `target_address`
+/// flows from the signed JSON through `authenticate`, `build_auth_data`, `AuthorizationData`,
+/// and into `resolve_sender`.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_multisig_with_authorized_target_address() {
+    // Build a 2-of-3 multisig (its default address is never funded).
+    let key1 = Ed25519PrivateKey::generate();
+    let key2 = Ed25519PrivateKey::generate();
+    let key3 = Ed25519PrivateKey::generate();
+    let pub1 = key1.pub_key();
+    let pub2 = key2.pub_key();
+    let pub3 = key3.pub_key();
+    let min_signers: u8 = 2;
+    let multisig =
+        sov_modules_api::Multisig::new(min_signers, vec![pub1.clone(), pub2.clone(), pub3.clone()]);
+    let multisig_credential_id = multisig.credential_id::<TestHasher>();
+    let multisig_default_address: <SolanaTestSpec as Spec>::Address = multisig_credential_id.into();
+
+    // Bring up a rollup where admin's address is authorized for the multisig's credential.
+    let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
+        vec![sov_test_utils::runtime::sov_accounts::AccountData {
+            credential_id: multisig_credential_id,
+            address: admin.address(),
+        }]
+    })
+    .await
+    .expect("Failed to create rollup");
+
+    let admin_address_str = admin.address().to_string();
+    let admin_balance_before = query_balance(&test_rollup.client, &admin_address_str).await;
+
+    // Build a V1 multisig transfer targeting admin's address.
+    let transfer_json = create_multisig_transfer_tx_json(
+        Amount(7_000),
+        RECIPIENT_ADDRESS,
+        multisig_default_address,
+        Some(admin.address()),
+    );
+    let json_bytes = transfer_json.as_bytes();
+    let wire_bytes = create_multisig_simple_wire_bytes(&transfer_json);
+
+    // Two of three signers sign.
+    let sig1 = key1.sign(json_bytes);
+    let sig2 = key2.sign(json_bytes);
+    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+        wire_bytes,
+        chain_hash: RT::CHAIN_HASH,
+        signatures: vec![
+            PubKeyAndSignature {
+                signature: sig1,
+                pub_key: pub1,
+            },
+            PubKeyAndSignature {
+                signature: sig2,
+                pub_key: pub2,
+            },
+        ]
+        .try_into()
+        .unwrap(),
+        unused_pub_keys: vec![pub3].try_into().unwrap(),
+        min_signers,
+    };
+
+    let raw_tx_bytes = borsh::to_vec(&multisig_msg).unwrap();
+    let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
+    assert!(
+        response.status().is_success(),
+        "Expected multisig-with-target_address transaction to succeed. Response: {response:?}"
+    );
+
+    // Recipient got the transfer.
+    let recipient_balance = query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await;
+    assert_eq!(
+        recipient_balance,
+        Some(Amount::new(7_000)),
+        "Expected recipient to have received 7,000 tokens via target-routed multisig tx"
+    );
+
+    // Admin's balance decreased (fees + transferred amount). We only check the ordering
+    // invariant: post < pre. A strict equality is fragile because paymaster gas is deducted.
+    let admin_balance_after = query_balance(&test_rollup.client, &admin_address_str).await;
+    assert!(
+        admin_balance_after < admin_balance_before,
+        "Expected admin balance to decrease after target-routed tx; before={admin_balance_before:?}, after={admin_balance_after:?}"
+    );
+
+    // The multisig's default address was never funded and should still have no balance —
+    // proving that the tx did NOT route through the default resolver.
+    let multisig_default_balance =
+        query_balance(&test_rollup.client, &multisig_default_address.to_string()).await;
+    assert!(
+        multisig_default_balance.is_none() || multisig_default_balance == Some(Amount::new(0)),
+        "Multisig default address must not have been used as sender; got balance {multisig_default_balance:?}"
+    );
+}
+
+/// Helper: builds a `SolanaOffchainUnsignedTransactionV1` with an arbitrary recipient for the
+/// serde round-trip / byte-equivalence tests below.
+fn build_v1_payload(
+    recipient: &str,
+    multisig_id: <S as Spec>::Address,
+    target_address: Option<<S as Spec>::Address>,
+) -> SolanaOffchainUnsignedTransactionV1<RT, S> {
+    let call: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
+        to: <S as Spec>::Address::from_str(recipient).unwrap(),
+        coins: Coins {
+            amount: Amount(1_000),
+            token_id: config_value!("GAS_TOKEN_ID"),
+        },
+    });
+    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+        call,
+        config_value!("CHAIN_ID"),
+        TEST_DEFAULT_MAX_PRIORITY_FEE,
+        TEST_DEFAULT_MAX_FEE,
+        UniquenessData::Nonce(0),
+        Some(TEST_DEFAULT_GAS_LIMIT.into()),
+    );
+    SolanaOffchainUnsignedTransactionV1::<RT, S> {
+        runtime_call: unsigned_tx.runtime_call,
+        uniqueness: unsigned_tx.uniqueness,
+        details: unsigned_tx.details,
+        chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
+        multisig_id,
+        target_address,
+        version: 1,
+    }
+}
+
+/// `target_address: None` is omitted from the serialized JSON, so pre-change signed messages
+/// remain byte-identical and existing signatures verify unchanged.
+#[test]
+fn test_v1_payload_omits_target_address_when_none() {
+    let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();
+    let payload = build_v1_payload(RECIPIENT_ADDRESS, multisig_address, None);
+
+    let json = serde_json::to_string(&payload).expect("serialize");
+    assert!(
+        !json.contains("target_address"),
+        "target_address must not appear in JSON when it is None; got: {json}"
+    );
+}
+
+/// Pre-change JSON (no `target_address` key) deserializes into a payload with `target_address:
+/// None`. Pins the `#[serde(default)]` promise: future refactors cannot silently break deployed
+/// Solana signers.
+#[test]
+fn test_v1_payload_without_target_address_field_deserializes_as_none() {
+    let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();
+    let expected = build_v1_payload(RECIPIENT_ADDRESS, multisig_address, None);
+    let canonical_json = serde_json::to_string(&expected).expect("serialize baseline");
+    assert!(
+        !canonical_json.contains("target_address"),
+        "guard: the canonical None-payload already omits target_address"
+    );
+
+    let parsed: SolanaOffchainUnsignedTransactionV1<RT, S> =
+        serde_json::from_str(&canonical_json).expect("deserialize");
+    assert_eq!(
+        parsed.target_address, None,
+        "missing target_address field must default to None"
+    );
+}
+
+/// A `target_address: Some(X)` round-trips through serialize/deserialize unchanged.
+#[test]
+fn test_v1_payload_with_target_address_round_trips() {
+    let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();
+    let target: <S as Spec>::Address =
+        <S as Spec>::Address::from_str(RECIPIENT_ADDRESS).expect("parse recipient");
+    let original = build_v1_payload(RECIPIENT_ADDRESS, multisig_address, Some(target));
+
+    let json = serde_json::to_string(&original).expect("serialize");
+    assert!(
+        json.contains("target_address"),
+        "target_address must appear in JSON when it is Some; got: {json}"
+    );
+
+    let parsed: SolanaOffchainUnsignedTransactionV1<RT, S> =
+        serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(parsed.target_address, Some(target));
+    assert_eq!(parsed.multisig_id, multisig_address);
 }

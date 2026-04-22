@@ -122,9 +122,15 @@ fn verify_signatures<S: Spec>(
 }
 
 /// Builds authorization data for either single-sig or multisig transactions.
+///
+/// `target_address` is the signer-declared target extracted from the deserialized V1 JSON payload.
+/// It must always be `None` for V0; for V1, it is forwarded from
+/// `SolanaOffchainUnsignedTransactionV1::target_address` so that the authorization layer can route
+/// execution to a pre-authorized account instead of the multisig's default address.
 fn build_auth_data<S: Spec>(
     unpacked: &UnpackedSolanaMessage<S>,
     uniqueness: UniquenessData,
+    target_address: Option<S::Address>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
@@ -147,6 +153,10 @@ fn build_auth_data<S: Spec>(
                 sov_modules_api::metered_credential::<S, S::CryptoSpec>(pub_key, meter)
                     .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
+            debug_assert!(
+                target_address.is_none(),
+                "V0 Solana transactions cannot carry a target_address"
+            );
             Ok(AuthorizationData {
                 uniqueness,
                 tx_hash: raw_tx_hash,
@@ -183,7 +193,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
-                address: None,
+                address: target_address,
             })
         }
     }
@@ -280,11 +290,11 @@ where
             raw_tx_hash,
         )
     };
-    let (provided_chain_name, unsigned_tx) = match &unpacked_message {
+    let (provided_chain_name, target_address, unsigned_tx) = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
             let tx = SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
-            (tx.chain_name.to_string(), tx.into_unsigned_tx())
+            (tx.chain_name.to_string(), None, tx.into_unsigned_tx())
         }
         UnpackedSolanaMessage::V1 {
             signatures,
@@ -301,7 +311,12 @@ where
                 *min_signers,
                 raw_tx_hash,
             )?;
-            (tx.chain_name.to_string(), tx.into_unsigned_tx())
+            let target_address = tx.target_address;
+            (
+                tx.chain_name.to_string(),
+                target_address,
+                tx.into_unsigned_tx(),
+            )
         }
     };
 
@@ -335,6 +350,7 @@ where
     let authorization_data = build_auth_data::<S>(
         &unpacked_message,
         unsigned_tx.uniqueness(),
+        target_address,
         raw_tx_hash,
         state,
     )?;

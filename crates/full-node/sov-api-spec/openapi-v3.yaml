@@ -1218,6 +1218,10 @@ components:
           type: object
           description: Optional uniqueness data for the transaction
           additionalProperties: true
+        target_address:
+          type: string
+          nullable: true
+          description: Optional target address for execution; null or omission uses default routing
       required:
         - sender
         - call
