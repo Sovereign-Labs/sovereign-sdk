@@ -307,10 +307,7 @@ fn test_multisig_signature_verification() {
 
     // Generate a signature from a random private key that's not part of the multisig. We'll use this in some of the test cases.
     let random_private_key = TestPrivateKey::generate();
-    // The multisig credential is authorized for `admin.address()` by the
-    // InsertCredentialId tx above. Target that address so the multisig tx pays
-    // gas from admin's balance; the multisig's own default address is unfunded.
-    let target = Some(admin.address());
+    let target = None;
     let make_multisig_tx = |generation| {
         let utx = create_utx_with_generation::<S, RT>(encode_message::<_, RT>(), generation);
         let signatures = multisig_keys
