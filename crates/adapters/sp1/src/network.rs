@@ -11,39 +11,6 @@ use sp1_sdk::prover::{ProveRequest, Prover};
 use sp1_sdk::HashableKey;
 use sp1_sdk::{NetworkProver, ProverClient, ProvingKey, SP1ProvingKey, SP1Stdin};
 
-#[cfg(feature = "metrics")]
-mod metrics {
-    use std::io::Write;
-
-    use sov_metrics::Metric;
-
-    /// Metrics emitted when the SP1 proving network fulfills a proof request.
-    #[derive(Debug)]
-    pub(super) struct SP1ProofFulfillmentMetrics {
-        /// The hex-encoded proof request ID.
-        pub request_id: String,
-        /// Time from proof request creation to fulfillment, in seconds, as reported by the SP1
-        /// network.
-        pub fulfillment_duration_secs: u64,
-    }
-
-    impl Metric for SP1ProofFulfillmentMetrics {
-        fn measurement_name(&self) -> &'static str {
-            "sov_rollup_sp1_proof_fulfillment"
-        }
-
-        fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-            write!(
-                buffer,
-                "{} request_id=\"{}\",fulfillment_duration_secs={}i",
-                self.measurement_name(),
-                self.request_id,
-                self.fulfillment_duration_secs,
-            )
-        }
-    }
-}
-
 /// Re-export of the proof handle type used by the SP1 network.
 pub type ProofHandle = B256;
 
@@ -83,7 +50,8 @@ impl SP1Network {
         if let Some(fulfilled_at) = proof_request.fulfilled_at {
             let fulfillment_duration_secs = fulfilled_at - proof_request.created_at;
             sov_metrics::track_metrics(|tracker| {
-                tracker.submit(metrics::SP1ProofFulfillmentMetrics {
+                tracker.submit(crate::metrics::SP1ProofFulfillmentMetrics {
+                    prover_type: crate::metrics::ProverType::Network,
                     request_id: format!("{request_id}"),
                     fulfillment_duration_secs,
                 });
