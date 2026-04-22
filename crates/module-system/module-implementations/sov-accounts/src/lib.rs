@@ -87,9 +87,8 @@ pub struct Accounts<S: Spec> {
     #[id]
     pub id: ModuleId,
 
-    /// `credential_id -> address` routing index, kept in lockstep with
-    /// [`Self::account_owners`] so `get_account` and `resolve_sender_address`
-    /// can answer with one lookup instead of scanning the authorization map.
+    /// Legacy/custom `credential_id -> address` routing index. New
+    /// authorization writes use [`Self::account_owners`] instead.
     #[state]
     pub(crate) accounts: StateMap<CredentialId, Account<S>>,
 
@@ -98,8 +97,7 @@ pub struct Accounts<S: Spec> {
     enable_custom_account_mappings: StateValue<bool>,
 
     /// Authorization set: a present entry means `credential_id` may sign as
-    /// `address`. Every write is paired with [`Self::accounts`], so
-    /// [`Self::is_authorized`] can rely on this map alone.
+    /// `address`.
     #[state]
     pub(crate) account_owners: StateMap<AccountOwnerKey<S>, bool>,
 }

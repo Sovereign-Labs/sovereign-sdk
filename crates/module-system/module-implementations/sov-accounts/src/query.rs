@@ -21,7 +21,7 @@ pub enum Response<Addr> {
 }
 
 impl<S: Spec> Accounts<S> {
-    /// Get the account corresponding to the given credential id.
+    /// Get the legacy/custom account mapping corresponding to the given credential id.
     pub fn get_account(
         &self,
         credential_id: CredentialId,

@@ -23,13 +23,13 @@ fn test_user_is_registered_correctly() {
     let route_id = register_basic_warp_route(&mut runner, &admin);
 
     let payer = [1u8; 32];
-    let embedded = [2u8; 32];
+    let embedded = payer;
     let body = [payer, embedded].concat();
     let valid_message = make_valid_message(0, route_id, HexString::new(body));
     let message = HexString::new(SafeVec::try_from(valid_message.encode().0).unwrap());
     let credential = CredentialId::from(embedded);
 
-    // Sanity check, ensure account definently doesnt already exist
+    // Sanity check, ensure registration does not rely on an accounts map entry.
     runner.query_state(|state| {
         let account = sov_accounts::Accounts::default().get_account(credential, state);
         assert!(matches!(account, sov_accounts::Response::AccountEmpty));
@@ -60,15 +60,12 @@ fn test_user_is_registered_correctly() {
 
     runner.query_state(|state| {
         let account = sov_accounts::Accounts::default().get_account(credential, state);
-        assert!(matches!(
-            account,
-            sov_accounts::Response::AccountExists { .. }
-        ));
+        assert!(matches!(account, sov_accounts::Response::AccountEmpty));
     });
 }
 
 #[test]
-fn test_errors_if_user_already_registered() {
+fn test_errors_if_embedded_pubkey_is_not_authorized_for_payer() {
     let SetupParams {
         mut runner,
         admin,
@@ -82,26 +79,11 @@ fn test_errors_if_user_already_registered() {
     let body = [payer, embedded].concat();
     let valid_message = make_valid_message(0, route_id, HexString::new(body));
     let message = HexString::new(SafeVec::try_from(valid_message.encode().0).unwrap());
-
-    runner.execute_transaction(TransactionTestCase {
-        input: user.create_plain_message::<RT, Mailbox<S>>(CallMessage::Process {
-            metadata: HexString::new(SafeVec::new()),
-            message: message.clone(),
-        }),
-        assert: Box::new(move |result, _| {
-            assert!(
-                result.tx_receipt.is_successful(),
-                "Recipient was not registered successfully"
-            );
-        }),
-    });
-
-    // payer is different so will try to register to different address
-    let payer = [3u8; 32];
-    let embedded = [2u8; 32];
-    let body = [payer, embedded].concat();
-    let valid_message = make_valid_message(1, route_id, HexString::new(body));
-    let message = HexString::new(SafeVec::try_from(valid_message.encode().0).unwrap());
+    let expected_error = format!(
+        "Embedded pubkey is not authorized for address. Address: {}, CredentialId: {}",
+        <S as Spec>::Address::from(payer),
+        CredentialId::from(embedded)
+    );
 
     runner.execute_transaction(TransactionTestCase {
         input: user.create_plain_message::<RT, Mailbox<S>>(CallMessage::Process {
@@ -110,10 +92,7 @@ fn test_errors_if_user_already_registered() {
         }),
         assert: Box::new(move |result, _| match result.tx_receipt {
             sov_rollup_interface::stf::TxEffect::Reverted(contents) => {
-                assert_eq!(
-                    contents.reason.to_string(),
-                    "Embedded pubkey already registered to different address. Attempted: CktRuQ2mttgRGkXJtyksdKHjUdc2C4TgDzyB98oEzy8, Registered: 4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi".to_string()
-                );
+                assert_eq!(contents.reason.to_string(), expected_error);
             }
             _ => panic!("Registration should have reverted: {:?}", result.tx_receipt),
         }),

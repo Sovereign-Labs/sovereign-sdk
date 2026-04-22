@@ -53,10 +53,10 @@ where
 pub enum SolanaRegistrationError {
     #[error("Core module error: {0}")]
     CoreModuleError(#[from] CoreModuleError),
-    #[error("Embedded pubkey already registered to different address. Attempted: {attempted_address}, Registered: {registered_address}")]
-    AlreadyRegistered {
-        attempted_address: String,
-        registered_address: String,
+    #[error("Embedded pubkey is not authorized for address. Address: {address}, CredentialId: {credential_id}")]
+    Unauthorized {
+        address: String,
+        credential_id: String,
     },
     #[error("Invalid body length. Expected {expected}, found {found}")]
     InvalidBodyLength { expected: usize, found: usize },
@@ -297,15 +297,15 @@ where
         let (user_pubkey, embedded_pubkey) = self.unpack_body(body.as_ref())?;
         let credential_id = CredentialId::from(embedded_pubkey);
         let address = S::Address::try_from(&user_pubkey).map_err(CoreModuleError::from)?;
-        let resolved_address = self
+        let is_authorized = self
             .accounts
-            .resolve_sender_address(&address, &credential_id, state)
-            .map_err(CoreModuleError::state_write)?;
+            .is_authorized_for(&address, &credential_id, state)
+            .map_err(CoreModuleError::state_read)?;
 
-        if address != resolved_address {
-            Err(SolanaRegistrationError::AlreadyRegistered {
-                attempted_address: address.to_string(),
-                registered_address: resolved_address.to_string(),
+        if !is_authorized {
+            Err(SolanaRegistrationError::Unauthorized {
+                address: address.to_string(),
+                credential_id: credential_id.to_string(),
             })
         } else {
             self.emit_event(

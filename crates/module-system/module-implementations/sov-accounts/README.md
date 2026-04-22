@@ -10,15 +10,15 @@ addresses and records which credentials may act for which addresses.
    canonical address does not require an account entry to be written.
 
 1. A credential can be explicitly mapped to a primary address in module state.
-   This is used for custom account mappings, duplicate credential checks,
-   credential-only resolution, and the `get_account` query.
+   This legacy/custom map is used for credential-only resolution and the
+   `get_account` query.
 
 1. It is possible to register another credential for the caller's address using
-   the `CallMessage::InsertCredentialId(..)` message. The call fails if that
-   credential is already explicitly mapped to any address.
+   the `CallMessage::InsertCredentialId(..)` message. This writes an
+   `account_owners` authorization, not a credential-indexed account entry.
 
 1. It is possible to query the `sov-accounts` module using the `get_account`
-   method and get the explicitly mapped account corresponding to the given
+   method and get the legacy/custom mapped account corresponding to the given
    credential id.
 
 ## Credential and Address Relations
@@ -47,10 +47,11 @@ credential. A credential has at most one primary address in this map, while one
 address may be the primary address for many credentials.
 
 This map is used when callers only know a `CredentialId` and need an address:
-`resolve_sender_address`, `get_account`, duplicate credential checks, and
-legacy/custom account mappings all depend on this credential-indexed lookup.
-`get_account` reports entries from this explicit map; it does not mean that
-every possible stateless canonical address has a stored account entry.
+`resolve_sender_address`, `get_account`, and legacy/custom account mappings all
+depend on this credential-indexed lookup. New `InsertCredentialId` calls do not
+write this map. `get_account` reports entries from this explicit map; it does
+not mean that every possible stateless canonical address or explicit
+authorization has a stored account entry.
 
 ### Account-credential authorization map
 
@@ -59,13 +60,17 @@ account_owners[(address, credential_id)] = true
 ```
 
 This state map records authorization. A present entry means the credential is
-authorized to sign transactions that execute as the given address.
+authorized to sign transactions that execute as the given address. The key is
+the exact `(address, credential_id)` pair, so this relation does not provide a
+credential-only lookup by itself.
 
 This relation answers "may this credential act as this address?" once the target
 address is known. It is not a replacement for the credential-to-account map,
 because it is keyed by `(address, credential_id)` and cannot efficiently answer
 "which address is this credential registered to?" with a single point lookup.
+New `InsertCredentialId` calls write this relation.
 
 In short: routing from only a credential uses the explicit
 credential-to-account map or the stateless canonical fallback. Authorization for
-a known address uses `account_owners`.
+a known address uses the combined `is_authorized_for` check: legacy/custom
+mapping, stateless canonical address, or `account_owners`.

@@ -73,17 +73,19 @@ fn test_config_account() {
         runner,
     ) = setup();
 
-    // The account is registered at genesis.
+    // The account is authorized at genesis, but no new `accounts` map entry is
+    // written for canonical credentials.
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
         assert!(accounts
             .is_authorized(&user.address(), &user.credential_id(), state)
             .unwrap());
+        assert!(accounts
+            .is_authorized_for(&user.address(), &user.credential_id(), state)
+            .unwrap());
         assert_eq!(
             accounts.get_account(user.credential_id(), state),
-            Response::AccountExists {
-                addr: user.address()
-            }
+            Response::AccountEmpty
         );
     });
 }
@@ -113,21 +115,24 @@ fn test_update_account() {
             assert!(accounts
                 .is_authorized(&user.address(), &new_credential, state)
                 .unwrap());
+            assert!(accounts
+                .is_authorized_for(&user.address(), &new_credential, state)
+                .unwrap());
             assert_eq!(
                 accounts.get_account(new_credential, state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
+                Response::AccountEmpty
             );
-            // The sender's own credential is auto-registered on first use.
-            assert!(accounts
+            // The sender's own credential uses stateless canonical ownership;
+            // resolving the tx no longer writes account authorization state.
+            assert!(!accounts
                 .is_authorized(&user.address(), &user.credential_id(), state)
+                .unwrap());
+            assert!(accounts
+                .is_authorized_for(&user.address(), &user.credential_id(), state)
                 .unwrap());
             assert_eq!(
                 accounts.get_account(user.credential_id(), state),
-                Response::AccountExists {
-                    addr: user.address()
-                }
+                Response::AccountEmpty
             );
 
             assert_ne!(new_credential, user.credential_id());
@@ -135,29 +140,37 @@ fn test_update_account() {
     });
 }
 
-/// A credential already mapped to one address cannot be inserted for another.
+/// A credential already authorized for an address cannot be inserted twice.
 #[test]
 fn test_insert_existing_credential_fails() {
     let (
         TestData {
-            account_1,
             non_registered_account: sender,
             ..
         },
         mut runner,
     ) = setup();
 
-    let peer_credential = account_1.credential_id();
+    let new_credential = TestPrivateKey::generate().pub_key().credential_id();
 
     runner.execute_transaction(TransactionTestCase {
         input: sender.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
-            peer_credential,
+            new_credential,
+        )),
+        assert: Box::new(move |result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: sender.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
+            new_credential,
         )),
         assert: Box::new(move |result, _state| match result.tx_receipt {
             TxEffect::Reverted(contents) => {
                 assert_eq!(
                     contents.reason.to_string(),
-                    "New CredentialId already exists"
+                    "CredentialId already authorized for this address"
                 );
             }
             _ => panic!("Expected reverted transaction for existing credential"),
@@ -168,8 +181,8 @@ fn test_insert_existing_credential_fails() {
 /// Tests the multisig functionality of the Accounts module.
 ///
 /// Seeds genesis with a `TestUser` whose custom `credential_id` matches the
-/// multisig, so the multisig's default address is funded and mapped before any
-/// tx is submitted. This keeps the focus on signature-level invariants.
+/// multisig, so the multisig's canonical address is funded before any tx is
+/// submitted. This keeps the focus on signature-level invariants.
 #[test]
 fn test_setup_multisig_and_act() {
     use sov_modules_api::Multisig;
@@ -389,6 +402,13 @@ fn test_register_new_account() {
                 state
             )
             .unwrap());
+        assert!(accounts
+            .is_authorized_for(
+                &non_registered_account.address(),
+                &non_registered_account.credential_id(),
+                state
+            )
+            .unwrap());
     });
 
     let new_credential = TestPrivateKey::generate().pub_key().credential_id();
@@ -406,16 +426,25 @@ fn test_register_new_account() {
             assert!(accounts
                 .is_authorized(&non_registered_account.address(), &new_credential, state)
                 .unwrap());
+            assert!(accounts
+                .is_authorized_for(&non_registered_account.address(), &new_credential, state)
+                .unwrap());
             assert_eq!(
                 accounts.get_account(new_credential, state),
-                Response::AccountExists {
-                    addr: non_registered_account.address()
-                }
+                Response::AccountEmpty
             );
 
-            // The sender's own credential is auto-registered on first tx.
-            assert!(accounts
+            // The sender's own credential uses stateless canonical ownership;
+            // resolving the tx no longer writes account authorization state.
+            assert!(!accounts
                 .is_authorized(
+                    &non_registered_account.address(),
+                    &non_registered_account.credential_id(),
+                    state
+                )
+                .unwrap());
+            assert!(accounts
+                .is_authorized_for(
                     &non_registered_account.address(),
                     &non_registered_account.credential_id(),
                     state
@@ -423,9 +452,7 @@ fn test_register_new_account() {
                 .unwrap());
             assert_eq!(
                 accounts.get_account(non_registered_account.credential_id(), state),
-                Response::AccountExists {
-                    addr: non_registered_account.address()
-                }
+                Response::AccountEmpty
             );
 
             assert_ne!(new_credential, non_registered_account.credential_id());
@@ -455,11 +482,22 @@ fn test_resolve_sender_address_with_default_address_non_registered() {
                 .unwrap(),
             non_registered_account.address()
         );
+        assert!(!accounts
+            .is_authorized(
+                &non_registered_account.address(),
+                &non_registered_account.credential_id(),
+                state
+            )
+            .unwrap());
+        assert_eq!(
+            accounts.get_account(non_registered_account.credential_id(), state),
+            Response::AccountEmpty
+        );
     });
 }
 
-/// Genesis-registered credentials resolve to their configured address even when
-/// a different fallback address is supplied.
+/// Genesis-authorized credentials have no `accounts` entry, so credential-only
+/// resolution falls back to the supplied address.
 #[test]
 fn test_resolve_sender_address_registered() {
     let (
@@ -480,18 +518,21 @@ fn test_resolve_sender_address_registered() {
                 .unwrap(),
             account_1.address()
         );
-        // Ensure correct (registered) address is used even if another fallback is provided.
         assert_eq!(
             accounts
                 .resolve_sender_address(&account_2.address(), &account_1.credential_id(), state)
                 .unwrap(),
-            account_1.address()
+            account_2.address()
         );
+        assert!(accounts
+            .is_authorized_for(&account_1.address(), &account_1.credential_id(), state)
+            .unwrap());
     });
 }
 
-/// After `InsertCredentialId` from a user, each inserted credential resolves
-/// to and is authorized under that user's address.
+/// After `InsertCredentialId` from a user, each inserted credential is
+/// authorized under that user's address without getting a credential-indexed
+/// account entry.
 #[test]
 fn test_resolve_address_with_multi_credential_ownership() {
     let (
@@ -533,21 +574,25 @@ fn test_resolve_address_with_multi_credential_ownership() {
 
         assert!(accounts.is_authorized(&addr, &credential_1, state).unwrap());
         assert!(accounts.is_authorized(&addr, &credential_2, state).unwrap());
+        assert!(accounts
+            .is_authorized_for(&addr, &credential_1, state)
+            .unwrap());
+        assert!(accounts
+            .is_authorized_for(&addr, &credential_2, state)
+            .unwrap());
         assert_eq!(
             accounts.get_account(credential_1, state),
-            Response::AccountExists { addr }
+            Response::AccountEmpty
         );
         assert_eq!(
             accounts.get_account(credential_2, state),
-            Response::AccountExists { addr }
+            Response::AccountEmpty
         );
     });
 }
 
-/// This test should verify that when a new credential is specified with an existing account's
-/// address as fallback, the credential is registered to that address. However
-/// query_visible_state doesn't mutate the state so it simply verifies that the fallback address is
-/// returned correctly
+/// Resolving an unknown credential returns the supplied fallback without
+/// writing account state.
 #[test]
 fn test_resolve_with_different_default_address() {
     let (TestData { account_1, .. }, runner) = setup();
@@ -562,6 +607,13 @@ fn test_resolve_with_different_default_address() {
                 .resolve_sender_address(&account_1.address(), &random_credential, state)
                 .unwrap(),
             account_1.address()
+        );
+        assert!(!accounts
+            .is_authorized(&account_1.address(), &random_credential, state)
+            .unwrap());
+        assert_eq!(
+            accounts.get_account(random_credential, state),
+            Response::AccountEmpty
         );
     });
 }
