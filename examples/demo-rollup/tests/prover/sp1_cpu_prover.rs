@@ -5,7 +5,7 @@ use sov_mock_da::MockDaSpec;
 use sov_modules_api::{Spec, ZkVerifier};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof;
-use sov_rollup_interface::zk::SerializedInnerProof;
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::{
     StateTransitionPublicData, StateTransitionWitnessWithAddress, ZkvmHost,
 };
@@ -40,7 +40,7 @@ async fn test_save_proofs() {
     .unwrap();
 
     for (i, data) in proof_data.into_iter().enumerate() {
-        let proof_public_data = verify(data.proof.raw_inner_proof.clone(), method_id.clone()).await;
+        let proof_public_data = verify(&data.proof, method_id.clone()).await;
         assert_eq!(proof_public_data.slot_hash, data.da_block_header.hash());
         let json = serde_json::to_string(&data).unwrap();
         std::fs::write(proofs_dir.join(format!("inner_{i}_proof.json")), &json).unwrap();
@@ -64,7 +64,7 @@ async fn test_proof_generation() {
         let _final_state_root = witness.final_state_root;
 
         let proof = generate_proof(&host, witness, prover_address).await;
-        let proof_public_data = verify(proof.proof.raw_inner_proof, method_id.clone()).await;
+        let proof_public_data = verify(&proof.proof, method_id.clone()).await;
 
         assert_eq!(proof_public_data.slot_hash, proof.da_block_header.hash());
         // TODO: Uncomment after NOmt bug is solved: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739
@@ -97,10 +97,10 @@ async fn generate_proof(
         prover_address,
     };
 
-    let raw_inner_proof = host.run(data).await;
+    let inner_proof = host.run(data).await;
     BlockHeaderWithProof {
         da_block_header,
-        proof: SerializedInnerProof { raw_inner_proof },
+        proof: inner_proof,
     }
 }
 
@@ -125,9 +125,9 @@ impl TestHost {
         Self { host }
     }
 
-    async fn run(&self, data: ProofInput) -> Vec<u8> {
+    async fn run(&self, data: ProofInput) -> SerializedZkProof {
         let mut host = self.host.clone();
-        tokio::task::spawn_blocking(move || -> Vec<u8> {
+        tokio::task::spawn_blocking(move || -> SerializedZkProof {
             host.add_hint_and_run(&data)
                 .expect("Prover should run successfully")
         })
@@ -137,8 +137,9 @@ impl TestHost {
 }
 
 async fn verify(
-    proof: Vec<u8>,
+    proof: &SerializedZkProof,
     code_commitment: SP1MethodId,
 ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-    SP1Verifier::verify(&proof, &code_commitment).expect("SP1 proof verification should succeed")
+    SP1Verifier::verify_with_proof(proof, &code_commitment)
+        .expect("SP1 proof verification should succeed")
 }

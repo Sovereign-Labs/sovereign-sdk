@@ -8,7 +8,7 @@ use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
-    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmNetwork,
 };
 use std::collections::HashMap;
@@ -134,11 +134,17 @@ where
                 ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
             })?;
 
+        let submit_start = std::time::Instant::now();
         let handle = self
             .inner_vm
             .add_hint_and_submit(&data)
             .await
             .map_err(ProverServiceError::Other)?;
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(crate::processes::metrics::ZkNetworkProverMetrics {
+                submit_duration_ms: submit_start.elapsed().as_millis(),
+            });
+        });
 
         let StateTransitionWitnessWithAddress {
             stf_witness:
@@ -206,8 +212,8 @@ where
             match self.inner_vm.poll(&handle).await {
                 Ok(Some(proof_bytes)) => {
                     let block_proof = BlockProof {
-                        proof: SerializedInnerProof {
-                            raw_inner_proof: proof_bytes,
+                        proof: SerializedZkProof {
+                            raw_proof: proof_bytes,
                         },
                         slot_number: metadata.slot_number,
                         st: metadata.st,

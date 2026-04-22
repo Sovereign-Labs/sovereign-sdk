@@ -262,6 +262,13 @@ where
             tracing::trace!(%height, "Notified about stf info height for proving/attesting");
         }
 
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(super::metrics::ZkStfInfoChannelMetrics {
+                channel_depth: self.notifier.max_capacity() - self.notifier.capacity(),
+                channel_capacity: self.notifier.max_capacity(),
+            });
+        });
+
         if height_to_notify >= next_height_to_send {
             self.next_height_to_send = height_to_notify.saturating_add(1);
         }
