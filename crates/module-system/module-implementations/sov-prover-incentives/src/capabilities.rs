@@ -145,7 +145,7 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        tracing::info!(
+        tracing::debug!(
             %public_outputs.initial_slot_number,
             %public_outputs.final_slot_number,
             "Processing aggregated proof"

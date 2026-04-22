@@ -352,8 +352,7 @@ where
         let public_outputs_opt =
             <<S::InnerZkvm as Zkvm>::Verifier as ZkVerifier>::verify_with_proof::<
                 StateTransitionPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-            >(proof, &code_commitment)
-            .map_err(|e| anyhow::format_err!("{:?}", e));
+            >(proof, &code_commitment);
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {
