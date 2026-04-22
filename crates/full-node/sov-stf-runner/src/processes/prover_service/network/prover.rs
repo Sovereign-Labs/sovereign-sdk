@@ -134,11 +134,17 @@ where
                 ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
             })?;
 
+        let submit_start = std::time::Instant::now();
         let handle = self
             .inner_vm
             .add_hint_and_submit(&data)
             .await
             .map_err(ProverServiceError::Other)?;
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(crate::processes::metrics::ZkNetworkProverMetrics {
+                submit_duration_ms: submit_start.elapsed().as_millis(),
+            });
+        });
 
         let StateTransitionWitnessWithAddress {
             stf_witness:

@@ -168,6 +168,12 @@ where
         >,
     ) -> anyhow::Result<()> {
         let first_height_unproven = self.stf_info_receiver.next_height_to_receive();
+        let received_slot_number = stf_info.slot_number;
+
+        assert!(
+            received_slot_number.get() >= first_height_unproven.get(),
+            "Received slot {received_slot_number} is behind first unproven height {first_height_unproven}"
+        );
 
         let prover_service = &self.prover_service;
 
@@ -203,6 +209,7 @@ where
             self.proofs_to_create.close_newest_proof();
             let metadata = self.proofs_to_create.take_oldest();
 
+            let proving_start = std::time::Instant::now();
             let agg_proof = self
                 .create_aggregate_proof_with_retries(
                     metadata,
@@ -210,6 +217,13 @@ where
                     &self.genesis_state_root,
                 )
                 .await?;
+            let aggregation_duration = proving_start.elapsed();
+
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(super::metrics::ZkAggregatedProofMetrics {
+                    aggregation_duration_ms: aggregation_duration.as_millis(),
+                });
+            });
 
             tracing::debug!(
                 bytes = agg_proof.raw_aggregated_proof.len(),
@@ -224,6 +238,15 @@ where
             self.stf_info_receiver
                 .inc_next_height_to_receive_by(num_proofs_to_create as u64);
         }
+
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(super::metrics::ZkProofManagerMetrics {
+                proving_lag: received_slot_number.get() - first_height_unproven.get(),
+                proofs_to_create: self.proofs_to_create.current_proof_jump(),
+                slot_number: received_slot_number.get(),
+            });
+        });
+
         Ok(())
     }
 }

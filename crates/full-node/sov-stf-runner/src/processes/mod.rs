@@ -1,4 +1,5 @@
 //! Processes responsible for creating different kind of proofs.
+mod metrics;
 mod op_manager;
 mod prover_service;
 mod stf_info_manager;
