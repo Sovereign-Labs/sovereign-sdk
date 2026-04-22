@@ -81,12 +81,10 @@ async fn test_network_prove_and_aggregate() {
 
     match status {
         ProofAggregationStatus::Success(proof) => {
-            let public_data = <MockZkVerifier as ZkVerifier>::verify::<
+            let serialized_proof = proof.to_serialized_zk_proof();
+            let public_data = <MockZkVerifier as ZkVerifier>::verify_with_proof::<
                 AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
-            >(
-                proof.raw_aggregated_proof.as_ref(),
-                &MockCodeCommitment::default(),
-            )
+            >(&serialized_proof, &MockCodeCommitment::default())
             .unwrap();
             assert_eq!(public_data.initial_slot_number.get(), 1);
             assert_eq!(public_data.final_slot_number.get(), 1);
@@ -155,12 +153,10 @@ async fn test_network_aggregated_proof_multiple_blocks() {
 
     match status {
         ProofAggregationStatus::Success(proof) => {
-            let public_data = <MockZkVerifier as ZkVerifier>::verify::<
+            let serialized_proof = proof.to_serialized_zk_proof();
+            let public_data = <MockZkVerifier as ZkVerifier>::verify_with_proof::<
                 AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
-            >(
-                proof.raw_aggregated_proof.as_ref(),
-                &MockCodeCommitment::default(),
-            )
+            >(&serialized_proof, &MockCodeCommitment::default())
             .unwrap();
             assert_eq!(public_data.initial_slot_number.get(), 0);
             assert_eq!(public_data.final_slot_number.get(), 4);
@@ -338,12 +334,10 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
 
     match status {
         ProofAggregationStatus::Success(proof) => {
-            let public_data = <MockZkVerifier as ZkVerifier>::verify::<
+            let serialized_proof = proof.to_serialized_zk_proof();
+            let public_data = <MockZkVerifier as ZkVerifier>::verify_with_proof::<
                 AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
-            >(
-                proof.raw_aggregated_proof.as_ref(),
-                &MockCodeCommitment::default(),
-            )
+            >(&serialized_proof, &MockCodeCommitment::default())
             .unwrap();
             assert_eq!(public_data.initial_slot_number.get(), 1);
             assert_eq!(public_data.final_slot_number.get(), 2);

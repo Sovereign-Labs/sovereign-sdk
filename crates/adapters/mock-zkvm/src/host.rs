@@ -2,7 +2,10 @@ use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
+use sov_rollup_interface::zk::aggregated_proof::{
+    BlockProof, OuterZkvmHost, SerializedAggregatedProof,
+};
+use sov_rollup_interface::zk::SerializedZkProof;
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
@@ -35,13 +38,17 @@ impl MockZkvmHost {
     }
 
     /// Create a proof for MockZkvm
-    pub fn create_serialized_proof<T: Serialize>(is_valid: bool, transition: T) -> Vec<u8> {
+    pub fn create_serialized_proof<T: Serialize>(
+        is_valid: bool,
+        transition: T,
+    ) -> SerializedZkProof {
         let data = bincode::serialize(&transition).unwrap();
-        bincode::serialize(&MockProof {
+        let raw_proof = bincode::serialize(&MockProof {
             is_valid,
             pub_data: data,
         })
-        .unwrap()
+        .unwrap();
+        SerializedZkProof { raw_proof }
     }
 
     fn add_hint_and_run_inner<T: Serialize>(&self, item: &T) -> anyhow::Result<Vec<u8>> {
@@ -71,8 +78,9 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         Ok(MockCodeCommitment::default())
     }
 
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedZkProof> {
         self.add_hint_and_run_inner(item)
+            .map(|raw_proof| SerializedZkProof { raw_proof })
     }
 
     fn from_args(_args: &Self::HostArgs) -> Self {
@@ -85,7 +93,7 @@ impl OuterZkvmHost for MockZkvmHost {
         &self,
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedAggregatedProof> {
         use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
 
         let block_proofs_data = headers_with_block_proofs
@@ -99,5 +107,8 @@ impl OuterZkvmHost for MockZkvmHost {
         );
 
         self.add_hint_and_run_inner(&public_data)
+            .map(|raw_aggregated_proof| SerializedAggregatedProof {
+                raw_aggregated_proof,
+            })
     }
 }

@@ -47,11 +47,12 @@ where
     // Verify the previous aggregation proof if one exists. On the first aggregation
     // after genesis, there is no predecessor, the chain starts here.
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
-        let public_data = V::verify::<AggregatedProofPublicData<Address, Da, Root>>(
-            &prev_outer_proof_witness.public_values,
-            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
+        let public_data =
+            V::verify_with_pub_values::<AggregatedProofPublicData<Address, Da, Root>>(
+                &prev_outer_proof_witness.public_values,
+                &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
+            )
+            .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
 
         assert_eq!(
             public_data.inner_vkey_hash, inner_vkey_hash,
@@ -132,11 +133,12 @@ where
     let mut rewarded_addresses = Vec::with_capacity(proof_inputs.len());
 
     for (index, proof_input) in proof_inputs.iter().enumerate() {
-        let stf_public_data = V::verify::<StateTransitionPublicData<Address, Da, Root>>(
-            &proof_input.public_values,
-            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
+        let stf_public_data =
+            V::verify_with_pub_values::<StateTransitionPublicData<Address, Da, Root>>(
+                &proof_input.public_values,
+                &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
+            )
+            .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
         let current_slot_number = SlotNumber::new(proof_input.da_block_header.height());
 

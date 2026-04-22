@@ -127,9 +127,10 @@ impl<S: Spec> ProverIncentives<S> {
             .map_err(Into::<anyhow::Error>::into)?;
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
-        let verification_result = <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify::<
-            AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-        >(&proof.raw_aggregated_proof, &code_commitment);
+        let verification_result =
+            <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
+                AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+            >(&proof.clone().to_serialized_zk_proof(), &code_commitment);
 
         let public_outputs = match verification_result {
             Ok(public_outputs) => public_outputs,
@@ -143,6 +144,12 @@ impl<S: Spec> ProverIncentives<S> {
                 ));
             }
         };
+
+        tracing::debug!(
+            %public_outputs.initial_slot_number,
+            %public_outputs.final_slot_number,
+            "Processing aggregated proof"
+        );
 
         // TODO #2551: We don’t handle real inner_code_commitment yet. Re-enable it at the end of #2551.
         /*

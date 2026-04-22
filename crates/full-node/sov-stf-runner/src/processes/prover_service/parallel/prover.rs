@@ -6,11 +6,9 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::{
-    BlockProof, OuterZkvmHost, SerializedAggregatedProof,
-};
+use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
 use sov_rollup_interface::zk::{
-    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
 };
 use tokio::sync::oneshot;
@@ -107,7 +105,7 @@ where
 
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data);
+                    let inner_proof = make_inner_proof::<InnerVm>(inner_vm, &data);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -129,8 +127,8 @@ where
                         .verify_relevant_tx_list(&da_block_header, &blobs, relevant_proofs)
                         .expect("An honest prover provided an invalid list of relevant txs. This is a bug in the prover - please report it.");
 
-                    let block_proof = proof.map(|p| BlockProof {
-                        proof: p,
+                    let block_proof = inner_proof.map(|proof| BlockProof {
+                        proof,
                         st: StateTransitionPublicData::<Address, Da::Spec, StateRoot> {
                             initial_state_root,
                             final_state_root,
@@ -193,7 +191,7 @@ where
             let _ = tx.send(result);
         });
 
-        let raw_aggregated_proof = rx
+        let serialized_aggregated_proof = rx
             .await
             .map_err(|_| anyhow::anyhow!("Proof aggregation task terminated"))??;
 
@@ -206,10 +204,6 @@ where
             }
         }
 
-        let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof,
-        };
-
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
     }
 }
@@ -217,7 +211,7 @@ where
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
     hint: &impl Serialize,
-) -> anyhow::Result<SerializedInnerProof>
+) -> anyhow::Result<SerializedZkProof>
 where
     InnerVm: Zkvm + 'static,
 {
@@ -244,5 +238,5 @@ where
             error!("Proof generation failed: {:?}", e);
         }
     }
-    result.map(|raw_inner_proof| SerializedInnerProof { raw_inner_proof })
+    result
 }

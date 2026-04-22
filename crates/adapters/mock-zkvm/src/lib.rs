@@ -18,7 +18,7 @@ pub use network::MockZkvmNetwork;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
-use sov_rollup_interface::zk::{CryptoSpec, Zkvm};
+use sov_rollup_interface::zk::{CryptoSpec, SerializedZkProof, Zkvm};
 
 use crate::crypto::{Ed25519PublicKey, Ed25519Signature};
 
@@ -118,14 +118,22 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+    #[cfg(target_os = "zkvm")]
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        todo!("MockZkVerifier does not support `verify_with_pub_values`")
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         let MockProof {
             is_valid,
             pub_data: input,
-        } = bincode::deserialize(serialized_proof)?;
+        } = bincode::deserialize(&serialized_proof.raw_proof)?;
         if is_valid {
             Ok(bincode::deserialize(&input)?)
         } else {
@@ -166,7 +174,7 @@ mod tests {
         vm.make_proof();
         let proof = vm.add_hint_and_run(&pub_data).unwrap();
         let verified_pub_data =
-            MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default())?;
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default())?;
 
         assert_eq!(verified_pub_data, pub_data);
         Ok(())
@@ -176,13 +184,13 @@ mod tests {
     fn test_proof_serialization() -> anyhow::Result<()> {
         let proof = MockZkvmHost::create_serialized_proof(true, "Valid");
         let verified_pub_data =
-            MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default());
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default());
 
         assert!(verified_pub_data.is_ok());
 
         let proof = MockZkvmHost::create_serialized_proof(false, "Invalid");
         let verified_pub_data =
-            MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default());
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default());
 
         assert!(verified_pub_data.is_err());
 
@@ -210,7 +218,11 @@ mod tests {
             .await?
             .expect("proof should be ready after complete_proof");
 
-        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
+        let proof = SerializedZkProof {
+            raw_proof: proof_bytes,
+        };
+        let verified =
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default())?;
         assert_eq!(verified, pub_data);
         Ok(())
     }
@@ -230,7 +242,11 @@ mod tests {
             .await?
             .expect("auto-complete proof should be immediately ready");
 
-        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
+        let proof = SerializedZkProof {
+            raw_proof: proof_bytes,
+        };
+        let verified =
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default())?;
         assert_eq!(verified, pub_data);
         Ok(())
     }
