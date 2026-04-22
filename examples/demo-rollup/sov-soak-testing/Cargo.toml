@@ -51,7 +51,7 @@ sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 sov-soak-testing-lib = { workspace = true }
 sov-db = { workspace = true }
-sov-sp1-adapter = { workspace = true, features = ["native", "arbitrary"] }
+sov-sp1-adapter = { workspace = true, features = ["native", "arbitrary", "metrics"] }
 sov-stf-runner = { workspace = true }
 sp1 = { path = "../provers/sp1" }
 

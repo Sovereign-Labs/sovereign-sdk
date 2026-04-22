@@ -63,6 +63,7 @@ native = [
     "sov-metrics?/native",
     "sov-sp1-adapter/native",
 ]
+metrics = ["sov-metrics"]
 bench = [
     "sov-metrics/sp1",
     "sov-sp1-adapter/bench",
