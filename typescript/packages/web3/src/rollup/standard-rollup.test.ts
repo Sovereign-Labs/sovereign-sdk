@@ -275,7 +275,6 @@ describe("createStandardRollup", () => {
     };
     const txDetails = {
       max_fee: "1234",
-      gas_limit: null,
     };
 
     await rollup.simulate(runtimeCall, {
