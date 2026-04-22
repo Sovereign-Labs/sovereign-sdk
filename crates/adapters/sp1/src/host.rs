@@ -8,12 +8,12 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
-    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness,
+    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness, SerializedPubValuse,
 };
 use sov_rollup_interface::zk::aggregated_proof::{
-    BlockHeaderWithProof, BlockProof, CodeCommitmentHash, OuterZkvmHost,
+    BlockHeaderWithProof, BlockProof, CodeCommitmentHash, OuterZkvmHost, SerializedAggregatedProof,
 };
-use sov_rollup_interface::zk::{SerializedInnerProof, ZkvmHost};
+use sov_rollup_interface::zk::{SerializedZkProof, ZkvmHost};
 use sp1_sdk::blocking::ProveRequest;
 use sp1_sdk::blocking::{EnvProver, EnvProvingKey, Prover, ProverClient};
 use sp1_sdk::ProvingKey;
@@ -67,7 +67,7 @@ impl SP1AggregationHost {
     pub fn run<Da: DaSpec>(
         &self,
         proofs_and_headers: Vec<BlockHeaderWithProof<Da>>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedAggregatedProof> {
         anyhow::ensure!(
             !proofs_and_headers.is_empty(),
             "At least one inner proof is required"
@@ -82,7 +82,7 @@ impl SP1AggregationHost {
             .map_err(|e| anyhow::anyhow!("prev_agg_proof mutex poisoned: {e}"))?;
 
         let prev_outer_proof_witness = if let Some(previous_outer_proof) = prev_agg_proof.as_ref() {
-            let serialized = bincode::serialize(previous_outer_proof)?;
+            let serialized = crate::encode_sp1_proof(previous_outer_proof)?;
             let public_values =
                 self.inner
                     .host
@@ -97,7 +97,7 @@ impl SP1AggregationHost {
         for proof_and_header in proofs_and_headers {
             let public_values = self.inner.host.add_proof_helper(
                 &mut stdin,
-                &proof_and_header.proof.raw_inner_proof,
+                &proof_and_header.proof,
                 &self.inner.inner_vk,
             )?;
             let proof_input = DeferredProofInput::<Da> {
@@ -124,10 +124,12 @@ impl SP1AggregationHost {
         stdin.write(&witness);
 
         let agg_proof = self.inner.host.run_helper(stdin)?;
-        let serialized = bincode::serialize(&agg_proof)?;
+        let serialized = crate::encode_sp1_proof(&agg_proof)?;
         *prev_agg_proof = Some(agg_proof);
 
-        Ok(serialized)
+        Ok(SerializedAggregatedProof {
+            raw_aggregated_proof: serialized.raw_proof,
+        })
     }
 }
 
@@ -166,9 +168,9 @@ impl SP1Host {
     fn add_proof_helper(
         &self,
         stdin: &mut SP1Stdin,
-        proof: &[u8],
+        proof: &SerializedZkProof,
         vk: &sp1_sdk::SP1VerifyingKey,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedPubValuse> {
         let proof = crate::decode_sp1_proof(proof)?;
 
         let SP1Proof::Compressed(recursion_proof) = &proof.proof else {
@@ -176,7 +178,9 @@ impl SP1Host {
         };
 
         stdin.write_proof((**recursion_proof).clone(), vk.vk.clone());
-        Ok(proof.public_values.to_vec())
+        Ok(SerializedPubValuse {
+            pub_values: proof.public_values.to_vec(),
+        })
     }
 
     fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
@@ -223,13 +227,11 @@ impl ZkvmHost for SP1Host {
         Self::new(args).unwrap_or_else(|e| panic!("Failed to create SP1Host: {e:?}"))
     }
 
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedInnerProof> {
+    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedZkProof> {
         let mut stdin = SP1Stdin::new();
         stdin.write(item);
         let output = self.run_helper(stdin)?;
-        Ok(SerializedInnerProof {
-            raw_inner_proof: bincode::serialize(&output)?,
-        })
+        crate::encode_sp1_proof(&output)
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
@@ -242,7 +244,7 @@ impl OuterZkvmHost for SP1AggregationHost {
         &self,
         _genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedAggregatedProof> {
         let proofs_and_headers: Vec<BlockHeaderWithProof<Da>> = headers_with_block_proofs
             .into_iter()
             .map(|(header, proof)| BlockHeaderWithProof {

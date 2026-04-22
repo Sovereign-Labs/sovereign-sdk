@@ -7,6 +7,7 @@ use sov_modules_api::{
     ZkVerifier, Zkvm,
 };
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_state::storage::Storage;
 use thiserror::Error;
 use tracing::error;
@@ -303,7 +304,9 @@ where
             return Err(ProcessChallengeErrors::InvalidOperatingMode);
         }
 
-        let proof = &serialized_challenge.raw_challenge;
+        let proof = &SerializedZkProof {
+            raw_proof: serialized_challenge.raw_challenge.clone(),
+        };
         // Get the challenger's old balance.
         // Revert if they aren't bonded
         let old_balance = self
@@ -346,10 +349,11 @@ where
             }
         };
 
-        let public_outputs_opt = <<S::InnerZkvm as Zkvm>::Verifier as ZkVerifier>::verify::<
-            StateTransitionPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-        >(proof, &code_commitment)
-        .map_err(|e| anyhow::format_err!("{:?}", e));
+        let public_outputs_opt =
+            <<S::InnerZkvm as Zkvm>::Verifier as ZkVerifier>::verify_with_proof::<
+                StateTransitionPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+            >(proof, &code_commitment)
+            .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {

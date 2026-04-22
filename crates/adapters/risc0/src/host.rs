@@ -7,7 +7,8 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
-use sov_rollup_interface::zk::SerializedInnerProof;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::ZkvmHost;
 
 /// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
@@ -103,12 +104,12 @@ impl ZkvmHost for Risc0Host<'static> {
     fn add_hint_and_run<T: serde::Serialize>(
         &mut self,
         item: &T,
-    ) -> anyhow::Result<SerializedInnerProof> {
+    ) -> anyhow::Result<SerializedZkProof> {
         self.replace_hints(item);
         let session = self.run_without_proving()?;
         let receipt = session.prove()?.receipt;
-        Ok(SerializedInnerProof {
-            raw_inner_proof: bincode::serialize(&receipt)?,
+        Ok(SerializedZkProof {
+            raw_proof: bincode::serialize(&receipt)?,
         })
     }
 
@@ -124,7 +125,7 @@ impl OuterZkvmHost for Risc0Host<'static> {
         &self,
         _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedAggregatedProof> {
         unimplemented!("Proof aggregation not supported for Risc0")
     }
 }

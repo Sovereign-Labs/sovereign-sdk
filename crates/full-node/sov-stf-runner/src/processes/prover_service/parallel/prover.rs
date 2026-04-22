@@ -6,11 +6,9 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::{
-    BlockProof, OuterZkvmHost, SerializedAggregatedProof,
-};
+use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
 use sov_rollup_interface::zk::{
-    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
 };
 use tokio::sync::oneshot;
@@ -193,7 +191,7 @@ where
             let _ = tx.send(result);
         });
 
-        let raw_aggregated_proof = rx
+        let serialized_aggregated_proof = rx
             .await
             .map_err(|_| anyhow::anyhow!("Proof aggregation task terminated"))??;
 
@@ -206,10 +204,6 @@ where
             }
         }
 
-        let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof,
-        };
-
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
     }
 }
@@ -217,7 +211,7 @@ where
 fn make_inner_proof<InnerVm>(
     mut vm: InnerVm::Host,
     hint: &impl Serialize,
-) -> anyhow::Result<SerializedInnerProof>
+) -> anyhow::Result<SerializedZkProof>
 where
     InnerVm: Zkvm + 'static,
 {

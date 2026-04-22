@@ -7,7 +7,7 @@ use crate::da::DaSpec;
 /// TODO
 pub struct SerializedPubValuse {
     /// TODO
-    pub public_values: Vec<u8>,
+    pub pub_values: Vec<u8>,
 }
 
 /// A single deferred proof input containing its public values and associated DA block header.
@@ -18,7 +18,7 @@ pub struct SerializedPubValuse {
 ))]
 pub struct DeferredProofInput<Da: DaSpec> {
     /// The public values of the proof.
-    pub public_values: Vec<u8>,
+    pub public_values: SerializedPubValuse,
     /// The DA block header associated with this proof.
     pub da_block_header: Da::BlockHeader,
 }
@@ -44,5 +44,5 @@ pub struct AggregatedProofWitness<Da: DaSpec> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PreviousOuterProofWitness {
     /// Serialized public values of the previous proof.
-    pub public_values: Vec<u8>,
+    pub public_values: SerializedPubValuse,
 }

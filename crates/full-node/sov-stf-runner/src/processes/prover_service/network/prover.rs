@@ -8,7 +8,7 @@ use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
-    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmNetwork,
 };
 use std::collections::HashMap;
@@ -206,8 +206,8 @@ where
             match self.inner_vm.poll(&handle).await {
                 Ok(Some(proof_bytes)) => {
                     let block_proof = BlockProof {
-                        proof: SerializedInnerProof {
-                            raw_inner_proof: proof_bytes,
+                        proof: SerializedZkProof {
+                            raw_proof: proof_bytes,
                         },
                         slot_number: metadata.slot_number,
                         st: metadata.st,

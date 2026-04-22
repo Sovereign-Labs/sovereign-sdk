@@ -10,6 +10,7 @@ use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
 
@@ -99,11 +100,11 @@ impl ZkVerifier for Risc0Verifier {
     type CryptoSpec = Risc0CryptoSpec;
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let receipt: Receipt = bincode::deserialize(serialized_proof)?;
+        let receipt: Receipt = bincode::deserialize(&serialized_proof.raw_proof)?;
         receipt.verify(code_commitment.0)?;
         Ok(bincode::deserialize(&receipt.journal.bytes)?)
     }
@@ -135,8 +136,16 @@ impl ZkVerifier for Risc0Verifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        _serialized_proof: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValuse,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Implement this method once risc0 supports recursion: issue #633
+        todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        _serialized_proof: &SerializedZkProof,
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         // Implement this method once risc0 supports recursion: issue #633

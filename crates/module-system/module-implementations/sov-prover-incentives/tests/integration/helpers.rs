@@ -126,7 +126,7 @@ pub(crate) fn consume_gas_tx_for_signer(signer: &TestUser<S>) -> TransactionType
 pub(crate) fn serialize_proof<T: Serialize>(agg_proof: T) -> Vec<u8> {
     let proof = sov_mock_zkvm::MockZkvmHost::create_serialized_proof(true, agg_proof);
     let serialized_proof = SerializedAggregatedProof {
-        raw_aggregated_proof: proof,
+        raw_aggregated_proof: proof.raw_proof,
     };
 
     // Double serialzie because the blob selector deserialize a Vec<u8> and then that in turn gets deserialized by the STF

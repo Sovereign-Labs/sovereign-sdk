@@ -121,5 +121,6 @@ async fn test_parallel_proof_generation() {
         <DefaultSpec as Spec>::Address,
         MockDaSpec,
         <<DefaultSpec as Spec>::Storage as Storage>::Root,
-    > = SP1Verifier::verify(&status.raw_aggregated_proof, &outer_code_commitment).unwrap();
+    > = SP1Verifier::verify_with_proof(&status.to_serialized_zk_proof(), &outer_code_commitment)
+        .unwrap();
 }
