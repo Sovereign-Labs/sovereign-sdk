@@ -129,6 +129,35 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Creates a new address whose derivation is domain-separated from normal signer credentials and authorizes the caller's current credential for it.",
+      "type": "object",
+      "required": [
+        "create_unknown_address"
+      ],
+      "properties": {
+        "create_unknown_address": {
+          "type": "object",
+          "required": [
+            "salt"
+          ],
+          "properties": {
+            "salt": {
+              "description": "User-provided salt for the derivation.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "maxItems": 32,
+              "minItems": 32
+            }
+          }
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {

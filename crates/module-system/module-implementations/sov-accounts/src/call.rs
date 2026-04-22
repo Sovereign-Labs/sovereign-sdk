@@ -1,10 +1,16 @@
 use anyhow::{anyhow, bail, Result};
 use schemars::JsonSchema;
+use sov_modules_api::digest::Digest;
 use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
+use sov_modules_api::{
+    Context, CredentialId, CryptoSpec, EventEmitter, Multisig, PublicKey, Spec, StateReader,
+    TxState,
+};
 use sov_state::namespaces::User;
 
-use crate::{AccountOwnerKey, Accounts};
+use crate::{AccountOwnerKey, Accounts, Event};
+
+const UNKNOWN_ADDRESS_DOMAIN: &[u8] = b"sov_accounts::unknown_address::v1";
 
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
@@ -60,6 +66,13 @@ pub enum CallMessage<S: Spec> {
         /// The credential being authorized for `address`. Must not already
         /// be authorized.
         new_credential: CredentialId,
+    },
+
+    /// Creates a new address whose derivation is domain-separated from normal
+    /// signer credentials and authorizes the caller's current credential for it.
+    CreateUnknownAddress {
+        /// User-provided salt for the derivation.
+        salt: [u8; 32],
     },
 }
 
@@ -154,6 +167,55 @@ impl<S: Spec> Accounts<S> {
         Ok(())
     }
 
+    pub(crate) fn create_unknown_address(
+        &mut self,
+        salt: [u8; 32],
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<()> {
+        self.ensure_custom_account_mappings_enabled(state)?;
+
+        let caller_credential = self.caller_credential_id(context)?;
+        let visible_slot = self
+            .chain_state
+            .latest_visible_slot(state)
+            .map_err(|err| anyhow!("Error raised while getting latest visible slot: {err:?}"))?
+            .ok_or_else(|| anyhow!("Visible DA slot hash is unavailable"))?;
+
+        let mut hasher = <S::CryptoSpec as CryptoSpec>::Hasher::new();
+        hasher.update(UNKNOWN_ADDRESS_DOMAIN);
+        hasher.update(visible_slot.slot_hash().as_ref());
+        hasher.update(context.sender().as_ref());
+        let caller_credential_bytes: &[u8] = caller_credential.0.as_ref();
+        hasher.update(caller_credential_bytes);
+        hasher.update(salt);
+        let unknown_credential = CredentialId::from_bytes(hasher.finalize().into());
+        let new_address: S::Address = unknown_credential.into();
+
+        anyhow::ensure!(
+            !self
+                .unknown_credentials
+                .get(&unknown_credential, state)
+                .map_err(|err| anyhow!("Error raised while getting unknown credential: {err:?}"))?
+                .unwrap_or(false),
+            "Unknown address already exists"
+        );
+
+        self.unknown_credentials
+            .set(&unknown_credential, &true, state)?;
+        self.authorize_credential(&new_address, &caller_credential, state)?;
+        self.emit_event(
+            state,
+            Event::UnknownAddressCreated {
+                address: new_address,
+                creator: *context.sender(),
+                credential: caller_credential,
+                unknown_credential,
+            },
+        );
+        Ok(())
+    }
+
     fn revoke_credential(
         &mut self,
         address: &S::Address,
@@ -203,6 +265,22 @@ impl<S: Spec> Accounts<S> {
             "Caller is not authorized to modify credentials for this address"
         );
         Ok(())
+    }
+
+    fn caller_credential_id(&self, context: &Context<S>) -> Result<CredentialId> {
+        if let Some(public_key) =
+            context.get_sender_credential::<<S::CryptoSpec as CryptoSpec>::PublicKey>()
+        {
+            return Ok(public_key.credential_id());
+        }
+
+        if let Some(multisig) =
+            context.get_sender_credential::<Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>>()
+        {
+            return Ok(multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>());
+        }
+
+        bail!("Unsupported credential type for unknown address creation")
     }
 
     fn exit_if_credential_exists(

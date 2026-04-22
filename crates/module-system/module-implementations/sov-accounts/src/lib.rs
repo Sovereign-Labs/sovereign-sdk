@@ -13,6 +13,7 @@ pub use query::*;
 #[cfg(test)]
 mod tests;
 pub use call::CallMessage;
+use sov_modules_api::macros::serialize;
 use sov_modules_api::{
     Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
     StateMap, StateValue, TxState,
@@ -32,6 +33,25 @@ use sov_modules_api::{
 pub struct Account<S: Spec> {
     /// The address of the account.
     pub addr: S::Address,
+}
+
+/// Events emitted by the accounts module.
+#[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema)]
+#[serialize(Borsh, Serde)]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "Event")]
+pub enum Event<S: Spec> {
+    /// An address with no known private-key derivation was created.
+    UnknownAddressCreated {
+        /// The newly created address.
+        address: S::Address,
+        /// The address that submitted the creation transaction.
+        creator: S::Address,
+        /// The credential authorized to control the new address.
+        credential: CredentialId,
+        /// The synthetic credential used to derive the new address.
+        unknown_credential: CredentialId,
+    },
 }
 
 /// Composite key for [`Accounts::account_owners`].
@@ -79,11 +99,14 @@ impl<S: Spec> std::str::FromStr for AccountOwnerKey<S> {
 
 /// A module responsible for managing accounts on the rollup.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
-#[cfg_attr(feature = "arbitrary", derive(Debug))]
 pub struct Accounts<S: Spec> {
     /// The ID of the sov-accounts module.
     #[id]
     pub id: ModuleId,
+
+    /// Chain-state module used to read visible DA slot metadata.
+    #[module]
+    pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
     /// Legacy/custom `credential_id -> address` routing index. New
     /// authorization writes use [`Self::account_owners`] instead.
@@ -99,6 +122,10 @@ pub struct Accounts<S: Spec> {
     /// the pair.
     #[state]
     pub(crate) account_owners: StateMap<AccountOwnerKey<S>, bool>,
+
+    /// Synthetic credentials created by [`CallMessage::CreateUnknownAddress`].
+    #[state]
+    pub(crate) unknown_credentials: StateMap<CredentialId, bool>,
 }
 
 impl<S: Spec> Module for Accounts<S> {
@@ -108,7 +135,7 @@ impl<S: Spec> Module for Accounts<S> {
 
     type CallMessage = call::CallMessage<S>;
 
-    type Event = ();
+    type Event = Event<S>;
 
     type Error = anyhow::Error;
 
@@ -150,6 +177,9 @@ impl<S: Spec> Module for Accounts<S> {
                 context,
                 state,
             ),
+            call::CallMessage::CreateUnknownAddress { salt } => {
+                self.create_unknown_address(salt, context, state)
+            }
         }
     }
 }
