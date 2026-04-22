@@ -18,7 +18,7 @@ use sov_modules_api::{
     StateMap, StateValue, TxState,
 };
 
-/// An account on the rollup.
+/// Stored address for a legacy/custom credential-indexed account mapping.
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
@@ -30,7 +30,7 @@ use sov_modules_api::{
     Clone,
 )]
 pub struct Account<S: Spec> {
-    /// The address of the account.
+    /// The mapped address.
     pub addr: S::Address,
 }
 
@@ -79,7 +79,8 @@ impl<S: Spec> std::str::FromStr for AccountOwnerKey<S> {
     }
 }
 
-/// A module responsible for managing accounts on the rollup.
+/// A module responsible for resolving credentials to addresses and recording
+/// credential authorizations.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
 #[cfg_attr(feature = "arbitrary", derive(Debug))]
 pub struct Accounts<S: Spec> {
@@ -92,7 +93,8 @@ pub struct Accounts<S: Spec> {
     #[state]
     pub(crate) accounts: StateMap<CredentialId, Account<S>>,
 
-    /// If this field is false, `CallMessage::InsertCredentialId` messages will be rejected.
+    /// If this field is false, configured genesis authorizations and
+    /// `CallMessage::InsertCredentialId` messages will be rejected.
     #[state]
     enable_custom_account_mappings: StateValue<bool>,
 

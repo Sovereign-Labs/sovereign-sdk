@@ -6,15 +6,15 @@ use sov_modules_api::{CredentialId, GenesisState};
 
 use crate::{AccountOwnerKey, Accounts};
 
-/// Account data for the genesis.
+/// Credential/address authorization data for genesis.
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AccountData<Address> {
-    /// Credential ID of the account.
+    /// Credential ID to authorize.
     #[serde_as(as = "DisplayFromStr")]
     pub credential_id: CredentialId,
-    /// Address of the account.
+    /// Address the credential may act as.
     pub address: Address,
 }
 
@@ -23,9 +23,9 @@ pub struct AccountData<Address> {
 #[serde(deny_unknown_fields)]
 #[schemars(bound = "S: ::sov_modules_api::Spec", rename = "AccountConfig")]
 pub struct AccountConfig<S: Spec> {
-    /// Accounts to initialize the rollup.
+    /// Credential/address authorizations to initialize.
     pub accounts: Vec<AccountData<S::Address>>,
-    /// Enable custom `CredentialId` => `Account` mapping.
+    /// Enable configured credential authorizations and `InsertCredentialId`.
     #[serde(default = "default_true")]
     pub enable_custom_account_mappings: bool,
 }

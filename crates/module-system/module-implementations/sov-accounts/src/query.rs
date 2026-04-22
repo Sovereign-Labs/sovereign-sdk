@@ -11,12 +11,12 @@ use crate::{Account, Accounts};
     rename_all = "snake_case"
 )]
 pub enum Response<Addr> {
-    /// The account corresponding to the given credential id exists.
+    /// A legacy/custom mapping for the given credential id exists.
     AccountExists {
-        /// The address of the account,
+        /// The mapped address.
         addr: Addr,
     },
-    /// The account corresponding to the credential id does not exist.
+    /// No legacy/custom mapping for the credential id exists.
     AccountEmpty,
 }
 

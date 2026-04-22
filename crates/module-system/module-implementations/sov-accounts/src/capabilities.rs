@@ -18,9 +18,9 @@ impl<S: Spec> Accounts<S> {
         )
     }
 
-    /// Resolve the sender's public key to an address. If `credential_id` has a
-    /// legacy/custom mapping in `accounts`, return it. Otherwise, return the
-    /// supplied `default_address` without writing account state.
+    /// Resolve the sender's credential to an address.
+    /// If `credential_id` has a legacy/custom mapping in `accounts`, return it.
+    /// Otherwise, return the supplied `default_address` without writing account state.
     pub fn resolve_sender_address<ST: StateAccessor>(
         &mut self,
         default_address: &S::Address,
@@ -34,7 +34,8 @@ impl<S: Spec> Accounts<S> {
     }
 
     /// Read-only variant of [`Self::resolve_sender_address`]: returns
-    /// `default_address` when the credential is unknown, without writing.
+    /// `default_address` when the credential has no legacy/custom mapping,
+    /// without writing.
     pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
         &self,
         default_address: &S::Address,
@@ -47,8 +48,8 @@ impl<S: Spec> Accounts<S> {
         Ok(*default_address)
     }
 
-    /// Returns `true` if `credential_id` is authorized to sign transactions
-    /// that execute as `address`.
+    /// Returns `true` if `credential_id` has an explicit `account_owners`
+    /// authorization for `address`.
     pub fn is_authorized<ST: StateReader<User>>(
         &self,
         address: &S::Address,

@@ -9,16 +9,15 @@ addresses and records which credentials may act for which addresses.
    `credential_id.into::<S::Address>()`. This relation is stateless: using the
    canonical address does not require an account entry to be written.
 
-1. A credential can be explicitly mapped to a primary address in module state.
-   This legacy/custom map is used for credential-only resolution and the
-   `get_account` query.
+1. Legacy state can contain an explicit `credential_id -> address` mapping.
+   This map is used for credential-only resolution and the `get_account` query.
 
-1. It is possible to register another credential for the caller's address using
+1. It is possible to authorize another credential for the caller's address using
    the `CallMessage::InsertCredentialId(..)` message. This writes an
    `account_owners` authorization, not a credential-indexed account entry.
 
 1. It is possible to query the `sov-accounts` module using the `get_account`
-   method and get the legacy/custom mapped account corresponding to the given
+   method and get the legacy/custom mapped address corresponding to the given
    credential id.
 
 ## Credential and Address Relations
@@ -33,8 +32,9 @@ credential_id -> credential_id.into::<S::Address>()
 ```
 
 This is the default address for a credential. It is deterministic and requires
-no state write. If a credential has no explicit state mapping, this canonical
-address is the natural fallback for credential-only routing.
+no state write. If a credential has no explicit credential-indexed state
+mapping, this canonical address is the natural fallback for credential-only
+routing.
 
 ### Credential-to-account map
 
@@ -42,9 +42,9 @@ address is the natural fallback for credential-only routing.
 accounts[credential_id] = Account { addr }
 ```
 
-This state map records the primary address explicitly associated with a
-credential. A credential has at most one primary address in this map, while one
-address may be the primary address for many credentials.
+This legacy/custom state map records the primary address explicitly associated
+with a credential. A credential has at most one primary address in this map,
+while one address may be the primary address for many credentials.
 
 This map is used when callers only know a `CredentialId` and need an address:
 `resolve_sender_address`, `get_account`, and legacy/custom account mappings all
@@ -67,10 +67,11 @@ credential-only lookup by itself.
 This relation answers "may this credential act as this address?" once the target
 address is known. It is not a replacement for the credential-to-account map,
 because it is keyed by `(address, credential_id)` and cannot efficiently answer
-"which address is this credential registered to?" with a single point lookup.
+"which address is this credential mapped to?" with a single point lookup.
 New `InsertCredentialId` calls write this relation.
 
-In short: routing from only a credential uses the explicit
-credential-to-account map or the stateless canonical fallback. Authorization for
-a known address uses the combined `is_authorized_for` check: legacy/custom
-mapping, stateless canonical address, or `account_owners`.
+In short: routing from only a credential uses the explicit credential-to-account
+map or the stateless canonical fallback. Callers that need to verify whether a
+known address may be used with a credential should use the combined
+`is_authorized_for` check: legacy/custom mapping, stateless canonical address,
+or `account_owners`.

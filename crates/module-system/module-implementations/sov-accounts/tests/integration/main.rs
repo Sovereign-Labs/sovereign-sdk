@@ -25,7 +25,8 @@ struct TestData<S: Spec> {
     non_registered_account: TestUser<S>,
 }
 
-/// We setup genesis with three accounts, two of which are registered at genesis.
+/// We set up genesis with three accounts, two of which have custom credentials
+/// authorized at genesis.
 fn setup() -> (TestData<S>, TestRunner<RT, S>) {
     let genesis_config = HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![
         TestUser::generate_with_default_balance().add_credential_id([0u8; 32].into()),
@@ -73,8 +74,8 @@ fn test_config_account() {
         runner,
     ) = setup();
 
-    // The account is authorized at genesis, but no new `accounts` map entry is
-    // written for canonical credentials.
+    // The credential/address pair is authorized at genesis, but no new
+    // `accounts` map entry is written for canonical credentials.
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
         assert!(accounts
@@ -196,7 +197,7 @@ fn test_setup_multisig_and_act() {
     let multisig_credential_id =
         multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
 
-    // Build a funded `TestUser` whose address is the multisig's default.
+    // Build a funded `TestUser` whose address is the multisig's canonical address.
     let multisig_user =
         TestUser::generate_with_default_balance().add_credential_id(multisig_credential_id);
 
@@ -386,7 +387,7 @@ fn test_register_new_account() {
         mut runner,
     ) = setup();
 
-    // The account is empty at the start because it is not registered at genesis.
+    // The credential has no legacy/custom account-map entry at genesis.
     assert_eq!(non_registered_account.custom_credential_id, None);
 
     runner.query_visible_state(|state| {
@@ -591,8 +592,8 @@ fn test_resolve_address_with_multi_credential_ownership() {
     });
 }
 
-/// Resolving an unknown credential returns the supplied fallback without
-/// writing account state.
+/// Resolving a credential with no legacy/custom mapping returns the supplied
+/// fallback without writing account state.
 #[test]
 fn test_resolve_with_different_default_address() {
     let (TestData { account_1, .. }, runner) = setup();

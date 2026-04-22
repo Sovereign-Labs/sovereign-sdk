@@ -15,7 +15,7 @@ pub enum CallMessage {
     /// Fails if the credential has a legacy/custom account mapping or is
     /// already authorized for the caller's address.
     InsertCredentialId(
-        /// The credential id being registered.
+        /// The credential id being authorized.
         CredentialId,
     ),
 }
