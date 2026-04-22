@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Context as _};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
@@ -26,7 +26,7 @@ impl<S: Spec> Accounts<S> {
         new_credential_id: CredentialId,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if !self.enable_custom_account_mappings.get(state)?.expect(
             "`enable_custom_account_mappings` should not be None; it must be set at genesis.",
         ) {
@@ -44,18 +44,18 @@ impl<S: Spec> Accounts<S> {
         new_credential_id: &CredentialId,
         address: &S::Address,
         state: &mut impl StateReader<User>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         anyhow::ensure!(
             self.accounts
                 .get(new_credential_id, state)
-                .map_err(|err| anyhow!("Error raised while getting account: {err:?}"))?
+                .context("Failed to read legacy account mapping")?
                 .is_none(),
             "New CredentialId already exists"
         );
         anyhow::ensure!(
             self.account_owners
                 .get(&AccountOwnerKey::new(*address, *new_credential_id), state)
-                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
+                .context("Failed to read account owner")?
                 .is_none(),
             "CredentialId already authorized for this address"
         );

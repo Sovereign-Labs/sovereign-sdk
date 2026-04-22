@@ -62,10 +62,13 @@ impl<S: Spec> Accounts<S> {
             .is_some())
     }
 
-    /// Returns `true` if `credential_id` is authorized to act as `address`
-    /// under any supported relation: legacy/custom `accounts` mapping,
-    /// stateless canonical address, or explicit `account_owners`
-    /// authorization.
+    /// Returns `true` if `credential_id` is authorized to act as `address`.
+    ///
+    /// Precedence: if `credential_id` has a legacy mapping in `accounts`, that
+    /// mapping is authoritative and only the mapped address is considered
+    /// authorized. Otherwise, returns `true` if `address` is the canonical
+    /// address of `credential_id`, or if an explicit `account_owners`
+    /// authorization exists.
     pub fn is_authorized_for<ST: StateReader<User>>(
         &self,
         address: &S::Address,

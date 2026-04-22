@@ -23,13 +23,17 @@ fn test_user_is_registered_correctly() {
     let route_id = register_basic_warp_route(&mut runner, &admin);
 
     let payer = [1u8; 32];
+    // When `embedded == payer`, the embedded credential's canonical address equals
+    // the payer address, so `is_authorized_for` succeeds via the canonical-address
+    // arm without needing any stored `accounts` or `account_owners` entry. This
+    // exercises the stateless happy path.
     let embedded = payer;
     let body = [payer, embedded].concat();
     let valid_message = make_valid_message(0, route_id, HexString::new(body));
     let message = HexString::new(SafeVec::try_from(valid_message.encode().0).unwrap());
     let credential = CredentialId::from(embedded);
 
-    // Sanity check, ensure registration does not rely on an accounts map entry.
+    // Sanity check: no legacy accounts entry is required for registration.
     runner.query_state(|state| {
         let account = sov_accounts::Accounts::default().get_account(credential, state);
         assert!(matches!(account, sov_accounts::Response::AccountEmpty));
