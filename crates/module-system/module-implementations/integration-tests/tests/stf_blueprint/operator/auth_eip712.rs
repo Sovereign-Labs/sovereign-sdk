@@ -175,9 +175,9 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 }
 
 /// Signs a V1 (multisig) unsigned transaction with the given private key using EIP712.
-/// The credential_address is computed from the provided multisig. `target_address` is
-/// forwarded into the signed `UnsignedTransactionV1`; pass `None` to match pre-target
-/// routing or `Some(X)` to sign for a specific target account.
+/// The credential_address is computed from the provided multisig.
+/// `target_address` is forwarded into the signed `UnsignedTransactionV1`;
+/// pass `None` to match pre-target routing or `Some(X)` to sign for a specific target account.
 pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
     utx: &UnsignedTransactionV0<RT, S>,
     multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
