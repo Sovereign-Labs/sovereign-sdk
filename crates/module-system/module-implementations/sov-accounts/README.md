@@ -19,14 +19,16 @@ addresses and records which credentials may act for which addresses.
 
 1. It is possible to explicitly authorize a credential for the caller's own
    address with `CallMessage::AddCredentialToAddress { address, credential }`,
-   and revoke such an authorization with
-   `CallMessage::RemoveCredentialFromAddress { address, credential }`. Both
-   calls require `message.address == context.sender()`: callers can only modify
-   credentials on the address they are currently signing as. The V1 signing
-   path's `target_address` field lets a caller signing with a credential
-   authorized for multiple addresses select which one to act as. There is no
-   orphan guard on remove — revoking the last credential leaves the address
-   unspendable via `account_owners`.
+   revoke such an authorization with
+   `CallMessage::RemoveCredentialFromAddress { address, credential }`, and
+   atomically swap one credential for another with
+   `CallMessage::RotateCredentialOnAddress { address, old_credential, new_credential }`.
+   All three calls require `message.address == context.sender()`: callers can
+   only modify credentials on the address they are currently signing as. The
+   V1 signing path's `target_address` field lets a caller signing with a
+   credential authorized for multiple addresses select which one to act as.
+   There is no orphan guard on remove — revoking the last credential leaves
+   the address unspendable via `account_owners`.
 
 1. It is possible to query the `sov-accounts` module using the `get_account`
    method and get the legacy/custom mapped account corresponding to the given

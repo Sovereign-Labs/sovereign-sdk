@@ -140,6 +140,17 @@ impl<S: Spec> Module for Accounts<S> {
                 address,
                 credential,
             } => self.remove_credential_from_address(address, credential, context, state),
+            call::CallMessage::RotateCredentialOnAddress {
+                address,
+                old_credential,
+                new_credential,
+            } => self.rotate_credential_on_address(
+                address,
+                old_credential,
+                new_credential,
+                context,
+                state,
+            ),
         }
     }
 }

@@ -44,6 +44,23 @@ pub enum CallMessage<S: Spec> {
         /// The credential being revoked from `address`.
         credential: CredentialId,
     },
+
+    /// Atomically swaps `old_credential` for `new_credential` on `address`.
+    /// Functionally equivalent to a `RemoveCredentialFromAddress` followed by
+    /// an `AddCredentialToAddress`, collapsed into a single call so the
+    /// caller does not have to authorize two transactions during a rotation.
+    /// The caller must currently be signing as `address`.
+    RotateCredentialOnAddress {
+        /// The address whose credential set is being rotated. Must equal
+        /// `context.sender()`.
+        address: S::Address,
+        /// The credential being revoked from `address`. Must be currently
+        /// authorized.
+        old_credential: CredentialId,
+        /// The credential being authorized for `address`. Must not already
+        /// be authorized.
+        new_credential: CredentialId,
+    },
 }
 
 impl<S: Spec> Accounts<S> {
@@ -104,6 +121,40 @@ impl<S: Spec> Accounts<S> {
         );
 
         self.account_owners.delete(&key, state)?;
+        Ok(())
+    }
+
+    pub(crate) fn rotate_credential_on_address(
+        &mut self,
+        address: S::Address,
+        old_credential: CredentialId,
+        new_credential: CredentialId,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<()> {
+        self.ensure_custom_account_mappings_enabled(state)?;
+        self.ensure_caller_owns(&address, context)?;
+
+        let old_key = AccountOwnerKey::new(address, old_credential);
+        anyhow::ensure!(
+            self.account_owners
+                .get(&old_key, state)
+                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
+                .is_some(),
+            "CredentialId is not authorized for this address"
+        );
+
+        let new_key = AccountOwnerKey::new(address, new_credential);
+        anyhow::ensure!(
+            self.account_owners
+                .get(&new_key, state)
+                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
+                .is_none(),
+            "CredentialId already authorized for this address"
+        );
+
+        self.account_owners.delete(&old_key, state)?;
+        self.authorize_credential(&address, &new_credential, state)?;
         Ok(())
     }
 
