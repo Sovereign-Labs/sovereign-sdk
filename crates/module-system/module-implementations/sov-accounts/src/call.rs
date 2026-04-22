@@ -9,8 +9,9 @@ use crate::{AccountOwnerKey, Accounts};
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
 #[serialize(Borsh, Serde)]
+#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "CallMessage")]
 #[serde(rename_all = "snake_case")]
-pub enum CallMessage {
+pub enum CallMessage<S: Spec> {
     /// Authorizes `credential_id` as a signer for the caller's address.
     /// Fails if the credential has a legacy/custom account mapping or is
     /// already authorized for the caller's address.
@@ -18,6 +19,31 @@ pub enum CallMessage {
         /// The credential id being registered.
         CredentialId,
     ),
+
+    /// Authorizes `credential` to sign transactions that execute as `address`.
+    /// The caller must currently be signing as `address` (i.e.
+    /// `context.sender() == address`); this is naturally true after PR 2's
+    /// resolver for V1 `target_address = Some(address)` and for V0/target=None
+    /// where the signer's credential resolves into `address`. Fails if the
+    /// tuple is already authorized.
+    AddCredentialToAddress {
+        /// The address whose credential set is being extended. Must equal
+        /// `context.sender()`.
+        address: S::Address,
+        /// The credential being authorized for `address`.
+        credential: CredentialId,
+    },
+
+    /// Revokes `credential` from `address`. The caller must currently be
+    /// signing as `address`. No orphan guard: revoking the last credential
+    /// succeeds and leaves `address` unspendable via this map.
+    RemoveCredentialFromAddress {
+        /// The address whose credential set is being reduced. Must equal
+        /// `context.sender()`.
+        address: S::Address,
+        /// The credential being revoked from `address`.
+        credential: CredentialId,
+    },
 }
 
 impl<S: Spec> Accounts<S> {
@@ -27,15 +53,87 @@ impl<S: Spec> Accounts<S> {
         context: &Context<S>,
         state: &mut impl TxState<S>,
     ) -> Result<()> {
-        if !self.enable_custom_account_mappings.get(state)?.expect(
-            "`enable_custom_account_mappings` should not be None; it must be set at genesis.",
-        ) {
-            bail!("Custom account mappings are disabled");
-        }
+        self.ensure_custom_account_mappings_enabled(state)?;
 
         self.exit_if_credential_exists(&new_credential_id, context.sender(), state)?;
 
         self.authorize_credential(context.sender(), &new_credential_id, state)?;
+        Ok(())
+    }
+
+    pub(crate) fn add_credential_to_address(
+        &mut self,
+        address: S::Address,
+        credential: CredentialId,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<()> {
+        self.ensure_custom_account_mappings_enabled(state)?;
+        self.ensure_caller_owns(&address, context)?;
+
+        let key = AccountOwnerKey::new(address, credential);
+        anyhow::ensure!(
+            self.account_owners
+                .get(&key, state)
+                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
+                .is_none(),
+            "CredentialId already authorized for this address"
+        );
+
+        self.authorize_credential(&address, &credential, state)?;
+        Ok(())
+    }
+
+    pub(crate) fn remove_credential_from_address(
+        &mut self,
+        address: S::Address,
+        credential: CredentialId,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<()> {
+        self.ensure_custom_account_mappings_enabled(state)?;
+        self.ensure_caller_owns(&address, context)?;
+
+        let key = AccountOwnerKey::new(address, credential);
+        anyhow::ensure!(
+            self.account_owners
+                .get(&key, state)
+                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
+                .is_some(),
+            "CredentialId is not authorized for this address"
+        );
+
+        self.account_owners.delete(&key, state)?;
+        Ok(())
+    }
+
+    fn ensure_custom_account_mappings_enabled(
+        &self,
+        state: &mut impl StateReader<User>,
+    ) -> Result<()> {
+        if !self
+            .enable_custom_account_mappings
+            .get(state)
+            .map_err(|err| anyhow!("Error reading enable_custom_account_mappings: {err:?}"))?
+            .expect(
+                "`enable_custom_account_mappings` should not be None; it must be set at genesis.",
+            )
+        {
+            bail!("Custom account mappings are disabled");
+        }
+        Ok(())
+    }
+
+    /// Enforces that the caller is currently signing as `address`, i.e.
+    /// `context.sender() == address`. PR 2's authorizer has already proven
+    /// the caller controls a credential authorized for `context.sender()`
+    /// (either via `is_authorized` on the V1 target path, or via the
+    /// credential's natural resolution to `sender` on V0/target=None).
+    fn ensure_caller_owns(&self, address: &S::Address, context: &Context<S>) -> Result<()> {
+        anyhow::ensure!(
+            context.sender() == address,
+            "Caller is not authorized to modify credentials for this address"
+        );
         Ok(())
     }
 

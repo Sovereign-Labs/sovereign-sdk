@@ -17,6 +17,17 @@ addresses and records which credentials may act for which addresses.
    the `CallMessage::InsertCredentialId(..)` message. This writes an
    `account_owners` authorization, not a credential-indexed account entry.
 
+1. It is possible to explicitly authorize a credential for the caller's own
+   address with `CallMessage::AddCredentialToAddress { address, credential }`,
+   and revoke such an authorization with
+   `CallMessage::RemoveCredentialFromAddress { address, credential }`. Both
+   calls require `message.address == context.sender()`: callers can only modify
+   credentials on the address they are currently signing as. The V1 signing
+   path's `target_address` field lets a caller signing with a credential
+   authorized for multiple addresses select which one to act as. There is no
+   orphan guard on remove — revoking the last credential leaves the address
+   unspendable via `account_owners`.
+
 1. It is possible to query the `sov-accounts` module using the `get_account`
    method and get the legacy/custom mapped account corresponding to the given
    credential id.

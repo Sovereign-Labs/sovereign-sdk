@@ -4,7 +4,7 @@
   "description": "Represents the available call messages for interacting with the sov-accounts module.",
   "oneOf": [
     {
-      "description": "Registers `credential_id` as an authorized signer whose transactions execute as the caller's address. Fails if the credential is already mapped to any address in this module (credentials are globally unique).",
+      "description": "Authorizes `credential_id` as a signer for the caller's address. Fails if the credential has a legacy/custom account mapping or is already authorized for the caller's address.",
       "type": "object",
       "required": [
         "insert_credential_id"
@@ -15,9 +15,84 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Authorizes `credential` to sign transactions that execute as `address`. The caller must currently be signing as `address` (i.e. `context.sender() == address`); this is naturally true after PR 2's resolver for V1 `target_address = Some(address)` and for V0/target=None where the signer's credential resolves into `address`. Fails if the tuple is already authorized.",
+      "type": "object",
+      "required": [
+        "add_credential_to_address"
+      ],
+      "properties": {
+        "add_credential_to_address": {
+          "type": "object",
+          "required": [
+            "address",
+            "credential"
+          ],
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being extended. Must equal `context.sender()`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "credential": {
+              "description": "The credential being authorized for `address`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Revokes `credential` from `address`. The caller must currently be signing as `address`. No orphan guard: revoking the last credential succeeds and leaves `address` unspendable via this map.",
+      "type": "object",
+      "required": [
+        "remove_credential_from_address"
+      ],
+      "properties": {
+        "remove_credential_from_address": {
+          "type": "object",
+          "required": [
+            "address",
+            "credential"
+          ],
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being reduced. Must equal `context.sender()`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "credential": {
+              "description": "The credential being revoked from `address`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
     "CredentialId": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
       "type": "string",

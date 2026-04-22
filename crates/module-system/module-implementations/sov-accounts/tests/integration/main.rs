@@ -673,9 +673,24 @@ fn make_v1_tx(
     inner_credential: sov_modules_api::CredentialId,
     target_address: Option<<S as Spec>::Address>,
 ) -> Version1<RT, S> {
+    make_v1_tx_with_call(
+        multisig,
+        CallMessage::InsertCredentialId(inner_credential),
+        target_address,
+        0,
+    )
+}
+
+/// Builds an unsigned V1 tx carrying the given accounts call.
+fn make_v1_tx_with_call(
+    multisig: &sov_modules_api::Multisig<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey>,
+    call: CallMessage<S>,
+    target_address: Option<<S as Spec>::Address>,
+    generation: u64,
+) -> Version1<RT, S> {
     UnsignedTransactionV0::<RT, S>::new_with_details(
-        TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
-        sov_modules_api::capabilities::UniquenessData::Generation(0),
+        TestAccountsRuntimeCall::Accounts(call),
+        sov_modules_api::capabilities::UniquenessData::Generation(generation),
         default_test_tx_details::<S>(),
     )
     .to_multisig_tx(multisig.clone(), target_address)
@@ -881,6 +896,542 @@ fn test_v1_target_tamper_breaks_signature() {
                 );
             }
             other => panic!("expected skipped tx, got {other:?}"),
+        }),
+    });
+}
+
+/// An existing owner can authorize a second credential for their own address
+/// via `AddCredentialToAddress` (V0 path, sender == address).
+#[test]
+fn test_add_credential_to_address_by_owner() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let new_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential: new_credential,
+        }),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(
+                accounts
+                    .is_authorized(&owner_address, &new_credential, state)
+                    .unwrap(),
+                "new credential should be authorized for owner's address"
+            );
+        }),
+    });
+}
+
+/// A brand-new user (no genesis entry, no prior `account_owners` entry) can
+/// authorize a credential for their own default address. The simple
+/// `sender == address` rule subsumes the bootstrap case: `sender` is the
+/// user's default address because the resolver returns the default for an
+/// unknown credential.
+#[test]
+fn test_add_credential_to_address_bootstrap() {
+    let (
+        TestData {
+            non_registered_account: fresh_user,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let fresh_address = fresh_user.address();
+    let extra_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: fresh_user.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::AddCredentialToAddress {
+                address: fresh_address,
+                credential: extra_credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_authorized(&fresh_address, &extra_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// A caller cannot add a credential for an address that isn't their own.
+/// Under the resolver, `context.sender()` is the caller's resolved address;
+/// the handler rejects if `message.address != context.sender()`. Uses two
+/// users whose canonical (`hash(pubkey).into()`) addresses equal their funded
+/// addresses so V0 gas reservation succeeds and the handler actually runs.
+#[test]
+fn test_add_credential_to_address_non_owner_rejected() {
+    let attacker = TestUser::<S>::generate_with_default_balance();
+    let victim = TestUser::<S>::generate_with_default_balance();
+    let victim_address = victim.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![attacker.clone(), victim]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let attacker_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: attacker.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::AddCredentialToAddress {
+                address: victim_address,
+                credential: attacker_credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            match result.tx_receipt {
+                TxEffect::Reverted(contents) => {
+                    assert_eq!(
+                        contents.reason.to_string(),
+                        "Caller is not authorized to modify credentials for this address"
+                    );
+                }
+                other => panic!("Expected reverted transaction, got {other:?}"),
+            }
+            // Confirm the attacker's credential was never written under the victim.
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized(&victim_address, &attacker_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// Adding a tuple that already exists fails cleanly.
+#[test]
+fn test_add_credential_duplicate_rejected() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute(owner.create_plain_message::<RT, Accounts<S>>(
+        CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential,
+        },
+    ));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential,
+        }),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "CredentialId already authorized for this address"
+                );
+            }
+            other => panic!("Expected reverted transaction, got {other:?}"),
+        }),
+    });
+}
+
+/// The owner can revoke a credential from their own address.
+#[test]
+fn test_remove_credential_from_address_by_owner() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let kept_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let removed_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    // Authorize both credentials for the owner.
+    runner.execute(owner.create_plain_message::<RT, Accounts<S>>(
+        CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential: kept_credential,
+        },
+    ));
+    runner.execute(owner.create_plain_message::<RT, Accounts<S>>(
+        CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential: removed_credential,
+        },
+    ));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address: owner_address,
+                credential: removed_credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized(&owner_address, &removed_credential, state)
+                .unwrap());
+            assert!(
+                accounts
+                    .is_authorized(&owner_address, &kept_credential, state)
+                    .unwrap(),
+                "unrelated authorization should survive the revocation"
+            );
+        }),
+    });
+}
+
+/// A caller cannot revoke a credential from an address they don't own. Uses
+/// two canonical-address users (no custom credential_id) so the V0 gas path
+/// resolves correctly to the funded address.
+#[test]
+fn test_remove_credential_non_owner_rejected() {
+    let attacker = TestUser::<S>::generate_with_default_balance();
+    let victim = TestUser::<S>::generate_with_default_balance();
+    let victim_address = victim.address();
+    let victim_credential = victim.credential_id();
+
+    // Seed victim's `(address, credential)` so the attacker's revoke attempt
+    // targets a real tuple. Otherwise the handler would fail on the tuple
+    // check before the ownership check, hiding the bug we care about.
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![attacker.clone(), victim]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: victim_credential,
+        address: victim_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    runner.execute_transaction(TransactionTestCase {
+        input: attacker.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address: victim_address,
+                credential: victim_credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            match result.tx_receipt {
+                TxEffect::Reverted(contents) => {
+                    assert_eq!(
+                        contents.reason.to_string(),
+                        "Caller is not authorized to modify credentials for this address"
+                    );
+                }
+                other => panic!("Expected reverted transaction, got {other:?}"),
+            }
+            // Victim's authorization is unaffected.
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_authorized(&victim_address, &victim_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// Attempting to remove a tuple that doesn't exist fails cleanly.
+#[test]
+fn test_remove_credential_not_authorized_rejected() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let ghost_credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address: owner_address,
+                credential: ghost_credential,
+            },
+        ),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "CredentialId is not authorized for this address"
+                );
+            }
+            other => panic!("Expected reverted transaction, got {other:?}"),
+        }),
+    });
+}
+
+/// Removing the last credential succeeds (no orphan guard) and leaves the
+/// address unspendable via `account_owners`: a subsequent V1 tx with
+/// `target_address = Some(orphaned)` signed by the revoked credential is
+/// skipped at the resolver.
+#[test]
+fn test_remove_last_credential_orphans_address() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        credential_id: multisig_credential_id,
+        user: multisig_user,
+    } = make_multisig_env();
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user, alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    // Seed `(alice_address, multisig_credential_id)` so the multisig can route
+    // to Alice's address before we revoke.
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    // Revoke the only credential authorizing the multisig for Alice.
+    let mut revoke_tx = make_v1_tx_with_call(
+        &multisig,
+        CallMessage::RemoveCredentialFromAddress {
+            address: alice_address,
+            credential: multisig_credential_id,
+        },
+        Some(alice_address),
+        0,
+    );
+    sign_v1(&mut revoke_tx, &keys[0]);
+    sign_v1(&mut revoke_tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(revoke_tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized(&alice_address, &multisig_credential_id, state)
+                .unwrap());
+        }),
+    });
+
+    // Orphan confirmed: trying to route to Alice again is rejected at the
+    // resolver (skipped, not reverted).
+    let follow_up_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut orphan_tx = make_v1_tx_with_call(
+        &multisig,
+        CallMessage::InsertCredentialId(follow_up_credential),
+        Some(alice_address),
+        1,
+    );
+    sign_v1(&mut orphan_tx, &keys[0]);
+    sign_v1(&mut orphan_tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(orphan_tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("not authorized for target address"),
+                    "expected resolver skip; got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx, got {other:?}"),
+        }),
+    });
+}
+
+/// End-to-end multisig rotation M1 → M2 while preserving the original
+/// address. Exercises `AddCredentialToAddress` + `RemoveCredentialFromAddress`
+/// via V1 + `target_address`.
+#[test]
+fn test_multisig_key_rotation() {
+    use sov_modules_api::Multisig;
+
+    // M1 is the incumbent 2-of-3 multisig. M2 is the rotated key set, fully
+    // disjoint so credential_id_1 and credential_id_2 cannot collide.
+    let keys_1 = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let keys_2 = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let multisig_1 = Multisig::new(2, keys_1.iter().map(|k| k.pub_key()).collect());
+    let multisig_2 = Multisig::new(2, keys_2.iter().map(|k| k.pub_key()).collect());
+    let credential_id_1 =
+        multisig_1.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+    let credential_id_2 =
+        multisig_2.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+
+    let multisig_user =
+        TestUser::generate_with_default_balance().add_credential_id(credential_id_1);
+    let target_address = multisig_user.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    // 1. M1 authorizes M2 for the shared address X.
+    let mut add_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::AddCredentialToAddress {
+            address: target_address,
+            credential: credential_id_2,
+        },
+        Some(target_address),
+        0,
+    );
+    sign_v1(&mut add_tx, &keys_1[0]);
+    sign_v1(&mut add_tx, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(add_tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_authorized(&target_address, &credential_id_1, state)
+                .unwrap());
+            assert!(accounts
+                .is_authorized(&target_address, &credential_id_2, state)
+                .unwrap());
+        }),
+    });
+
+    // 2. M1 revokes itself from X.
+    let mut remove_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::RemoveCredentialFromAddress {
+            address: target_address,
+            credential: credential_id_1,
+        },
+        Some(target_address),
+        1,
+    );
+    sign_v1(&mut remove_tx, &keys_1[0]);
+    sign_v1(&mut remove_tx, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(remove_tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized(&target_address, &credential_id_1, state)
+                .unwrap());
+            assert!(accounts
+                .is_authorized(&target_address, &credential_id_2, state)
+                .unwrap());
+        }),
+    });
+
+    // 3. M2 signs a routine tx targeting X — should succeed.
+    let follow_up_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut m2_tx = make_v1_tx_with_call(
+        &multisig_2,
+        CallMessage::InsertCredentialId(follow_up_credential),
+        Some(target_address),
+        0,
+    );
+    sign_v1(&mut m2_tx, &keys_2[0]);
+    sign_v1(&mut m2_tx, &keys_2[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(m2_tx),
+        assert: Box::new(move |result, _state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "M2 should now control X; got {:?}",
+                result.tx_receipt
+            );
+        }),
+    });
+
+    // 4. M1 signs another tx targeting X — should be skipped (no longer
+    //    authorized).
+    let orphan_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut m1_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::InsertCredentialId(orphan_credential),
+        Some(target_address),
+        2,
+    );
+    sign_v1(&mut m1_tx, &keys_1[0]);
+    sign_v1(&mut m1_tx, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(m1_tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("not authorized for target address"),
+                    "expected resolver skip after rotation; got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx after rotation, got {other:?}"),
+        }),
+    });
+}
+
+/// With `enable_custom_account_mappings = false`, both new call variants are
+/// rejected by the same guard that already rejects `InsertCredentialId`.
+#[test]
+fn test_feature_flag_gates_new_variants() {
+    let (user, mut runner) = setup_with_disable_custom_account_mappings();
+    let user_address = user.address();
+    let credential = TestPrivateKey::generate().pub_key().credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::AddCredentialToAddress {
+            address: user_address,
+            credential,
+        }),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "Custom account mappings are disabled"
+                );
+            }
+            other => panic!("Expected reverted transaction, got {other:?}"),
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address: user_address,
+                credential,
+            },
+        ),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "Custom account mappings are disabled"
+                );
+            }
+            other => panic!("Expected reverted transaction, got {other:?}"),
         }),
     });
 }
