@@ -38,7 +38,6 @@ impl SP1Network {
     }
 }
 
-#[cfg(feature = "metrics")]
 impl SP1Network {
     async fn emit_fulfillment_metric(&self, request_id: B256) {
         let proof_request = match self.prover.get_proof_request(request_id).await {
@@ -91,7 +90,6 @@ impl ZkvmNetwork for SP1Network {
 
         match maybe_proof {
             Some(proof) => {
-                #[cfg(feature = "metrics")]
                 self.emit_fulfillment_metric(*handle).await;
 
                 Ok(Some(bincode::serialize(&proof)?))
