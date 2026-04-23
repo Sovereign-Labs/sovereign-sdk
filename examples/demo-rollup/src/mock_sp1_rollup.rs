@@ -11,20 +11,19 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier};
+use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::{SP1CryptoSpec, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
@@ -78,16 +77,6 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
     >;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
-        SP1Host::new(agg_elf)
-            .expect("Failed to create SP1Host from aggregation guest ELF")
-            .code_commitment()
-            .expect("SP1 aggregation code commitment should be created successfully")
-    }
 
     async fn create_endpoints(
         &self,
@@ -154,17 +143,23 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
+        let outer_verifying_key = tokio::task::spawn_blocking(move || {
+            Arc::new(sov_sp1_adapter::host::verifying_key_from_elf(elf))
+        })
+        .await
+        .unwrap();
 
         // SP1's blocking CPU prover spins up its own tokio runtime during setup,
         // so it must be constructed off the async executor thread.
-        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf))
+        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf, outer_verifying_key))
             .await
             .expect("SP1Host setup task panicked")
             .expect("Failed to create SP1Host from guest ELF");
 
         let inner_verifying_key = inner_vm.verifying_key().clone();
 
-        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
         let outer_vm = tokio::task::spawn_blocking(move || {
             SP1AggregationHost::new(agg_elf, inner_verifying_key)
                 .expect("Failed to create SP1AggregationHost from aggregation guest ELF")

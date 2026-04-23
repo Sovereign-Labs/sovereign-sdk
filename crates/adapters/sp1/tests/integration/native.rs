@@ -1,38 +1,5 @@
-use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{ZkvmGuest, ZkvmHost};
-use sov_sp1_adapter::host::SP1Host;
+use sov_sp1_adapter::host::SP1Prover;
 use sp1_build::BuildArgs;
-use sp1_sdk::SP1Stdin;
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-struct TestStruct {
-    ints: Vec<i32>,
-    string: String,
-}
-
-#[test]
-fn test_hints_roundtrip() {
-    let hint_a = TestStruct {
-        ints: vec![1, 2, 3, 4, 5],
-        string: "hello".to_string(),
-    };
-    let hint_b = TestStruct {
-        ints: vec![1, 2, 3, 4, 5],
-        string: "hello".to_string(),
-    };
-
-    let mut stdin = SP1Stdin::new();
-    stdin.write(&hint_a);
-    stdin.write(&hint_b);
-
-    let guest = SP1Host::simulate_with_hints(stdin);
-
-    let mut received;
-    received = guest.read_from_host();
-    assert_eq!(hint_a, received);
-    received = guest.read_from_host();
-    assert_eq!(hint_b, received);
-}
 
 #[test]
 #[ignore = "Should be run manually"]
@@ -54,9 +21,9 @@ fn test_fibonnaci_host() {
 
     let fibonacci_elf = include_bytes!("../../test_data/riscv64im-succinct-zkvm-elf");
 
-    let mut host = SP1Host::new(fibonacci_elf).unwrap();
+    let prover = SP1Prover::new(fibonacci_elf).unwrap();
 
     // Give the input 7 to the fibonnaci program. Under the mock backend this
     // exercises the proving pipeline end-to-end without generating real proofs.
-    host.add_hint_and_run(&7u32).unwrap();
+    prover.add_hint_and_run(&7u32).unwrap();
 }

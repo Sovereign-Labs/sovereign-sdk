@@ -33,7 +33,7 @@ pub struct SP1AggregationHost {
 }
 
 struct Inner {
-    host: SP1Host,
+    prover: SP1Prover,
     outer_vk: sp1_sdk::SP1VerifyingKey,
     inner_vk: sp1_sdk::SP1VerifyingKey,
     prev_agg_proof: Mutex<Option<sp1_sdk::SP1ProofWithPublicValues>>,
@@ -43,12 +43,12 @@ impl SP1AggregationHost {
     /// Creates a new aggregation host from the aggregation guest `elf` binary
     /// and the verifying key (`inner_method_id`) of the inner proof program.
     pub fn new(elf: &'static [u8], inner_vk: sp1_sdk::SP1VerifyingKey) -> anyhow::Result<Self> {
-        let host = SP1Host::new(elf)?;
-        let outer_vk = host.proving_key()?.verifying_key().clone();
+        let prover = SP1Prover::new(elf)?;
+        let outer_vk = prover.verifying_key().clone();
 
         Ok(Self {
             inner: Arc::new(Inner {
-                host,
+                prover,
                 outer_vk,
                 inner_vk,
                 prev_agg_proof: Mutex::new(None),
@@ -83,10 +83,11 @@ impl SP1AggregationHost {
 
         let prev_outer_proof_witness = if let Some(previous_outer_proof) = prev_agg_proof.as_ref() {
             let serialized = crate::encode_sp1_proof(previous_outer_proof)?;
-            let public_values =
-                self.inner
-                    .host
-                    .add_proof_helper(&mut stdin, &serialized, &self.inner.outer_vk)?;
+            let public_values = self.inner.prover.add_proof_helper(
+                &mut stdin,
+                &serialized,
+                &self.inner.outer_vk,
+            )?;
 
             Some(PreviousOuterProofWitness { public_values })
         } else {
@@ -95,7 +96,7 @@ impl SP1AggregationHost {
 
         let mut proof_inputs = Vec::with_capacity(proofs_and_headers.len());
         for proof_and_header in proofs_and_headers {
-            let public_values = self.inner.host.add_proof_helper(
+            let public_values = self.inner.prover.add_proof_helper(
                 &mut stdin,
                 &proof_and_header.proof,
                 &self.inner.inner_vk,
@@ -123,7 +124,7 @@ impl SP1AggregationHost {
 
         stdin.write(&witness);
 
-        let agg_proof = self.inner.host.run_helper(stdin)?;
+        let agg_proof = self.inner.prover.run(stdin)?;
         let serialized = crate::encode_sp1_proof(&agg_proof)?;
         *prev_agg_proof = Some(agg_proof);
 
@@ -133,36 +134,31 @@ impl SP1AggregationHost {
     }
 }
 
-/// SP1 Host implementation.
+/// SP1 prover bundling the [`EnvProver`] with its proving key.
 #[derive(Clone)]
-pub struct SP1Host {
+pub struct SP1Prover {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
 }
 
-/// Instantiate a new SP1 Host.
-impl SP1Host {
-    /// Create a new SP1 Host backed by a real proving key derived from `elf`.
+impl SP1Prover {
+    /// Create a new [`SP1Prover`] by setting up a proving key from `elf`.
     pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
-        let prover = ProverClient::from_env();
-
-        let pk = prover
-            .setup(elf.into())
-            .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
-
+        let (prover, pk) = prover_and_pk(elf)?;
         Ok(Self {
             prover,
             pk: Arc::new(pk),
         })
     }
 
-    /// Create a new `Sp1Guest` that reads the provided hints
-    pub fn simulate_with_hints(stdin: SP1Stdin) -> SP1Guest {
-        SP1Guest::with_hints(stdin.buffer)
+    /// Verification key.
+    pub fn verifying_key(&self) -> &SP1VerifyingKey {
+        self.pk.verifying_key()
     }
 
-    pub(crate) fn proving_key(&self) -> anyhow::Result<&EnvProvingKey> {
-        Ok(&self.pk)
+    /// Method id.
+    pub fn method_id(&self) -> SP1MethodId {
+        SP1MethodId(self.pk.verifying_key().hash_u32())
     }
 
     fn add_proof_helper(
@@ -183,7 +179,7 @@ impl SP1Host {
         })
     }
 
-    fn run_helper(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+    fn run(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
         // Under the mock backend the inner compressed proofs are dummies that
         // would fail the executor-side deferred-proof check. Skip that check so
         // mock aggregation can run end-to-end; real backends keep it on.
@@ -202,15 +198,72 @@ impl SP1Host {
         Ok(output)
     }
 
-    /// Verification key.
-    pub fn verifying_key(&self) -> &SP1VerifyingKey {
-        self.pk.verifying_key()
+    /// Serialize `item` as a hint, produce a compressed proof, and encode it.
+    pub fn add_hint_and_run<T: Serialize>(&self, item: &T) -> anyhow::Result<SerializedZkProof> {
+        let mut stdin = SP1Stdin::new();
+        stdin.write(item);
+        let output = self.run(stdin)?;
+        crate::encode_sp1_proof(&output)
+    }
+}
+
+/// SP1 Host implementation.
+#[derive(Clone)]
+pub struct SP1Host {
+    prover: SP1Prover,
+    outer_vk: Arc<SP1VerifyingKey>,
+}
+
+/// Instantiate a new SP1 Host.
+impl SP1Host {
+    /// Create a new SP1 Host backed by a real proving key derived from `elf`.
+    pub fn new(elf: &[u8], outer_vk: Arc<SP1VerifyingKey>) -> anyhow::Result<Self> {
+        Ok(Self {
+            prover: SP1Prover::new(elf)?,
+            outer_vk,
+        })
     }
 
-    /// Method id.
-    pub fn method_id(&self) -> SP1MethodId {
-        SP1MethodId(self.pk.verifying_key().hash_u32())
+    fn add_hint_deferred_and_run_heler<T: Serialize>(
+        &mut self,
+        item: &T,
+        agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof> {
+        let mut stdin = SP1Stdin::new();
+
+        for raw_agg_proof in agg_proofs {
+            self.prover.add_proof_helper(
+                &mut stdin,
+                &raw_agg_proof.to_serialized_zk_proof(),
+                &self.outer_vk,
+            )?;
+        }
+
+        stdin.write(item);
+        let output = self.prover.run(stdin)?;
+        crate::encode_sp1_proof(&output)
     }
+
+    /// Verification key.
+    pub fn verifying_key(&self) -> &SP1VerifyingKey {
+        self.prover.verifying_key()
+    }
+}
+
+/// Verification key.
+pub fn verifying_key_from_elf(elf: &[u8]) -> SP1VerifyingKey {
+    let (_, pk) = prover_and_pk(elf).unwrap();
+    pk.verifying_key().clone()
+}
+
+fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey)> {
+    let prover = ProverClient::from_env();
+
+    let pk = prover
+        .setup(elf.into())
+        .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
+
+    Ok((prover, pk))
 }
 
 impl core::fmt::Debug for SP1Host {
@@ -220,22 +273,18 @@ impl core::fmt::Debug for SP1Host {
 }
 
 impl ZkvmHost for SP1Host {
-    type HostArgs = &'static [u8];
     type Guest = SP1Guest;
 
-    fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args).unwrap_or_else(|e| panic!("Failed to create SP1Host: {e:?}"))
-    }
-
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedZkProof> {
-        let mut stdin = SP1Stdin::new();
-        stdin.write(item);
-        let output = self.run_helper(stdin)?;
-        crate::encode_sp1_proof(&output)
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof> {
+        self.add_hint_deferred_and_run_heler(item, agg_proofs)
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
-        Ok(crate::SP1MethodId(self.pk.verifying_key().hash_u32()))
+        Ok(self.prover.method_id())
     }
 }
 

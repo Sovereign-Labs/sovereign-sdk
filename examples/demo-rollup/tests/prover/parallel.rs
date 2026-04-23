@@ -9,6 +9,7 @@ use sov_stf_runner::processes::{
     ParallelProverService, ProofAggregationStatus, ProofProcessingStatus, ProverService,
     StateTransitionInfo,
 };
+use std::sync::Arc;
 
 use super::{DefaultSpec, ProofStateRoot, ProofWitness};
 
@@ -33,16 +34,22 @@ async fn test_parallel_proof_generation() {
     std::env::set_var("SP1_PROVER", "mock");
 
     let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+    let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
     assert!(
         !elf.is_empty(),
         "SP1 guest ELF is empty — build the guest first"
     );
 
-    let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf).unwrap())
+    let outer_vk = tokio::task::spawn_blocking(move || {
+        Arc::new(sov_sp1_adapter::host::verifying_key_from_elf(elf))
+    })
+    .await
+    .unwrap();
+
+    let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf, outer_vk).unwrap())
         .await
         .unwrap();
-
-    let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
     let inner_vm_clone = inner_vm.clone();
 

@@ -9,6 +9,7 @@
 pub mod aggregated_proof;
 use core::fmt::Debug;
 
+use crate::state_machine::da::BlobReaderTrait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::typenum::U32;
 use digest::Digest;
@@ -18,6 +19,7 @@ use sov_universal_wallet::UniversalWallet;
 
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
+use crate::zk::aggregated_proof::SerializedAggregatedProof;
 
 /// The `CryptoSpec` trait configures the cryptographic primitives used by a particular instance of a rollup.
 /// this trait implementation is meant to be provided by the `Zkvm`. module
@@ -72,10 +74,6 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
     type Network: ZkvmNetwork<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
 }
 
-/// The arguments required by the [`Zkvm::Host`]'s constructor function.
-#[cfg(feature = "native")]
-pub type HostArgs<Vm> = <<Vm as Zkvm>::Host as ZkvmHost>::HostArgs;
-
 /// The code commitment for the Zkvm
 pub type CodeCommitmentFor<Vm> = <<Vm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment;
 
@@ -103,14 +101,6 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
     /// The associated guest type
     type Guest: ZkvmGuest;
 
-    /// The required arguments to the constructor - usually either a `Vec<u8>`` or a path to the file containing an `ELF`.
-    #[cfg(feature = "native")]
-    type HostArgs: Send + Sync + 'static + Default;
-
-    /// Constructs a new `ZkvmHost`.
-    #[cfg(feature = "native")]
-    fn from_args(args: &Self::HostArgs) -> Self;
-
     /// Returns a commitment to the program to be proven. This method does a lot of heavy cryptographic work - caller beware!
     #[cfg(feature = "native")]
     fn code_commitment(
@@ -119,7 +109,11 @@ pub trait ZkvmHost: Clone + Send + Sync + 'static {
 
     /// Provide a single non-deterministic advice item to the guest and
     /// synchronously generate a SNARK of correct execution over that hint.
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedZkProof>;
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof>;
 }
 
 /// A commitment to a zkVM program binary. Every concrete [`ZkVerifier::CodeCommitment`]
@@ -313,6 +307,20 @@ pub struct StateTransitionWitness<StateRoot, Witness, Da: DaSpec> {
     pub relevant_blobs: RelevantBlobs<<Da as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub witness: Witness,
+}
+
+impl<DA: DaSpec, StateRoot, Witness> StateTransitionWitness<StateRoot, Witness, DA> {
+    /// Extracts the aggregated proofs from the proof blobs included in this
+    /// state transition witness.
+    pub fn aggregated_proofs(&self) -> Vec<SerializedAggregatedProof> {
+        self.relevant_blobs
+            .proof_blobs
+            .iter()
+            .map(|blob| SerializedAggregatedProof {
+                raw_aggregated_proof: blob.verified_data().to_vec(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Serialize, Deserialize, UniversalWallet)]

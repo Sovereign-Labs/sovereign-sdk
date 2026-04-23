@@ -6,10 +6,8 @@ use sov_modules_api::{Spec, ZkVerifier};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof;
 use sov_rollup_interface::zk::SerializedZkProof;
-use sov_rollup_interface::zk::{
-    StateTransitionPublicData, StateTransitionWitnessWithAddress, ZkvmHost,
-};
-use sov_sp1_adapter::host::SP1Host;
+use sov_rollup_interface::zk::{StateTransitionPublicData, StateTransitionWitnessWithAddress};
+use sov_sp1_adapter::host::SP1Prover;
 use sov_sp1_adapter::{SP1MethodId, SP1Verifier};
 
 type ProofInput = StateTransitionWitnessWithAddress<
@@ -29,8 +27,8 @@ async fn test_save_proofs() {
         .join("test_data")
         .join("tmp");
 
-    let v_key = host.host.verifying_key();
-    let method_id = host.host.method_id();
+    let v_key = host.prover.verifying_key();
+    let method_id = host.prover.method_id();
 
     std::fs::create_dir_all(&proofs_dir).unwrap();
     std::fs::write(
@@ -55,7 +53,7 @@ async fn test_proof_generation() {
     std::env::set_var("SP1_PROVER", "mock");
 
     let host = TestHost::new().await;
-    let method_id = host.host.method_id();
+    let method_id = host.prover.method_id();
     let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
     let prover_address = default_prover_address();
 
@@ -111,24 +109,26 @@ fn default_prover_address() -> <DefaultSpec as Spec>::Address {
 // The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
 // To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
 struct TestHost {
-    host: SP1Host,
+    prover: SP1Prover,
 }
 
 impl TestHost {
     async fn new() -> Self {
-        let host = tokio::task::spawn_blocking(move || {
-            SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF).expect("SP1Host should be created successfully")
+        let prover = tokio::task::spawn_blocking(move || {
+            SP1Prover::new(*sp1::SP1_GUEST_MOCK_ELF)
+                .expect("SP1Prover should be created successfully")
         })
         .await
         .unwrap();
 
-        Self { host }
+        Self { prover }
     }
 
     async fn run(&self, data: ProofInput) -> SerializedZkProof {
-        let mut host = self.host.clone();
+        let prover = self.prover.clone();
         tokio::task::spawn_blocking(move || -> SerializedZkProof {
-            host.add_hint_and_run(&data)
+            prover
+                .add_hint_and_run(&data)
                 .expect("Prover should run successfully")
         })
         .await

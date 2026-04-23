@@ -105,7 +105,7 @@ where
 
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let inner_proof = make_inner_proof::<InnerVm>(inner_vm, &data);
+                    let inner_proof = Self::make_inner_proof::<InnerVm>(inner_vm, &data);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -206,37 +206,40 @@ where
 
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
     }
-}
 
-fn make_inner_proof<InnerVm>(
-    mut vm: InnerVm::Host,
-    hint: &impl Serialize,
-) -> anyhow::Result<SerializedZkProof>
-where
-    InnerVm: Zkvm + 'static,
-{
-    let proving_start = std::time::Instant::now();
-    info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-    let result = vm.add_hint_and_run(hint);
-    sov_metrics::track_metrics(|tracker| {
-        let proving_time = proving_start.elapsed();
-        let is_success = result.is_ok();
-        tracker.submit(sov_metrics::ZkProvingTime {
-            proving_time,
-            is_success,
-            zk_circuit: sov_metrics::ZkCircuit::Inner,
+    fn make_inner_proof<InnerVm>(
+        mut vm: InnerVm::Host,
+        hint: &StateTransitionWitnessWithAddress<Address, StateRoot, Witness, Da::Spec>,
+    ) -> anyhow::Result<SerializedZkProof>
+    where
+        InnerVm: Zkvm + 'static,
+    {
+        let proving_start = std::time::Instant::now();
+        info!("Generating proof with {}", std::any::type_name::<InnerVm>());
+
+        let serialized_agg_proofs = hint.stf_witness.aggregated_proofs();
+
+        let result = vm.add_hint_deferred_and_run(hint, serialized_agg_proofs);
+        sov_metrics::track_metrics(|tracker| {
+            let proving_time = proving_start.elapsed();
+            let is_success = result.is_ok();
+            tracker.submit(sov_metrics::ZkProvingTime {
+                proving_time,
+                is_success,
+                zk_circuit: sov_metrics::ZkCircuit::Inner,
+            });
         });
-    });
-    match result {
-        Ok(ref proof) => {
-            trace!(
-                bytes = proof.len(),
-                "Proof generation completed successfully"
-            );
+        match result {
+            Ok(ref proof) => {
+                trace!(
+                    bytes = proof.len(),
+                    "Proof generation completed successfully"
+                );
+            }
+            Err(ref e) => {
+                error!("Proof generation failed: {:?}", e);
+            }
         }
-        Err(ref e) => {
-            error!("Proof generation failed: {:?}", e);
-        }
+        result
     }
-    result
 }
