@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
@@ -260,6 +260,7 @@ where
         router: axum::Router<()>,
         methods: RpcModule<()>,
         cors_configuration: CorsConfiguration,
+        trusted_proxies: Vec<IpAddr>,
     ) -> anyhow::Result<()> {
         let http_task_handle = crate::http::start_http_server(
             self.axum_tcp
@@ -269,6 +270,7 @@ where
             methods,
             self.secondary_shutdown_sender.subscribe(),
             cors_configuration,
+            trusted_proxies,
         )
         .await?;
 

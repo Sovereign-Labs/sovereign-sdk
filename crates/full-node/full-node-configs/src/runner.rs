@@ -1,3 +1,4 @@
+use std::net::IpAddr;
 use std::num::NonZero;
 use std::path::Path;
 
@@ -53,6 +54,12 @@ pub struct HttpServerConfig {
     /// public_address = "https://rollup.example.com"
     /// ```
     pub public_address: Option<String>,
+    /// Reverse proxies whose `X-Forwarded-For` headers should be trusted.
+    ///
+    /// Requests coming from other peers will ignore `X-Forwarded-For` and use the direct socket
+    /// address instead.
+    #[serde(default = "Vec::<IpAddr>::new")]
+    pub trusted_proxies: Vec<IpAddr>,
     /// Enable or disable CORS policy headers. Enabled by default.
     #[serde(default)]
     pub cors: CorsConfiguration,
@@ -92,6 +99,7 @@ impl HttpServerConfig {
             bind_host: "127.0.0.1".to_string(),
             bind_port: port,
             public_address: None,
+            trusted_proxies: Vec::new(),
             cors: CorsConfiguration::Permissive,
         }
     }
@@ -103,6 +111,7 @@ impl HttpServerConfig {
             bind_host: host.into(),
             bind_port: port,
             public_address: None,
+            trusted_proxies: Vec::new(),
             cors: CorsConfiguration::Permissive,
         }
     }

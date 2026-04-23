@@ -12632,6 +12632,7 @@ dependencies = [
  "proptest",
  "proptest-derive 0.5.1",
  "reltester",
+ "reqwest",
  "rockbound",
  "schemars 0.8.22",
  "serde",

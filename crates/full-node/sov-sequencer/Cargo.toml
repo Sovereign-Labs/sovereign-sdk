@@ -28,6 +28,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, default-features = false, features = ["client", "server"] }
 mini-moka = "0.10"
+reqwest = { workspace = true, features = ["json"] }
 sov-full-node-configs = { workspace = true }
 rockbound = { workspace = true }
 schemars = { workspace = true }

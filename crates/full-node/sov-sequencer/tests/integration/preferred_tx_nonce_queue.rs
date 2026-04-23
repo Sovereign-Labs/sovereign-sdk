@@ -83,7 +83,9 @@ async fn create_test_rollup(
 
         let mut preferred_config = match &c.sequencer_config {
             SequencerKindConfig::Preferred(p) => p.clone(),
-            SequencerKindConfig::Standard(_) => PreferredSequencerConfig::default(),
+            SequencerKindConfig::Standard(_) | SequencerKindConfig::Forwarding(_) => {
+                PreferredSequencerConfig::default()
+            }
         };
         preferred_config.batch_execution_time_limit_millis = MAX_BATCH_EXECUTION_TIME_MILLIS;
         preferred_config.maximum_future_nonce_delta = maximum_future_nonce_delta;

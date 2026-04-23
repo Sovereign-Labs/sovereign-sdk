@@ -14,7 +14,7 @@ use jsonrpsee::server::{
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
 use sov_metrics::{track_metrics, HttpMetrics};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
@@ -30,19 +30,25 @@ use sov_rest_utils::GetIPResult;
 // Middleware to inject SocketAddr from axum's ConnectInfo into the request extensions
 // so that jsonrpsee RPC handlers can access it via the Extensions parameter
 #[derive(Clone)]
-struct InjectSocketAddrLayer;
+struct InjectSocketAddrLayer {
+    trusted_proxies: Vec<IpAddr>,
+}
 
 impl<S> Layer<S> for InjectSocketAddrLayer {
     type Service = InjectSocketAddrService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        InjectSocketAddrService { inner }
+        InjectSocketAddrService {
+            inner,
+            trusted_proxies: self.trusted_proxies.clone(),
+        }
     }
 }
 
 #[derive(Clone)]
 struct InjectSocketAddrService<S> {
     inner: S,
+    trusted_proxies: Vec<IpAddr>,
 }
 
 impl<S, B> tower::Service<axum::http::Request<B>> for InjectSocketAddrService<S>
@@ -66,7 +72,7 @@ where
         let headers = req.headers();
         let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>();
 
-        let maybe_ip = get_client_ip(headers.clone(), connect_info);
+        let maybe_ip = get_client_ip(headers.clone(), connect_info, &self.trusted_proxies);
         req.extensions_mut().insert(GetIPResult {
             maybe_ip: Arc::new(maybe_ip),
         });
@@ -81,9 +87,11 @@ pub(crate) async fn start_http_server(
     methods: RpcModule<()>,
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
+    trusted_proxies: Vec<IpAddr>,
 ) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
     let rest_address = axum_listener.local_addr()?;
-    let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
+    let (rpc_router, server_handle) =
+        rpc_module_to_router(methods, cors_configuration, trusted_proxies);
 
     let handle = tokio::spawn(async move {
         tracing::info!(%rest_address, "Starting HTTP server");
@@ -126,6 +134,7 @@ pub(crate) async fn start_http_server(
 pub fn rpc_module_to_router(
     methods: RpcModule<()>,
     cors_config: CorsConfiguration,
+    trusted_proxies: Vec<IpAddr>,
 ) -> (axum::Router, ServerHandle) {
     let (stop_handle, server_handle) = stop_channel();
     let cors_layer = match cors_config {
@@ -148,7 +157,7 @@ pub fn rpc_module_to_router(
     let ws_service = error_layer.layer(ws_service);
 
     // Wrap services with the SocketAddr injection layer
-    let inject_addr_layer = InjectSocketAddrLayer;
+    let inject_addr_layer = InjectSocketAddrLayer { trusted_proxies };
     let http_service = inject_addr_layer.layer(http_service);
     let ws_service = inject_addr_layer.layer(ws_service);
 
@@ -305,6 +314,7 @@ mod tests {
             methods,
             shutdown_receiver,
             CorsConfiguration::Restrictive,
+            vec![],
         )
         .await
         .unwrap();

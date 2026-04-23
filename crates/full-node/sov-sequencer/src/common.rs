@@ -204,6 +204,17 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
         Ok(None)
     }
 
+    /// Queries a transaction by hash and returns the API-facing representation.
+    async fn get_api_tx(
+        &self,
+        tx_hash: TxHash,
+    ) -> anyhow::Result<Option<ApiAcceptedTx<Self::Confirmation>>> {
+        Ok(self
+            .get_tx(tx_hash)
+            .await?
+            .map(ApiAcceptedTx::<_>::from_accepted_tx::<Self::Rt, Self::Spec>))
+    }
+
     /// Updates the sequencer's view of the state of the rollup.
     async fn update_state(
         &self,

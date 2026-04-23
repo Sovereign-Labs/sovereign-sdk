@@ -990,7 +990,7 @@ where
 }
 
 /// Transaction confirmation data of [`PreferredSequencer`].
-#[derive(derivative::Derivative, serde::Serialize)]
+#[derive(derivative::Derivative, serde::Serialize, serde::Deserialize)]
 #[derivative(Clone(bound = ""), Debug(bound = "S: Spec, Rt: Runtime<S>"))]
 #[serde(bound = "S: Spec, Rt: Runtime<S>")]
 pub struct Confirmation<S, Rt>
@@ -1002,7 +1002,7 @@ where
     receipt: ApiTxEffect<TxReceiptContents<S>>,
     tx_number: u64,
     /// The timestamp of the transaction.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     timestamp_nanos: Option<HDTimestamp>,
 }
 

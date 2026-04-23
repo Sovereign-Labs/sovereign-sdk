@@ -400,6 +400,7 @@ mod tests {
                 bind_host: bind_host.to_string(),
                 bind_port,
                 public_address: public_address.map(|s| s.to_string()),
+                trusted_proxies: vec![],
                 cors: sov_stf_runner::CorsConfiguration::Permissive,
             },
             save_tx_bodies: false,
