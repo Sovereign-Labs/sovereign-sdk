@@ -22,7 +22,6 @@ use sov_rollup_interface::stf::{
     StateTransitionFunction,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
 use tokio::sync::watch;
@@ -30,7 +29,7 @@ use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
-use crate::state_manager::{BlockCandidateResolution, StateManager};
+use crate::state_manager::{AggregatedProofs, BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
 type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
@@ -705,10 +704,10 @@ where
             Item = ProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
         >,
     ) -> (
-        Vec<SerializedAggregatedProof>,
+        AggregatedProofs,
         Vec<PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>>,
     ) {
-        let mut aggregated_proofs: Vec<SerializedAggregatedProof> = Vec::new();
+        let mut aggregated_proofs = AggregatedProofs::default();
         #[allow(clippy::type_complexity)]
         // Any type alias needs the STF bounds, which are more complex than the original type
         let mut partial_receipts: Vec<
@@ -720,12 +719,25 @@ where
                     _public_data,
                     raw_proof,
                 )) => {
-                    aggregated_proofs.push(std::mem::take(raw_proof));
+                    let raw_proof = std::mem::take(raw_proof);
+                    aggregated_proofs
+                        .all_aggregated_proofs
+                        .push(raw_proof.clone());
+                    aggregated_proofs.accepted_aggregated_proofs.push(raw_proof);
                 }
                 ProofOutcome::Valid(_) => {
                     tracing::info!("Not aggregated proof, probably running in a different mode. Will be fixed in the future.");
                 }
-                _ => {
+                ProofOutcome::Invalid(_, proof) => {
+                    if let Some(proof) = proof.take() {
+                        aggregated_proofs.all_aggregated_proofs.push(proof);
+                    }
+                    tracing::error!(
+                        outcome = ?receipt.outcome,
+                        blob_hash = hex::encode(receipt.blob_hash),
+                        "Invalid proof outcome");
+                }
+                ProofOutcome::Ignored => {
                     tracing::error!(
                         outcome = ?receipt.outcome,
                         blob_hash = hex::encode(receipt.blob_hash),

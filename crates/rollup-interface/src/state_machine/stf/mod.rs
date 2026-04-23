@@ -254,7 +254,7 @@ pub enum ProofOutcomeEnum<Receipt> {
     /// The blob is some kind of valid proof
     Valid(Receipt),
     /// The blob is some kind of invalid proof
-    Invalid(InvalidProofError),
+    Invalid(InvalidProofError, Option<SerializedAggregatedProof>),
 }
 
 impl<Address, Da: DaSpec, Root, StorageProof> From<ProofOutcome<Address, Da, Root, StorageProof>>
@@ -264,7 +264,7 @@ impl<Address, Da: DaSpec, Root, StorageProof> From<ProofOutcome<Address, Da, Roo
         match value {
             ProofOutcomeEnum::Ignored => ProofOutcomeEnum::Ignored,
             ProofOutcomeEnum::Valid(receipt) => ProofOutcomeEnum::Valid(receipt.into()),
-            ProofOutcomeEnum::Invalid(error) => ProofOutcomeEnum::Invalid(error),
+            ProofOutcomeEnum::Invalid(error, proof) => ProofOutcomeEnum::Invalid(error, proof),
         }
     }
 }

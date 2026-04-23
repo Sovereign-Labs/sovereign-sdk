@@ -72,8 +72,6 @@ impl Default for MockZkvmHost {
 impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
     type Guest = MockZkGuest;
 
-
-
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
         Ok(MockCodeCommitment::default())
     }

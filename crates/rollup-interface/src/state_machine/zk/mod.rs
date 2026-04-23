@@ -9,7 +9,6 @@
 pub mod aggregated_proof;
 use core::fmt::Debug;
 
-use crate::state_machine::da::BlobReaderTrait;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::typenum::U32;
 use digest::Digest;
@@ -307,20 +306,6 @@ pub struct StateTransitionWitness<StateRoot, Witness, Da: DaSpec> {
     pub relevant_blobs: RelevantBlobs<<Da as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub witness: Witness,
-}
-
-impl<DA: DaSpec, StateRoot, Witness> StateTransitionWitness<StateRoot, Witness, DA> {
-    /// Extracts the aggregated proofs from the proof blobs included in this
-    /// state transition witness.
-    pub fn aggregated_proofs(&self) -> Vec<SerializedAggregatedProof> {
-        self.relevant_blobs
-            .proof_blobs
-            .iter()
-            .map(|blob| SerializedAggregatedProof {
-                raw_aggregated_proof: blob.verified_data().to_vec(),
-            })
-            .collect()
-    }
 }
 
 #[derive(Serialize, Deserialize, UniversalWallet)]

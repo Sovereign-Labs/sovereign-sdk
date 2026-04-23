@@ -146,10 +146,11 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
         let outer_verifying_key = tokio::task::spawn_blocking(move || {
-            Arc::new(sov_sp1_adapter::host::verifying_key_from_elf(elf))
+            sov_sp1_adapter::host::verifying_key_from_elf(agg_elf).map(Arc::new)
         })
         .await
-        .unwrap();
+        .expect("Outer verifying key setup task panicked")
+        .expect("Failed to derive outer verifying key from aggregation guest ELF");
 
         // SP1's blocking CPU prover spins up its own tokio runtime during setup,
         // so it must be constructed off the async executor thread.

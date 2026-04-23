@@ -224,7 +224,7 @@ impl SP1Host {
         })
     }
 
-    fn add_hint_deferred_and_run_heler<T: Serialize>(
+    fn add_hint_deferred_and_run_helper<T: Serialize>(
         &mut self,
         item: &T,
         agg_proofs: Vec<SerializedAggregatedProof>,
@@ -251,9 +251,9 @@ impl SP1Host {
 }
 
 /// Verification key.
-pub fn verifying_key_from_elf(elf: &[u8]) -> SP1VerifyingKey {
-    let (_, pk) = prover_and_pk(elf).unwrap();
-    pk.verifying_key().clone()
+pub fn verifying_key_from_elf(elf: &[u8]) -> anyhow::Result<SP1VerifyingKey> {
+    let (_, pk) = prover_and_pk(elf)?;
+    Ok(pk.verifying_key().clone())
 }
 
 fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey)> {
@@ -280,7 +280,7 @@ impl ZkvmHost for SP1Host {
         item: &T,
         agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
-        self.add_hint_deferred_and_run_heler(item, agg_proofs)
+        self.add_hint_deferred_and_run_helper(item, agg_proofs)
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{

@@ -6,7 +6,9 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::{BlockProof, OuterZkvmHost};
+use sov_rollup_interface::zk::aggregated_proof::{
+    BlockProof, OuterZkvmHost, SerializedAggregatedProof,
+};
 use sov_rollup_interface::zk::{
     SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
@@ -98,14 +100,21 @@ where
         if start_prover {
             prover_state.set_to_proving(block_header_hash.clone());
 
+            let StateTransitionInfo {
+                data,
+                aggregated_proofs,
+                slot_number,
+            } = state_transition_info;
+
             let data = StateTransitionWitnessWithAddress {
-                stf_witness: state_transition_info.data,
+                stf_witness: data,
                 prover_address: self.prover_address.clone(),
             };
 
             self.pool.spawn(move || {
                 tracing::info_span!("guest_execution").in_scope(|| {
-                    let inner_proof = Self::make_inner_proof::<InnerVm>(inner_vm, &data);
+                    let inner_proof =
+                        Self::make_inner_proof::<InnerVm>(inner_vm, &data, aggregated_proofs);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -135,7 +144,7 @@ where
                             slot_hash: block_header_hash.clone(),
                             prover_address,
                         },
-                        slot_number: state_transition_info.slot_number,
+                        slot_number,
                     });
 
                     prover_state.set_to_proved(block_header_hash, block_proof);
@@ -210,14 +219,13 @@ where
     fn make_inner_proof<InnerVm>(
         mut vm: InnerVm::Host,
         hint: &StateTransitionWitnessWithAddress<Address, StateRoot, Witness, Da::Spec>,
+        serialized_agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof>
     where
         InnerVm: Zkvm + 'static,
     {
         let proving_start = std::time::Instant::now();
         info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-
-        let serialized_agg_proofs = hint.stf_witness.aggregated_proofs();
 
         let result = vm.add_hint_deferred_and_run(hint, serialized_agg_proofs);
         sov_metrics::track_metrics(|tracker| {

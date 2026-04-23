@@ -13,6 +13,7 @@ use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::types::StoredStfInfo;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
 use tokio::sync::mpsc;
@@ -23,6 +24,8 @@ use tokio::sync::mpsc;
 pub struct StateTransitionInfo<StateRoot, Witness, Da: DaSpec> {
     /// Public input to the per-block zk proof.
     pub(crate) data: StateTransitionWitness<StateRoot, Witness, Da>,
+    /// Aggregated proofs processed while executing this transition, in verification order.
+    pub(crate) aggregated_proofs: Vec<SerializedAggregatedProof>,
     /// Rollup height.
     pub(crate) slot_number: SlotNumber,
 }
@@ -33,7 +36,11 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
         data: StateTransitionWitness<StateRoot, Witness, Da>,
         slot_number: SlotNumber,
     ) -> Self {
-        Self { data, slot_number }
+        Self {
+            data,
+            aggregated_proofs: Vec::new(),
+            slot_number,
+        }
     }
 
     pub(crate) fn da_block_header(&self) -> &Da::BlockHeader {

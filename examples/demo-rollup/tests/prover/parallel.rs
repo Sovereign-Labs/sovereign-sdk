@@ -36,15 +36,11 @@ async fn test_parallel_proof_generation() {
     let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
     let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
-    assert!(
-        !elf.is_empty(),
-        "SP1 guest ELF is empty — build the guest first"
-    );
-
     let outer_vk = tokio::task::spawn_blocking(move || {
-        Arc::new(sov_sp1_adapter::host::verifying_key_from_elf(elf))
+        sov_sp1_adapter::host::verifying_key_from_elf(agg_elf).map(Arc::new)
     })
     .await
+    .unwrap()
     .unwrap();
 
     let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf, outer_vk).unwrap())
