@@ -200,9 +200,15 @@ importers:
       '@noble/hashes':
         specifier: ^1.5.0
         version: 1.5.0
+      '@sovereign-sdk/multisig':
+        specifier: workspace:^
+        version: link:../multisig
       '@sovereign-sdk/signers':
         specifier: workspace:^
         version: link:../signers
+      '@sovereign-sdk/utils':
+        specifier: workspace:^
+        version: link:../utils
       '@sovereign-sdk/web3':
         specifier: workspace:^
         version: link:../web3
@@ -255,9 +261,6 @@ importers:
       '@noble/hashes':
         specifier: ^1.5.0
         version: 1.8.0
-      '@sovereign-sdk/signers':
-        specifier: workspace:^
-        version: link:../signers
       '@sovereign-sdk/utils':
         specifier: workspace:^
         version: link:../utils
@@ -268,9 +271,6 @@ importers:
       '@sovereign-sdk/types':
         specifier: workspace:^
         version: link:../types
-      '@sovereign-sdk/web3':
-        specifier: workspace:^
-        version: link:../web3
       tsup:
         specifier: ^8.3.0
         version: 8.3.0(@swc/core@1.7.42(@swc/helpers@0.5.17))(postcss@8.5.3)(tsx@4.20.3)(typescript@5.6.3)(yaml@2.7.1)
@@ -429,6 +429,9 @@ importers:
       '@sovereign-sdk/client':
         specifier: 0.1.0-alpha.39
         version: 0.1.0-alpha.39
+      '@sovereign-sdk/multisig':
+        specifier: workspace:^
+        version: link:../multisig
       '@sovereign-sdk/serializers':
         specifier: workspace:^
         version: link:../serializers

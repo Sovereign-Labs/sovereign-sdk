@@ -160,7 +160,8 @@ const getSerializer = (_schema: RollupSchema) =>
 
 function createMockStandardClient() {
   const client = new SovereignClient({ fetch: vi.fn() });
-  const chainHash = "0x0000000000000000000000000000000000000000000000000000000000000000";
+  const chainHash =
+    "0x0000000000000000000000000000000000000000000000000000000000000000";
 
   client.rollup = {
     constants: vi.fn().mockResolvedValue({ chain_id: 1 }),
@@ -362,7 +363,9 @@ describe("createStandardRollup", () => {
         ),
       },
     });
-    expect(signingBytes).toEqual(new Uint8Array([7, 8, 9, ...new Array(32).fill(0)]));
+    expect(signingBytes).toEqual(
+      new Uint8Array([7, 8, 9, ...new Array(32).fill(0)]),
+    );
 
     const signatureBytes = await signer.sign(signingBytes);
     const signature = {
@@ -383,7 +386,10 @@ describe("createStandardRollup", () => {
 
   it("should fail fast when converting an incomplete multisig transaction", () => {
     const multisig = Multisig.fromPubKeys(
-      [bytesToHex(new Uint8Array(32).fill(1)), bytesToHex(new Uint8Array(32).fill(2))],
+      [
+        bytesToHex(new Uint8Array(32).fill(1)),
+        bytesToHex(new Uint8Array(32).fill(2)),
+      ],
       2,
     );
     const unsignedTx = {

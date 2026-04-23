@@ -14,9 +14,7 @@ const pubkey2 =
 const pubkey3 =
   "74fc1e9c39b21173ef47c1cdfb37158764486c8b8ba81d8f29c6dd77800cd57f";
 
-const createParams = (
-  overrides?: Partial<MultisigParams>,
-): MultisigParams => ({
+const createParams = (overrides?: Partial<MultisigParams>): MultisigParams => ({
   signatures: [],
   unusedPubKeys: [pubkey1, pubkey2, pubkey3],
   minSigners: 2,
@@ -131,7 +129,7 @@ describe("Multisig", () => {
         minSigners: 1,
       });
 
-      multisig.addSignature(`0xAA`, `0x${pubkey1.toUpperCase()}`);
+      multisig.addSignature("0xAA", `0x${pubkey1.toUpperCase()}`);
 
       expect(multisig.signaturesAndPubKeys).toEqual([
         { pub_key: pubkey1, signature: "aa" },

@@ -1,5 +1,5 @@
 import SovereignClient from "@sovereign-sdk/client";
-import { Multisig } from "@sovereign-sdk/multisig";
+import type { Multisig } from "@sovereign-sdk/multisig";
 import { JsSerializer } from "@sovereign-sdk/serializers";
 import type {
   Transaction,
@@ -114,7 +114,10 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   ): Promise<string> {
     if (this.context.credentialIdToAddress) {
       const serializer = await this.serializer();
-      return this.context.credentialIdToAddress(credentialId, serializer.schema);
+      return this.context.credentialIdToAddress(
+        credentialId,
+        serializer.schema,
+      );
     }
 
     return addressFromPublicKey(credentialId, "sov");

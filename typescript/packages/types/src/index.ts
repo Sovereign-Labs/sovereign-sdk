@@ -61,10 +61,7 @@ export type UnsignedTransactionV1<
  * Versioned unsigned transaction envelope.
  * This is the exact root object serialized for signing.
  */
-export type UnsignedTransaction<
-  RuntimeCall,
-  CredentialAddress = unknown,
-> =
+export type UnsignedTransaction<RuntimeCall, CredentialAddress = unknown> =
   | { V0: UnsignedTransactionV0<RuntimeCall> }
   | { V1: UnsignedTransactionV1<RuntimeCall, CredentialAddress> };
 

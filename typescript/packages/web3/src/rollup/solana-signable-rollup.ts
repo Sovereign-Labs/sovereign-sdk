@@ -7,7 +7,11 @@ import type {
   UnsignedTransactionV0,
 } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
-import { bytesToHex, hexToBytes, normalizeHexString } from "@sovereign-sdk/utils";
+import {
+  bytesToHex,
+  hexToBytes,
+  normalizeHexString,
+} from "@sovereign-sdk/utils";
 import bs58 from "bs58";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
@@ -29,11 +33,10 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
 export type SolanaOffchainUnsignedTransactionV1<
   RuntimeCall,
   MultisigId = unknown,
-> =
-  SolanaOffchainUnsignedTransaction<RuntimeCall> & {
-    multisig_id: MultisigId;
-    version: number;
-  };
+> = SolanaOffchainUnsignedTransaction<RuntimeCall> & {
+  multisig_id: MultisigId;
+  version: number;
+};
 
 export type SolanaOffchainSimpleMessage = {
   signed_message: Uint8Array;
@@ -265,10 +268,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   private canonicalizeMultisigPubkeys(
     multisigPubkeys: HexString[],
   ): Uint8Array[] {
-    if (
-      multisigPubkeys.length < 1 ||
-      multisigPubkeys.length > MAX_SIGNERS
-    ) {
+    if (multisigPubkeys.length < 1 || multisigPubkeys.length > MAX_SIGNERS) {
       throw new Error(
         `Invalid multisig signer count: expected 1-${MAX_SIGNERS} signers, got ${multisigPubkeys.length}`,
       );
@@ -414,9 +414,12 @@ export class SolanaSignableRollup<RuntimeCall> {
           options,
         );
       case "solanaSimple": {
-        const unsignedTx = await this.inner.buildUnsignedTransaction(runtimeCall, {
-          overrides: params.overrides,
-        });
+        const unsignedTx = await this.inner.buildUnsignedTransaction(
+          runtimeCall,
+          {
+            overrides: params.overrides,
+          },
+        );
         return this.signWithSolanaSimpleAndSubmit(
           unsignedTx,
           params.signer,
@@ -424,9 +427,12 @@ export class SolanaSignableRollup<RuntimeCall> {
         );
       }
       case "solana": {
-        const unsignedTx = await this.inner.buildUnsignedTransaction(runtimeCall, {
-          overrides: params.overrides,
-        });
+        const unsignedTx = await this.inner.buildUnsignedTransaction(
+          runtimeCall,
+          {
+            overrides: params.overrides,
+          },
+        );
         return this.signWithSolanaSpecAndSubmit(
           unsignedTx,
           params.signer,

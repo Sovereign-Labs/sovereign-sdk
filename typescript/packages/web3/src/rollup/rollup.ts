@@ -174,7 +174,8 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     const context = {
       runtimeCall,
       rollup: this,
-      overrides: params?.overrides ?? ({} as DeepPartial<S["UnsignedTransaction"]>),
+      overrides:
+        params?.overrides ?? ({} as DeepPartial<S["UnsignedTransaction"]>),
     };
 
     return this._typeBuilder.unsignedTransaction(context);
@@ -314,7 +315,8 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
   ): Promise<S["Transaction"]> {
     const serializer = await this.serializer();
     const signingUnsignedTx = await this.unsignedTxForSigning(unsignedTx);
-    const serializedUnsignedTx = serializer.serializeUnsignedTx(signingUnsignedTx);
+    const serializedUnsignedTx =
+      serializer.serializeUnsignedTx(signingUnsignedTx);
     const chainHash = await this.chainHash();
     const signature = await signer.sign(
       new Uint8Array([...serializedUnsignedTx, ...chainHash]),
