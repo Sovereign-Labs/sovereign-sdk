@@ -60,7 +60,7 @@ native = [
     "rand",
     "sp1-sdk/network",
     "sov-rollup-interface/native",
-    "sov-metrics?/native",
+    "sov-metrics/native",
     "sov-sp1-adapter/native",
 ]
 bench = [

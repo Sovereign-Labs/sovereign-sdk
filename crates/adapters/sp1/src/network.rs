@@ -38,6 +38,27 @@ impl SP1Network {
     }
 }
 
+impl SP1Network {
+    async fn emit_fulfillment_metric(&self, request_id: B256) {
+        let proof_request = match self.prover.get_proof_request(request_id).await {
+            Ok(Some(req)) => req,
+            // Best-effort: silently skip metric if request details are unavailable.
+            Ok(None) | Err(_) => return,
+        };
+
+        if let Some(fulfilled_at) = proof_request.fulfilled_at {
+            let fulfillment_duration_secs = fulfilled_at - proof_request.created_at;
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(crate::metrics::SP1ProofFulfillmentMetrics {
+                    prover_type: crate::metrics::ProverType::Network,
+                    request_id: format!("{request_id}"),
+                    fulfillment_duration_secs,
+                });
+            });
+        }
+    }
+}
+
 impl ZkvmNetwork for SP1Network {
     type Guest = SP1Guest;
     type ProofHandle = ProofHandle;
@@ -68,7 +89,11 @@ impl ZkvmNetwork for SP1Network {
         }
 
         match maybe_proof {
-            Some(proof) => Ok(Some(bincode::serialize(&proof)?)),
+            Some(proof) => {
+                self.emit_fulfillment_metric(*handle).await;
+
+                Ok(Some(bincode::serialize(&proof)?))
+            }
             None => Ok(None),
         }
     }

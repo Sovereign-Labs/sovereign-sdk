@@ -24,7 +24,7 @@ pub mod host;
 #[cfg(feature = "native")]
 pub mod network;
 
-#[cfg(all(feature = "native", feature = "bench"))]
+#[cfg(feature = "native")]
 pub mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
