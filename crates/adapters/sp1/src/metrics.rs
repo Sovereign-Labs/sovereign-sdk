@@ -3,21 +3,6 @@ use std::io::Write;
 
 use sov_metrics::Metric;
 
-#[cfg(feature = "bench")]
-use sp1_sdk::HookEnv;
-
-/// A custom callback for extracting metrics from the SP1 zkvm.
-///
-/// When the "bench" feature is enabled, this callback is registered as a syscall
-/// in the SP1 VM and invoked whenever a function annotated with the `cycle_tracker`
-/// macro is invoked.
-#[cfg(feature = "bench")]
-pub fn metrics_hook(_env: HookEnv, buf: &[u8]) -> Vec<Vec<u8>> {
-    let _ = sov_metrics::cycle_utils::deserialize_metrics_call(buf).unwrap();
-
-    vec![]
-}
-
 /// The type of SP1 prover that generated a proof.
 #[derive(Debug)]
 #[allow(dead_code)]
