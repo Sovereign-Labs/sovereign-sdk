@@ -50,7 +50,7 @@ export type RollupContext = Record<string, unknown>;
 export type CredentialIdToAddress = (
   credentialId: Uint8Array,
   schema: RollupSchema,
-) => unknown;
+) => string;
 
 /**
  * The configuration for a rollup client.
@@ -159,12 +159,8 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
   /**
    * Retrieve dedup information about the provided credential ID.
    */
-  async dedupByCredentialId(
-    credentialId: HexString | Uint8Array,
-  ): Promise<S["Dedup"]> {
-    const credentialIdHex =
-      typeof credentialId === "string" ? credentialId : bytesToHex(credentialId);
-    const response = await this.rollup.addresses.dedup(credentialIdHex);
+  async dedupByCredentialId(credentialId: HexString): Promise<S["Dedup"]> {
+    const response = await this.rollup.addresses.dedup(credentialId);
     return response as S["Dedup"];
   }
 

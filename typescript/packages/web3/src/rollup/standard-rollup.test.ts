@@ -369,7 +369,7 @@ describe("createStandardRollup", () => {
       pub_key: bytesToHex(signerPublicKey),
       signature: bytesToHex(signatureBytes),
     };
-    multisig.addSignature(signature);
+    multisig.addSignature(signature.signature, signature.pub_key);
 
     expect(multisig.toTransaction(unsignedTx)).toEqual({
       V1: {

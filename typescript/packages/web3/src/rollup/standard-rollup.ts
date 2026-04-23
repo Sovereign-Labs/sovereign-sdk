@@ -111,7 +111,7 @@ export class StandardRollup<RuntimeCall> extends Rollup<
 
   private async credentialAddressFromId(
     credentialId: Uint8Array,
-  ): Promise<unknown> {
+  ): Promise<string> {
     if (this.context.credentialIdToAddress) {
       const serializer = await this.serializer();
       return this.context.credentialIdToAddress(credentialId, serializer.schema);

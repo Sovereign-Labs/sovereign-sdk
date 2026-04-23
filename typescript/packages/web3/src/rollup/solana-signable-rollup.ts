@@ -1,5 +1,5 @@
 import type SovereignClient from "@sovereign-sdk/client";
-import { Multisig } from "@sovereign-sdk/multisig";
+import { MAX_SIGNERS, Multisig } from "@sovereign-sdk/multisig";
 import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type {
   Transaction,
@@ -84,7 +84,6 @@ const CHAIN_HASH_SIZE = 32;
 const PUBKEY_SIZE = 32;
 const SIGNATURE_SIZE = 64;
 const MULTISIG_PREAMBLE_FIXED_LENGTH = 53;
-const MAX_MULTISIG_SIGNERS = 21; // TODO - is there any way we could get it from Rust rather than hard-coding here
 
 // Solana preamble constants
 const SIGNING_DOMAIN = new Uint8Array([
@@ -111,9 +110,9 @@ function createSolanaPreamble(
   chainHash: Uint8Array,
   messageLength: number,
 ): Uint8Array {
-  if (pubkeys.length < 1 || pubkeys.length > MAX_MULTISIG_SIGNERS) {
+  if (pubkeys.length < 1 || pubkeys.length > MAX_SIGNERS) {
     throw new Error(
-      `Invalid signer count: expected 1-${MAX_MULTISIG_SIGNERS} signers, got ${pubkeys.length}`,
+      `Invalid signer count: expected 1-${MAX_SIGNERS} signers, got ${pubkeys.length}`,
     );
   }
 
@@ -268,10 +267,10 @@ export class SolanaSignableRollup<RuntimeCall> {
   ): Uint8Array[] {
     if (
       multisigPubkeys.length < 1 ||
-      multisigPubkeys.length > MAX_MULTISIG_SIGNERS
+      multisigPubkeys.length > MAX_SIGNERS
     ) {
       throw new Error(
-        `Invalid multisig signer count: expected 1-${MAX_MULTISIG_SIGNERS} signers, got ${multisigPubkeys.length}`,
+        `Invalid multisig signer count: expected 1-${MAX_SIGNERS} signers, got ${multisigPubkeys.length}`,
       );
     }
 
@@ -517,7 +516,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   /**
    * Formats the multisig credential in the rollup's configured address format.
    */
-  private async multisigIdFromMultisig(multisig: Multisig): Promise<unknown> {
+  private async multisigIdFromMultisig(multisig: Multisig): Promise<string> {
     const credentialId = multisig.getMultisigAddress();
 
     if (this.inner.context.credentialIdToAddress) {
@@ -857,7 +856,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     return this.inner.dedup(address);
   }
 
-  async dedupByCredentialId(credentialId: HexString | Uint8Array) {
+  async dedupByCredentialId(credentialId: HexString) {
     return this.inner.dedupByCredentialId(credentialId);
   }
 

@@ -8,7 +8,7 @@ import type { HexString } from "@sovereign-sdk/utils";
 import { hexToBytes, normalizeHexString } from "@sovereign-sdk/utils";
 import * as borsh from "borsh";
 
-const MAX_SIGNERS = 21;
+export const MAX_SIGNERS = 21;
 
 /**
  * Base error class for multisig-related errors.
@@ -46,7 +46,9 @@ export class Multisig {
 
   constructor({ signatures = [], unusedPubKeys, minSigners }: MultisigParams) {
     const normalizedSignatures = signatures.map(normalizeSignatureAndPubKey);
-    const normalizedUnusedPubKeys = unusedPubKeys.map(normalizeHexString);
+    const normalizedUnusedPubKeys = unusedPubKeys.map((pubKey) =>
+      normalizeMultisigHex("public key", pubKey),
+    );
 
     assertValidSignerSet(
       normalizedSignatures,
@@ -67,20 +69,8 @@ export class Multisig {
     });
   }
 
-  addSignature(signature: HexString, pubKey: HexString): void;
-  addSignature(pair: SignatureAndPubKey): void;
-  addSignature(
-    signatureOrPair: HexString | SignatureAndPubKey,
-    pubKey?: HexString,
-  ): void {
-    const pair = normalizeSignatureAndPubKey(
-      typeof signatureOrPair === "string"
-        ? {
-            signature: normalizeHexString(signatureOrPair),
-            pub_key: normalizeHexString(assertDefined(pubKey)),
-          }
-        : signatureOrPair,
-    );
+  addSignature(signature: HexString, pubKey: HexString): void {
+    const pair = normalizeSignatureAndPubKey({ signature, pub_key: pubKey });
 
     if (!this.unusedPubKeys.delete(pair.pub_key)) {
       throw new InvalidMultisigParameterError(
@@ -156,6 +146,8 @@ function assertValidSignerSet(
   unusedPubKeys: HexString[],
   minSigners: number,
 ): void {
+  // `signatures` and `unusedPubKeys` are expected to already be normalized and
+  // validated hex strings by the time this runs.
   const seenPubKeys = new Set<HexString>();
   const allPubKeys = [
     ...signatures.map((signature) => signature.pub_key),
@@ -188,7 +180,6 @@ function assertValidSignerSet(
     }
 
     seenPubKeys.add(pubKey);
-    hexToBytes(pubKey);
   }
 }
 
@@ -196,17 +187,18 @@ function normalizeSignatureAndPubKey(
   pair: SignatureAndPubKey,
 ): SignatureAndPubKey {
   return {
-    signature: normalizeHexString(pair.signature),
-    pub_key: normalizeHexString(pair.pub_key),
+    signature: normalizeMultisigHex("signature", pair.signature),
+    pub_key: normalizeMultisigHex("public key", pair.pub_key),
   };
 }
 
-function assertDefined<T>(value: T | undefined): T {
-  if (value === undefined) {
+function normalizeMultisigHex(kind: string, value: HexString): HexString {
+  try {
+    return normalizeHexString(value);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new InvalidMultisigParameterError(
-      "pubKey is required when adding a signature by positional arguments",
+      `Invalid multisig ${kind} ${value}: ${message}`,
     );
   }
-
-  return value;
 }

@@ -2,6 +2,7 @@ import { bytesToHex } from "@sovereign-sdk/utils";
 import { describe, expect, it } from "vitest";
 import {
   InvalidMultisigParameterError,
+  MAX_SIGNERS,
   Multisig,
   type MultisigParams,
 } from "./index";
@@ -71,6 +72,17 @@ describe("Multisig", () => {
           ),
       ).toThrow(InvalidMultisigParameterError);
     });
+
+    it("should reject invalid public key hex as a multisig validation error", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              unusedPubKeys: ["xyz", pubkey2],
+            }),
+          ),
+      ).toThrow(InvalidMultisigParameterError);
+    });
   });
 
   describe("fromPubKeys", () => {
@@ -84,18 +96,7 @@ describe("Multisig", () => {
   });
 
   describe("addSignature", () => {
-    it("should add a signature by pair and remove the signer from remaining keys", () => {
-      const multisig = new Multisig(createParams());
-
-      multisig.addSignature({ pub_key: pubkey1, signature: "aa" });
-
-      expect(multisig.signaturesAndPubKeys).toEqual([
-        { pub_key: pubkey1, signature: "aa" },
-      ]);
-      expect([...multisig.remainingPubKeys]).toEqual([pubkey2, pubkey3]);
-    });
-
-    it("should add a signature by positional arguments", () => {
+    it("should add a signature and remove the signer from remaining keys", () => {
       const multisig = new Multisig(createParams());
 
       multisig.addSignature("aa", pubkey1);
@@ -103,6 +104,7 @@ describe("Multisig", () => {
       expect(multisig.signaturesAndPubKeys).toEqual([
         { pub_key: pubkey1, signature: "aa" },
       ]);
+      expect([...multisig.remainingPubKeys]).toEqual([pubkey2, pubkey3]);
     });
 
     it("should reject unknown or duplicate signers", () => {
@@ -122,7 +124,10 @@ describe("Multisig", () => {
     it("should normalize user-supplied hex strings", () => {
       const multisig = new Multisig({
         signatures: [],
-        unusedPubKeys: [`0x${pubkey1.toUpperCase()}`, `0x${pubkey2.toUpperCase()}`],
+        unusedPubKeys: [
+          `0x${pubkey1.toUpperCase()}`,
+          `0x${pubkey2.toUpperCase()}`,
+        ],
         minSigners: 1,
       });
 
@@ -190,6 +195,10 @@ describe("Multisig", () => {
   });
 
   describe("getMultisigAddress", () => {
+    it("should expose the shared signer cap", () => {
+      expect(MAX_SIGNERS).toBe(21);
+    });
+
     it("should match the Rust test vector", () => {
       const multisig = Multisig.fromPubKeys([pubkey1, pubkey2, pubkey3], 2);
 

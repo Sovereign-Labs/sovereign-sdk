@@ -14,8 +14,6 @@ npm install @sovereign-sdk/web3
 ## Features
 
 - 🔄 Type-safe transaction submission and signing
-- ✍️ First-class unsigned transaction builders via `buildUnsignedTransaction()`
-- 🔐 Standard and Solana multisig signing helpers
 - 🔍 Runtime call simulation for gas estimation
 - 📦 Borsh serialization with schema validation
 - 🎯 Strongly typed rollup interactions with customizable type specifications
@@ -135,23 +133,20 @@ const multisig = Multisig.fromPubKeys(
   2,
 );
 
-const signer1Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+const signingBytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
 multisig.addSignature(
-  bytesToHex(await signer1.sign(signer1Bytes)),
+  bytesToHex(await signer1.sign(signingBytes)),
   bytesToHex(await signer1.publicKey()),
 );
 
-const signer2Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
 multisig.addSignature(
-  bytesToHex(await signer2.sign(signer2Bytes)),
+  bytesToHex(await signer2.sign(signingBytes)),
   bytesToHex(await signer2.publicKey()),
 );
 
 const tx = multisig.toTransaction(unsignedTx);
 await rollup.submitTransaction(tx);
 ```
-
-`SolanaSignableRollup` exposes the same multisig flow for `"standard"`, `"solanaSimple"`, and `"solana"` authenticators. Use `multisigSigningBytes(unsignedTx, multisig, authenticator)` and `submitTransaction(tx, authenticator)` with the same explicit authenticator for every signer. The Solana multisig helpers derive canonical signer ordering and the multisig ID internally, so callers no longer pass `multisigPubkeys` or `multisigAddress`.
 
 ## API Reference
 

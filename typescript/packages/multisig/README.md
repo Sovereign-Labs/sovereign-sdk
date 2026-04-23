@@ -5,17 +5,13 @@
 
 Payload-agnostic multisig signer state for Sovereign SDK applications.
 
-## Overview
+Use `@sovereign-sdk/multisig` when you want to collect signatures outside the rollup client and finalize them into a standard `TransactionV1` once the threshold is met.
 
-`@sovereign-sdk/multisig` owns:
+## Installation
 
-- multisig signer membership
-- the threshold
-- collected signatures
-- credential ID derivation
-- finalization into `TransactionV1`
-
-It does not own rollup-specific signing-byte derivation. That responsibility lives in `@sovereign-sdk/web3`.
+```bash
+npm install @sovereign-sdk/multisig
+```
 
 ## Usage
 
@@ -45,15 +41,14 @@ const multisig = Multisig.fromPubKeys(
   2,
 );
 
-const signer1Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+const signingBytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
 multisig.addSignature(
-  bytesToHex(await signer1.sign(signer1Bytes)),
+  bytesToHex(await signer1.sign(signingBytes)),
   bytesToHex(await signer1.publicKey()),
 );
 
-const signer2Bytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
 multisig.addSignature(
-  bytesToHex(await signer2.sign(signer2Bytes)),
+  bytesToHex(await signer2.sign(signingBytes)),
   bytesToHex(await signer2.publicKey()),
 );
 
@@ -61,15 +56,3 @@ if (multisig.isComplete) {
   await rollup.submitTransaction(multisig.toTransaction(unsignedTx));
 }
 ```
-
-## API Notes
-
-- `Multisig.fromPubKeys(allPubKeys, minSigners)` creates an empty signer set.
-- `addSignature()` accepts either `(signature, pubKey)` or `{ signature, pub_key }`.
-- `getMultisigAddress()` returns the credential ID bytes computed as `hash(min_signers || sorted(pub_keys))`.
-
-## Migration Notes
-
-- Replace `MultisigTransaction` with `Multisig`.
-- Move transaction finalization to `multisig.toTransaction(...)`.
-- The multisig package no longer restricts transactions to nonce-based uniqueness because it no longer owns transaction payloads.

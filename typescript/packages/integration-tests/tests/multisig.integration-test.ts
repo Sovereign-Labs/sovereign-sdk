@@ -1,5 +1,6 @@
 import { Multisig } from "@sovereign-sdk/multisig";
 import { Ed25519Signer, type Signer } from "@sovereign-sdk/signers";
+import { bytesToHex } from "@sovereign-sdk/utils";
 import {
   DEFAULT_TX_DETAILS,
   type StandardRollup,
@@ -25,12 +26,6 @@ function generateSigners(count = 5): Signer[] {
   }
 
   return signers;
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
-    "",
-  );
 }
 
 describe("multisig", async () => {
