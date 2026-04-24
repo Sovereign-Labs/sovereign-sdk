@@ -32,7 +32,7 @@ type TestNetworkProverService = NetworkProverService<
 ///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
 ///   - Network access to Succinct's proving infrastructure
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Requires SP1_PRIVATE_KEY and network access to the Succinct proving network"]
+//#[ignore = "Requires SP1_PRIVATE_KEY and network access to the Succinct proving network"]
 async fn test_network_proof_generation() {
     tracing_subscriber::fmt::init();
 

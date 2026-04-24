@@ -4544,6 +4544,7 @@ name = "sov-prover-incentives"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "borsh",
  "derive_more",
  "schemars 0.8.22",

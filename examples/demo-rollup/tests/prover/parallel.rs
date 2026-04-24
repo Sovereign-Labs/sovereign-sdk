@@ -31,7 +31,7 @@ type TestParallelProverService = ParallelProverService<
 #[tokio::test(flavor = "multi_thread")]
 async fn test_parallel_proof_generation() {
     // Use the mock prover: CPU proving is far too slow to run in tests.
-    std::env::set_var("SP1_PROVER", "mock");
+    std::env::set_var("SP1_PROVER", "network");
 
     let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
     let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;

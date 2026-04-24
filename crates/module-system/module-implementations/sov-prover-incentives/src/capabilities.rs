@@ -1,7 +1,6 @@
-use std::cmp::max;
-
 use sov_bank::{config_gas_token_id, Amount, Coins, IntoPayable};
 use sov_modules_api::registration_lib::StakeRegistration;
+use sov_modules_api::CodeCommitmentTrait;
 use sov_modules_api::{
     AggregatedProofPublicData, Gas, GasSpec, GetGasPrice, InvalidProofError,
     SerializedAggregatedProof, Spec, StateReader, Storage, TxState, VersionReader, ZkVerifier,
@@ -9,6 +8,7 @@ use sov_modules_api::{
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::Kernel;
+use std::cmp::max;
 use thiserror::Error;
 
 use crate::event::SlashingReason;
@@ -126,11 +126,22 @@ impl<S: Spec> ProverIncentives<S> {
             )
             .map_err(Into::<anyhow::Error>::into)?;
 
+        let mut reader: &[u8] = &proof.clone().to_serialized_zk_proof().raw_proof;
+        let public_values: Vec<u8> = bincode::deserialize_from(&mut reader).unwrap();
+        let ppp: AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root> =
+            bincode::deserialize(&public_values).unwrap();
+
+        let out = ppp.outer_vk_hash;
+
+        let out_xxx =
+            <<<S as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::from_hash(
+                out,
+            );
+
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
-        let verification_result =
-            <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
-                AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-            >(&proof.clone().to_serialized_zk_proof(), &code_commitment);
+        let verification_result = <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
+            AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+        >(&proof.clone().to_serialized_zk_proof(), &out_xxx);
 
         let public_outputs = match verification_result {
             Ok(public_outputs) => public_outputs,
@@ -144,6 +155,11 @@ impl<S: Spec> ProverIncentives<S> {
                 ));
             }
         };
+
+        println!(
+            "XXXXXXXX Processing aggregated proof initial_slot_number: {} final_slot_number: {}",
+            public_outputs.initial_slot_number, public_outputs.final_slot_number
+        );
 
         tracing::debug!(
             %public_outputs.initial_slot_number,

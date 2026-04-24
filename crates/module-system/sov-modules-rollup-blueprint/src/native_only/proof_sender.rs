@@ -13,7 +13,7 @@ use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChalleng
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_sequencer::{ProofBlobSender, SerializedProofWithDetailsBytes};
 
-const MAX_FEE: Amount = Amount::new(10_000_000);
+const MAX_FEE: Amount = Amount::new(100_000_000);
 
 /// Adds metadata about gas & fees to the proof blob.
 pub struct SovApiProofSender<S: Spec> {
