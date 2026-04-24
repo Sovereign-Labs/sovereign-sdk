@@ -16,6 +16,9 @@ pub use mock_rollup::*;
 mod mock_sp1_rollup;
 pub use mock_sp1_rollup::*;
 
+mod chain_state_override;
+pub use chain_state_override::override_code_commitments_in_chain_state;
+
 mod celestia_rollup;
 pub use celestia_rollup::*;
 

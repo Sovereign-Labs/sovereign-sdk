@@ -20,7 +20,7 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::{SP1CryptoSpec, SP1};
+use sov_sp1_adapter::{SP1CryptoSpec, SP1MethodId, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
@@ -33,6 +33,20 @@ use crate::solana_offchain_endpoint::solana_offchain_router;
 #[derive(Default, Clone, Copy)]
 pub struct MockSp1DemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
+}
+
+impl<M> MockSp1DemoRollup<M> {
+    /// Computes the inner (state-transition) and outer (aggregation) code commitments
+    /// by setting up SP1 proving keys for the guest ELFs that this rollup runs.
+    pub fn compute_code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
+        let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
+        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
+        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
+
+        Ok((inner, outer))
+    }
 }
 
 type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;

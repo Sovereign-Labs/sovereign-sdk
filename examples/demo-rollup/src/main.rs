@@ -11,7 +11,8 @@ use sov_db::config::{
     RollupDbConfigWithCustomizations, VersionedColumnFamilyKind,
 };
 use sov_demo_rollup::{
-    CelestiaDemoRollup, ExternalMockDemoRollup, MockDemoRollup, MockSp1DemoRollup,
+    override_code_commitments_in_chain_state, CelestiaDemoRollup, ExternalMockDemoRollup,
+    MockDemoRollup, MockSp1DemoRollup,
 };
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -52,6 +53,12 @@ struct Args {
     /// Asserts that the rollup starts at a given height.
     #[arg(long, default_value = None)]
     start_at_rollup_height: Option<u64>,
+
+    /// When true, overrides `inner_code_commitment` and `outer_code_commitment`
+    /// in `chain_state.json` with values computed from the SP1 guest ELFs
+    /// before starting the rollup. Only meaningful when `zk_vm=sp1`.
+    #[arg(long, default_value_t = false)]
+    override_code_commitments: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -118,6 +125,7 @@ async fn run() -> anyhow::Result<()> {
                 prover_config,
                 start_at_rollup_height,
                 stop_at_rollup_height,
+                args.override_code_commitments,
             )
             .await
             .context("Failed to initialize SP1 MockDa rollup")?;
@@ -287,11 +295,35 @@ async fn new_rollup_with_sp1_mock_da(
     prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
+    override_code_commitments: bool,
 ) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on mock DA with SP1 zkVM"
     );
+
+    if override_code_commitments {
+        let (inner, outer) =
+            tokio::task::spawn_blocking(MockSp1DemoRollup::<Native>::compute_code_commitments)
+                .await
+                .context("SP1 code-commitment computation task panicked")?
+                .context("Failed to compute SP1 code commitments")?;
+
+        let chain_state_path = &rt_genesis_paths.chain_state_genesis_path;
+        override_code_commitments_in_chain_state(chain_state_path, &inner, &outer).with_context(
+            || {
+                format!(
+                    "Failed to override code commitments in {}",
+                    chain_state_path.display()
+                )
+            },
+        )?;
+
+        tracing::info!(
+            path = %chain_state_path.display(),
+            "Overrode inner/outer code commitments in chain_state.json",
+        );
+    }
 
     let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
         from_toml_path(rollup_config_path).with_context(|| {
