@@ -157,10 +157,12 @@ async fn run() -> anyhow::Result<()> {
 }
 
 fn parse_prover_config() -> anyhow::Result<RollupProverConfig> {
-    let Some(value) = option_env!("SOV_PROVER_MODE") else {
-        return Ok(RollupProverConfig::Disabled);
+    let value = match std::env::var("SOV_PROVER_MODE") {
+        Ok(v) => v,
+        Err(std::env::VarError::NotPresent) => return Ok(RollupProverConfig::Disabled),
+        Err(e) => return Err(e.into()),
     };
-    let config = std::str::FromStr::from_str(value).inspect_err(|&error| {
+    let config = std::str::FromStr::from_str(&value).inspect_err(|&error| {
         tracing::error!(value, ?error, "Unknown `SOV_PROVER_MODE` value; aborting");
     })?;
 
