@@ -117,8 +117,6 @@ pub use sov_rollup_interface::stf::{
 pub use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, CodeCommitmentHash, SerializedAggregatedProof,
 };
-#[cfg(feature = "native")]
-pub use sov_rollup_interface::zk::HostArgs;
 pub use sov_rollup_interface::zk::{
     CodeCommitmentFor, CodeCommitmentTrait, CryptoSpec, StateTransitionPublicData, ZkVerifier, Zkvm,
 };

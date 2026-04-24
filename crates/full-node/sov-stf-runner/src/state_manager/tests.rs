@@ -217,6 +217,80 @@ async fn test_instant_finality() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS);
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let (sender, mut receiver) = crate::processes::new_stf_info_channel(
+        state_manager.ledger_db.clone(),
+        NonZero::new(40).unwrap(),
+        NonZero::new(40).unwrap(),
+    )
+    .await?;
+    state_manager.stf_info_sender = Some(sender);
+
+    da_service.send_transaction(&[1; 10]).await.await??;
+    let filtered_block = da_service.get_block_at(1).await?;
+
+    let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
+        state_manager
+            .check_continuation(filtered_block.header(), &da_service)
+            .await?,
+    );
+    let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+        pre_state_root,
+        prover_storage,
+        &da_service,
+        filtered_block.clone(),
+    )
+    .await;
+    let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
+
+    let accepted_proof = SerializedAggregatedProof {
+        raw_aggregated_proof: vec![1, 2, 3],
+    };
+    let rejected_proof = SerializedAggregatedProof {
+        raw_aggregated_proof: vec![4, 5, 6],
+    };
+
+    state_manager
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            AggregatedProofs {
+                all_aggregated_proofs: vec![accepted_proof.clone(), rejected_proof.clone()],
+                accepted_aggregated_proofs: vec![accepted_proof.clone()],
+            },
+            Vec::<DummyProofReceipt>::new(),
+        )
+        .await?;
+
+    let latest_proof = state_manager
+        .ledger_db
+        .get_latest_aggregated_proof()
+        .await?
+        .expect("accepted aggregated proof should be published");
+    assert_eq!(accepted_proof, latest_proof.proof);
+
+    let stf_info = receiver
+        .read_next()
+        .await?
+        .expect("stf info should be available");
+    assert_eq!(
+        vec![accepted_proof, rejected_proof],
+        stf_info.aggregated_proofs
+    );
+
+    shutdown_sender.send(())?;
+
+    Ok(())
+}
+
 // Basic test for single reorg, but detailed check of what state root hash is returned.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
@@ -317,7 +391,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                     ledger_pre_state,
                     transition_witness,
                     slot_commit,
-                    Vec::new(),
+                    AggregatedProofs::default(),
                     Vec::<DummyProofReceipt>::new(),
                 )
                 .await?;
@@ -403,7 +477,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             ledger_pre_state,
             transition_witness,
             slot_commit,
-            Vec::new(),
+            AggregatedProofs::default(),
             Vec::<DummyProofReceipt>::new(),
         )
         .await?;
@@ -514,7 +588,7 @@ async fn test_progressing_with_shuffle(
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;
@@ -731,7 +805,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;
@@ -829,7 +903,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;
@@ -1273,7 +1347,7 @@ async fn process_continuous_transition(
             ledger_pre_state,
             transition_witness,
             slot_commit,
-            Vec::new(),
+            AggregatedProofs::default(),
             Vec::<DummyProofReceipt>::new(),
         )
         .await?;
@@ -1555,7 +1629,7 @@ async fn test_progressing_with_rewind_below_finalized(
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;
@@ -1623,7 +1697,7 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;
@@ -1722,7 +1796,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;
@@ -1774,7 +1848,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
             ledger_pre_state,
             transition_witness,
             slot_commit,
-            Vec::new(),
+            AggregatedProofs::default(),
             Vec::<DummyProofReceipt>::new(),
         )
         .await?;
@@ -1894,7 +1968,7 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
             )
             .await?;

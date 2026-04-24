@@ -14,7 +14,6 @@ use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
     DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, VersionReader,
-    ZkVerifier,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
@@ -79,11 +78,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
     /// Serialize proof blob and adds metadata needed for verification.
     type ProofSender: ProofSender + 'static;
-
-    /// Creates code commitments for the outer zkVM program.
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment;
 
     /// Creates RPC methods and REST APIs for the rollup.
     async fn create_endpoints(

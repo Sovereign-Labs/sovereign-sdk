@@ -48,6 +48,12 @@ pub enum BlockCandidateResolution<StfPreState, StateRoot, LedgerPreState> {
     },
 }
 
+#[derive(Default)]
+pub(crate) struct AggregatedProofs {
+    pub(crate) all_aggregated_proofs: Vec<SerializedAggregatedProof>,
+    pub(crate) accepted_aggregated_proofs: Vec<SerializedAggregatedProof>,
+}
+
 /// Structure that holds a block header and a pre-state root that was on this block header
 struct StateOnBlock<Da: DaSpec, StateRoot> {
     block_header: Da::BlockHeader,
@@ -330,7 +336,7 @@ where
         ledger_pre_state: Sm::LedgerState,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
-        aggregated_proofs: Vec<SerializedAggregatedProof>,
+        aggregated_proofs: AggregatedProofs,
         proof_receipts: Vec<PartialProofReceipt<Address, Da::Spec, StateRoot, StorageProof>>,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
@@ -349,12 +355,18 @@ where
             );
         }
 
-        let aggregated_proofs_count = aggregated_proofs.len();
+        let AggregatedProofs {
+            all_aggregated_proofs,
+            accepted_aggregated_proofs,
+        } = aggregated_proofs;
+        let aggregated_proofs_count = all_aggregated_proofs.len();
+        let accepted_aggregated_proofs_count = accepted_aggregated_proofs.len();
         let proof_receipts_count = proof_receipts.len();
         tracing::debug!(
             current_state_root = hex::encode(self.last_processed_finalized_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
+            accepted_aggregated_proofs = accepted_aggregated_proofs_count,
             proof_receipts = proof_receipts_count,
             "Saving changes after applying slot"
         );
@@ -423,6 +435,7 @@ where
             tracing::trace!("Going to materialize StateTransitionInfo");
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
+                aggregated_proofs: all_aggregated_proofs,
                 slot_number,
             };
             let stf_info_schema = stf_info_sender
@@ -432,7 +445,7 @@ where
             tracing::trace!("StateTransitionInfo is materialized into Ledger ChangeSet");
         }
 
-        for aggregated_proof in aggregated_proofs {
+        for aggregated_proof in accepted_aggregated_proofs {
             let this_height_data = self
                 .ledger_db
                 .materialize_aggregated_proof(slot_number, aggregated_proof)?;

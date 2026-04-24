@@ -8,11 +8,11 @@ use sov_db::schema::DeltaReader;
 use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockDaSpec, MockHash};
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::HasRestApi;
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier, Zkvm};
+use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, Zkvm};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
@@ -171,12 +171,6 @@ where
     type ProverService = <Prover as ProverFactory<S>>::ProverService;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        MockCodeCommitment::default()
-    }
 
     async fn create_endpoints(
         &self,

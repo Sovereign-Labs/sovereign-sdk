@@ -22,7 +22,7 @@ fn assert_slashed(
 ) {
     assert_matches!(
         &context.proof_receipt.unwrap().outcome,
-        ProofOutcome::Invalid(e) if matches!(e, InvalidProofError::ProverSlashed(s) if s == slash_reason)
+        ProofOutcome::Invalid(e, _) if matches!(e, InvalidProofError::ProverSlashed(s) if s == slash_reason)
     );
     assert!(TestProverIncentives::default()
         .bonded_provers

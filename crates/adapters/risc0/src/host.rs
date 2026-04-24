@@ -93,17 +93,12 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl ZkvmHost for Risc0Host<'static> {
-    type HostArgs = &'static [u8];
-
-    fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args)
-    }
-
     type Guest = Risc0Guest;
 
-    fn add_hint_and_run<T: serde::Serialize>(
+    fn add_hint_deferred_and_run<T: Serialize>(
         &mut self,
         item: &T,
+        _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
         self.replace_hints(item);
         let session = self.run_without_proving()?;

@@ -189,7 +189,7 @@ impl BenchCLICustomArgs {
         passed_admin: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
     ) -> Benchmark<S> {
         let risc0_host_args = mock_da_risc0_host_args();
-        let risc0_commitment = Risc0Host::from_args(&*risc0_host_args)
+        let risc0_commitment = Risc0Host::new(&risc0_host_args)
             .code_commitment()
             .unwrap_or_else(|e| panic!("Uncable to compute code commitment: {e}"));
 

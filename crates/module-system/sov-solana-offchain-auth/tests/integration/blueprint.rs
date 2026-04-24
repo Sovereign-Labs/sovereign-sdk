@@ -74,13 +74,6 @@ where
     type ProverService = <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::ProverService;
     type ProofSender = <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::ProofSender;
 
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as sov_stf_runner::processes::ProverService>::Verifier as sov_modules_api::ZkVerifier>::CodeCommitment
-    {
-        self.inner.create_outer_code_commitment()
-    }
-
     async fn create_endpoints(
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,

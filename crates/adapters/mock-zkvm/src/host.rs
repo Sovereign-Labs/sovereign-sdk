@@ -72,19 +72,17 @@ impl Default for MockZkvmHost {
 impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
     type Guest = MockZkGuest;
 
-    type HostArgs = ();
-
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
         Ok(MockCodeCommitment::default())
     }
 
-    fn add_hint_and_run<T: Serialize>(&mut self, item: &T) -> anyhow::Result<SerializedZkProof> {
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        _agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof> {
         self.add_hint_and_run_inner(item)
             .map(|raw_proof| SerializedZkProof { raw_proof })
-    }
-
-    fn from_args(_args: &Self::HostArgs) -> Self {
-        Self::new_non_blocking()
     }
 }
 

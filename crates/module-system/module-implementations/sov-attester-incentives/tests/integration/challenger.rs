@@ -99,7 +99,7 @@ fn setup_with_wrong_attestation() -> (
             assert: Box::new(move |result, state| {
                 assert_matches!(
                     result.proof_receipt.unwrap().outcome,
-                    ProofOutcome::Invalid(_)
+                    ProofOutcome::Invalid(_, _)
                 );
 
                 // Check that the attester was slashed
@@ -219,7 +219,7 @@ fn test_invalid_challenge_helper(
         input: ProofInput(challenge_blob),
         assert: Box::new(move |result, state| {
             match &result.proof_receipt.unwrap().outcome {
-                ProofOutcome::Invalid(InvalidProofError::ProverSlashed(msg)) => {
+                ProofOutcome::Invalid(InvalidProofError::ProverSlashed(msg), _) => {
                     assert_eq!(msg, &slashing_reason.to_string());
                 }
                 _ => panic!("Expected invalid outcome"),
