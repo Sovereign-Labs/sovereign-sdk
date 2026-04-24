@@ -20,7 +20,7 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::{SP1CryptoSpec, SP1};
+use sov_sp1_adapter::{SP1CryptoSpec, SP1MethodId, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
@@ -192,5 +192,15 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
+        let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
+        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
+        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
+
+        Ok((inner, outer))
     }
 }

@@ -9,7 +9,7 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::CryptoSpec;
@@ -20,9 +20,11 @@ use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, Sequencer
 use sov_risc0_adapter::host::Risc0Host;
 use sov_risc0_adapter::Risc0;
 use sov_risc0_adapter::Risc0CryptoSpec;
+use sov_risc0_adapter::Risc0MethodId;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
@@ -180,5 +182,11 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(Risc0MethodId, MockCodeCommitment)> {
+        let inner = Risc0Host::new(risc0::MOCK_DA_ELF).code_commitment()?;
+        let outer = MockZkvmHost::new_non_blocking().code_commitment()?;
+        Ok((inner, outer))
     }
 }

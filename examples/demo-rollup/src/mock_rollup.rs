@@ -9,7 +9,7 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec};
@@ -174,5 +174,11 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(MockCodeCommitment, MockCodeCommitment)> {
+        // MockZkvm has no ELF to derive a commitment from — the default zero
+        // commitment matches what `MockZkvmHost::code_commitment` returns.
+        Ok((MockCodeCommitment::default(), MockCodeCommitment::default()))
     }
 }

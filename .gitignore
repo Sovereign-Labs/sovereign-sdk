@@ -44,5 +44,7 @@ constants_output.csv
 
 .codex
 
+*.log
+
 # Temporary test data files
 examples/demo-rollup/tests/resync/data/.tmp*

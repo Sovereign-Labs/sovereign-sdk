@@ -13,7 +13,8 @@ use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
-    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, VersionReader,
+    CodeCommitmentFor, DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint,
+    VersionReader,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
@@ -143,6 +144,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         sequencer: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender>;
+
+    /// Computes the inner (state-transition) and outer (aggregation) code commitments
+    /// for this rollup's zkVM(s), typically derived from the guest ELF(s).
+    fn compute_code_commitments() -> anyhow::Result<(
+        CodeCommitmentFor<<Self::Spec as Spec>::InnerZkvm>,
+        CodeCommitmentFor<<Self::Spec as Spec>::OuterZkvm>,
+    )> {
+        anyhow::bail!("compute_code_commitments not supported.")
+    }
 
     /// Creates an instance of a LedgerDb.
     fn create_ledger_db(

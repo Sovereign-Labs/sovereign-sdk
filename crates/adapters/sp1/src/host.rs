@@ -256,6 +256,12 @@ pub fn verifying_key_from_elf(elf: &[u8]) -> anyhow::Result<SP1VerifyingKey> {
     Ok(pk.verifying_key().clone())
 }
 
+/// Computes the [`SP1MethodId`] (code commitment) for the given guest ELF.
+pub fn code_commitment_from_elf(elf: &[u8]) -> anyhow::Result<SP1MethodId> {
+    let vk = verifying_key_from_elf(elf)?;
+    Ok(SP1MethodId(vk.hash_u32()))
+}
+
 fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey)> {
     let prover = ProverClient::from_env();
 
