@@ -232,3 +232,145 @@ where
 
     Ok(())
 }
+
+// NOMT requires both user and kernel namespaces to be written together in each
+// commit; a user-only write triggers a harness panic. Mirrors the helper in
+// `structs.rs`.
+fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) {
+    let mut kernel_val: KernelStateValue<u8> =
+        KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
+    kernel_val.set(&0u8, state).unwrap();
+}
+
+// The following tests probe the claim that the state backend silently drops
+// zero-byte values on commit, i.e. `StateMap<_, ()>` and `StateValue<()>` appear
+// present in the same session but return `None` after a commit/readback cycle.
+
+#[test]
+fn test_jmt_state_map_unit_value_persists_across_commit() -> Result<(), Infallible> {
+    let mut storage_manager = SimpleJmtStorageManager::new();
+    storage_manager.genesis();
+    test_state_map_unit_value_persists::<TestJmtSpec, _>(storage_manager)
+}
+
+#[test]
+fn test_nomt_state_map_unit_value_persists_across_commit() -> Result<(), Infallible> {
+    let storage_manager = SimpleStorageManager::new();
+    test_state_map_unit_value_persists::<TestSpec, _>(storage_manager)
+}
+
+fn test_state_map_unit_value_persists<S, Sm>(mut storage_manager: Sm) -> Result<(), Infallible>
+where
+    S: Spec,
+    Sm: ForklessStorageManager<Storage = S::Storage>,
+{
+    let (storage, prev_root) = storage_manager.create_storage_with_root();
+    let mut state_map = StateMap::<u32, ()>::with_codec(Prefix::new(0, 0), BorshCodec);
+    let mut kernel = MockKernel::<S>::default();
+
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    state_map.set(&0x12345678u32, &(), &mut state)?;
+    assert_eq!(
+        state_map.get(&0x12345678u32, &mut state)?,
+        Some(()),
+        "StateMap<_, ()> should return Some(()) after set in the same session",
+    );
+    write_kernel_marker(&mut state);
+    commit_to_storage(state, storage, &mut kernel, &mut storage_manager, prev_root);
+
+    let (storage, _) = storage_manager.create_storage_with_root();
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage, &kernel, None);
+    assert_eq!(
+        state_map.get(&0x12345678u32, &mut state)?,
+        Some(()),
+        "StateMap<_, ()> should still return Some(()) after commit + fresh session",
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_jmt_state_map_bool_false_persists_across_commit() -> Result<(), Infallible> {
+    let mut storage_manager = SimpleJmtStorageManager::new();
+    storage_manager.genesis();
+    test_state_map_bool_false_persists::<TestJmtSpec, _>(storage_manager)
+}
+
+#[test]
+fn test_nomt_state_map_bool_false_persists_across_commit() -> Result<(), Infallible> {
+    let storage_manager = SimpleStorageManager::new();
+    test_state_map_bool_false_persists::<TestSpec, _>(storage_manager)
+}
+
+fn test_state_map_bool_false_persists<S, Sm>(mut storage_manager: Sm) -> Result<(), Infallible>
+where
+    S: Spec,
+    Sm: ForklessStorageManager<Storage = S::Storage>,
+{
+    let (storage, prev_root) = storage_manager.create_storage_with_root();
+    let mut state_map = StateMap::<u32, bool>::with_codec(Prefix::new(0, 0), BorshCodec);
+    let mut kernel = MockKernel::<S>::default();
+
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    state_map.set(&0x12345678u32, &false, &mut state)?;
+    assert_eq!(
+        state_map.get(&0x12345678u32, &mut state)?,
+        Some(false),
+        "StateMap<_, bool> should return Some(false) after set in the same session",
+    );
+    write_kernel_marker(&mut state);
+    commit_to_storage(state, storage, &mut kernel, &mut storage_manager, prev_root);
+
+    let (storage, _) = storage_manager.create_storage_with_root();
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage, &kernel, None);
+    assert_eq!(
+        state_map.get(&0x12345678u32, &mut state)?,
+        Some(false),
+        "StateMap<_, bool> control: Some(false) must persist across commit (harness sanity)",
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_jmt_state_value_unit_persists_across_commit() -> Result<(), Infallible> {
+    let mut storage_manager = SimpleJmtStorageManager::new();
+    storage_manager.genesis();
+    test_state_value_unit_persists::<TestJmtSpec, _>(storage_manager)
+}
+
+#[test]
+fn test_nomt_state_value_unit_persists_across_commit() -> Result<(), Infallible> {
+    let storage_manager = SimpleStorageManager::new();
+    test_state_value_unit_persists::<TestSpec, _>(storage_manager)
+}
+
+fn test_state_value_unit_persists<S, Sm>(mut storage_manager: Sm) -> Result<(), Infallible>
+where
+    S: Spec,
+    Sm: ForklessStorageManager<Storage = S::Storage>,
+{
+    let (storage, prev_root) = storage_manager.create_storage_with_root();
+    let mut state_value = StateValue::<()>::with_codec(Prefix::new(0, 0), BorshCodec);
+    let mut kernel = MockKernel::<S>::default();
+
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    state_value.set(&(), &mut state)?;
+    assert_eq!(
+        state_value.get(&mut state)?,
+        Some(()),
+        "StateValue<()> should return Some(()) after set in the same session",
+    );
+    write_kernel_marker(&mut state);
+    commit_to_storage(state, storage, &mut kernel, &mut storage_manager, prev_root);
+
+    let (storage, _) = storage_manager.create_storage_with_root();
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage, &kernel, None);
+    assert_eq!(
+        state_value.get(&mut state)?,
+        Some(()),
+        "StateValue<()> should still return Some(()) after commit + fresh session",
+    );
+
+    Ok(())
+}
