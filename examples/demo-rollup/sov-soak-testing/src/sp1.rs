@@ -82,6 +82,11 @@ impl ProverFactory<SP1Spec> for NetworkProverFactory {
             Duration::from_secs(600),
         )
     }
+
+    fn compute_inner_code_commitment() -> anyhow::Result<sov_sp1_adapter::SP1MethodId> {
+        let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        sov_sp1_adapter::host::code_commitment_from_elf(elf)
+    }
 }
 
 pub type NetworkProvingBlueprint = RtAgnosticBlueprint<

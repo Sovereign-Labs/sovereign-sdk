@@ -55,8 +55,8 @@ struct Args {
     start_at_rollup_height: Option<u64>,
 
     /// When true, overrides `inner_code_commitment` and `outer_code_commitment`
-    /// in `chain_state.json` with values computed from the SP1 guest ELFs
-    /// before starting the rollup. Only meaningful when `zk_vm=sp1`.
+    /// in `chain_state.json` with values computed from the selected rollup's
+    /// zkVM guest ELFs before starting the rollup.
     #[arg(long, default_value_t = false)]
     override_code_commitments: bool,
 }
@@ -113,6 +113,7 @@ async fn run() -> anyhow::Result<()> {
                 prover_config,
                 start_at_rollup_height,
                 stop_at_rollup_height,
+                args.override_code_commitments,
             )
             .await
             .context("Failed to initialize MockDa rollup")?;
@@ -138,6 +139,7 @@ async fn run() -> anyhow::Result<()> {
                 prover_config,
                 start_at_rollup_height,
                 stop_at_rollup_height,
+                args.override_code_commitments,
             )
             .await
             .context("Failed to initialize ExternalMockDa rollup")?;
@@ -150,6 +152,7 @@ async fn run() -> anyhow::Result<()> {
                 prover_config,
                 start_at_rollup_height,
                 stop_at_rollup_height,
+                args.override_code_commitments,
             )
             .await
             .context("Failed to initialize Celestia rollup")?;
@@ -232,14 +235,55 @@ fn example_tune_live_nomt_table_for_small_writes(
         ))
 }
 
+/// Computes code commitments for `B` and rewrites them into `chain_state.json`
+/// when `override_code_commitments` is true. No-op otherwise.
+async fn apply_code_commitments_override<B>(
+    rt_genesis_paths: &GenesisPaths,
+    override_code_commitments: bool,
+) -> anyhow::Result<()>
+where
+    B: FullNodeBlueprint<Native>,
+{
+    if !override_code_commitments {
+        return Ok(());
+    }
+
+    let (inner, outer) = tokio::task::spawn_blocking(B::compute_code_commitments)
+        .await
+        .context("Code-commitment computation task panicked")?
+        .context("Failed to compute code commitments")?;
+
+    let chain_state_path = &rt_genesis_paths.chain_state_genesis_path;
+    override_code_commitments_in_chain_state::<B::Spec>(chain_state_path, &inner, &outer)
+        .with_context(|| {
+            format!(
+                "Failed to override code commitments in {}",
+                chain_state_path.display()
+            )
+        })?;
+
+    tracing::info!(
+        path = %chain_state_path.display(),
+        "Overrode inner/outer code commitments in chain_state.json",
+    );
+    Ok(())
+}
+
 async fn new_rollup_with_celestia_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
     prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
+    override_code_commitments: bool,
 ) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
     debug!(config_path = rollup_config_path, "Starting Celestia rollup");
+
+    apply_code_commitments_override::<CelestiaDemoRollup<Native>>(
+        rt_genesis_paths,
+        override_code_commitments,
+    )
+    .await?;
 
     let rollup_config: RollupConfig<MultiAddressEvmSolana, CelestiaService> =
         from_toml_path(rollup_config_path).with_context(|| {
@@ -265,11 +309,18 @@ async fn new_rollup_with_mock_da(
     prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
+    override_code_commitments: bool,
 ) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on mock DA"
     );
+
+    apply_code_commitments_override::<MockDemoRollup<Native>>(
+        rt_genesis_paths,
+        override_code_commitments,
+    )
+    .await?;
 
     let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
         from_toml_path(rollup_config_path).with_context(|| {
@@ -302,28 +353,11 @@ async fn new_rollup_with_sp1_mock_da(
         "Starting rollup on mock DA with SP1 zkVM"
     );
 
-    if override_code_commitments {
-        let (inner, outer) =
-            tokio::task::spawn_blocking(MockSp1DemoRollup::<Native>::compute_code_commitments)
-                .await
-                .context("SP1 code-commitment computation task panicked")?
-                .context("Failed to compute SP1 code commitments")?;
-
-        let chain_state_path = &rt_genesis_paths.chain_state_genesis_path;
-        override_code_commitments_in_chain_state(chain_state_path, &inner, &outer).with_context(
-            || {
-                format!(
-                    "Failed to override code commitments in {}",
-                    chain_state_path.display()
-                )
-            },
-        )?;
-
-        tracing::info!(
-            path = %chain_state_path.display(),
-            "Overrode inner/outer code commitments in chain_state.json",
-        );
-    }
+    apply_code_commitments_override::<MockSp1DemoRollup<Native>>(
+        rt_genesis_paths,
+        override_code_commitments,
+    )
+    .await?;
 
     let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
         from_toml_path(rollup_config_path).with_context(|| {
@@ -349,11 +383,18 @@ async fn new_rollup_with_external_mock_da(
     prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
+    override_code_commitments: bool,
 ) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on external-mock DA"
     );
+
+    apply_code_commitments_override::<ExternalMockDemoRollup<Native>>(
+        rt_genesis_paths,
+        override_code_commitments,
+    )
+    .await?;
 
     let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaClient> =
         from_toml_path(rollup_config_path).with_context(|| {

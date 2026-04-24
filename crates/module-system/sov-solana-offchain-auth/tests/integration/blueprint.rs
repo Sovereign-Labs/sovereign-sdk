@@ -159,6 +159,13 @@ where
         self.inner
             .create_proof_sender(rollup_config, proof_blob_sender)
     }
+
+    fn compute_code_commitments() -> anyhow::Result<(
+        sov_modules_api::CodeCommitmentFor<<Self::Spec as Spec>::InnerZkvm>,
+        sov_modules_api::CodeCommitmentFor<<Self::Spec as Spec>::OuterZkvm>,
+    )> {
+        <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::compute_code_commitments()
+    }
 }
 
 /// Handler for accepting Solana offchain authenticated transactions

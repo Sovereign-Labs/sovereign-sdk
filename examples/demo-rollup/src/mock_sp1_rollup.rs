@@ -35,20 +35,6 @@ pub struct MockSp1DemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-impl<M> MockSp1DemoRollup<M> {
-    /// Computes the inner (state-transition) and outer (aggregation) code commitments
-    /// by setting up SP1 proving keys for the guest ELFs that this rollup runs.
-    pub fn compute_code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
-        let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
-        let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
-
-        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
-        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
-
-        Ok((inner, outer))
-    }
-}
-
 type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
@@ -206,5 +192,15 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
+        let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
+        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
+        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
+
+        Ok((inner, outer))
     }
 }

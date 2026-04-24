@@ -3,14 +3,14 @@
 use std::path::Path;
 
 use anyhow::Context as _;
-use sov_sp1_adapter::SP1MethodId;
+use sov_modules_api::{CodeCommitmentFor, Spec};
 
 /// Overrides `inner_code_commitment` and `outer_code_commitment` in the given
 /// `chain_state.json` file. All other fields are preserved.
-pub fn override_code_commitments_in_chain_state(
+pub fn override_code_commitments_in_chain_state<S: Spec>(
     chain_state_path: &Path,
-    inner: &SP1MethodId,
-    outer: &SP1MethodId,
+    inner: &CodeCommitmentFor<S::InnerZkvm>,
+    outer: &CodeCommitmentFor<S::OuterZkvm>,
 ) -> anyhow::Result<()> {
     let raw = std::fs::read_to_string(chain_state_path).with_context(|| {
         format!(
@@ -35,11 +35,11 @@ pub fn override_code_commitments_in_chain_state(
 
     obj.insert(
         "inner_code_commitment".to_string(),
-        serde_json::to_value(inner.0)?,
+        serde_json::to_value(inner)?,
     );
     obj.insert(
         "outer_code_commitment".to_string(),
-        serde_json::to_value(outer.0)?,
+        serde_json::to_value(outer)?,
     );
 
     let serialized = serde_json::to_string_pretty(&value)?;

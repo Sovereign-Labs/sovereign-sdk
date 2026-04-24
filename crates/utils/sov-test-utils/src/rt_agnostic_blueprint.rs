@@ -8,7 +8,7 @@ use sov_db::schema::DeltaReader;
 use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockDaSpec, MockHash};
-use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::HasRestApi;
