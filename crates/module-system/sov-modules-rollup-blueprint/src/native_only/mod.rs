@@ -26,6 +26,7 @@ use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
+use sov_sequencer::forwarding::ForwardingSequencer;
 use sov_sequencer::preferred::PreferredSequencer;
 use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
@@ -40,7 +41,7 @@ use sov_stf_runner::{
     StateTransitionRunner,
 };
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio::signal::unix::SignalKind;
@@ -235,9 +236,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_address,
                     )
                     .await?;
-                endpoints.axum_router = endpoints.axum_router.merge(
-                    SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
-                );
+                endpoints.axum_router =
+                    endpoints.axum_router.merge(SequencerApis::rest_api_server(
+                        sequencer.clone(),
+                        shutdown_receiver,
+                        rollup_config.runner.http_config.trusted_proxies.clone(),
+                    ));
 
                 Ok(SequencerCreationReceipt {
                     api_state: sequencer.api_state(),
@@ -277,9 +281,55 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_address,
                     )
                     .await?;
-                endpoints.axum_router = endpoints.axum_router.merge(
-                    SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
-                );
+                endpoints.axum_router =
+                    endpoints.axum_router.merge(SequencerApis::rest_api_server(
+                        sequencer.clone(),
+                        shutdown_receiver,
+                        rollup_config.runner.http_config.trusted_proxies.clone(),
+                    ));
+
+                Ok(SequencerCreationReceipt {
+                    api_state: sequencer.api_state(),
+                    endpoints,
+                    background_handles,
+                    proof_sender: Arc::new(sequencer),
+                    api_ledger_db: api_ledger_db.clone(),
+                    da_address,
+                })
+            }
+            SequencerKindConfig::Forwarding(seq_config) => {
+                let (sequencer, background_handles) =
+                    ForwardingSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
+                        state_update_receiver.clone(),
+                        da_sync_state,
+                        &rollup_config.sequencer.with_seq_config(seq_config.clone()),
+                        ledger_db.clone(),
+                        api_ledger_db.clone(),
+                        shutdown_sender,
+                    )
+                    .await?;
+
+                let da_address = seq_config.upstream_da_address.parse().map_err(|err| {
+                    anyhow::anyhow!(
+                        "Failed to parse forwarding sequencer upstream_da_address {:?}: {:?}",
+                        seq_config.upstream_da_address,
+                        err
+                    )
+                })?;
+                let mut endpoints = self
+                    .sequencer_additional_apis(
+                        sequencer.clone(),
+                        rollup_config,
+                        shutdown_receiver.clone(),
+                        da_address,
+                    )
+                    .await?;
+                endpoints.axum_router =
+                    endpoints.axum_router.merge(SequencerApis::rest_api_server(
+                        sequencer.clone(),
+                        shutdown_receiver,
+                        rollup_config.runner.http_config.trusted_proxies.clone(),
+                    ));
 
                 Ok(SequencerCreationReceipt {
                     api_state: sequencer.api_state(),
@@ -582,6 +632,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let endpoints = NodeEndpointsContainer {
             inner: endpoints,
             cors_configuration: rollup_config.runner.http_config.cors,
+            trusted_proxies: rollup_config.runner.http_config.trusted_proxies.clone(),
         };
 
         background_handles.extend(sequencer.background_handles);
@@ -633,6 +684,7 @@ fn validate_heights(
 pub struct NodeEndpointsContainer {
     inner: NodeEndpoints,
     cors_configuration: CorsConfiguration,
+    trusted_proxies: Vec<IpAddr>,
 }
 
 /// Dependencies needed to run the rollup.
@@ -667,6 +719,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
                 self.endpoints.inner.axum_router,
                 self.endpoints.inner.jsonrpsee_module,
                 self.endpoints.cors_configuration,
+                self.endpoints.trusted_proxies,
             )
             .await
             .context("Failed to start Axum Server")?;

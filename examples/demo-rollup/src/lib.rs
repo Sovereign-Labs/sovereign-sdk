@@ -35,7 +35,7 @@ pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(config_value!(
 fn sequencer_type(
     config: &sov_full_node_configs::sequencer::SequencerConfig<impl Copy>,
 ) -> sov_modules_api::SequencerType {
-    if config.is_preferred_sequencer() {
+    if config.is_preferred_sequencer() || config.is_forwarding_sequencer() {
         sov_modules_api::SequencerType::Preferred
     } else {
         sov_modules_api::SequencerType::NonPreferred

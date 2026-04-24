@@ -58,6 +58,7 @@ async fn start_node_with_genesis(
             c.aggregated_proof_block_jump = 5;
             c.max_infos_in_db = 30;
             c.max_channel_size = 20;
+            c.trusted_proxies = vec![std::net::Ipv4Addr::LOCALHOST.into()];
             c.extension = extension;
             if let SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
                 seq.ideal_lag_behind_finalized_slot = ideal_lag;

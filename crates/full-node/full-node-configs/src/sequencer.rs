@@ -13,6 +13,9 @@ pub enum SequencerKindConfig<Address: Copy> {
     Standard(StdSequencerConfig),
     /// A "Preferred" sequencer which is allowed to give soft confirmations.
     Preferred(PreferredSequencerConfig<Address>),
+    /// A "Forwarding" sequencer that serves reads locally and forwards tx submissions to a
+    /// remote preferred sequencer.
+    Forwarding(ForwardingSequencerConfig),
 }
 
 impl<Address: Copy + serde::Serialize + serde::de::DeserializeOwned> Default
@@ -105,6 +108,14 @@ impl<Addr: Copy> SequencerConfig<Addr> {
         matches!(
             self.sequencer_kind_config,
             SequencerKindConfig::Preferred(_)
+        )
+    }
+
+    /// Returns true if the sequencer uses [`SequencerKindConfig::Forwarding`].
+    pub fn is_forwarding_sequencer(&self) -> bool {
+        matches!(
+            self.sequencer_kind_config,
+            SequencerKindConfig::Forwarding(_)
         )
     }
 }
@@ -332,6 +343,34 @@ pub struct StdSequencerConfig {
     /// Maximum size of a batch. The sequencer will not build batches larger
     /// than this size.
     pub max_batch_size_bytes: Option<NonZero<usize>>,
+}
+
+/// Configuration for a `ForwardingSequencer`, a read-only sequencer that forwards tx submissions
+/// to a remote preferred sequencer while serving reads from the local node.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ForwardingSequencerConfig {
+    /// Base URL of the upstream preferred sequencer (e.g. `http://leader:12346`).
+    /// Transaction submissions are forwarded to this endpoint.
+    pub upstream_url: String,
+    /// DA address of the upstream preferred sequencer.
+    /// This is used by local read/simulation APIs so they match the upstream's preferred
+    /// sequencer behavior.
+    pub upstream_da_address: String,
+    /// HTTP request timeout in milliseconds for calls to the upstream sequencer.
+    #[serde(default = "default_forwarding_request_timeout_ms")]
+    pub request_timeout_ms: u64,
+    /// TTL in milliseconds for the cached readiness result from the upstream sequencer.
+    #[serde(default = "default_forwarding_readiness_cache_ms")]
+    pub readiness_cache_ms: u64,
+}
+
+const fn default_forwarding_request_timeout_ms() -> u64 {
+    10_000
+}
+
+const fn default_forwarding_readiness_cache_ms() -> u64 {
+    200
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]

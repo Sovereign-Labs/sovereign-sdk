@@ -7,6 +7,7 @@ pub(crate) mod metrics;
 pub mod rest_api;
 mod tx_status;
 
+pub mod forwarding;
 pub mod preferred;
 pub mod standard;
 #[cfg(feature = "test-utils")]
@@ -21,6 +22,7 @@ pub use common::ForcedTxBatchNotification;
 pub use common::StateUpdateNotification;
 pub use common::{react_to_state_updates, AcceptTxErrorCode, AcceptTxErrorDetails, Sequencer};
 pub use config::{SeqConfigExtension, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig};
+pub use forwarding::{ForwardingSequencer, ForwardingSequencerConfig};
 pub use preferred::SequencerRole;
 pub use rest_api::SequencerApis;
 use serde::Serialize;

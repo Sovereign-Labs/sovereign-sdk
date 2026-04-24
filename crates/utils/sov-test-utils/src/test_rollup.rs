@@ -1,6 +1,6 @@
 #![allow(dead_code, missing_docs)]
 use crate::postgres::connection_string_from_postgres_container;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::num::NonZero;
 use std::path::Path;
 use std::path::PathBuf;
@@ -109,6 +109,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub telegraf_address: sov_stf_runner::TelegrafSocketConfig,
     pub rollup_prover_config: RollupProverConfig,
     pub storage: StoragePath,
+    pub trusted_proxies: Vec<IpAddr>,
     pub axum_host: String,
     pub axum_port: u16,
     pub max_batch_size_bytes: usize,
@@ -347,15 +348,15 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
         let rollup_db_config =
             RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
+        let mut http_config =
+            HttpServerConfig::on_host_port(&self.config.axum_host, self.config.axum_port);
+        http_config.trusted_proxies = self.config.trusted_proxies.clone();
 
         RollupConfig {
             storage: rollup_db_config,
             runner: RunnerConfig {
                 da_polling_interval_ms: TEST_MOCK_DA_POLLING_INTERVAL.as_millis() as u64,
-                http_config: HttpServerConfig::on_host_port(
-                    &self.config.axum_host,
-                    self.config.axum_port,
-                ),
+                http_config,
                 concurrent_sync_tasks: 1,
                 pre_fetched_blocks_capacity: NonZero::new(3).unwrap(),
                 save_tx_bodies: false,
@@ -417,6 +418,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             rollup_prover_config: RollupProverConfig::Disabled,
             storage: storage_path,
             telegraf_address: MonitoringConfig::standard().telegraf_address,
+            trusted_proxies: Vec::new(),
             axum_host: "127.0.0.1".to_string(),
             axum_port: 0,
             blob_processing_timeout_secs: 60,
@@ -650,7 +652,8 @@ where
             )
             .await?;
 
-        let router = SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver.clone());
+        let router =
+            SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver.clone(), vec![]);
 
         let addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
         let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -1167,7 +1170,7 @@ where
         self.wait_for_node_synced().await.unwrap();
         // Extra
         let ideal_lag = match &self.rollup_config.sequencer.sequencer_kind_config {
-            SequencerKindConfig::Standard(_) => 5,
+            SequencerKindConfig::Standard(_) | SequencerKindConfig::Forwarding(_) => 5,
             SequencerKindConfig::Preferred(c) => c.ideal_lag_behind_finalized_slot,
         }
         .saturating_add(2);

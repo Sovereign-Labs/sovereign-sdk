@@ -60,6 +60,7 @@ bind_host = "127.0.0.1"
 bind_port = 12346
 # The fully qualified public name of the server, in case the rollup is running behind a proxy
 # public_address = "http://rollup.sovereign.xyz"
+# trusted_proxies = ["127.0.0.1"] # Trust X-Forwarded-For only from these proxy IPs
 # cors = "permissive" # CORS configuration: "permissive" or "restrictive"
 
 [monitoring]
@@ -135,6 +136,15 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 # [sequencer.standard]
 # mempool_max_txs_count = 10000 # Maximum transactions in mempool
 # max_batch_size_bytes = 1048576 # Maximum batch size
+
+# Alternative configuration for a forwarding sequencer. Serves reads locally and forwards tx
+# submissions to a canonical upstream preferred sequencer. Mutually exclusive with
+# [sequencer.preferred] and [sequencer.standard].
+# [sequencer.forwarding]
+# upstream_url = "http://localhost:12346"
+# upstream_da_address = "0x0000000000000000000000000000000000000000000000000000000000000000"
+# request_timeout_ms = 10000
+# readiness_cache_ms = 200
 
 [sequencer.extension]
 max_log_limit = 20000

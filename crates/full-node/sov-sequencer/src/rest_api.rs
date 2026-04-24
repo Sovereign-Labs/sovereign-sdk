@@ -1,6 +1,6 @@
 //! Utilities and definitions for the sequencer's REST APIs.
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::pin::Pin;
 use std::time::{Duration, Instant};
 
@@ -18,7 +18,7 @@ use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
+use sov_modules_api::{FullyBakedTx, RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
@@ -132,18 +132,28 @@ impl CompressionQuery {
 pub struct SequencerApis<Seq: Sequencer> {
     sequencer: Seq,
     shutdown_receiver: Receiver<()>,
+    trusted_proxies: Vec<IpAddr>,
 }
 
 impl<Seq: Sequencer> SequencerApis<Seq> {
     /// Creates a new Axum router for this sequencer.
-    pub fn rest_api_server(sequencer: Seq, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
+    pub fn rest_api_server(
+        sequencer: Seq,
+        shutdown_receiver: Receiver<()>,
+        trusted_proxies: Vec<IpAddr>,
+    ) -> axum::Router<()> {
         let state = Self {
             sequencer,
             shutdown_receiver,
+            trusted_proxies,
         };
 
         let router = axum::Router::new()
             .route("/sequencer/txs", axum::routing::post(Self::axum_accept_tx))
+            .route(
+                "/sequencer/txs/baked",
+                axum::routing::post(Self::axum_accept_baked_tx),
+            )
             .route("/sequencer/ready", axum::routing::get(Self::axum_get_ready))
             .route(
                 "/sequencer/txs/{tx_hash}/status",
@@ -227,7 +237,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         headers: axum::http::HeaderMap,
         ws: ws::WebSocketUpgrade,
     ) -> Result<impl IntoResponse, axum::response::Response> {
-        let ip_addr = get_client_ip(headers, Some(&connect_info))
+        let ip_addr = get_client_ip(headers, Some(&connect_info), &state.trusted_proxies)
             .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
 
         // Limit the incoming messsages directly on the web-socket
@@ -493,12 +503,11 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         state: State<Self>,
         tx_hash: Path<TxHash>,
     ) -> ApiResult<ApiAcceptedTx<Seq::Confirmation>> {
-        let tx = state.sequencer.get_tx(tx_hash.0).await.map_err(|e| {
+        let tx = state.sequencer.get_api_tx(tx_hash.0).await.map_err(|e| {
             tracing::error!(error = %e, "Error getting transaction");
             errors::database_error_500("Unable to retrieve transaction").into_response()
         })?;
         if let Some(tx) = tx {
-            let tx = ApiAcceptedTx::<_>::from_accepted_tx::<Seq::Rt, Seq::Spec>(tx);
             Ok(tx.into())
         } else {
             Err(errors::not_found_404("Transaction", tx_hash.0))
@@ -513,7 +522,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
     ) -> ApiResult<
         TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>,
     > {
-        let ip_addr = get_client_ip(headers, Some(&connect_info))
+        let ip_addr = get_client_ip(headers, Some(&connect_info), &state.trusted_proxies)
             .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
 
         let raw_tx = RawTx::new(tx.0.body.blob);
@@ -528,6 +537,39 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             .map_err(|e| {
                 if e.status.is_server_error() {
                     tracing::error!(error = ?e, "Error accepting transaction");
+                }
+                IntoResponse::into_response(e)
+            })?;
+
+        Ok(TxInfoWithConfirmation {
+            id: tx_with_hash.tx_hash,
+            confirmation: tx_with_hash.confirmation,
+            status: TxStatus::Submitted,
+        }
+        .into())
+    }
+
+    // Accepts a pre-baked transaction (already wrapped with its authenticator discriminant).
+    // Used by `ForwardingSequencer` to forward txs whose auth mode is not necessarily standard
+    // (e.g. EVM-authenticated txs).
+    async fn axum_accept_baked_tx(
+        connect_info: ConnectInfo<SocketAddr>,
+        headers: axum::http::HeaderMap,
+        state: State<Self>,
+        tx: Json<FullyBakedTx>,
+    ) -> ApiResult<
+        TxInfoWithConfirmation<DaBlobHash<<Seq::Da as DaService>::Spec>, Seq::Confirmation>,
+    > {
+        let ip_addr = get_client_ip(headers, Some(&connect_info), &state.trusted_proxies)
+            .map_err(|e| IntoResponse::into_response(e.to_error_object()))?;
+
+        let tx_with_hash = state
+            .sequencer
+            .accept_tx(tx.0, ip_addr)
+            .await
+            .map_err(|e| {
+                if e.status.is_server_error() {
+                    tracing::error!(error = ?e, "Error accepting baked transaction");
                 }
                 IntoResponse::into_response(e)
             })?;
@@ -754,7 +796,7 @@ pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
 }
 
 /// An accepted transaction, with the transaction body and confirmation data.
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,

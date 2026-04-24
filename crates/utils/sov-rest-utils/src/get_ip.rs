@@ -36,18 +36,20 @@ pub struct GetIPResult {
     pub maybe_ip: Arc<Result<IpAddr, ClientIpError>>,
 }
 
-/// Get the original sender's IP address.
+/// Get the sender's IP address, trusting `X-Forwarded-For` only from configured proxies.
 pub fn get_client_ip(
     headers: HeaderMap<HeaderValue>,
     connect_info: Option<&ConnectInfo<SocketAddr>>,
+    trusted_proxies: &[IpAddr],
 ) -> Result<IpAddr, ClientIpError> {
-    if headers.contains_key(&X_FORWARDED_FOR) {
+    let sock_addr = connect_info.ok_or(ClientIpError::MissingConnectInfo)?;
+
+    if trusted_proxies.contains(&sock_addr.ip()) && headers.contains_key(&X_FORWARDED_FOR) {
         return rightmost_x_forwarded_for(&headers)
             .map_err(ClientIpError::InvalidXForwardedForEncoding);
     }
 
     // Fallback to the socket address from ConnectInfo
-    let sock_addr = connect_info.ok_or(ClientIpError::MissingConnectInfo)?;
     Ok(sock_addr.ip())
 }
 
@@ -70,7 +72,8 @@ mod tests {
                 "x-forwarded-for",
                 HeaderValue::from_static(frowarded_for_ip),
             );
-            let ip = get_client_ip(headers, Some(&connect_info)).unwrap();
+            let ip =
+                get_client_ip(headers, Some(&connect_info), &[connect_info_ip.into()]).unwrap();
             assert_eq!(ip.to_string(), ip.to_string());
         }
 
@@ -81,29 +84,45 @@ mod tests {
                 "X-Forwarded-For",
                 HeaderValue::from_static(frowarded_for_ip),
             );
-            let ip = get_client_ip(headers, Some(&connect_info)).unwrap();
+            let ip =
+                get_client_ip(headers, Some(&connect_info), &[connect_info_ip.into()]).unwrap();
             assert_eq!(frowarded_for_ip.to_string(), ip.to_string());
         }
 
         // If x-forwarded-for is not set then get the ip from ConnectInfo
         {
             let headers = HeaderMap::new();
-            let ip = get_client_ip(headers, Some(&connect_info)).unwrap();
+            let ip = get_client_ip(headers, Some(&connect_info), &[]).unwrap();
             assert_eq!(connect_info_ip.to_string(), ip.to_string());
         }
 
-        // Many ips in x-forwarded-for
+        // Untrusted peers cannot spoof their source IP via x-forwarded-for.
+        {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "x-forwarded-for",
+                HeaderValue::from_static(frowarded_for_ip),
+            );
+            let ip = get_client_ip(headers, Some(&connect_info), &[]).unwrap();
+            assert_eq!(connect_info_ip.to_string(), ip.to_string());
+        }
+
+        // Many ips in x-forwarded-for from a trusted proxy
         {
             let many_ips = "223.223.223.223,323.323.323.32,123.123.123.123";
             let mut headers = HeaderMap::new();
             headers.insert("x-forwarded-for", HeaderValue::from_static(many_ips));
-            let ip = get_client_ip(headers, None).unwrap();
+            let ip =
+                get_client_ip(headers, Some(&connect_info), &[connect_info_ip.into()]).unwrap();
             assert_eq!(ip.to_string(), "123.123.123.123".to_string());
         }
     }
 
     #[test]
     fn test_get_invalid_ip() {
+        let connect_info_ip = Ipv4Addr::new(1, 2, 3, 4);
+        let connect_info = ConnectInfo(SocketAddr::V4(SocketAddrV4::new(connect_info_ip, 0)));
+
         // Test invalid ip format
         {
             let frowarded_for_ip = "123.123.123.1234";
@@ -112,7 +131,8 @@ mod tests {
                 "x-forwarded-for",
                 HeaderValue::from_static(frowarded_for_ip),
             );
-            let err = get_client_ip(headers, None).unwrap_err();
+            let err =
+                get_client_ip(headers, Some(&connect_info), &[connect_info_ip.into()]).unwrap_err();
             assert_eq!(
                 err,
                 ClientIpError::InvalidXForwardedForEncoding(Error::MalformedHeaderValue {
@@ -125,7 +145,7 @@ mod tests {
         // Test missing ip
         {
             let headers = HeaderMap::new();
-            let err = get_client_ip(headers, None).unwrap_err();
+            let err = get_client_ip(headers, None, &[]).unwrap_err();
             assert_eq!(err, ClientIpError::MissingConnectInfo);
         }
 
@@ -134,7 +154,8 @@ mod tests {
             let empty_ip = "";
             let mut headers = HeaderMap::new();
             headers.insert("x-forwarded-for", HeaderValue::from_static(empty_ip));
-            let err = get_client_ip(headers, None).unwrap_err();
+            let err =
+                get_client_ip(headers, Some(&connect_info), &[connect_info_ip.into()]).unwrap_err();
             assert_eq!(
                 err,
                 ClientIpError::InvalidXForwardedForEncoding(Error::MalformedHeaderValue {

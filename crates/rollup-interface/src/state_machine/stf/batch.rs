@@ -26,6 +26,7 @@ pub struct FullyBakedTx {
     pub data: Bytes,
     /// Sequencer-provided metadata for each transaction (e.g., timestamps).
     /// This data is NOT signed by users but is added by the sequencer.
+    /// Security invariant: human-readable/public inputs must never be allowed to set this field.
     #[serde_as(as = "Option<serde_with::base64::Base64>")]
     pub sequencing_data: Option<Bytes>,
 }
@@ -84,6 +85,8 @@ impl<'de> Deserialize<'de> for FullyBakedTx {
     where
         D: serde::Deserializer<'de>,
     {
+        let is_human_readable = deserializer.is_human_readable();
+
         #[derive(Deserialize)]
         struct FullyBakedTxHelper {
             #[serde(with = "serde_with::As::<serde_with::base64::Base64>")]
@@ -93,6 +96,12 @@ impl<'de> Deserialize<'de> for FullyBakedTx {
         }
 
         let helper = FullyBakedTxHelper::deserialize(deserializer)?;
+
+        if is_human_readable && helper.sequencing_data.is_some() {
+            return Err(serde::de::Error::custom(
+                "sequencing_data is internal-only and must not be accepted from human-readable inputs",
+            ));
+        }
 
         let total_size = helper.data.len() + helper.sequencing_data.as_ref().map_or(0, |d| d.len());
 
@@ -413,6 +422,38 @@ mod tests {
         let deserialized: FullyBakedTx = borsh::from_slice(&serialized).unwrap();
         assert_eq!(deserialized.data.as_ref(), &data);
         assert!(deserialized.sequencing_data.is_some());
+    }
+
+    #[test]
+    fn test_fullybaked_serde_json_rejects_sequencing_data() {
+        let data = vec![1u8; 1024];
+        let mut tx = FullyBakedTx::new(data);
+        tx.set_sequencing_metadata(&vec![2u8; 16]);
+
+        let serialized = serde_json::to_string(&tx).unwrap();
+
+        let result: Result<FullyBakedTx, _> = serde_json::from_str(&serialized);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("sequencing_data is internal-only"));
+    }
+
+    #[test]
+    fn test_fullybaked_bincode_allows_internal_sequencing_data() {
+        let data = vec![1u8; 1024];
+        let mut tx = FullyBakedTx::new(data.clone());
+        let seq_data = vec![2u8; 16];
+        let expected_sequencing_data = borsh::to_vec(&seq_data).unwrap();
+        tx.set_sequencing_metadata(&seq_data);
+
+        let serialized = bincode::serialize(&tx).unwrap();
+        let deserialized: FullyBakedTx = bincode::deserialize(&serialized).unwrap();
+
+        assert_eq!(deserialized.data.as_ref(), &data);
+        assert_eq!(
+            deserialized.sequencing_data.as_deref(),
+            Some(expected_sequencing_data.as_slice())
+        );
     }
 
     #[test]

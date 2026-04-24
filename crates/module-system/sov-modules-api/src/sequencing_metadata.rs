@@ -19,6 +19,7 @@ use crate::capabilities::SequencingDataTrait;
     BorshSerialize,
     BorshDeserialize,
     serde::Serialize,
+    serde::Deserialize,
 )]
 #[serde(transparent)]
 pub struct HDTimestamp(u128);

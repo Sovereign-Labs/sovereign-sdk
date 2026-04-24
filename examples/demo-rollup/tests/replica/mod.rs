@@ -98,7 +98,7 @@ async fn start_rollup_with_connection_string(
     .set_config(move |c| {
         c.blob_processing_timeout_secs = 300;
         match &mut c.sequencer_config {
-            SequencerKindConfig::Standard(_) => {
+            SequencerKindConfig::Standard(_) | SequencerKindConfig::Forwarding(_) => {
                 panic!("Expected preferred sequencer config");
             }
             SequencerKindConfig::Preferred(p) => {
