@@ -9,7 +9,7 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::CryptoSpec;
@@ -17,14 +17,9 @@ use sov_modules_api::{NodeEndpoints, Spec, Storage};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
-use sov_risc0_adapter::Risc0CryptoSpec;
-use sov_risc0_adapter::Risc0MethodId;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
@@ -34,18 +29,18 @@ use sov_stf_runner::RollupConfig;
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
-type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
+type Hasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 type NativeStorage =
     NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
 pub type ExternalMockRollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
-    Risc0,
+    MockZkvm,
     MockZkvm,
     MultiAddressEvmSolana,
     M,
-    Risc0CryptoSpec,
+    MockZkvmCryptoSpec,
     NativeStorage,
 >;
 
@@ -155,8 +150,7 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
     ) -> Self::ProverService {
-        let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
-
+        let inner_vm = MockZkvmHost::new_non_blocking();
         let outer_vm = MockZkvmHost::new_non_blocking();
         let da_verifier = Default::default();
 
@@ -184,9 +178,9 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         Ok(Self::ProofSender::new(sequence_number_provider))
     }
 
-    fn compute_code_commitments() -> anyhow::Result<(Risc0MethodId, MockCodeCommitment)> {
-        let inner = Risc0Host::new(risc0::MOCK_DA_ELF).code_commitment()?;
-        let outer = MockZkvmHost::new_non_blocking().code_commitment()?;
-        Ok((inner, outer))
+    fn compute_code_commitments() -> anyhow::Result<(MockCodeCommitment, MockCodeCommitment)> {
+        // MockZkvm has no ELF to derive a commitment from — the default zero
+        // commitment matches what `MockZkvmHost::code_commitment` returns.
+        Ok((MockCodeCommitment::default(), MockCodeCommitment::default()))
     }
 }
