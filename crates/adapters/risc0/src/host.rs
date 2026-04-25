@@ -3,6 +3,7 @@
 use crate::guest::Risc0Guest;
 use crate::Risc0MethodId;
 use risc0_zkvm::{ExecutorEnvBuilder, ExecutorImpl, Session};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::BlockProof;
@@ -116,7 +117,11 @@ impl ZkvmHost for Risc0Host<'static> {
 }
 
 impl OuterZkvmHost for Risc0Host<'static> {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + DeserializeOwned + Clone,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned + Clone,
+    >(
         &self,
         _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,

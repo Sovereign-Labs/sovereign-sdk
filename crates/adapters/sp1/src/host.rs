@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::guest::SP1Guest;
 use crate::SP1MethodId;
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::reexports::anyhow;
@@ -311,7 +312,11 @@ impl ZkvmHost for SP1Host {
 }
 
 impl OuterZkvmHost for SP1AggregationHost {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + DeserializeOwned + Clone,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned + Clone,
+    >(
         &self,
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,

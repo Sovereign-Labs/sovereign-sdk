@@ -19,7 +19,11 @@ use crate::zk::SerializedZkProof;
 /// Host-side interface for the outer zkVM that produces aggregated proofs.
 pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
     /// Aggregates per-block inner proofs into a single serialized aggregated proof.
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + DeserializeOwned + Clone,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned + Clone,
+    >(
         &self,
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
