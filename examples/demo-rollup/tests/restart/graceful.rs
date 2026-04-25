@@ -9,18 +9,23 @@ use crate::test_helpers::{
     build_transfer_token_tx_with_generation, test_genesis_source, DemoRollupSpec,
 };
 use anyhow::Context;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
+use sov_api_spec::types::{AggregatedProof as ApiAggregatedProof, Slot as ApiSlot};
 use sov_bank::config_gas_token_id;
 use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::{BlockProducingConfig, MockDaConfig};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::{CryptoSpec, OperatingMode, PrivateKey, PublicKey, Spec};
+use sov_modules_api::{CryptoSpec, OperatingMode, PrivateKey, PublicKey, Spec, Storage};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregateProofVerifier, AggregatedProofPublicData, SerializedAggregatedProof,
+};
 use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
@@ -40,6 +45,7 @@ const ROLLUP_START_TIMEOUT: Duration = Duration::from_secs(10);
 const ROLLUP_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const FULL_TEST_TIMEOUT: Duration = Duration::from_secs(300);
 const UNDER_LOAD_READY_TIMEOUT: Duration = Duration::from_secs(3);
+const AGGREGATED_PROOF_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 const MIN_SLEEP_MS: i64 = 10;
 const JITTER_MS: i64 = 15;
 const TX_SEND_INTERVAL_MS: u64 = 50;
@@ -182,6 +188,65 @@ fn initialize_logging_for_restart(collector: LogCollector, with_stdout: bool) {
     } else {
         subscriber.init();
     }
+}
+
+type DemoAggregatedProofPublicData = AggregatedProofPublicData<
+    <DemoRollupSpec as Spec>::Address,
+    <DemoRollupSpec as Spec>::Da,
+    <<DemoRollupSpec as Spec>::Storage as Storage>::Root,
+>;
+
+fn verify_aggregated_proof(
+    proof: ApiAggregatedProof,
+) -> anyhow::Result<DemoAggregatedProofPublicData> {
+    let proof: SerializedAggregatedProof = proof.try_into()?;
+    let verifier = AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default());
+
+    Ok(verifier.verify(&proof)?)
+}
+
+async fn produce_blocks_until_aggregated_proofs(
+    test_rollup: &TestRollup<MockDemoRollup<Native>>,
+    slot_subscription: &mut (impl Stream<Item = anyhow::Result<ApiSlot>> + Unpin),
+    aggregated_proof_subscription: &mut (impl Stream<Item = anyhow::Result<ApiAggregatedProof>> + Unpin),
+    number_of_proofs: usize,
+) -> anyhow::Result<Vec<DemoAggregatedProofPublicData>> {
+    let mut proofs = Vec::with_capacity(number_of_proofs);
+
+    for _ in 0..50 {
+        if proofs.len() >= number_of_proofs {
+            break;
+        }
+
+        test_rollup.da_service.produce_block_now().await?;
+        tokio::time::timeout(AGGREGATED_PROOF_WAIT_TIMEOUT, slot_subscription.next())
+            .await
+            .context("Timed out waiting for a slot after producing a DA block")?
+            .transpose()?
+            .context("Slot subscription closed unexpectedly")?;
+
+        while proofs.len() < number_of_proofs {
+            match tokio::time::timeout(
+                Duration::from_millis(150),
+                aggregated_proof_subscription.next(),
+            )
+            .await
+            {
+                Ok(Some(Ok(proof))) => proofs.push(verify_aggregated_proof(proof)?),
+                Ok(Some(Err(err))) => return Err(err.into()),
+                Ok(None) => anyhow::bail!("Aggregated proof subscription closed unexpectedly"),
+                Err(_) => break,
+            }
+        }
+    }
+
+    anyhow::ensure!(
+        proofs.len() >= number_of_proofs,
+        "Timed out waiting for {number_of_proofs} aggregated proofs, got {}",
+        proofs.len()
+    );
+
+    Ok(proofs)
 }
 
 /// Starts a TestNode, lets it run for some time and then shuts it down.
@@ -470,6 +535,112 @@ async fn flaky_test_start_stop_under_load_optimistic_non_instant_finality() -> a
     for seed in [42, 1337] {
         start_stop_under_load(OperatingMode::Optimistic, 3, seed, &collector).await?;
     }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_zk_restart_preserves_aggregated_proof_continuity() -> anyhow::Result<()> {
+    let collector = LogCollector::new(Level::WARN);
+    initialize_logging_for_restart(collector.clone(), false);
+    let log_start_idx = collector.records().len();
+
+    let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
+    let downtime_blocks = 4usize;
+    let proofs_before_restart = 2usize;
+    let proofs_after_restart = 2usize;
+
+    let rollup_builder = RollupBuilder::<MockDemoRollup<Native>>::new(
+        test_genesis_source(OperatingMode::Zk),
+        BlockProducingConfig::Manual,
+        0,
+    )
+    .enable_prover()
+    .set_config(|c| {
+        c.max_concurrent_blobs = 65_536;
+        c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
+        c.rollup_prover_config = RollupProverConfig::Prove;
+        c.aggregated_proof_block_jump = 2;
+        if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
+            sequencer_conf.disable_state_root_consistency_checks = true;
+            sequencer_conf.ideal_lag_behind_finalized_slot = 3;
+        }
+    })
+    .set_persistent_da();
+
+    let test_rollup = rollup_builder.start().await?;
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
+    let mut aggregated_proof_subscription = test_rollup
+        .client
+        .client
+        .subscribe_aggregated_proof()
+        .await?;
+
+    let proofs_before = produce_blocks_until_aggregated_proofs(
+        &test_rollup,
+        &mut slot_subscription,
+        &mut aggregated_proof_subscription,
+        proofs_before_restart,
+    )
+    .await?;
+    let last_proof_before_restart = proofs_before
+        .last()
+        .cloned()
+        .context("Expected at least one aggregated proof before restart")?;
+
+    let da_service = test_rollup.da_service.clone();
+    drop(slot_subscription);
+    drop(aggregated_proof_subscription);
+
+    let restart_builder = tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
+        .await
+        .context("Timed out shutting down rollup before restart")??;
+
+    da_service.produce_n_blocks_now(downtime_blocks).await?;
+
+    let restarted_rollup = restart_builder.start().await?;
+    restarted_rollup.wait_for_sequencer_ready().await?;
+
+    let mut restarted_slot_subscription = restarted_rollup.client.client.subscribe_slots().await?;
+    let mut restarted_aggregated_proof_subscription = restarted_rollup
+        .client
+        .client
+        .subscribe_aggregated_proof()
+        .await?;
+
+    let proofs_after = produce_blocks_until_aggregated_proofs(
+        &restarted_rollup,
+        &mut restarted_slot_subscription,
+        &mut restarted_aggregated_proof_subscription,
+        proofs_after_restart,
+    )
+    .await?;
+    let first_proof_after_restart = proofs_after
+        .first()
+        .cloned()
+        .context("Expected at least one aggregated proof after restart")?;
+
+    assert_eq!(
+        first_proof_after_restart.initial_slot_number.get(),
+        last_proof_before_restart.final_slot_number.get() + 1,
+    );
+    assert_eq!(
+        first_proof_after_restart.initial_state_root,
+        last_proof_before_restart.final_state_root,
+    );
+    assert_eq!(
+        first_proof_after_restart.genesis_state_root,
+        last_proof_before_restart.genesis_state_root,
+    );
+
+    drop(restarted_slot_subscription);
+    drop(restarted_aggregated_proof_subscription);
+    tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, restarted_rollup.shutdown())
+        .await
+        .context("Timed out shutting down restarted rollup")??;
+
+    assert_only_known_logs_since(&collector, log_start_idx);
     Ok(())
 }
 
