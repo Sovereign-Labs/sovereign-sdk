@@ -61,6 +61,22 @@ impl SP1AggregationHost {
         SP1MethodId(self.inner.outer_vk.hash_u32())
     }
 
+    /// Restores the latest accepted aggregated proof so the next aggregation
+    /// can continue the recursive chain after a restart.
+    pub fn restore_persisted_aggregated_proof(
+        &self,
+        aggregated_proof: SerializedAggregatedProof,
+    ) -> anyhow::Result<()> {
+        let aggregated_proof = crate::decode_sp1_proof(&aggregated_proof.to_serialized_zk_proof())?;
+        let mut prev_agg_proof = self
+            .inner
+            .prev_agg_proof
+            .lock()
+            .map_err(|e| anyhow::anyhow!("prev_agg_proof mutex poisoned: {e}"))?;
+        *prev_agg_proof = Some(aggregated_proof);
+        Ok(())
+    }
+
     /// Generates a compressed aggregation proof over the supplied inner
     /// `proofs_and_headers`.  If a previous aggregation proof exists it is
     /// included as a deferred proof input for recursive verification.
@@ -297,9 +313,29 @@ impl ZkvmHost for SP1Host {
 impl OuterZkvmHost for SP1AggregationHost {
     fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
         &self,
-        _genesis_state_root: Root,
+        genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
+        let has_prev_agg_proof = self
+            .inner
+            .prev_agg_proof
+            .lock()
+            .map_err(|e| anyhow::anyhow!("prev_agg_proof mutex poisoned: {e}"))?
+            .is_some();
+
+        if !has_prev_agg_proof {
+            let first_block_proof = headers_with_block_proofs
+                .first()
+                .map(|(_, proof)| proof)
+                .expect("create_aggregated_proof requires at least one block proof");
+
+            anyhow::ensure!(
+                serialize_for_continuity_check(&first_block_proof.st.initial_state_root)?
+                    == serialize_for_continuity_check(&genesis_state_root)?,
+                "Missing previous SP1 aggregated proof: this batch starts after genesis and would reset outer-proof continuity"
+            );
+        }
+
         let proofs_and_headers: Vec<BlockHeaderWithProof<Da>> = headers_with_block_proofs
             .into_iter()
             .map(|(header, proof)| BlockHeaderWithProof {
@@ -310,4 +346,15 @@ impl OuterZkvmHost for SP1AggregationHost {
 
         self.run(proofs_and_headers)
     }
+
+    fn restore_persisted_aggregated_proof(
+        &self,
+        aggregated_proof: SerializedAggregatedProof,
+    ) -> anyhow::Result<()> {
+        SP1AggregationHost::restore_persisted_aggregated_proof(self, aggregated_proof)
+    }
+}
+
+fn serialize_for_continuity_check<T: Serialize>(item: &T) -> anyhow::Result<Vec<u8>> {
+    bincode::serialize(item).map_err(Into::into)
 }

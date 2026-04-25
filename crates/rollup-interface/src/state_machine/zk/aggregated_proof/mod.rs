@@ -24,6 +24,16 @@ pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof>;
+
+    /// Restores the last accepted aggregated proof so future aggregations can
+    /// continue the same recursive chain after a restart.
+    fn restore_persisted_aggregated_proof(
+        &self,
+        aggregated_proof: SerializedAggregatedProof,
+    ) -> anyhow::Result<()> {
+        let _ = aggregated_proof;
+        Ok(())
+    }
 }
 
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].

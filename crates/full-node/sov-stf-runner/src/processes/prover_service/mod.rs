@@ -138,6 +138,16 @@ pub trait ProverService: Send + Sync + 'static {
         block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus>;
+
+    /// Restores the latest accepted aggregated proof so recursive outer provers
+    /// can continue their proof chain after restart.
+    fn restore_persisted_aggregated_proof(
+        &self,
+        aggregated_proof: SerializedAggregatedProof,
+    ) -> anyhow::Result<()> {
+        let _ = aggregated_proof;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

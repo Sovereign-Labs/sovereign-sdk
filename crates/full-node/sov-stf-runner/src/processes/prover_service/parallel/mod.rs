@@ -9,6 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use super::{ProverService, ProverServiceError, Verifier};
@@ -130,5 +131,13 @@ where
         self.prover_state
             .create_aggregated_proof(self.outer_vm.clone(), block_headers, genesis_state_root)
             .await
+    }
+
+    fn restore_persisted_aggregated_proof(
+        &self,
+        aggregated_proof: sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof,
+    ) -> anyhow::Result<()> {
+        self.outer_vm
+            .restore_persisted_aggregated_proof(aggregated_proof)
     }
 }

@@ -22,17 +22,8 @@ type TestParallelProverService = ParallelProverService<
     SP1,
 >;
 
-/// Tests proof generation using the SP1 parallel (local CPU) prover service.
-///
-/// This runs SP1 proofs locally using the parallel prover service for per-block.
-///
-/// Prerequisites:
-///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
-#[tokio::test(flavor = "multi_thread")]
-async fn test_parallel_proof_generation() {
-    // Use the mock prover: CPU proving is far too slow to run in tests.
-    std::env::set_var("SP1_PROVER", "mock");
-
+async fn make_parallel_prover_service() -> (TestParallelProverService, sov_sp1_adapter::SP1MethodId)
+{
     let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
     let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
@@ -66,6 +57,22 @@ async fn test_parallel_proof_generation() {
         da_verifier,
         prover_address,
     );
+
+    (prover_service, outer_code_commitment)
+}
+
+/// Tests proof generation using the SP1 parallel (local CPU) prover service.
+///
+/// This runs SP1 proofs locally using the parallel prover service for per-block.
+///
+/// Prerequisites:
+///   - SP1 guest ELF built (`cargo build` in the prover guest directory)
+#[tokio::test(flavor = "multi_thread")]
+async fn test_parallel_proof_generation() {
+    // Use the mock prover: CPU proving is far too slow to run in tests.
+    std::env::set_var("SP1_PROVER", "mock");
+
+    let (prover_service, outer_code_commitment) = make_parallel_prover_service().await;
 
     let (genesis_state_root, witnesses) = super::generate_witnesses().await;
 
@@ -126,4 +133,98 @@ async fn test_parallel_proof_generation() {
         <<DefaultSpec as Spec>::Storage as Storage>::Root,
     > = SP1Verifier::verify_with_proof(&status.to_serialized_zk_proof(), &outer_code_commitment)
         .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_parallel_proof_generation_restores_outer_continuity_after_restart() {
+    std::env::set_var("SP1_PROVER", "mock");
+    std::env::set_var("SOV_BENCH_BLOCKS", "3");
+
+    let split = 2usize;
+    let (genesis_state_root, witnesses) = super::generate_witnesses().await;
+    let mut witnesses = witnesses.into_iter();
+    let first_batch: Vec<_> = witnesses.by_ref().take(split).collect();
+    let second_batch: Vec<_> = witnesses.collect();
+    assert!(
+        !second_batch.is_empty(),
+        "test requires more than one aggregation batch"
+    );
+
+    let (first_prover_service, _) = make_parallel_prover_service().await;
+
+    let mut first_block_headers = Vec::new();
+    for (i, witness) in first_batch.into_iter().enumerate() {
+        first_block_headers.push(witness.da_block_header.clone());
+
+        let slot_number = SlotNumber::new(i as u64 + 1);
+        let state_transition_info = StateTransitionInfo::new(witness, slot_number);
+        let status = first_prover_service
+            .prove(state_transition_info)
+            .await
+            .expect("prove() should succeed");
+        assert!(matches!(
+            status,
+            ProofProcessingStatus::<ProofStateRoot, ProofWitness, MockDaSpec>::ProvingInProgress
+        ));
+    }
+
+    let restored_outer_proof = loop {
+        match first_prover_service
+            .create_aggregated_proof(&first_block_headers, &genesis_state_root)
+            .await
+        {
+            Ok(ProofAggregationStatus::Success(proof)) => break proof,
+            Ok(ProofAggregationStatus::ProofGenerationInProgress) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            Err(e) => panic!("First aggregation failed: {e}"),
+        }
+    };
+
+    let (second_prover_service, outer_code_commitment) = make_parallel_prover_service().await;
+    second_prover_service
+        .restore_persisted_aggregated_proof(restored_outer_proof)
+        .expect("restoring the last aggregated proof should succeed");
+
+    let mut second_block_headers = Vec::new();
+    for (i, witness) in second_batch.into_iter().enumerate() {
+        second_block_headers.push(witness.da_block_header.clone());
+
+        let slot_number = SlotNumber::new((split + i) as u64 + 1);
+        let state_transition_info = StateTransitionInfo::new(witness, slot_number);
+        let status = second_prover_service
+            .prove(state_transition_info)
+            .await
+            .expect("prove() should succeed");
+        assert!(matches!(
+            status,
+            ProofProcessingStatus::<ProofStateRoot, ProofWitness, MockDaSpec>::ProvingInProgress
+        ));
+    }
+
+    let status = loop {
+        match second_prover_service
+            .create_aggregated_proof(&second_block_headers, &genesis_state_root)
+            .await
+        {
+            Ok(ProofAggregationStatus::Success(proof)) => break proof,
+            Ok(ProofAggregationStatus::ProofGenerationInProgress) => {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            Err(e) => panic!("Second aggregation failed: {e}"),
+        }
+    };
+
+    let public_data: AggregatedProofPublicData<
+        <DefaultSpec as Spec>::Address,
+        MockDaSpec,
+        <<DefaultSpec as Spec>::Storage as Storage>::Root,
+    > = SP1Verifier::verify_with_proof(&status.to_serialized_zk_proof(), &outer_code_commitment)
+        .unwrap();
+    assert_eq!(public_data.initial_slot_number.get(), split as u64 + 1);
+    assert_eq!(
+        public_data.final_slot_number.get(),
+        (split + second_block_headers.len()) as u64
+    );
+    assert_eq!(public_data.genesis_state_root, genesis_state_root);
 }

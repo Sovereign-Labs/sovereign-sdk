@@ -24,6 +24,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
@@ -558,6 +559,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .await?
                 }
                 OperatingMode::Zk => {
+                    if let Some(aggregated_proof) = ledger_db.get_latest_aggregated_proof().await? {
+                        prover_service
+                            .restore_persisted_aggregated_proof(aggregated_proof.proof)
+                            .context("Failed to restore persisted aggregated proof")?;
+                    }
+
                     start_zk_workflow_in_background(
                         prover_service,
                         rollup_config.proof_manager.aggregated_proof_block_jump,

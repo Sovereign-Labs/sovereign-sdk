@@ -22,7 +22,7 @@ use sov_state::DefaultStorageSpec;
 use sov_test_utils::generators::BlobBuildingCtx;
 use tempfile::TempDir;
 
-use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
+use crate::prover::datagen::get_blocks_from_da;
 use crate::test_helpers::test_genesis_paths;
 
 type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
@@ -98,7 +98,7 @@ pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
 
     let mut witnesses = Vec::new();
 
-    for filtered_block in &mut blocks[..(DEFAULT_BLOCKS as usize)] {
+    for filtered_block in &mut blocks {
         let height = filtered_block.header().height();
         tracing::info!(
             "Requesting data for height {} and prev_state_root 0x{}",
