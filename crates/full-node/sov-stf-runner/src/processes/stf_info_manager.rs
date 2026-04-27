@@ -395,7 +395,7 @@ where
     }
 
     /// Gets [`StateTransitionInfo`] for the corresponding slot number
-    pub fn get(
+    fn get(
         &self,
         slot_number: SlotNumber,
     ) -> anyhow::Result<Option<StateTransitionInfo<StateRoot, Witness, Da>>> {
