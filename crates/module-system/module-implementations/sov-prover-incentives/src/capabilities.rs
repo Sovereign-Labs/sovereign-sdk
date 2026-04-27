@@ -3,9 +3,9 @@ use std::cmp::max;
 use sov_bank::{config_gas_token_id, Amount, Coins, IntoPayable};
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
-    AggregatedProofPublicData, Gas, GasSpec, GetGasPrice, InvalidProofError,
-    SerializedAggregatedProof, Spec, StateReader, Storage, TxState, VersionReader, ZkVerifier,
-    Zkvm,
+    AggregatedProofPublicData, CryptoSpec, Gas, GasSpec, GetGasPrice, InvalidProofError,
+    MeteredHasher, SerializedAggregatedProof, Spec, StateReader, Storage, TxState, VersionReader,
+    ZkVerifier, Zkvm,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::Kernel;
@@ -188,6 +188,38 @@ impl<S: Spec> ProverIncentives<S> {
             )));
         }
 
+        // Hash the *public outputs* (not the raw proof bytes) so we can
+        // recognise honest retries of an already-accepted proof. Real zkVMs
+        // (e.g. SP1) produce non-deterministic proof bytes — Groth16/PLONK
+        // commitments use fresh blinding randomness per run — so the same
+        // claim about the same window yields different `raw_aggregated_proof`
+        // bytes on each run but identical public outputs. Hashing the public
+        // outputs captures "same claim" semantics. A retry whose public
+        // outputs differ (e.g. different `rewarded_addresses`) is still a
+        // double-claim attempt and falls into the penalty path below.
+        let public_outputs_bytes = borsh::to_vec(&public_outputs)
+            .expect("AggregatedProofPublicData must be borsh-serializable");
+        let public_outputs_hash =
+            MeteredHasher::<_, <S::CryptoSpec as CryptoSpec>::Hasher>::digest(
+                &public_outputs_bytes,
+                state,
+            )
+            .map_err(Into::<anyhow::Error>::into)?;
+
+        if let Some(stored_hash) = self
+            .accepted_public_outputs_hashes
+            .get(&public_outputs.final_slot_number, state)
+            .map_err(Into::<anyhow::Error>::into)?
+        {
+            if stored_hash == public_outputs_hash {
+                tracing::debug!(
+                    final_slot_number = %public_outputs.final_slot_number,
+                    "Honest retry of an already-accepted proof (public outputs match); treating as no-op"
+                );
+                return Ok(public_outputs);
+            }
+        }
+
         match self.calculate_reward_and_remove(
             public_outputs.initial_slot_number,
             public_outputs.final_slot_number,
@@ -202,6 +234,13 @@ impl<S: Spec> ProverIncentives<S> {
             }
             Paycheck::Rewarded(total_reward) => {
                 self.reward_prover(total_reward, prover_address, state)?;
+                self.accepted_public_outputs_hashes
+                    .set(
+                        &public_outputs.final_slot_number,
+                        &public_outputs_hash,
+                        state,
+                    )
+                    .map_err(Into::<anyhow::Error>::into)?;
                 Ok(public_outputs)
             }
         }

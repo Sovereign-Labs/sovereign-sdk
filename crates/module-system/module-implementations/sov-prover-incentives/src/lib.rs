@@ -45,6 +45,20 @@ pub struct ProverIncentives<S: Spec> {
     #[state]
     pub last_claimed_reward: StateValue<SlotNumber>,
 
+    /// Hash of the public outputs of the most recently accepted aggregated
+    /// proof, keyed by its `final_slot_number`. We hash the public outputs
+    /// (not the raw proof bytes) because real zkVMs like SP1 produce
+    /// non-deterministic proof bytes for the same claim — Groth16/PLONK
+    /// commitments use fresh blinding randomness per run — so two honest
+    /// proofs over the same window have identical public outputs but
+    /// different `raw_aggregated_proof`. Used to recognise honest retries
+    /// (e.g. at-least-once DA resubmission after a crash) and treat them as
+    /// a no-op. A retry whose public outputs *differ* (e.g. different
+    /// `rewarded_addresses`) is still penalised — that is what the
+    /// proving-penalty exists for.
+    #[state]
+    pub accepted_public_outputs_hashes: StateMap<SlotNumber, [u8; 32]>,
+
     /// A penalty for provers who submit a proof for transitions that were already proven
     ///
     /// This quantity is expressed in gas units. When provers are penalized proofs, they will

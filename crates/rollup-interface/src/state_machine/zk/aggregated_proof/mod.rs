@@ -89,27 +89,51 @@ impl core::fmt::Display for CodeCommitmentHash {
 }
 
 /// Public data of an aggregated proof.
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Clone)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     /// Initial rollup height.
     pub initial_slot_number: SlotNumber,
     /// Final rollup height.
     pub final_slot_number: SlotNumber,
     /// The genesis state root of the aggregated proof.
+    #[borsh(bound(
+        serialize = "Root: borsh::ser::BorshSerialize",
+        deserialize = "Root: borsh::de::BorshDeserialize"
+    ))]
     pub genesis_state_root: Root,
     /// The initial state root of the aggregated proof.
+    #[borsh(bound(
+        serialize = "Root: borsh::ser::BorshSerialize",
+        deserialize = "Root: borsh::de::BorshDeserialize"
+    ))]
     pub initial_state_root: Root,
     /// The final state root of the aggregated proof.
+    #[borsh(bound(
+        serialize = "Root: borsh::ser::BorshSerialize",
+        deserialize = "Root: borsh::de::BorshDeserialize"
+    ))]
     pub final_state_root: Root,
     /// The initial slot hash of the aggregated proof.
+    #[borsh(bound(
+        serialize = "<Da as DaSpec>::SlotHash: borsh::ser::BorshSerialize",
+        deserialize = "<Da as DaSpec>::SlotHash: borsh::de::BorshDeserialize"
+    ))]
     pub initial_slot_hash: Da::SlotHash,
     /// The final slot hash of the aggregated proof.
+    #[borsh(bound(
+        serialize = "<Da as DaSpec>::SlotHash: borsh::ser::BorshSerialize",
+        deserialize = "<Da as DaSpec>::SlotHash: borsh::de::BorshDeserialize"
+    ))]
     pub final_slot_hash: Da::SlotHash,
     /// Inner verifying key hash of the aggregated proof circuit.
     pub inner_vkey_hash: CodeCommitmentHash,
     /// Outer verifying key hash of the aggregated proof circuit.
     pub outer_vk_hash: CodeCommitmentHash,
     /// These are the addresses of the provers who proved individual blocks.
+    #[borsh(bound(
+        serialize = "Address: borsh::ser::BorshSerialize",
+        deserialize = "Address: borsh::de::BorshDeserialize"
+    ))]
     pub rewarded_addresses: Vec<Address>,
 }
 
