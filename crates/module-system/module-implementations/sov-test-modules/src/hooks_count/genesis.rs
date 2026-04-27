@@ -9,8 +9,6 @@ impl<S: Spec> HooksCount<S> {
         self.begin_rollup_block_hook_count.set(&0, state)?;
         self.end_rollup_block_hook_count.set(&0, state)?;
         self.finalize_hook_count.set(&0, state)?;
-        self.pre_dispatch_tx_hook_count.set(&0, state)?;
-        self.post_dispatch_tx_hook_count.set(&0, state)?;
         Ok(())
     }
 }

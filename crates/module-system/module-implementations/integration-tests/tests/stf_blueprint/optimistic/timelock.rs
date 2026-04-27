@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 
 use sov_modules_api::capabilities::TimelockPolicy;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_test_modules::hooks_count::HooksCount;
+use sov_test_modules::hooks_count::TxHooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::{
@@ -15,7 +15,7 @@ use crate::stf_blueprint::S;
 generate_optimistic_runtime_with_kernel!(
     TimelockRuntime <=
     kernel_type: sov_test_utils::runtime::BasicKernel<'a, S>,
-    modules: [value_setter: ValueSetter<S>, hooks_count: HooksCount<S>],
+    modules: [value_setter: ValueSetter<S>, tx_hooks_count: TxHooksCount<S>],
     timelock_policy_wrapper: |call: &TimelockRuntimeCall<S>| {
         match call {
             TimelockRuntimeCall::ValueSetter(CallMessage::SetValue { value: 7, .. }) => {
@@ -73,7 +73,7 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
                 None
             );
             assert_eq!(
-                HooksCount::<S>::default()
+                TxHooksCount::<S>::default()
                     .post_dispatch_tx_hook_count
                     .get(state)
                     .unwrap_infallible(),
@@ -103,7 +103,7 @@ fn repeated_timelocked_call_still_registers_without_dispatching_call() {
                     None
                 );
                 assert_eq!(
-                    HooksCount::<S>::default()
+                    TxHooksCount::<S>::default()
                         .post_dispatch_tx_hook_count
                         .get(state)
                         .unwrap_infallible(),
@@ -133,7 +133,7 @@ fn untimelocked_call_dispatches_normally() {
                 Some(8)
             );
             assert_eq!(
-                HooksCount::<S>::default()
+                TxHooksCount::<S>::default()
                     .post_dispatch_tx_hook_count
                     .get(state)
                     .unwrap_infallible(),

@@ -10,7 +10,7 @@ use sov_modules_api::{
 };
 use sov_state::Storage;
 
-use super::HooksCount;
+use super::{HooksCount, TxHooksCount};
 
 impl<S: Spec> BlockHooks for HooksCount<S> {
     type Spec = S;
@@ -48,7 +48,7 @@ impl<S: Spec> BlockHooks for HooksCount<S> {
     }
 }
 
-impl<S: Spec> TxHooks for HooksCount<S> {
+impl<S: Spec> TxHooks for TxHooksCount<S> {
     type Spec = S;
 
     fn pre_dispatch_tx_hook<T: TxState<S>>(
