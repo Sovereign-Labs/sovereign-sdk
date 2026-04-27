@@ -133,9 +133,7 @@ pub trait HasCapabilities<S: Spec> {
     /// Returns the [`TimelockCapability`] implementation for this runtime.
     ///
     /// Timelocks are opt-in, so the default implementation is a no-op.
-    fn timelock(&mut self) -> impl TimelockCapability<S> {
-        ()
-    }
+    fn timelock(&mut self) -> impl TimelockCapability<S> {}
 }
 
 /// Indicates that a type provides the necessary kernel capabilities for a runtime.
