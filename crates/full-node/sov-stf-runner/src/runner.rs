@@ -121,11 +121,6 @@ where
     Stf: StateTransitionFunction<Da::Spec, PreState = Sm::StfState, ChangeSet = Sm::StfChangeSet>,
 {
     /// Creates a new [`StateTransitionRunner`].
-    ///
-    /// `latest_proof_final_slot` is the `final_slot_number` of the most recent
-    /// aggregated proof persisted in the ledger DB, as validated by the prover
-    /// service. When provided, the STF-info channel resumes at
-    /// `final_slot + 1` even if the in-DB STF-info pointer is ahead of it.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
         runner_config: RunnerConfig,

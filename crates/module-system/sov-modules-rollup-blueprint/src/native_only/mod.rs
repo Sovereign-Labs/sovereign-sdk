@@ -500,9 +500,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         // The prover service validates the latest aggregated proof persisted in
         // the ledger DB and returns its `final_slot_number`. We pass this slot
-        // into the runner so the STF-info stream resumes at `final_slot + 1`,
-        // keeping it contiguous with the on-disk proof even when the in-DB
-        // STF-info pointer is ahead of the latest verified proof.
+        // into the runner so the STF-info stream resumes at `final_slot + 1`.
         let (prover_service, latest_proof_final_slot) = if prover_config.is_enabled() {
             let (svc, slot) = self
                 .create_prover_service(prover_config, &rollup_config, &da_service, &ledger_db)
