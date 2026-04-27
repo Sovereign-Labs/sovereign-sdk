@@ -4,7 +4,7 @@ use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{HexHash, Spec, TxState};
+use crate::{err_detail, Error, ErrorContext, ErrorDetail, HexHash, Spec, TxState};
 
 /// Identifier for a timelock proposal.
 ///
@@ -22,7 +22,7 @@ pub struct TimelockPolicy {
 
 /// Errors returned when trying to unlock a timelock proposal.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "error_code", rename_all = "snake_case")]
 pub enum TimelockError {
     /// The proposal does not exist.
     #[error("Timelock proposal does not exist")]
@@ -35,7 +35,16 @@ pub enum TimelockError {
     ProposalExpired,
 }
 
+impl ErrorDetail for TimelockError {
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(err_detail!(self))
+    }
+}
+
 /// Capability for managing timelock proposals.
+///
+/// Methods return [`crate::Error`] so semantic timelock failures and state/gas access
+/// failures can use the same error path as [`crate::DispatchCall::dispatch_call`].
 pub trait TimelockCapability<S: Spec> {
     /// Returns true if the proposal exists for the provided address.
     fn has_proposal(
@@ -43,7 +52,7 @@ pub trait TimelockCapability<S: Spec> {
         address: &S::Address,
         proposal_id: &ProposalId,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<bool>;
+    ) -> Result<bool, Error>;
 
     /// Registers a new proposal for the provided address.
     fn register_proposal(
@@ -52,7 +61,7 @@ pub trait TimelockCapability<S: Spec> {
         proposal_id: ProposalId,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), Error>;
 
     /// Tries to unlock a proposal, consuming it if unlocking succeeds.
     fn try_unlock_proposal(
@@ -60,7 +69,7 @@ pub trait TimelockCapability<S: Spec> {
         address: &S::Address,
         proposal_id: &ProposalId,
         state: &mut impl TxState<S>,
-    ) -> Result<(), TimelockError>;
+    ) -> Result<(), Error>;
 }
 
 impl<S: Spec> TimelockCapability<S> for () {
@@ -69,7 +78,7 @@ impl<S: Spec> TimelockCapability<S> for () {
         _address: &S::Address,
         _proposal_id: &ProposalId,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<bool> {
+    ) -> Result<bool, Error> {
         Ok(false)
     }
 
@@ -79,7 +88,7 @@ impl<S: Spec> TimelockCapability<S> for () {
         _proposal_id: ProposalId,
         _policy: TimelockPolicy,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Error> {
         Ok(())
     }
 
@@ -88,8 +97,8 @@ impl<S: Spec> TimelockCapability<S> for () {
         _address: &S::Address,
         _proposal_id: &ProposalId,
         _state: &mut impl TxState<S>,
-    ) -> Result<(), TimelockError> {
-        Err(TimelockError::ProposalNotFound)
+    ) -> Result<(), Error> {
+        Err(TimelockError::ProposalNotFound.into())
     }
 }
 
@@ -99,7 +108,7 @@ impl<S: Spec, T: TimelockCapability<S> + ?Sized> TimelockCapability<S> for &mut 
         address: &S::Address,
         proposal_id: &ProposalId,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<bool> {
+    ) -> Result<bool, Error> {
         (**self).has_proposal(address, proposal_id, state)
     }
 
@@ -109,7 +118,7 @@ impl<S: Spec, T: TimelockCapability<S> + ?Sized> TimelockCapability<S> for &mut 
         proposal_id: ProposalId,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Error> {
         (**self).register_proposal(address, proposal_id, policy, state)
     }
 
@@ -118,7 +127,7 @@ impl<S: Spec, T: TimelockCapability<S> + ?Sized> TimelockCapability<S> for &mut 
         address: &S::Address,
         proposal_id: &ProposalId,
         state: &mut impl TxState<S>,
-    ) -> Result<(), TimelockError> {
+    ) -> Result<(), Error> {
         (**self).try_unlock_proposal(address, proposal_id, state)
     }
 }

@@ -7,8 +7,8 @@ use sov_modules_api::capabilities::{
     ProposalId, TimelockCapability, TimelockError, TimelockPolicy,
 };
 use sov_modules_api::{
-    Context, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, NotInstantiable,
-    Spec, TxState,
+    Context, DaSpec, Error, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi,
+    NotInstantiable, Spec, TxState,
 };
 
 /// Timelock module.
@@ -60,7 +60,7 @@ impl<S: Spec> TimelockCapability<S> for Timelock<S> {
         _address: &S::Address,
         _proposal_id: &ProposalId,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<bool> {
+    ) -> Result<bool, Error> {
         Ok(false)
     }
 
@@ -70,7 +70,7 @@ impl<S: Spec> TimelockCapability<S> for Timelock<S> {
         _proposal_id: ProposalId,
         _policy: TimelockPolicy,
         _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), Error> {
         Ok(())
     }
 
@@ -79,7 +79,7 @@ impl<S: Spec> TimelockCapability<S> for Timelock<S> {
         _address: &S::Address,
         _proposal_id: &ProposalId,
         _state: &mut impl TxState<S>,
-    ) -> Result<(), TimelockError> {
-        Err(TimelockError::ProposalNotFound)
+    ) -> Result<(), Error> {
+        Err(TimelockError::ProposalNotFound.into())
     }
 }
