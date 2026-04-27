@@ -1674,6 +1674,7 @@ dependencies = [
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
+ "sov-timelock",
  "sov-uniqueness",
  "strum 0.26.3",
 ]
@@ -5960,6 +5961,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-timelock",
  "sov-uniqueness",
 ]
 
@@ -6370,6 +6372,14 @@ dependencies = [
  "strum 0.26.3",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "sov-timelock"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sov-modules-api",
 ]
 
 [[package]]

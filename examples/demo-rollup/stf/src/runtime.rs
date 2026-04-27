@@ -185,6 +185,7 @@ where
             sequencer_registry: &mut self.0.sequencer_registry,
             accounts: &mut self.0.accounts,
             uniqueness: &mut self.0.uniqueness,
+            timelock: &mut self.0.timelock,
             chain_state: &mut self.0.chain_state,
             operator_incentives: &mut self.0.operator_incentives,
             prover_incentives: &mut self.0.prover_incentives,

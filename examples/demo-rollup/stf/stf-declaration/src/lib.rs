@@ -78,6 +78,8 @@ where
     pub accounts: sov_accounts::Accounts<S>,
     /// The uniqueness module.
     pub uniqueness: sov_uniqueness::Uniqueness<S>,
+    /// The timelock module.
+    pub timelock: sov_timelock::Timelock<S>,
     /// The Chain state module.
     pub chain_state: sov_chain_state::ChainState<S>,
     /// The Blob storage module.

@@ -9,7 +9,8 @@ use sov_chain_state::ChainState as ChainStateModule;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::{
     AuthorizationData, GasEnforcer, ProofProcessor, SequencerAuthorization, SequencerRemuneration,
-    SequencingDataHandler, TransactionAuthorizer,
+    SequencingDataHandler, TimelockCapability, TimelockError, TimelockPolicy,
+    TransactionAuthorizer,
 };
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
@@ -22,7 +23,7 @@ use sov_modules_api::{
     SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage, TxState,
 };
 use sov_modules_api::{ExecutionContext, GasSpec, VersionReader};
-use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::common::{HexHash, SlotNumber};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
 use sov_sequencer_registry::SequencerRegistry;
@@ -35,6 +36,7 @@ pub struct StandardProvenRollupCapabilities<'a, S: Spec, GasPayer = ()> {
     pub sequencer_registry: &'a mut SequencerRegistry<S>,
     pub accounts: &'a mut sov_accounts::Accounts<S>,
     pub uniqueness: &'a mut sov_uniqueness::Uniqueness<S>,
+    pub timelock: &'a mut sov_timelock::Timelock<S>,
     pub chain_state: &'a mut ChainStateModule<S>,
     pub operator_incentives: &'a mut sov_operator_incentives::OperatorIncentives<S>,
     pub prover_incentives: &'a mut sov_prover_incentives::ProverIncentives<S>,
@@ -233,6 +235,38 @@ impl<S: Spec, T> SequencerAuthorization<S> for StandardProvenRollupCapabilities<
         state: &mut impl InfallibleStateAccessor,
     ) -> bool {
         self.sequencer_registry.preferred_sequencer(state).as_ref() == Some(sequencer)
+    }
+}
+
+impl<S: Spec, T> TimelockCapability<S> for StandardProvenRollupCapabilities<'_, S, T> {
+    fn has_proposal(
+        &self,
+        address: &S::Address,
+        proposal_id: &HexHash,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<bool> {
+        self.timelock.has_proposal(address, proposal_id, state)
+    }
+
+    fn register_proposal(
+        &mut self,
+        address: &S::Address,
+        proposal_id: HexHash,
+        policy: TimelockPolicy,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        self.timelock
+            .register_proposal(address, proposal_id, policy, state)
+    }
+
+    fn try_unlock_proposal(
+        &mut self,
+        address: &S::Address,
+        proposal_id: &HexHash,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), TimelockError> {
+        self.timelock
+            .try_unlock_proposal(address, proposal_id, state)
     }
 }
 

@@ -133,6 +133,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-timelock"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "demo-stf"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

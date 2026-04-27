@@ -98,6 +98,7 @@ where
         read_genesis_json(&genesis_paths.accounts_genesis_path)?;
 
     let nonces_config = ();
+    let timelock_config = ();
 
     let evm_config: EvmGenesisConfig<S> = read_genesis_json(&genesis_paths.evm_genesis_path)?;
 
@@ -126,6 +127,7 @@ where
         prover_incentives_config,
         accounts_config,
         nonces_config,
+        timelock_config,
         chain_state_config,
         blob_storage_config,
         paymaster_config,

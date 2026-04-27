@@ -36,6 +36,14 @@ pub struct HooksCount<S: Spec> {
     #[state]
     pub finalize_hook_count: AccessoryStateValue<u32>,
 
+    /// The number of times the `pre_dispatch_tx` hook has been called.
+    #[state]
+    pub pre_dispatch_tx_hook_count: StateValue<u32>,
+
+    /// The number of times the `post_dispatch_tx` hook has been called.
+    #[state]
+    pub post_dispatch_tx_hook_count: StateValue<u32>,
+
     /// The latest state root stored by the begin slot hook
     #[state]
     pub latest_state_root: StateValue<<<S as Spec>::Storage as Storage>::Root>,

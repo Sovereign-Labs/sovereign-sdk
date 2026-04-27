@@ -5,7 +5,7 @@ pub mod capabilities;
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
+use capabilities::{HasCapabilities, HasKernel, TimelockPolicy, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
@@ -146,6 +146,11 @@ pub trait Runtime<S: Spec>:
         false
     }
 
+    /// Gets the timelock policy for a call message, if the call must be timelocked.
+    fn timelock_for_callmessage(&self, _call: &Self::Decodable) -> Option<TimelockPolicy> {
+        None
+    }
+
     /// Populates the pinned state cache for the given storage if supported
     fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
         None
@@ -210,6 +215,11 @@ pub trait Runtime<S: Spec>:
         _state: &mut impl crate::TxState<S>,
     ) -> bool {
         false
+    }
+
+    /// Gets the timelock policy for a call message, if the call must be timelocked.
+    fn timelock_for_callmessage(&self, _call: &Self::Decodable) -> Option<TimelockPolicy> {
+        None
     }
 }
 

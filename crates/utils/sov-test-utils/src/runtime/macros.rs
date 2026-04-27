@@ -20,6 +20,9 @@ macro_rules! generate_runtime_without_capabilities {
         // `fn(&Self, &::sov_modules_api::FullyBakedTx) -> u32`
         // If not provided, defaults to 0 priority (via Runtime trait default).
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        // Optional: A wrapper expression for custom transaction timelock policy logic.
+        // Expected signature for the expression: `fn(&Self::Decodable) -> Option<TimelockPolicy>`.
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma for the entire argument block
         $(,)?
@@ -49,6 +52,8 @@ macro_rules! generate_runtime_without_capabilities {
             pub accounts: $crate::runtime::Accounts<S>,
             /// The uniqueness module
             pub uniqueness: $crate::runtime::Uniqueness<S>,
+            /// The timelock module
+            pub timelock: $crate::runtime::Timelock<S>,
             /// The attester incentives module.
             pub attester_incentives: $crate::runtime::AttesterIncentives<S>,
             /// The chain state module.
@@ -87,6 +92,7 @@ macro_rules! generate_runtime_without_capabilities {
                     bank: minimal_config.config.bank,
                     accounts: minimal_config.config.accounts,
                     uniqueness: minimal_config.config.uniqueness,
+                    timelock: (),
                     chain_state: minimal_config.config.chain_state,
                     blob_storage: minimal_config.config.blob_storage,
                     operator_incentives : minimal_config.config.operator_incentives,
@@ -198,6 +204,15 @@ macro_rules! generate_runtime_without_capabilities {
             )?
 
             $(
+                fn timelock_for_callmessage(
+                    &self,
+                    call: &Self::Decodable,
+                ) -> Option<::sov_modules_api::capabilities::TimelockPolicy> {
+                    ($timelock_policy_wrapper_expr)(call)
+                }
+            )?
+
+            $(
                 fn populate_pinned_cache(storage: &S::Storage) -> Option<::sov_state::pinned_cache::PinnedCache> {
                     ($populate_pinned_cache_fn_expr)(storage)
                 }
@@ -242,6 +257,7 @@ macro_rules! generate_runtime {
         auth_type: $auth:ty,
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma
         $(,)?
@@ -256,6 +272,7 @@ macro_rules! generate_runtime {
             auth_type: $auth,
             auth_call_wrapper: $auth_wrapper
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
+            $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
         }
 
         impl<S> ::sov_modules_api::capabilities::HasCapabilities<S> for $id<S>
@@ -274,6 +291,7 @@ macro_rules! generate_runtime {
                         sequencer_registry: &mut self.sequencer_registry,
                         accounts: &mut self.accounts,
                         uniqueness: &mut self.uniqueness,
+                        timelock: &mut self.timelock,
                         chain_state: &mut self.chain_state,
                         operator_incentives: &mut self.operator_incentives,
                         prover_incentives: &mut self.prover_incentives,
@@ -295,6 +313,7 @@ macro_rules! generate_runtime {
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma
         $(,)?
@@ -310,6 +329,7 @@ macro_rules! generate_runtime {
             auth_call_wrapper: $auth_wrapper
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
+            $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
             $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
         }
 
@@ -329,6 +349,7 @@ macro_rules! generate_runtime {
                         sequencer_registry: &mut self.sequencer_registry,
                         accounts: &mut self.accounts,
                         uniqueness: &mut self.uniqueness,
+                        timelock: &mut self.timelock,
                         chain_state: &mut self.chain_state,
                         operator_incentives: &mut self.operator_incentives,
                         prover_incentives: &mut self.prover_incentives,
@@ -367,6 +388,7 @@ macro_rules! generate_optimistic_runtime_with_kernel {
         modules: [$($module_name:ident : $module_ty:path),*]
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         $(,)? // Optional trailing comma for the module list or wrapper
     ) => {
@@ -381,6 +403,7 @@ macro_rules! generate_optimistic_runtime_with_kernel {
             auth_call_wrapper: |auth_data| auth_data
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
+            $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
             $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
         }
     };

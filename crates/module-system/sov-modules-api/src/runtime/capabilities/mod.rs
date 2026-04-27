@@ -29,6 +29,8 @@ pub use chain_state::*;
 mod sequencing_data;
 pub use sequencing_data::*;
 pub use sov_rollup_interface::common::RollupHeight;
+mod timelock;
+pub use timelock::*;
 
 use crate::Spec;
 
@@ -63,6 +65,7 @@ pub trait HasCapabilities<S: Spec> {
         + ProofProcessor<S>
         + SequencingDataHandler<S, SequencingData = Self::SequencingData>
         + SequencerRemuneration<S>
+        + TimelockCapability<S>
     where
         Self: 'a;
 
@@ -125,6 +128,13 @@ pub trait HasCapabilities<S: Spec> {
     fn sequencing_data_handler(
         &mut self,
     ) -> impl SequencingDataHandler<S, SequencingData = Self::SequencingData> {
+        self.capabilities().inner
+    }
+
+    /// Returns the [`TimelockCapability`] implementation on [`HasCapabilities::Capabilities`].
+    ///
+    /// This method can be overridden to provide a custom implementation.
+    fn timelock(&mut self) -> impl TimelockCapability<S> {
         self.capabilities().inner
     }
 }

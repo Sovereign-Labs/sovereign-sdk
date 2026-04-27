@@ -41,6 +41,7 @@ use sov_rollup_interface::stf::DiscardedBlob;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 pub use sov_sequencer_registry::{self, SequencerRegistry, SequencerRegistryConfig};
 use sov_state::{DefaultStorageSpec, Storage, StorageProof};
+pub use sov_timelock::Timelock;
 pub use sov_uniqueness::Uniqueness;
 pub use sov_value_setter::{
     CallMessage as ValueSetterCallMessage, Event as ValueSetterEvent, ValueSetter,
@@ -48,7 +49,7 @@ pub use sov_value_setter::{
 };
 use tokio::sync::watch::{self};
 pub use {
-    sov_accounts, sov_attester_incentives, sov_bank, sov_blob_storage, sov_paymaster,
+    sov_accounts, sov_attester_incentives, sov_bank, sov_blob_storage, sov_paymaster, sov_timelock,
     sov_value_setter,
 };
 

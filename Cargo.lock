@@ -3626,6 +3626,7 @@ dependencies = [
  "sov-synthetic-load",
  "sov-test-modules",
  "sov-test-utils",
+ "sov-timelock",
  "sov-uniqueness",
  "strum 0.26.3",
 ]
@@ -5752,6 +5753,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-test-modules",
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
@@ -11422,6 +11424,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-timelock",
  "sov-uniqueness",
 ]
 
@@ -13005,6 +13008,7 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-state",
  "sov-stf-runner",
+ "sov-timelock",
  "sov-uniqueness",
  "sov-universal-wallet",
  "sov-value-setter",
@@ -13017,6 +13021,14 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "tracing-subscriber 0.3.20",
+]
+
+[[package]]
+name = "sov-timelock"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sov-modules-api",
 ]
 
 [[package]]
