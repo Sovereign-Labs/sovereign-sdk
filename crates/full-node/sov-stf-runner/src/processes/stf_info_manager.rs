@@ -117,22 +117,36 @@ impl<
                     .await?
                     .unwrap_or(SlotNumber::ONE);
 
-                assert_eq!(
-                    ledger_next_height_to_receive.get(),
-                    next_rollup_height_to_receive,
-                    "The next height to receive should be the same as the one stored in the db"
+                // The in-memory pointer can diverge from the DB pointer in
+                // either direction when `new_stf_info_channel` realigned it
+                // to the latest verified aggregated proof:
+                // - DB ahead of in-memory: the prover bumped the DB pointer
+                //   as soon as a proof was submitted to DA, but the proof's
+                //   round-trip didn't complete before shutdown.
+                // - DB behind in-memory: the in-memory counter advanced
+                //   after a successful aggregation but no later slot was
+                //   materialized to persist the bump.
+                // Either way, the in-memory value is re-persisted on the
+                // next `materialize_stf_info` call.
+                let _ = ledger_next_height_to_receive;
+
+                // Sanity check for `write_rollup_height & next_rollup_height_to_receive`.
+                // After a realign-forward in `new_stf_info_channel`, the
+                // in-memory pointer can sit exactly one slot beyond the last
+                // written STF info (the receiver is ready to consume the very
+                // next slot once it's materialized).
+                assert!(
+                    write_rollup_height.get() + 1 >= next_rollup_height_to_receive,
+                    "The `write_rollup_height` ({write_rollup_height}) is more than one slot behind `next_rollup_height_to_receive` ({next_rollup_height_to_receive})"
                 );
 
-                // Sanity check for `write_rollup_height & next_rollup_height_to_receive`
+                let outstanding = write_rollup_height
+                    .get()
+                    .saturating_sub(next_rollup_height_to_receive);
                 assert!(
-                    write_rollup_height.get() >= next_rollup_height_to_receive,
-                    "The `write_rollup_height` should always be greater than the `next_rollup_height_to_receive`"
-                );
-
-                assert!(
-                    (write_rollup_height.get() - next_rollup_height_to_receive) <= self.max_nb_of_infos_in_db.get(),
+                    outstanding <= self.max_nb_of_infos_in_db.get(),
                     "Too many STF infos in the db: {}, vs max allowed {} last_submitted={} write={}",
-                    write_rollup_height.get() - next_rollup_height_to_receive,
+                    outstanding,
                     self.max_nb_of_infos_in_db,
                     next_rollup_height_to_receive,
                     write_rollup_height,
@@ -189,6 +203,7 @@ pub async fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     ledger_db: LedgerDb,
     max_channel_size: NonZero<u64>,
     max_nb_of_infos_in_db: NonZero<u64>,
+    latest_proof_final_slot: Option<SlotNumber>,
 ) -> anyhow::Result<(
     Sender<StateRoot, Witness, Da>,
     Receiver<StateRoot, Witness, Da>,
@@ -207,10 +222,38 @@ pub async fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
-    let next_height_to_receive = ledger_db
+    let stored_next_height_to_receive = ledger_db
         .get_stf_info_next_slot_number_to_receive()
         .await?
         .unwrap_or(SlotNumber::ONE);
+
+    // Anchor the resume point to the latest verified aggregated proof. The
+    // STF-info pointer in the DB is unreliable across restarts: it can be
+    // ahead of the verified proof (the prover submitted a proof to DA whose
+    // round-trip didn't complete before shutdown) or behind it (the in-memory
+    // counter advanced after a successful aggregation but no later slot was
+    // materialized to persist it). The verified proof on disk is the only
+    // self-consistent record of what's been committed, so we resume from
+    // `final_slot + 1` whenever we have one. The atomic is re-persisted to
+    // the DB on the next `materialize_stf_info` call.
+    //
+    // A proof covering up to genesis carries no useful anchor and is treated
+    // as no proof at all, in which case we trust the stored DB pointer.
+    let next_height_to_receive = match latest_proof_final_slot {
+        Some(final_slot) if final_slot > SlotNumber::GENESIS => {
+            let anchor = final_slot.saturating_add(1);
+            if anchor != stored_next_height_to_receive {
+                tracing::warn!(
+                    stored = %stored_next_height_to_receive,
+                    anchor = %anchor,
+                    %final_slot,
+                    "Realigning STF-info next_height_to_receive to stay contiguous with the latest verified aggregated proof"
+                );
+            }
+            anchor
+        }
+        _ => stored_next_height_to_receive,
+    };
 
     let next_height_to_receive_ref = Arc::new(AtomicU64::new(next_height_to_receive.get()));
 
@@ -475,6 +518,7 @@ mod tests {
             ledger_db.clone(),
             NonZero::new(max_channel_size).unwrap(),
             NonZero::new(max_nb_of_infos_in_db).unwrap(),
+            None,
         )
         .await?;
 

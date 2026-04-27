@@ -121,6 +121,11 @@ where
     Stf: StateTransitionFunction<Da::Spec, PreState = Sm::StfState, ChangeSet = Sm::StfChangeSet>,
 {
     /// Creates a new [`StateTransitionRunner`].
+    ///
+    /// `latest_proof_final_slot` is the `final_slot_number` of the most recent
+    /// aggregated proof persisted in the ledger DB, as validated by the prover
+    /// service. When provided, the STF-info channel resumes at
+    /// `final_slot + 1` even if the in-DB STF-info pointer is ahead of it.
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub async fn new(
         runner_config: RunnerConfig,
@@ -139,6 +144,7 @@ where
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
+        latest_proof_final_slot: Option<SlotNumber>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -172,6 +178,7 @@ where
                 ledger_db.clone(),
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
+                latest_proof_final_slot,
             )
             .await?;
 

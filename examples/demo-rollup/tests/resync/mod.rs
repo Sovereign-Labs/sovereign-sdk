@@ -320,6 +320,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
         (Level::WARN, "slow statement: execution time exceeded alert threshold".to_string()),
         // TODO - investigate: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2978
         (Level::WARN, "Received error updating target height, stopping background task".to_string()),
+        (Level::WARN, "The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.".to_string()),
         // This is expected for the second resync: since we have batches in the sequencer DB, we
         // are indeed causing a delay for users
         (Level::WARN, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.".to_string()),

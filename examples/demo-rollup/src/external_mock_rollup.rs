@@ -9,7 +9,9 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
+use sov_mock_zkvm::{
+    MockCodeCommitment, MockZkVerifier, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost,
+};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::CryptoSpec;
@@ -18,8 +20,13 @@ use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregateProofVerifier, AggregatedProofPublicData,
+};
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
@@ -149,17 +156,42 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &LedgerDb,
+    ) -> (Self::ProverService, Option<SlotNumber>) {
+        let previous_aggregated_proof = ledger_db
+            .get_latest_aggregated_proof()
+            .await
+            .expect("Failed to read latest aggregated proof from ledger DB")
+            .map(|response| response.proof);
+
+        // Validate the persisted proof and extract the `final_slot_number` so
+        // the runner can rewind the STF-info stream to `final_slot + 1`.
+        let latest_proof_final_slot = previous_aggregated_proof.as_ref().map(|proof| {
+            let verifier =
+                AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default());
+            let public_data: AggregatedProofPublicData<
+                <Self::Spec as Spec>::Address,
+                MockDaSpec,
+                <<Self::Spec as Spec>::Storage as Storage>::Root,
+            > = verifier
+                .verify(proof)
+                .expect("Persisted aggregated proof failed verification");
+            public_data.final_slot_number
+        });
+
         let inner_vm = MockZkvmHost::new_non_blocking();
-        let outer_vm = MockZkvmHost::new_non_blocking();
+        let outer_vm =
+            MockZkvmHost::new_non_blocking_with_previous_proof(previous_aggregated_proof);
         let da_verifier = Default::default();
 
-        ParallelProverService::new_with_default_workers(
+        let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
             rollup_config.proof_manager.prover_address,
-        )
+        );
+
+        (prover, latest_proof_final_slot)
     }
 
     fn create_storage_manager(

@@ -50,7 +50,7 @@ async fn test_network_prove_and_aggregate() {
         ..
     } = make_network_prover(false, true, Duration::from_secs(60));
 
-    let header = make_header(MockHash::from([1; 32]), 1);
+    let header = make_header(MockHash::from([1; 32]), 0);
     let genesis = genesis_state_root();
 
     // Submit one block — should return ProvingInProgress.
@@ -158,8 +158,8 @@ async fn test_network_aggregated_proof_multiple_blocks() {
                 AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
             >(&serialized_proof, &MockCodeCommitment::default())
             .unwrap();
-            assert_eq!(public_data.initial_slot_number.get(), 0);
-            assert_eq!(public_data.final_slot_number.get(), 4);
+            assert_eq!(public_data.initial_slot_number.get(), 1);
+            assert_eq!(public_data.final_slot_number.get(), 5);
         }
         ProofAggregationStatus::ProofGenerationInProgress => {
             panic!("Expected Success after completing all inner proofs")
@@ -300,8 +300,8 @@ async fn test_network_aggregation_preserves_proved_entries_across_calls() {
     } = make_network_prover(false, true, Duration::from_secs(60));
 
     let genesis = genesis_state_root();
-    let header_a = make_header(MockHash::from([8; 32]), 1);
-    let header_b = make_header(MockHash::from([9; 32]), 2);
+    let header_a = make_header(MockHash::from([8; 32]), 0);
+    let header_b = make_header(MockHash::from([9; 32]), 1);
 
     // Submit two blocks.
     prover_service

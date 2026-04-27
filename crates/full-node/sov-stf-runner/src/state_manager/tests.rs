@@ -172,6 +172,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         state_manager.ledger_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
+        None,
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
@@ -228,6 +229,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
         state_manager.ledger_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
+        None,
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
