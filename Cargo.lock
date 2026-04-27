@@ -9550,7 +9550,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=00d4a84f0b9256da681e2138949e01e4c138a5ae#00d4a84f0b9256da681e2138949e01e4c138a5ae"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=d8b270d399d0d355a19fbeedf9af009baee8ae66#d8b270d399d0d355a19fbeedf9af009baee8ae66"
 dependencies = [
  "anyhow",
  "parking_lot",

@@ -1,3 +1,6 @@
+# 2026-04-23
+- #2693 Adds new apis for statemap iteration at `/modules/{module}/state/{map_name}/items`
+
 # 2026-04-21
 - #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
   The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.

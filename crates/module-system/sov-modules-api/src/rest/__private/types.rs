@@ -14,6 +14,15 @@ pub enum StateItemContents<K, V> {
     MapElement { key: K, value: V },
 }
 
+impl<K, V> StateItemContents<K, V> {
+    pub fn key(&self) -> Option<&K> {
+        match self {
+            StateItemContents::MapElement { key, .. } => Some(key),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case", tag = "type", rename = "module")]
 pub struct ModuleObject {

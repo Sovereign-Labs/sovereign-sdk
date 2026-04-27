@@ -532,7 +532,7 @@ where
         S: NativeStorage,
     {
         let prefix = SlotKey::singleton(self.prefix());
-        let maybe_iter = storage.maybe_iter_user_values_with_prefix(prefix)?;
+        let maybe_iter = storage.maybe_iter_user_values_with_prefix(prefix, None)?;
         Ok(self.decode_raw_iter(maybe_iter, "user"))
     }
 }
@@ -555,7 +555,7 @@ where
         S: NativeStorage,
     {
         let prefix = SlotKey::singleton(self.prefix());
-        let maybe_iter = storage.maybe_iter_kernel_values_with_prefix(prefix)?;
+        let maybe_iter = storage.maybe_iter_kernel_values_with_prefix(prefix, None)?;
         Ok(self.decode_raw_iter(maybe_iter, "kernel"))
     }
 }

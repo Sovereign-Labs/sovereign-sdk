@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use super::FinalizedSlotPolicy;
@@ -304,6 +304,188 @@ impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
     }
     fn storage(&self) -> &S::Storage {
         self.checkpoint_and_read_txn.state_checkpoint.storage()
+    }
+}
+
+#[cfg(feature = "native")]
+impl<S: Spec> ApiStateAccessor<S>
+where
+    S::Storage: NativeStorage,
+{
+    /// Collect the current visible values with the given prefix in the specified
+    /// namespace.
+    ///
+    /// Values are merged using the same precedence as point reads:
+    /// local writes, checkpoint writes, uncommitted changes, then storage.
+    ///
+    /// Returns `None` if the underlying storage does not support prefix
+    /// iteration, because in that case the full key set is not discoverable.
+    pub fn current_values_with_prefix(
+        &self,
+        namespace: Namespace,
+        prefix: &SlotKey,
+        cursor_key: Option<SlotKey>,
+        limit: usize,
+    ) -> anyhow::Result<Option<BTreeMap<SlotKey, SlotValue>>> {
+        use std::collections::BTreeSet;
+
+        let storage = self.checkpoint_and_read_txn.state_checkpoint.storage();
+        let maybe_storage_iter: Option<Box<dyn Iterator<Item = (SlotKey, SlotValue)> + '_>> =
+            match namespace {
+                Namespace::User => storage
+                    .maybe_iter_user_values_with_prefix(prefix.clone(), cursor_key.clone())?
+                    .map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>),
+                Namespace::Kernel => storage
+                    .maybe_iter_kernel_values_with_prefix(prefix.clone(), cursor_key.clone())?
+                    .map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>),
+                Namespace::Accessory => return Ok(None),
+            };
+        let Some(storage_iter) = maybe_storage_iter else {
+            return Ok(None);
+        };
+
+        let mut values = BTreeMap::<SlotKey, SlotValue>::new();
+        let mut tombstones: BTreeSet<SlotKey> = BTreeSet::new();
+        let matches_prefix = |key: &SlotKey| key.as_ref().starts_with(prefix.as_ref());
+
+        match namespace {
+            Namespace::User => {
+                // Iterate over the local writes, getting all keys that match the prefix and are less than or equal to the cursor key.
+                // This is a hashmap, so the keys are unordered; that means we can't stop iterating early even if we've found enough keys to populate the entire response.
+                for (key, value) in &self.local_user_writes {
+                    if matches_prefix(key)
+                        && (cursor_key.is_none()
+                            || cursor_key.as_ref().is_some_and(|cursor| key > cursor))
+                    {
+                        match value {
+                            Some(value) => {
+                                // Since local writes are a hashmap, we know there can't be a tombstone matching the key - insert unconditionally.
+                                values.insert(key.clone(), value.clone());
+                                if values.len() > (limit + 1) {
+                                    values.pop_last();
+                                }
+                            }
+                            None => {
+                                tombstones.insert(key.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            Namespace::Kernel => {
+                for (key, value) in &self.local_kernel_writes {
+                    if matches_prefix(key)
+                        && (cursor_key.is_none()
+                            || cursor_key.as_ref().is_some_and(|cursor| key > cursor))
+                    {
+                        match value {
+                            Some(value) => {
+                                // Since local writes are a hashmap, we know there can't be a tombstone matching the key - insert unconditionally.
+                                values.insert(key.clone(), value.clone());
+                                if values.len() > (limit + 1) {
+                                    values.pop_last();
+                                }
+                            }
+                            None => {
+                                tombstones.insert(key.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            Namespace::Accessory => {
+                for (key, value) in &self.local_accessory_writes {
+                    if matches_prefix(key)
+                        && (cursor_key.is_none()
+                            || cursor_key.as_ref().is_some_and(|cursor| key > cursor))
+                    {
+                        match value.value.as_ref() {
+                            Some(value) => {
+                                // Since local writes are a hashmap, we know there can't be a tombstone matching the key - insert unconditionally.
+                                values.insert(key.clone(), value.clone());
+                                if values.len() > (limit + 1) {
+                                    values.pop_last();
+                                }
+                            }
+                            None => {
+                                tombstones.insert(key.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Next, iterate over the writes on the checkpoint. These are also unordered, so we iterate over all of them.
+        for ((key, entry_namespace), value) in self.checkpoint_and_read_txn.read_txn.iter() {
+            if *entry_namespace == namespace
+                && matches_prefix(key)
+                && (cursor_key.is_none() || cursor_key.as_ref().is_some_and(|cursor| key > cursor))
+            {
+                match value {
+                    Some(value) => {
+                        // Only consider the key if it wasn't delted by a local write
+                        if !tombstones.contains(key) {
+                            values.entry(key.clone()).or_insert_with(|| value.clone());
+                            if values.len() > (limit + 1) {
+                                values.pop_last();
+                            }
+                        }
+                    }
+                    None => {
+                        tombstones.insert(key.clone());
+                    }
+                }
+            }
+        }
+
+        // Iterate over the uncommitted changes, getting all keys that match the prefix and are less than or equal to the cursor key.
+        // This could be a pretty large number of entries, but (like the previous entries) they're unordered so we have to iterate over all of them.
+        if let Some(changes) = self.uncommitted_changes.as_ref() {
+            if let Some(iter) =
+                changes.maybe_iter_prefix_exclusive(namespace, prefix, cursor_key.clone())
+            {
+                for (key, value) in iter {
+                    match value {
+                        Some(value) => {
+                            if !tombstones.contains(&key) {
+                                values.entry(key.clone()).or_insert_with(|| value.clone());
+                                if values.len() > (limit + 1) {
+                                    values.pop_last();
+                                }
+                            }
+                        }
+                        None => {
+                            tombstones.insert(key.clone());
+                        }
+                    }
+                }
+            } else {
+                return Ok(None);
+            }
+        }
+
+        // Finally, we reach storage. These values are ordered, so we can return early once we have enough keys to populate the response (plus one extra key to decide if the user has exhausted)
+        // the iteration.
+        for (key, value) in storage_iter {
+            if cursor_key.as_ref().is_some_and(|k| &key == k) {
+                continue;
+            }
+            if values.len() >= (limit + 1)
+                && values
+                    .last_key_value()
+                    .is_some_and(|(largest_key_to_return, _)| &key > largest_key_to_return)
+            {
+                break;
+            }
+            if !tombstones.contains(&key) {
+                values.entry(key.clone()).or_insert_with(|| value.clone());
+                if values.len() > (limit + 1) {
+                    values.pop_last();
+                }
+            }
+        }
+        Ok(Some(values))
     }
 }
 
