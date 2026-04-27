@@ -11,16 +11,20 @@ use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
-use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
-    DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint, StateUpdateInfo,
-    SyncStatus, VersionReader, ZkVerifier,
+    CodeCommitmentFor, DaSpec, NodeEndpoints, OperatingMode, ProofSender, Spec, StateCheckpoint,
+    VersionReader,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateChannel;
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::DaSyncState;
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
@@ -31,7 +35,6 @@ use sov_state::Storage;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
-    RollupProverConfigDiscriminants,
 };
 use sov_stf_runner::{
     initialize_state, query_state_update_info, CorsConfiguration, RollupConfig,
@@ -77,11 +80,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Serialize proof blob and adds metadata needed for verification.
     type ProofSender: ProofSender + 'static;
 
-    /// Creates code commitments for the outer zkVM program.
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment;
-
     /// Creates RPC methods and REST APIs for the rollup.
     async fn create_endpoints(
         &self,
@@ -123,7 +121,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Creates an instance of [`ProverService`].
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>,
+        prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
     ) -> Self::ProverService;
@@ -147,6 +145,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         sequencer: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender>;
 
+    /// Computes the inner (state-transition) and outer (aggregation) code commitments
+    /// for this rollup's zkVM(s), typically derived from the guest ELF(s).
+    fn compute_code_commitments() -> anyhow::Result<(
+        CodeCommitmentFor<<Self::Spec as Spec>::InnerZkvm>,
+        CodeCommitmentFor<<Self::Spec as Spec>::OuterZkvm>,
+    )> {
+        anyhow::bail!("compute_code_commitments not supported.")
+    }
+
     /// Creates an instance of a LedgerDb.
     fn create_ledger_db(
         &self,
@@ -162,7 +169,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         runtime_genesis_paths: &<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisInput,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
+        prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -303,7 +310,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        prover_config: Option<RollupProverConfig<<Self::Spec as Spec>::InnerZkvm>>,
+        prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
@@ -343,10 +350,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
         info!(?operating_mode, "Instantiating a new rollup");
 
-        if let (OperatingMode::Operator, Some(prover_config)) =
-            (operating_mode, prover_config.clone())
-        {
-            let prover_config: RollupProverConfigDiscriminants = prover_config.into();
+        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
             panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
         }
 
@@ -366,7 +370,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         .await?;
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
-        let witness_generation = prover_config.as_ref().is_some_and(|c| c.needs_witness());
+        let witness_generation = prover_config.is_enabled();
         let mut storage_manager =
             self.create_storage_manager(&rollup_config, witness_generation)?;
 
@@ -408,7 +412,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
                 let genesis_header = rollup_genesis_block.header().clone();
                 let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root =
-                    initialize_state::<_, _, _, Self::DaService, _>(
+                    initialize_state::<_, Self::DaService, _>(
                         &native_stf,
                         &mut storage_manager,
                         rollup_genesis_block,
@@ -472,15 +476,16 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Rollup state initialization is completed"
         );
 
-        let (state_update_sender, state_update_receiver) =
-            tokio::sync::watch::channel(state_update_info);
+        let state_channel = StateChannel::new(state_update_info);
+        let state_update_receiver = state_channel.subscribe_state_update();
+        let storage_receiver = state_channel.subscribe_storage();
 
         if let Some(handle) = da_service_handle {
             background_handles.push(handle);
         }
 
         let visible_state_height_tracker: Box<dyn ProvableHeightTracker> = Box::new(
-            MaximumProvableHeight::new(state_update_sender.subscribe(), Self::Runtime::default()),
+            MaximumProvableHeight::new(state_channel.subscribe_storage(), Self::Runtime::default()),
         );
 
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
@@ -490,7 +495,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
-            if prover_config.is_some() {
+            if prover_config.is_enabled() {
                 Some(rollup_config.proof_manager)
             } else {
                 None
@@ -499,7 +504,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             ledger_db.clone(),
             native_stf,
             storage_manager,
-            state_update_sender,
+            state_channel,
             prev_state_root,
             visible_state_height_tracker,
             main_shutdown_receiver.clone(),
@@ -527,9 +532,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .await?;
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
-            let prover_config = prover_config
-                .expect("This code path should not be possible; this is a bug, please report it");
-
             let prover_service = self
                 .create_prover_service(prover_config, &rollup_config, &da_service)
                 .await;
@@ -544,7 +546,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         .proof_processor()
                         .create_bonding_proof_service::<Self::Runtime>(
                         prover_address,
-                        state_update_receiver.clone(),
+                        storage_receiver,
                     );
 
                     start_op_workflow_in_background::<Self::ProverService, _>(
@@ -559,6 +561,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     start_zk_workflow_in_background(
                         prover_service,
                         rollup_config.proof_manager.aggregated_proof_block_jump,
+                        rollup_config.proof_manager.eager_proof_submission,
                         proof_sender,
                         genesis_state_root,
                         stf_info_receiver,
@@ -646,13 +649,8 @@ pub struct NodeEndpointsContainer {
 pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     /// The State Transition Runner.
     #[allow(clippy::type_complexity)]
-    pub runner: StateTransitionRunner<
-        StfBlueprint<S::Spec, S::Runtime>,
-        S::StorageManager,
-        S::DaService,
-        <S::Spec as Spec>::InnerZkvm,
-        <S::Spec as Spec>::OuterZkvm,
-    >,
+    pub runner:
+        StateTransitionRunner<StfBlueprint<S::Spec, S::Runtime>, S::StorageManager, S::DaService>,
 
     /// Server endpoints for the rollup.
     pub endpoints: NodeEndpointsContainer,

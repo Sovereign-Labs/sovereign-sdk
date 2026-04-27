@@ -7,7 +7,7 @@ use sov_modules_api::{
 };
 
 pub trait TestSpec:
-    Default + Send + Sync + std::fmt::Debug + Clone + PartialEq + Eq + 'static
+    Default + Send + Sync + std::fmt::Debug + Clone + PartialEq + Eq + 'static + serde::Serialize + serde::de::DeserializeOwned
 {
     type Data: Data;
 }
@@ -115,7 +115,7 @@ struct Runtime<T: TestSpec, S: Spec> {
     pub chain_state: sov_chain_state::ChainState<S>,
 }
 
-#[derive(Default, Clone, PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct ActualSpec;
 
 impl TestSpec for ActualSpec {

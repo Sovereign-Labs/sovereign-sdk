@@ -19,6 +19,7 @@ sov-db = { workspace = true }
 sov-test-modules = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-address = { workspace = true }
+sov-hyperlane-integration = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["bench"] }
 sov-transaction-generator = { workspace = true }
 sov-modules-rollup-blueprint = { workspace = true, default-features = false }
@@ -27,12 +28,14 @@ sov-node-client = { workspace = true }
 sov-metrics = { workspace = true, default-features = false }
 
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-stf-runner = { workspace = true }
 
 demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
 reqwest = { workspace = true, features = ["rustls-tls", "stream"], default-features = false }
 
 sov-risc0-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
-sov-sp1-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
+sov-sp1-adapter = { workspace = true, features = ["arbitrary", "native"] }
 
 # Provers
 risc0 = { path = "../provers/risc0", features = ["bench"] }
@@ -51,6 +54,7 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 backon = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["process"] }
+async-trait = { workspace = true }
 humantime = "2.1"
 clap = { workspace = true }
 tempfile = { workspace = true }

@@ -1,6 +1,7 @@
 [package]
 name = "sov-universal-wallet"
-description = "UniversallWallet for Sovereign rollups"
+description = "Universal wallet schema and display utilities for Sovereign rollups"
+authors = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -33,7 +34,6 @@ schemars = { workspace = true, optional = true }                    # for SafeSt
 borsh = { workspace = true }
 sov-universal-wallet-macros = { workspace = true }
 sov-universal-wallet = { path = ".", features = ["serde", "eip712", "macros"] }
-sov-rollup-interface = { workspace = true }
 serde_arrays = { workspace = true }
 serde_with = { workspace = true }
 serde = { workspace = true }

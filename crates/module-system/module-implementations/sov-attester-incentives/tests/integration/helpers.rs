@@ -283,7 +283,7 @@ pub(crate) fn make_challenge_blob(
 ) -> Vec<u8> {
     let serialized_challenge = MockZkvmHost::create_serialized_proof(is_valid, challenge);
     let serialized_challenge = SerializedChallenge {
-        raw_challenge: serialized_challenge,
+        raw_challenge: serialized_challenge.raw_proof,
     };
 
     borsh::to_vec(

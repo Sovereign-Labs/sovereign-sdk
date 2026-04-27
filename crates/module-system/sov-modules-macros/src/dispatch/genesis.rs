@@ -29,6 +29,9 @@ impl GenesisMacro {
             quote::quote! {
                 #[serde(bound = #serde_bounds_str)]
             },
+            quote::quote! {
+                #[serde(deny_unknown_fields)]
+            },
         ];
         let config_attributes = get_derived_enum_attrs("genesis", &input, default_attrs)?;
 

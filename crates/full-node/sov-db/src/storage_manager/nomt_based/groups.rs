@@ -13,7 +13,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest;
 
 use crate::accessory_db::AccessoryDb;
-use crate::config::RollupDbConfig;
+use crate::config::{RocksDbKind, RollupDbConfigWithCustomizations};
 use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
@@ -46,21 +46,52 @@ where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
     K: Eq + std::hash::Hash + Clone + std::fmt::Debug,
 {
-    pub(crate) fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
+    pub(crate) fn new(custom_config: RollupDbConfigWithCustomizations) -> anyhow::Result<Self> {
+        let config = custom_config.config().clone();
         let path = config.path.clone();
         let ledger_db_path = config.ledger_db_path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
-        let merklized_state = Arc::new(NomtStateDb::<H>::new(config)?);
-        let flat_state = FlatStateDb::new(path.clone(), state_cache_size)?;
+        let merklized_state = Arc::new(NomtStateDb::<H>::new(config.clone())?);
+        let flat_state = FlatStateDb::new_with_customizations(
+            path.clone(),
+            state_cache_size,
+            Some(&custom_config),
+        )?;
+        let ledger_db_options = custom_config.get_rocksdb_options(RocksDbKind::Ledger);
         let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
-            LedgerDb::get_rockbound_options().default_setup_db(ledger_db_path)?
+            LedgerDb::get_rockbound_options().setup_db_with_options_and_cfs(
+                ledger_db_path,
+                &ledger_db_options,
+                |cf_name, builder| {
+                    custom_config.customize_rocksdb_cf(RocksDbKind::Ledger, cf_name, None, builder);
+                },
+            )?
         } else {
-            LedgerDb::get_rockbound_options().default_setup_db_as_subdir(&path)?
+            LedgerDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
+                &path,
+                &ledger_db_options,
+                |cf_name, builder| {
+                    custom_config.customize_rocksdb_cf(RocksDbKind::Ledger, cf_name, None, builder);
+                },
+            )?
         });
 
-        let accessory =
-            Arc::new(AccessoryDb::get_rockbound_options().default_setup_db_as_subdir(&path)?);
+        let accessory_db_options = custom_config.get_rocksdb_options(RocksDbKind::Accessory);
+        let accessory = Arc::new(
+            AccessoryDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
+                &path,
+                &accessory_db_options,
+                |cf_name, builder| {
+                    custom_config.customize_rocksdb_cf(
+                        RocksDbKind::Accessory,
+                        cf_name,
+                        None,
+                        builder,
+                    );
+                },
+            )?,
+        );
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessary(
@@ -100,6 +131,10 @@ where
                 },
         } = group;
 
+        // ======================= DANGER ZONE ======================
+        // The commit order here is relied on by NomtProverStorage::get_with_proof
+        // If you change the order, you'll need to update merkle proof generation.
+
         // NOMT
         tracing::trace!("Commiting NOMT DBs...");
         let merklized_commit = self.merklized_state.commit(state)?;
@@ -107,13 +142,15 @@ where
         // Ledger
         tracing::trace!("Committing Ledger DB...");
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingLedger.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
+            .inject_fault_if_configured();
         let ledger_commit = self.commit_ledger(&ledger)?;
 
         // Accessory
         tracing::trace!("Commiting Accessory DB...");
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingAccessory.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
+            .inject_fault_if_configured();
         let accessory_commit =
             self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
 
@@ -135,6 +172,8 @@ where
             );
             self.flat_state.commit(historical_state)?
         };
+
+        // ======================= END DANGER ZONE ======================
 
         // Metrics
         let merklized_commit_from_caller = merklized_commit.total;

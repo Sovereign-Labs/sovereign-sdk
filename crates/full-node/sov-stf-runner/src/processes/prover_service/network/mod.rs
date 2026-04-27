@@ -9,7 +9,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use super::{ProverService, ProverServiceError, Verifier};
@@ -49,20 +48,13 @@ where
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
         da_verifier: Da::Verifier,
-        code_commitment: CodeCommitmentHash,
         prover_address: Address,
         outer_proof_timeout: std::time::Duration,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });
 
         Self {
-            prover: NetworkProver::new(
-                prover_address,
-                inner_vm,
-                outer_vm,
-                code_commitment,
-                outer_proof_timeout,
-            ),
+            prover: NetworkProver::new(prover_address, inner_vm, outer_vm, outer_proof_timeout),
             verifier,
         }
     }
@@ -104,11 +96,11 @@ where
 
     async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
+        block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         self.prover
-            .create_aggregated_proof(block_header_hashes, genesis_state_root)
+            .create_aggregated_proof(block_headers, genesis_state_root)
             .await
     }
 }

@@ -12,10 +12,16 @@ mod test_utils;
 pub use address::MultiAddressEvmSolana;
 
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_hyperlane_integration::{
+    HyperlaneAddress, InterchainGasPaymaster, Mailbox as RawMailbox, MerkleTreeHook, Warp,
+};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::prelude::*;
 use sov_modules_api::{Base58Address, DispatchCall, Event, Genesis, Hooks, MessageCodec, Spec};
+
+/// The hyperlane mailbox type, parameterized with Warp as the recipient.
+pub type Mailbox<S> = RawMailbox<S, Warp<S>>;
 
 /// The runtime defines the logic of the rollup.
 ///
@@ -56,7 +62,7 @@ use sov_modules_api::{Base58Address, DispatchCall, Event, Genesis, Hooks, Messag
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 pub struct Runtime<S: Spec>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     /// The Bank module.
     pub bank: sov_bank::Bank<S>,
@@ -78,6 +84,16 @@ where
     pub blob_storage: sov_blob_storage::BlobStorage<S>,
     /// The Paymaster module.
     pub paymaster: sov_paymaster::Paymaster<S>,
+    /// The Revenue Share module.
+    pub revenue_share: sov_revenue_share::RevenueShare<S>,
+    /// The Hyperlane Mailbox module.
+    pub mailbox: Mailbox<S>,
+    /// The Interchain Gas Paymaster module.
+    pub interchain_gas_paymaster: InterchainGasPaymaster<S>,
+    /// The Merkle Tree Hook module.
+    pub merkle_tree_hook: MerkleTreeHook<S>,
+    /// The Hyperlane Warp module.
+    pub warp: Warp<S>,
     #[cfg_attr(feature = "native", cli_skip)]
     /// The EVM module.
     pub evm: sov_evm::Evm<S>,

@@ -5,11 +5,11 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, CodeCommitmentHash, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
-    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, Zkvm,
-    ZkvmNetwork,
+    SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
+    StateTransitionWitnessWithAddress, Zkvm, ZkvmNetwork,
 };
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -55,7 +55,6 @@ pub(crate) struct NetworkProver<
     inner_vm: InnerVm::Network,
     outer_vm: OuterVm::Network,
     tracker: tokio::sync::RwLock<ProofStatusMap<Address, StateRoot, Da::Spec, InnerVm>>,
-    code_commitment: CodeCommitmentHash,
     outer_proof_timeout: std::time::Duration,
     phantom: PhantomData<Witness>,
 }
@@ -75,7 +74,6 @@ where
         prover_address: Address,
         inner_vm: InnerVm::Network,
         outer_vm: OuterVm::Network,
-        code_commitment: CodeCommitmentHash,
         outer_proof_timeout: std::time::Duration,
     ) -> Self {
         Self {
@@ -83,7 +81,6 @@ where
             inner_vm,
             outer_vm,
             tracker: tokio::sync::RwLock::new(HashMap::new()),
-            code_commitment,
             outer_proof_timeout,
             phantom: PhantomData,
         }
@@ -95,24 +92,28 @@ where
         verifier: &Verifier<Da>,
     ) -> Result<ProofProcessingStatus<StateRoot, Witness, Da::Spec>, ProverServiceError> {
         let block_header_hash = state_transition_info.da_block_header().hash();
-        let mut tracker = self.tracker.write().await;
 
-        if let Some(status) = tracker.get(&block_header_hash) {
-            return match status {
-                NetworkProverStatus::Submitted { .. } => {
-                    Err(ProverServiceError::Other(anyhow::anyhow!(
-                        "Proof generation for {} still in progress",
-                        block_header_hash,
-                    )))
-                }
-                NetworkProverStatus::Proved(_) => Err(ProverServiceError::Other(anyhow::anyhow!(
-                    "Witness for block_header_hash {}, submitted multiple times.",
-                    block_header_hash,
-                ))),
-                NetworkProverStatus::Err(e) => {
-                    Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
-                }
-            };
+        {
+            let tracker = self.tracker.read().await;
+            if let Some(status) = tracker.get(&block_header_hash) {
+                return match status {
+                    NetworkProverStatus::Submitted { .. } => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Proof generation for {} still in progress",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Proved(_) => {
+                        Err(ProverServiceError::Other(anyhow::anyhow!(
+                            "Witness for block_header_hash {}, submitted multiple times.",
+                            block_header_hash,
+                        )))
+                    }
+                    NetworkProverStatus::Err(e) => {
+                        Err(ProverServiceError::Other(anyhow::format_err!("{}", e)))
+                    }
+                };
+            }
         }
 
         let slot_number = state_transition_info.slot_number;
@@ -133,11 +134,17 @@ where
                 ProverServiceError::Other(anyhow::anyhow!("DA verification failed: {:?}", e))
             })?;
 
+        let submit_start = std::time::Instant::now();
         let handle = self
             .inner_vm
             .add_hint_and_submit(&data)
             .await
             .map_err(ProverServiceError::Other)?;
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(crate::processes::metrics::ZkNetworkProverMetrics {
+                submit_duration_ms: submit_start.elapsed().as_millis(),
+            });
+        });
 
         let StateTransitionWitnessWithAddress {
             stf_witness:
@@ -164,25 +171,30 @@ where
             block_header_hash
         );
 
-        tracker.insert(
-            block_header_hash,
-            NetworkProverStatus::Submitted { handle, metadata },
-        );
+        {
+            let mut tracker = self.tracker.write().await;
+            tracker.insert(
+                block_header_hash,
+                NetworkProverStatus::Submitted { handle, metadata },
+            );
+        }
 
         Ok(ProofProcessingStatus::ProvingInProgress)
     }
 
     pub(crate) async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<Da::Spec as DaSpec>::SlotHash],
+        block_headers: &[<Da::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
-        assert!(!block_header_hashes.is_empty());
+        assert!(!block_headers.is_empty());
+
+        let block_header_hashes: Vec<_> = block_headers.iter().map(|h| h.hash()).collect();
 
         let mut proof_statuses = self.tracker.write().await;
         // Phase 1: Poll all Submitted entries and transition them to Proved.
         // We only remove entries confirmed to be Submitted, so Proved/Err entries are untouched.
-        for slot_hash in block_header_hashes {
+        for slot_hash in &block_header_hashes {
             // We want to only remove if we know the entry exists
             if !matches!(
                 proof_statuses.get(slot_hash),
@@ -200,7 +212,9 @@ where
             match self.inner_vm.poll(&handle).await {
                 Ok(Some(proof_bytes)) => {
                     let block_proof = BlockProof {
-                        proof: proof_bytes,
+                        proof: SerializedZkProof {
+                            raw_proof: proof_bytes,
+                        },
                         slot_number: metadata.slot_number,
                         st: metadata.st,
                     };
@@ -236,7 +250,7 @@ where
         let proof_statuses = proof_statuses.downgrade();
         // Phase 2: Collect all proved block proofs.
         let mut block_proofs_data = Vec::new();
-        for slot_hash in block_header_hashes {
+        for slot_hash in &block_header_hashes {
             match proof_statuses.get(slot_hash) {
                 Some(NetworkProverStatus::Proved(block_proof)) => {
                     assert_eq!(slot_hash, &block_proof.st.slot_hash);
@@ -260,7 +274,6 @@ where
         let public_data = AggregatedProofPublicData::from_block_proofs(
             &block_proofs_data,
             genesis_state_root.clone(),
-            self.code_commitment.clone(),
         );
 
         tracing::trace!(%public_data, "generating aggregate proof");
@@ -296,7 +309,7 @@ where
         })??;
 
         let mut tracker = self.tracker.write().await;
-        for slot_hash in block_header_hashes {
+        for slot_hash in &block_header_hashes {
             tracker.remove(slot_hash);
         }
 

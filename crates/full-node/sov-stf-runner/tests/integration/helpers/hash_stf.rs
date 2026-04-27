@@ -9,7 +9,7 @@ use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::stf::{ApplySlotOutput, GenesisParams, StateTransitionFunction};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::{ZkVerifier, Zkvm};
+use sov_rollup_interface::zk::{SerializedZkProof, ZkVerifier};
 use sov_state::namespaces::User;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::storage::{NativeStorage, SlotKey, SlotValue};
@@ -46,7 +46,7 @@ impl HashStf {
         let result = hasher.finalize();
 
         let hash_key = HashStf::hash_key();
-        let hash_value = SlotValue::from(result.as_slice().to_vec());
+        let hash_value = SlotValue::from(result.to_vec());
 
         let kernel_key = HashStf::kernel_key();
         let kernel_value = SlotValue::from(vec![0u8]); // Minimal kernel state marker
@@ -91,9 +91,7 @@ impl From<Vec<u8>> for HashStfGenesisParams {
     }
 }
 
-impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
-    for HashStf
-{
+impl<Da: DaSpec> StateTransitionFunction<Da> for HashStf {
     type Address = MockAddress;
     type StateRoot = StorageRoot<S>;
     type GenesisParams = HashStfGenesisParams;
@@ -132,7 +130,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [Da::BlobTransaction]>,
         _execution_context: sov_modules_api::ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self> {
+    ) -> ApplySlotOutput<Da, Self> {
         // Note: Uses native code, so won't work in ZK
         let storage_root_hash = pre_state
             .get_latest_root_hash()
@@ -177,9 +175,12 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             if raw_proof.is_empty() {
                 continue;
             }
+            let serialized_proof = SerializedZkProof {
+                raw_proof: raw_proof.to_vec(),
+            };
             let public_data: AggregatedProofPublicData<Self::Address, Da, Self::StateRoot> =
-                match <MockZkVerifier as ZkVerifier>::verify(
-                    raw_proof,
+                match <MockZkVerifier as ZkVerifier>::verify_with_proof(
+                    &serialized_proof,
                     &MockCodeCommitment::default(),
                 ) {
                     Ok(public_data) => public_data,
@@ -212,7 +213,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             "Post apply slot root hashes",
         );
 
-        ApplySlotOutput::<InnerVm, OuterVm, Da, Self> {
+        ApplySlotOutput::<Da, Self> {
             state_root,
             change_set,
             proof_receipts,

@@ -33,9 +33,8 @@ use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
-use sov_modules_api::{
-    FullyBakedTx, Runtime, Spec, StateCheckpoint, StateUpdateInfo, VersionReader,
-};
+use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint, VersionReader};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -315,17 +314,20 @@ where
                     .await;
             }
             #[cfg(feature = "test-utils")]
-            Message::ForceCloseCurrentBatch { reason: _reason } => {
-                self.process_force_close_current_batch(_reason).await;
+            Message::ForceCloseCurrentBatch {
+                reason: _reason,
+                result_sender,
+            } => {
+                self.process_force_close_current_batch(_reason, result_sender)
+                    .await;
             }
             Message::ProofBlob {
                 blob_id,
                 data,
                 reason,
             } => self.process_proof_blob(blob_id, data, reason).await,
-            Message::TriggerBatchProductionIfConvenient { reason } => {
-                self.process_trigger_batch_production_if_convenient(reason)
-                    .await;
+            Message::TriggerBatchProduction { reason } => {
+                self.process_trigger_batch_production(reason).await;
             }
             Message::SimpleStateUpdate { info } => {
                 let slot_number = info.slot_number;
@@ -734,6 +736,10 @@ where
             inner.next_unassigned_sequence_number = node_sequence_number;
         }
 
+        inner.executor_rebase_height =
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+                .rollup_height_to_access();
+
         inner.is_ready = Ok(());
         inner.has_finished_startup = true;
         inner.latest_info = info;
@@ -827,9 +833,18 @@ where
 
     /// Closes the current batch
     #[cfg(feature = "test-utils")]
-    async fn process_force_close_current_batch(&mut self, reason: &'static str) {
+    async fn process_force_close_current_batch(
+        &mut self,
+        reason: &'static str,
+        result_sender: oneshot::Sender<bool>,
+    ) {
         let mut inner = self.get_inner_with_timing(reason).await;
+        if !inner.executor.has_in_progress_batch() {
+            let _ = result_sender.send(false); // If the receiver has dropped, we don't need to do anything about it.
+            return;
+        }
         inner.close_current_batch().await;
+        let _ = result_sender.send(true);
     }
 
     async fn process_proof_blob(
@@ -847,14 +862,13 @@ where
             .await;
     }
 
-    async fn process_trigger_batch_production_if_convenient(&mut self, reason: &'static str) {
+    async fn process_trigger_batch_production(&mut self, reason: &'static str) {
         // We don't run force_overwrite_state() here.
         // This is mostly fine, mainly the API state will be out of date until we've
         // finished sending our batches.
         // Adding parallel state update handling is not worth the complexity right now.
-
         let mut inner = self.get_inner_with_timing(reason).await;
-        inner.trigger_batch_production_if_convenient().await;
+        inner.trigger_batch_production().await;
     }
 
     async fn process_accept_tx(
@@ -954,6 +968,8 @@ where
 
         let batch_from_master =
             Self::ensure_replica_batch_start_visible_slot_matches(&mut inner, batch_from_master)?;
+
+        Self::ensure_replica_batch_start_within_rebase_window(&mut inner, batch_from_master)?;
 
         inner
             .do_batch_start(
@@ -1088,6 +1104,44 @@ where
             %replica_expected,
             master_expected = %batch_from_master.visible_slot_number_after_increase,
             "Replica VSN diverged from master. Entering sync mode and retrying."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
+    }
+
+    fn ensure_replica_batch_start_within_rebase_window(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<(), ReplicaError<S>> {
+        let state_root_delay_blocks: u64 =
+            sov_modules_api::macros::config_value!("STATE_ROOT_DELAY_BLOCKS");
+        let current_height = inner.executor.checkpoint.rollup_height_to_access();
+        let rebase_height = inner.executor_rebase_height;
+
+        if current_height.get().saturating_sub(rebase_height.get())
+            <= state_root_delay_blocks.saturating_sub(1)
+        {
+            return Ok(());
+        }
+
+        let heights_since_rebase = current_height.get().saturating_sub(rebase_height.get());
+
+        tracing::warn!(
+            %current_height,
+            %rebase_height,
+            %heights_since_rebase,
+            %state_root_delay_blocks,
+            "Replica has accepted too many PG batches since the last executor rebase. Rejecting batch start until node replay catches up."
         );
 
         let sync_details = SequencerNotReadyDetails::Syncing {

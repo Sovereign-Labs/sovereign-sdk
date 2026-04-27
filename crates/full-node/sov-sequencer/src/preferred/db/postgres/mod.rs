@@ -11,7 +11,7 @@ use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
 use anyhow::Context;
-use axum::async_trait;
+use async_trait::async_trait;
 use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
@@ -412,7 +412,9 @@ impl DbBackend for PostgresBackend {
             visible_slots_to_advance: batch_to_store.visible_slots_to_advance,
         })?;
 
-        // Compound CTE statement to avoid multiple roundtrips
+        // Compound CTE statement to avoid multiple roundtrips.
+        // ON CONFLICT makes both inserts idempotent so retries after
+        // a successful-but-unacknowledged write are harmless.
         let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
@@ -421,11 +423,17 @@ impl DbBackend for PostgresBackend {
                 INSERT INTO in_progress_batch (sequence_number, borsh_value)
                 SELECT $1, $2
                 WHERE is_leader($3)
-            RETURNING sequence_number
+                ON CONFLICT (singleton)
+                DO UPDATE SET sequence_number = EXCLUDED.sequence_number,
+                              borsh_value = EXCLUDED.borsh_value
+                RETURNING sequence_number
             )
             INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
             SELECT bi.sequence_number, 'batch_start', NULL, NULL, $2
-            FROM batch_insert bi;
+            FROM batch_insert bi
+            ON CONFLICT (sequence_number, event_type)
+                WHERE event_type IN ('batch_start', 'batch_end', 'new_proof')
+            DO UPDATE SET data = EXCLUDED.data;
             "
             )
             .bind(i64::try_from(batch_to_store.sequence_number)?)
@@ -476,7 +484,10 @@ impl DbBackend for PostgresBackend {
                     $4::bytea[],
                     $5::bytea[]
                 )
-                WHERE is_leader($6);"
+                WHERE is_leader($6)
+                ON CONFLICT (sequence_number, index_in_batch)
+                    WHERE event_type = 'transaction'
+                DO UPDATE SET data = EXCLUDED.data;"
             )
             .bind(&sequence_number[..])
             .bind(&event_types[..])
@@ -512,7 +523,10 @@ impl DbBackend for PostgresBackend {
             sqlx::query::<Postgres>(
                 "INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
                     SELECT $1, 'transaction', $2, $3, $4
-                WHERE is_leader($5);",
+                WHERE is_leader($5)
+                ON CONFLICT (sequence_number, index_in_batch)
+                    WHERE event_type = 'transaction'
+                DO UPDATE SET data = EXCLUDED.data;",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind(i64::try_from(tx_index_within_batch)?)
@@ -538,17 +552,27 @@ impl DbBackend for PostgresBackend {
         let stored_blob: StoredBlob = cached.into();
         let blob_data = borsh::to_vec(&stored_blob)?;
 
-        // Compound CTE statement to avoid multiple roundtrips
+        // Compound CTE statement to avoid multiple roundtrips.
+        // The INSERT is gated on is_leader() rather than on the DELETE returning rows,
+        // so that retries after a successful-but-unacknowledged write still insert
+        // (or upsert) the batch_end event even though in_progress_batch is already gone.
         let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
-                "WITH batch_delete AS (
+                "WITH leader_check AS (
+                    SELECT 1 WHERE is_leader($3)
+                ),
+                batch_delete AS (
                     DELETE FROM in_progress_batch
-                    WHERE is_leader($3)
-                    RETURNING 1)
+                    WHERE EXISTS (SELECT 1 FROM leader_check)
+                    RETURNING 1
+                )
                 INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
                 SELECT $1, 'batch_end', NULL, NULL, $2
-                FROM batch_delete",
+                WHERE EXISTS (SELECT 1 FROM leader_check)
+                ON CONFLICT (sequence_number, event_type)
+                    WHERE event_type IN ('batch_start', 'batch_end', 'new_proof')
+                DO UPDATE SET data = EXCLUDED.data",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())
@@ -613,7 +637,9 @@ impl DbBackend for PostgresBackend {
             blob_id,
         })?;
 
-        // Compound CTE statement to avoid multiple roundtrips
+        // Compound CTE statement to avoid multiple roundtrips.
+        // ON CONFLICT makes both inserts idempotent so retries after
+        // a successful-but-unacknowledged write are harmless.
         let result = run_with_retries!(
             &self.backoff_policy,
             sqlx::query(
@@ -622,11 +648,16 @@ impl DbBackend for PostgresBackend {
                     INSERT INTO proof_blobs (sequence_number, borsh_value)
                     SELECT $1, $2
                     WHERE is_leader($3)
+                    ON CONFLICT (sequence_number)
+                    DO UPDATE SET borsh_value = EXCLUDED.borsh_value
                     RETURNING sequence_number
                 )
                 INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
                 SELECT bi.sequence_number, 'new_proof', NULL, NULL, NULL
-                FROM blob_insert bi",
+                FROM blob_insert bi
+                ON CONFLICT (sequence_number, event_type)
+                    WHERE event_type IN ('batch_start', 'batch_end', 'new_proof')
+                DO UPDATE SET data = EXCLUDED.data",
             )
             .bind(i64::try_from(sequence_number)?)
             .bind::<&[u8]>(blob_data.as_ref())

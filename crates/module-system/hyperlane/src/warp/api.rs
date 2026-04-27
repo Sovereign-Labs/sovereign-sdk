@@ -67,8 +67,8 @@ impl<S: Spec> HasCustomRestApi for Warp<S> {
 
     fn custom_rest_api(&self, state: ApiState<S>) -> axum::Router<()> {
         axum::Router::new()
-            .route("/route/:route/routers", get(Self::get_routers))
-            .route("/route/:route/limits", get(Self::get_transfer_limits))
+            .route("/route/{route}/routers", get(Self::get_routers))
+            .route("/route/{route}/limits", get(Self::get_transfer_limits))
             .with_state(state.with(self.clone()))
     }
 

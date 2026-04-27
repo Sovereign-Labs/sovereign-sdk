@@ -4,6 +4,7 @@ use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::io::Write;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use nomt::hasher::BinaryHasher;
@@ -23,12 +24,38 @@ use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
-    Accessory, CompileTimeNamespace, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
+    Accessory, CompileTimeNamespace, Kernel, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
     NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace, ProvableNamespace,
-    SlotKey, SlotValue, StateAccesses, StateUpdate, Storage, StorageProof, StorageRoot, Witness,
+    SlotKey, SlotValue, StateAccesses, StateRoot, StateUpdate, Storage, StorageProof, StorageRoot,
+    User, Witness,
 };
 
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
+
+#[derive(Debug)]
+enum GetWithProofError {
+    StateRootMismatch,
+    Other(anyhow::Error),
+}
+
+impl core::fmt::Display for GetWithProofError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StateRootMismatch => {
+                write!(f, "State root mismatch between pre-fetch and post-fetch")
+            }
+            Self::Other(err) => write!(f, "{err}"),
+        }
+    }
+}
+
+impl std::error::Error for GetWithProofError {}
+
+impl From<anyhow::Error> for GetWithProofError {
+    fn from(err: anyhow::Error) -> Self {
+        Self::Other(err)
+    }
+}
 
 /// A [`Storage`] implementation to be used by the prover in a native execution based on NOMT.
 pub struct NomtProverStorage<S: MerkleProofSpec, K>
@@ -157,6 +184,8 @@ where
             && version_to_use == self.latest_version()
     }
 
+    /// Reads the latest value for the given key without trying to preserve the illusion that this `Storage` instance is backed by a snapshot.
+    /// If the underlying DB has advanced beyond the snapshot, this method will read from the live DB.
     fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
         match N::NAMESPACE {
             Namespace::User => self
@@ -343,6 +372,103 @@ where
         version: SlotNumber,
     ) -> NomtChangeSet {
         self.materialize_changes_with_version(state_update, version)
+    }
+
+    /// Get the latest root hash available in the live db. This could be the newest root hash from the underlying db, or the root hash from the latest delta in memory - whichever is newer.
+    fn latest_root_and_version_unbound(&self) -> Option<(SlotNumber, StorageRoot<S>)> {
+        self.historical_state
+            .latest_root_and_version_unbound()
+            .expect("Error reading from database")
+            .map(|(version, root)| {
+                (
+                    version,
+                    borsh::from_slice(&root).expect("Error deserializing root hash"),
+                )
+            })
+    }
+
+    // Fetch the requested key with proof. Atomically retrieve the values of any provided accessory keys at the same storage version.
+    //
+    // This is a single attempt at the latest-state algorithm. The public `get_with_proof`
+    // wrapper retries only `StateRootMismatch`, which is the transient case caused by NOMT and
+    // RocksDB committing slightly out of phase. All other failures are returned immediately.
+    //
+    // NOMT only maintains the live version of the merkle tree
+    //
+    // We want to ensure that the merkle proof we fetch (from NOMT) and the value (from RocksDB) are consistent. But RocksDB and NOMT commit at slightly different times.
+    // So, what we do is...
+    // 1. Fetch the root hash from RocksDB at the latest version.
+    // 2. Read the value from RocksDB
+    // 3. Fetch the root hash from RocksDB again.
+    // 4. Open a NOMT session (which locks NOMT and prevents any commits)
+    // 5. Compare NOMT's state root with the ones we fetched from RocksDB. If they don't match, GOTO 1.
+    // 6. Generate the merkle proof
+    // 7. (Implicit) unlock NOMT by dropping the session.
+    //
+    // This algorithm guarantees that NOMT and RocksDB are consistent, since the root hash at the time of the RocksDB read is known (we checked both before and after the read) and we've
+    // compared that it matches the NOMT root.
+    //
+    // Note that in this function, we always the use the "unbound" methods to read from storage. Recall that the standard readers attempt to preserve the illusion that the storage holds a point-in-time snapshot,
+    // so they fall back to archival state if the underlying DB has changed. But NOMT doesn't have an archival tree to make merkle proofs against, so this behavior would break consistency.
+    // The "unbound" methods bypass this behavior and always show the newest available value (either a value from the in-memory deltas in the storage, or - if it's newer - the value from the underlying database).
+    //
+    // Aside: Why do we need to fetch the root hash twice?
+    // If we only fetch once, there's a subtle race condition. With a single read, one or the other of these interleavings is possible: (Read_rocksdb_value-> (other thread)commit_rocksdb -> Read_rocksdb_root) or (Read_rocksdb_root-> (other thread)commit_rocksdb -> Read_rocksdb_value)
+    // In either case, the value we read from RocksDB will be inconsistent with the root hash we fetched from RocksDB. By reading the root hash before and after the value and cross-checking, we eliminate this possibility.
+    fn get_with_proof_once<N: ProvableCompileTimeNamespace>(
+        &self,
+        proven_key: SlotKey,
+    ) -> Result<(StorageProof<NomtMultiProof>, SlotNumber, StorageRoot<S>), GetWithProofError> {
+        let namespace = N::PROVABLE_NAMESPACE;
+        // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
+        let (_, pre_fetch_state_root) =
+            self.latest_root_and_version_unbound().ok_or_else(|| {
+                GetWithProofError::Other(anyhow::anyhow!("Latest root hash not found"))
+            })?;
+        let pre_fetch_state_root = pre_fetch_state_root.namespace_root(namespace);
+        // Read the value from the newest delta or the live table, whichever is newer.
+        let value = match namespace {
+            ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
+            ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
+        };
+        // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
+        let (committed_slot_number, post_fetch_state_root) = self
+            .latest_root_and_version_unbound()
+            .ok_or(anyhow::anyhow!("Latest root hash not found"))?;
+        let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
+
+        let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
+        let session = match namespace {
+            ProvableNamespace::User => self
+                .state_session_builder
+                .begin_user_session_without_witness()
+                .map_err(GetWithProofError::from)?,
+            ProvableNamespace::Kernel => self
+                .state_session_builder
+                .begin_kernel_session_without_witness()
+                .map_err(GetWithProofError::from)?,
+        };
+
+        if pre_fetch_state_root != post_fetch_state_root_namespace
+            || post_fetch_state_root_namespace != session.prev_root().as_ref()
+        {
+            return Err(GetWithProofError::StateRootMismatch);
+        }
+
+        let path_proof = session.prove(key_path).map_err(GetWithProofError::from)?;
+        drop(session);
+        let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
+
+        Ok((
+            StorageProof {
+                key: proven_key,
+                value,
+                proof: NomtMultiProof(multi_proof),
+                namespace,
+            },
+            committed_slot_number,
+            post_fetch_state_root,
+        ))
     }
 }
 
@@ -713,34 +839,43 @@ where
 
     fn get_with_proof<N: ProvableCompileTimeNamespace>(
         &self,
-        key: SlotKey,
-        slot_number: Option<SlotNumber>,
-    ) -> anyhow::Result<StorageProof<Self::Proof>> {
-        let namespace = N::PROVABLE_NAMESPACE;
-        let value = match namespace {
-            ProvableNamespace::User => self.read_value::<crate::User>(&key, slot_number)?,
-            ProvableNamespace::Kernel => self.read_value::<crate::Kernel>(&key, slot_number)?,
-        };
+        proven_key: SlotKey,
+    ) -> anyhow::Result<(StorageProof<Self::Proof>, SlotNumber, Self::Root)> {
+        // Keep the retry budget well under the RPC's 500ms target while avoiding hammering the
+        // DB under sustained write pressure. In practice one blocked attempt often lands after the
+        // in-flight commit finishes, so a few short retries are enough for the transient mismatch.
+        const RETRY_DEADLINE: Duration = Duration::from_millis(375);
+        const RETRY_BACKOFFS_MS: [u64; 3] = [2, 10, 25];
 
-        let session = match namespace {
-            ProvableNamespace::User => self
-                .state_session_builder
-                .begin_user_session_without_witness()?,
-            ProvableNamespace::Kernel => self
-                .state_session_builder
-                .begin_kernel_session_without_witness()?,
-        };
+        let start = Instant::now();
+        let mut attempts = 0;
 
-        let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
-        let path_proof = session.prove(key_path)?;
-        let multi_proof = MultiProof::from_path_proofs(vec![path_proof]);
+        loop {
+            attempts += 1;
+            match self.get_with_proof_once::<N>(proven_key.clone()) {
+                Ok(result) => return Ok(result),
+                Err(GetWithProofError::Other(err)) => return Err(err),
+                Err(GetWithProofError::StateRootMismatch) => {
+                    let Some(backoff_ms) = RETRY_BACKOFFS_MS.get(attempts - 1).copied() else {
+                        anyhow::bail!(
+                            "State root mismatch between pre-fetch and post-fetch after {attempts} attempts over {:?}",
+                            start.elapsed()
+                        );
+                    };
 
-        Ok(StorageProof {
-            key,
-            value,
-            proof: NomtMultiProof(multi_proof),
-            namespace,
-        })
+                    let elapsed = start.elapsed();
+                    if elapsed >= RETRY_DEADLINE {
+                        anyhow::bail!(
+                            "State root mismatch between pre-fetch and post-fetch after {attempts} attempts over {:?}",
+                            elapsed
+                        );
+                    }
+
+                    let remaining = RETRY_DEADLINE.saturating_sub(elapsed);
+                    std::thread::sleep(Duration::from_millis(backoff_ms).min(remaining));
+                }
+            }
+        }
     }
 
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
@@ -781,6 +916,17 @@ where
 
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {
         self.read_value_unbound::<N>(&key)
+    }
+
+    fn get_accessory_unbound(
+        &self,
+        key: SlotKey,
+        max_version: Option<SlotNumber>,
+    ) -> Option<SlotValue> {
+        self.accessory
+            .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
+            .expect("Unable to read from AccessoryDb")
+            .map(Into::into)
     }
 
     fn maybe_iter_user_values_with_prefix(
@@ -843,5 +989,554 @@ impl sov_metrics::Metric for NomtProverComputeStateResult {
         let kernel_writes = self.kernel_writes;
         let with_witness = self.with_witness as u8;
         write!(buffer, "{name},with_witness={with_witness} user_reads={user_reads},user_writes={user_writes},kernel_reads={kernel_reads},kernel_writes={kernel_writes}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use sha2::Sha256;
+    use sov_db::config::RollupDbConfig;
+    use sov_db::storage_manager::NomtStorageManager;
+    use sov_db::test_utils::CommitFaultInjectionLocation;
+    use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
+    use sov_rollup_interface::storage::HierarchicalStorageManager;
+
+    use super::{GetWithProofError, NomtProverStorage};
+    use crate::cache::{OrderedReadsAndWrites, StateAccesses};
+    use crate::storage::{NativeStorage, StateUpdate, Storage};
+    use crate::{DefaultStorageSpec, SlotKey, SlotValue, User};
+
+    type TestStorage = NomtProverStorage<DefaultStorageSpec<Sha256>, MockHash>;
+    type TestStorageManager = NomtStorageManager<MockDaSpec, Sha256, TestStorage>;
+
+    type StorageProofResult = Result<
+        (
+            crate::StorageProof<<TestStorage as Storage>::Proof>,
+            sov_rollup_interface::common::SlotNumber,
+            <TestStorage as Storage>::Root,
+        ),
+        GetWithProofError,
+    >;
+
+    // Writes a block to the storage manager and finalizes it if requested.
+    fn write_block(
+        storage_manager: &mut TestStorageManager,
+        prev_root: <TestStorage as Storage>::Root,
+        da_header: &MockBlockHeader,
+        user_key: &SlotKey,
+        accessory_key: &SlotKey,
+        value: &SlotValue,
+        finalize: bool,
+    ) -> <TestStorage as Storage>::Root {
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(da_header).unwrap();
+        let (expected_root, mut state_update) = stf_storage
+            .compute_state_update(
+                StateAccesses {
+                    user: OrderedReadsAndWrites {
+                        ordered_reads: Vec::new(),
+                        ordered_writes: vec![(user_key.clone(), Some(value.clone()))],
+                    },
+                    kernel: OrderedReadsAndWrites {
+                        ordered_reads: Vec::new(),
+                        ordered_writes: vec![(user_key.clone(), Some(value.clone()))],
+                    },
+                },
+                &Default::default(),
+                prev_root,
+                None,
+            )
+            .unwrap();
+        state_update.add_accessory_item(accessory_key.clone(), Some(value.clone()));
+
+        storage_manager
+            .save_change_set(
+                da_header,
+                stf_storage.materialize_changes(state_update),
+                Default::default(),
+            )
+            .unwrap();
+
+        if finalize {
+            storage_manager.finalize(da_header).unwrap();
+        }
+
+        expected_root
+    }
+
+    fn assert_proof_matches_storage_and_accessory(
+        storage: &TestStorage,
+        user_key: &SlotKey,
+        accessory_key: &SlotKey,
+        expected_value: &SlotValue,
+        expected_root: <TestStorage as Storage>::Root,
+    ) {
+        let (proof, slot_number, root_hash) = storage
+            .get_with_proof_once::<User>(user_key.clone())
+            .unwrap();
+
+        assert_eq!(slot_number, storage.latest_version_unbound());
+        assert_eq!(root_hash, expected_root);
+        assert_eq!(proof.value, Some(expected_value.clone()));
+        assert_eq!(
+            TestStorage::open_proof(root_hash, proof.clone()).unwrap(),
+            (user_key.clone(), Some(expected_value.clone()))
+        );
+        assert_eq!(
+            storage.get_accessory_unbound(accessory_key.clone(), Some(slot_number)),
+            Some(expected_value.clone())
+        );
+    }
+
+    #[test]
+    fn get_with_proof_reads_overlay_latest_user_and_accessory_state_across_multiple_blocks() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+        let mut prev_root = TestStorage::PRE_GENESIS_ROOT;
+
+        for height in 1..=3 {
+            let da_header = MockBlockHeader::from_height(height);
+            let expected_value = SlotValue::from(vec![height as u8]);
+            let expected_root = write_block(
+                &mut storage_manager,
+                prev_root,
+                &da_header,
+                &user_key,
+                &accessory_key,
+                &expected_value,
+                false, // don't finalize any blocks so that the overlay is newer than the DB
+            );
+
+            let (overlay_storage, _ledger_storage) =
+                storage_manager.create_state_after(&da_header).unwrap();
+            assert_proof_matches_storage_and_accessory(
+                &overlay_storage,
+                &user_key,
+                &accessory_key,
+                &expected_value,
+                expected_root,
+            );
+
+            prev_root = expected_root;
+        }
+    }
+
+    #[test]
+    fn get_with_proof_reads_latest_committed_state_from_stale_storage() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let (stale_storage, _ledger_storage) =
+            storage_manager.create_state_after(&first_header).unwrap();
+
+        let second_header = MockBlockHeader::from_height(2);
+        let second_value = SlotValue::from(vec![2]);
+        let expected_root = write_block(
+            &mut storage_manager,
+            first_root,
+            &second_header,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            true, // finalize blocks so that the DB gets newer than the "stale" storage overlay
+        );
+
+        assert!(stale_storage.latest_version() < stale_storage.latest_version_unbound());
+        assert_proof_matches_storage_and_accessory(
+            &stale_storage,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            expected_root,
+        );
+    }
+
+    /// This is the positive control for the normal committed-state path after block `N+1`
+    /// finishes finalizing and we reopen storage at that new head. The
+    /// `latest_version() == latest_version_unbound()` assertion checks that this handle is
+    /// genuinely fresh rather than exercising stale-storage fallback behavior. The shared helper
+    /// then verifies the full success path: `get_with_proof` returns the expected root and value,
+    /// the proof opens successfully against that root, and accessory state at the returned slot
+    /// matches the proven user value.
+    #[test]
+    fn get_with_proof_reads_latest_committed_state_from_fresh_storage() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let second_header = MockBlockHeader::from_height(2);
+        let second_value = SlotValue::from(vec![2]);
+        let expected_root = write_block(
+            &mut storage_manager,
+            first_root,
+            &second_header,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            true,
+        );
+
+        let (fresh_storage, _ledger_storage) =
+            storage_manager.create_state_after(&second_header).unwrap();
+        assert_eq!(
+            fresh_storage.latest_version(),
+            fresh_storage.latest_version_unbound()
+        );
+        assert_proof_matches_storage_and_accessory(
+            &fresh_storage,
+            &user_key,
+            &accessory_key,
+            &second_value,
+            expected_root,
+        );
+    }
+
+    // These paused-finalization tests have two kinds of assertions.
+    // `wait_until_wait_gate_reached`, the short `recv_timeout(...).is_err()` check, and the final
+    // `latest_version() < latest_version_unbound()` assertion validate the test's setup
+    // assumptions: finalization is paused at the intended spot, `get_with_proof` is blocked by
+    // that in-flight finalization, and the handle is actually stale once the commit completes.
+    // The real method-level correctness check is the post-release
+    // `GetWithProofError::StateRootMismatch` result, which would be a bug if `get_with_proof`
+    // ever turned into a successful proof or some
+    // unrelated error here.
+    fn run_get_with_proof_while_finalize_is_paused<F>(
+        location: CommitFaultInjectionLocation,
+        storage: &TestStorage,
+        user_key: &SlotKey,
+        finish_finalize: F,
+    ) -> StorageProofResult
+    where
+        F: FnOnce(),
+    {
+        assert!(
+            location.wait_until_wait_gate_reached(Duration::from_secs(5)),
+            "timed out waiting for commit to pause at {location}"
+        );
+
+        let (proof_started_tx, proof_started_rx) = std::sync::mpsc::channel();
+        let (proof_done_tx, proof_done_rx) = std::sync::mpsc::channel();
+        let proof_thread = std::thread::spawn({
+            let storage = storage.clone();
+            let user_key = user_key.clone();
+            move || {
+                proof_started_tx.send(()).unwrap();
+                let result = storage.get_with_proof_once::<User>(user_key);
+                proof_done_tx.send(result).unwrap();
+            }
+        });
+
+        proof_started_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("timed out waiting for proof request to start");
+        assert!(
+            proof_done_rx
+                .recv_timeout(Duration::from_millis(100))
+                .is_err(),
+            "get_with_proof unexpectedly finished while commit was paused at {location}"
+        );
+
+        location.release_wait_gate();
+        finish_finalize();
+        let result = proof_done_rx
+            .recv_timeout(Duration::from_secs(5))
+            .expect("timed out waiting for blocked proof request to finish");
+        proof_thread.join().unwrap();
+        result
+    }
+
+    fn run_paused_finalize_and_get_proof_result(
+        location: CommitFaultInjectionLocation,
+    ) -> (TestStorage, SlotKey, StorageProofResult) {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let (stale_storage, _ledger_storage) =
+            storage_manager.create_state_after(&first_header).unwrap();
+
+        location.arm_wait_gate();
+
+        let second_header = MockBlockHeader::from_height(2);
+        let commit_thread = std::thread::spawn({
+            let user_key = user_key.clone();
+            let accessory_key = accessory_key.clone();
+            move || {
+                write_block(
+                    &mut storage_manager,
+                    first_root,
+                    &second_header,
+                    &user_key,
+                    &accessory_key,
+                    &SlotValue::from(vec![2]),
+                    true,
+                )
+            }
+        });
+
+        let result = run_get_with_proof_while_finalize_is_paused(
+            location,
+            &stale_storage,
+            &user_key,
+            move || {
+                commit_thread.join().unwrap();
+            },
+        );
+
+        assert!(stale_storage.latest_version() < stale_storage.latest_version_unbound());
+        (stale_storage, accessory_key, result)
+    }
+
+    fn assert_stale_storage_blocks_then_observes_root_mismatch(
+        location: CommitFaultInjectionLocation,
+    ) {
+        let (_stale_storage, _accessory_key, result) =
+            run_paused_finalize_and_get_proof_result(location);
+        let err = result.expect_err(
+            "get_with_proof should observe a root mismatch once the paused commit finishes",
+        );
+        assert!(
+            matches!(err, GetWithProofError::StateRootMismatch),
+            "unexpected error after releasing paused commit: {err:?}"
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_accessory() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingAccessory,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_ledger() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingLedger,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_archival() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingArchival,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_kernel_nomt() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingKernelNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_waits_for_stale_storage_while_commit_is_paused_before_user_nomt() {
+        assert_stale_storage_blocks_then_observes_root_mismatch(
+            CommitFaultInjectionLocation::BeforeCommittingUserNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_does_not_return_inconsistent_success_for_stale_storage_while_commit_is_paused_before_live(
+    ) {
+        let (stale_storage, accessory_key, result) = run_paused_finalize_and_get_proof_result(
+            CommitFaultInjectionLocation::BeforeCommittingLive,
+        );
+        if let Ok((proof, slot_number, root_hash)) = result {
+            assert_eq!(slot_number, stale_storage.latest_version_unbound());
+            let (_, opened_value) =
+                TestStorage::open_proof(root_hash, proof.clone()).expect("proof should verify");
+            assert_eq!(opened_value, proof.value);
+            assert_eq!(
+                stale_storage.get_accessory_unbound(accessory_key, Some(slot_number)),
+                proof.value
+            );
+        }
+    }
+
+    fn run_paused_finalize_and_get_overlay_proof_result(
+        location: CommitFaultInjectionLocation,
+    ) -> (
+        TestStorage,
+        SlotKey,
+        SlotKey,
+        SlotValue,
+        <TestStorage as Storage>::Root,
+        StorageProofResult,
+    ) {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            false,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+
+        let second_header = MockBlockHeader::from_height(2);
+        let expected_value = SlotValue::from(vec![2]);
+        let expected_root = write_block(
+            &mut storage_manager,
+            first_root,
+            &second_header,
+            &user_key,
+            &accessory_key,
+            &expected_value,
+            false,
+        );
+        let (overlay_storage, _ledger_storage) =
+            storage_manager.create_state_after(&second_header).unwrap();
+
+        location.arm_wait_gate();
+
+        let finalize_thread = std::thread::spawn(move || storage_manager.finalize(&second_header));
+
+        let result = run_get_with_proof_while_finalize_is_paused(
+            location,
+            &overlay_storage,
+            &user_key,
+            move || {
+                finalize_thread.join().unwrap().unwrap();
+            },
+        );
+
+        (
+            overlay_storage,
+            user_key,
+            accessory_key,
+            expected_value,
+            expected_root,
+            result,
+        )
+    }
+
+    fn assert_overlay_storage_blocks_then_observes_consistent_success(
+        location: CommitFaultInjectionLocation,
+    ) {
+        let (overlay_storage, user_key, accessory_key, expected_value, expected_root, result) =
+            run_paused_finalize_and_get_overlay_proof_result(location);
+        let (proof, slot_number, root_hash) =
+            result.expect("get_with_proof should succeed once the paused commit finishes");
+
+        assert_eq!(slot_number, overlay_storage.latest_version_unbound());
+        assert_eq!(root_hash, expected_root);
+        assert_eq!(proof.value, Some(expected_value.clone()));
+        assert_eq!(
+            TestStorage::open_proof(root_hash, proof.clone()).unwrap(),
+            (user_key, Some(expected_value.clone()))
+        );
+        assert_eq!(
+            overlay_storage.get_accessory_unbound(accessory_key, Some(slot_number)),
+            Some(expected_value)
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_archival() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingArchival,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_accessory() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingAccessory,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_ledger() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingLedger,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_kernel_nomt() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingKernelNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_user_nomt() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingUserNomt,
+        );
+    }
+
+    #[test]
+    fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_live() {
+        assert_overlay_storage_blocks_then_observes_consistent_success(
+            CommitFaultInjectionLocation::BeforeCommittingLive,
+        );
     }
 }

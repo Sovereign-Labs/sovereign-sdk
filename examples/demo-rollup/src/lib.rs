@@ -13,25 +13,19 @@ mod mock_rollup;
 
 pub use mock_rollup::*;
 
+mod mock_sp1_rollup;
+pub use mock_sp1_rollup::*;
+
+mod chain_state_override;
+pub use chain_state_override::override_code_commitments_in_chain_state;
+
 mod celestia_rollup;
 pub use celestia_rollup::*;
-
-mod celestia_nomt_rollup;
-pub use celestia_nomt_rollup::*;
-
-mod mock_nomt_rollup;
-pub use mock_nomt_rollup::*;
 
 mod external_mock_rollup;
 pub use external_mock_rollup::*;
 
-mod external_mock_nomt_rollup;
-pub use external_mock_nomt_rollup::*;
-
 mod solana_offchain_endpoint;
-
-mod zk;
-pub use zk::*;
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml

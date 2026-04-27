@@ -14,16 +14,16 @@ use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_metrics::RunnerProcessStfChangesMetrics;
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::DaSyncState;
 use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
-use sov_rollup_interface::{ProvableHeightTracker, StateUpdateInfo};
-use tokio::sync::watch;
+use sov_rollup_interface::ProvableHeightTracker;
 
 /// Result of checking if a block is a valid continuation of the current chain.
 ///
@@ -46,6 +46,12 @@ pub enum BlockCandidateResolution<StfPreState, StateRoot, LedgerPreState> {
         /// This is the first unprocessed height in the current fork.
         height_to_fetch: u64,
     },
+}
+
+#[derive(Default)]
+pub(crate) struct AggregatedProofs {
+    pub(crate) all_aggregated_proofs: Vec<SerializedAggregatedProof>,
+    pub(crate) accepted_aggregated_proofs: Vec<SerializedAggregatedProof>,
 }
 
 /// Structure that holds a block header and a pre-state root that was on this block header
@@ -113,6 +119,7 @@ pub struct StateManager<StateRoot, Witness, Sm, Da>
 where
     Da: DaService,
     Sm: HierarchicalStorageManager<Da::Spec>,
+    Sm::StfState: Clone,
 {
     storage_manager: Sm,
     ledger_db: LedgerDb,
@@ -127,7 +134,7 @@ where
         HashMap<<<Da as DaService>::Spec as DaSpec>::SlotHash, StateOnBlock<Da::Spec, StateRoot>>,
     // Helper for faster iteration over fork tree.
     seen_on_height: BTreeMap<u64, HashSet<<Da::Spec as DaSpec>::SlotHash>>,
-    state_update_sender: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+    state_channel: StateChannel<Sm::StfState>,
     stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
     max_provable_slot_number_tracker: Box<dyn ProvableHeightTracker>,
     is_initialized: bool,
@@ -152,7 +159,7 @@ where
         storage_manager: Sm,
         ledger_db: LedgerDb,
         last_processed_finalized_state_root: StateRoot,
-        state_update_channel: watch::Sender<StateUpdateInfo<Sm::StfState>>,
+        state_channel: StateChannel<Sm::StfState>,
         stf_info_sender: Option<StfInfoSender<StateRoot, Witness, Da::Spec>>,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
         da_sync_state: Arc<DaSyncState>,
@@ -167,7 +174,7 @@ where
             last_processed_finalized_header,
             state_on_block: Default::default(),
             seen_on_height: Default::default(),
-            state_update_sender: state_update_channel,
+            state_channel,
             stf_info_sender,
             max_provable_slot_number_tracker: state_height_tracker,
             is_initialized: false,
@@ -329,7 +336,7 @@ where
         ledger_pre_state: Sm::LedgerState,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
-        aggregated_proofs: Vec<SerializedAggregatedProof>,
+        aggregated_proofs: AggregatedProofs,
         proof_receipts: Vec<PartialProofReceipt<Address, Da::Spec, StateRoot, StorageProof>>,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
@@ -348,12 +355,18 @@ where
             );
         }
 
-        let aggregated_proofs_count = aggregated_proofs.len();
+        let AggregatedProofs {
+            all_aggregated_proofs,
+            accepted_aggregated_proofs,
+        } = aggregated_proofs;
+        let aggregated_proofs_count = all_aggregated_proofs.len();
+        let accepted_aggregated_proofs_count = accepted_aggregated_proofs.len();
         let proof_receipts_count = proof_receipts.len();
         tracing::debug!(
             current_state_root = hex::encode(self.last_processed_finalized_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
+            accepted_aggregated_proofs = accepted_aggregated_proofs_count,
             proof_receipts = proof_receipts_count,
             "Saving changes after applying slot"
         );
@@ -422,6 +435,7 @@ where
             tracing::trace!("Going to materialize StateTransitionInfo");
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
+                aggregated_proofs: all_aggregated_proofs,
                 slot_number,
             };
             let stf_info_schema = stf_info_sender
@@ -431,7 +445,7 @@ where
             tracing::trace!("StateTransitionInfo is materialized into Ledger ChangeSet");
         }
 
-        for aggregated_proof in aggregated_proofs {
+        for aggregated_proof in accepted_aggregated_proofs {
             let this_height_data = self
                 .ledger_db
                 .materialize_aggregated_proof(slot_number, aggregated_proof)?;
@@ -544,12 +558,23 @@ where
             query_state_update_info(&self.ledger_db, stf_state, self.da_sync_state.as_ref())
                 .await?;
 
+        // Debug-only delay before notifying the sequencer about new state.
+        // Widens the window where archival reads must consult uncommitted_changes
+        // instead of NOMT, useful for reproducing race conditions in tests.
+        // Usage: SOV_TEST_DELAY_STATE_UPDATE_MS=500
+        #[cfg(debug_assertions)]
+        if let Ok(ms) = std::env::var("SOV_TEST_DELAY_STATE_UPDATE_MS") {
+            if let Ok(ms) = ms.parse::<u64>() {
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+            }
+        }
+
         // `send_replace` is superior to `send` for our use case. It never fails
         // because it doesn't need to notify all receivers, unlike `send`, which
         // we don't need. It will also keep working even if there are no
         // receivers currently alive, which makes it easier to reason about the
         // code.
-        self.state_update_sender.send_replace(state_update_info);
+        self.state_channel.notify(state_update_info);
 
         Ok(())
     }

@@ -4,12 +4,63 @@
 //! including runtime schema generation and JSON schema output.
 
 use std::fs::File;
-use std::io::Write;
-use std::path::PathBuf;
+use std::io::{BufWriter, Write};
+use std::path::{Path, PathBuf};
+
+use anyhow::Context;
 
 use sov_modules_api::schemars::{schema_for, JsonSchema};
 use sov_modules_api::transaction::TransactionCallable;
 use sov_modules_api::{DispatchCall, Spec};
+
+/// Writes to `target` atomically using a temp file + rename pattern.
+///
+/// The `write_fn` closure receives a buffered writer for the temp file.
+/// After the closure returns, data is flushed, synced to disk, and the
+/// temp file is atomically renamed to `target`.
+///
+/// The temp file name includes PID and timestamp to avoid collisions when
+/// multiple build script invocations run concurrently (e.g. native vs zk mode).
+fn write_atomically<F>(target: &Path, write_fn: F) -> anyhow::Result<()>
+where
+    F: FnOnce(&mut BufWriter<File>) -> anyhow::Result<()>,
+{
+    let unique_suffix = format!(
+        ".tmp.{}.{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let mut temp_os = target.as_os_str().to_os_string();
+    temp_os.push(&unique_suffix);
+    let temp_path = PathBuf::from(temp_os);
+
+    let file = File::create(&temp_path)
+        .with_context(|| format!("Failed to create temp file {temp_path:?}"))?;
+    let mut buf_writer = BufWriter::new(file);
+
+    write_fn(&mut buf_writer)
+        .with_context(|| format!("Failed to write to temp file {temp_path:?}"))?;
+
+    buf_writer
+        .flush()
+        .with_context(|| format!("Failed to flush temp file {temp_path:?}"))?;
+
+    let file = buf_writer
+        .into_inner()
+        .map_err(|e| e.into_error())
+        .with_context(|| format!("Failed to unwrap BufWriter for {temp_path:?}"))?;
+
+    file.sync_all()
+        .with_context(|| format!("Failed to sync temp file {temp_path:?} to disk"))?;
+
+    std::fs::rename(&temp_path, target)
+        .with_context(|| format!("Failed to rename {temp_path:?} to {target:?}"))?;
+
+    Ok(())
+}
 
 /// Builder for configuring build options.
 ///
@@ -182,27 +233,20 @@ impl Options {
 
         let schema_json = serde_json::to_string_pretty(&schema)?;
         let schema_borsh = borsh::to_vec(&schema)?;
-
-        let mut file = File::create(out_path)?;
         let chain_hash = schema.chain_hash().unwrap();
 
-        write!(
-            &mut file,
-            "pub const CHAIN_HASH: [u8; 32] = {chain_hash:?};\n\n"
-        )?;
-
-        write!(
-            &mut file,
-            "#[allow(dead_code)]\npub const SCHEMA_BORSH: &[u8] = &{schema_borsh:?};\n\n"
-        )?;
-        write!(
-            &mut file,
-            "#[allow(dead_code)]\npub const SCHEMA_JSON: &str = r#\"{schema_json}\"#;\n"
-        )?;
-
-        file.flush()?;
-
-        Ok(())
+        write_atomically(&out_path, |file| {
+            write!(file, "pub const CHAIN_HASH: [u8; 32] = {chain_hash:?};\n\n")?;
+            write!(
+                file,
+                "#[allow(dead_code)]\npub const SCHEMA_BORSH: &[u8] = &{schema_borsh:?};\n\n"
+            )?;
+            write!(
+                file,
+                "#[allow(dead_code)]\npub const SCHEMA_JSON: &str = r#\"{schema_json}\"#;\n"
+            )?;
+            Ok(())
+        })
     }
 
     fn output_rollup_schema<S, D>(&self) -> anyhow::Result<()>
@@ -214,12 +258,12 @@ impl Options {
         let schema =
             sov_modules_api::runtime::get_runtime_schema::<S, D>().expect("Failed to get schema");
         let json = serde_json::to_string_pretty(&schema)?;
-        let mut file = File::create(out_path)?;
 
-        file.write_all(json.as_bytes())?;
-        file.write_all(b"\n")?;
-
-        Ok(())
+        write_atomically(&out_path, |file| {
+            file.write_all(json.as_bytes())?;
+            file.write_all(b"\n")?;
+            Ok(())
+        })
     }
 
     fn output_json_schema<D>(&self) -> anyhow::Result<()>
@@ -230,12 +274,12 @@ impl Options {
         let out_path = self.out_dir.join("json-schema.json");
         let schema = schema_for!(D::Decodable);
         let json = serde_json::to_string_pretty(&schema)?;
-        let mut file = File::create(out_path)?;
 
-        file.write_all(json.as_bytes())?;
-        file.write_all(b"\n")?;
-
-        Ok(())
+        write_atomically(&out_path, |file| {
+            file.write_all(json.as_bytes())?;
+            file.write_all(b"\n")?;
+            Ok(())
+        })
     }
 
     fn set_git_head_env(&self) -> anyhow::Result<()> {

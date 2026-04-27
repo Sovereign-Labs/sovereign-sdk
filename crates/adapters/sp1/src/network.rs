@@ -2,14 +2,14 @@
 //!
 //! Submits proof requests to the Succinct proving network and polls for results.
 
+use crate::guest::SP1Guest;
 use serde::Serialize;
-use sov_rollup_interface::zk::{Proof, ZkvmNetwork};
+use sov_rollup_interface::zk::{ZkVerifier, ZkvmGuest, ZkvmNetwork};
 use sp1_sdk::network::proto::auction_types::FulfillmentStatus;
 use sp1_sdk::network::{NetworkMode, B256};
 use sp1_sdk::prover::{ProveRequest, Prover};
-use sp1_sdk::{NetworkProver, ProverClient, SP1ProvingKey, SP1Stdin};
-
-use crate::guest::SP1Guest;
+use sp1_sdk::HashableKey;
+use sp1_sdk::{NetworkProver, ProverClient, ProvingKey, SP1ProvingKey, SP1Stdin};
 
 /// Re-export of the proof handle type used by the SP1 network.
 pub type ProofHandle = B256;
@@ -35,6 +35,27 @@ impl SP1Network {
             .map_err(|e| anyhow::anyhow!("SP1 network setup failed: {e}"))?;
 
         Ok(Self { prover, pk })
+    }
+}
+
+impl SP1Network {
+    async fn emit_fulfillment_metric(&self, request_id: B256) {
+        let proof_request = match self.prover.get_proof_request(request_id).await {
+            Ok(Some(req)) => req,
+            // Best-effort: silently skip metric if request details are unavailable.
+            Ok(None) | Err(_) => return,
+        };
+
+        if let Some(fulfilled_at) = proof_request.fulfilled_at {
+            let fulfillment_duration_secs = fulfilled_at - proof_request.created_at;
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(crate::metrics::SP1ProofFulfillmentMetrics {
+                    prover_type: crate::metrics::ProverType::Network,
+                    request_id: format!("{request_id}"),
+                    fulfillment_duration_secs,
+                });
+            });
+        }
     }
 }
 
@@ -68,11 +89,18 @@ impl ZkvmNetwork for SP1Network {
         }
 
         match maybe_proof {
-            Some(proof) => Ok(Some(bincode::serialize(&Proof::<
-                _,
-                sp1_sdk::SP1PublicValues,
-            >::Full(proof))?)),
+            Some(proof) => {
+                self.emit_fulfillment_metric(*handle).await;
+
+                Ok(Some(bincode::serialize(&proof)?))
+            }
             None => Ok(None),
         }
+    }
+
+    fn code_commitment(
+        &self,
+    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment> {
+        Ok(crate::SP1MethodId(self.pk.verifying_key().hash_u32()))
     }
 }

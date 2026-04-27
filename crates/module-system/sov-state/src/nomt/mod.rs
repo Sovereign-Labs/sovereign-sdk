@@ -16,7 +16,7 @@ pub mod zk_storage;
 /// Verifies a storage proof against a state root and returns the key-value pair.
 ///
 /// This is shared logic used by both Nomt-based storages.
-pub(crate) fn verify_storage_proof<S: MerkleProofSpec>(
+pub fn verify_storage_proof<S: MerkleProofSpec>(
     state_root: StorageRoot<S>,
     proof: StorageProof<NomtMultiProof>,
 ) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {

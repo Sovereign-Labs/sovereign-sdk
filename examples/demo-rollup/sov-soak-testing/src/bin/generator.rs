@@ -5,8 +5,8 @@ use sov_bank::Bank;
 use sov_modules_api::prelude::tracing;
 use sov_modules_api::{EncodeCall, Runtime, Spec};
 use sov_soak_testing::{
-    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SoakTestRunner, TestRT,
-    ValidityProfile,
+    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SP1Spec, SoakTestRunner,
+    TestRT, ValidityProfile, SP1RT,
 };
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::TestSpec;
@@ -20,6 +20,8 @@ use tokio::task::JoinSet;
 enum SelectedRuntime {
     /// Generated test runtime, running by the sov-soak-testing
     Test,
+    /// Generated test runtime with SP1 as inner zkvm (for use with --network-proving)
+    Sp1Test,
     /// demo-stf with Celestia DA
     DemoCelestia,
     /// demo-stf with Mock DA
@@ -52,9 +54,17 @@ struct Args {
     /// The distribution of token transfers vs. synthetic load transactions to generate.
     tx_type: TxType,
 
-    /// After that many seconds main loop will restart with salt incremented by number of workerAs
+    /// After that many seconds main loop will restart with salt incremented by number of workers
     #[arg(long, default_value = "None")]
     restart_after_seconds: Option<u64>,
+
+    #[arg(long)]
+    /// Fixed number of transactions per batch. If unset, randomly chosen between 10 and 100.
+    batch_size: Option<u32>,
+
+    #[arg(long)]
+    /// Fixed sleep interval between batches in milliseconds. If unset, randomly chosen between 25 and 100.
+    batch_interval_ms: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -77,6 +87,8 @@ async fn run_soak_test_with_demo_runtime<R, S>(
     validity: Distribution<MessageValidity>,
     tx_type: TxType,
     restart_after: Option<std::time::Duration>,
+    batch_size: Option<u32>,
+    batch_interval_ms: Option<u64>,
 ) -> anyhow::Result<()>
 where
     R: Runtime<S> + EncodeCall<Bank<S>> + EncodeCall<SyntheticLoad<S>> + Clone,
@@ -91,7 +103,16 @@ where
     };
 
     runner
-        .run(client, rx, worker_id, num_workers, validity, restart_after)
+        .run(
+            client,
+            rx,
+            worker_id,
+            num_workers,
+            validity,
+            restart_after,
+            batch_size,
+            batch_interval_ms,
+        )
         .await
 }
 
@@ -104,6 +125,8 @@ async fn worker_task(
     validity_profile: ValidityProfile,
     tx_type: TxType,
     restart_after: Option<std::time::Duration>,
+    batch_size: Option<u32>,
+    batch_interval_ms: Option<u64>,
 ) -> anyhow::Result<()> {
     let validity = validity_profile.get_validity();
 
@@ -117,6 +140,22 @@ async fn worker_task(
                 validity,
                 tx_type,
                 restart_after,
+                batch_size,
+                batch_interval_ms,
+            )
+            .await
+        }
+        SelectedRuntime::Sp1Test => {
+            run_soak_test_with_demo_runtime::<SP1RT, SP1Spec>(
+                client,
+                rx,
+                worker_id,
+                num_workers,
+                validity,
+                tx_type,
+                restart_after,
+                batch_size,
+                batch_interval_ms,
             )
             .await
         }
@@ -129,6 +168,8 @@ async fn worker_task(
                 validity,
                 tx_type,
                 restart_after,
+                batch_size,
+                batch_interval_ms,
             )
             .await
         }
@@ -141,6 +182,8 @@ async fn worker_task(
                 validity,
                 tx_type,
                 restart_after,
+                batch_size,
+                batch_interval_ms,
             )
             .await
         }
@@ -180,6 +223,8 @@ async fn main() -> Result<(), anyhow::Error> {
             args.validity_profile,
             args.tx_type,
             restart_after,
+            args.batch_size,
+            args.batch_interval_ms,
         ));
     }
 

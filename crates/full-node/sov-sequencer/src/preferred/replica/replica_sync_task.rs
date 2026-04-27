@@ -195,6 +195,7 @@ mod tests {
     use sov_modules_api::VisibleSlotNumber;
     use sov_test_utils::postgres::config_from_postgres_container;
     use sov_test_utils::postgres::{create_postgres_container, CreatePostgresError};
+    use sqlx::postgres::PgPoolOptions;
     use std::net::Ipv4Addr;
     use std::net::SocketAddr;
     use std::sync::atomic::Ordering;
@@ -270,7 +271,7 @@ mod tests {
         BatchEnd(u64),
     }
 
-    async fn execute(mut db: PostgresBackend, data: Vec<TestCase>) {
+    async fn execute(db: &mut PostgresBackend, data: Vec<TestCase>) {
         let mut index = 0;
         for db_data in data {
             match db_data {
@@ -305,6 +306,21 @@ mod tests {
                     db.end_rollup_block(stored_batch).await.unwrap();
                 }
             };
+        }
+    }
+
+    async fn burn_event_ids(connection_string: &str, count: usize) {
+        let pool = PgPoolOptions::new()
+            .connect(connection_string)
+            .await
+            .unwrap();
+
+        for _ in 0..count {
+            let _: i64 =
+                sqlx::query_scalar("SELECT nextval(pg_get_serial_sequence('events', 'event_id'))")
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
         }
     }
 
@@ -379,6 +395,71 @@ mod tests {
         run(test_data, expected, 6).await;
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_notifications_with_event_id_gap_larger_than_page_size() {
+        let postgres = create_postgres_container().await;
+        let postgres = match postgres {
+            Ok(pg) => pg,
+            Err(CreatePostgresError::DockerNotSupported) => return,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let postgres_config = config_from_postgres_container(
+            &postgres,
+            "Replica".into(),
+            ConfiguredNodeRole::Replica,
+        )
+        .await
+        .unwrap();
+
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
+        let mut db = PostgresBackend::connect(&postgres_config, addr)
+            .await
+            .unwrap();
+
+        let _ = db
+            .heartbeat(Some(postgres_config.leader_election))
+            .await
+            .unwrap();
+
+        let (shutdown_snd, _shutdown_rcv) = watch::channel(());
+        let (mut sync_task, start_replica_task_notifier) =
+            ReplicaSyncTask::new_with_page_size(shutdown_snd, 2, SequencerRole::PgSyncReplica)
+                .await
+                .unwrap();
+
+        start_replica_task_notifier.notify();
+
+        let (test_handler, mut recv) = TestHandler::new(0);
+        sync_task.start(test_handler, &postgres_config).await;
+
+        // Wait for sync_task.start to spawn the sync task
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let first_batch = vec![TestCase::CompleteBatch(1, 1)];
+        let first_expected = to_db_data(&first_batch);
+        execute(&mut db, first_batch).await;
+
+        for data in first_expected {
+            let recv_data = recv.recv().await.unwrap();
+            assert_eq!(recv_data, data, "Expected: {data:?}, got: {recv_data:?}");
+        }
+
+        // Burn enough ids to create an empty numeric range larger than the receiver page size.
+        burn_event_ids(&postgres_config.postgres_connection_string, 5).await;
+
+        let second_batch = vec![TestCase::CompleteBatch(2, 1)];
+        let second_expected = to_db_data(&second_batch);
+        execute(&mut db, second_batch).await;
+
+        for data in second_expected {
+            let recv_data = recv.recv().await.unwrap();
+            assert_eq!(recv_data, data, "Expected: {data:?}, got: {recv_data:?}");
+        }
+    }
+
     async fn run(test_cases: Vec<TestCase>, expected: Vec<DbData>, exec_seq_nr: u64) {
         let postgres = create_postgres_container().await;
         let postgres = match postgres {
@@ -421,7 +502,8 @@ mod tests {
         // Wait for sync_task.start to spawn the sync task
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        execute(db, test_cases).await;
+        let mut db = db;
+        execute(&mut db, test_cases).await;
 
         for data in expected {
             let recv_data = recv.recv().await.unwrap();

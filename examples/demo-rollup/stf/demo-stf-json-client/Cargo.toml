@@ -23,6 +23,7 @@ serde_json = { workspace = true, features = ["alloc"] }
 prettyplease = "0.2.22"
 sov-address = { workspace = true, features = ["evm"] }
 progenitor = { version = "0.8" }
+openapiv3 = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 syn = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }

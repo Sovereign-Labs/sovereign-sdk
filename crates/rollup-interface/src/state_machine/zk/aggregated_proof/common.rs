@@ -3,6 +3,17 @@ use serde::{Deserialize, Serialize};
 use super::CodeCommitmentHash;
 use crate::da::DaSpec;
 
+/// Serialized public values committed to by a ZK proof.
+///
+/// Passed to [`crate::zk::ZkVerifier::verify_with_pub_values`] when the
+/// proof itself is read from the guest's implicit proof input channel and
+/// only the public values need to be supplied explicitly.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SerializedPubValues {
+    #[allow(missing_docs)]
+    pub pub_values: Vec<u8>,
+}
+
 /// A single deferred proof input containing its public values and associated DA block header.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(bound(
@@ -11,7 +22,7 @@ use crate::da::DaSpec;
 ))]
 pub struct DeferredProofInput<Da: DaSpec> {
     /// The public values of the proof.
-    pub public_values: Vec<u8>,
+    pub public_values: SerializedPubValues,
     /// The DA block header associated with this proof.
     pub da_block_header: Da::BlockHeader,
 }
@@ -25,6 +36,8 @@ pub struct DeferredProofInput<Da: DaSpec> {
 pub struct AggregatedProofWitness<Da: DaSpec> {
     /// The inner proof inputs to be aggregated.
     pub proof_inputs: Vec<DeferredProofInput<Da>>,
+    /// The hash of the inner verification key used to verify the aggregated proofs.
+    pub inner_vkey_hash: CodeCommitmentHash,
     /// The hash of the outer verification key.
     pub outer_vkey_hash: CodeCommitmentHash,
     /// An optional previous outer proof witness for recursive aggregation.
@@ -35,5 +48,5 @@ pub struct AggregatedProofWitness<Da: DaSpec> {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PreviousOuterProofWitness {
     /// Serialized public values of the previous proof.
-    pub public_values: Vec<u8>,
+    pub public_values: SerializedPubValues,
 }

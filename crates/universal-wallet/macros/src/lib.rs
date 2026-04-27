@@ -6,8 +6,8 @@ pub fn derive_wallet(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let result = sov_universal_wallet_macro_helpers::schema::derive(
         input,
-        Some(syn::parse_quote! { sov_rollup_interface }),
-        syn::parse_quote! { sov_rollup_interface::sov_universal_wallet::UniversalWallet },
+        None,
+        syn::parse_quote! { sov_universal_wallet::UniversalWallet },
     );
     handle_macro_error_and_expand(result.map(Into::into))
 }

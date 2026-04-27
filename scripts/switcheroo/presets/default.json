@@ -7,6 +7,7 @@
     "crates/full-node/sov-sequencer",
     "crates/full-node/sov-ledger-apis",
     "crates/full-node/sov-rollup-apis",
+    "crates/full-node/sov-rollup-full-node-interface",
     "crates/full-node/sov-stf-runner",
     "crates/full-node/sov-metrics",
     "crates/full-node/sov-api-spec",

@@ -11,17 +11,15 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::stf::GenesisParams;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
-#[cfg(feature = "native")]
-use sov_state::User;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
 use crate::transaction::TransactionCallable;
 use crate::Context;
-use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
 #[cfg(feature = "native")]
-use crate::{FullyBakedTx, StateReader};
+use crate::FullyBakedTx;
+use crate::{DispatchCall, Genesis, RuntimeEventProcessor, Spec};
 
 /// Flag indicating what mode the rollup is operating in.
 #[derive(
@@ -84,7 +82,7 @@ pub trait Runtime<S: Spec>:
     + 'static
 {
     /// Chain root hash used for transaction verification. Generated from a
-    /// [schema](sov_rollup_interface::sov_universal_wallet::schema::Schema).
+    /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
     /// GenesisConfig type.
@@ -152,14 +150,6 @@ pub trait Runtime<S: Spec>:
     fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
         None
     }
-
-    /// Resolve CredentialId to address.
-    fn resolve_address<ST: StateReader<User>>(
-        &self,
-        default_address: &S::Address,
-        credential_id: &crate::CredentialId,
-        state: &mut ST,
-    ) -> Result<S::Address, ST::Error>;
 }
 
 #[cfg(feature = "native")]
@@ -195,7 +185,7 @@ pub trait Runtime<S: Spec>:
     + 'static
 {
     /// Chain root hash used for transaction verification. Generated from a
-    /// [schema](sov_rollup_interface::sov_universal_wallet::schema::Schema).
+    /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
     /// `GenesisConfig` type.

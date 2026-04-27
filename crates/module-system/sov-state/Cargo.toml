@@ -25,6 +25,7 @@ serde = { workspace = true, features = ["rc"] }
 derive_more = { workspace = true }
 serde-big-array = "0.5.1"
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["macros"] }
 sov-db = { workspace = true, optional = true }
 hex = { workspace = true }
 jmt = { workspace = true, features = ["std", "sha2"] }
@@ -41,27 +42,32 @@ proptest = { workspace = true }
 test-strategy = { workspace = true }
 sha2 = { workspace = true }
 serde_json = { workspace = true }
+sov-db = { workspace = true, features = ["test-utils"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+tempfile = { workspace = true }
 
 [features]
 arbitrary = [
-    "dep:arbitrary",
-    "dep:proptest",
-    "dep:proptest-derive",
-    "sov-db?/arbitrary",
-    "sov-rollup-interface/arbitrary",
-    "sov-modules-macros?/arbitrary",
-    "sov-db-types/arbitrary",
+	"dep:arbitrary",
+	"dep:proptest",
+	"dep:proptest-derive",
+	"sov-db?/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"sov-modules-macros?/arbitrary",
+	"sov-db-types/arbitrary",
+	"sov-mock-da/arbitrary"
 ]
 bench = ["dep:sov-modules-macros", "sov-modules-macros/bench"]
 default = []
 native = [
-    "sov-db",
-    "sov-rollup-interface/native",
-    "sov-metrics/native",
-    "sov-modules-macros?/native",
-    "sov-db-types/native",
-    "dep:nomt",
-    "dep:tracing",
+	"sov-db",
+	"sov-rollup-interface/native",
+	"sov-metrics/native",
+	"sov-modules-macros?/native",
+	"sov-db-types/native",
+	"dep:nomt",
+	"dep:tracing",
+	"sov-mock-da/native"
 ]
 
 test-utils = []

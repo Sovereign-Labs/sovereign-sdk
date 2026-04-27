@@ -19,6 +19,7 @@ digest = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true }
 
 hex = { workspace = true }
 ed25519-dalek = { workspace = true, features = ["serde", "alloc"] }

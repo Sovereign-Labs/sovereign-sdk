@@ -3,12 +3,12 @@ use std::str::FromStr;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::{eip1559::MIN_PROTOCOL_BASE_FEE, eip2718::Encodable2718};
 use alloy_primitives::{Address, Bytes, TxKind};
-use reth_primitives::TransactionSigned;
 use secp256k1::rand::SeedableRng as _;
 use secp256k1::{PublicKey, SecretKey};
 use sov_address::MultiAddress;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_eth_dev_signer::Signer;
+use sov_eth_dev_signer::TransactionSigned;
 use sov_evm::{
     AccountData, EthereumAuthenticator, EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
 };
@@ -40,7 +40,7 @@ impl EvmAccount {
     }
 
     pub fn address(&self) -> Address {
-        reth_primitives::public_key_to_address(self.public_key())
+        alloy_consensus::crypto::secp256k1::public_key_to_address(self.public_key())
     }
 
     pub fn sign(&self, tx: TypedTransaction) -> (RlpEvmTransaction, TransactionSigned) {

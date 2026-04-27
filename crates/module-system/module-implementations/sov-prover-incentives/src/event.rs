@@ -33,6 +33,10 @@ pub enum SlashingReason {
 
     /// The final slot hash contained in the [`sov_modules_api::AggregatedStateTransition`] outputs is incorrect
     IncorrectFinalSlotHash,
+
+    /// The inner verification key hash committed in the proof does not match the
+    /// chain's expected inner code commitment.
+    IncorrectInnerVkeyHash,
 }
 
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]

@@ -6,18 +6,17 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::namespace_data::NamespaceData;
 /// Reexport the [`Namespace`] from `celestia-types`
 pub use celestia_types::nmt::Namespace;
-use celestia_types::AppVersion;
 pub use error::*;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::schema::OverrideSchema;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 
-pub(crate) const APP_VERSION: AppVersion = AppVersion::V7;
 pub(crate) const SUPPORTED_SHARE_VERSION: u8 = 1;
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Clone, Eq, Hash, Serialize, Deserialize)]
@@ -29,7 +28,7 @@ pub struct TmHash(pub tendermint::Hash);
 #[doc(hidden)]
 pub struct TmHashSchema(#[sov_wallet(display(hex))] [u8; 32]);
 
-impl sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema for TmHash {
+impl OverrideSchema for TmHash {
     type Output = TmHashSchema;
 }
 
@@ -174,12 +173,9 @@ impl NamespaceRelevantData {
                 share_seq.check_consistency();
             }
             // Commitment
-            let commitment = celestia_types::Commitment::from_shares(
-                self.namespace,
-                &share_seq.shares,
-                APP_VERSION,
-            )
-            .expect("blob must be valid");
+            let commitment =
+                celestia_types::Commitment::from_shares(self.namespace, &share_seq.shares)
+                    .expect("blob must be valid");
             let hash = HexHash::new(*commitment.hash());
 
             let range_in_namespace = share_seq.range_in_ns.clone();

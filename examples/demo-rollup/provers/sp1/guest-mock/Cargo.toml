@@ -9,7 +9,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { version = "1.0.95" }
-sp1-zkvm = { version = "6.0.2" }
+sp1-zkvm = { version = "6.1.0" }
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1" }
@@ -22,6 +22,7 @@ sov-kernels = { path = "../../../../../crates/module-system/sov-kernels" }
 sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true, features = [
     "sp1",
 ] }
+sha2 = { version = "0.10", default-features = false }
 
 [patch.crates-io]
 sha2-v0-9-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.9.9-sp1-6.0.0" }

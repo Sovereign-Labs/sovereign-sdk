@@ -179,7 +179,7 @@ pub struct TestRunner<
     checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     /// The corresponding receiving end of the channel.
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
-    axum_server: axum_server::Handle,
+    axum_server: axum_server::Handle<std::net::SocketAddr>,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
 }
@@ -191,12 +191,7 @@ impl<RT: Runtime<S>, S: Spec, Sm: ForklessStorageManager> Drop for TestRunner<RT
 }
 
 /// The output of the apply slot function that uses the test spec and da spec.
-pub type TestApplySlotOutput<RT, S> = ApplySlotOutput<
-    <S as Spec>::InnerZkvm,
-    <S as Spec>::OuterZkvm,
-    <S as Spec>::Da,
-    TestStfBlueprint<RT, S>,
->;
+pub type TestApplySlotOutput<RT, S> = ApplySlotOutput<<S as Spec>::Da, TestStfBlueprint<RT, S>>;
 
 /// The output of the runner
 pub struct RunnerOutput<S: Spec> {

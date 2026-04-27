@@ -28,7 +28,9 @@ use sov_full_node_configs::sequencer::{PreferredSequencerConfig, SequencerConfig
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::GasArray;
 use sov_modules_api::GasSpec;
-use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
+use sov_modules_api::VersionReader;
+use sov_modules_api::{FullyBakedTx, Runtime, Spec};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
@@ -101,13 +103,14 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     #[cfg(feature = "test-utils")]
     ForceCloseCurrentBatch {
         reason: &'static str,
+        result_sender: oneshot::Sender<bool>,
     },
     ProofBlob {
         blob_id: BlobInternalId,
         data: SerializedProofWithDetailsBytes,
         reason: &'static str,
     },
-    TriggerBatchProductionIfConvenient {
+    TriggerBatchProduction {
         reason: &'static str,
     },
     SimpleStateUpdate {
@@ -191,15 +194,19 @@ where
         seq_config.max_batch_size_bytes,
     );
 
+    let executor = RollupBlockExecutor::new(
+        &latest_info,
+        rollup_exec_config.clone(),
+        seq_config.clone(),
+        Default::default(),
+        None, // We'll populate the pinned cache on the first `update_state` call.
+    );
+    let executor_rebase_height = executor.checkpoint.rollup_height_to_access();
+
     let inner = Inner {
         seq_role,
-        executor: RollupBlockExecutor::new(
-            &latest_info,
-            rollup_exec_config.clone(),
-            seq_config.clone(),
-            Default::default(),
-            None, // We'll populate the pinned cache on the first `update_state` call.
-        ),
+        executor,
+        executor_rebase_height,
         latest_info,
         tx_queue_id,
         batch_execution_time_limit_micros,
@@ -296,9 +303,11 @@ impl InitialStatus {
 const COMFORTABLE_GAS_LIMIT_MULTIPLIER: u64 = 19;
 const COMFORTABLE_GAS_LIMIT_DIVISOR: u64 = 20;
 
-pub(crate) fn comfortable_gas_limit<S: Spec>() -> <S as GasSpec>::Gas {
-    let initial_gas_limit = <S as GasSpec>::initial_gas_limit();
-    initial_gas_limit
+pub(crate) fn comfortable_gas_limit_for_height<S: Spec>(
+    height: RollupHeight,
+) -> <S as GasSpec>::Gas {
+    let gas_limit = <S as GasSpec>::gas_limit_for_height(height);
+    gas_limit
             .scalar_division(COMFORTABLE_GAS_LIMIT_DIVISOR)
             .checked_scalar_product(COMFORTABLE_GAS_LIMIT_MULTIPLIER).unwrap_or_else(|| {
                 panic!(

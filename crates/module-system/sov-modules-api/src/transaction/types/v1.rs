@@ -6,8 +6,8 @@ use derivative::Derivative;
 use sov_rollup_interface::common::SafeVec;
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::zk::CryptoSpec;
+use sov_universal_wallet::UniversalWallet;
 
 /// The maximum number of signers allowed in a multisig.
 pub const MAX_SIGNERS: usize = 21;
@@ -78,9 +78,7 @@ pub struct Version1<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     // This is used to compute the credential ID statelessly.
     pub min_signers: u8,
     /// The runtime call of the transaction.
-    #[sov_wallet(
-        bound = "Call: sov_rollup_interface::sov_universal_wallet::schema::UniversalWallet"
-    )]
+    #[sov_wallet(bound = "Call: sov_universal_wallet::schema::UniversalWallet")]
     pub runtime_call: Call,
     /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,

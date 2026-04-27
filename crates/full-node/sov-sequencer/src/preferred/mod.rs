@@ -47,15 +47,16 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
-use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
-    RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber,
-    *,
+    RuntimeEventResponse, Spec, StateCheckpoint, VersionReader, VisibleSlotNumber, *,
 };
 use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rest_utils::json_obj;
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
@@ -249,9 +250,7 @@ where
                 }
 
                 self.synchronized_state_updator
-                    .trigger_batch_production_if_convenient_msg(
-                        "recover_and_catch_up:dump_catchup_batches",
-                    )
+                    .trigger_batch_production_msg("recover_and_catch_up:dump_catchup_batches")
                     .await
                     .map_err(|e| e.into_state_update_error())?;
             }
@@ -802,12 +801,12 @@ where
     }
 
     #[cfg(feature = "test-utils")]
-    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
-        self.synchronized_state_updator
+    async fn force_close_current_batch(&self) -> anyhow::Result<bool> {
+        Ok(self
+            .synchronized_state_updator
             .force_close_current_batch_msg("force_close_current_batch")
             .await
-            .map_err(|e| e.into_state_update_error())?;
-        Ok(())
+            .map_err(|e| e.into_state_update_error())?)
     }
 
     #[cfg(feature = "test-utils")]

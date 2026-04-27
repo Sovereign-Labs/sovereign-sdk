@@ -9,10 +9,9 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
-use super::{ProverService, ProverServiceError, RollupProverConfigDiscriminants, Verifier};
+use super::{ProverService, ProverServiceError, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
 
 /// Prover service that generates proofs in parallel.
@@ -26,8 +25,7 @@ where
     OuterVm: Zkvm,
 {
     inner_vm: InnerVm::Host,
-    outer_vm: OuterVm::Host,
-    prover_config: RollupProverConfigDiscriminants,
+    outer_vm: OuterVm::OuterHost,
 
     prover_state: Prover<Address, StateRoot, Witness, Da>,
 
@@ -46,14 +44,11 @@ where
     OuterVm: Zkvm,
 {
     /// Creates a new prover.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         inner_vm: InnerVm::Host,
-        outer_vm: OuterVm::Host,
+        outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
-        config: RollupProverConfigDiscriminants,
         num_threads: usize,
-        outer_vk_hash: CodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let verifier = Arc::new(Verifier { da_verifier });
@@ -61,20 +56,16 @@ where
         Self {
             inner_vm,
             outer_vm,
-            prover_config: config,
-            prover_state: Prover::new(prover_address, num_threads, outer_vk_hash),
+            prover_state: Prover::new(prover_address, num_threads),
             verifier,
         }
     }
 
     /// Creates a new prover.
-    #[allow(clippy::too_many_arguments)]
     pub fn new_with_default_workers(
         inner_vm: InnerVm::Host,
-        outer_vm: OuterVm::Host,
+        outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
-        config: RollupProverConfigDiscriminants,
-        outer_vk_hash: CodeCommitmentHash,
         prover_address: Address,
     ) -> Self {
         let num_cpus = num_cpus::get();
@@ -84,9 +75,7 @@ where
             inner_vm,
             outer_vm,
             da_verifier,
-            config,
             num_cpus - 1,
-            outer_vk_hash,
             prover_address,
         )
     }
@@ -128,7 +117,6 @@ where
 
         self.prover_state.start_proving::<InnerVm>(
             state_transition_info,
-            self.prover_config,
             inner_vm,
             self.verifier.clone(),
         )
@@ -136,13 +124,11 @@ where
 
     async fn create_aggregated_proof(
         &self,
-        block_header_hashes: &[<<Self::DaService as DaService>::Spec as DaSpec>::SlotHash],
+        block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
-        self.prover_state.create_aggregated_proof(
-            self.outer_vm.clone(),
-            block_header_hashes,
-            genesis_state_root,
-        )
+        self.prover_state
+            .create_aggregated_proof(self.outer_vm.clone(), block_headers, genesis_state_root)
+            .await
     }
 }

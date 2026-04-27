@@ -132,10 +132,17 @@ When doing static production-readiness sweeps, prioritize:
 
 ## Fast Commands
 
+The EVM RPC integration suite lives in
+`crates/full-node/sov-ethereum/tests/integration/` and runs under
+`-p sov-ethereum`. Running `evm_rpc` there covers the compliance validation
+tests (`evm_rpc_compliance_validation*`); the `sov-demo-rollup` `evm_rpc`
+smoke test exercises the full production runtime.
+
 ```bash
 SKIP_GUEST_BUILD=1 cargo nextest run -p sov-evm
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_rpc
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_fee_history
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_effective_gas_price
+SKIP_GUEST_BUILD=1 cargo nextest run -p sov-ethereum evm_basefee
 SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_rpc
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_fee_history
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_effective_gas_price
-SKIP_GUEST_BUILD=1 cargo nextest run -p sov-demo-rollup evm_basefee
 ```

@@ -1,4 +1,51 @@
+# 2026-04-21
+- #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
+  The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.
+  Downstream runtimes with a manual `Runtime` impl should delete their `resolve_address` function.
+
+# 2026-04-16
+- #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
+- #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
+  The change also affects call message de-serialization in sov-paymaster, for all call messages that use `PaymasterPolicyInitializer`
+- #2750 **Code breaking change**: `StateUpdateInfo`, `StateChannel`, `StateUpdateReceiver`, and `DaSyncState` have been moved out of `sov-rollup-interface` and `sov-modules-api` into a new crate `sov-rollup-full-node-interface`. This removes the `rockbound` (RocksDB) dependency from `sov-rollup-interface/native`. Update your imports:
+  - `sov_rollup_interface::StateUpdateInfo` -> `sov_rollup_full_node_interface::StateUpdateInfo`
+  - `sov_rollup_interface::StateChannel` -> `sov_rollup_full_node_interface::StateChannel`
+  - `sov_rollup_interface::node::DaSyncState` -> `sov_rollup_full_node_interface::DaSyncState`
+  - `sov_modules_api::StateChannel` -> `sov_rollup_full_node_interface::StateChannel`
+  - `sov_modules_api::rest::StateUpdateReceiver` -> `sov_rollup_full_node_interface::StateUpdateReceiver`
+  - `SyncStatus` remains in `sov_rollup_interface::node::SyncStatus` (unchanged)
+  - `MaximumProvableHeight::new` now takes `watch::Receiver<S::Storage>` instead of `StateUpdateReceiver`. Use `StateChannel::subscribe_storage()` instead of `StateChannel::subscribe_state_update()` when constructing it.
+
+# 2026-04-15
+- #2742 *Minor breaking change (code)*: The `UniversalWallet` macro exported by the `sov-universal-wallet` crate is now meant to be used by depending directly on the crate, and is no longer re-exported from `sov-rollup-interface`. The re-export from `sov-modules-api` is unchanged, so most usage is unaffected; this is only breaking if you were previously importing the macro specifically from `sov-rollup-interface`.
+
+# 2026-04-13
+- #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
+- #2735 Internal change: moves EVM RPC tests to sov-ethereum from sov-demo-rollup
+
+# 2026-04-08
+- #2695 adds a new `ext_getStorageProof` RPC endpoint to the EVM module
+- #2704 Replaces `reth`-related crates. No breakage is intended.
+- #2710 Marks demo-rollup's bank test as flaky.
+
+# 2026-04-02
+- #2682 Upgrades axum from 0.7 to 0.8. OpenAPI specs are now served as version 3.1.0 (previously 3.0.2). Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
+- #2683 Removes JMT based rollup from demo-rollup examples. JMT-based storage is still available in sov-state.
+
+# 2026-04-01
+- #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
+
+# 2026-03-30
+- #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
+- #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
+- #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
+- #2675 Upgrades `rockbound` version, with some dependency clean up. `prometheus_exporter` is removed from `demo-rollup`
+- #2671 Fixes API archival query race condition
+- #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
+- #2658 (Non-breaking) Add multisig support to the sov-solana-offchain-authenticator, but only when using simple signing (i.e. multisigs are not yet supported with Ledger wallets).
+
 # 2026-03-24
+- #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
 - #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
 - #2634 Test only changes
 - #2631 Reorganize and extend demo-stf

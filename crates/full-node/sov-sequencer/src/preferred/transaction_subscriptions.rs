@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::pin::Pin;
 use std::sync::Arc;
 
+use sov_modules_api::capabilities::TransactionAuthenticator;
+
 use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
@@ -280,7 +282,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             .map(move |result| match result {
                 Ok(tx) => {
                     last_tx_number = Some(tx.confirmation.tx_number);
-                    Ok(tx.into())
+                    Ok(ApiAcceptedTx::from_accepted_tx::<Rt, S>(tx))
                 }
                 Err(BroadcastStreamRecvError::Lagged(skipped)) => {
                     Err(SubscriptionStreamError::Lagged {
@@ -418,7 +420,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
         let txs_from_cache = tx_cache
             .cache
             .range(starting_from..starting_from + CHUNK_SIZE)
-            .map(|(_, tx)| ApiAcceptedTx::from(tx.clone()))
+            .map(|(_, tx)| ApiAcceptedTx::from_accepted_tx::<Rt, S>(tx.clone()))
             .collect::<Vec<_>>();
 
         // If the start of the chunk was in cache we're done - every later tx that exists will also be in cache, and
@@ -465,8 +467,15 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                 let timestamp_nanos = tx.body.as_ref().and_then(|body| {
                     get_maybe_timestamp_from_sequencing_data::<S, Rt>(body, false)
                 });
+                let tx_body = tx
+                    .body
+                    .and_then(|body| Rt::Auth::decode_serialized_tx(&body).ok())
+                    .map(|tx| {
+                        serde_json::to_value(Rt::wrap_call(tx))
+                            .expect("Txs must be json serializable")
+                    });
                 ApiAcceptedTx {
-                    tx: tx.body.unwrap_or_default(),
+                    tx: tx_body,
                     id: HexString(tx.hash),
                     confirmation: Confirmation {
                         events: tx
@@ -497,7 +506,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
             Pin::new(subscription).poll_next(cx).map(|opt| {
                 opt.map(|result| {
                     result
-                        .map(|tx| tx.into())
+                        .map(|tx| ApiAcceptedTx::from_accepted_tx::<Rt, S>(tx))
                         .map_err(|BroadcastStreamRecvError::Lagged(n)| {
                             SubscriptionStreamError::Lagged {
                                 skipped: n,

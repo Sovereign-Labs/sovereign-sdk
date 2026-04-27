@@ -17,7 +17,8 @@ use crate::{SequencerNotReadyDetails, TxHash};
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateUpdateInfo};
+use sov_modules_api::{FullyBakedTx, Runtime, Spec};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::Storage;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -217,8 +218,24 @@ where
     pub(crate) async fn force_close_current_batch_msg(
         &self,
         reason: &'static str,
-    ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::ForceCloseCurrentBatch { reason }).await
+    ) -> Result<bool, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::ForceCloseCurrentBatch {
+            reason,
+            result_sender: resp,
+        })
+        .await?;
+        match recv.await {
+            Ok(result) => Ok(result),
+            Err(_) => {
+                if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                    info!("SequencerStateUpdator(force_close_current_batch) task exited, this is ok since the sequencer is shutting down.");
+                    return Err(SequencerStateUpdatorError::Shutdown);
+                }
+                error!("SequencerStateUpdator(force_close_current_batch) task has shut down unexpectedly.");
+                Err(SequencerStateUpdatorError::Unexpected)
+            }
+        }
     }
 
     pub(crate) async fn proof_blob_msg(
@@ -235,12 +252,11 @@ where
         .await
     }
 
-    pub(crate) async fn trigger_batch_production_if_convenient_msg(
+    pub(crate) async fn trigger_batch_production_msg(
         &self,
         reason: &'static str,
     ) -> Result<(), SequencerStateUpdatorError> {
-        self.send(Message::TriggerBatchProductionIfConvenient { reason })
-            .await
+        self.send(Message::TriggerBatchProduction { reason }).await
     }
 
     pub(crate) async fn send_simple_state_update_msg(

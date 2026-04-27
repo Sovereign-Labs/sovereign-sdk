@@ -2,6 +2,7 @@
 
 #[cfg(feature = "native")]
 use sov_evm::execution_config::EvmExecutionConfig;
+use sov_hyperlane_integration::HyperlaneAddress;
 use sov_solana_offchain_auth::SolanaOffchainAuthenticatorTrait;
 #[cfg(feature = "native")]
 use sov_state::pinned_cache::PinnedCache;
@@ -46,11 +47,11 @@ pub use __generated::CHAIN_HASH;
 #[derive(Default, Clone)]
 pub struct Runtime<S: Spec>(pub(crate) RuntimeInner<S>)
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>;
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress;
 
 impl<S: Spec> std::ops::Deref for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     type Target = RuntimeInner<S>;
     fn deref(&self) -> &Self::Target {
@@ -60,7 +61,7 @@ where
 
 impl<S: Spec> std::ops::DerefMut for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -70,7 +71,7 @@ where
 impl<S> sov_modules_stf_blueprint::Runtime<S> for Runtime<S>
 where
     S: Spec,
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
 
@@ -115,18 +116,6 @@ where
             jsonrpsee_module: demo_stf_declaration::get_rpc_methods::<S>(api_state),
             background_handles: Vec::new(),
         }
-    }
-
-    #[cfg(feature = "native")]
-    fn resolve_address<ST: sov_modules_api::StateReader<sov_modules_api::User>>(
-        &self,
-        default_address: &S::Address,
-        credential_id: &sov_modules_api::CredentialId,
-        state: &mut ST,
-    ) -> Result<S::Address, ST::Error> {
-        self.0
-            .accounts
-            .resolve_sender_address_read_only(default_address, credential_id, state)
     }
 
     #[cfg(feature = "native")]
@@ -184,7 +173,7 @@ where
 
 impl<S: Spec> HasCapabilities<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     type Capabilities<'a> = StandardCapabilities<'a, S, &'a mut sov_paymaster::Paymaster<S>>;
     type SequencingData = sov_modules_api::HDTimestamp;
@@ -206,7 +195,7 @@ where
 
 impl<S: Spec> HasKernel<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     type Kernel<'a> = SoftConfirmationsKernel<'a, S>;
 
@@ -225,7 +214,7 @@ where
 
 impl<S: Spec> EthereumAuthenticator<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     fn add_ethereum_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
         EvmAndSolanaOffchainAuthenticatorInput::Evm(tx)
@@ -234,7 +223,7 @@ where
 
 impl<S: Spec> SolanaOffchainAuthenticatorTrait<S> for Runtime<S>
 where
-    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address>,
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     fn add_solana_offchain_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
         EvmAndSolanaOffchainAuthenticatorInput::SolanaOffchain(tx)

@@ -2,10 +2,6 @@ use std::ops::{Deref, DerefMut};
 
 use sov_universal_wallet::UniversalWallet;
 
-// Needed for UniversalWallet derive macro because we are inside the
-// sov_rollup_interface crate.
-use crate as sov_rollup_interface;
-
 /// Uniquely identifies a slot **within the canonical DA fork**.
 ///
 /// Slots across reorgs can have the same [`SlotNumber`].
@@ -295,6 +291,7 @@ fn test_visible_slot_number() {
     serde::Deserialize,
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
+    schemars::JsonSchema,
 )]
 pub struct RollupHeight(u64);
 
@@ -310,6 +307,9 @@ impl RollupHeight {
 
     /// The height of the first rollup block after genesis.
     pub const ONE: Self = Self(1);
+
+    /// The largest possible [`RollupHeight`].
+    pub const MAX: Self = Self(u64::MAX);
 
     /// Create a new rollup height from a u64.
     pub fn new(height: u64) -> Self {

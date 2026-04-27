@@ -13,14 +13,15 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
-    GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
+    call_message_repr, Amount, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx,
+    Gas, GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
     RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
-    StateUpdateInfo, TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
+    TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
 use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
@@ -285,6 +286,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
         self.uncommitted_changes = other.uncommitted_changes;
+        self.id = other.id;
 
         // Update our list of state roots from the other executor.
         self.state_roots = other.state_roots;
@@ -814,6 +816,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         if self
             .state_root_request_sender
             .send(StateRootComputeRequest {
+                executor_id: self.id,
                 raw_state_changes: changes.clone(),
                 uncommitted_changes: self.uncommitted_changes.clone(),
                 storage: self.checkpoint.storage().clone(),
@@ -933,10 +936,17 @@ where
         .base_fee_per_gas(&mut accessor)
         .unwrap_or(S::initial_base_fee_per_gas());
     // Note that we need to escrow gas for each batch and proof. The escrow amount is `max_tx_check_costs` in each case.
-    let needed_gas_escrow = S::max_tx_check_costs()
+    let standard_gas_escrow = S::max_tx_check_costs()
         .checked_value(next_gas_price)
         .expect("Gas price overflow! This is a bug, please report it.");
-    kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+    let needed_gas_escrow_for_preferred_sequencer =
+    // The blob sender decides what the gas limit should be *before* we call `increment_rollup_height`. Use the same height
+        if old_rollup_height > <S as GasSpec>::change_gas_limit_after_height() {
+            Amount::ZERO
+        } else {
+            standard_gas_escrow
+        };
+    kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
 
     let blob_selector_output = {
         let preferred_blob = SelectedBlob {
@@ -949,7 +959,7 @@ where
                 sequencer_rollup_address,
                 is_responsible_for_gating_admins,
             )),
-            reserved_gas_tokens: Some(needed_gas_escrow),
+            reserved_gas_tokens: Some(needed_gas_escrow_for_preferred_sequencer),
             sender: sequencer_da_address,
         };
 
@@ -967,7 +977,7 @@ where
                 // Batches from unregistered sequencers don't reserve any gas
                 // tokens.
                 if b.reserved_gas_tokens.is_some() {
-                    b.reserved_gas_tokens = Some(needed_gas_escrow);
+                    b.reserved_gas_tokens = Some(standard_gas_escrow);
                 }
                 b.map_batch(MaybeAsyncBatch::<S>::new_sync)
             })
@@ -978,7 +988,7 @@ where
         let selected_blobs = proofs_to_replay
             .into_iter()
             .map(|p| {
-                kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+                kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
                 let proof_with_sequence_number = PreferredProofData::try_from_slice(&p.data.0).expect("Failed to deserialize trusted proof data within the sequencer. This is a bug, please report it.");
                 SelectedBlob {
                 blob_data: BlobDataWithId::Proof {
@@ -986,7 +996,7 @@ where
                     id: [0u8; 32], // Following the preferred batch logic, we use the zero hash for proofs whose blob ID is unknown because they haven't been published yet
                     sequencer_address: sequencer_rollup_address,
                 },
-                reserved_gas_tokens: Some(needed_gas_escrow),
+                reserved_gas_tokens: Some(needed_gas_escrow_for_preferred_sequencer),
                 sender: sequencer_da_address,
             }})
             .chain(std::iter::once(preferred_blob))

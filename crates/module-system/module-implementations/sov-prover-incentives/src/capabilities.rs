@@ -127,9 +127,10 @@ impl<S: Spec> ProverIncentives<S> {
             .map_err(Into::<anyhow::Error>::into)?;
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
-        let verification_result = <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify::<
-            AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-        >(&proof.raw_aggregated_proof, &code_commitment);
+        let verification_result =
+            <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
+                AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+            >(&proof.clone().to_serialized_zk_proof(), &code_commitment);
 
         let public_outputs = match verification_result {
             Ok(public_outputs) => public_outputs,
@@ -144,6 +145,36 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
+        tracing::debug!(
+            %public_outputs.initial_slot_number,
+            %public_outputs.final_slot_number,
+            "Processing aggregated proof"
+        );
+
+        // TODO #2551: We don’t handle real inner_code_commitment yet. Re-enable it at the end of #2551.
+        /*
+                // Bind the inner circuit: the aggregation program reads `inner_vkey_hash`
+                // from host advice, so without this check a prover could verify inner
+                // proofs against an arbitrary inner VK. The outer VK proof alone no
+                // longer transitively pins the inner circuit.
+                let inner_code_commitment = self
+                    .chain_state
+                    .inner_code_commitment(state)
+                    .map_err(Into::<anyhow::Error>::into)?
+                    .expect("The inner code commitment should be set at genesis");
+
+                if &inner_code_commitment.to_hash()? != &public_outputs.inner_vkey_hash {
+                    tracing::debug!(
+                        slashing_reason = ?SlashingReason::IncorrectInnerVkeyHash,
+                        "Slashing prover"
+                    );
+                    self.slash_prover(prover_address, state)?;
+                    return Err(ProcessProofError::ProverSlashedNoRevert(format!(
+                        "Invalid output {}",
+                        SlashingReason::IncorrectInnerVkeyHash
+                    )));
+                }
+        */
         if let Some(slashing_reason) = self
             .check_proof_outputs(&public_outputs, state)
             .map_err(Into::<anyhow::Error>::into)?
@@ -336,9 +367,12 @@ impl<S: Spec> ProverIncentives<S> {
             return Ok(Some(SlashingReason::IncorrectFinalSlotHash));
         }
 
+        // TODO uncomment after NOMT bug is fixed: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739
+        /*
         if expected_final_transition.post_state_root() != &public_outputs.final_state_root {
             return Ok(Some(SlashingReason::IncorrectFinalStateRoot));
         }
+        */
 
         Ok(None)
     }

@@ -15,7 +15,7 @@ workspace = true
 [dependencies]
 sov-rest-utils = { workspace = true }
 anyhow = { workspace = true }
-axum = { workspace = true, features = ["tokio", "http1", "http2", "ws", ] }
+axum = { workspace = true, features = ["tokio", "http1", "http2", "ws", "matched-path"] }
 rockbound = { workspace = true }
 bincode = { workspace = true }
 derivative = { workspace = true }
@@ -36,6 +36,7 @@ async-trait = { workspace = true }
 rayon = { workspace = true }
 sov-db = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-rollup-full-node-interface = { workspace = true }
 sov-metrics = { workspace = true }
 tower-http = { workspace = true, features = ["normalize-path", "cors"] }
 tower-layer = "0.3.3"

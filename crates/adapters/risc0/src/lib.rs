@@ -6,14 +6,11 @@
 use crypto::{Risc0PublicKey, Risc0Signature};
 use risc0_zkvm::sha::Digest;
 #[cfg(not(target_os = "zkvm"))]
-use risc0_zkvm::Journal;
-#[cfg(not(target_os = "zkvm"))]
 use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "zkvm"))]
-use sov_rollup_interface::zk::Proof;
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
 
@@ -33,6 +30,16 @@ pub mod metrics;
 /// Use the [`ZkvmHost::code_commitment`](sov_rollup_interface::zk::ZkvmHost) method to get the MethodId for a given binary.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Risc0MethodId([u32; 8]);
+
+impl sov_rollup_interface::zk::CodeCommitmentTrait for Risc0MethodId {
+    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(self.0)
+    }
+
+    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+        Self(hash.to_u32_array())
+    }
+}
 
 impl PartialEq<Digest> for Risc0MethodId {
     fn eq(&self, other: &Digest) -> bool {
@@ -93,18 +100,13 @@ impl ZkVerifier for Risc0Verifier {
     type CryptoSpec = Risc0CryptoSpec;
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: Proof<Receipt, Option<Journal>> = bincode::deserialize(serialized_proof)?;
-        match proof {
-            Proof::PublicData(_) => anyhow::bail!("Risc0Verifier supports only full proofs"),
-            Proof::Full(receipt) => {
-                receipt.verify(code_commitment.0)?;
-                Ok(bincode::deserialize(&receipt.journal.bytes)?)
-            }
-        }
+        let receipt: Receipt = bincode::deserialize(&serialized_proof.raw_proof)?;
+        receipt.verify(code_commitment.0)?;
+        Ok(bincode::deserialize(&receipt.journal.bytes)?)
     }
 }
 
@@ -120,6 +122,9 @@ impl sov_rollup_interface::zk::Zkvm for Risc0 {
     type Host = crate::host::Risc0Host<'static>;
 
     #[cfg(feature = "native")]
+    type OuterHost = crate::host::Risc0Host<'static>;
+
+    #[cfg(feature = "native")]
     type Network = sov_rollup_interface::zk::NoopZkvmNetwork<crate::guest::Risc0Guest>;
 }
 
@@ -131,8 +136,16 @@ impl ZkVerifier for Risc0Verifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        _serialized_proof: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Implement this method once risc0 supports recursion: issue #633
+        todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        _serialized_proof: &SerializedZkProof,
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         // Implement this method once risc0 supports recursion: issue #633

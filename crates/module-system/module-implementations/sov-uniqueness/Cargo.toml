@@ -20,7 +20,7 @@ sov-modules-api = { workspace = true }
 sov-state = { workspace = true }
 
 [dev-dependencies]
-alloy-consensus = { workspace = true }
+alloy-consensus = { workspace = true, features = ["secp256k1"] }
 alloy-primitives = { workspace = true }
 alloy-eips = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
@@ -32,7 +32,6 @@ sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }
 sov-value-setter = { workspace = true }
 sov-evm = { workspace = true, features = ["native"] }
-reth-primitives = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
 sov-rollup-interface = { workspace = true }
 sov-kernels = { workspace = true }
@@ -46,7 +45,6 @@ arbitrary = [
 	"sov-uniqueness/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
-	"reth-primitives/arbitrary",
 	"sov-address/arbitrary",
 	"sov-evm/arbitrary",
 	"sov-rollup-interface/arbitrary",
@@ -56,7 +54,6 @@ arbitrary = [
 	"sov-evm-test-utils/arbitrary",
 ]
 native = [
-	"reth-primitives/std",
 	"sov-modules-api/native",
 	"sov-uniqueness/native",
 	"sov-state/native",

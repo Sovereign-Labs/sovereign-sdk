@@ -9,8 +9,6 @@ use sov_rollup_interface::zk::aggregated_proof::{
 
 #[cfg(feature = "native")]
 use super::HasKernel;
-#[cfg(feature = "native")]
-use crate::rest::StateUpdateReceiver;
 use crate::{GetGasPrice, SovAttestation, SovStateTransitionPublicData, Spec, Storage, TxState};
 
 /// The `ProofProcessor` capability is responsible for processing proofs inside
@@ -29,7 +27,7 @@ pub trait ProofProcessor<S: Spec> {
     fn create_bonding_proof_service<K: HasKernel<S>>(
         &self,
         attester_address: <S as Spec>::Address,
-        storage: StateUpdateReceiver<<S as Spec>::Storage>,
+        storage_receiver: tokio::sync::watch::Receiver<<S as Spec>::Storage>,
     ) -> Self::BondingProofService<K>;
 
     /// Called by the stf once the zk-proof is received.

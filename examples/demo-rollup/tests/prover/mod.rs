@@ -1,90 +1,61 @@
-use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use demo_stf::genesis_config::create_genesis_config;
 use demo_stf::runtime::Runtime;
+use sov_db::config::RollupDbConfig;
 use sov_db::schema::SchemaBatch;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService, MockDaSpec};
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode::WitnessGeneration;
-use sov_modules_api::{OperatingMode, SlotData, Spec, ZkVerifier};
+use sov_modules_api::{CryptoSpec, OperatingMode, SlotData};
 use sov_modules_stf_blueprint::{GenesisParams, StfBlueprint};
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::{
-    StateTransitionPublicData, StateTransitionWitness, StateTransitionWitnessWithAddress, ZkvmHost,
-};
-use sov_sp1_adapter::host::SP1Host;
-use sov_sp1_adapter::BlockHeaderWithProof;
-use sov_sp1_adapter::{SP1MethodId, SP1Verifier, SP1};
-use sov_state::ProverStorage;
+use sov_rollup_interface::zk::StateTransitionWitness;
+use sov_sp1_adapter::SP1CryptoSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
 use sov_test_utils::generators::BlobBuildingCtx;
-use sov_test_utils::TestStorageSpec;
 use tempfile::TempDir;
 
 use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
 use crate::test_helpers::test_genesis_paths;
 
-type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
+type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
+type NativeStorage =
+    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+
+pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSpec<
     sov_mock_da::MockDaSpec,
     sov_sp1_adapter::SP1,
     sov_mock_zkvm::MockZkvm,
     demo_stf::MultiAddressEvmSolana,
     WitnessGeneration,
-    sov_mock_zkvm::MockZkvmCryptoSpec,
+    SP1CryptoSpec,
+    NativeStorage,
 >;
 
 mod datagen;
+mod network;
+mod parallel;
+mod sp1_cpu_prover;
 
-type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
-type ProofStateRoot = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::StateRoot;
-type ProofWitness = <TestSTF as StateTransitionFunction<SP1, MockZkvm, MockDaSpec>>::Witness;
-type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
+pub(super) type TestSTF = StfBlueprint<DefaultSpec, Runtime<DefaultSpec>>;
+pub(super) type ProofStateRoot = <TestSTF as StateTransitionFunction<MockDaSpec>>::StateRoot;
+pub(super) type ProofWitness = <TestSTF as StateTransitionFunction<MockDaSpec>>::Witness;
+pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
 
-type ProofInput = StateTransitionWitnessWithAddress<
-    <DefaultSpec as Spec>::Address,
-    ProofStateRoot,
-    ProofWitness,
-    MockDaSpec,
->;
-
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test is used to generate data for testing the aggregate proof circuit and should be enabled only when needed."]
-async fn test_save_proofs() {
-    let host = TestHost::new().await;
-    let proof_data = generate_proofs(true, &host).await;
-    let proofs_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests")
-        .join("test_data")
-        .join("tmp");
-
-    std::fs::create_dir_all(&proofs_dir).unwrap();
-    std::fs::write(proofs_dir.join("inner_vk.bin"), host.verifying_key_bytes()).unwrap();
-
-    for (i, data) in proof_data.into_iter().enumerate() {
-        let proof_public_data = host.verify(data.proof.clone()).await;
-        assert_eq!(proof_public_data.slot_hash, data.da_block_header.hash());
-        let json = serde_json::to_string(&data).unwrap();
-        std::fs::write(proofs_dir.join(format!("inner_{i}_proof.json")), &json).unwrap();
-    }
-}
-
-/// This test reproduces the proof generation process for the rollup used in benchmarks.
-#[tokio::test(flavor = "multi_thread")]
-#[cfg_attr(skip_guest_build, ignore)]
-async fn test_proof_generation() {
-    let host = TestHost::new().await;
-    let _ = generate_proofs(false, &host).await;
-}
-
-async fn generate_proofs(
-    with_proof: bool,
-    host: &TestHost,
-) -> Vec<BlockHeaderWithProof<MockDaSpec>> {
+/// Executes the STF against mock DA blocks and produces per-block witnesses.
+///
+/// This is the shared data generation logic used by both the local (host) prover
+/// tests and the network prover tests.
+///
+/// Returns `(genesis_state_root, witnesses)`.
+pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     tracing::info!("Creating temp dir at {}", temp_dir.path().display());
     let da_service = MockDaService::new(MockAddress::default());
@@ -92,9 +63,11 @@ async fn generate_proofs(
         curr_sequence_number: Arc::new(AtomicU64::new(0)),
     };
 
-    let mut storage_manager =
-        NativeStorageManager::<MockDaSpec, ProverStorage<TestStorageSpec>>::new(temp_dir.path())
-            .expect("NativeStorageManager initialization has failed");
+    let mut storage_manager = NomtStorageManager::<MockDaSpec, Hasher, NativeStorage>::new(
+        RollupDbConfig::default_in_path(temp_dir.path().to_path_buf()),
+        true,
+    )
+    .expect("NomtStorageManager initialization has failed");
     let stf = TestSTF::new();
 
     let genesis_config = {
@@ -116,14 +89,14 @@ async fn generate_proofs(
     // Write it to the database immediately!
     storage_manager.finalize(&genesis_block.header).unwrap();
 
+    let genesis_state_root = prev_state_root;
+
     // TODO: Fix this with genesis logic.
     let mut blocks = get_blocks_from_da(sequencer_mode)
         .await
         .expect("Failed to get DA blocks");
 
-    let prover_address = <DefaultSpec as Spec>::Address::try_from([0u8; 28].as_ref()).unwrap();
-
-    let mut proofs = Vec::new();
+    let mut witnesses = Vec::new();
 
     for filtered_block in &mut blocks[..(DEFAULT_BLOCKS as usize)] {
         let height = filtered_block.header().height();
@@ -149,24 +122,13 @@ async fn generate_proofs(
             ExecutionContext::Node,
         );
 
-        let data = StfWitness {
+        witnesses.push(StfWitness {
             initial_state_root: prev_state_root,
             da_block_header: filtered_block.header().clone(),
             relevant_proofs,
             witness: result.witness,
             relevant_blobs,
             final_state_root: result.state_root,
-        };
-
-        let data: ProofInput = StateTransitionWitnessWithAddress {
-            stf_witness: data,
-            prover_address,
-        };
-
-        let proof = host.run(data, with_proof).await;
-        proofs.push(BlockHeaderWithProof {
-            da_block_header: filtered_block.header().clone(),
-            proof,
         });
 
         prev_state_root = result.state_root;
@@ -179,60 +141,5 @@ async fn generate_proofs(
             .unwrap();
     }
 
-    proofs
-}
-
-// The SP1 prover manages its own Tokio runtime, which conflicts with the `tokio::test` runtime.
-// To avoid this, all blocking work must be executed inside `tokio::task::spawn_blocking`.
-struct TestHost {
-    host: SP1Host<'static>,
-    code_commitment: SP1MethodId,
-}
-
-impl TestHost {
-    async fn new() -> Self {
-        let host = SP1Host::new(*sp1::SP1_GUEST_MOCK_ELF);
-        let host_clone = host.clone();
-        let code_commitment = tokio::task::spawn_blocking(move || -> SP1MethodId {
-            host_clone
-                .code_commitment()
-                .expect("SP1 code commitment should be created successfully")
-        })
-        .await
-        .unwrap();
-
-        Self {
-            host,
-            code_commitment,
-        }
-    }
-
-    async fn run(&self, data: ProofInput, with_proof: bool) -> Vec<u8> {
-        let mut host = self.host.clone();
-        tokio::task::spawn_blocking(move || -> Vec<u8> {
-            host.add_hint(data);
-            host.run(with_proof)
-                .expect("Prover should run successfully")
-        })
-        .await
-        .unwrap()
-    }
-
-    fn verifying_key_bytes(&self) -> Vec<u8> {
-        self.code_commitment.0.clone()
-    }
-
-    #[allow(dead_code)]
-    async fn verify(
-        &self,
-        proof: Vec<u8>,
-    ) -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-        let code_commitment = self.code_commitment.clone();
-        tokio::task::spawn_blocking(move || -> StateTransitionPublicData<<DefaultSpec as Spec>::Address, MockDaSpec, ProofStateRoot> {
-            SP1Verifier::verify(&proof, &code_commitment)
-                .expect("SP1 proof verification should succeed")
-        })
-        .await
-        .unwrap()
-    }
+    (genesis_state_root, witnesses)
 }
