@@ -59,8 +59,7 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
 /// Materializes STF infos and sends notifications to the associated [`Receiver`].
 pub struct Sender<StateRoot, Witness, Da: DaSpec> {
     /// Height of the next `StateTransitionInfo` that should be received by the [`Receiver`].
-    /// This value is synchronized with the receiver end of the channel. On the sender end
-    /// it is only persisted in the database after a slot completion.
+    /// This value is synchronized with the receiver end of the channel.
     next_height_to_receive: Arc<AtomicU64>,
 
     /// The next height to send to the [`Receiver`]. This value is not persisted in the database and
