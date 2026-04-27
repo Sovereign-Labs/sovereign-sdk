@@ -116,7 +116,11 @@ impl ZkvmHost for Risc0Host<'static> {
 }
 
 impl OuterZkvmHost for Risc0Host<'static> {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
         _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,

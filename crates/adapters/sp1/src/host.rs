@@ -43,15 +43,30 @@ impl SP1AggregationHost {
     /// Creates a new aggregation host from the aggregation guest `elf` binary
     /// and the verifying key (`inner_method_id`) of the inner proof program.
     pub fn new(elf: &'static [u8], inner_vk: sp1_sdk::SP1VerifyingKey) -> anyhow::Result<Self> {
+        Self::new_with_previous_proof(elf, inner_vk, None)
+    }
+
+    /// Like [`Self::new`], but seeded with the latest aggregated proof
+    /// previously persisted in the ledger DB so that recursive verification of
+    /// the previous outer proof survives a node restart.
+    pub fn new_with_previous_proof(
+        elf: &'static [u8],
+        inner_vk: sp1_sdk::SP1VerifyingKey,
+        previous_aggregated_proof: Option<SerializedAggregatedProof>,
+    ) -> anyhow::Result<Self> {
         let prover = SP1Prover::new(elf)?;
         let outer_vk = prover.verifying_key().clone();
+
+        let prev_agg_proof = previous_aggregated_proof
+            .map(|proof| crate::decode_sp1_proof(&proof.to_serialized_zk_proof()))
+            .transpose()?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 prover,
                 outer_vk,
                 inner_vk,
-                prev_agg_proof: Mutex::new(None),
+                prev_agg_proof: Mutex::new(prev_agg_proof),
             }),
         })
     }
@@ -295,7 +310,11 @@ impl ZkvmHost for SP1Host {
 }
 
 impl OuterZkvmHost for SP1AggregationHost {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
         _genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,

@@ -1,13 +1,14 @@
+use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 
 use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData;
 use sov_rollup_interface::zk::aggregated_proof::{
-    BlockProof, OuterZkvmHost, SerializedAggregatedProof,
+    AggregatedProofPublicData, BlockProof, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::SerializedZkProof;
 
@@ -16,21 +17,48 @@ use sov_rollup_interface::zk::SerializedZkProof;
 pub struct MockZkvmHost {
     notification_manager: NotificationManager,
     wait_for_proof: bool,
-    /// Most recently produced aggregated proof. Shared across clones so that
-    /// continuity assertions in [`OuterZkvmHost::run_proof_aggregation`] hold
-    /// across the whole prover service.
-    previous_aggregated_proof: Arc<Mutex<Option<SerializedAggregatedProof>>>,
+    /// Anchor extracted from the most recently produced aggregated proof.
+    /// Shared across clones so that continuity assertions in
+    /// [`OuterZkvmHost::run_proof_aggregation`] hold across the whole prover
+    /// service.
+    previous_anchor: Arc<Mutex<Option<PreviousAggregatedProofAnchor>>>,
 }
 
-/// Mirrors the prefix of [`AggregatedProofPublicData`](sov_rollup_interface::zk::aggregated_proof::AggregatedProofPublicData)
-/// so we can read the slot bounds of a previous aggregated proof without
-/// requiring `DeserializeOwned` bounds on the generic `Address`/`Root` types.
-#[derive(Deserialize)]
-struct AggregatedProofSlotBounds {
-    // Read so bincode advances to `final_slot_number`; not used directly.
-    #[allow(dead_code)]
-    initial_slot_number: SlotNumber,
+/// Continuity anchor extracted from a previously produced aggregated proof.
+#[derive(Clone, Debug)]
+struct PreviousAggregatedProofAnchor {
     final_slot_number: SlotNumber,
+    genesis_state_root: Vec<u8>,
+    final_state_root: Vec<u8>,
+}
+
+impl PreviousAggregatedProofAnchor {
+    fn from_public_data<Address, Da, Root>(
+        public_data: &AggregatedProofPublicData<Address, Da, Root>,
+    ) -> Self
+    where
+        Address: Serialize,
+        Da: DaSpec,
+        Root: Serialize,
+    {
+        Self {
+            final_slot_number: public_data.final_slot_number,
+            genesis_state_root: bincode::serialize(&public_data.genesis_state_root)
+                .expect("genesis_state_root must be bincode-serializable"),
+            final_state_root: bincode::serialize(&public_data.final_state_root)
+                .expect("final_state_root must be bincode-serializable"),
+        }
+    }
+
+    fn deserialize_genesis_state_root<Root: DeserializeOwned>(&self) -> Root {
+        bincode::deserialize(&self.genesis_state_root)
+            .expect("genesis_state_root must be bincode-deserializable")
+    }
+
+    fn deserialize_final_state_root<Root: DeserializeOwned>(&self) -> Root {
+        bincode::deserialize(&self.final_state_root)
+            .expect("final_state_root must be bincode-deserializable")
+    }
 }
 
 impl MockZkvmHost {
@@ -39,26 +67,37 @@ impl MockZkvmHost {
         Self {
             wait_for_proof: true,
             notification_manager: Default::default(),
-            previous_aggregated_proof: Arc::new(Mutex::new(None)),
+            previous_anchor: Arc::new(Mutex::new(None)),
         }
     }
 
     /// Creates a new MockZkvm, the `ZkvmHost::add_hint_and_run` will return immediately.
     pub fn new_non_blocking() -> Self {
-        Self::new_non_blocking_with_previous_proof(None)
-    }
-
-    /// Like [`Self::new_non_blocking`], but seeded with the latest aggregated
-    /// proof previously persisted in the ledger DB so that continuity
-    /// assertions in [`OuterZkvmHost::run_proof_aggregation`] survive a node
-    /// restart.
-    pub fn new_non_blocking_with_previous_proof(
-        previous_aggregated_proof: Option<SerializedAggregatedProof>,
-    ) -> Self {
         Self {
             wait_for_proof: false,
             notification_manager: Default::default(),
-            previous_aggregated_proof: Arc::new(Mutex::new(previous_aggregated_proof)),
+            previous_anchor: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Like [`Self::new_non_blocking`], but seeded with the public data of the
+    /// latest verified aggregated proof previously persisted in the ledger DB
+    /// so that continuity assertions in
+    /// [`OuterZkvmHost::run_proof_aggregation`] survive a node restart.
+    pub fn new_non_blocking_with_previous_anchor<Address, Da, Root>(
+        previous_public_data: Option<&AggregatedProofPublicData<Address, Da, Root>>,
+    ) -> Self
+    where
+        Address: Serialize,
+        Da: DaSpec,
+        Root: Serialize,
+    {
+        let previous_anchor =
+            previous_public_data.map(PreviousAggregatedProofAnchor::from_public_data);
+        Self {
+            wait_for_proof: false,
+            notification_manager: Default::default(),
+            previous_anchor: Arc::new(Mutex::new(previous_anchor)),
         }
     }
 
@@ -118,7 +157,11 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
 }
 
 impl OuterZkvmHost for MockZkvmHost {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned + Clone + PartialEq + Debug,
+    >(
         &self,
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
@@ -134,26 +177,29 @@ impl OuterZkvmHost for MockZkvmHost {
         );
 
         let mut previous = self
-            .previous_aggregated_proof
+            .previous_anchor
             .lock()
-            .expect("previous_aggregated_proof mutex was poisoned");
+            .expect("previous_anchor mutex was poisoned");
 
-        if let Some(previous_proof) = previous.as_ref() {
-            let envelope: MockProof = bincode::deserialize(&previous_proof.raw_aggregated_proof)
-                .expect("previous aggregated proof envelope must be a MockProof");
-            // `bincode::deserialize_from` reads only the bytes needed for the
-            // declared fields, so we can extract the slot bounds without knowing
-            // the concrete `Address`/`Root` types of the previous proof.
-            let prev_bounds: AggregatedProofSlotBounds =
-                bincode::deserialize_from(envelope.pub_data.as_slice())
-                    .expect("previous aggregated proof public data must start with slot bounds");
-
+        if let Some(prev) = previous.as_ref() {
             assert_eq!(
                 public_data.initial_slot_number,
-                prev_bounds.final_slot_number.next(),
+                prev.final_slot_number.next(),
                 "Aggregated proof continuity violated: new aggregation starts at slot {} but previous aggregation ended at slot {}",
                 public_data.initial_slot_number,
-                prev_bounds.final_slot_number,
+                prev.final_slot_number,
+            );
+
+            let prev_genesis_state_root: Root = prev.deserialize_genesis_state_root();
+            let prev_final_state_root: Root = prev.deserialize_final_state_root();
+
+            assert_eq!(
+                public_data.genesis_state_root, prev_genesis_state_root,
+                "Aggregated proof continuity violated: genesis_state_root differs from previous aggregation",
+            );
+            assert_eq!(
+                public_data.initial_state_root, prev_final_state_root,
+                "Aggregated proof continuity violated: new initial_state_root does not match previous final_state_root",
             );
         } else {
             assert_eq!(public_data.initial_slot_number, SlotNumber::ONE);
@@ -165,7 +211,9 @@ impl OuterZkvmHost for MockZkvmHost {
                 raw_aggregated_proof,
             })?;
 
-        *previous = Some(serialized.clone());
+        *previous = Some(PreviousAggregatedProofAnchor::from_public_data(
+            &public_data,
+        ));
         Ok(serialized)
     }
 }

@@ -112,29 +112,6 @@ impl<
 
         match maybe_write_rollup_height {
             Some(write_rollup_height) => {
-                let ledger_next_height_to_receive = ledger_db
-                    .get_stf_info_next_slot_number_to_receive()
-                    .await?
-                    .unwrap_or(SlotNumber::ONE);
-
-                // The in-memory pointer can diverge from the DB pointer in
-                // either direction when `new_stf_info_channel` realigned it
-                // to the latest verified aggregated proof:
-                // - DB ahead of in-memory: the prover bumped the DB pointer
-                //   as soon as a proof was submitted to DA, but the proof's
-                //   round-trip didn't complete before shutdown.
-                // - DB behind in-memory: the in-memory counter advanced
-                //   after a successful aggregation but no later slot was
-                //   materialized to persist the bump.
-                // Either way, the in-memory value is re-persisted on the
-                // next `materialize_stf_info` call.
-                let _ = ledger_next_height_to_receive;
-
-                // Sanity check for `write_rollup_height & next_rollup_height_to_receive`.
-                // After a realign-forward in `new_stf_info_channel`, the
-                // in-memory pointer can sit exactly one slot beyond the last
-                // written STF info (the receiver is ready to consume the very
-                // next slot once it's materialized).
                 assert!(
                     write_rollup_height.get() + 1 >= next_rollup_height_to_receive,
                     "The `write_rollup_height` ({write_rollup_height}) is more than one slot behind `next_rollup_height_to_receive` ({next_rollup_height_to_receive})"
@@ -154,10 +131,6 @@ impl<
             }
             // Db is empty
             None => {
-                assert!(ledger_db
-                    .get_stf_info_next_slot_number_to_receive()
-                    .await?
-                    .is_none());
                 assert!(ledger_db.get_stf_info_oldest_slot_number().await?.is_none());
             }
         }
@@ -222,38 +195,14 @@ pub async fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
-    let stored_next_height_to_receive = ledger_db
-        .get_stf_info_next_slot_number_to_receive()
-        .await?
+    // Resume STF-info processing from the last aggregated proof that was
+    // verified on-chain and persisted in the DB: that proof's `final_slot` is
+    // the last slot we know is committed, so the prover picks up at
+    // `final_slot + 1`. If no such proof exists yet (fresh node), start from
+    // genesis.
+    let next_height_to_receive = latest_proof_final_slot
+        .map(|final_slot| final_slot.saturating_add(1))
         .unwrap_or(SlotNumber::ONE);
-
-    // Anchor the resume point to the latest verified aggregated proof. The
-    // STF-info pointer in the DB is unreliable across restarts: it can be
-    // ahead of the verified proof (the prover submitted a proof to DA whose
-    // round-trip didn't complete before shutdown) or behind it (the in-memory
-    // counter advanced after a successful aggregation but no later slot was
-    // materialized to persist it). The verified proof on disk is the only
-    // self-consistent record of what's been committed, so we resume from
-    // `final_slot + 1` whenever we have one. The atomic is re-persisted to
-    // the DB on the next `materialize_stf_info` call.
-    //
-    // A proof covering up to genesis carries no useful anchor and is treated
-    // as no proof at all, in which case we trust the stored DB pointer.
-    let next_height_to_receive = match latest_proof_final_slot {
-        Some(final_slot) if final_slot > SlotNumber::GENESIS => {
-            let anchor = final_slot.saturating_add(1);
-            if anchor != stored_next_height_to_receive {
-                tracing::warn!(
-                    stored = %stored_next_height_to_receive,
-                    anchor = %anchor,
-                    %final_slot,
-                    "Realigning STF-info next_height_to_receive to stay contiguous with the latest verified aggregated proof"
-                );
-            }
-            anchor
-        }
-        _ => stored_next_height_to_receive,
-    };
 
     let next_height_to_receive_ref = Arc::new(AtomicU64::new(next_height_to_receive.get()));
 
@@ -381,12 +330,7 @@ where
         // Update the write rollup height.
         schema.merge(ledger_db.materialize_stf_info_write_slot_number(write_rollup_height)?);
 
-        // Send the new changes to the subscribers
         let next_rollup_height_to_receive = self.next_height_to_receive();
-        schema.merge(
-            ledger_db
-                .materialize_stf_info_next_slot_number_to_receive(next_rollup_height_to_receive)?,
-        );
 
         // Prune the oldest entries if needed
         schema.merge(
@@ -511,6 +455,20 @@ mod tests {
         Sender<StateRoot, Witness, MockDaSpec>,
         Receiver<StateRoot, Witness, MockDaSpec>,
     )> {
+        setup_with_resume(path, max_channel_size, max_nb_of_infos_in_db, None).await
+    }
+
+    async fn setup_with_resume(
+        path: &Path,
+        max_channel_size: u64,
+        max_nb_of_infos_in_db: u64,
+        latest_proof_final_slot: Option<SlotNumber>,
+    ) -> anyhow::Result<(
+        LedgerDb,
+        SimpleLedgerStorageManager,
+        Sender<StateRoot, Witness, MockDaSpec>,
+        Receiver<StateRoot, Witness, MockDaSpec>,
+    )> {
         let mut storage_manager = SimpleLedgerStorageManager::new(path);
         let ledger_db = LedgerDb::with_reader(storage_manager.create_ledger_storage())?;
 
@@ -518,7 +476,7 @@ mod tests {
             ledger_db.clone(),
             NonZero::new(max_channel_size).unwrap(),
             NonZero::new(max_nb_of_infos_in_db).unwrap(),
-            None,
+            latest_proof_final_slot,
         )
         .await?;
 
@@ -594,8 +552,16 @@ mod tests {
 
         // Now the reads are visible.
         {
-            let (ledger_db, _, sender, mut receiver) =
-                setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db).await?;
+            // The previous block advanced `next_height_to_receive` to 3 in
+            // memory and persisted writes through slot 12. Resume the channel
+            // at slot 3 by anchoring to a "previous proof" with `final_slot=2`.
+            let (ledger_db, _, sender, mut receiver) = setup_with_resume(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                Some(SlotNumber::new(2)),
+            )
+            .await?;
 
             let stf_info = receiver.read_next().await?.unwrap();
             assert_eq!(stf_info.slot_number.get(), 3);

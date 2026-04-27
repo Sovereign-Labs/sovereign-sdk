@@ -107,7 +107,7 @@ fn build_sleep_schedule(
     schedule
 }
 
-fn known_restart_warnings() -> [(Level, String); 10] {
+fn known_restart_warnings() -> [(Level, String); 9] {
     [
         // https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1878:
         (
@@ -117,10 +117,6 @@ fn known_restart_warnings() -> [(Level, String); 10] {
         (
             Level::WARN,
             "Received error updating target height, stopping background task".to_string(),
-        ),
-        (
-            Level::WARN,
-            "Rewinding STF-info next_height_to_receive to stay contiguous with the latest verified aggregated proof".to_string(),
         ),
         // The node gets out of sync during the restart
         (

@@ -21,7 +21,6 @@ use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, Sequencer
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregateProofVerifier, AggregatedProofPublicData,
@@ -33,6 +32,7 @@ use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
+use crate::read_latest_aggregated_proof;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`MockZkvm`] inner vm and [`MockZkvm`] for outer vm
@@ -156,30 +156,23 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         _da_service: &Self::DaService,
         ledger_db: &LedgerDb,
     ) -> (Self::ProverService, Option<SlotNumber>) {
-        let previous_aggregated_proof = ledger_db
-            .get_latest_aggregated_proof()
-            .await
-            .expect("Failed to read latest aggregated proof from ledger DB")
-            .map(|response| response.proof);
-
-        // Validate the persisted proof and extract the `final_slot_number` so
-        // the runner can rewind the STF-info stream to `final_slot + 1`.
-        let latest_proof_final_slot = previous_aggregated_proof.as_ref().map(|proof| {
-            let verifier =
-                AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default());
-            let public_data: AggregatedProofPublicData<
+        let previous_public_data: Option<
+            AggregatedProofPublicData<
                 <Self::Spec as Spec>::Address,
                 MockDaSpec,
                 <<Self::Spec as Spec>::Storage as Storage>::Root,
-            > = verifier
-                .verify(proof)
-                .expect("Persisted aggregated proof failed verification");
-            public_data.final_slot_number
+            >,
+        > = read_latest_aggregated_proof(ledger_db).await.map(|proof| {
+            AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default())
+                .verify(&proof)
+                .expect("Persisted aggregated proof failed verification")
         });
+
+        let latest_proof_final_slot = previous_public_data.as_ref().map(|p| p.final_slot_number);
 
         let inner_vm = MockZkvmHost::new_non_blocking();
         let outer_vm =
-            MockZkvmHost::new_non_blocking_with_previous_proof(previous_aggregated_proof);
+            MockZkvmHost::new_non_blocking_with_previous_anchor(previous_public_data.as_ref());
         let da_verifier = Default::default();
 
         let prover = ParallelProverService::new_with_default_workers(

@@ -9,6 +9,9 @@ use std::str::FromStr;
 use sov_celestia_adapter::types::Namespace;
 use sov_modules_api::macros::config_value;
 
+mod aggregated_proof;
+pub use aggregated_proof::read_latest_aggregated_proof;
+
 mod mock_rollup;
 
 pub use mock_rollup::*;

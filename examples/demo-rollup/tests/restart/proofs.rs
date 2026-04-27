@@ -106,8 +106,6 @@ async fn test_aggregated_proofs_after_restart_external_da() {
     // Phase 2: shut the rollup down and wait for the DA to advance by at least 3 blocks.
     let height_at_shutdown = da_service.get_head_block_header().await.unwrap().height() as u32;
 
-    println!("RESTART");
-
     let builder = test_rollup.shutdown().await.unwrap();
 
     da_service
