@@ -28,7 +28,6 @@ where
             bank: minimal_config.config.bank,
             accounts: minimal_config.config.accounts,
             uniqueness: minimal_config.config.uniqueness,
-            timelock: (),
             chain_state: minimal_config.config.chain_state,
             blob_storage: minimal_config.config.blob_storage,
             operator_incentives: minimal_config.config.operator_incentives,

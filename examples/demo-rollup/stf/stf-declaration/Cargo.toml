@@ -33,7 +33,6 @@ sov-rollup-interface = { workspace = true }
 sov-sequencer-registry = { workspace = true }
 sov-state = { workspace = true }
 sov-synthetic-load = { workspace = true }
-sov-timelock = { workspace = true }
 sov-test-modules = { workspace = true }
 sov-test-utils = { workspace = true, optional = true }
 sov-uniqueness = { workspace = true }
@@ -73,7 +72,6 @@ native = [
 	"sov-sequencer-registry/native",
 	"sov-state/native",
 	"sov-synthetic-load/native",
-	"sov-timelock/native",
 	"sov-test-modules/native",
 	"sov-uniqueness/native",
 ]
@@ -89,7 +87,6 @@ arbitrary = [
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils?/arbitrary",
-	"sov-timelock/arbitrary",
 	"sov-uniqueness/arbitrary",
 	"sov-hyperlane-integration/arbitrary"
 ]

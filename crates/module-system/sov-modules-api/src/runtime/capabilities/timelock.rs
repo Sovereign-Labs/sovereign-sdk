@@ -92,3 +92,33 @@ impl<S: Spec> TimelockCapability<S> for () {
         Err(TimelockError::ProposalNotFound)
     }
 }
+
+impl<S: Spec, T: TimelockCapability<S> + ?Sized> TimelockCapability<S> for &mut T {
+    fn has_proposal(
+        &self,
+        address: &S::Address,
+        proposal_id: &ProposalId,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<bool> {
+        (**self).has_proposal(address, proposal_id, state)
+    }
+
+    fn register_proposal(
+        &mut self,
+        address: &S::Address,
+        proposal_id: ProposalId,
+        policy: TimelockPolicy,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        (**self).register_proposal(address, proposal_id, policy, state)
+    }
+
+    fn try_unlock_proposal(
+        &mut self,
+        address: &S::Address,
+        proposal_id: &ProposalId,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), TimelockError> {
+        (**self).try_unlock_proposal(address, proposal_id, state)
+    }
+}

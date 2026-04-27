@@ -19,7 +19,6 @@ sov-bank = { workspace = true }
 sov-paymaster = { workspace = true }
 sov-accounts = { workspace = true }
 sov-uniqueness = { workspace = true }
-sov-timelock = { workspace = true }
 sov-sequencer-registry = { workspace = true }
 sov-operator-incentives = { workspace = true }
 sov-prover-incentives = { workspace = true }
@@ -38,7 +37,6 @@ native = [
 	"sov-modules-api/native",
 	"sov-state/native",
 	"sov-uniqueness/native",
-	"sov-timelock/native",
 	"sov-prover-incentives/native",
 	"sov-attester-incentives/native",
 	"sov-sequencer-registry/native",

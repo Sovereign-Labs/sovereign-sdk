@@ -65,7 +65,6 @@ pub trait HasCapabilities<S: Spec> {
         + ProofProcessor<S>
         + SequencingDataHandler<S, SequencingData = Self::SequencingData>
         + SequencerRemuneration<S>
-        + TimelockCapability<S>
     where
         Self: 'a;
 
@@ -131,11 +130,11 @@ pub trait HasCapabilities<S: Spec> {
         self.capabilities().inner
     }
 
-    /// Returns the [`TimelockCapability`] implementation on [`HasCapabilities::Capabilities`].
+    /// Returns the [`TimelockCapability`] implementation for this runtime.
     ///
-    /// This method can be overridden to provide a custom implementation.
+    /// Timelocks are opt-in, so the default implementation is a no-op.
     fn timelock(&mut self) -> impl TimelockCapability<S> {
-        self.capabilities().inner
+        ()
     }
 }
 

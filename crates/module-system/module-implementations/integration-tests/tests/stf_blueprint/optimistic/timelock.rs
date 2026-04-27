@@ -15,7 +15,11 @@ use crate::stf_blueprint::S;
 generate_optimistic_runtime_with_kernel!(
     TimelockRuntime <=
     kernel_type: sov_test_utils::runtime::BasicKernel<'a, S>,
-    modules: [value_setter: ValueSetter<S>, tx_hooks_count: TxHooksCount<S>],
+    modules: [
+        value_setter: ValueSetter<S>,
+        tx_hooks_count: TxHooksCount<S>,
+        timelock: sov_timelock::Timelock<S>
+    ],
     timelock_policy_wrapper: |call: &TimelockRuntimeCall<S>| {
         match call {
             TimelockRuntimeCall::ValueSetter(CallMessage::SetValue { value: 7, .. }) => {
@@ -46,6 +50,7 @@ fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
         ValueSetterConfig {
             admin: admin.address(),
         },
+        (),
         (),
     );
 

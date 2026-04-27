@@ -198,7 +198,6 @@ fn create_test_rt_genesis_config<S: Spec>(
         },
 
         uniqueness: (),
-        timelock: (),
     }
 }
 

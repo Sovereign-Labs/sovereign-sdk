@@ -22,6 +22,7 @@ macro_rules! generate_runtime_without_capabilities {
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         // Optional: A wrapper expression for custom transaction timelock policy logic.
         // Expected signature for the expression: `fn(&Self::Decodable) -> Option<TimelockPolicy>`.
+        // If provided, the runtime must include a module named `timelock`.
         $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma for the entire argument block
@@ -52,8 +53,6 @@ macro_rules! generate_runtime_without_capabilities {
             pub accounts: $crate::runtime::Accounts<S>,
             /// The uniqueness module
             pub uniqueness: $crate::runtime::Uniqueness<S>,
-            /// The timelock module
-            pub timelock: $crate::runtime::Timelock<S>,
             /// The attester incentives module.
             pub attester_incentives: $crate::runtime::AttesterIncentives<S>,
             /// The chain state module.
@@ -92,7 +91,6 @@ macro_rules! generate_runtime_without_capabilities {
                     bank: minimal_config.config.bank,
                     accounts: minimal_config.config.accounts,
                     uniqueness: minimal_config.config.uniqueness,
-                    timelock: (),
                     chain_state: minimal_config.config.chain_state,
                     blob_storage: minimal_config.config.blob_storage,
                     operator_incentives : minimal_config.config.operator_incentives,
@@ -241,6 +239,17 @@ macro_rules! generate_runtime_without_capabilities {
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __impl_runtime_timelock_capability {
+    () => {};
+    ($timelock_policy_wrapper_expr:expr) => {
+        fn timelock(&mut self) -> impl ::sov_modules_api::capabilities::TimelockCapability<S> {
+            &mut self.timelock
+        }
+    };
+}
+
 /// Base for generating runtimes.
 /// Excludes the TransactionAuthenticator trait to allow custom runtimes like EVM to provide their own
 /// implementation.
@@ -291,7 +300,6 @@ macro_rules! generate_runtime {
                         sequencer_registry: &mut self.sequencer_registry,
                         accounts: &mut self.accounts,
                         uniqueness: &mut self.uniqueness,
-                        timelock: &mut self.timelock,
                         chain_state: &mut self.chain_state,
                         operator_incentives: &mut self.operator_incentives,
                         prover_incentives: &mut self.prover_incentives,
@@ -300,6 +308,7 @@ macro_rules! generate_runtime {
                 )
             }
 
+            $crate::__impl_runtime_timelock_capability!($($timelock_policy_wrapper_expr)?);
         }
     };
     (
@@ -349,7 +358,6 @@ macro_rules! generate_runtime {
                         sequencer_registry: &mut self.sequencer_registry,
                         accounts: &mut self.accounts,
                         uniqueness: &mut self.uniqueness,
-                        timelock: &mut self.timelock,
                         chain_state: &mut self.chain_state,
                         operator_incentives: &mut self.operator_incentives,
                         prover_incentives: &mut self.prover_incentives,
@@ -358,6 +366,7 @@ macro_rules! generate_runtime {
                 )
             }
 
+            $crate::__impl_runtime_timelock_capability!($($timelock_policy_wrapper_expr)?);
         }
     }
 }
