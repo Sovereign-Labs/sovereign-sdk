@@ -10,13 +10,14 @@ use sov_mock_da::{BlockProducingConfig, MockDaSpec};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
+use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::SP1;
+use sov_sp1_adapter::{SP1MethodId, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
 use sov_state::Storage;
@@ -108,6 +109,14 @@ impl ProverFactory<SP1Spec> for ParallelProverFactory {
             rollup_config.proof_manager.prover_address,
         )
     }
+
+    fn code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
+        let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
+        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
+        Ok((inner, outer))
+    }
 }
 
 pub type NetworkProvingBlueprint = RtAgnosticBlueprint<
@@ -126,14 +135,27 @@ fn sp1_genesis_paths() -> GenesisPaths {
     paths
 }
 
-pub fn create_sp1_rollup_builder(
+pub async fn create_sp1_rollup_builder(
     storage_path: PathBuf,
     axum_port: u16,
     db_connection_url: Option<String>,
 ) -> RollupBuilder<NetworkProvingBlueprint> {
-    let genesis_config =
+    let mut genesis_config =
         demo_stf::genesis_config::create_genesis_config::<SP1Spec>(&sp1_genesis_paths())
             .expect("Failed to create demo-stf genesis config");
+
+    // The shared `chain_state_zk.json` ships with placeholder-zero code commitments.
+    // Real SP1 proofs commit to non-zero `SP1MethodId`s derived from the guest ELFs,
+    // so we override the in-memory genesis commitments with the actual ELF-derived
+    // values before constructing the rollup. The on-disk JSON file is left untouched.
+    let (inner, outer) =
+        tokio::task::spawn_blocking(NetworkProvingBlueprint::compute_code_commitments)
+            .await
+            .expect("Code-commitment computation task panicked")
+            .expect("Failed to compute code commitments for the SP1 soak rollup");
+    genesis_config.chain_state.inner_code_commitment = inner;
+    genesis_config.chain_state.outer_code_commitment = outer;
+
     let postgres_config = make_postgres_config(db_connection_url);
 
     // SP1 network proving takes ~10s per proof. With aggregated_proof_block_jump=8,

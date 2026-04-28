@@ -41,6 +41,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.axum_port,
             args.db_connection_url,
         )
+        .await
         .set_config(|config| {
             // Enable witness generation so proofs can be submitted to the network.
             config.rollup_prover_config = RollupProverConfig::Prove;
