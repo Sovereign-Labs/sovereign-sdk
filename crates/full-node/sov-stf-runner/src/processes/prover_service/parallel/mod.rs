@@ -75,17 +75,9 @@ where
         outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
         prover_address: Address,
+        num_threads: usize,
     ) -> Self {
-        let num_cpus = num_cpus::get();
-        assert!(num_cpus > 1, "Unable to create parallel prover service");
-
-        Self::new(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            num_cpus - 1,
-            prover_address,
-        )
+        Self::new(inner_vm, outer_vm, da_verifier, num_threads, prover_address)
     }
 }
 
