@@ -196,11 +196,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
 
         let da_verifier = Default::default();
 
-        let num_threads = 2 * rollup_config
-            .proof_manager
-            .aggregated_proof_block_jump
-            .get()
-            + 1;
+        let num_threads = rollup_config.proof_manager.prover_thread_count();
         let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,

@@ -176,11 +176,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
 
         let da_verifier = CelestiaVerifier::new(rollup_params);
 
-        let num_threads = rollup_config
-            .proof_manager
-            .aggregated_proof_block_jump
-            .get()
-            + 1;
+        let num_threads = rollup_config.proof_manager.prover_thread_count();
 
         let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
