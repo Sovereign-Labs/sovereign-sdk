@@ -25,8 +25,6 @@ const PAST_TRANSACTION_WINDOW: u64 = {
     window
 };
 
-const WINDOW_BYTES: usize = (PAST_TRANSACTION_WINDOW / 8) as usize;
-
 /// A window of seen nonces.
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default)]
 pub struct Window {
@@ -40,8 +38,9 @@ pub struct Window {
     bits: BitMap,
 }
 
-impl From<(u64, Vec<u8>)> for Window {
-    fn from((start_nonce, bits): (u64, Vec<u8>)) -> Self {
+impl Window {
+    /// A test-only constructor that allows creating a window from a tuple of start nonce and bits.
+    pub fn test_only_from_tuple((start_nonce, bits): (u64, Vec<u8>)) -> Self {
         Self {
             start_nonce,
             bits: BitMap(VecDeque::from(bits)),
@@ -59,20 +58,21 @@ impl Window {
 
         // The current window is start_nonce..(start_nonce + PAST_TRANSACTION_WINDOW);
         // That means the max offset we can have without adjusting the window is PAST_TRANSACTION_WINDOW - 1.
-        let new_start_nonce = if nonce >= self.start_nonce + (PAST_TRANSACTION_WINDOW - 1) {
-            // In this branch, we're adjusting the window.
-            let unaligned_start_nonce = nonce - (PAST_TRANSACTION_WINDOW - 1);
-            // Safety: PAST_TRANSACTION_WINDOW is greater than 7, so unaligned_start_nonce + 7 < u64::MAX
-            let new_start_nonce = (unaligned_start_nonce + 7) & 0xFFFF_FFFF_FFFF_FFF8; // round up to multiple of 8
+        let new_start_nonce =
+            if nonce >= self.start_nonce.saturating_add(PAST_TRANSACTION_WINDOW - 1) {
+                // In this branch, we're adjusting the window.
+                let unaligned_start_nonce = nonce - (PAST_TRANSACTION_WINDOW - 1);
+                // Safety: PAST_TRANSACTION_WINDOW is greater than 7, so unaligned_start_nonce + 7 <= u64::MAX
+                let new_start_nonce = (unaligned_start_nonce + 7) & 0xFFFF_FFFF_FFFF_FFF8; // round up to multiple of 8
 
-            // Drop the bytes that are no longer in the window.
-            let bytes_to_drop = (new_start_nonce - old_start_nonce) / 8;
-            let bytes_to_drop = std::cmp::min(self.bits.0.len() as u64, bytes_to_drop);
-            self.bits.0.drain(0..bytes_to_drop as usize);
-            new_start_nonce
-        } else {
-            old_start_nonce
-        };
+                // Drop the bytes that are no longer in the window.
+                let bytes_to_drop = (new_start_nonce - old_start_nonce) / 8;
+                let bytes_to_drop = std::cmp::min(self.bits.0.len() as u64, bytes_to_drop);
+                self.bits.0.drain(0..bytes_to_drop as usize);
+                new_start_nonce
+            } else {
+                old_start_nonce
+            };
 
         // Safety: new_start_nonce is always less than or equal to nonce, so nonce - new_start_nonce is non-negative.
         let offset = nonce
@@ -110,7 +110,7 @@ impl BitMap {
     fn get_bit(&self, index: usize) -> bool {
         let byte_index = index / 8;
         let bit_index = index % 8;
-        let Some(&byte) = self.0.get(byte_index as usize) else {
+        let Some(&byte) = self.0.get(byte_index) else {
             return false;
         };
         byte & (1 << bit_index) != 0
@@ -122,7 +122,10 @@ impl BitMap {
             index < PAST_TRANSACTION_WINDOW as usize,
             "Index out of bounds: {index} > {PAST_TRANSACTION_WINDOW}"
         );
-        self.0.resize(WINDOW_BYTES, 0);
+        // Resize if necessessary. This is only required if the index is currently out of bounds.
+        if index >= self.0.len() * 8 {
+            self.0.resize((index / 8) + 1, 0);
+        }
         let byte_index = index / 8;
         let bit_index = index % 8;
         self.0[byte_index] |= 1 << bit_index;
@@ -141,7 +144,7 @@ impl<S: Spec> Uniqueness<S> {
         let start = window.start_nonce;
 
         anyhow::ensure!(
-	    nonce > start,
+	    nonce >= start,
 	    "Tx outdated for credential id: {credential_id}, expected at least: {start}, but found: {nonce}");
 
         // The offset into the bits array that represents the nonce. This is (nonce - start - 1). For example,
@@ -166,7 +169,7 @@ impl<S: Spec> Uniqueness<S> {
         let mut window = self.window.get(credential_id, state)?.unwrap_or_default();
 
         // this assertion ensures that `check_window_uniqueness()` was executed beforehand
-        assert!(nonce > window.start_nonce, "Tx is being marked as attempted despite having a consumed nonce {nonce}. This is a bug.");
+        assert!(nonce >= window.start_nonce, "Tx is being marked as attempted despite having a consumed nonce {nonce}. This is a bug.");
 
         window.add_nonce(nonce);
 
@@ -223,6 +226,8 @@ mod tests {
     fn test_adjust_window() {
         let mut window = Window::default();
 
+        assert!(!window.has_seen_nonce(0));
+
         window.add_nonce(0);
         assert_eq!(window.start_nonce, 0);
         assert!(window.has_seen_nonce(0));
@@ -250,5 +255,14 @@ mod tests {
         assert!(window.has_seen_nonce(43));
         assert!(window.has_seen_nonce(PAST_TRANSACTION_WINDOW + 32));
         assert!(!window.has_seen_nonce(44));
+
+        window.add_nonce(u64::MAX - 1);
+        assert!(window.has_seen_nonce(u64::MAX - 1));
+        assert!(!window.has_seen_nonce(u64::MAX));
+
+        let mut window = Window::default();
+        window.add_nonce(u64::MAX);
+        assert!(window.has_seen_nonce(u64::MAX));
+        assert!(!window.has_seen_nonce(u64::MAX - 1));
     }
 }

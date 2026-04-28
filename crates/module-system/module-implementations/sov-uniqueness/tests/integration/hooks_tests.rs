@@ -160,6 +160,37 @@ fn send_tx_bad_generation_too_old() {
 }
 
 #[test]
+fn send_tx_works_window_zero_start_nonce() {
+    let (admin, mut runner, evm_account) = setup();
+    let admin_credential_id: CredentialId = admin.credential_id();
+
+    runner.query_visible_state(|state| {
+        assert_eq!(
+            Uniqueness::<S>::default()
+                .window(&admin_credential_id, state)
+                .unwrap_infallible(),
+            None,
+            "The window should not be set"
+        );
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_default_tx(UniquenessData::Window(0), &admin, &evm_account),
+        assert: Box::new(move |ctx, state| {
+            assert!(ctx.tx_receipt.is_successful());
+
+            assert_eq!(
+                Uniqueness::<S>::default()
+                    .window(&admin_credential_id, state)
+                    .unwrap_infallible(),
+                Some(Window::test_only_from_tuple((0, vec![1]))),
+                "A bit in the window should be set",
+            );
+        }),
+    });
+}
+
+#[test]
 fn send_tx_works_window() {
     let (admin, mut runner, evm_account) = setup();
     let admin_credential_id: CredentialId = admin.credential_id();
@@ -183,7 +214,10 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::from((0, vec![0, 0, 0, 0, 0, 1 << 2]))),
+                Some(Window::test_only_from_tuple((
+                    0,
+                    vec![0, 0, 0, 0, 0, 1 << 2]
+                ))),
                 "A bit in the window should be set",
             );
         }),
@@ -197,7 +231,10 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::from((0, vec![0, 0, 0, 0, 0, (1 << 2) | (1 << 0)]))),
+                Some(Window::test_only_from_tuple((
+                    0,
+                    vec![0, 0, 0, 0, 0, (1 << 2) | (1 << 0)]
+                ))),
                 "Two bits in the window should be set."
             );
         }),
@@ -218,7 +255,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::from((40, dst))),
+                Some(Window::test_only_from_tuple((40, dst))),
                 "Dropping bits in the window"
             );
         }),
@@ -234,7 +271,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::from((48, dst))),
+                Some(Window::test_only_from_tuple((48, dst))),
                 "Dropping bits in the window"
             );
         }),
@@ -291,7 +328,7 @@ fn send_tx_bad_window_nonce_too_old() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::from((8, value))),
+                Some(Window::test_only_from_tuple((8, value))),
                 "Dropping bits in the window"
             );
         }),
@@ -304,7 +341,7 @@ fn send_tx_bad_window_nonce_too_old() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::from((8, dst))),
+                Some(Window::test_only_from_tuple((8, dst))),
                 "Unchanged window",
             );
             if let TxEffect::Skipped(skipped) = &ctx.tx_receipt {
