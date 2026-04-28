@@ -24,8 +24,8 @@ generate_optimistic_runtime_with_kernel!(
         match call {
             TimelockRuntimeCall::ValueSetter(CallMessage::SetValue { value: 7, .. }) => {
                 Some(TimelockPolicy {
-                    unlock_seconds_from_now: NonZeroU64::new(60).unwrap(),
-                    expire_seconds_after_unlock: NonZeroU64::new(60).unwrap(),
+                    unlock_seconds_from_proposal: NonZeroU64::new(60).unwrap(),
+                    expire_seconds_after_unlock_override: Some(60),
                 })
             }
             _ => None,

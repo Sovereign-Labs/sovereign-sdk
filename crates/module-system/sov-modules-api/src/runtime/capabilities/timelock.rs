@@ -11,13 +11,28 @@ use crate::{err_detail, Error, ErrorContext, ErrorDetail, HexHash, Spec, TxState
 /// This is the hash of an encoded runtime call message, not the hash of a raw transaction.
 pub type ProposalId = HexHash;
 
+/// Default number of seconds after unlock during which a proposal may be executed.
+pub const DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK: u64 = 86_400 * 2; // 2 days
+
 /// Timelock policy returned by a runtime for call messages that must be delayed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimelockPolicy {
-    /// Number of seconds that must pass before the proposal may be unlocked.
-    pub unlock_seconds_from_now: NonZeroU64,
-    /// Number of seconds after unlock during which the proposal may be executed.
-    pub expire_seconds_after_unlock: NonZeroU64,
+    /// Number of seconds after proposal registration before the proposal may be unlocked.
+    pub unlock_seconds_from_proposal: NonZeroU64,
+    /// Optional override for the post-unlock execution window, in seconds. If unset,
+    /// [`DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK`] is used.
+    ///
+    /// Caution: an override of `0` has no special meaning, and the proposal will be executable
+    /// only at its exact unlock timestamp. Take care to set reasonable expiraty delays.
+    pub expire_seconds_after_unlock_override: Option<u64>,
+}
+
+impl TimelockPolicy {
+    /// Returns the post-unlock execution window in seconds, applying the default if needed.
+    pub fn expire_seconds_after_unlock(&self) -> u64 {
+        self.expire_seconds_after_unlock_override
+            .unwrap_or(DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK)
+    }
 }
 
 /// Errors returned when trying to unlock a timelock proposal.
