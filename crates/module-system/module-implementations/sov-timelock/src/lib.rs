@@ -50,7 +50,7 @@ impl<S: Spec> Module for Timelock<S> {
         _context: &Context<S>,
         _state: &mut impl TxState<S>,
     ) -> Result<(), Self::Error> {
-        unreachable!()
+        Ok(())
     }
 }
 

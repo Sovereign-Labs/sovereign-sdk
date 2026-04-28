@@ -39,6 +39,9 @@ impl TimelockPolicy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "error_code", rename_all = "snake_case")]
 pub enum TimelockError {
+    /// The runtime does not provide a timelock capability.
+    #[error("Timelocks are not available in this runtime")]
+    TimelocksNotAvailable,
     /// The proposal does not exist.
     #[error("Timelock proposal does not exist")]
     ProposalNotFound,
@@ -104,7 +107,7 @@ impl<S: Spec> TimelockCapability<S> for () {
         _policy: TimelockPolicy,
         _state: &mut impl TxState<S>,
     ) -> Result<(), Error> {
-        Ok(())
+        Err(TimelockError::TimelocksNotAvailable.into())
     }
 
     fn try_unlock_proposal(
