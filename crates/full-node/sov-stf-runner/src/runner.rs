@@ -36,7 +36,9 @@ type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 type NextDaHeightToProcess = u64;
 
-fn validate_proof_manager_config<Address>(config: ProofManagerConfig<Address>) -> anyhow::Result<()> {
+fn validate_proof_manager_config<Address>(
+    config: &ProofManagerConfig<Address>,
+) -> anyhow::Result<()> {
     let aggregated_proof_block_jump = u64::try_from(config.aggregated_proof_block_jump.get())
         .context("aggregated_proof_block_jump does not fit in u64")?;
     let pipelined_backlog = aggregated_proof_block_jump
@@ -193,7 +195,7 @@ where
             "Initializing StfRunner");
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
-            validate_proof_manager_config(config)?;
+            validate_proof_manager_config(&config)?;
             let channel = new_stf_info_channel(
                 ledger_db.clone(),
                 config.max_number_of_transitions_in_memory,
