@@ -18,7 +18,7 @@ use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTrans
 pub struct ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address: Serialize + DeserializeOwned,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + PartialEq + core::fmt::Debug,
     Witness: Serialize + DeserializeOwned,
     Da: DaService,
     InnerVm: Zkvm,
@@ -37,7 +37,15 @@ impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
     InnerVm: Zkvm,
@@ -87,8 +95,16 @@ impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm> ProverService
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    StateRoot:
-        BorshSerialize + Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: BorshSerialize
+        + Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
     InnerVm: Zkvm + 'static,

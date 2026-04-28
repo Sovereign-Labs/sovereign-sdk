@@ -9,7 +9,9 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost};
+use sov_mock_zkvm::{
+    MockCodeCommitment, MockZkVerifier, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost,
+};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec};
@@ -17,8 +19,12 @@ use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregateProofVerifier, AggregatedProofPublicData,
+};
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
@@ -26,6 +32,7 @@ use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
+use crate::read_latest_aggregated_proof;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`MockZkvm`] inner vm and [`MockZkvm`] for outer vm
@@ -147,17 +154,35 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &LedgerDb,
+    ) -> (Self::ProverService, Option<SlotNumber>) {
+        let previous_public_data: Option<
+            AggregatedProofPublicData<
+                <Self::Spec as Spec>::Address,
+                MockDaSpec,
+                <<Self::Spec as Spec>::Storage as Storage>::Root,
+            >,
+        > = read_latest_aggregated_proof(ledger_db).await.map(|proof| {
+            AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default())
+                .verify(&proof)
+                .expect("Persisted aggregated proof failed verification")
+        });
+
+        let latest_proof_final_slot = previous_public_data.as_ref().map(|p| p.final_slot_number);
+
         let inner_vm = MockZkvmHost::new_non_blocking();
-        let outer_vm = MockZkvmHost::new_non_blocking();
+        let outer_vm =
+            MockZkvmHost::new_non_blocking_with_previous_anchor(previous_public_data.as_ref());
         let da_verifier = Default::default();
 
-        ParallelProverService::new_with_default_workers(
+        let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
             rollup_config.proof_manager.prover_address,
-        )
+        );
+
+        (prover, latest_proof_final_slot)
     }
 
     fn create_storage_manager(

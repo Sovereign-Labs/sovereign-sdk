@@ -160,7 +160,11 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        _ledger_db: &LedgerDb,
+    ) -> (
+        Self::ProverService,
+        Option<sov_rollup_interface::common::SlotNumber>,
+    ) {
         let inner_vm = Risc0Host::new(risc0::ROLLUP_ELF);
 
         let outer_vm = MockZkvmHost::new_non_blocking();
@@ -172,12 +176,14 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
 
         let da_verifier = CelestiaVerifier::new(rollup_params);
 
-        ParallelProverService::new_with_default_workers(
+        let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
             rollup_config.proof_manager.prover_address,
-        )
+        );
+
+        (prover, None)
     }
 
     fn create_storage_manager(

@@ -118,6 +118,7 @@ async fn test_runner_with_background_da_service(
         da_sync_state,
         da_service_with_cache,
         genesis_da_height,
+        None,
     )
     .await?;
 

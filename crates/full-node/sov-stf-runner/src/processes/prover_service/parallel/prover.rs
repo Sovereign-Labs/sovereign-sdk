@@ -42,7 +42,15 @@ where
     Da: DaService,
     Address:
         BorshSerialize + Serialize + DeserializeOwned + AsRef<[u8]> + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     pub(crate) fn new(prover_address: Address, num_threads: usize) -> Self {

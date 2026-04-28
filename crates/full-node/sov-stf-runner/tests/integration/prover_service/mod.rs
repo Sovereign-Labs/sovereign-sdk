@@ -25,7 +25,7 @@ fn make_header(header_hash: MockHash, height: u64) -> MockBlockHeader {
 fn make_transition_info(
     da_block_header: MockBlockHeader,
 ) -> StateTransitionInfo<StateRoot, Vec<u8>, MockDaSpec> {
-    let height = da_block_header.height;
+    let height = da_block_header.height + 1;
 
     StateTransitionInfo::new(
         StateTransitionWitness {

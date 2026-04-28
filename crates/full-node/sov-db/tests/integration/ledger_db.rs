@@ -148,20 +148,6 @@ async fn test_stf_info() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn next_slot_number_to_receive_is_none_at_startup() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
-    let ledger_storage = storage_manager.create_ledger_storage();
-
-    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
-    assert!(ledger_db
-        .get_stf_info_next_slot_number_to_receive()
-        .await
-        .unwrap()
-        .is_none());
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn test_rollback() {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());

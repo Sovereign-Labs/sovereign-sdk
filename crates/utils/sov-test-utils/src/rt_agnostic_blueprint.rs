@@ -208,8 +208,12 @@ where
         prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
-        Prover::create(prover_config, rollup_config).await
+        _ledger_db: &LedgerDb,
+    ) -> (
+        Self::ProverService,
+        Option<sov_rollup_interface::common::SlotNumber>,
+    ) {
+        (Prover::create(prover_config, rollup_config).await, None)
     }
 
     fn create_storage_manager(

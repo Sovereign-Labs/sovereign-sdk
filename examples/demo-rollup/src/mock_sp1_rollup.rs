@@ -16,17 +16,22 @@ use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregateProofVerifier, AggregatedProofPublicData,
+};
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::{SP1CryptoSpec, SP1MethodId, SP1};
+use sov_sp1_adapter::{SP1CryptoSpec, SP1MethodId, SP1Verifier, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
+use crate::read_latest_aggregated_proof;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, and [`SP1`] for both inner and outer vm
@@ -141,7 +146,8 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &LedgerDb,
+    ) -> (Self::ProverService, Option<SlotNumber>) {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
@@ -161,21 +167,43 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
 
         let inner_verifying_key = inner_vm.verifying_key().clone();
 
+        let previous_aggregated_proof = read_latest_aggregated_proof(ledger_db).await;
+
+        let previous_for_outer = previous_aggregated_proof.clone();
         let outer_vm = tokio::task::spawn_blocking(move || {
-            SP1AggregationHost::new(agg_elf, inner_verifying_key)
-                .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
+            SP1AggregationHost::new_with_previous_proof(
+                agg_elf,
+                inner_verifying_key,
+                previous_for_outer,
+            )
+            .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
         })
         .await
         .expect("SP1AggregationHost setup task panicked");
 
+        // Validate the persisted proof and extract the `final_slot_number` so
+        // the runner can rewind the STF-info stream to `final_slot + 1`.
+        let latest_proof_final_slot = previous_aggregated_proof.as_ref().map(|proof| {
+            let public_data: AggregatedProofPublicData<
+                <Self::Spec as Spec>::Address,
+                MockDaSpec,
+                <<Self::Spec as Spec>::Storage as Storage>::Root,
+            > = AggregateProofVerifier::<SP1Verifier>::new(outer_vm.code_commitment())
+                .verify(proof)
+                .expect("Persisted aggregated proof failed verification");
+            public_data.final_slot_number
+        });
+
         let da_verifier = Default::default();
 
-        ParallelProverService::new_with_default_workers(
+        let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
             rollup_config.proof_manager.prover_address,
-        )
+        );
+
+        (prover, latest_proof_final_slot)
     }
 
     fn create_storage_manager(
