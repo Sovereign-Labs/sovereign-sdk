@@ -186,6 +186,13 @@ impl PyUniquenessData {
     }
 
     #[staticmethod]
+    fn window(window: u64) -> Self {
+        PyUniquenessData {
+            inner: UniquenessData::Window(window),
+        }
+    }
+
+    #[staticmethod]
     fn default() -> PyResult<Self> {
         let uniqueness = default_uniqueness().map_err(|e| {
             PyValueError::new_err(format!("Failed to create default uniqueness: {e}"))

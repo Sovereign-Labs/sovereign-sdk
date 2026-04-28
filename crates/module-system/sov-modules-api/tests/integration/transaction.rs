@@ -191,6 +191,32 @@ mod web3_compatibility {
     }
 
     #[test]
+    fn test_unsigned_tx_wallet_serialization_window_uniqueness() {
+        let json = r#"{
+        "runtime_call": {
+            "value_setter": {
+                 "set_value": {
+                    "value": 4,
+                    "gas": null
+                }
+            }
+        },
+        "uniqueness": {
+            "window": 3
+        },
+        "details": {
+            "max_priority_fee_bips": 1,
+            "max_fee": 10000,
+            "gas_limit": null,
+            "chain_id": 1337
+        }
+    }"#;
+        let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
+
+        assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
+    }
+
+    #[test]
     fn test_tx_wallet_serialization_some_gas_limit() {
         let json = r#"
         {"V0": 

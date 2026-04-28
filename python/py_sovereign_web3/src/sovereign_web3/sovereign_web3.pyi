@@ -121,7 +121,7 @@ class TxDetails:
         ...
 
 class UniquenessData:
-    """Transaction uniqueness data (nonce or generation)."""
+    """Transaction uniqueness data (nonce, generation, or window)."""
 
     @staticmethod
     def nonce(nonce: int) -> "UniquenessData":
@@ -141,6 +141,18 @@ class UniquenessData:
 
         Args:
             generation: Generation value
+
+        Returns:
+            UniquenessData instance
+        """
+        ...
+
+    @staticmethod
+    def window(window: int) -> "UniquenessData":
+        """Create window-based uniqueness data.
+
+        Args:
+            window: Window nonce value
 
         Returns:
             UniquenessData instance
