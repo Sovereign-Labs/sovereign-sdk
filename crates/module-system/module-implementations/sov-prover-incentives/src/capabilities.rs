@@ -126,6 +126,8 @@ impl<S: Spec> ProverIncentives<S> {
             )
             .map_err(Into::<anyhow::Error>::into)?;
 
+        println!("XXXXX V");
+
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         let verification_result =
             <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
@@ -144,6 +146,11 @@ impl<S: Spec> ProverIncentives<S> {
                 ));
             }
         };
+
+        println!(
+            "XXXXX: Processing aggregated proof {}",
+            public_outputs.initial_slot_number
+        );
 
         tracing::debug!(
             %public_outputs.initial_slot_number,
