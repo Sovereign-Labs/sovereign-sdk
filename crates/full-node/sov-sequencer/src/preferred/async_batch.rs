@@ -52,7 +52,7 @@ impl<S: Spec> MaybeAsyncBatch<S> {
                 admins: sequencer_admins,
                 tx_profit_threshold,
                 // This will get overwritten by the pre-flight hook.
-                unix_timestamp_micros: std::cell::RefCell::new(std::time::Instant::now()),
+                execution_start: std::cell::RefCell::new(std::time::Instant::now()),
                 is_responsible_for_gating_admins,
             },
         }
@@ -167,10 +167,7 @@ pub struct AsyncBatchResponder<S: Spec> {
     result_channel: Sender<AsyncBatchResult<S>>,
     admins: Arc<Vec<S::Address>>,
     tx_profit_threshold: u128,
-    /// The timestamp of the start of the latest tx in microseconds since the UNIX epoch
-    /// We use an atomic u64 to avoid requiring a mutex. Note that this is set during the pre-flight hook.
-    /// and read during the post-tx hook. It may not be meaningful before the pre-flight hook is called.
-    unix_timestamp_micros: std::cell::RefCell<std::time::Instant>,
+    execution_start: std::cell::RefCell<std::time::Instant>,
     is_responsible_for_gating_admins: bool,
 }
 
@@ -202,7 +199,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             result_channel: self.result_channel.clone(),
             admins: self.admins.clone(),
             tx_profit_threshold: self.tx_profit_threshold,
-            unix_timestamp_micros: std::cell::RefCell::new(std::time::Instant::now()),
+            execution_start: std::cell::RefCell::new(std::time::Instant::now()),
             is_responsible_for_gating_admins: self.is_responsible_for_gating_admins,
         }
     }
@@ -215,8 +212,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         context: &Context<S>,
         call: &<RT as DispatchCall>::Decodable,
     ) -> TxControlFlow<()> {
-        self.unix_timestamp_micros
-            .replace(std::time::Instant::now());
+        self.execution_start.replace(std::time::Instant::now());
         if !self.is_responsible_for_gating_admins
             || sender_is_allowed(
                 runtime,
@@ -229,7 +225,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             TxControlFlow::ContinueProcessing(())
         } else {
             let execution_time_micros =
-                self.unix_timestamp_micros.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
+                self.execution_start.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
             self.send(
                 S::Gas::zero(),
                 execution_time_micros,
@@ -248,7 +244,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let execution_time_micros =
-            self.unix_timestamp_micros.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
+            self.execution_start.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
         let ProvisionalSequencerOutcome {
             reward,
             penalty,
