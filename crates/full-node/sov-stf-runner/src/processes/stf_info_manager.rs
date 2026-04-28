@@ -425,6 +425,39 @@ where
                 .fetch_add(amount, Ordering::SeqCst),
         )
     }
+
+    /// Returns a cloneable handle that can advance `next_height_to_receive`
+    /// from a different task without requiring access to the full
+    /// [`Receiver`]. Used by the proof-aggregation pipeline to keep the
+    /// cursor advance co-located with the actual proof publication, while
+    /// the channel-draining `read_next` still happens on the intake task.
+    pub fn cursor_handle(&self) -> CursorHandle {
+        CursorHandle {
+            next_height_to_receive: self.next_height_to_receive.clone(),
+        }
+    }
+}
+
+/// A clonable handle over the [`Receiver`]'s `next_height_to_receive` cursor.
+///
+/// The cursor doubles as the prune cutoff for materialized STF infos
+/// (see `prune_entries`), so it MUST only be advanced over slots whose proofs
+/// have been durably published. Holding this handle in a non-receiver task
+/// lets the publish step do that advance without giving the task the rest of
+/// the [`Receiver`].
+#[derive(Clone)]
+pub struct CursorHandle {
+    next_height_to_receive: Arc<AtomicU64>,
+}
+
+impl CursorHandle {
+    /// Increment next height to receive by the requested amount, returning the previous value.
+    pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
+        SlotNumber::new_dangerous(
+            self.next_height_to_receive
+                .fetch_add(amount, Ordering::SeqCst),
+        )
+    }
 }
 
 #[cfg(test)]

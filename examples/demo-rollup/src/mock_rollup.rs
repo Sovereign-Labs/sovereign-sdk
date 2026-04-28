@@ -175,11 +175,14 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
             MockZkvmHost::new_non_blocking_with_previous_anchor(previous_public_data.as_ref());
         let da_verifier = Default::default();
 
+        let num_threads = rollup_config.proof_manager.prover_thread_count();
+
         let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
             rollup_config.proof_manager.prover_address,
+            num_threads,
         );
 
         (prover, latest_proof_final_slot)

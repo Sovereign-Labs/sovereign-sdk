@@ -90,6 +90,7 @@ where
             outer_vm,
             Default::default(),
             rollup_config.proof_manager.prover_address,
+            5,
         )
     }
 }

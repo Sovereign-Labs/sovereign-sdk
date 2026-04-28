@@ -139,6 +139,15 @@ fn default_eager_proof_submission() -> bool {
     true
 }
 
+impl<Address> ProofManagerConfig<Address> {
+    /// Number of prover threads required to fully pipeline aggregation:
+    /// `2 * aggregated_proof_block_jump + 1` covers inner proofs for the
+    /// current and next batch plus one outer-aggregation worker.
+    pub fn prover_thread_count(&self) -> usize {
+        2 * self.aggregated_proof_block_jump.get() + 1
+    }
+}
+
 /// Rollup Configuration
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[schemars(

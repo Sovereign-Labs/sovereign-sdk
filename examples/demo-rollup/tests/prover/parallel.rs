@@ -65,6 +65,7 @@ async fn test_parallel_proof_generation() {
         outer_vm,
         da_verifier,
         prover_address,
+        3,
     );
 
     let (genesis_state_root, witnesses) = super::generate_witnesses().await;
