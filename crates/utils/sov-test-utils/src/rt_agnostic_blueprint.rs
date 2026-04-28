@@ -33,15 +33,13 @@ use sov_stf_runner::RollupConfig;
 /// Implement this trait to plug different prover backends (parallel, network, etc.)
 /// into the blueprint without reimplementing the entire [`FullNodeBlueprint`].
 #[async_trait]
-pub trait ProverFactory<S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>>:
-    Send + Sync + 'static
-{
+pub trait ProverFactory<S: Spec<Da = MockDaSpec>>: Send + Sync + 'static {
     /// The prover service type this factory creates.
     type ProverService: ProverService<
         StateRoot = <S::Storage as Storage>::Root,
         Witness = <S::Storage as Storage>::Witness,
         DaService = StorableMockDaService,
-        Verifier = <<MockZkvm as Zkvm>::Guest as ZkvmGuest>::Verifier,
+        Verifier = <<S::OuterZkvm as Zkvm>::Guest as ZkvmGuest>::Verifier,
     >;
 
     /// Create the prover service from the given config.
@@ -148,7 +146,7 @@ where
 impl<S, R, Manager, Prover, A> FullNodeBlueprint<Native>
     for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
-    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
+    S: Spec<Da = MockDaSpec> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
     Manager: Send
         + Sync

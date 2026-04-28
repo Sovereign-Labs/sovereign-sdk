@@ -1,13 +1,12 @@
 use std::path::Path;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::MultiAddressEvmSolana;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockDaSpec};
-use sov_mock_zkvm::{MockZkvm, MockZkvmNetwork};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::Spec;
@@ -16,12 +15,12 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
-use sov_sp1_adapter::network::SP1Network;
+use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::SP1;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
 use sov_state::Storage;
-use sov_stf_runner::processes::NetworkProverService;
+use sov_stf_runner::processes::ParallelProverService;
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::RollupConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath};
@@ -36,7 +35,7 @@ type SP1NativeStorage =
 pub type SP1Spec = ConfigurableSpec<
     MockDaSpec,
     SP1,
-    MockZkvm,
+    SP1,
     MultiAddressEvmSolana,
     Native,
     sov_sp1_adapter::SP1CryptoSpec,
@@ -44,18 +43,23 @@ pub type SP1Spec = ConfigurableSpec<
 >;
 pub type SP1RT = demo_stf::runtime::Runtime<SP1Spec>;
 
-/// Prover factory that submits proofs to the SP1 Succinct proving network.
-pub struct NetworkProverFactory;
+/// Prover factory backed by [`ParallelProverService`] with `SP1Host` for the inner.
+///
+/// The SP1 SDK's prover backend is selected via the `SP1_PROVER` environment
+/// variable read by `sp1_sdk` at runtime — `cpu`, `cuda`, `mock`, or `network`.
+/// For network proving, set `SP1_PROVER=network` along with `NETWORK_PRIVATE_KEY`
+/// before launching the rollup.
+pub struct ParallelProverFactory;
 
 #[async_trait]
-impl ProverFactory<SP1Spec> for NetworkProverFactory {
-    type ProverService = NetworkProverService<
+impl ProverFactory<SP1Spec> for ParallelProverFactory {
+    type ProverService = ParallelProverService<
         <SP1Spec as Spec>::Address,
         <<SP1Spec as Spec>::Storage as Storage>::Root,
         <<SP1Spec as Spec>::Storage as Storage>::Witness,
         StorableMockDaService,
         SP1,
-        MockZkvm,
+        SP1,
     >;
 
     async fn create(
@@ -63,32 +67,54 @@ impl ProverFactory<SP1Spec> for NetworkProverFactory {
         rollup_config: &RollupConfig<<SP1Spec as Spec>::Address, StorableMockDaService>,
     ) -> Self::ProverService {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
         assert!(
             !elf.is_empty(),
             "SP1 guest ELF is empty — build it first (cd provers/sp1 && cargo build)"
         );
+        assert!(
+            !agg_elf.is_empty(),
+            "SP1 aggregation guest ELF is empty — build it first (cd provers/sp1 && cargo build)"
+        );
 
-        let inner_vm = SP1Network::new(elf)
+        // SP1 host setup spins up its own runtime; do it off the async executor.
+        let outer_verifying_key = tokio::task::spawn_blocking(move || {
+            sov_sp1_adapter::host::verifying_key_from_elf(agg_elf).map(Arc::new)
+        })
+        .await
+        .expect("Outer verifying key setup task panicked")
+        .expect("Failed to derive outer verifying key from aggregation guest ELF");
+
+        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf, outer_verifying_key))
             .await
-            .expect("Failed to create SP1Network — is NETWORK_PRIVATE_KEY set?");
-        // auto-complete outer proofs — real outer not supported yet
-        let outer_vm = MockZkvmNetwork::new(true);
+            .expect("SP1Host setup task panicked")
+            .expect("Failed to create SP1Host from guest ELF");
 
-        NetworkProverService::new(
+        let inner_verifying_key = inner_vm.verifying_key().clone();
+
+        let outer_vm = tokio::task::spawn_blocking(move || {
+            SP1AggregationHost::new(agg_elf, inner_verifying_key)
+                .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
+        })
+        .await
+        .expect("SP1AggregationHost setup task panicked");
+
+        let da_verifier = Default::default();
+
+        ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
-            Default::default(),
+            da_verifier,
             rollup_config.proof_manager.prover_address,
-            Duration::from_secs(600),
         )
     }
 }
 
-pub type NetworkProvingBlueprint = RtAgnosticBlueprint<
+pub type ParallelProvingBlueprint = RtAgnosticBlueprint<
     SP1Spec,
     SP1RT,
     sov_db::storage_manager::NomtStorageManager<MockDaSpec, SP1Hasher, SP1NativeStorage>,
-    NetworkProverFactory,
+    ParallelProverFactory,
 >;
 
 fn sp1_genesis_paths() -> GenesisPaths {
@@ -104,19 +130,19 @@ pub fn create_sp1_rollup_builder(
     storage_path: PathBuf,
     axum_port: u16,
     db_connection_url: Option<String>,
-) -> RollupBuilder<NetworkProvingBlueprint> {
+) -> RollupBuilder<ParallelProvingBlueprint> {
     let genesis_config =
         demo_stf::genesis_config::create_genesis_config::<SP1Spec>(&sp1_genesis_paths())
             .expect("Failed to create demo-stf genesis config");
     let postgres_config = make_postgres_config(db_connection_url);
 
-    // SP1 network proving takes ~10s per proof. With aggregated_proof_block_jump=3,
-    // each batch takes ~30s. Use 10s block time so the prover can keep pace with DA.
+    // SP1 network proving takes ~10s per proof. With aggregated_proof_block_jump=8,
+    // each batch takes ~80s. Use 10s block time so the prover can keep pace with DA.
     let block_producing_config = BlockProducingConfig::Periodic {
         block_time_ms: 10_000,
     };
 
-    RollupBuilder::<NetworkProvingBlueprint>::new_with_storage_path(
+    RollupBuilder::<ParallelProvingBlueprint>::new_with_storage_path(
         GenesisSource::CustomParams(GenesisParams {
             runtime: genesis_config,
         }),
@@ -133,9 +159,12 @@ pub fn create_sp1_rollup_builder(
             postgres_config,
             batch_execution_time_limit_millis: 11_000,
             disable_state_root_consistency_checks: true,
+            // Disable executor cache warm-up — it produces noisy "Transaction could not
+            // be applied" warnings and isn't needed for soak testing.
+            num_cache_warmup_workers: 0,
             ..Default::default()
         });
-        config.aggregated_proof_block_jump = 3;
+        config.aggregated_proof_block_jump = 8;
         config.axum_port = axum_port;
         // With 10s block time and finalization_blocks=5, DA finalization takes ~50s.
         // The default 60s is too tight — bump to 120s to avoid spurious timeouts.
