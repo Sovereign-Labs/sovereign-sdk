@@ -12,6 +12,8 @@ use sov_modules_api::{
 };
 use sov_state::User;
 
+pub use crate::window::Window;
+
 /// A module responsible for managing transaction deduplication for the rollup.
 /// Deduplication is done in two ways:
 /// - Nonce deduplication: Each transaction sent by a given `sov_rollup_interface::crypto::CredentialId` has a unique nonce.
@@ -37,7 +39,7 @@ pub struct Uniqueness<S: Spec> {
 
     /// Mapping from a credential id to a window of seen nonces.
     #[state]
-    pub(crate) window: StateMap<CredentialId, (u64, Vec<u8>)>,
+    pub(crate) window: StateMap<CredentialId, Window>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,
@@ -107,7 +109,7 @@ impl<S: Spec> Uniqueness<S> {
         &self,
         credential_id: &CredentialId,
         state: &mut Reader,
-    ) -> Result<Option<(u64, Vec<u8>)>, Reader::Error> {
+    ) -> Result<Option<Window>, Reader::Error> {
         self.window.get(credential_id, state)
     }
 }

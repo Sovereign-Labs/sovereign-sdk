@@ -3,7 +3,7 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{CredentialId, HexHash, TxEffect};
 use sov_test_utils::{TransactionTestCase, TxProcessingError};
-use sov_uniqueness::Uniqueness;
+use sov_uniqueness::{Uniqueness, Window};
 
 use crate::runtime::S;
 use crate::utils::{generate_default_tx, setup};
@@ -183,7 +183,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some((0, vec![0, 0, 0, 0, 0, 1 << 2])),
+                Some(Window::from((0, vec![0, 0, 0, 0, 0, 1 << 2]))),
                 "A bit in the window should be set",
             );
         }),
@@ -197,7 +197,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some((0, vec![0, 0, 0, 0, 0, (1 << 2) | (1 << 0)])),
+                Some(Window::from((0, vec![0, 0, 0, 0, 0, (1 << 2) | (1 << 0)]))),
                 "Two bits in the window should be set."
             );
         }),
@@ -218,7 +218,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some((40, dst)),
+                Some(Window::from((40, dst))),
                 "Dropping bits in the window"
             );
         }),
@@ -234,7 +234,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some((48, dst)),
+                Some(Window::from((48, dst))),
                 "Dropping bits in the window"
             );
         }),
@@ -291,7 +291,7 @@ fn send_tx_bad_window_nonce_too_old() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some((8, value)),
+                Some(Window::from((8, value))),
                 "Dropping bits in the window"
             );
         }),
@@ -304,7 +304,7 @@ fn send_tx_bad_window_nonce_too_old() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some((8, dst)),
+                Some(Window::from((8, dst))),
                 "Unchanged window",
             );
             if let TxEffect::Skipped(skipped) = &ctx.tx_receipt {
