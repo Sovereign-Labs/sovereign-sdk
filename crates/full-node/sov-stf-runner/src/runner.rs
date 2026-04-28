@@ -36,6 +36,30 @@ type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 type NextDaHeightToProcess = u64;
 
+fn validate_proof_manager_config<Address>(config: ProofManagerConfig<Address>) -> anyhow::Result<()> {
+    let aggregated_proof_block_jump = u64::try_from(config.aggregated_proof_block_jump.get())
+        .context("aggregated_proof_block_jump does not fit in u64")?;
+    let pipelined_backlog = aggregated_proof_block_jump
+        .checked_mul(3)
+        .context("aggregated proof backlog overflowed")?;
+    let required_transitions_in_db = config
+        .max_number_of_transitions_in_memory
+        .get()
+        .checked_add(pipelined_backlog)
+        .context("required STF info DB capacity overflowed")?;
+
+    anyhow::ensure!(
+        config.max_number_of_transitions_in_db.get() >= required_transitions_in_db,
+        "Invalid proof manager config: `max_number_of_transitions_in_db` must be at least `max_number_of_transitions_in_memory + 3 * aggregated_proof_block_jump` for pipelined aggregated proof posting (got db={}, memory={}, jump={}, required={})",
+        config.max_number_of_transitions_in_db,
+        config.max_number_of_transitions_in_memory,
+        config.aggregated_proof_block_jump,
+        required_transitions_in_db,
+    );
+
+    Ok(())
+}
+
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 #[allow(clippy::type_complexity)]
 pub struct StateTransitionRunner<Stf, Sm, Da>
@@ -169,6 +193,7 @@ where
             "Initializing StfRunner");
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
+            validate_proof_manager_config(config)?;
             let channel = new_stf_info_channel(
                 ledger_db.clone(),
                 config.max_number_of_transitions_in_memory,
