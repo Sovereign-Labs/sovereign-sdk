@@ -12,7 +12,7 @@ use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::HasRestApi;
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, Zkvm};
+use sov_modules_api::{CodeCommitmentFor, CryptoSpec, NodeEndpoints, Spec, Zkvm};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
@@ -47,6 +47,18 @@ pub trait ProverFactory<S: Spec<Da = MockDaSpec>>: Send + Sync + 'static {
         prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
     ) -> Self::ProverService;
+
+    /// Compute the inner+outer code commitments for this prover, typically by
+    /// hashing the guest ELFs. Default impl bails — factories that want to
+    /// support `--override-code-commitments`-style genesis rewrites should
+    /// override this.
+    #[allow(clippy::type_complexity)]
+    fn code_commitments() -> anyhow::Result<(
+        CodeCommitmentFor<S::InnerZkvm>,
+        CodeCommitmentFor<S::OuterZkvm>,
+    )> {
+        anyhow::bail!("code_commitments not supported by this prover factory")
+    }
 }
 
 /// Default prover factory using local parallel proving.
@@ -228,6 +240,14 @@ where
         proof_blob_sender: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(proof_blob_sender))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn compute_code_commitments() -> anyhow::Result<(
+        CodeCommitmentFor<<S as Spec>::InnerZkvm>,
+        CodeCommitmentFor<<S as Spec>::OuterZkvm>,
+    )> {
+        Prover::code_commitments()
     }
 
     async fn sequencer_additional_apis<Seq>(

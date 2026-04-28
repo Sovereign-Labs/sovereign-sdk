@@ -119,8 +119,13 @@ where
                 prover_address: self.prover_address.clone(),
             };
 
+            let span_block_header_hash = block_header_hash.clone();
             self.pool.spawn(move || {
-                tracing::info_span!("guest_execution").in_scope(|| {
+                tracing::info_span!("guest_execution", slot_number = %slot_number).in_scope(|| {
+                    info!(
+                        "Submitting inner proof for slot {} (slot_hash={})",
+                        slot_number, span_block_header_hash
+                    );
                     let inner_proof =
                         Self::make_inner_proof::<InnerVm>(inner_vm, &data, aggregated_proofs);
 
