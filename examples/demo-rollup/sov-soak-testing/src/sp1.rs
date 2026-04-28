@@ -110,7 +110,7 @@ impl ProverFactory<SP1Spec> for ParallelProverFactory {
     }
 }
 
-pub type ParallelProvingBlueprint = RtAgnosticBlueprint<
+pub type NetworkProvingBlueprint = RtAgnosticBlueprint<
     SP1Spec,
     SP1RT,
     sov_db::storage_manager::NomtStorageManager<MockDaSpec, SP1Hasher, SP1NativeStorage>,
@@ -130,7 +130,7 @@ pub fn create_sp1_rollup_builder(
     storage_path: PathBuf,
     axum_port: u16,
     db_connection_url: Option<String>,
-) -> RollupBuilder<ParallelProvingBlueprint> {
+) -> RollupBuilder<NetworkProvingBlueprint> {
     let genesis_config =
         demo_stf::genesis_config::create_genesis_config::<SP1Spec>(&sp1_genesis_paths())
             .expect("Failed to create demo-stf genesis config");
@@ -142,7 +142,7 @@ pub fn create_sp1_rollup_builder(
         block_time_ms: 10_000,
     };
 
-    RollupBuilder::<ParallelProvingBlueprint>::new_with_storage_path(
+    RollupBuilder::<NetworkProvingBlueprint>::new_with_storage_path(
         GenesisSource::CustomParams(GenesisParams {
             runtime: genesis_config,
         }),
@@ -159,8 +159,7 @@ pub fn create_sp1_rollup_builder(
             postgres_config,
             batch_execution_time_limit_millis: 11_000,
             disable_state_root_consistency_checks: true,
-            // Disable executor cache warm-up — it produces noisy "Transaction could not
-            // be applied" warnings and isn't needed for soak testing.
+            // Pinned cache is currently not compatible with ZKPs
             num_cache_warmup_workers: 0,
             ..Default::default()
         });
