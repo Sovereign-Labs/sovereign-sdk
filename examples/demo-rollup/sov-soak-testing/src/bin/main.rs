@@ -21,9 +21,10 @@ struct Args {
     #[arg(short, long)]
     db_connection_url: Option<String>,
 
-    /// Enable SP1 network proving.
-    /// Requires NETWORK_PRIVATE_KEY env var to be set.
-    /// The rollup will submit proofs to the Succinct proving network.
+    /// Enable SP1 proving via `ParallelProverService` with `SP1Host` + `SP1AggregationHost`.
+    /// The SP1 SDK's prover backend is selected via the `SP1_PROVER` env var
+    /// (`cpu`, `cuda`, `mock`, or `network`). For network proving, also set
+    /// `NETWORK_PRIVATE_KEY`.
     #[arg(long)]
     network_proving: bool,
 }
