@@ -7,7 +7,7 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::da::Time;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::EncodeCall;
+use sov_modules_api::{EncodeCall, SafeVec};
 use sov_test_modules::hooks_count::TxHooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
@@ -16,7 +16,7 @@ use sov_test_utils::{
 };
 use sov_timelock::{
     CancellationPolicy, Event as TimelockEvent, ProposalKey, Timelock,
-    MAX_PENDING_PROPOSALS_PER_ADDRESS,
+    MAX_PENDING_PROPOSALS_PER_ADDRESS, MAX_PROPOSAL_KEYS_PER_CLEANUP,
 };
 use sov_value_setter::{CallMessage as ValueSetterCallMessage, ValueSetterConfig};
 
@@ -54,15 +54,12 @@ fn timelock_capability<SpecT: sov_modules_api::Spec>(
     &mut runtime.timelock
 }
 
-fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
-    let genesis_config =
-        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
+fn setup_with_accounts(account_count: usize) -> (Vec<TestUser<S>>, TestRunner<RT, S>) {
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate()
+        .add_accounts_with_default_balance(account_count);
 
-    let admin = genesis_config
-        .additional_accounts()
-        .first()
-        .unwrap()
-        .clone();
+    let users = genesis_config.additional_accounts().to_vec();
+    let admin = users.first().unwrap().clone();
 
     let genesis = GenesisConfig::from_minimal_config(
         genesis_config.into(),
@@ -75,6 +72,13 @@ fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
 
     let mut runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
     runner.config.freeze_time = Some(Time::from_secs(1_000));
+
+    (users, runner)
+}
+
+fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
+    let (mut users, runner) = setup_with_accounts(1);
+    let admin = users.pop().unwrap();
 
     (admin, runner)
 }
@@ -90,6 +94,12 @@ fn set_value_proposal_id(value: u32) -> sov_modules_api::capabilities::ProposalI
 fn set_value_proposal_data(value: u32) -> TimelockProposalData {
     let encoded = <RT as EncodeCall<ValueSetter<S>>>::encode_call(set_value_message(value));
     TimelockProposalData::call_message(encoded)
+}
+
+fn cleanup_keys(
+    keys: Vec<ProposalKey<S>>,
+) -> SafeVec<ProposalKey<S>, MAX_PROPOSAL_KEYS_PER_CLEANUP> {
+    SafeVec::try_from(keys).unwrap()
 }
 
 #[test]
@@ -296,6 +306,136 @@ fn owner_can_cancel_pending_proposal() {
                     .get(&admin_address, state)
                     .unwrap_infallible(),
                 None
+            );
+        }),
+    });
+}
+
+#[test]
+fn expired_proposals_can_be_batch_cleaned_without_owner_permission() {
+    let (users, mut runner) = setup_with_accounts(2);
+    let admin = users[0].clone();
+    let cleaner = users[1].clone();
+    let admin_address = admin.address();
+    let first_proposal_id = set_value_proposal_id(100);
+    let second_proposal_id = set_value_proposal_id(101);
+
+    for value in [100, 101] {
+        runner.execute_transaction(TransactionTestCase {
+            input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(value)),
+            assert: Box::new(|result, _state| {
+                assert!(result.tx_receipt.is_successful());
+            }),
+        });
+    }
+
+    runner.config.freeze_time = Some(Time::from_secs(1_121));
+    let proposal_keys = cleanup_keys(vec![
+        ProposalKey(admin_address, first_proposal_id),
+        ProposalKey(admin_address, second_proposal_id),
+    ]);
+    runner.execute_transaction(TransactionTestCase {
+        input: cleaner.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CleanExpiredProposals {
+                proposal_keys: proposal_keys.clone(),
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            assert_eq!(
+                result.events,
+                vec![
+                    TimelockRuntimeEvent::Timelock(TimelockEvent::ExpiredProposalCleaned {
+                        address: admin_address,
+                        proposal_id: first_proposal_id,
+                    }),
+                    TimelockRuntimeEvent::Timelock(TimelockEvent::ExpiredProposalCleaned {
+                        address: admin_address,
+                        proposal_id: second_proposal_id,
+                    }),
+                ]
+            );
+            for proposal_key in proposal_keys {
+                assert!(Timelock::<S>::default()
+                    .proposals
+                    .get(&proposal_key, state)
+                    .unwrap_infallible()
+                    .is_none());
+            }
+            assert_eq!(
+                Timelock::<S>::default()
+                    .proposal_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                None
+            );
+        }),
+    });
+}
+
+#[test]
+fn cleanup_skips_unexpired_and_missing_proposals() {
+    let (admin, mut runner) = setup();
+    let admin_address = admin.address();
+    let expired_proposal_id = set_value_proposal_id(100);
+    let unexpired_proposal_id = set_value_proposal_id(101);
+    let expired_proposal_key = ProposalKey(admin_address, expired_proposal_id);
+    let unexpired_proposal_key = ProposalKey(admin_address, unexpired_proposal_id);
+    let missing_proposal_key = ProposalKey(admin_address, ProposalId::new([9; 32]));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(100)),
+        assert: Box::new(|result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.config.freeze_time = Some(Time::from_secs(1_061));
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(101)),
+        assert: Box::new(|result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.config.freeze_time = Some(Time::from_secs(1_121));
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CleanExpiredProposals {
+                proposal_keys: cleanup_keys(vec![
+                    expired_proposal_key.clone(),
+                    unexpired_proposal_key.clone(),
+                    missing_proposal_key,
+                ]),
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            assert_eq!(
+                result.events,
+                vec![TimelockRuntimeEvent::Timelock(
+                    TimelockEvent::ExpiredProposalCleaned {
+                        address: admin_address,
+                        proposal_id: expired_proposal_id,
+                    }
+                )]
+            );
+            assert!(Timelock::<S>::default()
+                .proposals
+                .get(&expired_proposal_key, state)
+                .unwrap_infallible()
+                .is_none());
+            assert!(Timelock::<S>::default()
+                .proposals
+                .get(&unexpired_proposal_key, state)
+                .unwrap_infallible()
+                .is_some());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .proposal_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                Some(1)
             );
         }),
     });

@@ -16,12 +16,15 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
     err_detail, Context, CoreModuleError, DaSpec, Error as ModuleError, ErrorContext, ErrorDetail,
-    EventEmitter, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateMap,
-    TxState,
+    EventEmitter, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, SafeVec, Spec,
+    StateMap, TxState,
 };
 
 /// Maximum number of pending proposals per address.
 pub const MAX_PENDING_PROPOSALS_PER_ADDRESS: u32 = 128;
+
+/// Maximum number of proposal keys accepted by a cleanup call.
+pub const MAX_PROPOSAL_KEYS_PER_CLEANUP: usize = 128;
 
 const PROPOSAL_KEY_SEPARATOR: &str = "/proposals/";
 
@@ -37,6 +40,7 @@ const PROPOSAL_KEY_SEPARATOR: &str = "/proposals/";
     serde::Serialize,
     serde::Deserialize,
     JsonSchema,
+    UniversalWallet,
 )]
 #[serde(bound = "S: Spec", deny_unknown_fields)]
 #[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "ProposalKey")]
@@ -191,6 +195,13 @@ pub enum Event<S: Spec> {
         /// Address that cancelled the proposal.
         cancelled_by: S::Address,
     },
+    /// An expired proposal was cleaned.
+    ExpiredProposalCleaned {
+        /// Proposal owner.
+        address: S::Address,
+        /// Proposal id.
+        proposal_id: ProposalId,
+    },
 }
 
 /// Calls supported by the timelock module.
@@ -211,6 +222,11 @@ pub enum CallMessage<S: Spec> {
     ModifyCancellationPolicy {
         /// New cancellation policy.
         new_policy: CancellationPolicy<S>,
+    },
+    /// Clean expired proposals.
+    CleanExpiredProposals {
+        /// Proposal keys to clean.
+        proposal_keys: SafeVec<ProposalKey<S>, MAX_PROPOSAL_KEYS_PER_CLEANUP>,
     },
 }
 
@@ -255,6 +271,18 @@ pub enum Error<S: Spec> {
         address: S::Address,
         /// Proposal id being deleted.
         proposal_id: ProposalId,
+    },
+    /// The proposal exists but has not expired yet.
+    #[error(
+        "Proposal {proposal_key} is not expired at current time {current_time}; executable until {executable_until}"
+    )]
+    ProposalNotExpired {
+        /// Proposal key.
+        proposal_key: ProposalKey<S>,
+        /// Current chain time in seconds.
+        current_time: u64,
+        /// Unix timestamp after which the proposal is expired.
+        executable_until: u64,
     },
     /// The sender is not authorized to cancel the proposal.
     #[error(
@@ -358,6 +386,10 @@ impl<S: Spec> Module for Timelock<S> {
                 .map_err(ModuleError::from)?,
             CallMessage::ModifyCancellationPolicy { new_policy } => {
                 self.modify_cancellation_policy(new_policy, context, state)?;
+            }
+            CallMessage::CleanExpiredProposals { proposal_keys } => {
+                self.clean_expired_proposals(proposal_keys, state)
+                    .map_err(ModuleError::from)?;
             }
         }
         Ok(())
@@ -562,6 +594,66 @@ impl<S: Spec> Timelock<S> {
                 cancelled_by: *context.sender(),
             },
         );
+        Ok(())
+    }
+
+    fn clean_expired_proposals(
+        &mut self,
+        proposal_keys: SafeVec<ProposalKey<S>, MAX_PROPOSAL_KEYS_PER_CLEANUP>,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), Error<S>> {
+        let current_time = self.current_time_secs(state)?;
+        for key in proposal_keys {
+            let mut attempt_state = state.to_revertable();
+            match self.clean_expired_proposal(&key, current_time, &mut attempt_state) {
+                Ok(()) => {
+                    attempt_state.commit();
+                }
+                Err(Error::Timelock(TimelockError::ProposalNotFound))
+                | Err(Error::ProposalNotExpired { .. }) => {
+                    attempt_state.revert();
+                }
+                Err(error) => {
+                    attempt_state.revert();
+                    return Err(error);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn clean_expired_proposal(
+        &mut self,
+        key: &ProposalKey<S>,
+        current_time: u64,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), Error<S>> {
+        let Some(pending_proposal) = self
+            .proposals
+            .get(key, state)
+            .map_err(CoreModuleError::state_read)?
+        else {
+            return Err(TimelockError::ProposalNotFound.into());
+        };
+
+        if current_time <= pending_proposal.unlock_condition.executable_until {
+            return Err(Error::ProposalNotExpired {
+                proposal_key: key.clone(),
+                current_time,
+                executable_until: pending_proposal.unlock_condition.executable_until,
+            });
+        }
+
+        self.delete_proposal(key, state)?;
+        self.emit_event(
+            state,
+            Event::ExpiredProposalCleaned {
+                address: key.0,
+                proposal_id: key.1,
+            },
+        );
+
         Ok(())
     }
 
