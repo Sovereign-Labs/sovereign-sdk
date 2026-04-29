@@ -10,8 +10,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
 use sov_modules_api::capabilities::{
-    calculate_timelock_proposal_id_metered, ProposalId, TimelockCapability, TimelockError,
-    TimelockPolicy, TimelockProposalHashData,
+    calculate_custom_timelock_proposal_id_metered, ProposalId, TimelockCapability, TimelockError,
+    TimelockPolicy, TimelockProposalOutcome,
 };
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
@@ -293,38 +293,28 @@ impl<S: Spec> Module for Timelock<S> {
 }
 
 impl<S: Spec> TimelockCapability<S> for Timelock<S> {
-    fn has_proposal(
-        &self,
-        address: &S::Address,
-        proposal_id: &ProposalId,
-        state: &mut impl TxState<S>,
-    ) -> Result<bool, ModuleError> {
-        Ok(self
-            .timelocks
-            .get(&TimelockKey::new(*address, *proposal_id), state)
-            .map_err(CoreModuleError::state_read)?
-            .is_some())
-    }
-
-    fn register_proposal(
+    fn register_or_try_unlock_proposal(
         &mut self,
         address: &S::Address,
         proposal_id: ProposalId,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
-    ) -> Result<(), ModuleError> {
-        self.register_proposal_inner(address, proposal_id, policy, state)
-            .map_err(Into::into)
-    }
-
-    fn try_unlock_proposal(
-        &mut self,
-        address: &S::Address,
-        proposal_id: &ProposalId,
-        state: &mut impl TxState<S>,
-    ) -> Result<(), ModuleError> {
-        self.try_unlock_proposal_inner(address, proposal_id, state)
-            .map_err(Into::into)
+    ) -> Result<TimelockProposalOutcome, ModuleError> {
+        let key = TimelockKey::new(*address, proposal_id);
+        if self
+            .timelocks
+            .get(&key, state)
+            .map_err(CoreModuleError::state_read)?
+            .is_some()
+        {
+            self.try_unlock_proposal_inner(address, &proposal_id, state)
+                .map_err(ModuleError::from)?;
+            Ok(TimelockProposalOutcome::Unlocked)
+        } else {
+            self.register_proposal_inner(address, proposal_id, policy, state)
+                .map_err(ModuleError::from)?;
+            Ok(TimelockProposalOutcome::Registered)
+        }
     }
 }
 
@@ -491,18 +481,18 @@ impl<S: Spec> Timelock<S> {
         let proposal_id = self
             .policy_update_proposal_id(&new_policy, state)
             .map_err(ModuleError::from)?;
-        if self.has_proposal(context.sender(), &proposal_id, state)? {
-            self.try_unlock_proposal(context.sender(), &proposal_id, state)?;
-            self.policies
-                .set(context.sender(), &new_policy, state)
-                .map_err(CoreModuleError::state_write)
-                .map_err(ModuleError::from)?;
-        } else {
-            let policy = TimelockPolicy {
-                unlock_seconds_from_proposal: policy_change_timelock_seconds,
-                expire_seconds_after_unlock_override: None,
-            };
-            self.register_proposal(context.sender(), proposal_id, policy, state)?;
+        let policy = TimelockPolicy {
+            unlock_seconds_from_proposal: policy_change_timelock_seconds,
+            expire_seconds_after_unlock_override: None,
+        };
+        match self.register_or_try_unlock_proposal(context.sender(), proposal_id, policy, state)? {
+            TimelockProposalOutcome::Registered => {}
+            TimelockProposalOutcome::Unlocked => {
+                self.policies
+                    .set(context.sender(), &new_policy, state)
+                    .map_err(CoreModuleError::state_write)
+                    .map_err(ModuleError::from)?;
+            }
         }
 
         Ok(())
@@ -518,13 +508,7 @@ impl<S: Spec> Timelock<S> {
         })
         .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)))?;
 
-        calculate_timelock_proposal_id_metered::<_, S>(
-            TimelockProposalHashData::CustomData {
-                module_id: &self.id,
-                data: &encoded_message,
-            },
-            state,
-        )
-        .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)).into())
+        calculate_custom_timelock_proposal_id_metered::<_, S>(&self.id, &encoded_message, state)
+            .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)).into())
     }
 }

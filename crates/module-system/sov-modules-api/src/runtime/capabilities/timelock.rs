@@ -45,6 +45,18 @@ pub fn calculate_timelock_proposal_id_metered<G: GasMeter<Spec = S>, S: Spec>(
     calculate_hash_metered::<G, S>(&encoded_data, gas_meter)
 }
 
+/// Calculates a module-owned custom timelock proposal id and charges gas for hashing.
+pub fn calculate_custom_timelock_proposal_id_metered<G: GasMeter<Spec = S>, S: Spec>(
+    module_id: &ModuleId,
+    data: &[u8],
+    gas_meter: &mut G,
+) -> Result<ProposalId, GasMeteringError<S::Gas>> {
+    calculate_timelock_proposal_id_metered::<G, S>(
+        TimelockProposalHashData::CustomData { module_id, data },
+        gas_meter,
+    )
+}
+
 /// Calculates a timelock proposal id without charging gas.
 ///
 /// This helper is intended for tests and clients that need to derive the same proposal id
@@ -52,6 +64,17 @@ pub fn calculate_timelock_proposal_id_metered<G: GasMeter<Spec = S>, S: Spec>(
 pub fn calculate_timelock_proposal_id<S: Spec>(data: TimelockProposalHashData<'_>) -> ProposalId {
     let encoded_data = borsh::to_vec(&data).expect("Serialization to vec is infallible");
     calculate_hash::<S>(&encoded_data)
+}
+
+/// Calculates a module-owned custom timelock proposal id without charging gas.
+///
+/// This helper is intended for tests and clients that need to derive the same proposal id
+/// outside transaction execution.
+pub fn calculate_custom_timelock_proposal_id<S: Spec>(
+    module_id: &ModuleId,
+    data: &[u8],
+) -> ProposalId {
+    calculate_timelock_proposal_id::<S>(TimelockProposalHashData::CustomData { module_id, data })
 }
 
 /// Timelock policy returned by a runtime for call messages that must be delayed.
@@ -73,6 +96,15 @@ impl TimelockPolicy {
         self.expire_seconds_after_unlock_override
             .unwrap_or(DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK)
     }
+}
+
+/// Outcome of registering or unlocking a timelock proposal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TimelockProposalOutcome {
+    /// The proposal did not exist and has been registered.
+    Registered,
+    /// The proposal existed, was unlocked, and has been consumed.
+    Unlocked,
 }
 
 /// Errors returned when trying to unlock a timelock proposal.
@@ -104,88 +136,36 @@ impl ErrorDetail for TimelockError {
 /// Methods return [`crate::Error`] so semantic timelock failures and state/gas access
 /// failures can use the same error path as [`crate::DispatchCall::dispatch_call`].
 pub trait TimelockCapability<S: Spec> {
-    /// Returns true if the proposal exists for the provided address.
-    fn has_proposal(
-        &self,
-        address: &S::Address,
-        proposal_id: &ProposalId,
-        state: &mut impl TxState<S>,
-    ) -> Result<bool, Error>;
-
-    /// Registers a new proposal for the provided address.
-    fn register_proposal(
+    /// Registers a proposal if it does not exist, or tries to unlock and consume an existing proposal.
+    fn register_or_try_unlock_proposal(
         &mut self,
         address: &S::Address,
         proposal_id: ProposalId,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
-    ) -> Result<(), Error>;
-
-    /// Tries to unlock a proposal, consuming it if unlocking succeeds.
-    fn try_unlock_proposal(
-        &mut self,
-        address: &S::Address,
-        proposal_id: &ProposalId,
-        state: &mut impl TxState<S>,
-    ) -> Result<(), Error>;
+    ) -> Result<TimelockProposalOutcome, Error>;
 }
 
 impl<S: Spec> TimelockCapability<S> for () {
-    fn has_proposal(
-        &self,
-        _address: &S::Address,
-        _proposal_id: &ProposalId,
-        _state: &mut impl TxState<S>,
-    ) -> Result<bool, Error> {
-        Ok(false)
-    }
-
-    fn register_proposal(
+    fn register_or_try_unlock_proposal(
         &mut self,
         _address: &S::Address,
         _proposal_id: ProposalId,
         _policy: TimelockPolicy,
         _state: &mut impl TxState<S>,
-    ) -> Result<(), Error> {
+    ) -> Result<TimelockProposalOutcome, Error> {
         Err(TimelockError::TimelocksNotAvailable.into())
-    }
-
-    fn try_unlock_proposal(
-        &mut self,
-        _address: &S::Address,
-        _proposal_id: &ProposalId,
-        _state: &mut impl TxState<S>,
-    ) -> Result<(), Error> {
-        Err(TimelockError::ProposalNotFound.into())
     }
 }
 
 impl<S: Spec, T: TimelockCapability<S> + ?Sized> TimelockCapability<S> for &mut T {
-    fn has_proposal(
-        &self,
-        address: &S::Address,
-        proposal_id: &ProposalId,
-        state: &mut impl TxState<S>,
-    ) -> Result<bool, Error> {
-        (**self).has_proposal(address, proposal_id, state)
-    }
-
-    fn register_proposal(
+    fn register_or_try_unlock_proposal(
         &mut self,
         address: &S::Address,
         proposal_id: ProposalId,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
-    ) -> Result<(), Error> {
-        (**self).register_proposal(address, proposal_id, policy, state)
-    }
-
-    fn try_unlock_proposal(
-        &mut self,
-        address: &S::Address,
-        proposal_id: &ProposalId,
-        state: &mut impl TxState<S>,
-    ) -> Result<(), Error> {
-        (**self).try_unlock_proposal(address, proposal_id, state)
+    ) -> Result<TimelockProposalOutcome, Error> {
+        (**self).register_or_try_unlock_proposal(address, proposal_id, policy, state)
     }
 }
