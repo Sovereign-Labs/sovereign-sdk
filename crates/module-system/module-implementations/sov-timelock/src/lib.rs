@@ -16,7 +16,8 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
     err_detail, Context, CoreModuleError, DaSpec, Error as ModuleError, ErrorContext, ErrorDetail,
-    GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateMap, TxState,
+    EventEmitter, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateMap,
+    TxState,
 };
 
 /// Planned upper bound for per-address timelocks.
@@ -134,6 +135,41 @@ pub struct UnlockCondition<S: Spec> {
     pub cancellation_policy: CancellationPolicy<S>,
 }
 
+/// Events emitted by the timelock module.
+#[derive(Debug, PartialEq, Eq, Clone, JsonSchema)]
+#[serialize(Borsh, Serde)]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "Event")]
+pub enum Event<S: Spec> {
+    /// A proposal was registered and is pending unlock.
+    ProposalRegistered {
+        /// Proposal owner.
+        address: S::Address,
+        /// Proposal id.
+        proposal_id: ProposalId,
+        /// Unix timestamp at which the proposal becomes executable.
+        executable_from: u64,
+        /// Unix timestamp after which the proposal is expired.
+        executable_until: u64,
+    },
+    /// A proposal was unlocked and consumed for execution.
+    ProposalUnlocked {
+        /// Proposal owner.
+        address: S::Address,
+        /// Proposal id.
+        proposal_id: ProposalId,
+    },
+    /// A pending proposal was cancelled.
+    ProposalCancelled {
+        /// Proposal owner.
+        address: S::Address,
+        /// Proposal id.
+        proposal_id: ProposalId,
+        /// Address that cancelled the proposal.
+        cancelled_by: S::Address,
+    },
+}
+
 /// Calls supported by the timelock module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
 #[serialize(Borsh, Serde)]
@@ -247,7 +283,7 @@ impl<S: Spec> Module for Timelock<S> {
 
     type CallMessage = CallMessage<S>;
 
-    type Event = ();
+    type Event = Event<S>;
 
     type Error = ModuleError;
 
@@ -380,6 +416,15 @@ impl<S: Spec> Timelock<S> {
         self.timelocks
             .set(&key, &unlock_condition, state)
             .map_err(CoreModuleError::state_write)?;
+        self.emit_event(
+            state,
+            Event::ProposalRegistered {
+                address: *address,
+                proposal_id,
+                executable_from: unlock_condition.executable_from,
+                executable_until: unlock_condition.executable_until,
+            },
+        );
         Ok(())
     }
 
@@ -410,6 +455,13 @@ impl<S: Spec> Timelock<S> {
         self.timelocks
             .delete(&key, state)
             .map_err(CoreModuleError::state_write)?;
+        self.emit_event(
+            state,
+            Event::ProposalUnlocked {
+                address: *address,
+                proposal_id: *proposal_id,
+            },
+        );
 
         Ok(())
     }
@@ -445,6 +497,14 @@ impl<S: Spec> Timelock<S> {
         self.timelocks
             .delete(&key, state)
             .map_err(CoreModuleError::state_write)?;
+        self.emit_event(
+            state,
+            Event::ProposalCancelled {
+                address,
+                proposal_id,
+                cancelled_by: *context.sender(),
+            },
+        );
         Ok(())
     }
 

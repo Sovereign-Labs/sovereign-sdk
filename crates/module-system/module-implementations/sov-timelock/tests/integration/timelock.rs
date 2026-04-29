@@ -14,7 +14,7 @@ use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, AsUser, TestUser, TransactionTestCase,
 };
-use sov_timelock::{CancellationPolicy, Timelock, TimelockKey};
+use sov_timelock::{CancellationPolicy, Event as TimelockEvent, Timelock, TimelockKey};
 use sov_value_setter::{CallMessage as ValueSetterCallMessage, ValueSetterConfig};
 
 use crate::S;
@@ -105,6 +105,17 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
             assert_eq!(
+                result.events,
+                vec![TimelockRuntimeEvent::Timelock(
+                    TimelockEvent::ProposalRegistered {
+                        address: admin_address,
+                        proposal_id,
+                        executable_from: 1_060,
+                        executable_until: 1_120,
+                    }
+                )]
+            );
+            assert_eq!(
                 ValueSetter::<S>::default()
                     .value
                     .get(state)
@@ -187,6 +198,13 @@ fn unlocked_timelocked_call_dispatches_and_consumes_proposal() {
         input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(7)),
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
+            assert!(result.events.iter().any(|event| {
+                event
+                    == &TimelockRuntimeEvent::Timelock(TimelockEvent::ProposalUnlocked {
+                        address: admin_address,
+                        proposal_id,
+                    })
+            }));
             assert_eq!(
                 ValueSetter::<S>::default()
                     .value
@@ -232,6 +250,16 @@ fn owner_can_cancel_pending_proposal() {
         ),
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
+            assert_eq!(
+                result.events,
+                vec![TimelockRuntimeEvent::Timelock(
+                    TimelockEvent::ProposalCancelled {
+                        address: admin_address,
+                        proposal_id,
+                        cancelled_by: admin_address,
+                    }
+                )]
+            );
             assert!(Timelock::<S>::default()
                 .timelocks
                 .get(&TimelockKey(admin_address, proposal_id), state)
