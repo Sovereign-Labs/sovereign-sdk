@@ -80,6 +80,29 @@ impl Metric for ZkAggregatedProofMetrics {
     }
 }
 
+/// Metrics tracking the number of in-flight proving tasks in the parallel prover service.
+/// Emitted on every increment / decrement of the pending task counter.
+#[derive(Debug)]
+pub(crate) struct PendingProverTasksMetric {
+    /// Number of proving tasks currently in flight.
+    pub pending_tasks_count: usize,
+}
+
+impl Metric for PendingProverTasksMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_prover_service_pending_tasks"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} pending_tasks_count={}i",
+            self.measurement_name(),
+            self.pending_tasks_count,
+        )
+    }
+}
+
 /// Metrics for the network prover.
 /// Emitted after each proof submission to the proving network.
 #[derive(Debug)]
