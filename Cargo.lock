@@ -13027,7 +13027,13 @@ name = "sov-timelock"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "borsh",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-chain-state",
  "sov-modules-api",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

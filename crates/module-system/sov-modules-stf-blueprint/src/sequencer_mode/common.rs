@@ -1,6 +1,7 @@
 use borsh::BorshDeserialize;
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, HasCapabilities, SequencingDataHandler, TimelockCapability,
+    calculate_timelock_proposal_id_metered, HasCapabilities, SequencingDataHandler,
+    TimelockCapability, TimelockProposalHashData,
 };
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
@@ -140,8 +141,11 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 
     if let Some(policy) = runtime.timelock_for_callmessage(&message) {
         let encoded_message = RT::encode(&message);
-        let proposal_id = calculate_hash_metered::<_, S>(&encoded_message, state)
-            .map_err(|error| Error::from(anyhow::anyhow!(error)))?;
+        let proposal_id = calculate_timelock_proposal_id_metered::<_, S>(
+            TimelockProposalHashData::CallMessage(&encoded_message),
+            state,
+        )
+        .map_err(|error| Error::from(anyhow::anyhow!(error)))?;
         let proposal_exists = {
             let timelock = runtime.timelock();
             timelock.has_proposal(ctx.sender(), &proposal_id, state)?

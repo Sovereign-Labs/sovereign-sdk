@@ -15,7 +15,13 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sov-chain-state = { workspace = true }
 sov-modules-api = { workspace = true }
+thiserror = { workspace = true }
 
 [features]
 default = []
