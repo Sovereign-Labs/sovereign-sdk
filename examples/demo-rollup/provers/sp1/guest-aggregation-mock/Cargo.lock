@@ -6220,6 +6220,7 @@ dependencies = [
  "serde",
  "sov-bank",
  "sov-chain-state",
+ "sov-metrics",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
