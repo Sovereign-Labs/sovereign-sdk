@@ -5752,7 +5752,9 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-test-modules",
  "sov-test-utils",
+ "sov-timelock",
  "sov-value-setter",
  "strum 0.26.3",
  "tempfile",
@@ -13018,6 +13020,14 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "tracing-subscriber 0.3.20",
+]
+
+[[package]]
+name = "sov-timelock"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "sov-modules-api",
 ]
 
 [[package]]
