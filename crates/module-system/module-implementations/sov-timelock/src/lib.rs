@@ -20,12 +20,12 @@ use sov_modules_api::{
     TxState,
 };
 
-/// Maximum number of pending timelock proposals per address.
-pub const MAX_USER_TIMELOCKS: u32 = 128;
+/// Maximum number of pending proposals per address.
+pub const MAX_PENDING_PROPOSALS_PER_ADDRESS: u32 = 128;
 
-const TIMELOCK_KEY_SEPARATOR: &str = "/timelocks/";
+const PROPOSAL_KEY_SEPARATOR: &str = "/proposals/";
 
-/// Storage key for a timelock proposal.
+/// Storage key for a pending proposal.
 #[derive(
     Debug,
     Clone,
@@ -39,27 +39,27 @@ const TIMELOCK_KEY_SEPARATOR: &str = "/timelocks/";
     JsonSchema,
 )]
 #[serde(bound = "S: Spec", deny_unknown_fields)]
-#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "TimelockKey")]
-pub struct TimelockKey<S: Spec>(
+#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "ProposalKey")]
+pub struct ProposalKey<S: Spec>(
     /// Proposal owner.
     pub S::Address,
     /// Proposal id.
     pub ProposalId,
 );
 
-impl<S: Spec> TimelockKey<S> {
+impl<S: Spec> ProposalKey<S> {
     fn new(address: S::Address, proposal_id: ProposalId) -> Self {
         Self(address, proposal_id)
     }
 }
 
-impl<S: Spec> Display for TimelockKey<S> {
+impl<S: Spec> Display for ProposalKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}{TIMELOCK_KEY_SEPARATOR}{}", self.0, self.1)
+        write!(f, "{}{PROPOSAL_KEY_SEPARATOR}{}", self.0, self.1)
     }
 }
 
-impl<S> FromStr for TimelockKey<S>
+impl<S> FromStr for ProposalKey<S>
 where
     S: Spec,
     S::Address: FromStr<Err: Into<Box<dyn std::error::Error + Send + Sync + 'static>>>,
@@ -67,9 +67,9 @@ where
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some((address, proposal_id)) = s.rsplit_once(TIMELOCK_KEY_SEPARATOR) else {
+        let Some((address, proposal_id)) = s.rsplit_once(PROPOSAL_KEY_SEPARATOR) else {
             anyhow::bail!(
-                "{s} is not a timelock key: missing '{TIMELOCK_KEY_SEPARATOR}' separator"
+                "{s} is not a proposal key: missing '{PROPOSAL_KEY_SEPARATOR}' separator"
             );
         };
 
@@ -132,7 +132,7 @@ pub struct UnlockCondition<S: Spec> {
     pub cancellation_policy: CancellationPolicy<S>,
 }
 
-/// A pending timelock proposal and its unlock condition.
+/// A pending proposal and its unlock condition.
 #[derive(
     Debug,
     Clone,
@@ -147,9 +147,9 @@ pub struct UnlockCondition<S: Spec> {
 #[serde(bound = "S: Spec", deny_unknown_fields)]
 #[schemars(
     bound = "S::Address: ::schemars::JsonSchema",
-    rename = "PendingTimelock"
+    rename = "PendingProposal"
 )]
-pub struct PendingTimelock<S: Spec> {
+pub struct PendingProposal<S: Spec> {
     /// Full proposal data whose hash is used as the proposal id.
     pub proposal_data: TimelockProposalData,
     /// Condition that must hold before the proposal may execute.
@@ -200,10 +200,10 @@ pub enum Event<S: Spec> {
 #[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "CallMessage")]
 #[serde(rename_all = "snake_case")]
 pub enum CallMessage<S: Spec> {
-    /// Cancel a pending unlock.
-    CancelUnlock {
+    /// Cancel a pending proposal.
+    CancelProposal {
         /// Proposal id to cancel.
-        call_message_hash: ProposalId,
+        proposal_id: ProposalId,
         /// Owner address. If absent, the sender is treated as the owner.
         address: Option<S::Address>,
     },
@@ -229,26 +229,28 @@ pub enum Error<S: Spec> {
     #[error(transparent)]
     Timelock(#[from] TimelockError),
     /// The proposal already exists.
-    #[error("Timelock proposal {proposal_id} already exists for address {address}")]
+    #[error("Proposal {proposal_id} already exists for address {address}")]
     ProposalAlreadyExists {
         /// Proposal owner.
         address: S::Address,
         /// Existing proposal id.
         proposal_id: ProposalId,
     },
-    /// The proposal owner already has the maximum number of pending timelocks.
-    #[error("Address {address} already has the maximum of {max_user_timelocks} pending timelock proposals")]
-    MaxUserTimelocksReached {
+    /// The proposal owner already has the maximum number of pending proposals.
+    #[error(
+        "Address {address} already has the maximum of {max_pending_proposals} pending proposals"
+    )]
+    MaxPendingProposalsReached {
         /// Proposal owner.
         address: S::Address,
-        /// Maximum pending timelocks per address.
-        max_user_timelocks: u32,
+        /// Maximum pending proposals per address.
+        max_pending_proposals: u32,
     },
     /// The proposal counter is inconsistent with the proposal map.
     #[error(
-        "Timelock count for address {address} is inconsistent while deleting proposal {proposal_id}"
+        "Proposal count for address {address} is inconsistent while deleting proposal {proposal_id}"
     )]
-    TimelockCountUnderflow {
+    ProposalCountUnderflow {
         /// Proposal owner.
         address: S::Address,
         /// Proposal id being deleted.
@@ -256,7 +258,7 @@ pub enum Error<S: Spec> {
     },
     /// The sender is not authorized to cancel the proposal.
     #[error(
-        "Address {sender} is not authorized to cancel timelock proposal {proposal_id} for {address}; authorized canceller is {authorized_canceller}"
+        "Address {sender} is not authorized to cancel proposal {proposal_id} for {address}; authorized canceller is {authorized_canceller}"
     )]
     UnauthorizedCanceller {
         /// Transaction sender.
@@ -301,13 +303,13 @@ pub struct Timelock<S: Spec> {
     #[id]
     pub id: ModuleId,
 
-    /// Pending timelock proposals.
+    /// Pending proposals.
     #[state]
-    pub timelocks: StateMap<TimelockKey<S>, PendingTimelock<S>>,
+    pub proposals: StateMap<ProposalKey<S>, PendingProposal<S>>,
 
-    /// Number of pending timelock proposals per address.
+    /// Number of pending proposals per address.
     #[state]
-    pub timelock_counts: StateMap<S::Address, u32>,
+    pub proposal_counts: StateMap<S::Address, u32>,
 
     /// Cancellation policy per address.
     #[state]
@@ -348,11 +350,11 @@ impl<S: Spec> Module for Timelock<S> {
         state: &mut impl TxState<S>,
     ) -> Result<(), Self::Error> {
         match msg {
-            CallMessage::CancelUnlock {
-                call_message_hash,
+            CallMessage::CancelProposal {
+                proposal_id,
                 address,
             } => self
-                .cancel_unlock(call_message_hash, address, context, state)
+                .cancel_proposal(proposal_id, address, context, state)
                 .map_err(ModuleError::from)?,
             CallMessage::ModifyCancellationPolicy { new_policy } => {
                 self.modify_cancellation_policy(new_policy, context, state)?;
@@ -373,9 +375,9 @@ impl<S: Spec> TimelockCapability<S> for Timelock<S> {
         let proposal_id = calculate_timelock_proposal_id_metered::<_, S>(&proposal_data, state)
             .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)))
             .map_err(ModuleError::from)?;
-        let key = TimelockKey::new(*address, proposal_id);
+        let key = ProposalKey::new(*address, proposal_id);
         if self
-            .timelocks
+            .proposals
             .get(&key, state)
             .map_err(CoreModuleError::state_read)?
             .is_some()
@@ -448,9 +450,9 @@ impl<S: Spec> Timelock<S> {
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
-        let key = TimelockKey::new(*address, proposal_id);
+        let key = ProposalKey::new(*address, proposal_id);
         if self
-            .timelocks
+            .proposals
             .get(&key, state)
             .map_err(CoreModuleError::state_read)?
             .is_some()
@@ -462,19 +464,19 @@ impl<S: Spec> Timelock<S> {
         }
 
         let unlock_condition = self.unlock_condition(address, policy, state)?;
-        let pending_timelock = PendingTimelock {
+        let pending_proposal = PendingProposal {
             proposal_data,
             unlock_condition,
         };
-        self.add_timelock(&key, &pending_timelock, state)?;
+        self.add_proposal(&key, &pending_proposal, state)?;
         self.emit_event(
             state,
             Event::ProposalRegistered {
                 address: *address,
                 proposal_id,
-                proposal_data: pending_timelock.proposal_data.clone(),
-                executable_from: pending_timelock.unlock_condition.executable_from,
-                executable_until: pending_timelock.unlock_condition.executable_until,
+                proposal_data: pending_proposal.proposal_data.clone(),
+                executable_from: pending_proposal.unlock_condition.executable_from,
+                executable_until: pending_proposal.unlock_condition.executable_until,
             },
         );
         Ok(())
@@ -486,9 +488,9 @@ impl<S: Spec> Timelock<S> {
         proposal_id: &ProposalId,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
-        let key = TimelockKey::new(*address, *proposal_id);
-        let Some(pending_timelock) = self
-            .timelocks
+        let key = ProposalKey::new(*address, *proposal_id);
+        let Some(pending_proposal) = self
+            .proposals
             .get(&key, state)
             .map_err(CoreModuleError::state_read)?
         else {
@@ -496,15 +498,15 @@ impl<S: Spec> Timelock<S> {
         };
 
         let current_time = self.current_time_secs(state)?;
-        if current_time < pending_timelock.unlock_condition.executable_from {
+        if current_time < pending_proposal.unlock_condition.executable_from {
             return Err(TimelockError::ProposalLocked.into());
         }
 
-        if current_time > pending_timelock.unlock_condition.executable_until {
+        if current_time > pending_proposal.unlock_condition.executable_until {
             return Err(TimelockError::ProposalExpired.into());
         }
 
-        self.delete_timelock(&key, state)?;
+        self.delete_proposal(&key, state)?;
         self.emit_event(
             state,
             Event::ProposalUnlocked {
@@ -516,7 +518,7 @@ impl<S: Spec> Timelock<S> {
         Ok(())
     }
 
-    fn cancel_unlock(
+    fn cancel_proposal(
         &mut self,
         proposal_id: ProposalId,
         address: Option<S::Address>,
@@ -524,9 +526,9 @@ impl<S: Spec> Timelock<S> {
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
         let address = address.unwrap_or(*context.sender());
-        let key = TimelockKey::new(address, proposal_id);
-        let Some(pending_timelock) = self
-            .timelocks
+        let key = ProposalKey::new(address, proposal_id);
+        let Some(pending_proposal) = self
+            .proposals
             .get(&key, state)
             .map_err(CoreModuleError::state_read)?
         else {
@@ -535,7 +537,7 @@ impl<S: Spec> Timelock<S> {
 
         if context.sender() != &address
             && context.sender()
-                != &pending_timelock
+                != &pending_proposal
                     .unlock_condition
                     .cancellation_policy
                     .authorized_canceller
@@ -543,7 +545,7 @@ impl<S: Spec> Timelock<S> {
             return Err(Error::UnauthorizedCanceller {
                 sender: *context.sender(),
                 address,
-                authorized_canceller: pending_timelock
+                authorized_canceller: pending_proposal
                     .unlock_condition
                     .cancellation_policy
                     .authorized_canceller,
@@ -551,7 +553,7 @@ impl<S: Spec> Timelock<S> {
             });
         }
 
-        self.delete_timelock(&key, state)?;
+        self.delete_proposal(&key, state)?;
         self.emit_event(
             state,
             Event::ProposalCancelled {
@@ -563,62 +565,62 @@ impl<S: Spec> Timelock<S> {
         Ok(())
     }
 
-    fn add_timelock(
+    fn add_proposal(
         &mut self,
-        key: &TimelockKey<S>,
-        pending_timelock: &PendingTimelock<S>,
+        key: &ProposalKey<S>,
+        pending_proposal: &PendingProposal<S>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
         let count = self
-            .timelock_counts
+            .proposal_counts
             .get(&key.0, state)
             .map_err(CoreModuleError::state_read)?
             .unwrap_or_default();
 
-        if count >= MAX_USER_TIMELOCKS {
-            return Err(Error::MaxUserTimelocksReached {
+        if count >= MAX_PENDING_PROPOSALS_PER_ADDRESS {
+            return Err(Error::MaxPendingProposalsReached {
                 address: key.0,
-                max_user_timelocks: MAX_USER_TIMELOCKS,
+                max_pending_proposals: MAX_PENDING_PROPOSALS_PER_ADDRESS,
             });
         }
 
-        self.timelocks
-            .set(key, pending_timelock, state)
+        self.proposals
+            .set(key, pending_proposal, state)
             .map_err(CoreModuleError::state_write)?;
-        self.timelock_counts
+        self.proposal_counts
             .set(&key.0, &(count + 1), state)
             .map_err(CoreModuleError::state_write)?;
 
         Ok(())
     }
 
-    fn delete_timelock(
+    fn delete_proposal(
         &mut self,
-        key: &TimelockKey<S>,
+        key: &ProposalKey<S>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
         let Some(new_count) = self
-            .timelock_counts
+            .proposal_counts
             .get(&key.0, state)
             .map_err(CoreModuleError::state_read)?
             .unwrap_or_default()
             .checked_sub(1)
         else {
-            return Err(Error::TimelockCountUnderflow {
+            return Err(Error::ProposalCountUnderflow {
                 address: key.0,
                 proposal_id: key.1,
             });
         };
 
-        self.timelocks
+        self.proposals
             .delete(key, state)
             .map_err(CoreModuleError::state_write)?;
         if new_count == 0 {
-            self.timelock_counts
+            self.proposal_counts
                 .delete(&key.0, state)
                 .map_err(CoreModuleError::state_write)?;
         } else {
-            self.timelock_counts
+            self.proposal_counts
                 .set(&key.0, &new_count, state)
                 .map_err(CoreModuleError::state_write)?;
         }

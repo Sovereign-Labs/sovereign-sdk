@@ -15,7 +15,8 @@ use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, AsUser, TestUser, TransactionTestCase,
 };
 use sov_timelock::{
-    CancellationPolicy, Event as TimelockEvent, Timelock, TimelockKey, MAX_USER_TIMELOCKS,
+    CancellationPolicy, Event as TimelockEvent, ProposalKey, Timelock,
+    MAX_PENDING_PROPOSALS_PER_ADDRESS,
 };
 use sov_value_setter::{CallMessage as ValueSetterCallMessage, ValueSetterConfig};
 
@@ -92,14 +93,14 @@ fn set_value_proposal_data(value: u32) -> TimelockProposalData {
 }
 
 #[test]
-fn timelock_key_display_roundtrips() {
+fn proposal_key_display_roundtrips() {
     let (admin, _runner) = setup();
-    let key = TimelockKey(admin.address(), ProposalId::new([1; 32]));
+    let key = ProposalKey(admin.address(), ProposalId::new([1; 32]));
     let encoded = key.to_string();
 
-    assert!(encoded.contains("/timelocks/"));
+    assert!(encoded.contains("/proposals/"));
     assert!(!encoded.starts_with("addresses/"));
-    assert_eq!(TimelockKey::<S>::from_str(&encoded).unwrap(), key);
+    assert_eq!(ProposalKey::<S>::from_str(&encoded).unwrap(), key);
 }
 
 #[test]
@@ -138,17 +139,17 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
                     .unwrap_infallible(),
                 Some(1)
             );
-            let pending_timelock = Timelock::<S>::default()
-                .timelocks
-                .get(&TimelockKey(admin_address, proposal_id), state)
+            let pending_proposal = Timelock::<S>::default()
+                .proposals
+                .get(&ProposalKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .unwrap();
-            assert_eq!(pending_timelock.proposal_data, set_value_proposal_data(7));
-            assert_eq!(pending_timelock.unlock_condition.executable_from, 1_060);
-            assert_eq!(pending_timelock.unlock_condition.executable_until, 1_120);
+            assert_eq!(pending_proposal.proposal_data, set_value_proposal_data(7));
+            assert_eq!(pending_proposal.unlock_condition.executable_from, 1_060);
+            assert_eq!(pending_proposal.unlock_condition.executable_until, 1_120);
             assert_eq!(
                 Timelock::<S>::default()
-                    .timelock_counts
+                    .proposal_counts
                     .get(&admin_address, state)
                     .unwrap_infallible(),
                 Some(1)
@@ -189,8 +190,8 @@ fn repeated_timelocked_call_reverts_while_locked() {
                 Some(1)
             );
             assert!(Timelock::<S>::default()
-                .timelocks
-                .get(&TimelockKey(admin_address, proposal_id), state)
+                .proposals
+                .get(&ProposalKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_some());
         }),
@@ -237,13 +238,13 @@ fn unlocked_timelocked_call_dispatches_and_consumes_proposal() {
                 Some(2)
             );
             assert!(Timelock::<S>::default()
-                .timelocks
-                .get(&TimelockKey(admin_address, proposal_id), state)
+                .proposals
+                .get(&ProposalKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
             assert_eq!(
                 Timelock::<S>::default()
-                    .timelock_counts
+                    .proposal_counts
                     .get(&admin_address, state)
                     .unwrap_infallible(),
                 None
@@ -267,8 +268,8 @@ fn owner_can_cancel_pending_proposal() {
 
     runner.execute_transaction(TransactionTestCase {
         input: admin.create_plain_message::<RT, Timelock<S>>(
-            sov_timelock::CallMessage::CancelUnlock {
-                call_message_hash: proposal_id,
+            sov_timelock::CallMessage::CancelProposal {
+                proposal_id,
                 address: None,
             },
         ),
@@ -285,13 +286,13 @@ fn owner_can_cancel_pending_proposal() {
                 )]
             );
             assert!(Timelock::<S>::default()
-                .timelocks
-                .get(&TimelockKey(admin_address, proposal_id), state)
+                .proposals
+                .get(&ProposalKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
             assert_eq!(
                 Timelock::<S>::default()
-                    .timelock_counts
+                    .proposal_counts
                     .get(&admin_address, state)
                     .unwrap_infallible(),
                 None
@@ -301,11 +302,11 @@ fn owner_can_cancel_pending_proposal() {
 }
 
 #[test]
-fn registration_reverts_after_max_user_timelocks() {
+fn registration_reverts_after_max_pending_proposals() {
     let (admin, mut runner) = setup();
     let admin_address = admin.address();
 
-    for value in 100..(100 + MAX_USER_TIMELOCKS) {
+    for value in 100..(100 + MAX_PENDING_PROPOSALS_PER_ADDRESS) {
         runner.execute_transaction(TransactionTestCase {
             input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(value)),
             assert: Box::new(|result, _state| {
@@ -314,7 +315,7 @@ fn registration_reverts_after_max_user_timelocks() {
         });
     }
 
-    let rejected_value = 100 + MAX_USER_TIMELOCKS;
+    let rejected_value = 100 + MAX_PENDING_PROPOSALS_PER_ADDRESS;
     let rejected_proposal_id = set_value_proposal_id(rejected_value);
     runner.execute_transaction(TransactionTestCase {
         input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(rejected_value)),
@@ -322,14 +323,14 @@ fn registration_reverts_after_max_user_timelocks() {
             assert!(result.tx_receipt.is_reverted());
             assert_eq!(
                 Timelock::<S>::default()
-                    .timelock_counts
+                    .proposal_counts
                     .get(&admin_address, state)
                     .unwrap_infallible(),
-                Some(MAX_USER_TIMELOCKS)
+                Some(MAX_PENDING_PROPOSALS_PER_ADDRESS)
             );
             assert!(Timelock::<S>::default()
-                .timelocks
-                .get(&TimelockKey(admin_address, rejected_proposal_id), state)
+                .proposals
+                .get(&ProposalKey(admin_address, rejected_proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
         }),
