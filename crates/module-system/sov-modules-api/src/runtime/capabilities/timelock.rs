@@ -2,13 +2,14 @@
 
 use std::num::NonZeroU64;
 
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::{calculate_hash, calculate_hash_metered};
 use crate::{
-    err_detail, Error, ErrorContext, ErrorDetail, GasMeter, GasMeteringError, HexHash, ModuleId,
-    Spec, TxState,
+    err_detail, Error, ErrorContext, ErrorDetail, GasMeter, GasMeteringError, HexHash, HexString,
+    ModuleId, Spec, TxState,
 };
 
 /// Identifier for a timelock proposal.
@@ -19,18 +20,49 @@ pub type ProposalId = HexHash;
 /// Default number of seconds after unlock during which a proposal may be executed.
 pub const DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK: u64 = 86_400 * 2; // 2 days
 
-/// Domain-separated data used to compute timelock proposal ids.
-#[derive(BorshSerialize)]
-pub enum TimelockProposalHashData<'a> {
+/// Domain-separated proposal data used to compute timelock proposal ids.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+    JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TimelockProposalData {
     /// Encoded runtime call message bytes.
-    CallMessage(&'a [u8]),
+    CallMessage {
+        /// Encoded runtime call message bytes.
+        data: HexString,
+    },
     /// Module-owned custom proposal bytes.
     CustomData {
         /// Module owning the custom proposal.
-        module_id: &'a ModuleId,
+        module_id: ModuleId,
         /// Encoded module-specific proposal payload.
-        data: &'a [u8],
+        data: HexString,
     },
+}
+
+impl TimelockProposalData {
+    /// Creates proposal data for an encoded runtime call message.
+    pub fn call_message(data: impl Into<Vec<u8>>) -> Self {
+        Self::CallMessage {
+            data: HexString::new(data.into()),
+        }
+    }
+
+    /// Creates module-owned custom proposal data.
+    pub fn custom_data(module_id: ModuleId, data: impl Into<Vec<u8>>) -> Self {
+        Self::CustomData {
+            module_id,
+            data: HexString::new(data.into()),
+        }
+    }
 }
 
 /// Calculates a timelock proposal id and charges gas for hashing.
@@ -38,10 +70,10 @@ pub enum TimelockProposalHashData<'a> {
 /// The input is domain-separated so runtime call messages cannot overlap with
 /// module-owned custom proposal payloads.
 pub fn calculate_timelock_proposal_id_metered<G: GasMeter<Spec = S>, S: Spec>(
-    data: TimelockProposalHashData<'_>,
+    data: &TimelockProposalData,
     gas_meter: &mut G,
 ) -> Result<ProposalId, GasMeteringError<S::Gas>> {
-    let encoded_data = borsh::to_vec(&data).expect("Serialization to vec is infallible");
+    let encoded_data = borsh::to_vec(data).expect("Serialization to vec is infallible");
     calculate_hash_metered::<G, S>(&encoded_data, gas_meter)
 }
 
@@ -51,18 +83,16 @@ pub fn calculate_custom_timelock_proposal_id_metered<G: GasMeter<Spec = S>, S: S
     data: &[u8],
     gas_meter: &mut G,
 ) -> Result<ProposalId, GasMeteringError<S::Gas>> {
-    calculate_timelock_proposal_id_metered::<G, S>(
-        TimelockProposalHashData::CustomData { module_id, data },
-        gas_meter,
-    )
+    let proposal_data = TimelockProposalData::custom_data(*module_id, data);
+    calculate_timelock_proposal_id_metered::<G, S>(&proposal_data, gas_meter)
 }
 
 /// Calculates a timelock proposal id without charging gas.
 ///
 /// This helper is intended for tests and clients that need to derive the same proposal id
 /// outside transaction execution.
-pub fn calculate_timelock_proposal_id<S: Spec>(data: TimelockProposalHashData<'_>) -> ProposalId {
-    let encoded_data = borsh::to_vec(&data).expect("Serialization to vec is infallible");
+pub fn calculate_timelock_proposal_id<S: Spec>(data: &TimelockProposalData) -> ProposalId {
+    let encoded_data = borsh::to_vec(data).expect("Serialization to vec is infallible");
     calculate_hash::<S>(&encoded_data)
 }
 
@@ -74,7 +104,7 @@ pub fn calculate_custom_timelock_proposal_id<S: Spec>(
     module_id: &ModuleId,
     data: &[u8],
 ) -> ProposalId {
-    calculate_timelock_proposal_id::<S>(TimelockProposalHashData::CustomData { module_id, data })
+    calculate_timelock_proposal_id::<S>(&TimelockProposalData::custom_data(*module_id, data))
 }
 
 /// Timelock policy returned by a runtime for call messages that must be delayed.
@@ -86,7 +116,7 @@ pub struct TimelockPolicy {
     /// [`DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK`] is used.
     ///
     /// Caution: an override of `0` has no special meaning, and the proposal will be executable
-    /// only at its exact unlock timestamp. Take care to set reasonable expiraty delays.
+    /// only at its exact unlock timestamp. Take care to set reasonable expiry windows.
     pub expire_seconds_after_unlock_override: Option<u64>,
 }
 
@@ -140,7 +170,7 @@ pub trait TimelockCapability<S: Spec> {
     fn register_or_try_unlock_proposal(
         &mut self,
         address: &S::Address,
-        proposal_id: ProposalId,
+        proposal_data: TimelockProposalData,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
     ) -> Result<TimelockProposalOutcome, Error>;
@@ -150,7 +180,7 @@ impl<S: Spec> TimelockCapability<S> for () {
     fn register_or_try_unlock_proposal(
         &mut self,
         _address: &S::Address,
-        _proposal_id: ProposalId,
+        _proposal_data: TimelockProposalData,
         _policy: TimelockPolicy,
         _state: &mut impl TxState<S>,
     ) -> Result<TimelockProposalOutcome, Error> {
@@ -162,10 +192,10 @@ impl<S: Spec, T: TimelockCapability<S> + ?Sized> TimelockCapability<S> for &mut 
     fn register_or_try_unlock_proposal(
         &mut self,
         address: &S::Address,
-        proposal_id: ProposalId,
+        proposal_data: TimelockProposalData,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
     ) -> Result<TimelockProposalOutcome, Error> {
-        (**self).register_or_try_unlock_proposal(address, proposal_id, policy, state)
+        (**self).register_or_try_unlock_proposal(address, proposal_data, policy, state)
     }
 }

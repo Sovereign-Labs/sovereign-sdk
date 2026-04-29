@@ -1,9 +1,9 @@
 use borsh::BorshDeserialize;
-use sov_modules_api::capabilities::{
-    calculate_timelock_proposal_id_metered, HasCapabilities, SequencingDataHandler,
-    TimelockCapability, TimelockProposalHashData, TimelockProposalOutcome,
-};
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
+use sov_modules_api::capabilities::{
+    HasCapabilities, SequencingDataHandler, TimelockCapability, TimelockProposalData,
+    TimelockProposalOutcome,
+};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
@@ -140,16 +140,14 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
     runtime.pre_dispatch_tx_hook(tx, state)?;
 
     if let Some(policy) = runtime.timelock_for_callmessage(&message) {
-        let encoded_message = RT::encode(&message);
-        let proposal_id = calculate_timelock_proposal_id_metered::<_, S>(
-            TimelockProposalHashData::CallMessage(&encoded_message),
-            state,
-        )
-        .map_err(|error| Error::from(anyhow::anyhow!(error)))?;
-
         let outcome = {
             let mut timelock = runtime.timelock();
-            timelock.register_or_try_unlock_proposal(ctx.sender(), proposal_id, policy, state)?
+            timelock.register_or_try_unlock_proposal(
+                ctx.sender(),
+                TimelockProposalData::call_message(RT::encode(&message)),
+                policy,
+                state,
+            )?
         };
         match outcome {
             TimelockProposalOutcome::Registered => {}

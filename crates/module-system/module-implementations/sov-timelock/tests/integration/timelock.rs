@@ -2,7 +2,7 @@ use std::num::NonZeroU64;
 use std::str::FromStr;
 
 use sov_modules_api::capabilities::{
-    calculate_timelock_proposal_id, ProposalId, TimelockPolicy, TimelockProposalHashData,
+    calculate_timelock_proposal_id, ProposalId, TimelockPolicy, TimelockProposalData,
     DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK,
 };
 use sov_modules_api::da::Time;
@@ -83,8 +83,12 @@ fn set_value_message(value: u32) -> ValueSetterCallMessage<S> {
 }
 
 fn set_value_proposal_id(value: u32) -> sov_modules_api::capabilities::ProposalId {
+    calculate_timelock_proposal_id::<S>(&set_value_proposal_data(value))
+}
+
+fn set_value_proposal_data(value: u32) -> TimelockProposalData {
     let encoded = <RT as EncodeCall<ValueSetter<S>>>::encode_call(set_value_message(value));
-    calculate_timelock_proposal_id::<S>(TimelockProposalHashData::CallMessage(&encoded))
+    TimelockProposalData::call_message(encoded)
 }
 
 #[test]
@@ -114,6 +118,7 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
                     TimelockEvent::ProposalRegistered {
                         address: admin_address,
                         proposal_id,
+                        proposal_data: set_value_proposal_data(7),
                         executable_from: 1_060,
                         executable_until: 1_120,
                     }
@@ -133,13 +138,14 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
                     .unwrap_infallible(),
                 Some(1)
             );
-            let condition = Timelock::<S>::default()
+            let pending_timelock = Timelock::<S>::default()
                 .timelocks
                 .get(&TimelockKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .unwrap();
-            assert_eq!(condition.executable_from, 1_060);
-            assert_eq!(condition.executable_until, 1_120);
+            assert_eq!(pending_timelock.proposal_data, set_value_proposal_data(7));
+            assert_eq!(pending_timelock.unlock_condition.executable_from, 1_060);
+            assert_eq!(pending_timelock.unlock_condition.executable_until, 1_120);
             assert_eq!(
                 Timelock::<S>::default()
                     .timelock_counts

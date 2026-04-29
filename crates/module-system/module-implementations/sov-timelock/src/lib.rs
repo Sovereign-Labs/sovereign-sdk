@@ -10,8 +10,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
 use sov_modules_api::capabilities::{
-    calculate_custom_timelock_proposal_id_metered, ProposalId, TimelockCapability, TimelockError,
-    TimelockPolicy, TimelockProposalOutcome,
+    calculate_timelock_proposal_id_metered, ProposalId, TimelockCapability, TimelockError,
+    TimelockPolicy, TimelockProposalData, TimelockProposalOutcome,
 };
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
@@ -132,6 +132,30 @@ pub struct UnlockCondition<S: Spec> {
     pub cancellation_policy: CancellationPolicy<S>,
 }
 
+/// A pending timelock proposal and its unlock condition.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshDeserialize,
+    BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+    JsonSchema,
+)]
+#[serde(bound = "S: Spec", deny_unknown_fields)]
+#[schemars(
+    bound = "S::Address: ::schemars::JsonSchema",
+    rename = "PendingTimelock"
+)]
+pub struct PendingTimelock<S: Spec> {
+    /// Full proposal data whose hash is used as the proposal id.
+    pub proposal_data: TimelockProposalData,
+    /// Condition that must hold before the proposal may execute.
+    pub unlock_condition: UnlockCondition<S>,
+}
+
 /// Events emitted by the timelock module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema)]
 #[serialize(Borsh, Serde)]
@@ -144,6 +168,8 @@ pub enum Event<S: Spec> {
         address: S::Address,
         /// Proposal id.
         proposal_id: ProposalId,
+        /// Full proposal data whose hash is the proposal id.
+        proposal_data: TimelockProposalData,
         /// Unix timestamp at which the proposal becomes executable.
         executable_from: u64,
         /// Unix timestamp after which the proposal is expired.
@@ -277,7 +303,7 @@ pub struct Timelock<S: Spec> {
 
     /// Pending timelock proposals.
     #[state]
-    pub timelocks: StateMap<TimelockKey<S>, UnlockCondition<S>>,
+    pub timelocks: StateMap<TimelockKey<S>, PendingTimelock<S>>,
 
     /// Number of pending timelock proposals per address.
     #[state]
@@ -340,10 +366,13 @@ impl<S: Spec> TimelockCapability<S> for Timelock<S> {
     fn register_or_try_unlock_proposal(
         &mut self,
         address: &S::Address,
-        proposal_id: ProposalId,
+        proposal_data: TimelockProposalData,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
     ) -> Result<TimelockProposalOutcome, ModuleError> {
+        let proposal_id = calculate_timelock_proposal_id_metered::<_, S>(&proposal_data, state)
+            .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)))
+            .map_err(ModuleError::from)?;
         let key = TimelockKey::new(*address, proposal_id);
         if self
             .timelocks
@@ -355,7 +384,7 @@ impl<S: Spec> TimelockCapability<S> for Timelock<S> {
                 .map_err(ModuleError::from)?;
             Ok(TimelockProposalOutcome::Unlocked)
         } else {
-            self.register_proposal_inner(address, proposal_id, policy, state)
+            self.register_proposal_inner(address, proposal_id, proposal_data, policy, state)
                 .map_err(ModuleError::from)?;
             Ok(TimelockProposalOutcome::Registered)
         }
@@ -415,6 +444,7 @@ impl<S: Spec> Timelock<S> {
         &mut self,
         address: &S::Address,
         proposal_id: ProposalId,
+        proposal_data: TimelockProposalData,
         policy: TimelockPolicy,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
@@ -432,14 +462,19 @@ impl<S: Spec> Timelock<S> {
         }
 
         let unlock_condition = self.unlock_condition(address, policy, state)?;
-        self.add_timelock(&key, &unlock_condition, state)?;
+        let pending_timelock = PendingTimelock {
+            proposal_data,
+            unlock_condition,
+        };
+        self.add_timelock(&key, &pending_timelock, state)?;
         self.emit_event(
             state,
             Event::ProposalRegistered {
                 address: *address,
                 proposal_id,
-                executable_from: unlock_condition.executable_from,
-                executable_until: unlock_condition.executable_until,
+                proposal_data: pending_timelock.proposal_data.clone(),
+                executable_from: pending_timelock.unlock_condition.executable_from,
+                executable_until: pending_timelock.unlock_condition.executable_until,
             },
         );
         Ok(())
@@ -452,7 +487,7 @@ impl<S: Spec> Timelock<S> {
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
         let key = TimelockKey::new(*address, *proposal_id);
-        let Some(condition) = self
+        let Some(pending_timelock) = self
             .timelocks
             .get(&key, state)
             .map_err(CoreModuleError::state_read)?
@@ -461,11 +496,11 @@ impl<S: Spec> Timelock<S> {
         };
 
         let current_time = self.current_time_secs(state)?;
-        if current_time < condition.executable_from {
+        if current_time < pending_timelock.unlock_condition.executable_from {
             return Err(TimelockError::ProposalLocked.into());
         }
 
-        if current_time > condition.executable_until {
+        if current_time > pending_timelock.unlock_condition.executable_until {
             return Err(TimelockError::ProposalExpired.into());
         }
 
@@ -490,7 +525,7 @@ impl<S: Spec> Timelock<S> {
     ) -> Result<(), Error<S>> {
         let address = address.unwrap_or(*context.sender());
         let key = TimelockKey::new(address, proposal_id);
-        let Some(condition) = self
+        let Some(pending_timelock) = self
             .timelocks
             .get(&key, state)
             .map_err(CoreModuleError::state_read)?
@@ -499,12 +534,19 @@ impl<S: Spec> Timelock<S> {
         };
 
         if context.sender() != &address
-            && context.sender() != &condition.cancellation_policy.authorized_canceller
+            && context.sender()
+                != &pending_timelock
+                    .unlock_condition
+                    .cancellation_policy
+                    .authorized_canceller
         {
             return Err(Error::UnauthorizedCanceller {
                 sender: *context.sender(),
                 address,
-                authorized_canceller: condition.cancellation_policy.authorized_canceller,
+                authorized_canceller: pending_timelock
+                    .unlock_condition
+                    .cancellation_policy
+                    .authorized_canceller,
                 proposal_id,
             });
         }
@@ -524,7 +566,7 @@ impl<S: Spec> Timelock<S> {
     fn add_timelock(
         &mut self,
         key: &TimelockKey<S>,
-        unlock_condition: &UnlockCondition<S>,
+        pending_timelock: &PendingTimelock<S>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Error<S>> {
         let count = self
@@ -541,7 +583,7 @@ impl<S: Spec> Timelock<S> {
         }
 
         self.timelocks
-            .set(key, unlock_condition, state)
+            .set(key, pending_timelock, state)
             .map_err(CoreModuleError::state_write)?;
         self.timelock_counts
             .set(&key.0, &(count + 1), state)
@@ -603,14 +645,19 @@ impl<S: Spec> Timelock<S> {
             return Ok(());
         };
 
-        let proposal_id = self
-            .policy_update_proposal_id(&new_policy, state)
+        let proposal_data = self
+            .policy_update_proposal_data(&new_policy)
             .map_err(ModuleError::from)?;
         let policy = TimelockPolicy {
             unlock_seconds_from_proposal: policy_change_timelock_seconds,
             expire_seconds_after_unlock_override: None,
         };
-        match self.register_or_try_unlock_proposal(context.sender(), proposal_id, policy, state)? {
+        match self.register_or_try_unlock_proposal(
+            context.sender(),
+            proposal_data,
+            policy,
+            state,
+        )? {
             TimelockProposalOutcome::Registered => {}
             TimelockProposalOutcome::Unlocked => {
                 self.policies
@@ -623,17 +670,15 @@ impl<S: Spec> Timelock<S> {
         Ok(())
     }
 
-    fn policy_update_proposal_id(
+    fn policy_update_proposal_data(
         &self,
         new_policy: &CancellationPolicy<S>,
-        state: &mut impl TxState<S>,
-    ) -> Result<ProposalId, Error<S>> {
+    ) -> Result<TimelockProposalData, Error<S>> {
         let encoded_message = borsh::to_vec(&CallMessage::ModifyCancellationPolicy {
             new_policy: new_policy.clone(),
         })
         .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)))?;
 
-        calculate_custom_timelock_proposal_id_metered::<_, S>(&self.id, &encoded_message, state)
-            .map_err(|error| CoreModuleError::Generic(anyhow::anyhow!(error)).into())
+        Ok(TimelockProposalData::custom_data(self.id, encoded_message))
     }
 }
