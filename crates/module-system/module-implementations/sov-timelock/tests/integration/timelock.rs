@@ -14,7 +14,9 @@ use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, AsUser, TestUser, TransactionTestCase,
 };
-use sov_timelock::{CancellationPolicy, Event as TimelockEvent, Timelock, TimelockKey};
+use sov_timelock::{
+    CancellationPolicy, Event as TimelockEvent, Timelock, TimelockKey, MAX_USER_TIMELOCKS,
+};
 use sov_value_setter::{CallMessage as ValueSetterCallMessage, ValueSetterConfig};
 
 use crate::S;
@@ -29,7 +31,9 @@ generate_optimistic_runtime_with_kernel!(
     ],
     timelock_policy_wrapper: |call: &TimelockRuntimeCall<S>| {
         match call {
-            TimelockRuntimeCall::ValueSetter(ValueSetterCallMessage::SetValue { value: 7, .. }) => {
+            TimelockRuntimeCall::ValueSetter(ValueSetterCallMessage::SetValue { value, .. })
+                if *value == 7 || *value >= 100 =>
+            {
                 Some(TimelockPolicy {
                     unlock_seconds_from_proposal: NonZeroU64::new(60).unwrap(),
                     expire_seconds_after_unlock_override: Some(60),
@@ -136,6 +140,13 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
                 .unwrap();
             assert_eq!(condition.executable_from, 1_060);
             assert_eq!(condition.executable_until, 1_120);
+            assert_eq!(
+                Timelock::<S>::default()
+                    .timelock_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                Some(1)
+            );
         }),
     });
 }
@@ -224,6 +235,13 @@ fn unlocked_timelocked_call_dispatches_and_consumes_proposal() {
                 .get(&TimelockKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .timelock_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                None
+            );
         }),
     });
 }
@@ -263,6 +281,49 @@ fn owner_can_cancel_pending_proposal() {
             assert!(Timelock::<S>::default()
                 .timelocks
                 .get(&TimelockKey(admin_address, proposal_id), state)
+                .unwrap_infallible()
+                .is_none());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .timelock_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                None
+            );
+        }),
+    });
+}
+
+#[test]
+fn registration_reverts_after_max_user_timelocks() {
+    let (admin, mut runner) = setup();
+    let admin_address = admin.address();
+
+    for value in 100..(100 + MAX_USER_TIMELOCKS) {
+        runner.execute_transaction(TransactionTestCase {
+            input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(value)),
+            assert: Box::new(|result, _state| {
+                assert!(result.tx_receipt.is_successful());
+            }),
+        });
+    }
+
+    let rejected_value = 100 + MAX_USER_TIMELOCKS;
+    let rejected_proposal_id = set_value_proposal_id(rejected_value);
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(rejected_value)),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_reverted());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .timelock_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                Some(MAX_USER_TIMELOCKS)
+            );
+            assert!(Timelock::<S>::default()
+                .timelocks
+                .get(&TimelockKey(admin_address, rejected_proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
         }),

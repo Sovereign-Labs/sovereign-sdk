@@ -20,11 +20,8 @@ use sov_modules_api::{
     TxState,
 };
 
-/// Planned upper bound for per-address timelocks.
-///
-/// This is not enforced by the two-map MVP because enforcing it efficiently requires
-/// tracking a per-address count or index.
-pub const MAX_USER_TIMELOCKS: u32 = 100;
+/// Maximum number of pending timelock proposals per address.
+pub const MAX_USER_TIMELOCKS: u32 = 128;
 
 const TIMELOCK_KEY_SEPARATOR: &str = "/timelocks/";
 
@@ -213,6 +210,24 @@ pub enum Error<S: Spec> {
         /// Existing proposal id.
         proposal_id: ProposalId,
     },
+    /// The proposal owner already has the maximum number of pending timelocks.
+    #[error("Address {address} already has the maximum of {max_user_timelocks} pending timelock proposals")]
+    MaxUserTimelocksReached {
+        /// Proposal owner.
+        address: S::Address,
+        /// Maximum pending timelocks per address.
+        max_user_timelocks: u32,
+    },
+    /// The proposal counter is inconsistent with the proposal map.
+    #[error(
+        "Timelock count for address {address} is inconsistent while deleting proposal {proposal_id}"
+    )]
+    TimelockCountUnderflow {
+        /// Proposal owner.
+        address: S::Address,
+        /// Proposal id being deleted.
+        proposal_id: ProposalId,
+    },
     /// The sender is not authorized to cancel the proposal.
     #[error(
         "Address {sender} is not authorized to cancel timelock proposal {proposal_id} for {address}; authorized canceller is {authorized_canceller}"
@@ -263,6 +278,10 @@ pub struct Timelock<S: Spec> {
     /// Pending timelock proposals.
     #[state]
     pub timelocks: StateMap<TimelockKey<S>, UnlockCondition<S>>,
+
+    /// Number of pending timelock proposals per address.
+    #[state]
+    pub timelock_counts: StateMap<S::Address, u32>,
 
     /// Cancellation policy per address.
     #[state]
@@ -413,9 +432,7 @@ impl<S: Spec> Timelock<S> {
         }
 
         let unlock_condition = self.unlock_condition(address, policy, state)?;
-        self.timelocks
-            .set(&key, &unlock_condition, state)
-            .map_err(CoreModuleError::state_write)?;
+        self.add_timelock(&key, &unlock_condition, state)?;
         self.emit_event(
             state,
             Event::ProposalRegistered {
@@ -452,9 +469,7 @@ impl<S: Spec> Timelock<S> {
             return Err(TimelockError::ProposalExpired.into());
         }
 
-        self.timelocks
-            .delete(&key, state)
-            .map_err(CoreModuleError::state_write)?;
+        self.delete_timelock(&key, state)?;
         self.emit_event(
             state,
             Event::ProposalUnlocked {
@@ -494,9 +509,7 @@ impl<S: Spec> Timelock<S> {
             });
         }
 
-        self.timelocks
-            .delete(&key, state)
-            .map_err(CoreModuleError::state_write)?;
+        self.delete_timelock(&key, state)?;
         self.emit_event(
             state,
             Event::ProposalCancelled {
@@ -505,6 +518,69 @@ impl<S: Spec> Timelock<S> {
                 cancelled_by: *context.sender(),
             },
         );
+        Ok(())
+    }
+
+    fn add_timelock(
+        &mut self,
+        key: &TimelockKey<S>,
+        unlock_condition: &UnlockCondition<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), Error<S>> {
+        let count = self
+            .timelock_counts
+            .get(&key.0, state)
+            .map_err(CoreModuleError::state_read)?
+            .unwrap_or_default();
+
+        if count >= MAX_USER_TIMELOCKS {
+            return Err(Error::MaxUserTimelocksReached {
+                address: key.0,
+                max_user_timelocks: MAX_USER_TIMELOCKS,
+            });
+        }
+
+        self.timelocks
+            .set(key, unlock_condition, state)
+            .map_err(CoreModuleError::state_write)?;
+        self.timelock_counts
+            .set(&key.0, &(count + 1), state)
+            .map_err(CoreModuleError::state_write)?;
+
+        Ok(())
+    }
+
+    fn delete_timelock(
+        &mut self,
+        key: &TimelockKey<S>,
+        state: &mut impl TxState<S>,
+    ) -> Result<(), Error<S>> {
+        let Some(new_count) = self
+            .timelock_counts
+            .get(&key.0, state)
+            .map_err(CoreModuleError::state_read)?
+            .unwrap_or_default()
+            .checked_sub(1)
+        else {
+            return Err(Error::TimelockCountUnderflow {
+                address: key.0,
+                proposal_id: key.1,
+            });
+        };
+
+        self.timelocks
+            .delete(key, state)
+            .map_err(CoreModuleError::state_write)?;
+        if new_count == 0 {
+            self.timelock_counts
+                .delete(&key.0, state)
+                .map_err(CoreModuleError::state_write)?;
+        } else {
+            self.timelock_counts
+                .set(&key.0, &new_count, state)
+                .map_err(CoreModuleError::state_write)?;
+        }
+
         Ok(())
     }
 
