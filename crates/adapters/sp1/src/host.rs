@@ -176,6 +176,23 @@ impl SP1Prover {
         SP1MethodId(self.pk.verifying_key().hash_u32())
     }
 
+    /// Sleeps for the duration (in milliseconds) read from `env_var`, but only
+    /// when running under the SP1 mock backend. Used in tests/soak runs to
+    /// throttle the otherwise-instant mock prover. No-op if the env var is
+    /// unset or not parseable, or if the prover is not a mock.
+    fn maybe_mock_sleep(&self, env_var: &str) {
+        if !matches!(&self.prover, &EnvProver::Mock(_)) {
+            return;
+        }
+        let Some(ms) = std::env::var(env_var)
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+        else {
+            return;
+        };
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
+
     fn add_proof_helper(
         &self,
         stdin: &mut SP1Stdin,
@@ -301,6 +318,7 @@ impl ZkvmHost for SP1Host {
         item: &T,
         agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
+        self.prover.maybe_mock_sleep("SOV_SP1_MOCK_PROVE_SLEEP_MS");
         self.add_hint_deferred_and_run_helper(item, agg_proofs)
     }
 
@@ -327,6 +345,9 @@ impl OuterZkvmHost for SP1AggregationHost {
             })
             .collect();
 
+        self.inner
+            .prover
+            .maybe_mock_sleep("SOV_SP1_MOCK_AGGREGATION_SLEEP_MS");
         self.run(proofs_and_headers)
     }
 }
