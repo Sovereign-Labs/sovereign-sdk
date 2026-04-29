@@ -153,6 +153,8 @@ impl<S: Spec> ProverIncentives<S> {
                 execution_context: execution_context.str(),
             });
         });
+        #[cfg(not(feature = "native"))]
+        let _ = execution_context;
 
         tracing::debug!(
             %public_outputs.initial_slot_number,
