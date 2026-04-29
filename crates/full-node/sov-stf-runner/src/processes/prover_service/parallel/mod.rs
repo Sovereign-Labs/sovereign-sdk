@@ -10,6 +10,7 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
+use tokio::sync::Notify;
 
 use super::{ProverService, ProverServiceError, Verifier};
 use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTransitionInfo};
@@ -138,5 +139,9 @@ where
         self.prover_state
             .create_aggregated_proof(self.outer_vm.clone(), block_headers, genesis_state_root)
             .await
+    }
+
+    fn capacity_notify(&self) -> Option<Arc<Notify>> {
+        Some(self.prover_state.capacity_notify())
     }
 }

@@ -13,7 +13,7 @@ use sov_rollup_interface::zk::{
     SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
 };
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, Notify};
 use tracing::{error, info, trace};
 
 use super::state::{ProverState, ProverStatus};
@@ -25,6 +25,7 @@ use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTrans
 pub(crate) struct Prover<Address, StateRoot, Witness, Da: DaService> {
     prover_address: Address,
     prover_state: Arc<RwLock<ProverState<Address, StateRoot, Da::Spec>>>,
+    capacity_notify: Arc<Notify>,
     num_threads: usize,
     // From Docs:
     // """
@@ -65,9 +66,14 @@ where
                 prover_status: Default::default(),
                 pending_tasks_count: Default::default(),
             })),
+            capacity_notify: Arc::new(Notify::new()),
             prover_address,
             phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn capacity_notify(&self) -> Arc<Notify> {
+        self.capacity_notify.clone()
     }
 
     pub(crate) fn start_proving<InnerVm>(
@@ -104,6 +110,7 @@ where
         let start_prover = prover_state.inc_task_count_if_not_busy(self.num_threads);
 
         let prover_state_clone = self.prover_state.clone();
+        let capacity_notify = self.capacity_notify.clone();
         // Initiate a new proving job only if the prover is not busy.
         if start_prover {
             prover_state.set_to_proving(block_header_hash.clone());
@@ -162,6 +169,8 @@ where
 
                     prover_state.set_to_proved(block_header_hash, block_proof);
                     prover_state.dec_task_count();
+                    drop(prover_state);
+                    capacity_notify.notify_one();
                 });
             });
 

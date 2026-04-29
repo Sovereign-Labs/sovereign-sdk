@@ -7,7 +7,7 @@ use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use types::{BlockProofInfo, BlockProofStatus, UnAggregatedProofList};
@@ -131,15 +131,40 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
+        let capacity_notify = self.prover_service.capacity_notify();
+
         loop {
-            match future_or_shutdown(self.stf_info_receiver.read_next(), &self.shutdown_receiver)
-                .await
-            {
-                FutureOrShutdownOutput::Shutdown => {
+            if self.eager_proof_submission {
+                self.proofs_to_create
+                    .submit_waiting_blocks_until_busy(&*self.prover_service)
+                    .await;
+            }
+
+            let can_read_more_stf_infos = self.can_read_more_stf_infos();
+            let has_waiting_blocks =
+                self.eager_proof_submission && self.proofs_to_create.has_waiting_blocks();
+            let has_closed_window = self.proofs_to_create.has_closed_window();
+
+            tokio::select! {
+                biased;
+
+                shutdown_result = self.shutdown_receiver.changed() => {
+                    let _ = shutdown_result;
                     tracing::info!("Shutting down aggregated proof intake task...");
                     break;
                 }
-                FutureOrShutdownOutput::Output(stf_info_result) => {
+
+                permit_result = wait_for_handoff_permit(self.metadata_tx.clone()), if has_closed_window => {
+                    let permit = permit_result.map_err(|_| {
+                        anyhow::anyhow!("Aggregator task has terminated; cannot send metadata")
+                    })?;
+                    let (metadata, window_size) = self.proofs_to_create.take_oldest_with_size();
+                    permit.send((metadata, window_size));
+                }
+
+                _ = wait_for_prover_capacity(capacity_notify.clone()), if has_waiting_blocks => {}
+
+                stf_info_result = self.stf_info_receiver.read_next(), if can_read_more_stf_infos => {
                     let stf_info = match stf_info_result? {
                         None => {
                             tracing::debug!("Received None instead of StateTransitionInfo. This can happen if the transition has already been processed by the `Receiver`. In that case, it is fine to ignore the notification.");
@@ -195,33 +220,12 @@ where
             });
         }
 
-        if self.eager_proof_submission {
-            self.proofs_to_create
-                .oldest_mut()
-                .prove_any_unproven_blocks(&*self.prover_service)
-                .await;
-        }
-
-        let num_proofs_to_create = self.proofs_to_create.current_proof_jump();
-
-        // If we've covered enough blocks for the aggregate proof, hand the
-        // window off to the aggregator task.
-        if num_proofs_to_create >= self.aggregated_proof_block_jump.get() {
+        // Keep at most one closed window locally buffered. Once a second
+        // window fills, intake pauses until the aggregator accepts the oldest.
+        if self.proofs_to_create.current_proof_jump() >= self.aggregated_proof_block_jump.get()
+            && !self.proofs_to_create.has_closed_window()
+        {
             self.proofs_to_create.close_newest_proof();
-            let metadata = self.proofs_to_create.take_oldest();
-            let window_size = num_proofs_to_create as u64;
-
-            // 1-deep channel: blocks here only when the aggregator already
-            // has one window in flight AND a second buffered. While blocked,
-            // intake stops draining the STF-info mpsc, which propagates
-            // back-pressure upstream to the runner exactly as in the
-            // pre-pipelining design.
-            self.metadata_tx
-                .send((metadata, window_size))
-                .await
-                .map_err(|_| {
-                    anyhow::anyhow!("Aggregator task has terminated; cannot send metadata")
-                })?;
         }
 
         sov_metrics::track_metrics(|tracker| {
@@ -233,6 +237,12 @@ where
         });
 
         Ok(())
+    }
+
+    fn can_read_more_stf_infos(&self) -> bool {
+        !(self.proofs_to_create.has_closed_window()
+            && self.proofs_to_create.current_proof_jump()
+                >= self.aggregated_proof_block_jump.get())
     }
 }
 
@@ -348,5 +358,18 @@ async fn create_aggregate_proof_with_retries<Ps: ProverService>(
                 }
             }
         }
+    }
+}
+
+async fn wait_for_handoff_permit<Ps: ProverService>(
+    metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
+) -> Result<mpsc::OwnedPermit<(AggregateProofMetadata<Ps>, u64)>, mpsc::error::SendError<()>> {
+    metadata_tx.reserve_owned().await
+}
+
+async fn wait_for_prover_capacity(capacity_notify: Option<Arc<Notify>>) {
+    match capacity_notify {
+        Some(notify) => notify.notified().await,
+        None => sleep(Duration::from_millis(100)).await,
     }
 }

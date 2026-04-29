@@ -21,12 +21,6 @@ impl<T: Default> NonEmptyVecDeque<T> {
         Self(deque)
     }
 
-    pub fn front_mut(&mut self) -> &mut T {
-        self.0
-            .front_mut()
-            .expect("NonEmptyVecDeque may not be empty")
-    }
-
     /// Pops from the front of the queue, pushing `Default::default` if the
     /// queue would be emptied after the operation. To avoid adding the default
     /// element, the caller should check the queue length and `push_back` a value
@@ -52,6 +46,14 @@ impl<T: Default> NonEmptyVecDeque<T> {
 
     pub fn push_back(&mut self, value: T) {
         self.0.push_back(value);
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.0.iter_mut()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
@@ -92,41 +94,55 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
         self.block_proof_info.push(block);
     }
 
-    pub async fn prove_any_unproven_blocks(&mut self, prover_service: &Ps) {
-        if self.is_ready {
-            return;
+    pub fn has_waiting_blocks(&self) -> bool {
+        self.block_proof_info
+            .iter()
+            .any(|proof| matches!(proof.status, BlockProofStatus::Waiting(_)))
+    }
+
+    pub async fn submit_waiting_blocks_until_busy(&mut self, prover_service: &Ps) -> bool {
+        if !self.has_waiting_blocks() {
+            self.refresh_readiness();
+            return false;
         }
 
-        let submissions: Vec<_> = self
-            .block_proof_info
-            .iter_mut()
-            .filter_map(|proof| {
-                match std::mem::replace(&mut proof.status, BlockProofStatus::Submitted) {
-                    BlockProofStatus::Waiting(w) => Some(w),
-                    BlockProofStatus::Submitted => None,
-                }
-            })
-            .collect();
-
-        let futs = submissions.into_iter().map(|mut witness| async {
-            loop {
-                let status = prover_service
-                    .prove(witness)
-                    .await
-                    .expect("The proof submission should succeed");
-
-                match status {
-                    ProofProcessingStatus::ProvingInProgress => break,
-                    ProofProcessingStatus::Busy(data) => {
-                        witness = data;
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                    }
-                }
+        let mut prover_is_busy = false;
+        for proof in &mut self.block_proof_info {
+            if !matches!(proof.status, BlockProofStatus::Waiting(_)) {
+                continue;
             }
-        });
-        futures::future::join_all(futs).await;
 
-        self.is_ready = true;
+            let witness = match std::mem::replace(&mut proof.status, BlockProofStatus::Submitted) {
+                BlockProofStatus::Waiting(witness) => witness,
+                BlockProofStatus::Submitted => unreachable!("checked above"),
+            };
+
+            let status = prover_service
+                .prove(witness)
+                .await
+                .expect("The proof submission should succeed");
+
+            if let ProofProcessingStatus::Busy(witness) = status {
+                proof.status = BlockProofStatus::Waiting(witness);
+                prover_is_busy = true;
+                break;
+            }
+        }
+
+        self.refresh_readiness();
+        prover_is_busy
+    }
+
+    pub async fn prove_any_unproven_blocks(&mut self, prover_service: &Ps) {
+        while self.has_waiting_blocks() {
+            let is_busy = self.submit_waiting_blocks_until_busy(prover_service).await;
+            if !is_busy {
+                break;
+            }
+            wait_for_prover_capacity(prover_service).await;
+        }
+
+        self.refresh_readiness();
     }
 
     pub async fn prove(
@@ -157,6 +173,14 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
                 Err(e) => return Err((self, e)),
             }
         }
+    }
+
+    fn refresh_readiness(&mut self) {
+        self.is_ready = !self.block_proof_info.is_empty()
+            && self
+                .block_proof_info
+                .iter()
+                .all(|proof| matches!(proof.status, BlockProofStatus::Submitted));
     }
 }
 
@@ -215,13 +239,41 @@ impl<Ps: ProverService> UnAggregatedProofList<Ps> {
         self.proof_queue.back_mut().push(block);
     }
 
-    /// Takes the metadata for the oldest aggregated proof in the queue
-    pub fn oldest_mut(&mut self) -> &mut AggregateProofMetadata<Ps> {
-        self.proof_queue.front_mut()
+    pub fn has_closed_window(&self) -> bool {
+        self.proof_queue.len() > 1
+    }
+
+    pub fn has_waiting_blocks(&self) -> bool {
+        self.proof_queue
+            .0
+            .iter()
+            .any(|metadata| metadata.has_waiting_blocks())
+    }
+
+    pub async fn submit_waiting_blocks_until_busy(&mut self, prover_service: &Ps) {
+        for metadata in self.proof_queue.iter_mut() {
+            if metadata.submit_waiting_blocks_until_busy(prover_service).await {
+                break;
+            }
+        }
     }
 
     /// Takes the metadata for the oldest aggregated proof in the queue
     pub fn take_oldest(&mut self) -> AggregateProofMetadata<Ps> {
         self.proof_queue.pop_front_with_default()
+    }
+
+    pub fn take_oldest_with_size(&mut self) -> (AggregateProofMetadata<Ps>, u64) {
+        let metadata = self.take_oldest();
+        let window_size = metadata.block_proof_info.len() as u64;
+        (metadata, window_size)
+    }
+}
+
+async fn wait_for_prover_capacity<Ps: ProverService>(prover_service: &Ps) {
+    if let Some(notify) = prover_service.capacity_notify() {
+        notify.notified().await;
+    } else {
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }

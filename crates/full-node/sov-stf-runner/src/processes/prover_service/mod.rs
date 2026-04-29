@@ -1,6 +1,7 @@
 mod network;
 mod parallel;
 
+use std::sync::Arc;
 use std::fmt::Debug;
 
 use async_trait::async_trait;
@@ -15,6 +16,7 @@ use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::ZkVerifier;
 use strum::{Display, EnumString};
 use thiserror::Error;
+use tokio::sync::Notify;
 
 pub use crate::processes::StateTransitionInfo;
 
@@ -138,6 +140,11 @@ pub trait ProverService: Send + Sync + 'static {
         block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
         genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus>;
+
+    /// Notifies when the prover may be able to accept more proving work.
+    fn capacity_notify(&self) -> Option<Arc<Notify>> {
+        None
+    }
 }
 
 #[cfg(test)]
