@@ -25,7 +25,6 @@ use sov_modules_api::{
 /// tracking a per-address count or index.
 pub const MAX_USER_TIMELOCKS: u32 = 100;
 
-const TIMELOCK_KEY_PREFIX: &str = "addresses/";
 const TIMELOCK_KEY_SEPARATOR: &str = "/timelocks/";
 
 /// Storage key for a timelock proposal.
@@ -43,29 +42,22 @@ const TIMELOCK_KEY_SEPARATOR: &str = "/timelocks/";
 )]
 #[serde(bound = "S: Spec", deny_unknown_fields)]
 #[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "TimelockKey")]
-pub struct TimelockKey<S: Spec> {
+pub struct TimelockKey<S: Spec>(
     /// Proposal owner.
-    pub address: S::Address,
+    pub S::Address,
     /// Proposal id.
-    pub proposal_id: ProposalId,
-}
+    pub ProposalId,
+);
 
 impl<S: Spec> TimelockKey<S> {
     fn new(address: S::Address, proposal_id: ProposalId) -> Self {
-        Self {
-            address,
-            proposal_id,
-        }
+        Self(address, proposal_id)
     }
 }
 
 impl<S: Spec> Display for TimelockKey<S> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{TIMELOCK_KEY_PREFIX}{}{TIMELOCK_KEY_SEPARATOR}{}",
-            self.address, self.proposal_id
-        )
+        write!(f, "{}{TIMELOCK_KEY_SEPARATOR}{}", self.0, self.1)
     }
 }
 
@@ -77,20 +69,17 @@ where
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some(s) = s.strip_prefix(TIMELOCK_KEY_PREFIX) else {
-            anyhow::bail!("{s} is not a timelock key: missing '{TIMELOCK_KEY_PREFIX}' prefix");
-        };
         let Some((address, proposal_id)) = s.rsplit_once(TIMELOCK_KEY_SEPARATOR) else {
             anyhow::bail!(
                 "{s} is not a timelock key: missing '{TIMELOCK_KEY_SEPARATOR}' separator"
             );
         };
 
-        Ok(Self {
-            address: S::Address::from_str(address)
+        Ok(Self(
+            S::Address::from_str(address)
                 .map_err(|error| anyhow::Error::from_boxed(error.into()))?,
-            proposal_id: ProposalId::from_str(proposal_id)?,
-        })
+            ProposalId::from_str(proposal_id)?,
+        ))
     }
 }
 

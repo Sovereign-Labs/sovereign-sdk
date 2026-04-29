@@ -1,7 +1,8 @@
 use std::num::NonZeroU64;
+use std::str::FromStr;
 
 use sov_modules_api::capabilities::{
-    calculate_timelock_proposal_id, TimelockPolicy, TimelockProposalHashData,
+    calculate_timelock_proposal_id, ProposalId, TimelockPolicy, TimelockProposalHashData,
     DEFAULT_EXPIRE_SECONDS_AFTER_UNLOCK,
 };
 use sov_modules_api::da::Time;
@@ -83,6 +84,17 @@ fn set_value_proposal_id(value: u32) -> sov_modules_api::capabilities::ProposalI
 }
 
 #[test]
+fn timelock_key_display_roundtrips() {
+    let (admin, _runner) = setup();
+    let key = TimelockKey(admin.address(), ProposalId::new([1; 32]));
+    let encoded = key.to_string();
+
+    assert!(encoded.contains("/timelocks/"));
+    assert!(!encoded.starts_with("addresses/"));
+    assert_eq!(TimelockKey::<S>::from_str(&encoded).unwrap(), key);
+}
+
+#[test]
 fn timelocked_call_registers_proposal_without_dispatching_call() {
     let (admin, mut runner) = setup();
     let admin_address = admin.address();
@@ -108,13 +120,7 @@ fn timelocked_call_registers_proposal_without_dispatching_call() {
             );
             let condition = Timelock::<S>::default()
                 .timelocks
-                .get(
-                    &TimelockKey {
-                        address: admin_address,
-                        proposal_id,
-                    },
-                    state,
-                )
+                .get(&TimelockKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .unwrap();
             assert_eq!(condition.executable_from, 1_060);
@@ -156,13 +162,7 @@ fn repeated_timelocked_call_reverts_while_locked() {
             );
             assert!(Timelock::<S>::default()
                 .timelocks
-                .get(
-                    &TimelockKey {
-                        address: admin_address,
-                        proposal_id,
-                    },
-                    state
-                )
+                .get(&TimelockKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_some());
         }),
@@ -203,13 +203,7 @@ fn unlocked_timelocked_call_dispatches_and_consumes_proposal() {
             );
             assert!(Timelock::<S>::default()
                 .timelocks
-                .get(
-                    &TimelockKey {
-                        address: admin_address,
-                        proposal_id,
-                    },
-                    state
-                )
+                .get(&TimelockKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
         }),
@@ -240,13 +234,7 @@ fn owner_can_cancel_pending_proposal() {
             assert!(result.tx_receipt.is_successful());
             assert!(Timelock::<S>::default()
                 .timelocks
-                .get(
-                    &TimelockKey {
-                        address: admin_address,
-                        proposal_id,
-                    },
-                    state
-                )
+                .get(&TimelockKey(admin_address, proposal_id), state)
                 .unwrap_infallible()
                 .is_none());
         }),
