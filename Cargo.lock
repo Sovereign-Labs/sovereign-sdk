@@ -5754,7 +5754,6 @@ dependencies = [
  "sov-state",
  "sov-test-modules",
  "sov-test-utils",
- "sov-timelock",
  "sov-value-setter",
  "strum 0.26.3",
  "tempfile",
@@ -13033,6 +13032,11 @@ dependencies = [
  "serde_json",
  "sov-chain-state",
  "sov-modules-api",
+ "sov-test-modules",
+ "sov-test-utils",
+ "sov-timelock",
+ "sov-value-setter",
+ "strum 0.26.3",
  "thiserror 2.0.17",
 ]
 

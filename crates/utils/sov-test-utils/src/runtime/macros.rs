@@ -22,7 +22,6 @@ macro_rules! generate_runtime_without_capabilities {
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         // Optional: A wrapper expression for custom transaction timelock policy logic.
         // Expected signature for the expression: `fn(&Self::Decodable) -> Option<TimelockPolicy>`.
-        // If provided, the runtime must include a module named `timelock`.
         $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma for the entire argument block
@@ -243,9 +242,9 @@ macro_rules! generate_runtime_without_capabilities {
 #[macro_export]
 macro_rules! __impl_runtime_timelock_capability {
     () => {};
-    ($timelock_policy_wrapper_expr:expr) => {
+    ($timelock_capability_expr:expr) => {
         fn timelock(&mut self) -> impl ::sov_modules_api::capabilities::TimelockCapability<S> {
-            &mut self.timelock
+            ($timelock_capability_expr)(self)
         }
     };
 }
@@ -267,6 +266,10 @@ macro_rules! generate_runtime {
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
+        // Optional: An accessor for a concrete timelock capability.
+        // Expected signature for the expression: `fn(&mut Self) -> impl TimelockCapability<S>`.
+        // If not provided, the runtime uses the default no-op timelock capability.
+        $(, timelock_capability: $timelock_capability_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma
         $(,)?
@@ -308,7 +311,7 @@ macro_rules! generate_runtime {
                 )
             }
 
-            $crate::__impl_runtime_timelock_capability!($($timelock_policy_wrapper_expr)?);
+            $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
         }
     };
     (
@@ -323,6 +326,10 @@ macro_rules! generate_runtime {
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
+        // Optional: An accessor for a concrete timelock capability.
+        // Expected signature for the expression: `fn(&mut Self) -> impl TimelockCapability<S>`.
+        // If not provided, the runtime uses the default no-op timelock capability.
+        $(, timelock_capability: $timelock_capability_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         // optional final comma
         $(,)?
@@ -366,7 +373,7 @@ macro_rules! generate_runtime {
                 )
             }
 
-            $crate::__impl_runtime_timelock_capability!($($timelock_policy_wrapper_expr)?);
+            $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
         }
     }
 }
@@ -398,6 +405,10 @@ macro_rules! generate_optimistic_runtime_with_kernel {
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
         $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
+        // Optional: An accessor for a concrete timelock capability.
+        // Expected signature for the expression: `fn(&mut Self) -> impl TimelockCapability<S>`.
+        // If not provided, the runtime uses the default no-op timelock capability.
+        $(, timelock_capability: $timelock_capability_expr:expr)?
         $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
         $(,)? // Optional trailing comma for the module list or wrapper
     ) => {
@@ -413,6 +424,7 @@ macro_rules! generate_optimistic_runtime_with_kernel {
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
             $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
+            $(, timelock_capability: $timelock_capability_expr)?
             $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
         }
     };

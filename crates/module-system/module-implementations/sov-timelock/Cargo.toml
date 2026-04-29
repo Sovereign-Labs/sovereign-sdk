@@ -23,7 +23,14 @@ sov-chain-state = { workspace = true }
 sov-modules-api = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+sov-test-modules = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-timelock = { path = ".", version = "*", features = ["native"] }
+sov-value-setter = { workspace = true, features = ["native"] }
+strum = { workspace = true }
+
 [features]
 default = []
 arbitrary = ["sov-modules-api/arbitrary"]
-native = ["sov-modules-api/native"]
+native = ["sov-chain-state/native", "sov-modules-api/native"]
