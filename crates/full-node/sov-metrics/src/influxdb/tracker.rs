@@ -216,6 +216,8 @@ pub struct RunnerProcessStfChangesMetrics {
     pub aggregated_proofs_count: usize,
     /// A number of transitions have to be finalized.
     pub finalized_transitions_count: usize,
+    /// Slot number of the most recently finalized transition, if any were finalized in this batch.
+    pub last_finalized_slot_number: Option<u64>,
     /// Time the whole operation took.
     pub total_time: std::time::Duration,
     /// Time it took to identify which of the seen transitions can be considered as finalized.
@@ -385,7 +387,11 @@ impl Metric for RunnerProcessStfChangesMetrics {
             self.committing_storage_time.as_micros(),
             self.updating_api_storage_time.as_micros(),
             self.sending_stf_info_time_to_prover_time.as_micros(),
-        )
+        )?;
+        if let Some(slot) = self.last_finalized_slot_number {
+            write!(buffer, ",last_finalized_slot_number={slot}")?;
+        }
+        Ok(())
     }
 }
 

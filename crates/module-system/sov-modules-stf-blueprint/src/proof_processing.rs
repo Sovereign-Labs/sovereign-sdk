@@ -4,9 +4,9 @@ use sov_modules_api::capabilities::{ChainState, GasEnforcer, ProofProcessor};
 use sov_modules_api::proof_metadata::{ProofType, SerializeProofWithDetails};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::{
-    Amount, BasicGasMeter, DaSpec, Gas, GasArray, GasMeter, GasSpec, InvalidProofError,
-    MeteredBorshDeserialize, PreExecWorkingSet, ProofOutcome, ProofReceipt, ProofReceiptContents,
-    Rewards, Spec, StateCheckpoint, StateProvider, TxScratchpad, WorkingSet,
+    Amount, BasicGasMeter, DaSpec, ExecutionContext, Gas, GasArray, GasMeter, GasSpec,
+    InvalidProofError, MeteredBorshDeserialize, PreExecWorkingSet, ProofOutcome, ProofReceipt,
+    ProofReceiptContents, Rewards, Spec, StateCheckpoint, StateProvider, TxScratchpad, WorkingSet,
 };
 use sov_state::{Storage, StorageProof};
 
@@ -29,6 +29,7 @@ pub(crate) fn process_proof<S, RT>(
     sequencer_rollup_address: &S::Address,
     sequencer_bond: Amount,
     gas_price: <S::Gas as Gas>::Price,
+    execution_context: ExecutionContext,
     raw_proof: &[u8],
     state: StateCheckpoint<S>,
 ) -> (ProcessProofOutput<S>, StateCheckpoint<S>)
@@ -105,6 +106,7 @@ where
                     match runtime.proof_processor().process_aggregated_proof(
                         proof,
                         sequencer_rollup_address,
+                        execution_context,
                         &mut working_set,
                     ) {
                         Ok((pub_data, proof)) => {

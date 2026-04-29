@@ -208,8 +208,20 @@ where
 
         let (tx, rx) = oneshot::channel();
         self.pool.spawn(move || {
+            let proving_start = std::time::Instant::now();
             let result =
                 outer_vm.run_proof_aggregation(genesis_state_root, headers_with_block_proofs);
+
+            sov_metrics::track_metrics(|tracker| {
+                let proving_time = proving_start.elapsed();
+                let is_success = result.is_ok();
+                tracker.submit(sov_metrics::ZkProvingTime {
+                    proving_time,
+                    is_success,
+                    zk_circuit: sov_metrics::ZkCircuit::Outer,
+                });
+            });
+
             let _ = tx.send(result);
         });
 

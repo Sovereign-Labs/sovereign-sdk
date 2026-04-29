@@ -35,6 +35,7 @@ tracing = { workspace = true }
 derive_more = { workspace = true }
 
 sov-bank = { workspace = true }
+sov-metrics = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-state = { workspace = true }
@@ -45,6 +46,7 @@ default = []
 native = [
 	"sov-bank/native",
 	"sov-chain-state/native",
+	"sov-metrics/native",
 	"sov-mock-da/native",
 	"sov-mock-zkvm/native",
 	"sov-modules-api/native",
