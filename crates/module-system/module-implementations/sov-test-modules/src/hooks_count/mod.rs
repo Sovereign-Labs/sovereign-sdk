@@ -9,7 +9,7 @@ pub use event::Event;
 mod hooks;
 use sov_modules_api::{
     AccessoryStateValue, Context, DaSpec, Gas, GenesisState, Module, ModuleId, ModuleInfo,
-    ModuleRestApi, Spec, StateValue, TxState,
+    ModuleRestApi, NotInstantiable, Spec, StateValue, TxState,
 };
 use sov_state::Storage;
 
@@ -39,6 +39,25 @@ pub struct HooksCount<S: Spec> {
     /// The latest state root stored by the begin slot hook
     #[state]
     pub latest_state_root: StateValue<<<S as Spec>::Storage as Storage>::Root>,
+}
+
+/// A module that counts transaction hook invocations.
+#[derive(Clone, ModuleInfo, ModuleRestApi)]
+pub struct TxHooksCount<S: Spec> {
+    /// The ID of the module.
+    #[id]
+    pub id: ModuleId,
+
+    /// The number of times the `pre_dispatch_tx` hook has been called.
+    #[state]
+    pub pre_dispatch_tx_hook_count: StateValue<u32>,
+
+    /// The number of times the `post_dispatch_tx` hook has been called.
+    #[state]
+    pub post_dispatch_tx_hook_count: StateValue<u32>,
+
+    #[phantom]
+    phantom: std::marker::PhantomData<S>,
 }
 
 /// Gas configuration for the bank module
@@ -84,5 +103,37 @@ impl<S: Spec> Module for HooksCount<S> {
             } => self.assert_state_root(expected_state_root, context, state),
             CallMessage::DelayedCallMsg => Ok(()),
         }
+    }
+}
+
+impl<S: Spec> Module for TxHooksCount<S> {
+    type Spec = S;
+
+    type Config = ();
+
+    type CallMessage = NotInstantiable;
+
+    type Event = ();
+
+    type Error = anyhow::Error;
+
+    fn genesis(
+        &mut self,
+        _genesis_rollup_header: &<<S as Spec>::Da as DaSpec>::BlockHeader,
+        _config: &Self::Config,
+        state: &mut impl GenesisState<S>,
+    ) -> Result<(), Self::Error> {
+        self.pre_dispatch_tx_hook_count.set(&0, state)?;
+        self.post_dispatch_tx_hook_count.set(&0, state)?;
+        Ok(())
+    }
+
+    fn call(
+        &mut self,
+        _msg: Self::CallMessage,
+        _context: &Context<Self::Spec>,
+        _state: &mut impl TxState<S>,
+    ) -> Result<(), Self::Error> {
+        unreachable!()
     }
 }

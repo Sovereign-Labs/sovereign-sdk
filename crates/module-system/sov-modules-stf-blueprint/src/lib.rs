@@ -788,6 +788,7 @@ where
                         &sequencer_address,
                         sequencer_bond,
                         gas_price,
+                        execution_context,
                         &proof[..],
                         state,
                     );

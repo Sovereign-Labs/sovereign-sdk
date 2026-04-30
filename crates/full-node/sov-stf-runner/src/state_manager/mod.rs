@@ -408,13 +408,15 @@ where
             "Initial Ledger ChangeSet is materialized"
         );
 
-        if let Some(finalized_transition) = finalized_transitions.iter().last() {
-            let last_processed_finalized_header = &finalized_transition.block_header;
-            let last_finalized_slot_number = SlotNumber::new_dangerous(
-                last_processed_finalized_header
+        let last_finalized_slot_number = finalized_transitions.iter().last().map(|t| {
+            SlotNumber::new_dangerous(
+                t.block_header
                     .height()
                     .saturating_sub(self.genesis_da_height),
-            );
+            )
+        });
+
+        if let Some(last_finalized_slot_number) = last_finalized_slot_number {
             tracing::trace!(
                 ?last_finalized_slot_number,
                 "Going to materialize last finalized slot number"
@@ -524,6 +526,7 @@ where
                 da_height: block_header.height(),
                 aggregated_proofs_count,
                 finalized_transitions_count: finalized_transitions.len(),
+                last_finalized_slot_number: last_finalized_slot_number.map(|s| s.get()),
                 total_time: start.elapsed(),
                 processing_finalized_transitions_time,
                 ledger_changes_materializing_time: ledger_materialization_time,

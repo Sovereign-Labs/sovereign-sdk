@@ -1,0 +1,23 @@
+[package]
+name = "sov-timelock"
+description = "Sovereign SDK module for timelock proposal management"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+sov-modules-api = { workspace = true }
+
+[features]
+default = []
+arbitrary = ["sov-modules-api/arbitrary"]
+native = ["sov-modules-api/native"]

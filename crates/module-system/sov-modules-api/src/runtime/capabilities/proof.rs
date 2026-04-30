@@ -2,7 +2,7 @@ use sov_rollup_interface::common::SlotNumber;
 #[cfg(feature = "native")]
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
-use sov_rollup_interface::stf::InvalidProofError;
+use sov_rollup_interface::stf::{ExecutionContext, InvalidProofError};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, SerializedAggregatedProof,
 };
@@ -36,6 +36,7 @@ pub trait ProofProcessor<S: Spec> {
         &mut self,
         proof: SerializedAggregatedProof,
         prover_address: &S::Address,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<
         (
