@@ -318,7 +318,7 @@ impl ZkvmHost for SP1Host {
         item: &T,
         agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
-        self.prover.maybe_mock_sleep("SOV_SP1_MOCK_PROVE_SLEEP_MS");
+        self.prover.maybe_mock_sleep("MOCK_PROVE_SLEEP_MS");
         self.add_hint_deferred_and_run_helper(item, agg_proofs)
     }
 
@@ -347,7 +347,7 @@ impl OuterZkvmHost for SP1AggregationHost {
 
         self.inner
             .prover
-            .maybe_mock_sleep("SOV_SP1_MOCK_AGGREGATION_SLEEP_MS");
+            .maybe_mock_sleep("MOCK_AGGREGATION_SLEEP_MS");
         self.run(proofs_and_headers)
     }
 }

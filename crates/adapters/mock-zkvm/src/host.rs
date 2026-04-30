@@ -131,6 +131,19 @@ impl MockZkvmHost {
             pub_data,
         })?)
     }
+
+    /// Sleeps for the duration (in milliseconds) read from `env_var`. Used in
+    /// tests/soak runs to throttle the otherwise-instant mock prover. No-op
+    /// if the env var is unset or not parseable.
+    fn maybe_mock_sleep(env_var: &str) {
+        let Some(ms) = std::env::var(env_var)
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+        else {
+            return;
+        };
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
 }
 
 impl Default for MockZkvmHost {
@@ -151,6 +164,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         item: &T,
         _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
+        Self::maybe_mock_sleep("MOCK_PROVE_SLEEP_MS");
         self.add_hint_and_run_inner(item)
             .map(|raw_proof| SerializedZkProof { raw_proof })
     }
@@ -175,6 +189,8 @@ impl OuterZkvmHost for MockZkvmHost {
             block_proofs_data.as_slice(),
             genesis_state_root,
         );
+
+        Self::maybe_mock_sleep("MOCK_AGGREGATION_SLEEP_MS");
 
         let mut previous = self
             .previous_anchor
