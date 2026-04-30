@@ -134,7 +134,8 @@ pub struct ProofManagerConfig<Address> {
     #[serde(default = "default_eager_proof_submission")]
     pub eager_proof_submission: bool,
     /// Override for the number of prover threads. When `None`, defaults to
-    /// `2 * aggregated_proof_block_jump + 1`.
+    /// `2 * aggregated_proof_block_jump + 1`, which covers inner proofs for
+    /// the current and next batch plus one outer-aggregation worker.
     #[serde(default)]
     pub prover_thread_count_override: Option<NonZero<usize>>,
     /// Maximum number of completed aggregation windows that can be buffered in
