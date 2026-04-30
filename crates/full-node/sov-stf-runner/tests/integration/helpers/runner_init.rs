@@ -417,6 +417,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
             max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
             eager_proof_submission: true,
+            prover_thread_count: None,
         },
         sequencer: SequencerConfig {
             automatic_batch_production: true,

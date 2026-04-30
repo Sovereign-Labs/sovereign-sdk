@@ -133,6 +133,10 @@ pub struct ProofManagerConfig<Address> {
     /// When false, submission is deferred until the batch is full, then submitted concurrently.
     #[serde(default = "default_eager_proof_submission")]
     pub eager_proof_submission: bool,
+    /// Number of prover threads. If unset, defaults to
+    /// `2 * aggregated_proof_block_jump + 1`, which fully pipelines aggregation.
+    #[serde(default)]
+    pub prover_thread_count: Option<NonZero<usize>>,
 }
 
 fn default_eager_proof_submission() -> bool {
@@ -140,11 +144,13 @@ fn default_eager_proof_submission() -> bool {
 }
 
 impl<Address> ProofManagerConfig<Address> {
-    /// Number of prover threads required to fully pipeline aggregation:
-    /// `2 * aggregated_proof_block_jump + 1` covers inner proofs for the
+    /// Number of prover threads. Returns the configured value when set, otherwise
+    /// `2 * aggregated_proof_block_jump + 1` — enough to cover inner proofs for the
     /// current and next batch plus one outer-aggregation worker.
     pub fn prover_thread_count(&self) -> usize {
-        2 * self.aggregated_proof_block_jump.get() + 1
+        self.prover_thread_count
+            .map(|n| n.get())
+            .unwrap_or_else(|| 2 * self.aggregated_proof_block_jump.get() + 1)
     }
 }
 
