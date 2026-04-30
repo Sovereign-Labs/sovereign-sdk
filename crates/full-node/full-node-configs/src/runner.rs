@@ -149,9 +149,7 @@ fn default_eager_proof_submission() -> bool {
 }
 
 impl<Address> ProofManagerConfig<Address> {
-    /// Number of prover threads. Returns the configured value when set, otherwise
-    /// `2 * aggregated_proof_block_jump + 1` — enough to cover inner proofs for the
-    /// current and next batch plus one outer-aggregation worker.
+    /// Number of prover threads.
     pub fn prover_thread_count(&self) -> usize {
         self.prover_thread_count_override
             .map(|n| n.get())
