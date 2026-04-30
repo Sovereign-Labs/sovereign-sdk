@@ -32,6 +32,12 @@ generate_optimistic_runtime_with_kernel!(
     ],
     timelock_policy_wrapper: |call: &TimelockRuntimeCall<S>| {
         match call {
+            TimelockRuntimeCall::ValueSetter(ValueSetterCallMessage::SetValue { value: 9, .. }) => {
+                Some(TimelockPolicy {
+                    unlock_seconds_from_proposal: NonZeroU64::new(60).unwrap(),
+                    expire_seconds_after_unlock_override: Some(0),
+                })
+            }
             TimelockRuntimeCall::ValueSetter(ValueSetterCallMessage::SetValue { value, .. })
                 if *value == 7 || *value >= 100 =>
             {
@@ -264,6 +270,160 @@ fn unlocked_timelocked_call_dispatches_and_consumes_proposal() {
 }
 
 #[test]
+fn expired_timelocked_call_reverts_without_consuming_proposal() {
+    let (admin, mut runner) = setup();
+    let admin_address = admin.address();
+    let proposal_id = set_value_proposal_id(7);
+    let proposal_key = ProposalKey(admin_address, proposal_id);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(7)),
+        assert: Box::new(|result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.config.freeze_time = Some(Time::from_secs(1_121));
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(7)),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_reverted());
+            assert_eq!(
+                ValueSetter::<S>::default()
+                    .value
+                    .get(state)
+                    .unwrap_infallible(),
+                None
+            );
+            assert!(Timelock::<S>::default()
+                .proposals
+                .get(&proposal_key, state)
+                .unwrap_infallible()
+                .is_some());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .proposal_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                Some(1)
+            );
+            assert_eq!(
+                TxHooksCount::<S>::default()
+                    .post_dispatch_tx_hook_count
+                    .get(state)
+                    .unwrap_infallible(),
+                Some(1)
+            );
+        }),
+    });
+}
+
+#[test]
+fn zero_expiry_policy_executes_at_exact_unlock_timestamp() {
+    let (admin, mut runner) = setup();
+    let admin_address = admin.address();
+    let proposal_id = set_value_proposal_id(9);
+    let proposal_key = ProposalKey(admin_address, proposal_id);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(9)),
+        assert: Box::new({
+            let proposal_key = proposal_key.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_successful());
+                assert_eq!(
+                    result.events,
+                    vec![TimelockRuntimeEvent::Timelock(
+                        TimelockEvent::ProposalRegistered {
+                            address: admin_address,
+                            proposal_id,
+                            proposal_data: set_value_proposal_data(9),
+                            executable_from: 1_060,
+                            executable_until: 1_060,
+                        }
+                    )]
+                );
+                let pending_proposal = Timelock::<S>::default()
+                    .proposals
+                    .get(&proposal_key, state)
+                    .unwrap_infallible()
+                    .unwrap();
+                assert_eq!(pending_proposal.unlock_condition.executable_from, 1_060);
+                assert_eq!(pending_proposal.unlock_condition.executable_until, 1_060);
+            }
+        }),
+    });
+
+    runner.config.freeze_time = Some(Time::from_secs(1_060));
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CleanExpiredProposals {
+                proposal_keys: cleanup_keys(vec![proposal_key.clone()]),
+            },
+        ),
+        assert: Box::new({
+            let proposal_key = proposal_key.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_successful());
+                assert_eq!(result.events, vec![]);
+                assert!(Timelock::<S>::default()
+                    .proposals
+                    .get(&proposal_key, state)
+                    .unwrap_infallible()
+                    .is_some());
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .proposal_counts
+                        .get(&admin_address, state)
+                        .unwrap_infallible(),
+                    Some(1)
+                );
+                assert_eq!(
+                    ValueSetter::<S>::default()
+                        .value
+                        .get(state)
+                        .unwrap_infallible(),
+                    None
+                );
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(9)),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            assert!(result.events.iter().any(|event| {
+                event
+                    == &TimelockRuntimeEvent::Timelock(TimelockEvent::ProposalUnlocked {
+                        address: admin_address,
+                        proposal_id,
+                    })
+            }));
+            assert_eq!(
+                ValueSetter::<S>::default()
+                    .value
+                    .get(state)
+                    .unwrap_infallible(),
+                Some(9)
+            );
+            assert!(Timelock::<S>::default()
+                .proposals
+                .get(&proposal_key, state)
+                .unwrap_infallible()
+                .is_none());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .proposal_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                None
+            );
+        }),
+    });
+}
+
+#[test]
 fn owner_can_cancel_pending_proposal() {
     let (admin, mut runner) = setup();
     let admin_address = admin.address();
@@ -298,6 +458,255 @@ fn owner_can_cancel_pending_proposal() {
             assert!(Timelock::<S>::default()
                 .proposals
                 .get(&ProposalKey(admin_address, proposal_id), state)
+                .unwrap_infallible()
+                .is_none());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .proposal_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                None
+            );
+        }),
+    });
+}
+
+#[test]
+fn authorized_canceller_can_cancel_pending_proposal() {
+    let (users, mut runner) = setup_with_accounts(2);
+    let admin = users[0].clone();
+    let canceller = users[1].clone();
+    let admin_address = admin.address();
+    let canceller_address = canceller.address();
+    let proposal_id = set_value_proposal_id(7);
+    let cancellation_policy = CancellationPolicy::<S> {
+        authorized_canceller: canceller_address,
+        policy_change_timelock_seconds: 0,
+    };
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::ModifyCancellationPolicy {
+                new_policy: cancellation_policy.clone(),
+            },
+        ),
+        assert: Box::new({
+            let cancellation_policy = cancellation_policy.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_successful());
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .policies
+                        .get(&admin_address, state)
+                        .unwrap_infallible(),
+                    Some(cancellation_policy)
+                );
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(7)),
+        assert: Box::new({
+            let cancellation_policy = cancellation_policy.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_successful());
+                let pending_proposal = Timelock::<S>::default()
+                    .proposals
+                    .get(&ProposalKey(admin_address, proposal_id), state)
+                    .unwrap_infallible()
+                    .unwrap();
+                assert_eq!(
+                    pending_proposal.unlock_condition.cancellation_policy,
+                    cancellation_policy
+                );
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: canceller.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CancelProposal {
+                proposal_id,
+                address: Some(admin_address),
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            assert_eq!(
+                result.events,
+                vec![TimelockRuntimeEvent::Timelock(
+                    TimelockEvent::ProposalCancelled {
+                        address: admin_address,
+                        proposal_id,
+                        cancelled_by: canceller_address,
+                    }
+                )]
+            );
+            assert!(Timelock::<S>::default()
+                .proposals
+                .get(&ProposalKey(admin_address, proposal_id), state)
+                .unwrap_infallible()
+                .is_none());
+            assert_eq!(
+                Timelock::<S>::default()
+                    .proposal_counts
+                    .get(&admin_address, state)
+                    .unwrap_infallible(),
+                None
+            );
+        }),
+    });
+}
+
+#[test]
+fn proposals_snapshot_cancellation_policy_at_registration() {
+    let (users, mut runner) = setup_with_accounts(3);
+    let admin = users[0].clone();
+    let initial_canceller = users[1].clone();
+    let replacement_canceller = users[2].clone();
+    let admin_address = admin.address();
+    let initial_canceller_address = initial_canceller.address();
+    let replacement_canceller_address = replacement_canceller.address();
+    let proposal_id = set_value_proposal_id(7);
+    let proposal_key = ProposalKey(admin_address, proposal_id);
+    let initial_policy = CancellationPolicy::<S> {
+        authorized_canceller: initial_canceller_address,
+        policy_change_timelock_seconds: 0,
+    };
+    let replacement_policy = CancellationPolicy::<S> {
+        authorized_canceller: replacement_canceller_address,
+        policy_change_timelock_seconds: 0,
+    };
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::ModifyCancellationPolicy {
+                new_policy: initial_policy.clone(),
+            },
+        ),
+        assert: Box::new(|result, _state| {
+            assert!(result.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(set_value_message(7)),
+        assert: Box::new({
+            let initial_policy = initial_policy.clone();
+            let proposal_key = proposal_key.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_successful());
+                let pending_proposal = Timelock::<S>::default()
+                    .proposals
+                    .get(&proposal_key, state)
+                    .unwrap_infallible()
+                    .unwrap();
+                assert_eq!(
+                    pending_proposal.unlock_condition.cancellation_policy,
+                    initial_policy
+                );
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .proposal_counts
+                        .get(&admin_address, state)
+                        .unwrap_infallible(),
+                    Some(1)
+                );
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::ModifyCancellationPolicy {
+                new_policy: replacement_policy.clone(),
+            },
+        ),
+        assert: Box::new({
+            let initial_policy = initial_policy.clone();
+            let replacement_policy = replacement_policy.clone();
+            let proposal_key = proposal_key.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_successful());
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .policies
+                        .get(&admin_address, state)
+                        .unwrap_infallible(),
+                    Some(replacement_policy)
+                );
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .proposals
+                        .get(&proposal_key, state)
+                        .unwrap_infallible()
+                        .unwrap()
+                        .unlock_condition
+                        .cancellation_policy,
+                    initial_policy
+                );
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: replacement_canceller.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CancelProposal {
+                proposal_id,
+                address: Some(admin_address),
+            },
+        ),
+        assert: Box::new({
+            let replacement_policy = replacement_policy.clone();
+            let proposal_key = proposal_key.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_reverted());
+                assert!(Timelock::<S>::default()
+                    .proposals
+                    .get(&proposal_key, state)
+                    .unwrap_infallible()
+                    .is_some());
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .proposal_counts
+                        .get(&admin_address, state)
+                        .unwrap_infallible(),
+                    Some(1)
+                );
+                assert_eq!(
+                    Timelock::<S>::default()
+                        .policies
+                        .get(&admin_address, state)
+                        .unwrap_infallible(),
+                    Some(replacement_policy)
+                );
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: initial_canceller.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CancelProposal {
+                proposal_id,
+                address: Some(admin_address),
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            assert_eq!(
+                result.events,
+                vec![TimelockRuntimeEvent::Timelock(
+                    TimelockEvent::ProposalCancelled {
+                        address: admin_address,
+                        proposal_id,
+                        cancelled_by: initial_canceller_address,
+                    }
+                )]
+            );
+            assert!(Timelock::<S>::default()
+                .proposals
+                .get(&proposal_key, state)
                 .unwrap_infallible()
                 .is_none());
             assert_eq!(
