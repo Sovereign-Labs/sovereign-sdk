@@ -221,7 +221,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for HashStf {
             batch_receipts: vec![],
             discarded_blobs: vec![],
             witness,
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
         }
     }
 }

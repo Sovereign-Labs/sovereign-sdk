@@ -166,6 +166,25 @@ pub async fn initialize_runner(
     aggregated_proof_block_jump: usize,
     nb_of_prover_threads: Option<usize>,
 ) -> (HashStfRunner<MockDaService>, StateRoot, TestNode) {
+    initialize_runner_with_stop_at(
+        da_service,
+        path,
+        init_variant,
+        aggregated_proof_block_jump,
+        nb_of_prover_threads,
+        None,
+    )
+    .await
+}
+
+pub async fn initialize_runner_with_stop_at(
+    da_service: Arc<MockDaService>,
+    path: &std::path::Path,
+    init_variant: MockInitVariant,
+    aggregated_proof_block_jump: usize,
+    nb_of_prover_threads: Option<usize>,
+    stop_at_rollup_height: Option<sov_rollup_interface::common::RollupHeight>,
+) -> (HashStfRunner<MockDaService>, StateRoot, TestNode) {
     let stf = HashStf::new();
     let inner_vm = MockZkvmHost::new();
     let outer_vm = MockZkvmHost::new_non_blocking();
@@ -207,9 +226,10 @@ pub async fn initialize_runner(
         .unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
 
-    let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache)
-        .await
-        .unwrap();
+    let da_sync_state =
+        make_da_sync_state(0, stop_at_rollup_height, &ledger_db, &da_service_with_cache)
+            .await
+            .unwrap();
     let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
     let state_channel = StateChannel::new(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
@@ -266,7 +286,7 @@ pub async fn initialize_runner(
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
         None,
-        None,
+        stop_at_rollup_height,
         da_sync_state,
         da_service_with_cache,
         0,

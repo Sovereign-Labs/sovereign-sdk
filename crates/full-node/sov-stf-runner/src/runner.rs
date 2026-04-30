@@ -229,7 +229,7 @@ where
             first_unprocessed_height_at_startup,
             runner_config.concurrent_sync_tasks,
             runner_config.pre_fetched_blocks_capacity.get(),
-            shutdown_receiver.clone(),
+            secondary_shutdown_receiver.clone(),
         )
         .await?;
         background_handles.push(fetcher_background_handle);
@@ -391,8 +391,10 @@ where
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
 
-        let status_updater_handle = self
-            .spawn_sync_status_updater(self.da_polling_interval, self.shutdown_receiver.clone());
+        let status_updater_handle = self.spawn_sync_status_updater(
+            self.da_polling_interval,
+            self.secondary_shutdown_sender.subscribe(),
+        );
 
         let start_at_rollup_height = self.start_at_rollup_height;
         let stop_at_rollup_height = self.stop_at_rollup_height;
