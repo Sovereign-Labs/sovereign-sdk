@@ -32,5 +32,15 @@ strum = { workspace = true }
 
 [features]
 default = []
-arbitrary = ["sov-modules-api/arbitrary"]
-native = ["sov-chain-state/native", "sov-modules-api/native"]
+arbitrary = [
+	"sov-modules-api/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-timelock/arbitrary"
+]
+native = [
+	"sov-chain-state/native",
+	"sov-modules-api/native",
+	"sov-test-modules/native",
+	"sov-timelock/native",
+	"sov-value-setter/native"
+]
