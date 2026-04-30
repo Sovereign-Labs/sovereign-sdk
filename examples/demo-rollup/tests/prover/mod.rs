@@ -40,7 +40,6 @@ pub(super) type DefaultSpec = sov_modules_api::configurable_spec::ConfigurableSp
 >;
 
 mod datagen;
-mod network;
 mod parallel;
 mod sp1_cpu_prover;
 
@@ -50,9 +49,6 @@ pub(super) type ProofWitness = <TestSTF as StateTransitionFunction<MockDaSpec>>:
 pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness, MockDaSpec>;
 
 /// Executes the STF against mock DA blocks and produces per-block witnesses.
-///
-/// This is the shared data generation logic used by both the local (host) prover
-/// tests and the network prover tests.
 ///
 /// Returns `(genesis_state_root, witnesses)`.
 pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {

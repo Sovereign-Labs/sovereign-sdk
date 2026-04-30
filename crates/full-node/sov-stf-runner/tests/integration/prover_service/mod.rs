@@ -1,4 +1,3 @@
-mod network;
 mod parallel;
 
 use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};

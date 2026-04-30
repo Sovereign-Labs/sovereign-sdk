@@ -1,11 +1,9 @@
-mod network;
 mod parallel;
 
 use std::fmt::Debug;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
-pub use network::NetworkProverService;
 pub use parallel::ParallelProverService;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
