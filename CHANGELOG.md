@@ -1,3 +1,6 @@
+# 2026-04-30
+- #2798 (Non-breaking) Adds timelock support to the SDK. To use, add the `sov-timelock` module to the runtime, override the `timelock()` accessor on `HasCapabilities`, and then override `Runtime::timelock_for_callmessage` to match `CallMessage`s and return `TimelockPolicy` for those that should be timelocked. The module supports configurable cancellation policies, including delegating to a separate cancel address. See the `sov-timelock` module README for more details. Existing rollups do not need to do anything.
+
 # 2026-04-23
 - #2693 Adds new apis for statemap iteration at `/modules/{module}/state/{map_name}/items`
 
