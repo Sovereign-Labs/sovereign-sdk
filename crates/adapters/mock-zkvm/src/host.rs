@@ -164,7 +164,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         item: &T,
         _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
-        Self::maybe_mock_sleep("MOCK_PROVE_SLEEP_MS");
+        Self::maybe_mock_sleep("SOV_MOCK_PROVE_SLEEP_MS");
         self.add_hint_and_run_inner(item)
             .map(|raw_proof| SerializedZkProof { raw_proof })
     }
@@ -190,7 +190,7 @@ impl OuterZkvmHost for MockZkvmHost {
             genesis_state_root,
         );
 
-        Self::maybe_mock_sleep("MOCK_AGGREGATION_SLEEP_MS");
+        Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
 
         let mut previous = self
             .previous_anchor
