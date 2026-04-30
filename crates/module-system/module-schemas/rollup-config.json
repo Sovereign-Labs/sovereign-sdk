@@ -688,7 +688,7 @@
           ]
         },
         "prover_thread_count_override": {
-          "description": "Override for the number of prover threads. When `None`, defaults to `2 * aggregated_proof_block_jump + 1`.",
+          "description": "Override for the number of prover threads. When `None`, defaults to `2 * aggregated_proof_block_jump + 1`, which covers inner proofs for the current and next batch plus one outer-aggregation worker.",
           "default": null,
           "type": [
             "integer",
