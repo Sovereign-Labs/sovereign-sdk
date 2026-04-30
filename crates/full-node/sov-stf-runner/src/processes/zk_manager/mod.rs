@@ -229,11 +229,14 @@ where
                 })?;
         }
 
+        let pending_agg_metadata =
+            self.metadata_tx.max_capacity() - self.metadata_tx.capacity();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(super::metrics::ZkProofManagerMetrics {
                 proving_lag: received_slot_number.get() - first_height_unproven.get(),
                 proofs_to_create: self.proofs_to_create.current_proof_jump(),
                 slot_number: received_slot_number.get(),
+                pending_agg_metadata,
             });
         });
 
