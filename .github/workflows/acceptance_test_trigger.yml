@@ -2,8 +2,8 @@ name: Trigger Acceptance Tests
 
 on:
   schedule:
-    # Nightly at 5am UTC
-    - cron: "0 5 * * *"
+    # Nightly at 2am UTC
+    - cron: "0 2 * * *"
   # Can be triggered manually
   workflow_dispatch:
     inputs:
