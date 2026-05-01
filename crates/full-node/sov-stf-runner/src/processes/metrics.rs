@@ -106,26 +106,3 @@ impl Metric for PendingProverTasksMetric {
         )
     }
 }
-
-/// Metrics for the network prover.
-/// Emitted after each proof submission to the proving network.
-#[derive(Debug)]
-pub(crate) struct ZkNetworkProverMetrics {
-    /// Time in milliseconds for submitting a proof request to the network.
-    pub submit_duration_ms: u128,
-}
-
-impl Metric for ZkNetworkProverMetrics {
-    fn measurement_name(&self) -> &'static str {
-        "sov_rollup_zk_network_prover"
-    }
-
-    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        write!(
-            buffer,
-            "{} submit_duration_ms={}i",
-            self.measurement_name(),
-            self.submit_duration_ms,
-        )
-    }
-}
