@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use crate::helpers::hash_stf::{HashStf, S};
 use crate::helpers::runner_init::{
-    bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
+    bootstrap_state_update_info, initialize_runner, initialize_runner_with_stop_at, HashStfRunner,
+    InitVariant,
 };
 use anyhow::Context;
 use sov_db::config::RollupDbConfig;
@@ -18,6 +19,7 @@ use sov_mock_da::{
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
 use sov_rollup_full_node_interface::StateChannel;
+use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -394,6 +396,42 @@ async fn check_runner(
 
     assert_ne!(before, after);
     assert_eq!(expected_state_root, after);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stop_at_rollup_height_stops_with_prefetch_backlog() -> anyhow::Result<()> {
+    let tmp_dir = tempfile::tempdir()?;
+    let sequencer_address = MockAddress::new([11u8; 32]);
+    let genesis_params = vec![1, 2, 3, 4, 5];
+    let stop_at_height = RollupHeight::new(3);
+
+    let da_service = Arc::new(MockDaService::new(sequencer_address).with_wait_attempts(2));
+    let genesis_block = da_service.get_block_at(0).await?;
+
+    for _ in 0..100 {
+        da_service.send_transaction(&batch(vec![1])).await.await??;
+    }
+
+    let init_variant: MockInitVariant = InitVariant::Genesis {
+        block: genesis_block,
+        genesis_params: genesis_params.into(),
+    };
+
+    let (mut runner, _before, test_node) = initialize_runner_with_stop_at(
+        da_service,
+        tmp_dir.path(),
+        init_variant,
+        1,
+        None,
+        Some(stop_at_height),
+    )
+    .await;
+
+    tokio::time::timeout(std::time::Duration::from_secs(20), runner.run_in_process()).await??;
+    drop(runner);
+    test_node.stop().await;
+
+    Ok(())
 }
 
 fn get_saved_root_hash(
