@@ -48,10 +48,13 @@ where
             data.relevant_blobs.as_iters(),
             ExecutionContext::Node,
         );
+        let final_state_root = result.state_root;
+        let slot_number = result.slot_number;
 
         let out: StateTransitionPublicData<Stf::Address, Da::Spec, _> = StateTransitionPublicData {
             initial_state_root: data.initial_state_root,
-            final_state_root: result.state_root,
+            final_state_root,
+            slot_number,
             slot_hash: data.da_block_header.hash(),
             prover_address,
         };

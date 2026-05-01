@@ -16,7 +16,7 @@ use sov_mock_da::{
 };
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
-use sov_rollup_interface::da::{DaSpec, RelevantBlobIters};
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::GenesisParams;
@@ -89,7 +89,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
         _pre_state_root: &Self::StateRoot,
         _base_state: Self::PreState,
         _witness: Self::Witness,
-        _slot_header: &Da::BlockHeader,
+        slot_header: &Da::BlockHeader,
         _relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         _execution_context: ExecutionContext,
     ) -> ApplySlotOutput<Da, Self> {
@@ -106,6 +106,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
             discarded_blobs: Default::default(),
             witness: (),
             rollup_height: RollupHeight::new(0),
+            slot_number: SlotNumber::new(slot_header.height()),
         }
     }
 }

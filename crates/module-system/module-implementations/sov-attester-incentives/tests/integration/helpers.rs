@@ -264,6 +264,7 @@ pub(crate) fn build_challenge(
     > = StateTransitionPublicData {
         initial_state_root: *current_transition.slot().prev_state_root(),
         final_state_root: *current_transition.post_state_root(),
+        slot_number: challenge_slot,
         slot_hash: *current_transition.slot().slot_hash(),
         prover_address,
     };

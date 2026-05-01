@@ -28,6 +28,7 @@ pub use verifier::StateTransitionVerifier;
 
 use super::optimistic::Attestation;
 use crate::common::{HexHash, RollupHeight};
+use crate::common::SlotNumber;
 use crate::da::{DaSpec, RelevantBlobIters};
 use crate::zk::aggregated_proof::{AggregatedProofPublicData, SerializedAggregatedProof};
 use crate::zk::StateTransitionPublicData;
@@ -329,6 +330,8 @@ pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
     pub witness: Witness,
     /// The rollup height before applying the changes.
     pub rollup_height: RollupHeight,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
 }
 
 /// The result of applying a slot to current state.

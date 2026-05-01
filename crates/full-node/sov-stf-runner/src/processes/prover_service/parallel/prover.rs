@@ -154,6 +154,7 @@ where
                         st: StateTransitionPublicData::<Address, Da::Spec, StateRoot> {
                             initial_state_root,
                             final_state_root,
+                            slot_number,
                             slot_hash: block_header_hash.clone(),
                             prover_address,
                         },

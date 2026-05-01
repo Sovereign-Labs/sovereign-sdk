@@ -18,6 +18,7 @@ use sov_universal_wallet::UniversalWallet;
 
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
+use crate::common::SlotNumber;
 use crate::zk::aggregated_proof::SerializedAggregatedProof;
 
 /// The `CryptoSpec` trait configures the cryptographic primitives used by a particular instance of a rollup.
@@ -195,6 +196,8 @@ pub struct StateTransitionPublicData<Address, Da: DaSpec, Root> {
         deserialize = "Root: borsh::de::BorshDeserialize"
     ))]
     pub final_state_root: Root,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
     /// The slot hash of the state transition
     #[borsh(bound(
         serialize = "<Da as DaSpec>::SlotHash: borsh::ser::BorshSerialize",

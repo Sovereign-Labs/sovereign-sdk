@@ -140,7 +140,7 @@ where
             )
             .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
-        let current_slot_number = SlotNumber::new(proof_input.da_block_header.height());
+        let current_slot_number = stf_public_data.slot_number;
 
         // Verify DA block hash-chain continuity: each block's prev_hash must equal
         // the predecessor's hash. Also cross-check that the DA header hash matches
