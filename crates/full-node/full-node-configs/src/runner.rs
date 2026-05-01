@@ -133,6 +133,16 @@ pub struct ProofManagerConfig<Address> {
     /// When false, submission is deferred until the batch is full, then submitted concurrently.
     #[serde(default = "default_eager_proof_submission")]
     pub eager_proof_submission: bool,
+    /// Override for the number of prover threads. When `None`, defaults to
+    /// `2 * aggregated_proof_block_jump + 1`, which covers inner proofs for
+    /// the current and next batch plus one outer-aggregation worker.
+    #[serde(default)]
+    pub prover_thread_count_override: Option<NonZero<usize>>,
+    /// Maximum number of completed aggregation windows that can be buffered in
+    /// memory between the intake task and the aggregator task. When the
+    /// aggregator falls behind by this many windows, intake stalls and
+    /// back-pressure propagates upstream.
+    pub max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
 }
 
 fn default_eager_proof_submission() -> bool {
@@ -140,11 +150,11 @@ fn default_eager_proof_submission() -> bool {
 }
 
 impl<Address> ProofManagerConfig<Address> {
-    /// Number of prover threads required to fully pipeline aggregation:
-    /// `2 * aggregated_proof_block_jump + 1` covers inner proofs for the
-    /// current and next batch plus one outer-aggregation worker.
+    /// Number of prover threads.
     pub fn prover_thread_count(&self) -> usize {
-        2 * self.aggregated_proof_block_jump.get() + 1
+        self.prover_thread_count_override
+            .map(|n| n.get())
+            .unwrap_or_else(|| 2 * self.aggregated_proof_block_jump.get() + 1)
     }
 }
 
@@ -225,8 +235,9 @@ mod tests {
             [proof_manager]
             aggregated_proof_block_jump = 22
             prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-            max_number_of_transitions_in_db = 1025
-            max_number_of_transitions_in_memory = 768
+            max_number_of_transitions_in_db = 1000
+            max_number_of_transitions_in_memory = 100
+            max_number_of_aggregated_proofs_in_memory = 5
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
@@ -268,8 +279,9 @@ mod tests {
             [proof_manager]
             aggregated_proof_block_jump = 22
             prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-            max_number_of_transitions_in_db = 1025
-            max_number_of_transitions_in_memory = 768
+            max_number_of_transitions_in_db = 1000
+            max_number_of_transitions_in_memory = 100
+            max_number_of_aggregated_proofs_in_memory = 5
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
@@ -321,8 +333,9 @@ mod tests {
             [proof_manager]
             aggregated_proof_block_jump = 22
             prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-            max_number_of_transitions_in_db = 1025
-            max_number_of_transitions_in_memory = 768
+            max_number_of_transitions_in_db = 1000
+            max_number_of_transitions_in_memory = 100
+            max_number_of_aggregated_proofs_in_memory = 5
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576

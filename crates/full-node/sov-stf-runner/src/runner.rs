@@ -41,8 +41,16 @@ fn validate_proof_manager_config<Address>(
 ) -> anyhow::Result<()> {
     let aggregated_proof_block_jump = u64::try_from(config.aggregated_proof_block_jump.get())
         .context("aggregated_proof_block_jump does not fit in u64")?;
+    let buffered_windows = u64::try_from(config.max_number_of_aggregated_proofs_in_memory.get())
+        .context("max_number_of_aggregated_proofs_in_memory does not fit in u64")?;
+    // Windows resident across the pipeline: the one intake is filling, the one
+    // the aggregator is working on, plus `buffered_windows` queued in the
+    // intake→aggregator channel.
+    let pipelined_windows = buffered_windows
+        .checked_add(2)
+        .context("aggregated proof window count overflowed")?;
     let pipelined_backlog = aggregated_proof_block_jump
-        .checked_mul(3)
+        .checked_mul(pipelined_windows)
         .context("aggregated proof backlog overflowed")?;
     let required_transitions_in_db = config
         .max_number_of_transitions_in_memory
@@ -52,10 +60,11 @@ fn validate_proof_manager_config<Address>(
 
     anyhow::ensure!(
         config.max_number_of_transitions_in_db.get() >= required_transitions_in_db,
-        "Invalid proof manager config: `max_number_of_transitions_in_db` must be at least `max_number_of_transitions_in_memory + 3 * aggregated_proof_block_jump` for pipelined aggregated proof posting (got db={}, memory={}, jump={}, required={})",
+        "Invalid proof manager config: `max_number_of_transitions_in_db` must be at least `max_number_of_transitions_in_memory + (max_number_of_aggregated_proofs_in_memory + 2) * aggregated_proof_block_jump` for pipelined aggregated proof posting (got db={}, memory={}, jump={}, buffered={}, required={})",
         config.max_number_of_transitions_in_db,
         config.max_number_of_transitions_in_memory,
         config.aggregated_proof_block_jump,
+        config.max_number_of_aggregated_proofs_in_memory,
         required_transitions_in_db,
     );
 

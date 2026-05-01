@@ -644,6 +644,7 @@
       "type": "object",
       "required": [
         "aggregated_proof_block_jump",
+        "max_number_of_aggregated_proofs_in_memory",
         "max_number_of_transitions_in_db",
         "max_number_of_transitions_in_memory",
         "prover_address"
@@ -659,6 +660,12 @@
           "description": "When true, proofs are submitted as each block arrives. When false, submission is deferred until the batch is full, then submitted concurrently.",
           "default": true,
           "type": "boolean"
+        },
+        "max_number_of_aggregated_proofs_in_memory": {
+          "description": "Maximum number of completed aggregation windows that can be buffered in memory between the intake task and the aggregator task. When the aggregator falls behind by this many windows, intake stalls and back-pressure propagates upstream.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 1.0
         },
         "max_number_of_transitions_in_db": {
           "description": "A number of state transition info entries are allowed to be stored in the database. When the number is exceeded, older entries are removed.",
@@ -679,6 +686,16 @@
               "$ref": "#/definitions/Address"
             }
           ]
+        },
+        "prover_thread_count_override": {
+          "description": "Override for the number of prover threads. When `None`, defaults to `2 * aggregated_proof_block_jump + 1`, which covers inner proofs for the current and next batch plus one outer-aggregation worker.",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 1.0
         }
       }
     },

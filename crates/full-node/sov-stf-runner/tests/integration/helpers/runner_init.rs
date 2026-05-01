@@ -288,6 +288,9 @@ pub async fn initialize_runner(
             prover_service,
             rollup_config.proof_manager.aggregated_proof_block_jump,
             rollup_config.proof_manager.eager_proof_submission,
+            rollup_config
+                .proof_manager
+                .max_number_of_aggregated_proofs_in_memory,
             Box::new(MockProofSender {
                 da: da_service.clone(),
             }),
@@ -414,9 +417,11 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
         proof_manager: ProofManagerConfig {
             aggregated_proof_block_jump: NonZero::new(aggregated_proof_block_jump).unwrap(),
             prover_address: MockAddress::new([0u8; 32]),
-            max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
-            max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
+            max_number_of_transitions_in_db: NonZero::new(1000).unwrap(),
+            max_number_of_transitions_in_memory: NonZero::new(100).unwrap(),
             eager_proof_submission: true,
+            prover_thread_count_override: None,
+            max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
         },
         sequencer: SequencerConfig {
             automatic_batch_production: true,

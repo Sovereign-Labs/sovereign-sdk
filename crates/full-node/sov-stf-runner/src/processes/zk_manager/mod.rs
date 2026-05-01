@@ -29,6 +29,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     proofs_to_create: UnAggregatedProofList<Ps>,
     aggregated_proof_block_jump: NonZero<usize>,
     eager_proof_submission: bool,
+    max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
     genesis_state_root: Ps::StateRoot,
@@ -46,6 +47,7 @@ where
         prover_service: Ps,
         aggregated_proof_block_jump: NonZero<usize>,
         eager_proof_submission: bool,
+        max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
         proof_sender: Box<dyn ProofSender>,
         genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
@@ -56,6 +58,7 @@ where
             proofs_to_create: UnAggregatedProofList::new(),
             aggregated_proof_block_jump,
             eager_proof_submission,
+            max_number_of_aggregated_proofs_in_memory,
             proof_sender,
             backoff_policy: ExponentialBuilder::default()
                 .with_min_delay(Duration::from_secs(BACKOFF_POLICY_MIN_DELAY))
@@ -75,7 +78,9 @@ where
         tokio::spawn(async move {
             tracing::info!("Spawning an aggregated proof posting background task");
 
-            let (metadata_tx, metadata_rx) = mpsc::channel::<(AggregateProofMetadata<Ps>, u64)>(1);
+            let (metadata_tx, metadata_rx) = mpsc::channel::<(AggregateProofMetadata<Ps>, u64)>(
+                self.max_number_of_aggregated_proofs_in_memory.get(),
+            );
 
             // Cursor handle goes to the aggregator so the cursor only
             // advances after publish succeeds. See module-level docs.
@@ -211,11 +216,11 @@ where
             let metadata = self.proofs_to_create.take_oldest();
             let window_size = num_proofs_to_create as u64;
 
-            // 1-deep channel: blocks here only when the aggregator already
-            // has one window in flight AND a second buffered. While blocked,
-            // intake stops draining the STF-info mpsc, which propagates
-            // back-pressure upstream to the runner exactly as in the
-            // pre-pipelining design.
+            // Capacity is `max_number_of_aggregated_proofs_in_memory`: blocks
+            // here only once the aggregator has one window in flight AND that
+            // many windows buffered. While blocked, intake stops draining the
+            // STF-info mpsc, which propagates back-pressure upstream to the
+            // runner exactly as in the pre-pipelining design.
             self.metadata_tx
                 .send((metadata, window_size))
                 .await
@@ -224,11 +229,13 @@ where
                 })?;
         }
 
+        let pending_agg_metadata = self.metadata_tx.max_capacity() - self.metadata_tx.capacity();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(super::metrics::ZkProofManagerMetrics {
                 proving_lag: received_slot_number.get() - first_height_unproven.get(),
                 proofs_to_create: self.proofs_to_create.current_proof_jump(),
                 slot_number: received_slot_number.get(),
+                pending_agg_metadata,
             });
         });
 
@@ -236,9 +243,6 @@ where
     }
 }
 
-/// Aggregator side of [`ZkProofManager`]. Pulls completed windows from the
-/// 1-deep mpsc, runs the (necessarily serial) recursive aggregation, and
-/// publishes the resulting blob to DA.
 struct AggregatorTask<Ps: ProverService> {
     prover_service: Arc<Ps>,
     proof_sender: Box<dyn ProofSender>,
