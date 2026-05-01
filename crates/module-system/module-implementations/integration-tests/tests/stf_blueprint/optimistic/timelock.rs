@@ -2,27 +2,27 @@ use std::num::NonZeroU64;
 
 use sov_modules_api::capabilities::TimelockPolicy;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_test_modules::hooks_count::TxHooksCount;
+use sov_modules_api::TxEffect;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
 use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, AsUser, TestUser, TransactionTestCase,
 };
-use sov_value_setter::{CallMessage, ValueSetterConfig};
+use sov_value_setter::{CallMessage as ValueSetterCallMessage, ValueSetterConfig};
 
 use crate::stf_blueprint::S;
 
 generate_optimistic_runtime_with_kernel!(
-    TimelockRuntime <=
+    NoopTimelockRuntime <=
     kernel_type: sov_test_utils::runtime::BasicKernel<'a, S>,
     modules: [
-        value_setter: ValueSetter<S>,
-        tx_hooks_count: TxHooksCount<S>,
-        timelock: sov_timelock::Timelock<S>
+        value_setter: ValueSetter<S>
     ],
-    timelock_policy_wrapper: |call: &TimelockRuntimeCall<S>| {
+    timelock_policy_wrapper: |call: &NoopTimelockRuntimeCall<S>| {
         match call {
-            TimelockRuntimeCall::ValueSetter(CallMessage::SetValue { value: 7, .. }) => {
+            NoopTimelockRuntimeCall::ValueSetter(
+                ValueSetterCallMessage::SetValue { value: 7, .. }
+            ) => {
                 Some(TimelockPolicy {
                     unlock_seconds_from_proposal: NonZeroU64::new(60).unwrap(),
                     expire_seconds_after_unlock_override: Some(60),
@@ -33,7 +33,7 @@ generate_optimistic_runtime_with_kernel!(
     },
 );
 
-type RT = TimelockRuntime<S>;
+type RT = NoopTimelockRuntime<S>;
 
 fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
     let genesis_config =
@@ -50,8 +50,6 @@ fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
         ValueSetterConfig {
             admin: admin.address(),
         },
-        (),
-        (),
     );
 
     let runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
@@ -60,89 +58,28 @@ fn setup() -> (TestUser<S>, TestRunner<RT, S>) {
 }
 
 #[test]
-fn timelocked_call_registers_proposal_without_dispatching_call() {
+fn timelocked_call_is_rejected_when_timelock_capability_is_unavailable() {
     let (admin, mut runner) = setup();
 
     runner.execute_transaction(TransactionTestCase {
-        input: admin.create_plain_message::<RT, ValueSetter<S>>(CallMessage::SetValue {
+        input: admin.create_plain_message::<RT, ValueSetter<S>>(ValueSetterCallMessage::SetValue {
             value: 7,
             gas: None,
         }),
         assert: Box::new(|result, state| {
-            assert!(result.tx_receipt.is_successful());
+            let TxEffect::Reverted(contents) = &result.tx_receipt else {
+                panic!("expected reverted transaction, got {:?}", result.tx_receipt);
+            };
+            assert!(contents
+                .reason
+                .to_string()
+                .contains("Timelocks are not available"));
             assert_eq!(
                 ValueSetter::<S>::default()
                     .value
                     .get(state)
                     .unwrap_infallible(),
                 None
-            );
-            assert_eq!(
-                TxHooksCount::<S>::default()
-                    .post_dispatch_tx_hook_count
-                    .get(state)
-                    .unwrap_infallible(),
-                Some(1)
-            );
-        }),
-    });
-}
-
-#[test]
-fn repeated_timelocked_call_still_registers_without_dispatching_call() {
-    let (admin, mut runner) = setup();
-
-    for count in 1..=2 {
-        runner.execute_transaction(TransactionTestCase {
-            input: admin.create_plain_message::<RT, ValueSetter<S>>(CallMessage::SetValue {
-                value: 7,
-                gas: None,
-            }),
-            assert: Box::new(move |result, state| {
-                assert!(result.tx_receipt.is_successful());
-                assert_eq!(
-                    ValueSetter::<S>::default()
-                        .value
-                        .get(state)
-                        .unwrap_infallible(),
-                    None
-                );
-                assert_eq!(
-                    TxHooksCount::<S>::default()
-                        .post_dispatch_tx_hook_count
-                        .get(state)
-                        .unwrap_infallible(),
-                    Some(count)
-                );
-            }),
-        });
-    }
-}
-
-#[test]
-fn untimelocked_call_dispatches_normally() {
-    let (admin, mut runner) = setup();
-
-    runner.execute_transaction(TransactionTestCase {
-        input: admin.create_plain_message::<RT, ValueSetter<S>>(CallMessage::SetValue {
-            value: 8,
-            gas: None,
-        }),
-        assert: Box::new(|result, state| {
-            assert!(result.tx_receipt.is_successful());
-            assert_eq!(
-                ValueSetter::<S>::default()
-                    .value
-                    .get(state)
-                    .unwrap_infallible(),
-                Some(8)
-            );
-            assert_eq!(
-                TxHooksCount::<S>::default()
-                    .post_dispatch_tx_hook_count
-                    .get(state)
-                    .unwrap_infallible(),
-                Some(1)
             );
         }),
     });

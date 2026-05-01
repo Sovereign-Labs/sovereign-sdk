@@ -1,8 +1,9 @@
 use borsh::BorshDeserialize;
-use sov_modules_api::capabilities::{
-    calculate_hash_metered, HasCapabilities, SequencingDataHandler, TimelockCapability,
-};
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
+use sov_modules_api::capabilities::{
+    HasCapabilities, SequencingDataHandler, TimelockCapability, TimelockProposalData,
+    TimelockProposalOutcome,
+};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
@@ -139,23 +140,18 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
     runtime.pre_dispatch_tx_hook(tx, state)?;
 
     if let Some(policy) = runtime.timelock_for_callmessage(&message) {
-        let encoded_message = RT::encode(&message);
-        let proposal_id = calculate_hash_metered::<_, S>(&encoded_message, state)
-            .map_err(|error| Error::from(anyhow::anyhow!(error)))?;
-        let proposal_exists = {
-            let timelock = runtime.timelock();
-            timelock.has_proposal(ctx.sender(), &proposal_id, state)?
-        };
-
-        if proposal_exists {
-            {
-                let mut timelock = runtime.timelock();
-                timelock.try_unlock_proposal(ctx.sender(), &proposal_id, state)?;
-            }
-            runtime.dispatch_call(message, state, ctx)?;
-        } else {
+        let outcome = {
             let mut timelock = runtime.timelock();
-            timelock.register_proposal(ctx.sender(), proposal_id, policy, state)?;
+            timelock.register_or_try_unlock_proposal(
+                ctx.sender(),
+                TimelockProposalData::call_message(RT::encode(&message)),
+                policy,
+                state,
+            )?
+        };
+        match outcome {
+            TimelockProposalOutcome::Registered => {}
+            TimelockProposalOutcome::Unlocked => runtime.dispatch_call(message, state, ctx)?,
         }
     } else {
         runtime.dispatch_call(message, state, ctx)?;
