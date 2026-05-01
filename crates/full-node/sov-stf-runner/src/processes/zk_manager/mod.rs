@@ -229,8 +229,7 @@ where
                 })?;
         }
 
-        let pending_agg_metadata =
-            self.metadata_tx.max_capacity() - self.metadata_tx.capacity();
+        let pending_agg_metadata = self.metadata_tx.max_capacity() - self.metadata_tx.capacity();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(super::metrics::ZkProofManagerMetrics {
                 proving_lag: received_slot_number.get() - first_height_unproven.get(),
