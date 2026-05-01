@@ -95,20 +95,7 @@ impl<S: Spec> Timelock<S> {
     ) -> Result<(), Error<S>> {
         let current_time = self.current_time_secs(state)?;
         for key in proposal_keys {
-            let mut attempt_state = state.to_revertable();
-            match self.clean_expired_proposal(&key, current_time, &mut attempt_state) {
-                Ok(()) => {
-                    attempt_state.commit();
-                }
-                Err(Error::Timelock(TimelockError::ProposalNotFound))
-                | Err(Error::ProposalNotExpired { .. }) => {
-                    attempt_state.revert();
-                }
-                Err(error) => {
-                    attempt_state.revert();
-                    return Err(error);
-                }
-            }
+            self.clean_expired_proposal(&key, current_time, state)?;
         }
 
         Ok(())

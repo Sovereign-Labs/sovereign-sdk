@@ -324,8 +324,7 @@ fn zero_expiry_policy_executes_at_exact_unlock_timestamp() {
         assert: Box::new({
             let proposal_key = proposal_key.clone();
             move |result, state| {
-                assert!(result.tx_receipt.is_successful());
-                assert_eq!(result.events, vec![]);
+                assert!(result.tx_receipt.is_reverted());
                 assert!(pending_proposal(state, &proposal_key).is_some());
                 assert_eq!(proposal_count(state, &admin_address), Some(1));
                 assert_eq!(stored_value(state), None);
@@ -627,12 +626,11 @@ fn expired_proposals_can_be_batch_cleaned_without_owner_permission() {
 }
 
 #[test]
-fn cleanup_skips_unexpired_and_missing_proposals() {
+fn cleanup_reverts_on_unexpired_or_missing_proposals() {
     let (admin, mut runner) = setup();
     let admin_address = admin.address();
     let expired_proposal_key = set_value_proposal_key(admin_address, 100);
     let unexpired_proposal_key = set_value_proposal_key(admin_address, 101);
-    let expired_proposal_id = expired_proposal_key.1;
     let missing_proposal_key = ProposalKey(admin_address, ProposalId::new([9; 32]));
 
     register_set_value_proposal(&mut runner, &admin, 100);
@@ -647,24 +645,35 @@ fn cleanup_skips_unexpired_and_missing_proposals() {
                 proposal_keys: cleanup_keys(vec![
                     expired_proposal_key.clone(),
                     unexpired_proposal_key.clone(),
+                ]),
+            },
+        ),
+        assert: Box::new({
+            let expired_proposal_key = expired_proposal_key.clone();
+            let unexpired_proposal_key = unexpired_proposal_key.clone();
+            move |result, state| {
+                assert!(result.tx_receipt.is_reverted());
+                assert!(pending_proposal(state, &expired_proposal_key).is_some());
+                assert!(pending_proposal(state, &unexpired_proposal_key).is_some());
+                assert_eq!(proposal_count(state, &admin_address), Some(2));
+            }
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin.create_plain_message::<RT, Timelock<S>>(
+            sov_timelock::CallMessage::CleanExpiredProposals {
+                proposal_keys: cleanup_keys(vec![
+                    expired_proposal_key.clone(),
                     missing_proposal_key,
                 ]),
             },
         ),
         assert: Box::new(move |result, state| {
-            assert!(result.tx_receipt.is_successful());
-            assert_eq!(
-                result.events,
-                vec![TimelockRuntimeEvent::Timelock(
-                    TimelockEvent::ExpiredProposalCleaned {
-                        address: admin_address,
-                        proposal_id: expired_proposal_id,
-                    }
-                )]
-            );
-            assert!(pending_proposal(state, &expired_proposal_key).is_none());
+            assert!(result.tx_receipt.is_reverted());
+            assert!(pending_proposal(state, &expired_proposal_key).is_some());
             assert!(pending_proposal(state, &unexpired_proposal_key).is_some());
-            assert_eq!(proposal_count(state, &admin_address), Some(1));
+            assert_eq!(proposal_count(state, &admin_address), Some(2));
         }),
     });
 }
