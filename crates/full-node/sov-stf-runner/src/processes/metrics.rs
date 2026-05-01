@@ -39,6 +39,9 @@ pub(crate) struct ZkProofManagerMetrics {
     pub proofs_to_create: usize,
     /// The slot number of the most recently received state transition.
     pub slot_number: u64,
+    /// Number of pending aggregated-proof metadata items currently buffered in the
+    /// intake-to-aggregator channel (capacity `max_number_of_aggregated_proofs_in_memory`).
+    pub pending_agg_metadata: usize,
 }
 
 impl Metric for ZkProofManagerMetrics {
@@ -49,11 +52,12 @@ impl Metric for ZkProofManagerMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} proving_lag={}i,proofs_to_create={}i,slot_number={}i",
+            "{} proving_lag={}i,proofs_to_create={}i,slot_number={}i,pending_agg_metadata={}i",
             self.measurement_name(),
             self.proving_lag,
             self.proofs_to_create,
             self.slot_number,
+            self.pending_agg_metadata,
         )
     }
 }

@@ -579,6 +579,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         prover_service,
                         rollup_config.proof_manager.aggregated_proof_block_jump,
                         rollup_config.proof_manager.eager_proof_submission,
+                        rollup_config
+                            .proof_manager
+                            .max_number_of_aggregated_proofs_in_memory,
                         proof_sender,
                         genesis_state_root,
                         stf_info_receiver,
