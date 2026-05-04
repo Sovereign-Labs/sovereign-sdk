@@ -74,13 +74,6 @@ where
     type ProverService = <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::ProverService;
     type ProofSender = <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::ProofSender;
 
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as sov_stf_runner::processes::ProverService>::Verifier as sov_modules_api::ZkVerifier>::CodeCommitment
-    {
-        self.inner.create_outer_code_commitment()
-    }
-
     async fn create_endpoints(
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
@@ -143,9 +136,13 @@ where
         prover_config: sov_stf_runner::processes::RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &sov_db::ledger_db::LedgerDb,
+    ) -> (
+        Self::ProverService,
+        Option<sov_rollup_interface::common::SlotNumber>,
+    ) {
         self.inner
-            .create_prover_service(prover_config, rollup_config, da_service)
+            .create_prover_service(prover_config, rollup_config, da_service, ledger_db)
             .await
     }
 
@@ -165,6 +162,13 @@ where
     ) -> anyhow::Result<Self::ProofSender> {
         self.inner
             .create_proof_sender(rollup_config, proof_blob_sender)
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(
+        sov_modules_api::CodeCommitmentFor<<Self::Spec as Spec>::InnerZkvm>,
+        sov_modules_api::CodeCommitmentFor<<Self::Spec as Spec>::OuterZkvm>,
+    )> {
+        <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::compute_code_commitments()
     }
 }
 

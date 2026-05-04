@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 
+use crate::processes::metrics::PendingProverTasksMetric;
+
 pub(crate) enum ProverStatus<Address, StateRoot, Da: DaSpec> {
     ProvingInProgress,
     Proved(BlockProof<Address, Da, StateRoot>),
@@ -54,11 +56,22 @@ impl<Address, StateRoot, Da: DaSpec> ProverState<Address, StateRoot, Da> {
         }
 
         self.pending_tasks_count += 1;
+        self.emit_pending_tasks_metric();
         true
     }
 
     pub(crate) fn dec_task_count(&mut self) {
         assert!(self.pending_tasks_count > 0);
         self.pending_tasks_count -= 1;
+        self.emit_pending_tasks_metric();
+    }
+
+    fn emit_pending_tasks_metric(&self) {
+        let pending_tasks_count = self.pending_tasks_count;
+        sov_metrics::track_metrics(move |tracker| {
+            tracker.submit(PendingProverTasksMetric {
+                pending_tasks_count,
+            });
+        });
     }
 }

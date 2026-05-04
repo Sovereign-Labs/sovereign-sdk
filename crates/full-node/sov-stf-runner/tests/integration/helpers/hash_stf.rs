@@ -5,11 +5,11 @@ use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::{
     AggregatedProofPublicData, ProofOutcome, ProofReceipt, ProofReceiptContents, Storage,
 };
-use sov_rollup_interface::common::RollupHeight;
+use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::stf::{ApplySlotOutput, GenesisParams, StateTransitionFunction};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::ZkVerifier;
+use sov_rollup_interface::zk::{SerializedZkProof, ZkVerifier};
 use sov_state::namespaces::User;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::storage::{NativeStorage, SlotKey, SlotValue};
@@ -175,9 +175,12 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for HashStf {
             if raw_proof.is_empty() {
                 continue;
             }
+            let serialized_proof = SerializedZkProof {
+                raw_proof: raw_proof.to_vec(),
+            };
             let public_data: AggregatedProofPublicData<Self::Address, Da, Self::StateRoot> =
-                match <MockZkVerifier as ZkVerifier>::verify(
-                    raw_proof,
+                match <MockZkVerifier as ZkVerifier>::verify_with_proof(
+                    &serialized_proof,
                     &MockCodeCommitment::default(),
                 ) {
                     Ok(public_data) => public_data,
@@ -218,7 +221,8 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for HashStf {
             batch_receipts: vec![],
             discarded_blobs: vec![],
             witness,
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
+            slot_number: SlotNumber::new(slot_header.height()),
         }
     }
 }

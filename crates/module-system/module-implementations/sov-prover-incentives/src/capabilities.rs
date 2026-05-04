@@ -3,7 +3,7 @@ use std::cmp::max;
 use sov_bank::{config_gas_token_id, Amount, Coins, IntoPayable};
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
-    AggregatedProofPublicData, Gas, GasSpec, GetGasPrice, InvalidProofError,
+    AggregatedProofPublicData, ExecutionContext, Gas, GasSpec, GetGasPrice, InvalidProofError,
     SerializedAggregatedProof, Spec, StateReader, Storage, TxState, VersionReader, ZkVerifier,
     Zkvm,
 };
@@ -75,6 +75,7 @@ impl<S: Spec> ProverIncentives<S> {
         &mut self,
         proof: &SerializedAggregatedProof,
         prover_address: &S::Address,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<
         AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
@@ -127,9 +128,10 @@ impl<S: Spec> ProverIncentives<S> {
             .map_err(Into::<anyhow::Error>::into)?;
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
-        let verification_result = <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify::<
-            AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-        >(&proof.raw_aggregated_proof, &code_commitment);
+        let verification_result =
+            <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
+                AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+            >(&proof.clone().to_serialized_zk_proof(), &code_commitment);
 
         let public_outputs = match verification_result {
             Ok(public_outputs) => public_outputs,
@@ -143,6 +145,22 @@ impl<S: Spec> ProverIncentives<S> {
                 ));
             }
         };
+
+        #[cfg(feature = "native")]
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(crate::metrics::LatestVerifiedProofMetric {
+                final_slot_number: public_outputs.final_slot_number.get(),
+                execution_context: execution_context.str(),
+            });
+        });
+        #[cfg(not(feature = "native"))]
+        let _ = execution_context;
+
+        tracing::debug!(
+            %public_outputs.initial_slot_number,
+            %public_outputs.final_slot_number,
+            "Processing aggregated proof"
+        );
 
         // TODO #2551: We don’t handle real inner_code_commitment yet. Re-enable it at the end of #2551.
         /*

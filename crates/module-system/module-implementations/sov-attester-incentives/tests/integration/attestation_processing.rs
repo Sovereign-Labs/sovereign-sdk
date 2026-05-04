@@ -220,9 +220,10 @@ fn invalid_bond_proof_no_slash(
         assert: Box::new(move |result, state| {
             assert_eq!(
                 result.proof_receipt.unwrap().outcome,
-                ProofOutcome::Invalid(InvalidProofError::PreconditionNotMet(
-                    "Invalid bonding proof".to_string()
-                ))
+                ProofOutcome::Invalid(
+                    InvalidProofError::PreconditionNotMet("Invalid bonding proof".to_string()),
+                    None
+                )
             );
 
             assert_eq!(
@@ -254,7 +255,7 @@ fn invalid_initial_state_slashed(
         assert: Box::new(move |result, state| {
             assert_matches!(
                 result.proof_receipt.unwrap().outcome,
-                ProofOutcome::Invalid(InvalidProofError::ProverSlashed(_))
+                ProofOutcome::Invalid(InvalidProofError::ProverSlashed(_), _)
             );
 
             assert!(TestAttesterIncentives::default()
@@ -295,7 +296,7 @@ fn invalid_post_state_root_is_challengeable(
         assert: Box::new(move |result, state| {
             assert_matches!(
                 result.proof_receipt.unwrap().outcome,
-                ProofOutcome::Invalid(InvalidProofError::ProverSlashed(_))
+                ProofOutcome::Invalid(InvalidProofError::ProverSlashed(_), _)
             );
 
             assert!(TestAttesterIncentives::default()

@@ -9,12 +9,18 @@ use std::str::FromStr;
 use sov_celestia_adapter::types::Namespace;
 use sov_modules_api::macros::config_value;
 
+mod aggregated_proof;
+pub use aggregated_proof::read_latest_aggregated_proof;
+
 mod mock_rollup;
 
 pub use mock_rollup::*;
 
 mod mock_sp1_rollup;
 pub use mock_sp1_rollup::*;
+
+mod chain_state_override;
+pub use chain_state_override::override_code_commitments_in_chain_state;
 
 mod celestia_rollup;
 pub use celestia_rollup::*;

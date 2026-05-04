@@ -224,12 +224,12 @@ where
             }
             Message::CheckReadiness {
                 resp,
-                max_concurrent_blobs,
+                max_concurrent_batch_blobs,
                 height_to_stop_at,
                 reason,
             } => {
                 let ret = self
-                    .process_check_readiness(max_concurrent_blobs, height_to_stop_at, reason)
+                    .process_check_readiness(max_concurrent_batch_blobs, height_to_stop_at, reason)
                     .await;
 
                 self.send_response(resp, ret, "check_readiness").await;
@@ -611,13 +611,13 @@ where
 
     async fn process_check_readiness(
         &mut self,
-        max_concurrent_blobs: usize,
+        max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
         reason: &'static str,
     ) -> Result<(), SequencerNotReadyDetails> {
         let inner = self.get_inner_with_timing(reason).await;
         inner
-            .check_readiness(max_concurrent_blobs, height_to_stop_at)
+            .check_readiness(max_concurrent_batch_blobs, height_to_stop_at)
             .await
     }
 
@@ -900,7 +900,7 @@ where
 
         inner
             .check_readiness(
-                inner.seq_config.max_concurrent_blobs,
+                inner.seq_config.max_concurrent_batch_blobs,
                 inner.stop_at_rollup_height,
             )
             .await
@@ -917,7 +917,7 @@ where
 
             return Err(AcceptTxError::BatchError {
                 batch_creation_error,
-                nb_of_concurrent_blob_submissions: inner.nb_of_concurrent_blob_submissions(),
+                nb_of_batch_blobs_in_flight: inner.nb_of_concurrent_batch_blob_submissions(),
             });
         };
 

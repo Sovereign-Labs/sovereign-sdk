@@ -52,7 +52,7 @@ async fn start_node(
     .enable_prover()
     .with_rate_limiter(rate_limiter)
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
@@ -137,7 +137,7 @@ pub async fn setup_test_rollup_with_paymaster(
     )
     .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;
@@ -169,7 +169,7 @@ pub async fn setup_test_rollup_with_selective_paymaster(
     )
     .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;

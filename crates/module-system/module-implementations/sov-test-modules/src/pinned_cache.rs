@@ -30,6 +30,11 @@ pub enum CallMessage {
         write_indexes: Option<ValueRange>,
         expected_storage_accesses: Option<u64>,
     },
+    ModifyStateMap {
+        address: HexHash,
+        index: u32,
+        new_value: Option<u32>,
+    },
 }
 
 #[derive(
@@ -52,7 +57,7 @@ pub struct ValueRange {
 
 /// A module for testing the block-level cache.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
-pub struct PinnedCacheTester<S: Spec> {
+pub struct StateMapTester<S: Spec> {
     /// The ID of the module.
     #[id]
     pub id: ModuleId,
@@ -64,10 +69,22 @@ pub struct PinnedCacheTester<S: Spec> {
     _phantom: std::marker::PhantomData<S>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Hash, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+)]
 pub struct StateKey {
-    address: HexHash,
-    index: u32,
+    pub address: HexHash,
+    pub index: u32,
 }
 
 impl std::fmt::Display for StateKey {
@@ -88,7 +105,7 @@ impl std::str::FromStr for StateKey {
     }
 }
 
-impl<S: Spec> PinnedCacheTester<S> {
+impl<S: Spec> StateMapTester<S> {
     /// Get the bucket ID for a given address.
     pub fn get_bucket_id(&self, address: &HexHash) -> BucketId {
         let key = StateKey {
@@ -99,7 +116,7 @@ impl<S: Spec> PinnedCacheTester<S> {
     }
 }
 
-impl<S: Spec> Module for PinnedCacheTester<S> {
+impl<S: Spec> Module for StateMapTester<S> {
     type Error = anyhow::Error;
 
     type Spec = S;
@@ -160,6 +177,22 @@ impl<S: Spec> Module for PinnedCacheTester<S> {
                         num_accesses, expected_storage_accesses,
                         "Unexpected number of storage accesses. Expected: {expected_storage_accesses}, Actual: {num_accesses}",
                     );
+                }
+                Ok(())
+            }
+            CallMessage::ModifyStateMap {
+                address,
+                index,
+                new_value,
+            } => {
+                let key = StateKey { index, address };
+                match new_value {
+                    Some(new_value) => {
+                        self.values.set(&key, &new_value, state)?;
+                    }
+                    None => {
+                        self.values.delete(&key, state)?;
+                    }
                 }
                 Ok(())
             }

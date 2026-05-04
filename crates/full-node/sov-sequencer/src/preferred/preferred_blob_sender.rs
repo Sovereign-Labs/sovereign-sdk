@@ -22,7 +22,7 @@ use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
 pub struct PreferredBlobSender<Da: DaService> {
     inner: Option<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>,
-    nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
+    nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
 }
 
 impl<Da: DaService> PreferredBlobSender<Da> {
@@ -37,12 +37,12 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         match seq_role {
             SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica => Ok((
                 Self {
                     inner: None,
-                    nb_of_concurrent_blob_submissions,
+                    nb_of_concurrent_batch_blob_submissions,
                 },
                 None,
             )),
@@ -63,14 +63,15 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                     blob_processing_timeout,
                     Some(blobs_sender_channel),
                     blobs_to_send,
-                    nb_of_concurrent_blob_submissions.clone(),
+                    nb_of_concurrent_batch_blob_submissions.clone(),
+                    Arc::new(AtomicUsize::new(0)),
                 )
                 .await?;
 
                 Ok((
                     Self {
                         inner: Some(inner),
-                        nb_of_concurrent_blob_submissions,
+                        nb_of_concurrent_batch_blob_submissions,
                     },
                     Some(blob_sender_handle),
                 ))
@@ -132,8 +133,8 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         Ok(())
     }
 
-    pub(crate) fn nb_of_in_flight_blobs(&self) -> Arc<AtomicUsize> {
-        self.nb_of_concurrent_blob_submissions.clone()
+    pub(crate) fn nb_of_in_flight_batch_blobs(&self) -> Arc<AtomicUsize> {
+        self.nb_of_concurrent_batch_blob_submissions.clone()
     }
 
     pub(crate) async fn add_txs(&self, blob_id: BlobInternalId, tx_hashes: Arc<Vec<TxHash>>) {

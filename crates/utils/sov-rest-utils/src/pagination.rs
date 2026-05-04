@@ -119,7 +119,7 @@ pub enum PageSelection<T> {
 ///
 /// Returns the items of the request as well as a
 /// cursor for the next page if we're not at the end of the pagination.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct PaginatedResponse<T, C> {
     /// Items retireved by the request.
     pub items: Vec<T>,

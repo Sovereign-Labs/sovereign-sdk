@@ -3520,15 +3520,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "debugid"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bef552e6f588e446098f6ba40d89ac146c8c7b64aade83c051ee00bb5d2bc18d"
-dependencies = [
- "uuid",
-]
-
-[[package]]
 name = "deepsize2"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4769,17 +4760,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gecko_profile"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "890852c7e1e02bc6758e325d6b1e0236e4fbf21b492f585ce4d4715be54b4c6a"
-dependencies = [
- "debugid",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "gen_ops"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5772,6 +5752,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-test-modules",
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
@@ -9570,7 +9551,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=00d4a84f0b9256da681e2138949e01e4c138a5ae#00d4a84f0b9256da681e2138949e01e4c138a5ae"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=d8b270d399d0d355a19fbeedf9af009baee8ae66#d8b270d399d0d355a19fbeedf9af009baee8ae66"
 dependencies = [
  "anyhow",
  "parking_lot",
@@ -12393,6 +12374,7 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-db",
+ "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
@@ -13040,6 +13022,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-timelock"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-test-modules",
+ "sov-test-utils",
+ "sov-timelock",
+ "sov-value-setter",
+ "strum 0.26.3",
+ "thiserror 2.0.17",
+]
+
+[[package]]
 name = "sov-transaction-generator"
 version = "0.3.0"
 dependencies = [
@@ -13253,15 +13254,12 @@ dependencies = [
  "elf",
  "enum-map",
  "eyre",
- "gecko_profile",
  "hashbrown 0.14.5",
  "hex",
- "indicatif",
  "itertools 0.14.0",
  "memmap2",
  "num",
  "rrs-succinct",
- "rustc-demangle",
  "serde",
  "serde_arrays 0.2.0",
  "serde_json",

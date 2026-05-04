@@ -22,7 +22,6 @@ use sov_rollup_interface::stf::{
     StateTransitionFunction,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
 use tokio::sync::watch;
@@ -30,12 +29,47 @@ use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::processes::{new_stf_info_channel, Receiver};
-use crate::state_manager::{BlockCandidateResolution, StateManager};
+use crate::state_manager::{AggregatedProofs, BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
 type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 type NextDaHeightToProcess = u64;
+
+fn validate_proof_manager_config<Address>(
+    config: &ProofManagerConfig<Address>,
+) -> anyhow::Result<()> {
+    let aggregated_proof_block_jump = u64::try_from(config.aggregated_proof_block_jump.get())
+        .context("aggregated_proof_block_jump does not fit in u64")?;
+    let buffered_windows = u64::try_from(config.max_number_of_aggregated_proofs_in_memory.get())
+        .context("max_number_of_aggregated_proofs_in_memory does not fit in u64")?;
+    // Windows resident across the pipeline: the one intake is filling, the one
+    // the aggregator is working on, plus `buffered_windows` queued in the
+    // intake→aggregator channel.
+    let pipelined_windows = buffered_windows
+        .checked_add(2)
+        .context("aggregated proof window count overflowed")?;
+    let pipelined_backlog = aggregated_proof_block_jump
+        .checked_mul(pipelined_windows)
+        .context("aggregated proof backlog overflowed")?;
+    let required_transitions_in_db = config
+        .max_number_of_transitions_in_memory
+        .get()
+        .checked_add(pipelined_backlog)
+        .context("required STF info DB capacity overflowed")?;
+
+    anyhow::ensure!(
+        config.max_number_of_transitions_in_db.get() >= required_transitions_in_db,
+        "Invalid proof manager config: `max_number_of_transitions_in_db` must be at least `max_number_of_transitions_in_memory + (max_number_of_aggregated_proofs_in_memory + 2) * aggregated_proof_block_jump` for pipelined aggregated proof posting (got db={}, memory={}, jump={}, buffered={}, required={})",
+        config.max_number_of_transitions_in_db,
+        config.max_number_of_transitions_in_memory,
+        config.aggregated_proof_block_jump,
+        config.max_number_of_aggregated_proofs_in_memory,
+        required_transitions_in_db,
+    );
+
+    Ok(())
+}
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 #[allow(clippy::type_complexity)]
@@ -140,6 +174,7 @@ where
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
+        latest_proof_final_slot: Option<SlotNumber>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -169,10 +204,12 @@ where
             "Initializing StfRunner");
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
+            validate_proof_manager_config(&config)?;
             let channel = new_stf_info_channel(
                 ledger_db.clone(),
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
+                latest_proof_final_slot,
             )
             .await?;
 
@@ -201,7 +238,7 @@ where
             first_unprocessed_height_at_startup,
             runner_config.concurrent_sync_tasks,
             runner_config.pre_fetched_blocks_capacity.get(),
-            shutdown_receiver.clone(),
+            secondary_shutdown_receiver.clone(),
         )
         .await?;
         background_handles.push(fetcher_background_handle);
@@ -363,8 +400,10 @@ where
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
 
-        let status_updater_handle = self
-            .spawn_sync_status_updater(self.da_polling_interval, self.shutdown_receiver.clone());
+        let status_updater_handle = self.spawn_sync_status_updater(
+            self.da_polling_interval,
+            self.secondary_shutdown_sender.subscribe(),
+        );
 
         let start_at_rollup_height = self.start_at_rollup_height;
         let stop_at_rollup_height = self.stop_at_rollup_height;
@@ -623,6 +662,7 @@ where
                 relevant_proofs,
                 relevant_blobs,
                 witness: slot_result.witness,
+                slot_number: slot_result.slot_number,
             };
 
         let (aggregated_proofs, proof_receipts) =
@@ -705,10 +745,10 @@ where
             Item = ProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>,
         >,
     ) -> (
-        Vec<SerializedAggregatedProof>,
+        AggregatedProofs,
         Vec<PartialProofReceipt<Stf::Address, Da::Spec, Stf::StateRoot, Stf::StorageProof>>,
     ) {
-        let mut aggregated_proofs: Vec<SerializedAggregatedProof> = Vec::new();
+        let mut aggregated_proofs = AggregatedProofs::default();
         #[allow(clippy::type_complexity)]
         // Any type alias needs the STF bounds, which are more complex than the original type
         let mut partial_receipts: Vec<
@@ -720,12 +760,25 @@ where
                     _public_data,
                     raw_proof,
                 )) => {
-                    aggregated_proofs.push(std::mem::take(raw_proof));
+                    let raw_proof = std::mem::take(raw_proof);
+                    aggregated_proofs
+                        .all_aggregated_proofs
+                        .push(raw_proof.clone());
+                    aggregated_proofs.accepted_aggregated_proofs.push(raw_proof);
                 }
                 ProofOutcome::Valid(_) => {
                     tracing::info!("Not aggregated proof, probably running in a different mode. Will be fixed in the future.");
                 }
-                _ => {
+                ProofOutcome::Invalid(_, proof) => {
+                    if let Some(proof) = proof.take() {
+                        aggregated_proofs.all_aggregated_proofs.push(proof);
+                    }
+                    tracing::error!(
+                        outcome = ?receipt.outcome,
+                        blob_hash = hex::encode(receipt.blob_hash),
+                        "Invalid proof outcome");
+                }
+                ProofOutcome::Ignored => {
                     tracing::error!(
                         outcome = ?receipt.outcome,
                         blob_hash = hex::encode(receipt.blob_hash),

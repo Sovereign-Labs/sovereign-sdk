@@ -11,7 +11,7 @@ use sov_modules_stf_blueprint::Runtime;
 use sov_sequencer::SequencerKindConfig;
 use sov_state::pinned_cache::PinnedCache;
 use sov_test_modules::pinned_cache::CallMessage as PinnedCacheCallMessage;
-use sov_test_modules::pinned_cache::PinnedCacheTester;
+use sov_test_modules::pinned_cache::StateMapTester;
 use sov_test_modules::pinned_cache::ValueRange;
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -34,7 +34,7 @@ const PINNED_ADDRESS: HexHash = HexString([1u8; 32]);
 // generate_optimistic_runtime_with_kernel!(
 //     TestRuntime <=
 //     kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
-//     modules: [pinned_cache_tester: PinnedCacheTester<S>],
+//     modules: [pinned_cache_tester: StateMapTester<S>],
 //     populate_pinned_cache_fn: |_storage: &S::Storage| {
 //         Some(PinnedCache::default())
 //     }
@@ -43,10 +43,10 @@ const PINNED_ADDRESS: HexHash = HexString([1u8; 32]);
 generate_optimistic_runtime_with_kernel!(
     TestRuntime <=
     kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
-    modules: [pinned_cache_tester: PinnedCacheTester<S>],
+    modules: [pinned_cache_tester: StateMapTester<S>],
     populate_pinned_cache_fn: |storage: &S::Storage| {
         let mut cache = PinnedCache::default();
-        let bucket_id = PinnedCacheTester::<S>::default().get_bucket_id(&PINNED_ADDRESS);
+        let bucket_id = StateMapTester::<S>::default().get_bucket_id(&PINNED_ADDRESS);
         cache.try_load_bucket_if_absent(bucket_id, storage, 1000).unwrap();
         Some(cache)
     }
@@ -82,7 +82,7 @@ async fn create_test_nomt_rollup() -> (TestRollup<TestNomtBlueprint>, TestUser<T
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
-        c.max_concurrent_blobs = 64;
+        c.max_concurrent_batch_blobs = 64;
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 6000;

@@ -47,11 +47,12 @@ where
     // Verify the previous aggregation proof if one exists. On the first aggregation
     // after genesis, there is no predecessor, the chain starts here.
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
-        let public_data = V::verify::<AggregatedProofPublicData<Address, Da, Root>>(
-            &prev_outer_proof_witness.public_values,
-            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
+        let public_data =
+            V::verify_with_pub_values::<AggregatedProofPublicData<Address, Da, Root>>(
+                &prev_outer_proof_witness.public_values,
+                &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
+            )
+            .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
 
         assert_eq!(
             public_data.inner_vkey_hash, inner_vkey_hash,
@@ -122,6 +123,9 @@ where
     let mut expected_prev_state_root =
         previous_agg_proof_public_data.map(|public_data| public_data.final_state_root.clone());
 
+    let mut expected_prev_slot_number =
+        previous_agg_proof_public_data.map(|public_data| public_data.final_slot_number);
+
     // We intentionally scope the output to the current set of inner proofs only.
     // The predecessor proof is verified for chain continuity, but its slot range
     // and rewards are not carried forward — each aggregation covers only the
@@ -132,13 +136,29 @@ where
     let mut rewarded_addresses = Vec::with_capacity(proof_inputs.len());
 
     for (index, proof_input) in proof_inputs.iter().enumerate() {
-        let stf_public_data = V::verify::<StateTransitionPublicData<Address, Da, Root>>(
-            &proof_input.public_values,
-            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
+        let stf_public_data =
+            V::verify_with_pub_values::<StateTransitionPublicData<Address, Da, Root>>(
+                &proof_input.public_values,
+                &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
+            )
+            .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
-        let current_slot_number = SlotNumber::new(proof_input.da_block_header.height());
+        let current_slot_number = stf_public_data.slot_number;
+
+        // Slots advance 1:1 with DA blocks on the canonical fork, so each
+        // consecutive inner proof must increment the slot number by exactly one.
+        // For the very first aggregation (no predecessor), the first inner proof
+        // must cover slot 1 — slot 0 is the rollup genesis state and has no
+        // associated state transition / inner proof.
+        let expected = match expected_prev_slot_number {
+            Some(prev) => prev.next(),
+            None => SlotNumber::ONE,
+        };
+        assert_eq!(
+            current_slot_number, expected,
+            "Slot number discontinuity at index {index}: expected {expected}, got {current_slot_number}",
+        );
+        expected_prev_slot_number = Some(current_slot_number);
 
         // Verify DA block hash-chain continuity: each block's prev_hash must equal
         // the predecessor's hash. Also cross-check that the DA header hash matches

@@ -7,6 +7,8 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::ZkvmHost;
 
 /// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
@@ -91,19 +93,19 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl ZkvmHost for Risc0Host<'static> {
-    type HostArgs = &'static [u8];
-
-    fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args)
-    }
-
     type Guest = Risc0Guest;
 
-    fn add_hint_and_run<T: serde::Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        _agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof> {
         self.replace_hints(item);
         let session = self.run_without_proving()?;
         let receipt = session.prove()?.receipt;
-        Ok(bincode::serialize(&receipt)?)
+        Ok(SerializedZkProof {
+            raw_proof: bincode::serialize(&receipt)?,
+        })
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
@@ -114,11 +116,15 @@ impl ZkvmHost for Risc0Host<'static> {
 }
 
 impl OuterZkvmHost for Risc0Host<'static> {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
         _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedAggregatedProof> {
         unimplemented!("Proof aggregation not supported for Risc0")
     }
 }

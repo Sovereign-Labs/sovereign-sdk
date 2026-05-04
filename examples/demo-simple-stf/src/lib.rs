@@ -3,8 +3,8 @@
 use std::fmt::Display;
 
 use sha2::Digest;
-use sov_rollup_interface::common::RollupHeight;
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, RelevantBlobIters};
+use sov_rollup_interface::common::{RollupHeight, SlotNumber};
+use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::stf::GenesisParams as GenesisParamsTrait;
 use sov_rollup_interface::stf::{ApplySlotOutput, BatchReceipt, StateTransitionFunction};
 
@@ -90,7 +90,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for CheckHashPreimageStf {
         _pre_state_root: &Root,
         _base_state: Self::PreState,
         _witness: Self::Witness,
-        _slot_header: &Da::BlockHeader,
+        slot_header: &Da::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [Da::BlobTransaction]>,
         _execution_context: sov_rollup_interface::stf::ExecutionContext,
     ) -> ApplySlotOutput<Da, Self> {
@@ -127,7 +127,8 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for CheckHashPreimageStf {
             batch_receipts: receipts,
             discarded_blobs: Default::default(),
             witness: (),
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
+            slot_number: SlotNumber::new(slot_header.height()),
         }
     }
 }

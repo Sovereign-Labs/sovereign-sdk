@@ -5,7 +5,6 @@ sp1_zkvm::entrypoint!(main);
 use demo_stf::runtime::Runtime;
 use demo_stf::{MultiAddressEvmSolana, StfVerifier};
 use sov_mock_da::{MockDaSpec, MockDaVerifier};
-pub use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Zk;
 use sov_modules_stf_blueprint::StfBlueprint;
@@ -25,7 +24,7 @@ pub fn main() {
         ConfigurableSpec<
             MockDaSpec,
             SP1,
-            MockZkvm,
+            SP1,
             MultiAddressEvmSolana,
             Zk,
             sov_sp1_adapter::SP1CryptoSpec,

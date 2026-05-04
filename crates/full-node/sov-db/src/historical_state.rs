@@ -168,6 +168,30 @@ impl HistoricalStateReader {
         Ok(Some(self.kernel.iter_with_prefix(prefix.clone())?))
     }
 
+    /// Iterate over all user values with the given prefix starting from the given cursor (inclusive)
+    pub fn iter_user_values_with_prefix_and_cursor<'a>(
+        &'a self,
+        prefix: &SlotKey,
+        cursor: Option<SlotKey>,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(
+            self.user
+                .iter_with_prefix_and_cursor(prefix.clone(), cursor)?,
+        ))
+    }
+
+    /// Iterate over all kernel values with the given prefix starting from the given cursor (inclusive)
+    pub fn iter_kernel_values_with_prefix_and_cursor<'a>(
+        &'a self,
+        prefix: &SlotKey,
+        cursor: Option<SlotKey>,
+    ) -> anyhow::Result<Option<impl Iterator<Item = KvPair> + 'a>> {
+        Ok(Some(
+            self.kernel
+                .iter_with_prefix_and_cursor(prefix.clone(), cursor)?,
+        ))
+    }
+
     /// Get the very latest version of the given key from the database.
     pub fn get_kernel_value_option_by_key_unbound(
         &self,

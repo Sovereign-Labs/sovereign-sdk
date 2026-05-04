@@ -48,6 +48,12 @@ pub enum BlockCandidateResolution<StfPreState, StateRoot, LedgerPreState> {
     },
 }
 
+#[derive(Default)]
+pub(crate) struct AggregatedProofs {
+    pub(crate) all_aggregated_proofs: Vec<SerializedAggregatedProof>,
+    pub(crate) accepted_aggregated_proofs: Vec<SerializedAggregatedProof>,
+}
+
 /// Structure that holds a block header and a pre-state root that was on this block header
 struct StateOnBlock<Da: DaSpec, StateRoot> {
     block_header: Da::BlockHeader,
@@ -330,7 +336,7 @@ where
         ledger_pre_state: Sm::LedgerState,
         transition_witness: StateTransitionWitness<StateRoot, Witness, Da::Spec>,
         slot_commit: SlotCommit<S, B, T>,
-        aggregated_proofs: Vec<SerializedAggregatedProof>,
+        aggregated_proofs: AggregatedProofs,
         proof_receipts: Vec<PartialProofReceipt<Address, Da::Spec, StateRoot, StorageProof>>,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
@@ -349,12 +355,18 @@ where
             );
         }
 
-        let aggregated_proofs_count = aggregated_proofs.len();
+        let AggregatedProofs {
+            all_aggregated_proofs,
+            accepted_aggregated_proofs,
+        } = aggregated_proofs;
+        let aggregated_proofs_count = all_aggregated_proofs.len();
+        let accepted_aggregated_proofs_count = accepted_aggregated_proofs.len();
         let proof_receipts_count = proof_receipts.len();
         tracing::debug!(
             current_state_root = hex::encode(self.last_processed_finalized_state_root.as_ref()),
             next_state_root = hex::encode(new_state_root.as_ref()),
             aggregated_proofs = aggregated_proofs_count,
+            accepted_aggregated_proofs = accepted_aggregated_proofs_count,
             proof_receipts = proof_receipts_count,
             "Saving changes after applying slot"
         );
@@ -386,7 +398,16 @@ where
         self.ledger_db.replace_reader(ledger_pre_state);
         self.verify_transition_witness_against_ledger_state(&transition_witness)?;
 
-        let slot_number = self.get_slot_number()?;
+        let slot_number = transition_witness.slot_number;
+        let ledger_slot_number = self.get_slot_number()?;
+        // `slot_number` is the kernel-emitted value (true_slot_number from the STF),
+        // committed in the witness. The ledger's next-slot counter must agree
+        // with it; otherwise host-side bookkeeping has drifted from execution and
+        // downstream aggregation would later diverge.
+        assert_eq!(
+            slot_number, ledger_slot_number,
+            "STF-emitted slot_number ({slot_number}) does not match ledger-derived slot_number ({ledger_slot_number})",
+        );
         let ledger_materialization_start = std::time::Instant::now();
         let mut ledger_change_set = self
             .ledger_db
@@ -396,13 +417,15 @@ where
             "Initial Ledger ChangeSet is materialized"
         );
 
-        if let Some(finalized_transition) = finalized_transitions.iter().last() {
-            let last_processed_finalized_header = &finalized_transition.block_header;
-            let last_finalized_slot_number = SlotNumber::new_dangerous(
-                last_processed_finalized_header
+        let last_finalized_slot_number = finalized_transitions.iter().last().map(|t| {
+            SlotNumber::new_dangerous(
+                t.block_header
                     .height()
                     .saturating_sub(self.genesis_da_height),
-            );
+            )
+        });
+
+        if let Some(last_finalized_slot_number) = last_finalized_slot_number {
             tracing::trace!(
                 ?last_finalized_slot_number,
                 "Going to materialize last finalized slot number"
@@ -423,7 +446,7 @@ where
             tracing::trace!("Going to materialize StateTransitionInfo");
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
-                slot_number,
+                aggregated_proofs: all_aggregated_proofs,
             };
             let stf_info_schema = stf_info_sender
                 .materialize_stf_info(&stf_info, &self.ledger_db)
@@ -432,7 +455,7 @@ where
             tracing::trace!("StateTransitionInfo is materialized into Ledger ChangeSet");
         }
 
-        for aggregated_proof in aggregated_proofs {
+        for aggregated_proof in accepted_aggregated_proofs {
             let this_height_data = self
                 .ledger_db
                 .materialize_aggregated_proof(slot_number, aggregated_proof)?;
@@ -511,6 +534,7 @@ where
                 da_height: block_header.height(),
                 aggregated_proofs_count,
                 finalized_transitions_count: finalized_transitions.len(),
+                last_finalized_slot_number: last_finalized_slot_number.map(|s| s.get()),
                 total_time: start.elapsed(),
                 processing_finalized_transitions_time,
                 ledger_changes_materializing_time: ledger_materialization_time,

@@ -997,7 +997,7 @@ fn collect_kernel_entries<S: NativeStorage>(
     prefix: Prefix,
 ) -> anyhow::Result<Vec<(SlotKey, SlotValue)>> {
     let maybe_iter = storage
-        .maybe_iter_kernel_values_with_prefix(SlotKey::singleton(&prefix))
+        .maybe_iter_kernel_values_with_prefix(SlotKey::singleton(&prefix), None)
         .context("kernel prefix iteration failed")?;
 
     let iter = maybe_iter
@@ -1011,7 +1011,7 @@ fn collect_user_entries<S: NativeStorage>(
     prefix: Prefix,
 ) -> anyhow::Result<Vec<(SlotKey, SlotValue)>> {
     let maybe_iter = storage
-        .maybe_iter_user_values_with_prefix(SlotKey::singleton(&prefix))
+        .maybe_iter_user_values_with_prefix(SlotKey::singleton(&prefix), None)
         .context("user prefix iteration failed")?;
 
     let iter = maybe_iter

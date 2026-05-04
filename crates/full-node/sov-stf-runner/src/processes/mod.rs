@@ -1,4 +1,5 @@
 //! Processes responsible for creating different kind of proofs.
+mod metrics;
 mod op_manager;
 mod prover_service;
 mod stf_info_manager;
@@ -16,10 +17,12 @@ use tokio::task::JoinHandle;
 pub use zk_manager::*;
 
 /// Starts a process that generates aggregated proofs in the background.
+#[allow(clippy::too_many_arguments)]
 pub async fn start_zk_workflow_in_background<Ps>(
     prover_service: Ps,
     aggregated_proof_block_jump: NonZero<usize>,
     eager_proof_submission: bool,
+    max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
     proof_sender: Box<dyn ProofSender>,
     genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
@@ -33,6 +36,7 @@ where
         prover_service,
         aggregated_proof_block_jump,
         eager_proof_submission,
+        max_number_of_aggregated_proofs_in_memory,
         proof_sender,
         genesis_state_root,
         stf_info_receiver,

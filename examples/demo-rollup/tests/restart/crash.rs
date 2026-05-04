@@ -44,7 +44,7 @@ async fn start_node(
     })
     .set_config(|c| {
         c.storage = StoragePath::Tmp(location);
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.rollup_prover_config = RollupProverConfig::Disabled;
         c.aggregated_proof_block_jump = 5;
         c.max_infos_in_db = 30;

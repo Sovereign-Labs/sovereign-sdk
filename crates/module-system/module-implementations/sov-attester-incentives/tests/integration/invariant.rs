@@ -102,7 +102,7 @@ fn test_cannot_attest_below_max_attested_height() {
         input: ProofInput(make_attestation_blob(attestation_proof)),
         assert: Box::new(move |result, state| {
             match &result.proof_receipt.unwrap().outcome {
-                ProofOutcome::Invalid(e@InvalidProofError::PreconditionNotMet(msg)) => {
+                ProofOutcome::Invalid(e @ InvalidProofError::PreconditionNotMet(msg), _) => {
                     assert!(!e.is_not_revertable());
                     assert_eq!(msg, "Transition invariant isn't respected");
                 }
@@ -147,7 +147,7 @@ fn test_cannot_attest_above_max_attested_height_plus_one() {
         assert: Box::new(move |result, state| {
 
         match &result.proof_receipt.unwrap().outcome {
-            ProofOutcome::Invalid(e@InvalidProofError::PreconditionNotMet(msg)) => {
+            ProofOutcome::Invalid(e @ InvalidProofError::PreconditionNotMet(msg), _) => {
                 assert!(!e.is_not_revertable());
                 assert_eq!(msg, "Transition invariant isn't respected");
             }
@@ -249,7 +249,7 @@ fn test_cannot_attest_genesis_height() {
         input: ProofInput(make_attestation_blob(attestation_proof)),
         assert: Box::new(
             move |result, _state| match &result.proof_receipt.unwrap().outcome {
-                ProofOutcome::Invalid(e @ InvalidProofError::PreconditionNotMet(msg)) => {
+                ProofOutcome::Invalid(e @ InvalidProofError::PreconditionNotMet(msg), _) => {
                     assert!(!e.is_not_revertable());
                     assert_eq!(msg, "Transition invariant isn't respected");
                 }

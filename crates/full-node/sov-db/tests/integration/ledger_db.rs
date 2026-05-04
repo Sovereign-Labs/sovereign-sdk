@@ -99,7 +99,8 @@ async fn test_save_aggregated_proof() {
             rewarded_addresses: vec![MockAddress::default()],
         };
 
-        let raw_aggregated_proof = MockZkvmHost::create_serialized_proof(true, public_data.clone());
+        let raw_aggregated_proof =
+            MockZkvmHost::create_serialized_proof(true, public_data.clone()).raw_proof;
 
         let agg_proof = SerializedAggregatedProof {
             raw_aggregated_proof,
@@ -144,20 +145,6 @@ async fn test_stf_info() {
         .unwrap()
         .unwrap();
     assert_eq!(original_stored_inf_info, stored_stf_info);
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn next_slot_number_to_receive_is_none_at_startup() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
-    let ledger_storage = storage_manager.create_ledger_storage();
-
-    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
-    assert!(ledger_db
-        .get_stf_info_next_slot_number_to_receive()
-        .await
-        .unwrap()
-        .is_none());
 }
 
 #[tokio::test(flavor = "multi_thread")]

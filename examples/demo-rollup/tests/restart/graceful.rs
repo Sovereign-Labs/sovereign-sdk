@@ -222,7 +222,7 @@ async fn start_stop_empty(
             )
             .enable_prover()
             .set_config(|c| {
-                c.max_concurrent_blobs = 65536;
+                c.max_concurrent_batch_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
                 c.rollup_prover_config = RollupProverConfig::Prove;
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
@@ -333,7 +333,7 @@ async fn start_stop_under_load(
             )
             .enable_prover()
             .set_config(|c| {
-                c.max_concurrent_blobs = 65536;
+                c.max_concurrent_batch_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
                 c.rollup_prover_config = RollupProverConfig::Prove;
                 if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
@@ -496,7 +496,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
     )
     .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = RollupProverConfig::Prove;
         // Since we have the prover enabled, we need to disable state root consistency checks.
@@ -653,7 +653,7 @@ async fn check_with_increasing_stf_infos(
     )
     .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = RollupProverConfig::Prove;
         c.aggregated_proof_block_jump = aggregated_proof_jump;

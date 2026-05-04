@@ -8,11 +8,11 @@ use sov_db::schema::DeltaReader;
 use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockDaSpec, MockHash};
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::rest::HasRestApi;
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier, Zkvm};
+use sov_modules_api::{CodeCommitmentFor, CryptoSpec, NodeEndpoints, Spec, Zkvm};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
@@ -33,15 +33,13 @@ use sov_stf_runner::RollupConfig;
 /// Implement this trait to plug different prover backends (parallel, network, etc.)
 /// into the blueprint without reimplementing the entire [`FullNodeBlueprint`].
 #[async_trait]
-pub trait ProverFactory<S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>>:
-    Send + Sync + 'static
-{
+pub trait ProverFactory<S: Spec<Da = MockDaSpec>>: Send + Sync + 'static {
     /// The prover service type this factory creates.
     type ProverService: ProverService<
         StateRoot = <S::Storage as Storage>::Root,
         Witness = <S::Storage as Storage>::Witness,
         DaService = StorableMockDaService,
-        Verifier = <<MockZkvm as Zkvm>::Guest as ZkvmGuest>::Verifier,
+        Verifier = <<S::OuterZkvm as Zkvm>::Guest as ZkvmGuest>::Verifier,
     >;
 
     /// Create the prover service from the given config.
@@ -49,6 +47,18 @@ pub trait ProverFactory<S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm>>:
         prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
     ) -> Self::ProverService;
+
+    /// Compute the inner+outer code commitments for this prover, typically by
+    /// hashing the guest ELFs. Default impl bails — factories that want to
+    /// support `--override-code-commitments`-style genesis rewrites should
+    /// override this.
+    #[allow(clippy::type_complexity)]
+    fn code_commitments() -> anyhow::Result<(
+        CodeCommitmentFor<S::InnerZkvm>,
+        CodeCommitmentFor<S::OuterZkvm>,
+    )> {
+        anyhow::bail!("code_commitments not supported by this prover factory")
+    }
 }
 
 /// Default prover factory using local parallel proving.
@@ -80,6 +90,7 @@ where
             outer_vm,
             Default::default(),
             rollup_config.proof_manager.prover_address,
+            5,
         )
     }
 }
@@ -148,7 +159,7 @@ where
 impl<S, R, Manager, Prover, A> FullNodeBlueprint<Native>
     for RtAgnosticBlueprint<S, R, Manager, Prover, A>
 where
-    S: Spec<Da = MockDaSpec, OuterZkvm = MockZkvm> + PluggableSpec,
+    S: Spec<Da = MockDaSpec> + PluggableSpec,
     R: RuntimeTrait<S> + HasRestApi<S> + HasCapabilities<S> + HasKernel<S> + 'static,
     Manager: Send
         + Sync
@@ -171,12 +182,6 @@ where
     type ProverService = <Prover as ProverFactory<S>>::ProverService;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        MockCodeCommitment::default()
-    }
 
     async fn create_endpoints(
         &self,
@@ -214,8 +219,12 @@ where
         prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
-        Prover::create(prover_config, rollup_config).await
+        _ledger_db: &LedgerDb,
+    ) -> (
+        Self::ProverService,
+        Option<sov_rollup_interface::common::SlotNumber>,
+    ) {
+        (Prover::create(prover_config, rollup_config).await, None)
     }
 
     fn create_storage_manager(
@@ -232,6 +241,14 @@ where
         proof_blob_sender: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(proof_blob_sender))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn compute_code_commitments() -> anyhow::Result<(
+        CodeCommitmentFor<<S as Spec>::InnerZkvm>,
+        CodeCommitmentFor<<S as Spec>::OuterZkvm>,
+    )> {
+        Prover::code_commitments()
     }
 
     async fn sequencer_additional_apis<Seq>(

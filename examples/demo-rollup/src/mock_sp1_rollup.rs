@@ -11,23 +11,27 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier};
+use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
-use sov_rollup_interface::zk::ZkvmHost;
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregateProofVerifier, AggregatedProofPublicData,
+};
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::{SP1CryptoSpec, SP1};
+use sov_sp1_adapter::{SP1CryptoSpec, SP1MethodId, SP1Verifier, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
+use crate::read_latest_aggregated_proof;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, and [`SP1`] for both inner and outer vm
@@ -78,16 +82,6 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
     >;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
-        SP1Host::new(agg_elf)
-            .expect("Failed to create SP1Host from aggregation guest ELF")
-            .code_commitment()
-            .expect("SP1 aggregation code commitment should be created successfully")
-    }
 
     async fn create_endpoints(
         &self,
@@ -152,34 +146,66 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &LedgerDb,
+    ) -> (Self::ProverService, Option<SlotNumber>) {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
+        let outer_verifying_key = tokio::task::spawn_blocking(move || {
+            sov_sp1_adapter::host::verifying_key_from_elf(agg_elf).map(Arc::new)
+        })
+        .await
+        .expect("Outer verifying key setup task panicked")
+        .expect("Failed to derive outer verifying key from aggregation guest ELF");
 
         // SP1's blocking CPU prover spins up its own tokio runtime during setup,
         // so it must be constructed off the async executor thread.
-        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf))
+        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf, outer_verifying_key))
             .await
             .expect("SP1Host setup task panicked")
             .expect("Failed to create SP1Host from guest ELF");
 
         let inner_verifying_key = inner_vm.verifying_key().clone();
 
-        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+        let previous_aggregated_proof = read_latest_aggregated_proof(ledger_db).await;
+
+        let previous_for_outer = previous_aggregated_proof.clone();
         let outer_vm = tokio::task::spawn_blocking(move || {
-            SP1AggregationHost::new(agg_elf, inner_verifying_key)
-                .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
+            SP1AggregationHost::new_with_previous_proof(
+                agg_elf,
+                inner_verifying_key,
+                previous_for_outer,
+            )
+            .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
         })
         .await
         .expect("SP1AggregationHost setup task panicked");
 
+        // Validate the persisted proof and extract the `final_slot_number` so
+        // the runner can rewind the STF-info stream to `final_slot + 1`.
+        let latest_proof_final_slot = previous_aggregated_proof.as_ref().map(|proof| {
+            let public_data: AggregatedProofPublicData<
+                <Self::Spec as Spec>::Address,
+                MockDaSpec,
+                <<Self::Spec as Spec>::Storage as Storage>::Root,
+            > = AggregateProofVerifier::<SP1Verifier>::new(outer_vm.code_commitment())
+                .verify(proof)
+                .expect("Persisted aggregated proof failed verification");
+            public_data.final_slot_number
+        });
+
         let da_verifier = Default::default();
 
-        ParallelProverService::new_with_default_workers(
+        let num_threads = rollup_config.proof_manager.prover_thread_count();
+        let prover = ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
             rollup_config.proof_manager.prover_address,
-        )
+            num_threads,
+        );
+
+        (prover, latest_proof_final_slot)
     }
 
     fn create_storage_manager(
@@ -196,5 +222,15 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
+        let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
+        let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
+
+        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
+        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
+
+        Ok((inner, outer))
     }
 }

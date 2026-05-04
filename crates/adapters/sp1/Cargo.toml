@@ -60,13 +60,8 @@ native = [
     "rand",
     "sp1-sdk/network",
     "sov-rollup-interface/native",
-    "sov-metrics?/native",
+    "sov-metrics/native",
     "sov-sp1-adapter/native",
-]
-bench = [
-    "sov-metrics/sp1",
-    "sov-sp1-adapter/bench",
-    "sp1-sdk/profiling",
 ]
 arbitrary = [
     "dep:arbitrary",

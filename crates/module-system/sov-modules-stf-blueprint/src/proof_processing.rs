@@ -4,9 +4,9 @@ use sov_modules_api::capabilities::{ChainState, GasEnforcer, ProofProcessor};
 use sov_modules_api::proof_metadata::{ProofType, SerializeProofWithDetails};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::{
-    Amount, BasicGasMeter, DaSpec, Gas, GasArray, GasMeter, GasSpec, InvalidProofError,
-    MeteredBorshDeserialize, PreExecWorkingSet, ProofOutcome, ProofReceipt, ProofReceiptContents,
-    Rewards, Spec, StateCheckpoint, StateProvider, TxScratchpad, WorkingSet,
+    Amount, BasicGasMeter, DaSpec, ExecutionContext, Gas, GasArray, GasMeter, GasSpec,
+    InvalidProofError, MeteredBorshDeserialize, PreExecWorkingSet, ProofOutcome, ProofReceipt,
+    ProofReceiptContents, Rewards, Spec, StateCheckpoint, StateProvider, TxScratchpad, WorkingSet,
 };
 use sov_state::{Storage, StorageProof};
 
@@ -29,6 +29,7 @@ pub(crate) fn process_proof<S, RT>(
     sequencer_rollup_address: &S::Address,
     sequencer_bond: Amount,
     gas_price: <S::Gas as Gas>::Price,
+    execution_context: ExecutionContext,
     raw_proof: &[u8],
     state: StateCheckpoint<S>,
 ) -> (ProcessProofOutput<S>, StateCheckpoint<S>)
@@ -98,11 +99,27 @@ where
             };
 
             // `workflow.try_reserve_gas` succeeded, meaning that any charge will be deducted from the sequencer's balance in the bank module, rather than from the sequencer's bond.
+            let mut invalid_aggregated_proof = None;
             let receipt_contents = match proof_with_details.proof {
-                ProofType::ZkAggregatedProof(proof) => runtime
-                    .proof_processor()
-                    .process_aggregated_proof(proof, sequencer_rollup_address, &mut working_set)
-                    .map(|(pub_data, proof)| ProofReceiptContents::AggregateProof(pub_data, proof)),
+                ProofType::ZkAggregatedProof(proof) => {
+                    let proof_for_invalid_outcome = proof.clone();
+                    match runtime.proof_processor().process_aggregated_proof(
+                        proof,
+                        sequencer_rollup_address,
+                        execution_context,
+                        &mut working_set,
+                    ) {
+                        Ok((pub_data, proof)) => {
+                            Ok(ProofReceiptContents::AggregateProof(pub_data, proof))
+                        }
+                        Err(e) => {
+                            if should_retain_invalid_aggregated_proof(&e) {
+                                invalid_aggregated_proof = Some(proof_for_invalid_outcome);
+                            }
+                            Err(e)
+                        }
+                    }
+                }
 
                 ProofType::OptimisticProofAttestation(proof) => runtime
                     .proof_processor()
@@ -132,7 +149,7 @@ where
                 Err(e) if e.is_not_revertable() => {
                     let (scratchpad, transaction_consumption, _) = working_set.finalize();
                     (
-                        ProofOutcome::Invalid(e),
+                        ProofOutcome::Invalid(e, invalid_aggregated_proof),
                         scratchpad,
                         transaction_consumption,
                     )
@@ -140,7 +157,7 @@ where
                 Err(e) => {
                     let (scratchpad, transaction_consumption) = working_set.revert();
                     (
-                        ProofOutcome::Invalid(e),
+                        ProofOutcome::Invalid(e, invalid_aggregated_proof),
                         scratchpad,
                         transaction_consumption,
                     )
@@ -450,10 +467,17 @@ fn invalid_proof_receipt<S: Spec>(
 > {
     ProofReceipt {
         blob_hash,
-        outcome: ProofOutcome::Invalid(reason),
+        outcome: ProofOutcome::Invalid(reason, None),
         gas_used: S::Gas::zero().as_ref().to_vec(),
         gas_price: Vec::new(),
     }
 }
 
 type PreExecWorkingSetResult<S, I> = WorkflowResult<PreExecWorkingSet<S, I>, S, I>;
+
+fn should_retain_invalid_aggregated_proof(error: &InvalidProofError) -> bool {
+    // Aggregate-proof precondition failures happen before proof verification.
+    // Every other error variant can happen after we have attempted verification,
+    // so the guest still needs the proof bytes to replay that path.
+    !matches!(error, InvalidProofError::PreconditionNotMet(_))
+}

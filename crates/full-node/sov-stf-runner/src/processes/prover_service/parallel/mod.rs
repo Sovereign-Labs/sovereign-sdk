@@ -18,7 +18,7 @@ use crate::processes::{ProofAggregationStatus, ProofProcessingStatus, StateTrans
 pub struct ParallelProverService<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address: Serialize + DeserializeOwned,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]>,
+    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + PartialEq + core::fmt::Debug,
     Witness: Serialize + DeserializeOwned,
     Da: DaService,
     InnerVm: Zkvm,
@@ -37,7 +37,15 @@ impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm>
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
     InnerVm: Zkvm,
@@ -67,17 +75,9 @@ where
         outer_vm: OuterVm::OuterHost,
         da_verifier: Da::Verifier,
         prover_address: Address,
+        num_threads: usize,
     ) -> Self {
-        let num_cpus = num_cpus::get();
-        assert!(num_cpus > 1, "Unable to create parallel prover service");
-
-        Self::new(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            num_cpus - 1,
-            prover_address,
-        )
+        Self::new(inner_vm, outer_vm, da_verifier, num_threads, prover_address)
     }
 }
 
@@ -87,8 +87,16 @@ impl<Address, StateRoot, Witness, Da, InnerVm, OuterVm> ProverService
 where
     Address:
         BorshSerialize + AsRef<[u8]> + Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
-    StateRoot:
-        BorshSerialize + Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: BorshSerialize
+        + Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
     Da: DaService,
     InnerVm: Zkvm + 'static,

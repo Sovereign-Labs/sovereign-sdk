@@ -57,6 +57,49 @@ fn slot_number_param() -> utoipa::openapi::path::Parameter {
     .unwrap()
 }
 
+fn page_type_param() -> utoipa::openapi::path::Parameter {
+    serde_json::from_value(json!({
+        "name": "page",
+        "in": "query",
+        "description": "Pagination type (first, next, or last). Defaults to first when omitted.",
+        "required": false,
+        "schema": {
+            "type": "string",
+            "enum": ["first", "next", "last"],
+        }
+    }))
+    .unwrap()
+}
+
+fn page_size_param() -> utoipa::openapi::path::Parameter {
+    serde_json::from_value(json!({
+        "name": "page[size]",
+        "in": "query",
+        "description": "Number of items per page.",
+        "required": false,
+        "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 25,
+        }
+    }))
+    .unwrap()
+}
+
+fn page_cursor_param() -> utoipa::openapi::path::Parameter {
+    serde_json::from_value(json!({
+        "name": "page[cursor]",
+        "in": "query",
+        "description": "Cursor for the next page. Required when page=next.",
+        "required": false,
+        "schema": {
+            "type": "string",
+        }
+    }))
+    .unwrap()
+}
+
 /// The OpenAPI paths specification for
 /// [`StateValue`](crate::containers::StateValue).
 pub fn state_value_paths(module_name: &str, field_name: &str) -> OpenApiPaths {
@@ -356,6 +399,48 @@ pub fn state_map_paths_with_response(
                     "responses": {
                         "200": {
                             "$ref": "#/components/responses/StateMapInfoResponse"
+                        },
+                        "400": {
+                            "$ref": "#/components/responses/BadRequestResponse"
+                        }
+                    }
+                }
+            }),
+        ),
+        (
+            "/items".to_string(),
+            json!({
+                "get": {
+                    "summary": "List the current contents of a `StateMap`.",
+                    "operationId": format!("{}_{}_list_state_map_elements", module_name.to_snake_case(), field_name),
+                    "tags": [module_name],
+                    "parameters": [
+                        page_type_param(),
+                        page_size_param(),
+                        page_cursor_param(),
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Contains a paginated list of StateMap elements.",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "next_cursor": {
+                                                "type": "string"
+                                            },
+                                            "items": {
+                                                "type": "array",
+                                                "items": {
+                                                    "$ref": "#/components/schemas/StateMapElement"
+                                                }
+                                            }
+                                        },
+                                        "required": ["items"]
+                                    }
+                                }
+                            }
                         },
                         "400": {
                             "$ref": "#/components/responses/BadRequestResponse"

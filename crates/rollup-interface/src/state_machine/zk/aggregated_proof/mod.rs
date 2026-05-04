@@ -1,5 +1,6 @@
 //! Defines types that are related to the `AggregatedProof`.
 /// Core aggregation circuit logic.
+#[cfg(target_os = "zkvm")]
 pub mod circuit;
 /// Common types shared between the aggregated proof program and the host script.
 pub mod common;
@@ -13,25 +14,27 @@ use serde::{Deserialize, Serialize};
 use super::{StateTransitionPublicData, ZkVerifier};
 use crate::common::SlotNumber;
 use crate::da::DaSpec;
-use crate::zk::SerializedInnerProof;
+use crate::zk::SerializedZkProof;
 
 /// Host-side interface for the outer zkVM that produces aggregated proofs.
 pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
     /// Aggregates per-block inner proofs into a single serialized aggregated proof.
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
-    ) -> anyhow::Result<Vec<u8>>;
+    ) -> anyhow::Result<SerializedAggregatedProof>;
 }
 
 /// A single block's proof data, used to build an [`AggregatedProofPublicData`].
 #[derive(Clone)]
 pub struct BlockProof<Address, Da: DaSpec, Root> {
     /// The raw proof bytes.
-    pub proof: SerializedInnerProof,
-    /// The slot number this proof covers.
-    pub slot_number: SlotNumber,
+    pub proof: SerializedZkProof,
     /// The state transition public data for this block.
     pub st: StateTransitionPublicData<Address, Da, Root>,
 }
@@ -86,9 +89,9 @@ impl core::fmt::Display for CodeCommitmentHash {
 /// Public data of an aggregated proof.
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
-    /// Initial rollup height.
+    /// Initial rollup slot.
     pub initial_slot_number: SlotNumber,
-    /// Final rollup height.
+    /// Final rollup slot.
     pub final_slot_number: SlotNumber,
     /// The genesis state root of the aggregated proof.
     pub genesis_state_root: Root,
@@ -128,8 +131,8 @@ where
             .collect();
         Self {
             rewarded_addresses,
-            initial_slot_number: initial.slot_number,
-            final_slot_number: final_bp.slot_number,
+            initial_slot_number: initial.st.slot_number,
+            final_slot_number: final_bp.st.slot_number,
             genesis_state_root,
             initial_state_root: initial.st.initial_state_root.clone(),
             final_state_root: final_bp.st.final_state_root.clone(),
@@ -171,6 +174,15 @@ pub struct SerializedAggregatedProof {
     pub raw_aggregated_proof: Vec<u8>,
 }
 
+impl SerializedAggregatedProof {
+    /// Converts a [`SerializedAggregatedProof`] into a [`SerializedZkProof`].
+    pub fn to_serialized_zk_proof(self) -> SerializedZkProof {
+        SerializedZkProof {
+            raw_proof: self.raw_aggregated_proof,
+        }
+    }
+}
+
 /// A serialized partial proof receipt.
 #[derive(
     Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Default,
@@ -200,8 +212,8 @@ impl<Vm: ZkVerifier> AggregateProofVerifier<Vm> {
         &self,
         proof_data: &SerializedAggregatedProof,
     ) -> Result<AggregatedProofPublicData<Address, Da, Root>, Vm::Error> {
-        let public_data = Vm::verify::<AggregatedProofPublicData<Address, Da, Root>>(
-            proof_data.raw_aggregated_proof.as_slice(),
+        let public_data = Vm::verify_with_proof::<AggregatedProofPublicData<Address, Da, Root>>(
+            &proof_data.clone().to_serialized_zk_proof(),
             &self.outer_proof_code_commitment,
         )?;
 
@@ -215,5 +227,5 @@ pub struct BlockHeaderWithProof<Da: crate::da::DaSpec> {
     /// The DA layer block header associated with this proof.
     pub da_block_header: Da::BlockHeader,
     /// The serialized proof bytes.
-    pub proof: SerializedInnerProof,
+    pub proof: SerializedZkProof,
 }
