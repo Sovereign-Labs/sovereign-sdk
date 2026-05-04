@@ -3,6 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::guest::SP1Guest;
+use crate::metrics::submit_network_proving_metric;
 use crate::SP1MethodId;
 use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
@@ -14,11 +15,12 @@ use sov_rollup_interface::zk::aggregated_proof::{
     BlockHeaderWithProof, BlockProof, CodeCommitmentHash, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{SerializedZkProof, ZkvmHost};
-use sp1_sdk::blocking::ProveRequest;
-use sp1_sdk::blocking::{EnvProver, EnvProvingKey, Prover, ProverClient};
+use sp1_sdk::blocking::{
+    EnvProver, EnvProvingKey, NetworkProver, ProveRequest, Prover, ProverClient,
+};
 use sp1_sdk::ProvingKey;
 use sp1_sdk::SP1VerifyingKey;
-use sp1_sdk::{HashableKey, SP1Proof, SP1Stdin};
+use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 
 /// SP1 host that produces aggregated (outer) proofs by recursively verifying
 /// a batch of inner state-transition proofs inside an SP1 guest program.
@@ -212,6 +214,16 @@ impl SP1Prover {
     }
 
     fn run(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+        // For network proving we go through the explicit two-step API
+        // (`request()` + `wait_proof()`) so we can capture the request_id and
+        // afterwards fetch the canonical cycles + PGUs the network recorded.
+        if let EnvProver::Network(network) = &self.prover {
+            let EnvProvingKey::Network { pk, .. } = &*self.pk else {
+                anyhow::bail!("EnvProver is Network but proving key variant is not Network");
+            };
+            return Self::run_network(network, pk, stdin);
+        }
+
         // Under the mock backend the inner compressed proofs are dummies that
         // would fail the executor-side deferred-proof check. Skip that check so
         // mock aggregation can run end-to-end; real backends keep it on.
@@ -228,6 +240,26 @@ impl SP1Prover {
             .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
 
         Ok(output)
+    }
+
+    fn run_network(
+        network: &NetworkProver,
+        pk: &SP1ProvingKey,
+        stdin: SP1Stdin,
+    ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+        let request_id = network
+            .prove(pk, stdin)
+            .compressed()
+            .request()
+            .map_err(|e| anyhow::anyhow!("SP1 network proof submission failed. Error: {:?}", e))?;
+
+        let proof = network
+            .wait_proof(request_id, None, None)
+            .map_err(|e| anyhow::anyhow!("SP1 network proof wait failed. Error: {:?}", e))?;
+
+        submit_network_proving_metric(network, request_id);
+
+        Ok(proof)
     }
 
     /// Serialize `item` as a hint, produce a compressed proof, and encode it.

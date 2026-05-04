@@ -21,6 +21,8 @@ pub mod crypto;
 pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
+#[cfg(feature = "native")]
+mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
 ///
