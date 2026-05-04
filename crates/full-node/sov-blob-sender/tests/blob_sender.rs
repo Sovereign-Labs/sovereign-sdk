@@ -497,6 +497,7 @@ async fn create_blob_sender(
     let hooks = TestHooks {};
 
     let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+    let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
         deps.da.clone(),
         finalization_manager,
@@ -508,6 +509,7 @@ async fn create_blob_sender(
         Duration::from_millis(1000),
         Default::default(),
         nb_of_concurrent_blob_submissions,
+        nb_of_concurrent_batch_blob_submissions,
     )
     .await
     .unwrap();

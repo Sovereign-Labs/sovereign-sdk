@@ -162,6 +162,7 @@ where
         )?;
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         let (blob_sender, blob_sender_handle) = BlobSender::new(
             da,
             ledger_db.clone(),
@@ -172,6 +173,7 @@ where
             None,
             Default::default(),
             nb_of_concurrent_blob_submissions,
+            nb_of_concurrent_batch_blob_submissions,
         )
         .await?;
 

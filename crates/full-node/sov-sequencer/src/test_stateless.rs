@@ -82,6 +82,7 @@ where
         let tx_status_manager = TxStatusManager::default();
 
         let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         let seq = Self {
             inner: inner.into(),
             blob_sender: Arc::new(Mutex::new(
@@ -95,6 +96,7 @@ where
                     None,
                     Default::default(),
                     nb_of_concurrent_blob_submissions,
+                    nb_of_concurrent_batch_blob_submissions,
                 )
                 .await?
                 .0,
