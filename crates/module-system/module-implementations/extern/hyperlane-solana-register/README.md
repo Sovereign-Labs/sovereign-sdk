@@ -62,7 +62,6 @@ The `SolanaRegistration<S>` module is a Sovereign SDK module that implements the
 
 - **Selective Message Handling**: Only processes messages from the configured Solana domain and trusted program ID
 - **Account Linking**: Associates Solana embedded wallets with rollup addresses via the `sov-accounts` module
-- **Duplicate Prevention**: Rejects attempts to register an embedded wallet that's already linked to a different address
 - **Admin Controls**: Allows configuration updates via admin-only calls
 - **Fallback to Warp**: Non-Solana messages are forwarded to the underlying `Warp` module
 
@@ -132,7 +131,6 @@ pub enum Event<S: Spec> {
 
 The module defines several error types:
 
-- `Unauthorized`: The embedded public key is not authorized for the payer address
 - `InvalidBodyLength`: The message body doesn't contain exactly 64 bytes
 - `ExtractPubKey`: Failed to parse public keys from the message body
 - `AdminNotFound`: Admin address not configured
@@ -146,9 +144,8 @@ See `src/lib.rs:196-213` for the `handle` implementation:
 2. Verify the sender matches the trusted Solana program ID
 3. Extract the two 32-byte public keys from the message body
 4. Convert the payer public key to a rollup address
-5. Use `sov-accounts` to verify the embedded credential is authorized for the payer address
-6. Reject if the embedded credential is not authorized for that address
-7. Emit a `UserRegistered` event
+5. Authorize the embedded credential to act as the payer's address by recording `(payer, embedded)` in `sov-accounts`
+6. Emit a `UserRegistered` event
 
 ---
 
@@ -352,6 +349,10 @@ Returns:
 2. **Mailbox Trust**: The Solana program only trusts a specific Hyperlane mailbox program. This is validated on-chain at `solana/program/src/lib.rs:82-89`.
 
 3. **ISM Verification**: The Sovereign module uses an ISM (Interchain Security Module) to verify message authenticity. Configure an appropriate ISM for your security requirements.
+
+### Notes on the registration flow
+
+The current message format establishes the payer's intent on-chain. Down the line, additional verification on the embedded side may be considered to broaden the set of supported deployment scenarios; today's flow assumes the embedded key handling on the Solana program side is the source of truth for that direction.
 
 ---
 

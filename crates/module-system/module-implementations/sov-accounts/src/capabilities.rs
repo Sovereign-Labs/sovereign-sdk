@@ -5,7 +5,7 @@ use crate::{AccountOwnerKey, Accounts};
 
 impl<S: Spec> Accounts<S> {
     /// Authorizes `credential_id` to sign as `address`.
-    pub(crate) fn authorize_credential<ST: StateWriter<User>>(
+    pub fn authorize_credential<ST: StateWriter<User>>(
         &mut self,
         address: &S::Address,
         credential_id: &CredentialId,
