@@ -83,8 +83,8 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     da: Da,
     finalization_manager: FM,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
-    nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     proof_blob_semaphore: Arc<Semaphore>,
+    max_concurrent_proof_blobs: usize,
     blob_processing_timeout: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
     ledger_pool_interval: Duration,
@@ -108,7 +108,6 @@ where
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
-        nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
         max_concurrent_proof_blobs: usize,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         Self::new_with_task_intervals(
@@ -122,7 +121,6 @@ where
             LEDGER_POLL_INTERVAL,
             completed_blobs_to_send,
             nb_of_concurrent_batch_blob_submissions,
-            nb_of_concurrent_proof_blob_submissions,
             max_concurrent_proof_blobs,
         )
         .await
@@ -140,7 +138,6 @@ where
         ledger_pool_interval: Duration,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
-        nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
         max_concurrent_proof_blobs: usize,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
@@ -191,8 +188,8 @@ where
             da,
             finalization_manager,
             nb_of_concurrent_batch_blob_submissions,
-            nb_of_concurrent_proof_blob_submissions,
             proof_blob_semaphore,
+            max_concurrent_proof_blobs,
             blob_processing_timeout,
             blob_sender_channel,
             ledger_pool_interval,
@@ -206,11 +203,7 @@ where
 
     /// Total number of concurrent blob submissions in flight (sum of batch and proof counters).
     pub fn nb_of_concurrent_blob_submissions(&self) -> usize {
-        self.nb_of_concurrent_batch_blob_submissions
-            .load(Ordering::Relaxed)
-            + self
-                .nb_of_concurrent_proof_blob_submissions
-                .load(Ordering::Relaxed)
+        self.nb_of_concurrent_batch_blob_submissions() + self.nb_of_concurrent_proof_blob_submissions()
     }
 
     /// Number of concurrent batch blob submissions in flight.
@@ -220,19 +213,17 @@ where
     }
 
     /// Number of concurrent proof blob submissions in flight.
+    ///
+    /// Derived from the proof throttling semaphore: in-flight proofs equal the
+    /// configured cap minus currently available permits.
     pub fn nb_of_concurrent_proof_blob_submissions(&self) -> usize {
-        self.nb_of_concurrent_proof_blob_submissions
-            .load(Ordering::Relaxed)
+        self.max_concurrent_proof_blobs
+            .saturating_sub(self.proof_blob_semaphore.available_permits())
     }
 
     /// Returns a handle to the (atomic) number of batch blob submissions currently in flight.
     pub fn nb_of_in_flight_batch_blobs_handle(&self) -> Arc<AtomicUsize> {
         self.nb_of_concurrent_batch_blob_submissions.clone()
-    }
-
-    /// Returns a handle to the (atomic) number of proof blob submissions currently in flight.
-    pub fn nb_of_in_flight_proof_blobs_handle(&self) -> Arc<AtomicUsize> {
-        self.nb_of_concurrent_proof_blob_submissions.clone()
     }
 
     /// Returns a handle to the proof blob throttling semaphore.
@@ -246,11 +237,6 @@ where
 
     fn inc_nb_of_concurrent_batch_blob_submissions(&self) {
         self.nb_of_concurrent_batch_blob_submissions
-            .fetch_add(1, Ordering::Relaxed);
-    }
-
-    fn inc_nb_of_concurrent_proof_blob_submissions(&self) {
-        self.nb_of_concurrent_proof_blob_submissions
             .fetch_add(1, Ordering::Relaxed);
     }
 
@@ -351,9 +337,6 @@ where
             nb_of_concurrent_batch_blob_submissions: self
                 .nb_of_concurrent_batch_blob_submissions
                 .clone(),
-            nb_of_concurrent_proof_blob_submissions: self
-                .nb_of_concurrent_proof_blob_submissions
-                .clone(),
             proof_blob_semaphore: self.proof_blob_semaphore.clone(),
             blob_processing_timeout: self.blob_processing_timeout,
             ledger_pool_interval: self.ledger_pool_interval,
@@ -365,9 +348,11 @@ where
 
         if is_batch {
             self.inc_nb_of_concurrent_batch_blob_submissions();
-        } else {
-            self.inc_nb_of_concurrent_proof_blob_submissions();
         }
+        // Proof in-flight count is tracked entirely by the throttling
+        // semaphore (cap - available_permits). At the producer side, a permit
+        // was already acquired and `forget()`-ed; restored proofs are accounted
+        // for by reducing the semaphore's initial permits at construction.
         let handle = tokio::task::spawn({
             let state = task_state;
             let blob = blob.clone();
@@ -533,7 +518,6 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     hooks: Arc<dyn BlobSenderHooks<Da = Da::Spec>>,
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
-    nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     proof_blob_semaphore: Arc<Semaphore>,
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
@@ -547,9 +531,8 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
             self.nb_of_concurrent_batch_blob_submissions
                 .fetch_sub(1, Ordering::Relaxed);
         } else {
-            self.nb_of_concurrent_proof_blob_submissions
-                .fetch_sub(1, Ordering::Relaxed);
-            // Release the back-pressure permit reserved by the producer.
+            // Release the back-pressure permit reserved by the producer; the
+            // proof in-flight count is read off the semaphore.
             self.proof_blob_semaphore.add_permits(1);
         }
     }

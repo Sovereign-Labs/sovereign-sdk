@@ -464,9 +464,15 @@ async fn proofs_in_flight_do_not_block_batch_gate() -> anyhow::Result<()> {
     )
     .await;
 
+    // Mimic the producer-side back-pressure protocol used by the sequencers:
+    // acquire a permit on the proof semaphore and forget it, so that the
+    // semaphore-derived in-flight count reflects the new submission. The
+    // matching `add_permits(1)` happens inside BlobSender on finalization.
+    let proof_semaphore = blob_sender.proof_blob_semaphore();
     for i in 0..nb_of_proofs {
         let blob_id = (200 + i) as u8;
         let data = Arc::new([blob_id, 0, 0, 0]);
+        proof_semaphore.clone().acquire_owned().await?.forget();
         blob_sender
             .publish_proof_blob(data, blob_id as BlobInternalId)
             .await?;
@@ -551,7 +557,6 @@ async fn create_blob_sender(
     let hooks = TestHooks {};
 
     let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
-    let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
     // Tests don't exercise back-pressure unless a test specifically constructs
     // its own BlobSender. Use a large permissive cap.
     let max_concurrent_proof_blobs = usize::MAX >> 3;
@@ -566,7 +571,6 @@ async fn create_blob_sender(
         Duration::from_millis(1000),
         Default::default(),
         nb_of_concurrent_batch_blob_submissions,
-        nb_of_concurrent_proof_blob_submissions,
         max_concurrent_proof_blobs,
     )
     .await

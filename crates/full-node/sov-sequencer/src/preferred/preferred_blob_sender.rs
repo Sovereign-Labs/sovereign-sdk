@@ -66,7 +66,6 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                     Some(blobs_sender_channel),
                     blobs_to_send,
                     nb_of_concurrent_batch_blob_submissions.clone(),
-                    Arc::new(AtomicUsize::new(0)),
                     max_concurrent_proof_blobs,
                 )
                 .await?;
