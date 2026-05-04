@@ -447,6 +447,60 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
     Ok(())
 }
 
+// A saturated proof buffer must not block the
+// sequencer's batch-production gate.
+#[tokio::test(flavor = "multi_thread")]
+async fn proofs_in_flight_do_not_block_batch_gate() -> anyhow::Result<()> {
+    const MAX_CONCURRENT_BATCH_BLOBS: usize = 4;
+    let nb_of_proofs = MAX_CONCURRENT_BATCH_BLOBS * 2;
+
+    let deps = create_deps().await;
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
+    let (mut blob_sender, _handle) = create_blob_sender(
+        Duration::from_secs(20),
+        &deps,
+        Some(status_sender),
+        BlobSelectorStatus::Accepted,
+    )
+    .await;
+
+    for i in 0..nb_of_proofs {
+        let blob_id = (200 + i) as u8;
+        let data = Arc::new([blob_id, 0, 0, 0]);
+        blob_sender
+            .publish_proof_blob(data, blob_id as BlobInternalId)
+            .await?;
+    }
+
+    // Wait until each proof has at least reached `Published`, so the in-flight
+    // counters reflect the steady state. We deliberately do not produce a block,
+    // so the proofs stay in flight (not finalized).
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Published { .. }
+            )
+        },
+        nb_of_proofs,
+    )
+    .await;
+
+    assert_eq!(
+        blob_sender.nb_of_concurrent_proof_blob_submissions(),
+        nb_of_proofs,
+        "proof counter should reflect every in-flight proof",
+    );
+    assert_eq!(
+        blob_sender.nb_of_concurrent_batch_blob_submissions(),
+        0,
+        "batch counter must remain zero while only proofs are in flight",
+    );
+
+    Ok(())
+}
+
 struct Deps {
     _da_dir: TempDir,
     shutdown_sender: watch::Sender<()>,
@@ -496,8 +550,8 @@ async fn create_blob_sender(
 
     let hooks = TestHooks {};
 
-    let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
     let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
+    let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
         deps.da.clone(),
         finalization_manager,
@@ -508,8 +562,8 @@ async fn create_blob_sender(
         blob_status_sender,
         Duration::from_millis(1000),
         Default::default(),
-        nb_of_concurrent_blob_submissions,
         nb_of_concurrent_batch_blob_submissions,
+        nb_of_concurrent_proof_blob_submissions,
     )
     .await
     .unwrap();

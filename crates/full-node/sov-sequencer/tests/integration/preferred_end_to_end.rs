@@ -42,7 +42,7 @@ use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConf
 use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
     TEST_DEFAULT_MOCK_DA_ON_SUBMIT, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
@@ -2207,7 +2207,7 @@ async fn sequencer_back_pressure() {
 
         let mut bytes_submitted = 0;
         let max_batch_size = TEST_MAX_BATCH_SIZE * 100 / 99;
-        let max_total = max_batch_size * TEST_MAX_CONCURRENT_BLOBS;
+        let max_total = max_batch_size * TEST_MAX_CONCURRENT_BATCH_BLOBS;
         let mut has_hit_backpressure = false;
         while bytes_submitted < max_total {
             let tx = tx_set_value(&admin.private_key, generation, generation + 10);

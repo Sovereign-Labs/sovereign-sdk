@@ -355,7 +355,7 @@ async fn setup_with_block_producing(
     )
     .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.automatic_batch_production = true;
         c.rollup_prover_config = RollupProverConfig::Disabled;
         c.max_channel_size = 1;

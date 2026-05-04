@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use db::BlobSenderDb;
 pub use db::BlobToSend;
-use in_flight_blob::{track_num_of_in_flight_blobs, InFlightBlob, InFlightBlobInfo};
+use in_flight_blob::{InFlightBlob, InFlightBlobInfo, InFlightBlobsCount};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{DaSpec, EventModuleName, RuntimeEventResponse};
 use sov_rollup_interface::common::HexHash;
@@ -82,12 +82,13 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     shutdown_sender: watch::Sender<()>,
     da: Da,
     finalization_manager: FM,
-    nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
-    /// Counts only batch blobs in flight. Used to gate batch production
+    /// Counts batch blobs in flight. Used to gate batch production
     /// independently of proof submissions, so a saturated proof buffer cannot
     /// block new batches from being created (which is the only way queued
     /// proofs get drained for replay).
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
+    /// Counts proof blobs in flight.
+    nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     blob_processing_timeout: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
     ledger_pool_interval: Duration,
@@ -109,8 +110,8 @@ where
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
-        nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
+        nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         Self::new_with_task_intervals(
             da,
@@ -122,8 +123,8 @@ where
             blob_sender_channel,
             LEDGER_POLL_INTERVAL,
             completed_blobs_to_send,
-            nb_of_concurrent_blob_submissions,
             nb_of_concurrent_batch_blob_submissions,
+            nb_of_concurrent_proof_blob_submissions,
         )
         .await
     }
@@ -138,8 +139,8 @@ where
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         ledger_pool_interval: Duration,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
-        nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
+        nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
@@ -171,8 +172,8 @@ where
             shutdown_sender,
             da,
             finalization_manager,
-            nb_of_concurrent_blob_submissions,
             nb_of_concurrent_batch_blob_submissions,
+            nb_of_concurrent_proof_blob_submissions,
             blob_processing_timeout,
             blob_sender_channel,
             ledger_pool_interval,
@@ -184,15 +185,13 @@ where
         Ok((sender, handle))
     }
 
-    /// Number of concurrent blob submissions in flight.
+    /// Total number of concurrent blob submissions in flight (sum of batch and proof counters).
     pub fn nb_of_concurrent_blob_submissions(&self) -> usize {
-        self.nb_of_concurrent_blob_submissions
+        self.nb_of_concurrent_batch_blob_submissions
             .load(Ordering::Relaxed)
-    }
-
-    /// Returns a handle to the (atomic) number of blob submissions currently in flight.
-    pub fn nb_of_in_flight_blobs_handle(&self) -> Arc<AtomicUsize> {
-        self.nb_of_concurrent_blob_submissions.clone()
+            + self
+                .nb_of_concurrent_proof_blob_submissions
+                .load(Ordering::Relaxed)
     }
 
     /// Number of concurrent batch blob submissions in flight.
@@ -201,18 +200,29 @@ where
             .load(Ordering::Relaxed)
     }
 
+    /// Number of concurrent proof blob submissions in flight.
+    pub fn nb_of_concurrent_proof_blob_submissions(&self) -> usize {
+        self.nb_of_concurrent_proof_blob_submissions
+            .load(Ordering::Relaxed)
+    }
+
     /// Returns a handle to the (atomic) number of batch blob submissions currently in flight.
     pub fn nb_of_in_flight_batch_blobs_handle(&self) -> Arc<AtomicUsize> {
         self.nb_of_concurrent_batch_blob_submissions.clone()
     }
 
-    fn inc_nb_of_concurrent_blob_submissions(&self) {
-        self.nb_of_concurrent_blob_submissions
-            .fetch_add(1, Ordering::Relaxed);
+    /// Returns a handle to the (atomic) number of proof blob submissions currently in flight.
+    pub fn nb_of_in_flight_proof_blobs_handle(&self) -> Arc<AtomicUsize> {
+        self.nb_of_concurrent_proof_blob_submissions.clone()
     }
 
     fn inc_nb_of_concurrent_batch_blob_submissions(&self) {
         self.nb_of_concurrent_batch_blob_submissions
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn inc_nb_of_concurrent_proof_blob_submissions(&self) {
+        self.nb_of_concurrent_proof_blob_submissions
             .fetch_add(1, Ordering::Relaxed);
     }
 
@@ -310,9 +320,11 @@ where
             db: self.db.clone(),
             hooks: self.hooks.clone(),
             in_flight_blobs: self.in_flight_blobs.clone(),
-            nb_of_concurrent_blob_submissions: self.nb_of_concurrent_blob_submissions.clone(),
             nb_of_concurrent_batch_blob_submissions: self
                 .nb_of_concurrent_batch_blob_submissions
+                .clone(),
+            nb_of_concurrent_proof_blob_submissions: self
+                .nb_of_concurrent_proof_blob_submissions
                 .clone(),
             blob_processing_timeout: self.blob_processing_timeout,
             ledger_pool_interval: self.ledger_pool_interval,
@@ -322,9 +334,10 @@ where
 
         let shutdown_receiver = self.shutdown_receiver.clone();
 
-        self.inc_nb_of_concurrent_blob_submissions();
         if is_batch {
             self.inc_nb_of_concurrent_batch_blob_submissions();
+        } else {
+            self.inc_nb_of_concurrent_proof_blob_submissions();
         }
         let handle = tokio::task::spawn({
             let state = task_state;
@@ -395,16 +408,20 @@ where
                                 .collect::<Vec<_>>()
                         };
 
-                        let len = infos.len();
+                        let batch_count = infos.iter().filter(|b| b.is_batch).count() as u64;
+                        let proof_count = infos.len() as u64 - batch_count;
+                        let counts = InFlightBlobsCount {
+                            batch: batch_count,
+                            proof: proof_count,
+                        };
                         sov_metrics::track_metrics(|tracker| {
                             tracker.submit_inline("sov_rollup_blobs_enter_scope", "foo=1");
                             for b in infos {
                                 tracker.submit(b);
                             }
                             tracker.submit_inline("sov_rollup_blobs_exit_scope", "foo=1");
+                            tracker.submit(counts);
                         });
-
-                        track_num_of_in_flight_blobs(len as u64);
 
                         continue;
                     }
@@ -486,8 +503,8 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     db: Arc<BlobSenderDb>,
     hooks: Arc<dyn BlobSenderHooks<Da = Da::Spec>>,
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
-    nb_of_concurrent_blob_submissions: Arc<AtomicUsize>,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
+    nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
@@ -496,10 +513,11 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
 
 impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
     fn dec_nb_of_concurrent_blob_submissions(&self, is_batch: bool) {
-        self.nb_of_concurrent_blob_submissions
-            .fetch_sub(1, Ordering::Relaxed);
         if is_batch {
             self.nb_of_concurrent_batch_blob_submissions
+                .fetch_sub(1, Ordering::Relaxed);
+        } else {
+            self.nb_of_concurrent_proof_blob_submissions
                 .fetch_sub(1, Ordering::Relaxed);
         }
     }

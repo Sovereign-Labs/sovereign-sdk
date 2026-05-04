@@ -111,7 +111,7 @@ async fn start_rollup(
         .set_config(|c| {
             c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 10;
-            c.max_concurrent_blobs = 92;
+            c.max_concurrent_batch_blobs = 92;
             if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;

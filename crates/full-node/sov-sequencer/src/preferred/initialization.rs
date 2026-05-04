@@ -128,7 +128,6 @@ where
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
 
-        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
         let in_flight_batch_blobs = blob_sender.nb_of_in_flight_batch_blobs();
 
         let (forced_tx_batch_notifier, _) = broadcast::channel(1);
@@ -169,7 +168,6 @@ where
             shutdown_sender.clone(),
             executor_events_sender,
             next_sequence_number,
-            in_flight_blobs,
             in_flight_batch_blobs,
             stop_at_rollup_height,
             rollup_exec_config.clone(),

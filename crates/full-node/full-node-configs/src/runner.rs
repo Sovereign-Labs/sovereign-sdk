@@ -241,7 +241,7 @@ mod tests {
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
-            max_concurrent_blobs = 16
+            max_concurrent_batch_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.standard]
@@ -285,7 +285,7 @@ mod tests {
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
-            max_concurrent_blobs = 16
+            max_concurrent_batch_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.preferred]
@@ -339,7 +339,7 @@ mod tests {
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
-            max_concurrent_blobs = 16
+            max_concurrent_batch_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.preferred]

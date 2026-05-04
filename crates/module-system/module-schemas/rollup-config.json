@@ -1150,7 +1150,7 @@
         "blob_processing_timeout_secs",
         "max_allowed_node_distance_behind",
         "max_batch_size_bytes",
-        "max_concurrent_blobs",
+        "max_concurrent_batch_blobs",
         "rollup_address"
       ],
       "properties": {
@@ -1202,8 +1202,8 @@
           "format": "uint",
           "minimum": 0.0
         },
-        "max_concurrent_blobs": {
-          "description": "Maximum number of blobs sent in parallel.",
+        "max_concurrent_batch_blobs": {
+          "description": "Maximum number of batch blobs sent in parallel before throttling new batch creation. Proof blobs are not counted against this limit.",
           "type": "integer",
           "format": "uint",
           "minimum": 0.0

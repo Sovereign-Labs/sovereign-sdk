@@ -83,7 +83,6 @@ where
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
     pub(crate) is_ready: Result<(), SequencerNotReadyDetails>,
-    pub(crate) in_flight_blobs: Arc<AtomicUsize>,
     /// Counts batch blobs only. Gates batch production so that proofs in flight
     /// cannot block new batches from being created (which is the only path
     /// that drains queued proofs via `proofs_for_replay`).
@@ -187,8 +186,8 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    pub(crate) fn nb_of_concurrent_blob_submissions(&self) -> usize {
-        self.in_flight_blobs.load(Ordering::Acquire)
+    pub(crate) fn nb_of_concurrent_batch_blob_submissions(&self) -> usize {
+        self.in_flight_batch_blobs.load(Ordering::Acquire)
     }
 
     pub(crate) async fn overwrite_next_sequence_number_for_recovery(
@@ -442,7 +441,7 @@ where
 
     pub(crate) async fn check_readiness(
         &self,
-        max_concurrent_blobs: usize,
+        max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
     ) -> Result<(), SequencerNotReadyDetails> {
         // We cannot accept transactions until the latest finalized slot number
@@ -455,10 +454,10 @@ where
             });
         }
 
-        if let Some(nb_of_blobs_in_flight) = self.blob_sender_busy() {
+        if let Some(nb_of_batch_blobs_in_flight) = self.blob_sender_busy() {
             return Err(SequencerNotReadyDetails::WaitingOnBlobSender {
-                max_concurrent_blobs,
-                nb_of_blobs_in_flight,
+                max_concurrent_batch_blobs,
+                nb_of_batch_blobs_in_flight,
             });
         }
 
@@ -556,7 +555,7 @@ where
         // start consumes them via `proofs_for_replay`).
         let num_current_in_flight_batches = self.in_flight_batch_blobs.load(Ordering::Acquire);
 
-        if num_current_in_flight_batches > self.seq_config.max_concurrent_blobs {
+        if num_current_in_flight_batches > self.seq_config.max_concurrent_batch_blobs {
             Some(num_current_in_flight_batches)
         } else {
             None

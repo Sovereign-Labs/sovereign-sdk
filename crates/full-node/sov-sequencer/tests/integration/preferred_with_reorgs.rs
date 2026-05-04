@@ -250,7 +250,7 @@ async fn test_stream_of_transactions(
             ..Default::default()
         });
         config.rollup_prover_config = RollupProverConfig::Disabled;
-        config.max_concurrent_blobs = 128;
+        config.max_concurrent_batch_blobs = 128;
     })
     .set_da_config(|da_config| {
         da_config.sender_address = genesis_config
