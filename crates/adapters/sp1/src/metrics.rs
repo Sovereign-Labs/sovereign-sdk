@@ -43,33 +43,19 @@ impl Metric for Sp1NetworkProvingMetric {
 /// Best-effort: fetch the canonical cycles + PGUs the network recorded for
 /// `request_id` and submit a [`Sp1NetworkProvingMetric`].
 ///
-/// Telemetry must never fail proving, so any error from the SDK is logged and
-/// swallowed.
+/// Telemetry must never fail proving. Any error or missing-details response is
+/// silently dropped — the occasional missing datapoint is acceptable.
 pub(crate) fn submit_network_proving_metric(network: &NetworkProver, request_id: B256) {
-    let (program, cycles, gas_used) = match network.get_proof_request(request_id) {
-        Ok(Some(req)) => {
-            let program = req
-                .program_name
-                .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| hex::encode(&req.vk_hash));
-            (program, req.cycles, req.gas_used)
-        }
-        Ok(None) => {
-            tracing::warn!(
-                request_id = %request_id,
-                "SP1 network returned no ProofRequest details; skipping cycles/gas metric"
-            );
-            return;
-        }
-        Err(e) => {
-            tracing::warn!(
-                request_id = %request_id,
-                error = ?e,
-                "Failed to fetch SP1 ProofRequest details for cycles/gas metric"
-            );
-            return;
-        }
+    // Best-effort metric: drop on RPC failure or missing details.
+    let Ok(Some(req)) = network.get_proof_request(request_id) else {
+        return;
     };
+    let program = req
+        .program_name
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| hex::encode(&req.vk_hash));
+    let cycles = req.cycles;
+    let gas_used = req.gas_used;
 
     sov_metrics::track_metrics(|tracker| {
         tracker.submit(Sp1NetworkProvingMetric {

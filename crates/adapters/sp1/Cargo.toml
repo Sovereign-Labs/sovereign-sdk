@@ -39,7 +39,6 @@ sp1-verifier = { version = "6.1.0", default-features = false, features = ["std"]
 sp1-primitives = { version = "6.1.0", default-features = false }
 sp1-recursion-executor = { version = "6.1.0", default-features = false }
 slop-algebra = { version = "6.1.0", default-features = false }
-tracing = { workspace = true, optional = true }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
 sp1-zkvm = { version = "6.1.0", features = ["verify"] }
@@ -63,7 +62,6 @@ native = [
     "sov-rollup-interface/native",
     "sov-metrics/native",
     "sov-sp1-adapter/native",
-    "dep:tracing",
 ]
 arbitrary = [
     "dep:arbitrary",

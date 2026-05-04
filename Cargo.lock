@@ -12822,7 +12822,6 @@ dependencies = [
  "sp1-sdk",
  "sp1-verifier",
  "sp1-zkvm",
- "tracing",
 ]
 
 [[package]]
