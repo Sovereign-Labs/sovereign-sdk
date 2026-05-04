@@ -16,6 +16,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
+use crate::common::SlotNumber;
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use crate::zk::aggregated_proof::SerializedAggregatedProof;
@@ -195,6 +196,8 @@ pub struct StateTransitionPublicData<Address, Da: DaSpec, Root> {
         deserialize = "Root: borsh::de::BorshDeserialize"
     ))]
     pub final_state_root: Root,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
     /// The slot hash of the state transition
     #[borsh(bound(
         serialize = "<Da as DaSpec>::SlotHash: borsh::ser::BorshSerialize",
@@ -224,6 +227,8 @@ pub struct StateTransitionWitness<StateRoot, Witness, Da: DaSpec> {
     pub relevant_blobs: RelevantBlobs<<Da as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub witness: Witness,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
 }
 
 #[derive(Serialize, Deserialize, UniversalWallet)]

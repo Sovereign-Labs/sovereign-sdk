@@ -572,6 +572,7 @@ where
             .finalize_chain_state(&total_gas, &mut kernel_state_accessor);
 
         let rollup_height = state.rollup_height_to_access();
+        let slot_number = runtime.kernel().accessor(&mut state).true_slot_number();
         let (state_root, witness, change_set) = {
             // We can't use `if cfg!` here because `materialize_slot` returns different types in native and non-native mode.
             // So we structure this code to make it obvious that we're handling both cases.
@@ -615,6 +616,7 @@ where
             discarded_blobs,
             witness,
             rollup_height,
+            slot_number,
         }
     }
 

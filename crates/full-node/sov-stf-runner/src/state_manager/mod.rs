@@ -398,7 +398,16 @@ where
         self.ledger_db.replace_reader(ledger_pre_state);
         self.verify_transition_witness_against_ledger_state(&transition_witness)?;
 
-        let slot_number = self.get_slot_number()?;
+        let slot_number = transition_witness.slot_number;
+        let ledger_slot_number = self.get_slot_number()?;
+        // `slot_number` is the kernel-emitted value (true_slot_number from the STF),
+        // committed in the witness. The ledger's next-slot counter must agree
+        // with it; otherwise host-side bookkeeping has drifted from execution and
+        // downstream aggregation would later diverge.
+        assert_eq!(
+            slot_number, ledger_slot_number,
+            "STF-emitted slot_number ({slot_number}) does not match ledger-derived slot_number ({ledger_slot_number})",
+        );
         let ledger_materialization_start = std::time::Instant::now();
         let mut ledger_change_set = self
             .ledger_db
@@ -438,7 +447,6 @@ where
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
                 aggregated_proofs: all_aggregated_proofs,
-                slot_number,
             };
             let stf_info_schema = stf_info_sender
                 .materialize_stf_info(&stf_info, &self.ledger_db)

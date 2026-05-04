@@ -125,6 +125,7 @@ pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
             witness: result.witness,
             relevant_blobs,
             final_state_root: result.state_root,
+            slot_number: result.slot_number,
         });
 
         prev_state_root = result.state_root;
