@@ -38,7 +38,7 @@ use sov_stf_runner::{
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::{
     TestSpec, TestStorage, TestStorageManager, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MOCK_DA_POLLING_INTERVAL,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS, TEST_MOCK_DA_POLLING_INTERVAL,
 };
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Receiver;
@@ -456,6 +456,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             }),
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
             extension: None,
         },

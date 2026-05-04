@@ -18,7 +18,7 @@ use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
 use sov_rollup_interface::node::ledger_api::{LedgerStateProvider, QueryMode};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use sov_rollup_interface::stf::BlobDiscardReason;
-use tokio::sync::{broadcast, oneshot, watch, Mutex};
+use tokio::sync::{broadcast, oneshot, watch, Mutex, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, trace};
@@ -84,6 +84,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     finalization_manager: FM,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
     nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
+    proof_blob_semaphore: Arc<Semaphore>,
     blob_processing_timeout: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
     ledger_pool_interval: Duration,
@@ -96,6 +97,7 @@ where
     H: BlobSenderHooks<Da = Da::Spec>,
     FM: FinalizationManager,
 {
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         da: Da,
         finalization_manager: FM,
@@ -107,6 +109,7 @@ where
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
+        max_concurrent_proof_blobs: usize,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         Self::new_with_task_intervals(
             da,
@@ -120,10 +123,12 @@ where
             completed_blobs_to_send,
             nb_of_concurrent_batch_blob_submissions,
             nb_of_concurrent_proof_blob_submissions,
+            max_concurrent_proof_blobs,
         )
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn new_with_task_intervals(
         da: Da,
         finalization_manager: FM,
@@ -136,6 +141,7 @@ where
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
+        max_concurrent_proof_blobs: usize,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
@@ -159,6 +165,23 @@ where
 
         all_blobs.extend(completed_blobs_to_send);
 
+        // Count unique proof blobs across both restore sources (BlobSender's
+        // own RocksDB and the caller-supplied recovery list). Duplicates are
+        // skipped during replay (see `submit_blob_on_da`), so they must not
+        // be double-counted here. Each restored proof finalization will call
+        // `add_permits(1)`, so the semaphore must start with a deficit
+        // matching the in-flight set we're about to recreate.
+        let restored_proof_count = {
+            let mut seen = std::collections::HashSet::new();
+            all_blobs
+                .iter()
+                .filter(|b| matches!(b.blob, BlobToSend::Proof { .. }))
+                .filter(|b| seen.insert(b.blob_id))
+                .count()
+        };
+        let initial_permits = max_concurrent_proof_blobs.saturating_sub(restored_proof_count);
+        let proof_blob_semaphore = Arc::new(Semaphore::new(initial_permits));
+
         let sender = Self {
             db,
             hooks,
@@ -169,6 +192,7 @@ where
             finalization_manager,
             nb_of_concurrent_batch_blob_submissions,
             nb_of_concurrent_proof_blob_submissions,
+            proof_blob_semaphore,
             blob_processing_timeout,
             blob_sender_channel,
             ledger_pool_interval,
@@ -209,6 +233,15 @@ where
     /// Returns a handle to the (atomic) number of proof blob submissions currently in flight.
     pub fn nb_of_in_flight_proof_blobs_handle(&self) -> Arc<AtomicUsize> {
         self.nb_of_concurrent_proof_blob_submissions.clone()
+    }
+
+    /// Returns a handle to the proof blob throttling semaphore.
+    ///
+    /// Producers acquire a permit here before submitting a proof blob and call
+    /// `forget()` on the permit once submission has been accepted; the permit
+    /// is reissued by [`BlobSender`] when the proof reaches `Finalized` state.
+    pub fn proof_blob_semaphore(&self) -> Arc<Semaphore> {
+        self.proof_blob_semaphore.clone()
     }
 
     fn inc_nb_of_concurrent_batch_blob_submissions(&self) {
@@ -321,6 +354,7 @@ where
             nb_of_concurrent_proof_blob_submissions: self
                 .nb_of_concurrent_proof_blob_submissions
                 .clone(),
+            proof_blob_semaphore: self.proof_blob_semaphore.clone(),
             blob_processing_timeout: self.blob_processing_timeout,
             ledger_pool_interval: self.ledger_pool_interval,
             blob_sender_channel: self.blob_sender_channel.clone(),
@@ -500,6 +534,7 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
     nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
+    proof_blob_semaphore: Arc<Semaphore>,
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
@@ -514,6 +549,8 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
         } else {
             self.nb_of_concurrent_proof_blob_submissions
                 .fetch_sub(1, Ordering::Relaxed);
+            // Release the back-pressure permit reserved by the producer.
+            self.proof_blob_semaphore.add_permits(1);
         }
     }
 

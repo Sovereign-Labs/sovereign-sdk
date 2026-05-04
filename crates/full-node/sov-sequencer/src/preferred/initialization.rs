@@ -105,8 +105,11 @@ where
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
             seq_role,
+            config.max_concurrent_proof_blobs,
         )
         .await?;
+
+        let proof_blob_semaphore = blob_sender.proof_blob_semaphore();
 
         if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
@@ -219,6 +222,7 @@ where
             tx_status_manager: tx_status_manager.clone(),
             transaction_cache: cached_txs,
             blobs_sender_channel: Some(blobs_sender_channel),
+            proof_blob_semaphore,
             api_state,
             _runtime: PhantomData,
             config: config.clone(),

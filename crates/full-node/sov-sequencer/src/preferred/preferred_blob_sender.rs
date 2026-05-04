@@ -26,6 +26,7 @@ pub struct PreferredBlobSender<Da: DaService> {
 }
 
 impl<Da: DaService> PreferredBlobSender<Da> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn new(
         da: Da,
         ledger_db: LedgerDb,
@@ -36,6 +37,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,
+        max_concurrent_proof_blobs: usize,
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         match seq_role {
@@ -65,6 +67,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                     blobs_to_send,
                     nb_of_concurrent_batch_blob_submissions.clone(),
                     Arc::new(AtomicUsize::new(0)),
+                    max_concurrent_proof_blobs,
                 )
                 .await?;
 
@@ -135,6 +138,18 @@ impl<Da: DaService> PreferredBlobSender<Da> {
 
     pub(crate) fn nb_of_in_flight_batch_blobs(&self) -> Arc<AtomicUsize> {
         self.nb_of_concurrent_batch_blob_submissions.clone()
+    }
+
+    /// Returns a handle to the proof blob throttling semaphore, derived from
+    /// the underlying [`BlobSender`] so the deficit for restored proofs is
+    /// already accounted for.
+    pub(crate) fn proof_blob_semaphore(&self) -> Arc<tokio::sync::Semaphore> {
+        match &self.inner {
+            Some(inner) => inner.proof_blob_semaphore(),
+            // Replicas don't publish proofs; hand back a never-acquired
+            // semaphore for type symmetry.
+            None => Arc::new(tokio::sync::Semaphore::new(0)),
+        }
     }
 
     pub(crate) async fn add_txs(&self, blob_id: BlobInternalId, tx_hashes: Arc<Vec<TxHash>>) {

@@ -552,6 +552,9 @@ async fn create_blob_sender(
 
     let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
     let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
+    // Tests don't exercise back-pressure unless a test specifically constructs
+    // its own BlobSender. Use a large permissive cap.
+    let max_concurrent_proof_blobs = usize::MAX >> 3;
     let (blob_sender, handle) = BlobSender::new_with_task_intervals(
         deps.da.clone(),
         finalization_manager,
@@ -564,6 +567,7 @@ async fn create_blob_sender(
         Default::default(),
         nb_of_concurrent_batch_blob_submissions,
         nb_of_concurrent_proof_blob_submissions,
+        max_concurrent_proof_blobs,
     )
     .await
     .unwrap();

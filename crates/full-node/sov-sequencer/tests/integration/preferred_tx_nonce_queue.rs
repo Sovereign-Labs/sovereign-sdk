@@ -22,6 +22,7 @@ use sov_test_utils::{
     default_test_tx_details, generate_optimistic_runtime_with_kernel, test_signed_transaction,
     RtAgnosticBlueprint, TestSpec, TestUser, TEST_BLOB_PROCESSING_TIMEOUT,
     TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BATCH_BLOBS,
+    TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio::task::JoinHandle;
@@ -80,6 +81,7 @@ async fn create_test_rollup(
         c.max_batch_size_bytes = TEST_MAX_BATCH_SIZE;
         c.blob_processing_timeout_secs = TEST_BLOB_PROCESSING_TIMEOUT;
         c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
+        c.max_concurrent_proof_blobs = TEST_MAX_CONCURRENT_PROOF_BLOBS;
 
         let mut preferred_config = match &c.sequencer_config {
             SequencerKindConfig::Preferred(p) => p.clone(),

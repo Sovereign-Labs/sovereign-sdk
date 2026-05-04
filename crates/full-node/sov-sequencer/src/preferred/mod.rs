@@ -119,6 +119,7 @@ where
     synchronized_state_updator: Arc<SequencerStateUpdator<S, Rt>>,
     tx_status_manager: TxStatusManager<S::Da>,
     blobs_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
+    proof_blob_semaphore: Arc<tokio::sync::Semaphore>,
     api_state: ApiState<S>,
     _runtime: PhantomData<(Rt, Da)>,
     pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
@@ -975,6 +976,18 @@ where
         &self,
         proof_data: SerializedProofWithDetailsBytes,
     ) -> anyhow::Result<()> {
+        // Reserve a slot in the proof blob throttling budget before pushing the
+        // proof through the executor event channel. Acquiring here parks the
+        // producer (typically the ZK aggregator loop) until a finalized proof
+        // releases its permit, propagating back-pressure to proof generation
+        // without blocking the SideEffectsTask that drains batch blobs.
+        let permit = self
+            .proof_blob_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| anyhow::anyhow!("proof blob semaphore closed: {e}"))?;
+
         let blob_id = new_blob_id();
         self.synchronized_state_updator
             .proof_blob_msg(
@@ -985,6 +998,9 @@ where
             .await
             .map_err(|e| e.into_state_update_error())?;
 
+        // The proof is now durably owned by the executor pipeline; the
+        // BlobSender will reissue this permit on finalization.
+        permit.forget();
         Ok(())
     }
 }

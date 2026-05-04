@@ -39,7 +39,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{watch, Mutex, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::{debug, trace, warn};
@@ -99,6 +99,7 @@ where
     da_address: <S::Da as DaSpec>::Address,
     config: SequencerConfig<S::Address, StdSequencerConfig>,
     api_ledger_db: LedgerDb,
+    proof_blob_semaphore: Arc<Semaphore>,
 }
 
 /// An error that indicates that the transaction could not be added to the batch.
@@ -174,8 +175,13 @@ where
             Default::default(),
             nb_of_concurrent_batch_blob_submissions,
             nb_of_concurrent_proof_blob_submissions,
+            config.max_concurrent_proof_blobs,
         )
         .await?;
+        // Read back the semaphore that BlobSender constructed: it has already
+        // subtracted permits for any proofs restored from RocksDB during
+        // startup, so it correctly enforces the cap across restarts.
+        let proof_blob_semaphore = blob_sender.proof_blob_semaphore();
 
         let mut handles: Vec<JoinHandle<()>> = vec![];
         handles.push(blob_sender_handle);
@@ -203,6 +209,7 @@ where
             config: config.clone(),
             api_ledger_db,
             da_address,
+            proof_blob_semaphore,
         }));
 
         handles.push(tokio::spawn({
@@ -782,6 +789,16 @@ where
         &self,
         proof_blob: SerializedProofWithDetailsBytes,
     ) -> anyhow::Result<()> {
+        // Reserve a slot in the proof blob throttling budget before taking the
+        // inner lock so a saturated proof buffer cannot deadlock against batch
+        // submissions that also need this lock.
+        let permit = self
+            .proof_blob_semaphore
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| anyhow::anyhow!("proof blob semaphore closed: {e}"))?;
+
         let blob_id = new_blob_id();
 
         // TODO: Put SerializedAggregatedProof directly on chain without
@@ -802,6 +819,7 @@ where
 
         debug!(blob_id, "Proof blob has been dispatched for publishing");
 
+        permit.forget();
         Ok(())
     }
 }

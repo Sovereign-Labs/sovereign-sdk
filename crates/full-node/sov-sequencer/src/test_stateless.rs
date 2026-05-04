@@ -97,6 +97,7 @@ where
                     Default::default(),
                     nb_of_concurrent_batch_blob_submissions,
                     nb_of_concurrent_proof_blob_submissions,
+                    config.max_concurrent_proof_blobs,
                 )
                 .await?
                 .0,
