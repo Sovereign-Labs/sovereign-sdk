@@ -187,7 +187,7 @@ where
     Rt: Runtime<S>,
 {
     pub(crate) fn nb_of_concurrent_batch_blob_submissions(&self) -> usize {
-        self.in_flight_batch_blobs.load(Ordering::Acquire)
+        self.in_flight_batch_blobs.load(Ordering::Relaxed)
     }
 
     pub(crate) async fn overwrite_next_sequence_number_for_recovery(
@@ -395,7 +395,7 @@ where
             return;
         }
 
-        let in_flight_batch_blobs = self.in_flight_batch_blobs.load(Ordering::Relaxed);
+        let in_flight_batch_blobs = self.nb_of_concurrent_batch_blob_submissions();
         if in_flight_batch_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS {
             tracing::trace!(
                 current_in_flight = %in_flight_batch_blobs,
@@ -553,7 +553,7 @@ where
         // not block new batch creation, otherwise a saturated proof buffer
         // would prevent the very thing that drains queued proofs (a new batch
         // start consumes them via `proofs_for_replay`).
-        let num_current_in_flight_batches = self.in_flight_batch_blobs.load(Ordering::Acquire);
+        let num_current_in_flight_batches = self.nb_of_concurrent_batch_blob_submissions();
 
         if num_current_in_flight_batches > self.seq_config.max_concurrent_batch_blobs {
             Some(num_current_in_flight_batches)

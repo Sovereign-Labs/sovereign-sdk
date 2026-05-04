@@ -82,12 +82,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     shutdown_sender: watch::Sender<()>,
     da: Da,
     finalization_manager: FM,
-    /// Counts batch blobs in flight. Used to gate batch production
-    /// independently of proof submissions, so a saturated proof buffer cannot
-    /// block new batches from being created (which is the only way queued
-    /// proofs get drained for replay).
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
-    /// Counts proof blobs in flight.
     nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     blob_processing_timeout: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
