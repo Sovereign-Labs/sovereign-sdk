@@ -41,7 +41,7 @@ async fn get_latest_slot() {
 async fn get_latest_slot_include_children() {
     let slot = ledger_response_body(|client| async move {
         client
-            .get_latest_slot(Some(types::GetLatestSlotChildren::_1))
+            .get_latest_slot(Some(types::GetLatestSlotChildren::X1))
             .await
             .unwrap()
             .into_inner()
@@ -61,7 +61,7 @@ async fn get_latest_slot_include_children() {
             client
                 .get_slot_by_id(
                     &IntOrHash::Integer(rollup_height),
-                    Some(types::GetSlotByIdChildren::_1),
+                    Some(types::GetSlotByIdChildren::X1),
                 )
                 .await
                 .unwrap()
@@ -102,7 +102,7 @@ async fn get_finalized_slot() {
 async fn get_finalized_slot_include_children() {
     let slot = ledger_response_body(|client| async move {
         client
-            .get_finalized_slot(Some(types::GetFinalizedSlotChildren::_1))
+            .get_finalized_slot(Some(types::GetFinalizedSlotChildren::X1))
             .await
             .unwrap()
             .into_inner()
@@ -122,7 +122,7 @@ async fn get_finalized_slot_include_children() {
             client
                 .get_slot_by_id(
                     &IntOrHash::Integer(rollup_height),
-                    Some(types::GetSlotByIdChildren::_1),
+                    Some(types::GetSlotByIdChildren::X1),
                 )
                 .await
                 .unwrap()
@@ -182,7 +182,7 @@ async fn get_batch_include_children() {
         client
             .get_batch_by_id(
                 &IntOrHash::Integer(3),
-                Some(types::GetBatchByIdChildren::_1),
+                Some(types::GetBatchByIdChildren::X1),
             )
             .await
             .unwrap()
@@ -203,7 +203,7 @@ async fn get_batch_include_children() {
             client
                 .get_batch_by_id(
                     &IntOrHash::Hash(hash),
-                    Some(types::GetBatchByIdChildren::_1),
+                    Some(types::GetBatchByIdChildren::X1),
                 )
                 .await
                 .unwrap()
@@ -220,7 +220,7 @@ async fn get_batch_include_children() {
                 .get_batch_by_slot_id_and_offset(
                     &IntOrHash::Integer(1),
                     1,
-                    Some(types::GetBatchBySlotIdAndOffsetChildren::_1),
+                    Some(types::GetBatchBySlotIdAndOffsetChildren::X1),
                 )
                 .await
                 .unwrap()
@@ -305,7 +305,7 @@ async fn get_tx() {
 async fn get_tx_include_children() {
     let tx = ledger_response_body(|client| async move {
         client
-            .get_tx_by_id(&IntOrHash::Integer(7), Some(types::GetTxByIdChildren::_1))
+            .get_tx_by_id(&IntOrHash::Integer(7), Some(types::GetTxByIdChildren::X1))
             .await
             .unwrap()
             .into_inner()
@@ -322,7 +322,7 @@ async fn get_tx_include_children() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_id(&IntOrHash::Integer(7), Some(types::GetTxByIdChildren::_1))
+                .get_tx_by_id(&IntOrHash::Integer(7), Some(types::GetTxByIdChildren::X1))
                 .await
                 .unwrap()
                 .into_inner()
@@ -336,7 +336,7 @@ async fn get_tx_include_children() {
         tx,
         ledger_response_body(|client| async move {
             client
-                .get_tx_by_id(&IntOrHash::Hash(hash), Some(types::GetTxByIdChildren::_1))
+                .get_tx_by_id(&IntOrHash::Hash(hash), Some(types::GetTxByIdChildren::X1))
                 .await
                 .unwrap()
                 .into_inner()
@@ -353,7 +353,7 @@ async fn get_tx_include_children() {
                     &IntOrHash::Integer(1),
                     1,
                     1,
-                    Some(types::GetTxBySlotIdAndOffsetChildren::_1),
+                    Some(types::GetTxBySlotIdAndOffsetChildren::X1),
                 )
                 .await
                 .unwrap()
@@ -370,7 +370,7 @@ async fn get_tx_include_children() {
                 .get_tx_by_batch_id_and_offset(
                     &IntOrHash::Integer(3),
                     1,
-                    Some(types::GetTxByBatchIdAndOffsetChildren::_1),
+                    Some(types::GetTxByBatchIdAndOffsetChildren::X1),
                 )
                 .await
                 .unwrap()

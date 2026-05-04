@@ -163,9 +163,9 @@ impl Client {
         fut.retry(backoff)
             .when(|err| {
                 match err {
-                    Error::InvalidRequest(_) | Error::InvalidUpgrade(_) | Error::PreHookError(_) => false,
+                    Error::InvalidRequest(_) | Error::InvalidUpgrade(_)  => false,
                     Error::ErrorResponse(_) => !is_stop_height_error(err),
-                    Error::CommunicationError(_) | Error::ResponseBodyError(_) | Error::UnexpectedResponse(_) => true,
+                    Error::CommunicationError(_) | Error::ResponseBodyError(_) | Error::UnexpectedResponse(_) | Error::Custom(_) => true,
                     // This needs further improvement on the generated client.
                     // Details in https://github.com/Sovereign-Labs/sovereign-sdk-wip/pull/2799
                     Error::InvalidResponsePayload(bytes, _error) => {
