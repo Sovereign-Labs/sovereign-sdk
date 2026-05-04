@@ -12,9 +12,7 @@ use async_trait::async_trait;
 use db::BlobSenderDb;
 pub use db::BlobToSend;
 use in_flight_blob::{InFlightBlob, InFlightBlobInfo, InFlightBlobsCount};
-use metrics::{
-    submit_blobs_enter_scope_marker, submit_blobs_exit_scope_marker, track_num_of_in_flight_blobs,
-};
+use metrics::{submit_blobs_enter_scope_marker, submit_blobs_exit_scope_marker};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{DaSpec, EventModuleName, RuntimeEventResponse};
 use sov_rollup_interface::common::HexHash;

@@ -3,7 +3,7 @@ use std::io::Write;
 use sov_metrics::{write_escaped_field_value, Metric};
 use sov_modules_api::DaSpec;
 
-use crate::in_flight_blob::InFlightBlobInfo;
+use crate::in_flight_blob::{InFlightBlobInfo, InFlightBlobsCount};
 
 impl<Da: DaSpec> Metric for InFlightBlobInfo<Da> {
     fn measurement_name(&self) -> &'static str {
@@ -27,18 +27,13 @@ impl<Da: DaSpec> Metric for InFlightBlobInfo<Da> {
     }
 }
 
-/// Gauge of the current total of in-flight blobs (blobs handed to the sender but not yet
-/// finalized on the DA). Emitted as `sov_rollup_num_of_in_flight_blobs`.
+/// Gauge of in-flight blobs, split by batch vs proof. Emitted as
+/// `sov_rollup_num_of_in_flight_blobs`.
 ///
-/// Growing unboundedly indicates the DA submission pipeline cannot keep up with blob
-/// production; correlate with `sov_rollup_in_flight_blobs_snapshot` to see per-blob state.
-#[derive(Debug)]
-struct InFlightBlobCountMetric {
-    /// Number of blobs currently in-flight.
-    count: u64,
-}
-
-impl Metric for InFlightBlobCountMetric {
+/// Either field growing unboundedly indicates the DA submission pipeline cannot keep
+/// up with blob production; correlate with `sov_rollup_in_flight_blobs_snapshot` to
+/// see per-blob state.
+impl Metric for InFlightBlobsCount {
     fn measurement_name(&self) -> &'static str {
         "sov_rollup_num_of_in_flight_blobs"
     }
@@ -46,17 +41,12 @@ impl Metric for InFlightBlobCountMetric {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} num_of_in_flight_blobs={}i",
+            "{} num_of_in_flight_batch_blobs={}i,num_of_in_flight_proof_blobs={}i",
             self.measurement_name(),
-            self.count,
+            self.batch,
+            self.proof,
         )
     }
-}
-
-pub(super) fn track_num_of_in_flight_blobs(count: u64) {
-    sov_metrics::track_metrics(|tracker| {
-        tracker.submit(InFlightBlobCountMetric { count });
-    });
 }
 
 /// InfluxDB line protocol requires at least one field per point; markers have no payload
