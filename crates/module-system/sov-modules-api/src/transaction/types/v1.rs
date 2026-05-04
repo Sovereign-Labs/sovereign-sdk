@@ -87,10 +87,8 @@ pub struct Version1<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
-    /// Signer-declared target address for execution. `None` routes through
-    /// `resolve_sender_address` (default-address / legacy fallback). `Some(X)` requires
-    /// the multisig credential to be authorized for `X` in `account_owners`; the tx
-    /// is skipped otherwise. This field is part of the signed bytes.
+    /// Signer-declared target address; part of the signed bytes.
+    /// See [`crate::capabilities::AuthorizationData::address`] for routing semantics.
     pub target_address: Option<S::Address>,
 }
 

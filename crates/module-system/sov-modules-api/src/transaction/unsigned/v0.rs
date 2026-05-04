@@ -114,10 +114,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
     }
 
     /// Creates a new `V1` transaction from this unsigned transaction.
-    ///
-    /// `target_address = None` routes the tx through `resolve_sender_address`
-    /// (default address / legacy fallback). `target_address = Some(X)` requires
-    /// `(X, credential_id) ∈ account_owners`, else the tx is skipped at authorization.
+    /// See [`crate::capabilities::AuthorizationData::address`] for `target_address` routing.
     pub fn to_multisig_tx(
         self,
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,

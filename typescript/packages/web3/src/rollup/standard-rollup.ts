@@ -84,12 +84,11 @@ export function standardTypeBuilder<
 /**
  * The parameters for simulating a runtime call transaction.
  */
-type RollupSimulateParams = SovereignClient.RollupSimulateParams & {
-  target_address?: string | null;
-};
-
-export type SimulateParams = Omit<RollupSimulateParams, "call" | "sender"> &
-  SignerParams;
+export type SimulateParams = Omit<
+  SovereignClient.RollupSimulateParams,
+  "call" | "sender"
+> &
+  SignerParams & { target_address?: string | null };
 
 export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,

@@ -153,10 +153,6 @@ fn build_auth_data<S: Spec>(
                 sov_modules_api::metered_credential::<S, S::CryptoSpec>(pub_key, meter)
                     .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-            debug_assert!(
-                target_address.is_none(),
-                "V0 Solana transactions cannot carry a target_address"
-            );
             Ok(AuthorizationData {
                 uniqueness,
                 tx_hash: raw_tx_hash,

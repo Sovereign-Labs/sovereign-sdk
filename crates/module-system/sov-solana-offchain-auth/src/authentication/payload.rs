@@ -78,9 +78,8 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// This is the "multisig address" except if the credential is mapped to another address in
     /// `sov-accounts`.
     pub multisig_id: S::Address,
-    /// Signer-declared target address. `None` routes through `resolve_sender_address`
-    /// (default-address resolver). `Some(X)` requires the multisig credential to be authorized
-    /// for `X` via `account_owners`; otherwise the tx is skipped.
+    /// Signer-declared target address; routing semantics in
+    /// [`sov_modules_api::capabilities::AuthorizationData::address`].
     ///
     /// Omitted from the serialized JSON when `None`, so pre-change signed messages (which have no
     /// `target_address` field) remain byte-identical and verify against the same signature.

@@ -61,6 +61,9 @@ impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
         rewarded_token_holder
     }
 
+    /// Resolves the sender address. When `auth_data.address` is `Some(X)`, requires
+    /// `is_explicitly_authorized(X, credential_id)`. When `None`, falls through to
+    /// `resolve_sender_address` (default-address / legacy mapping).
     fn resolve_sender(
         &mut self,
         auth_data: &AuthorizationData<S>,
@@ -68,10 +71,11 @@ impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
     ) -> anyhow::Result<S::Address> {
         match auth_data.address {
             Some(requested) => {
-                if !self
-                    .accounts
-                    .is_authorized(&requested, &auth_data.credential_id, state)?
-                {
+                if !self.accounts.is_explicitly_authorized(
+                    &requested,
+                    &auth_data.credential_id,
+                    state,
+                )? {
                     anyhow::bail!(
                         "credential {} not authorized for target address {}",
                         auth_data.credential_id,
@@ -354,10 +358,6 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         ))
     }
 
-    /// V1 `target_address` semantics apply uniformly here: when `auth_data.address` is
-    /// `Some(X)`, `resolve_sender` enforces `is_authorized(X, credential_id)` and uses `X` as both
-    /// the sender and the sequencer's rollup address. V0 transactions set `address = None` and
-    /// hit the legacy `resolve_sender_address` path unchanged.
     fn resolve_unregistered_context(
         &mut self,
         auth_data: &AuthorizationData<S>,

@@ -923,7 +923,10 @@ describe("SolanaSignableRollup", () => {
       expect(parsed).not.toHaveProperty("target_address");
     });
 
-    it("includes target_address in the signed JSON when targetAddress is provided (solanaSimple)", async () => {
+    it("includes target_address in the signed JSON before version when targetAddress is provided", async () => {
+      // Field order matches Rust's `SolanaOffchainUnsignedTransactionV1`: signers sign the raw
+      // JSON bytes, so TS and Rust must emit fields in the same order or signatures produced
+      // in one language won't verify against JSON produced in the other.
       const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
         await setupMultisigContext();
 
@@ -941,35 +944,12 @@ describe("SolanaSignableRollup", () => {
 
       expect(captured.bytes).toBeDefined();
       const signedJson = new TextDecoder().decode(captured.bytes!);
-      const parsed = JSON.parse(signedJson);
-      expect(parsed.target_address).toBe(bs58.encode(targetAddress));
-    });
-
-    it("places target_address before version in the signed JSON to match Rust field order", async () => {
-      // The Rust `SolanaOffchainUnsignedTransactionV1` struct declares `target_address` before
-      // `version`. Multisig signers sign the raw JSON bytes, so TS and Rust must serialize the
-      // fields in the same order — otherwise signatures produced in one language won't verify
-      // against JSON produced in the other.
-      const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
-        await setupMultisigContext();
-
-      const targetAddress = new Uint8Array(32);
-      targetAddress.fill(0x42);
-
-      const { mock, captured } = captureSignerInput(signers.signer1);
-      await rollup.signTransactionForMultisig(unsignedTx, {
-        signer: mock,
-        authenticator: "solanaSimple",
-        multisigAddress,
-        multisigPubkeys,
-        targetAddress,
-      });
-
-      const signedJson = new TextDecoder().decode(captured.bytes!);
+      expect(JSON.parse(signedJson).target_address).toBe(
+        bs58.encode(targetAddress),
+      );
       const targetIdx = signedJson.indexOf('"target_address"');
       const versionIdx = signedJson.indexOf('"version"');
       expect(targetIdx).toBeGreaterThanOrEqual(0);
-      expect(versionIdx).toBeGreaterThanOrEqual(0);
       expect(targetIdx).toBeLessThan(versionIdx);
     });
 

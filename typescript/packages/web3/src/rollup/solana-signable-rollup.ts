@@ -28,11 +28,9 @@ export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
     multisig_id: string;
     /**
-     * Signer-declared target address. Omitted (or `null`) routes through
-     * `resolve_sender_address` on-chain. A concrete value requires the multisig credential to be
-     * authorized for that address in `account_owners`; otherwise the transaction is skipped.
-     * Omitted from the serialized JSON when not set, preserving byte equivalence with
-     * pre-change signed messages so existing signatures continue to verify.
+     * Signer-declared target address. Omitted from the serialized JSON when not set,
+     * preserving byte equivalence with pre-change signed messages so existing signatures
+     * continue to verify. See `AuthorizationData::address` (Rust) for routing semantics.
      */
     target_address?: string;
     version: number;
@@ -88,12 +86,9 @@ export type SolanaMultisigSubmitParams =
 export type SolanaMultisigSignParams = SolanaMultisigSubmitParams & {
   signer: Signer;
   /**
-   * Optional target address to embed in the signed V1 payload. When omitted, the signed message
-   * does not carry a `target_address` field, matching pre-change byte layout. When provided, the
-   * multisig credential must be authorized for this address in `account_owners` on-chain or the
-   * transaction will be skipped at authorization time.
-   *
-   * Unused by the `"standard"` authenticator.
+   * Optional target address to embed in the signed V1 payload. Omitted from the JSON when
+   * unset to preserve byte equivalence with pre-change signed messages. Unused by the
+   * `"standard"` authenticator. See `AuthorizationData::address` (Rust) for routing semantics.
    */
   targetAddress?: Uint8Array;
 };

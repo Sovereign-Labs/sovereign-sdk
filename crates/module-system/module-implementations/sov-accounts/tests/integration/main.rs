@@ -568,7 +568,7 @@ fn test_v1_target_none_uses_default_resolver() {
             let accounts = Accounts::<S>::default();
             assert!(
                 accounts
-                    .is_authorized(&multisig_default_address, &inner_credential, state)
+                    .is_explicitly_authorized(&multisig_default_address, &inner_credential, state)
                     .unwrap(),
                 "target=None should route to multisig default; the InsertCredentialId \
                  call must write the new credential under that address"
@@ -619,7 +619,7 @@ fn test_v1_target_some_authorized_succeeds() {
             let accounts = Accounts::<S>::default();
             assert!(
                 accounts
-                    .is_authorized(&alice_address, &inner_credential, state)
+                    .is_explicitly_authorized(&alice_address, &inner_credential, state)
                     .unwrap(),
                 "InsertCredentialId should write under target_address, not multisig default"
             );
@@ -670,7 +670,7 @@ fn test_v1_target_some_unauthorized_skipped() {
             let accounts = Accounts::<S>::default();
             assert!(
                 !accounts
-                    .is_authorized(&unowned_address, &inner_credential, state)
+                    .is_explicitly_authorized(&unowned_address, &inner_credential, state)
                     .unwrap(),
                 "unauthorized target path must not auto-register any tuple"
             );
