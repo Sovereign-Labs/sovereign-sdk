@@ -293,13 +293,6 @@ where
         let credential_id = CredentialId::from(embedded_pubkey);
         let address = S::Address::try_from(&user_pubkey).map_err(CoreModuleError::from)?;
 
-        // The Solana message body is signed by `payer` only; the `embedded`
-        // half is unsigned material in this format. The authorization we
-        // record here is a many-to-many entry in `account_owners` that is
-        // unusable without the embedded credential's private key, so a
-        // payer who copies someone else's `embedded` only writes inert
-        // state. Tightening this further is a property of the upstream
-        // message format rather than this handler.
         self.accounts
             .authorize_credential(&address, &credential_id, state)
             .map_err(CoreModuleError::state_write)?;

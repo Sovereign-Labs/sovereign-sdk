@@ -72,12 +72,6 @@ fn test_user_is_registered_correctly() {
             "Embedded credential should be authorized for the payer address after registration"
         );
     });
-
-    // TODO(follow-up): once V1 `target_address` lands (PR #2771), extend
-    // this test to also sign a V1 transaction with the embedded private
-    // key and `target_address = Some(payer_addr)`, asserting the rollup
-    // processes the tx as if from `payer_addr`. That covers the end-to-end
-    // embedded-wallet signing path this registration is enabling.
 }
 
 #[test]
@@ -115,28 +109,7 @@ fn test_two_payers_registering_same_embedded_both_succeed() {
         }),
     });
 
-    // Second registration: SAME embedded but a DIFFERENT payer. Under the
-    // new `account_owners` model this is allowed — many-to-many
-    // authorization records both pairings without conflict.
-    //
-    // Why no exploit follows from accepting this second write:
-    //   - `account_owners[(payer_b_addr, embedded)] = true` only declares
-    //     that `embedded` MAY sign as `payer_b_addr`; it does not by
-    //     itself reroute anyone's transactions.
-    //   - The legitimate holder of the embedded private key remains the
-    //     only entity that can produce a signature with that key. Without
-    //     that signature the entry is inert state: it cannot move funds,
-    //     change ownership of any pre-existing address, or redirect a
-    //     victim's traffic.
-    //   - The activation channel is V1 `target_address` (PR #2771), which
-    //     requires the signer to actually sign with the credential — an
-    //     attacker who only knows the public bytes cannot produce that
-    //     signature.
-    //
-    // TODO(follow-up): a later change to the upstream message format will
-    // require the embedded side to participate in the bind, after which
-    // the second pairing here could not be created at all by an entity
-    // that doesn't hold the embedded private key.
+    // Same embedded credential, different payer — many-to-many authorization is allowed.
     let body_b = [payer_b, embedded].concat();
     let msg_b = make_valid_message(1, route_id, HexString::new(body_b));
     let envelope_b = HexString::new(SafeVec::try_from(msg_b.encode().0).unwrap());

@@ -350,10 +350,6 @@ Returns:
 
 3. **ISM Verification**: The Sovereign module uses an ISM (Interchain Security Module) to verify message authenticity. Configure an appropriate ISM for your security requirements.
 
-### Notes on the registration flow
-
-The current message format establishes the payer's intent on-chain. Down the line, additional verification on the embedded side may be considered to broaden the set of supported deployment scenarios; today's flow assumes the embedded key handling on the Solana program side is the source of truth for that direction.
-
 ---
 
 ## Testing

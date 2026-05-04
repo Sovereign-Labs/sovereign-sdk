@@ -33,9 +33,7 @@ impl<S: Spec> Accounts<S> {
         Ok(*default_address)
     }
 
-    /// Read-only variant of [`Self::resolve_sender_address`]: returns
-    /// `default_address` when the credential has no legacy/custom mapping,
-    /// without writing.
+    /// Read-only variant of [`Self::resolve_sender_address`].
     pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
         &self,
         default_address: &S::Address,

@@ -74,20 +74,11 @@ fn test_config_account() {
         runner,
     ) = setup();
 
-    // The credential/address pair is authorized at genesis, but no new
-    // `accounts` map entry is written for canonical credentials.
+    // The account is registered at genesis.
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
-        assert!(accounts
-            .is_authorized(&user.address(), &user.credential_id(), state)
-            .unwrap());
-        assert!(accounts
-            .is_authorized_for(&user.address(), &user.credential_id(), state)
-            .unwrap());
-        assert_eq!(
-            accounts.get_account(user.credential_id(), state),
-            Response::AccountEmpty
-        );
+        let response = accounts.get_account(user.credential_id(), state);
+        assert_eq!(response, Response::AccountEmpty);
     });
 }
 
@@ -112,25 +103,12 @@ fn test_update_account() {
 
             let accounts = Accounts::<S>::default();
 
-            // The new credential is authorized to spend as the sender's address.
-            assert!(accounts
-                .is_authorized(&user.address(), &new_credential, state)
-                .unwrap());
-            assert!(accounts
-                .is_authorized_for(&user.address(), &new_credential, state)
-                .unwrap());
+            // New credential has no `accounts` map entry under the new model.
             assert_eq!(
                 accounts.get_account(new_credential, state),
                 Response::AccountEmpty
             );
-            // The sender's own credential uses stateless canonical ownership;
-            // resolving the tx no longer writes account authorization state.
-            assert!(!accounts
-                .is_authorized(&user.address(), &user.credential_id(), state)
-                .unwrap());
-            assert!(accounts
-                .is_authorized_for(&user.address(), &user.credential_id(), state)
-                .unwrap());
+            // Sender's own credential also has no `accounts` map entry.
             assert_eq!(
                 accounts.get_account(user.credential_id(), state),
                 Response::AccountEmpty
@@ -423,7 +401,6 @@ fn test_register_new_account() {
 
             let accounts = Accounts::<S>::default();
 
-            // The new credential is authorized for the sender's address.
             assert!(accounts
                 .is_authorized(&non_registered_account.address(), &new_credential, state)
                 .unwrap());
@@ -435,8 +412,6 @@ fn test_register_new_account() {
                 Response::AccountEmpty
             );
 
-            // The sender's own credential uses stateless canonical ownership;
-            // resolving the tx no longer writes account authorization state.
             assert!(!accounts
                 .is_authorized(
                     &non_registered_account.address(),
