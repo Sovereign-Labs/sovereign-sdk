@@ -53,7 +53,11 @@ impl<S: Spec> Accounts<S> {
         for acc in &config.accounts {
             let key = AccountOwnerKey::new(acc.address, acc.credential_id);
             if self.account_owners.get(&key, state)?.is_some() {
-                bail!("Account already exists")
+                bail!(
+                    "Authorization already exists for address {} and credential {}",
+                    acc.address,
+                    acc.credential_id
+                )
             }
             self.authorize_credential(&acc.address, &acc.credential_id, state)?;
         }
