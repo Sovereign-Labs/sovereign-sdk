@@ -662,6 +662,7 @@ where
                 relevant_proofs,
                 relevant_blobs,
                 witness: slot_result.witness,
+                slot_number: slot_result.slot_number,
             };
 
         let (aggregated_proofs, proof_receipts) =

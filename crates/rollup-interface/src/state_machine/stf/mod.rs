@@ -27,8 +27,8 @@ pub use transaction::*;
 pub use verifier::StateTransitionVerifier;
 
 use super::optimistic::Attestation;
-use crate::common::{HexHash, RollupHeight};
 use crate::common::SlotNumber;
+use crate::common::{HexHash, RollupHeight};
 use crate::da::{DaSpec, RelevantBlobIters};
 use crate::zk::aggregated_proof::{AggregatedProofPublicData, SerializedAggregatedProof};
 use crate::zk::StateTransitionPublicData;

@@ -105,7 +105,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
             }],
             discarded_blobs: Default::default(),
             witness: (),
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
             slot_number: SlotNumber::new(slot_header.height()),
         }
     }
@@ -196,7 +196,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
             sender.inc_next_height_to_receive();
         };
 
-        assert_eq!(height, finalized.slot_number.get());
+        assert_eq!(height, finalized.slot_number().get());
         assert_eq!(filtered_block.header, finalized.data.da_block_header);
         assert_eq!(state_root, finalized.data.initial_state_root);
         state_root.clone_from(&finalized.data.final_state_root);
@@ -1314,6 +1314,7 @@ async fn produce_synthetic_state_transition_witness<Da: DaService>(
         relevant_proofs,
         relevant_blobs,
         witness: (),
+        slot_number: SlotNumber::new(filtered_block.header().height()),
     };
 
     (change_set, transition_witness)

@@ -26,21 +26,19 @@ pub struct StateTransitionInfo<StateRoot, Witness, Da: DaSpec> {
     pub(crate) data: StateTransitionWitness<StateRoot, Witness, Da>,
     /// Aggregated proofs processed while executing this transition, in verification order.
     pub(crate) aggregated_proofs: Vec<SerializedAggregatedProof>,
-    /// Rollup height.
-    pub(crate) slot_number: SlotNumber,
 }
 
 impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da> {
     /// StateTransitionInfo constructor.
-    pub fn new(
-        data: StateTransitionWitness<StateRoot, Witness, Da>,
-        slot_number: SlotNumber,
-    ) -> Self {
+    pub fn new(data: StateTransitionWitness<StateRoot, Witness, Da>) -> Self {
         Self {
             data,
             aggregated_proofs: Vec::new(),
-            slot_number,
         }
+    }
+
+    pub(crate) fn slot_number(&self) -> SlotNumber {
+        self.data.slot_number
     }
 
     pub(crate) fn da_block_header(&self) -> &Da::BlockHeader {
@@ -321,7 +319,7 @@ where
         };
 
         // Materialize the changes to the database
-        let write_rollup_height = stf_info.slot_number;
+        let write_rollup_height = stf_info.slot_number();
 
         // Save the stf info in the db.
         let mut schema = ledger_db.materialize_stf_info(&stored_stf_info, write_rollup_height)?;
@@ -534,7 +532,7 @@ mod tests {
             for height in 1..=channel_size {
                 let stf_info = make_stf_info(height);
                 let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-                sender.notify(stf_info.slot_number, &ledger_db).await?;
+                sender.notify(stf_info.slot_number(), &ledger_db).await?;
                 storage_manager.commit(&schema_batch);
             }
         }
@@ -546,7 +544,7 @@ mod tests {
 
             for i in 1..=channel_size {
                 let stf_info = receiver.read_next().await?.unwrap();
-                assert_eq!(stf_info.slot_number.get(), i);
+                assert_eq!(stf_info.slot_number().get(), i);
             }
 
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 1);
@@ -559,7 +557,7 @@ mod tests {
 
             for i in 1..=channel_size {
                 let stf_info = receiver.read_next().await?.unwrap();
-                assert_eq!(stf_info.slot_number.get(), i);
+                assert_eq!(stf_info.slot_number().get(), i);
             }
 
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 1);
@@ -572,12 +570,12 @@ mod tests {
             let stf_info = make_stf_info(channel_size + 1);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
             storage_manager.commit(&schema_batch);
-            sender.notify(stf_info.slot_number, &ledger_db).await?;
+            sender.notify(stf_info.slot_number(), &ledger_db).await?;
 
             let stf_info = make_stf_info(channel_size + 2);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
             storage_manager.commit(&schema_batch);
-            sender.notify(stf_info.slot_number, &ledger_db).await?;
+            sender.notify(stf_info.slot_number(), &ledger_db).await?;
 
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 2);
         }
@@ -596,7 +594,7 @@ mod tests {
             .await?;
 
             let stf_info = receiver.read_next().await?.unwrap();
-            assert_eq!(stf_info.slot_number.get(), 3);
+            assert_eq!(stf_info.slot_number().get(), 3);
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 2);
         }
 
@@ -617,7 +615,7 @@ mod tests {
             let stf_info = make_stf_info(height);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
             storage_manager.commit(&schema_batch);
-            sender.notify(stf_info.slot_number, &ledger_db).await?;
+            sender.notify(stf_info.slot_number(), &ledger_db).await?;
         }
 
         // Read the data from the db.
@@ -627,7 +625,7 @@ mod tests {
                 .next_height_to_receive
                 .fetch_add(1, Ordering::SeqCst);
 
-            assert_eq!(stf_info.slot_number.get(), height);
+            assert_eq!(stf_info.slot_number().get(), height);
         }
         Ok(())
     }
@@ -644,7 +642,7 @@ mod tests {
             let stf_info = make_stf_info(height);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
             storage_manager.commit(&schema_batch);
-            sender.notify(stf_info.slot_number, &ledger_db).await?;
+            sender.notify(stf_info.slot_number(), &ledger_db).await?;
         }
 
         drop(sender);
@@ -655,7 +653,7 @@ mod tests {
                 .next_height_to_receive
                 .fetch_add(1, Ordering::SeqCst);
 
-            assert_eq!(stf_info.slot_number.get(), height);
+            assert_eq!(stf_info.slot_number().get(), height);
         }
 
         let stf_info = receiver.read_next().await;
@@ -687,7 +685,7 @@ mod tests {
                     .unwrap();
                 storage_manager.commit(&schema_batch);
                 sender
-                    .notify(stf_info.slot_number, &ledger_db)
+                    .notify(stf_info.slot_number(), &ledger_db)
                     .await
                     .unwrap();
             }
@@ -700,7 +698,7 @@ mod tests {
                 .next_height_to_receive
                 .fetch_add(1, Ordering::SeqCst);
 
-            assert_eq!(stf_info.slot_number.get(), height);
+            assert_eq!(stf_info.slot_number().get(), height);
         }
         Ok(())
     }
@@ -791,7 +789,7 @@ mod tests {
                 let stf_info = make_stf_info(height);
                 let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
                 storage_manager.commit(&schema_batch);
-                sender.notify(stf_info.slot_number, &ledger_db).await?;
+                sender.notify(stf_info.slot_number(), &ledger_db).await?;
                 receiver.read_next().await?.unwrap();
                 receiver
                     .next_height_to_receive
@@ -848,34 +846,32 @@ mod tests {
     }
 
     fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
-        StateTransitionInfo::new(
-            StateTransitionWitness {
-                initial_state_root: vec![1, 2, 3],
-                final_state_root: vec![3, 4, 5],
-                da_block_header: MockBlockHeader {
-                    prev_hash: [0; 32].into(),
-                    hash: MockHash([height as u8; 32]),
-                    height,
-                    time: Time::now(),
-                },
-                relevant_proofs: RelevantProofs {
-                    batch: DaProof {
-                        inclusion_proof: Default::default(),
-                        completeness_proof: Default::default(),
-                    },
-                    proof: DaProof {
-                        inclusion_proof: Default::default(),
-                        completeness_proof: Default::default(),
-                    },
-                },
-                relevant_blobs: RelevantBlobs {
-                    proof_blobs: vec![],
-                    batch_blobs: vec![],
-                },
-                witness: vec![],
+        StateTransitionInfo::new(StateTransitionWitness {
+            initial_state_root: vec![1, 2, 3],
+            final_state_root: vec![3, 4, 5],
+            da_block_header: MockBlockHeader {
+                prev_hash: [0; 32].into(),
+                hash: MockHash([height as u8; 32]),
+                height,
+                time: Time::now(),
             },
-            SlotNumber::new_dangerous(height),
-        )
+            relevant_proofs: RelevantProofs {
+                batch: DaProof {
+                    inclusion_proof: Default::default(),
+                    completeness_proof: Default::default(),
+                },
+                proof: DaProof {
+                    inclusion_proof: Default::default(),
+                    completeness_proof: Default::default(),
+                },
+            },
+            relevant_blobs: RelevantBlobs {
+                proof_blobs: vec![],
+                batch_blobs: vec![],
+            },
+            witness: vec![],
+            slot_number: SlotNumber::new_dangerous(height),
+        })
     }
 
     fn get_header_hash(stf_info: &StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec>) -> MockHash {

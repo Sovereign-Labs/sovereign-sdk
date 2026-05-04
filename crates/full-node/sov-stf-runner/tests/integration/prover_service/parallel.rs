@@ -7,7 +7,10 @@ use sov_stf_runner::processes::{
     ProverServiceError,
 };
 
-use super::{make_header, make_transition_info, wait_for_aggregated_proof, Address, StateRoot};
+use super::{
+    make_chained_headers, make_header, make_transition_info, wait_for_aggregated_proof, Address,
+    StateRoot,
+};
 use crate::helpers::genesis_state_root;
 
 struct TestProver {
@@ -202,9 +205,7 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
         ..
     } = make_new_prover();
 
-    let headers: Vec<_> = (0..total_nb_of_blocks)
-        .map(|height| make_header(MockHash::from([height as u8; 32]), height as u64))
-        .collect();
+    let headers: Vec<_> = make_chained_headers(total_nb_of_blocks);
 
     let genesis_state_root = genesis_state_root();
 

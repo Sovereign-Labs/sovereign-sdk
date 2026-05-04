@@ -16,9 +16,9 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
+use crate::common::SlotNumber;
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
-use crate::common::SlotNumber;
 use crate::zk::aggregated_proof::SerializedAggregatedProof;
 
 /// The `CryptoSpec` trait configures the cryptographic primitives used by a particular instance of a rollup.
@@ -227,6 +227,8 @@ pub struct StateTransitionWitness<StateRoot, Witness, Da: DaSpec> {
     pub relevant_blobs: RelevantBlobs<<Da as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub witness: Witness,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
 }
 
 #[derive(Serialize, Deserialize, UniversalWallet)]

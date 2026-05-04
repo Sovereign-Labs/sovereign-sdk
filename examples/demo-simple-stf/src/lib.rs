@@ -127,7 +127,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for CheckHashPreimageStf {
             batch_receipts: receipts,
             discarded_blobs: Default::default(),
             witness: (),
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
             slot_number: SlotNumber::new(slot_header.height()),
         }
     }

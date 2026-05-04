@@ -78,7 +78,7 @@ where
         &mut self,
         stf_info: StateTransitionInfo<StateRoot, Witness, Da>,
     ) -> anyhow::Result<()> {
-        let slot_number = stf_info.slot_number;
+        let slot_number = stf_info.slot_number();
         let witness = stf_info.witness();
 
         let attestation = Attestation {

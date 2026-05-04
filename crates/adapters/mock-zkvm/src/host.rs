@@ -6,11 +6,15 @@ use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, BlockProof, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::SerializedZkProof;
+
+/// A DA block header paired with the inner-proof data covering that block.
+type HeaderWithBlockProof<Address, Da, Root> =
+    (<Da as DaSpec>::BlockHeader, BlockProof<Address, Da, Root>);
 
 /// A mock implementing the zkVM trait.
 #[derive(Clone)]
@@ -132,6 +136,44 @@ impl MockZkvmHost {
         })?)
     }
 
+    /// Mirrors the per-inner-proof continuity checks performed by the real
+    /// aggregation circuit. Verifies that consecutive `BlockProof.st` entries
+    /// have:
+    ///   1. slot numbers that increment by exactly one,
+    ///   2. a `slot_hash` matching the paired DA block header's hash,
+    ///   3. a `prev_hash` pointing at the predecessor DA block's hash,
+    ///   4. an `initial_state_root` equal to the predecessor's `final_state_root`.
+    fn check_inner_proof_chain<Address, Da: DaSpec, Root: PartialEq + Debug>(
+        headers_with_block_proofs: &[HeaderWithBlockProof<Address, Da, Root>],
+    ) {
+        let mut prev: Option<(SlotNumber, &Da::SlotHash, &Root)> = None;
+        for (index, (header, bp)) in headers_with_block_proofs.iter().enumerate() {
+            let header_hash = header.hash();
+            assert_eq!(
+                header_hash, bp.st.slot_hash,
+                "Slot hash mismatch at index {index}: DA block header hash doesn't match inner-proof public data",
+            );
+            if let Some((prev_slot, prev_hash, prev_state_root)) = prev {
+                let expected = prev_slot.next();
+                assert_eq!(
+                    bp.st.slot_number, expected,
+                    "Slot number discontinuity at index {index}: expected {expected}, got {}",
+                    bp.st.slot_number,
+                );
+                assert_eq!(
+                    prev_hash,
+                    &header.prev_hash(),
+                    "DA block chain broken at index {index}: prev_hash mismatch",
+                );
+                assert_eq!(
+                    &bp.st.initial_state_root, prev_state_root,
+                    "State root discontinuity at index {index}: previous final_state_root != current initial_state_root",
+                );
+            }
+            prev = Some((bp.st.slot_number, &bp.st.slot_hash, &bp.st.final_state_root));
+        }
+    }
+
     /// Sleeps for the duration (in milliseconds) read from `env_var`. Used in
     /// tests/soak runs to throttle the otherwise-instant mock prover. No-op
     /// if the env var is unset or not parseable.
@@ -180,6 +222,10 @@ impl OuterZkvmHost for MockZkvmHost {
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
+        // Mirror the checks performed by the real aggregation circuit
+        // (`run_aggregation_program` in sov-rollup-interface).
+        Self::check_inner_proof_chain(&headers_with_block_proofs);
+
         let block_proofs_data = headers_with_block_proofs
             .iter()
             .map(|(_, bp)| bp)

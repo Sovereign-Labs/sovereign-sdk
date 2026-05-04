@@ -153,7 +153,7 @@ where
                         Some(stf_info) => stf_info,
                     };
                     tracing::trace!(
-                        slot_number = %stf_info.slot_number,
+                        slot_number = %stf_info.slot_number(),
                         block_header = %stf_info.da_block_header().display(),
                         "Received STF info"
                     );
@@ -175,7 +175,7 @@ where
         >,
     ) -> anyhow::Result<()> {
         let first_height_unproven = self.stf_info_receiver.next_height_to_receive();
-        let received_slot_number = stf_info.slot_number;
+        let received_slot_number = stf_info.slot_number();
 
         assert!(
             received_slot_number.get() >= first_height_unproven.get(),
@@ -185,7 +185,7 @@ where
         // We ensure that we're not trying to prove blocks that are being proven.
         // If that is not the case, we add the block to the queue.
         if first_height_unproven.saturating_add(self.proofs_to_create.current_proof_jump() as u64)
-            <= stf_info.slot_number
+            <= stf_info.slot_number()
         {
             let block_header = stf_info.da_block_header().clone();
             // Save the transition for later proving. This is temporarily redundant

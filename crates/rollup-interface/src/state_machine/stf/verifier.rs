@@ -48,13 +48,16 @@ where
             data.relevant_blobs.as_iters(),
             ExecutionContext::Node,
         );
-        let final_state_root = result.state_root;
-        let slot_number = result.slot_number;
+
+        assert_eq!(
+            data.slot_number, result.slot_number,
+            "Witness slot_number, does not match STF-emitted slot_number."
+        );
 
         let out: StateTransitionPublicData<Stf::Address, Da::Spec, _> = StateTransitionPublicData {
             initial_state_root: data.initial_state_root,
-            final_state_root,
-            slot_number,
+            final_state_root: result.state_root,
+            slot_number: result.slot_number,
             slot_hash: data.da_block_header.hash(),
             prover_address,
         };

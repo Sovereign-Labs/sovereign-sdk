@@ -111,8 +111,9 @@ where
             let StateTransitionInfo {
                 data,
                 aggregated_proofs,
-                slot_number,
             } = state_transition_info;
+
+            let slot_number = data.slot_number;
 
             let data = StateTransitionWitnessWithAddress {
                 stf_witness: data,
@@ -158,7 +159,6 @@ where
                             slot_hash: block_header_hash.clone(),
                             prover_address,
                         },
-                        slot_number,
                     });
 
                     prover_state.set_to_proved(block_header_hash, block_proof);

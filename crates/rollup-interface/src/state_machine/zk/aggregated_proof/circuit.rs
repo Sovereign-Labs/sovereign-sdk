@@ -123,6 +123,9 @@ where
     let mut expected_prev_state_root =
         previous_agg_proof_public_data.map(|public_data| public_data.final_state_root.clone());
 
+    let mut expected_prev_slot_number =
+        previous_agg_proof_public_data.map(|public_data| public_data.final_slot_number);
+
     // We intentionally scope the output to the current set of inner proofs only.
     // The predecessor proof is verified for chain continuity, but its slot range
     // and rewards are not carried forward — each aggregation covers only the
@@ -141,6 +144,21 @@ where
             .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
         let current_slot_number = stf_public_data.slot_number;
+
+        // Slots advance 1:1 with DA blocks on the canonical fork, so each
+        // consecutive inner proof must increment the slot number by exactly one.
+        // For the very first aggregation (no predecessor), the first inner proof
+        // must cover slot 1 — slot 0 is the rollup genesis state and has no
+        // associated state transition / inner proof.
+        let expected = match expected_prev_slot_number {
+            Some(prev) => prev.next(),
+            None => SlotNumber::ONE,
+        };
+        assert_eq!(
+            current_slot_number, expected,
+            "Slot number discontinuity at index {index}: expected {expected}, got {current_slot_number}",
+        );
+        expected_prev_slot_number = Some(current_slot_number);
 
         // Verify DA block hash-chain continuity: each block's prev_hash must equal
         // the predecessor's hash. Also cross-check that the DA header hash matches
