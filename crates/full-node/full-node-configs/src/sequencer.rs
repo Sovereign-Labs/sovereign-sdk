@@ -69,8 +69,9 @@ pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     pub sequencer_kind_config: Sc,
     /// Maximum size of a batch.
     pub max_batch_size_bytes: usize,
-    /// Maximum number of blobs sent in parallel.
-    pub max_concurrent_blobs: usize,
+    /// Maximum number of batch blobs sent in parallel before throttling
+    /// new batch creation. Proof blobs are not counted against this limit.
+    pub max_concurrent_batch_blobs: usize,
     /// Maximum time in seconds to wait for a blob to be processed, since it has been published to DA.
     pub blob_processing_timeout_secs: u64,
     /// Extensions to the sequencer config (for example evm related configuration).
@@ -91,7 +92,7 @@ impl<Addr: Copy + Clone, BbConfig> SequencerConfig<Addr, BbConfig> {
             max_allowed_node_distance_behind: self.max_allowed_node_distance_behind,
             admin_addresses: self.admin_addresses.clone(),
             max_batch_size_bytes: self.max_batch_size_bytes,
-            max_concurrent_blobs: self.max_concurrent_blobs,
+            max_concurrent_batch_blobs: self.max_concurrent_batch_blobs,
             sequencer_kind_config: seq_config,
             blob_processing_timeout_secs: self.blob_processing_timeout_secs,
             extension: self.extension,

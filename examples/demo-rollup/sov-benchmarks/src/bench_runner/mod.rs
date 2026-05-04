@@ -146,7 +146,7 @@ pub async fn setup_rollup(
     )
     .enable_prover()
     .set_config(|config| {
-        config.max_concurrent_blobs = 1024;
+        config.max_concurrent_batch_blobs = 1024;
         config.prover_address = prover_address.to_string();
         config.automatic_batch_production = true;
         config.telegraf_address = telegraf_address;

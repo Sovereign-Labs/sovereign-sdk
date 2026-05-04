@@ -83,7 +83,10 @@ where
     pub(crate) batch_execution_time_limit_micros: u64,
     pub(crate) batch_size_tracker: BatchSizeTracker,
     pub(crate) is_ready: Result<(), SequencerNotReadyDetails>,
-    pub(crate) in_flight_blobs: Arc<AtomicUsize>,
+    /// Counts batch blobs only. Gates batch production so that proofs in flight
+    /// cannot block new batches from being created (which is the only path
+    /// that drains queued proofs via `proofs_for_replay`).
+    pub(crate) in_flight_batch_blobs: Arc<AtomicUsize>,
     pub(crate) executor_events_sender: ExecutorEventsSender<S, Rt>,
     // We track two sequence numbers: the sequence number of the current open batch, and the next unassigned sequence number.
     // This is because we might need to assign a sequence number to some proofs while a batch is in progress,
@@ -183,8 +186,8 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    pub(crate) fn nb_of_concurrent_blob_submissions(&self) -> usize {
-        self.in_flight_blobs.load(Ordering::Acquire)
+    pub(crate) fn nb_of_concurrent_batch_blob_submissions(&self) -> usize {
+        self.in_flight_batch_blobs.load(Ordering::Relaxed)
     }
 
     pub(crate) async fn overwrite_next_sequence_number_for_recovery(
@@ -392,12 +395,12 @@ where
             return;
         }
 
-        let in_flight_blobs = self.in_flight_blobs.load(Ordering::Relaxed);
-        if in_flight_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS {
+        let in_flight_batch_blobs = self.nb_of_concurrent_batch_blob_submissions();
+        if in_flight_batch_blobs >= COMFORTABLE_IN_FLIGHT_BLOBS {
             tracing::trace!(
-                current_in_flight = %in_flight_blobs,
+                current_in_flight = %in_flight_batch_blobs,
                 max_comfortable = %COMFORTABLE_IN_FLIGHT_BLOBS,
-                "Skipping batch production due too many in flight blobs");
+                "Skipping batch production due too many in flight batch blobs");
             return;
         }
 
@@ -438,7 +441,7 @@ where
 
     pub(crate) async fn check_readiness(
         &self,
-        max_concurrent_blobs: usize,
+        max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
     ) -> Result<(), SequencerNotReadyDetails> {
         // We cannot accept transactions until the latest finalized slot number
@@ -451,10 +454,10 @@ where
             });
         }
 
-        if let Some(nb_of_blobs_in_flight) = self.blob_sender_busy() {
+        if let Some(nb_of_batch_blobs_in_flight) = self.blob_sender_busy() {
             return Err(SequencerNotReadyDetails::WaitingOnBlobSender {
-                max_concurrent_blobs,
-                nb_of_blobs_in_flight,
+                max_concurrent_batch_blobs,
+                nb_of_batch_blobs_in_flight,
             });
         }
 
@@ -546,10 +549,14 @@ where
     }
 
     fn blob_sender_busy(&self) -> Option<usize> {
-        let num_current_in_flight = self.nb_of_concurrent_blob_submissions();
+        // Only batch blobs gate batch production. Proof blobs in flight must
+        // not block new batch creation, otherwise a saturated proof buffer
+        // would prevent the very thing that drains queued proofs (a new batch
+        // start consumes them via `proofs_for_replay`).
+        let num_current_in_flight_batches = self.nb_of_concurrent_batch_blob_submissions();
 
-        if num_current_in_flight > self.seq_config.max_concurrent_blobs {
-            Some(num_current_in_flight)
+        if num_current_in_flight_batches > self.seq_config.max_concurrent_batch_blobs {
+            Some(num_current_in_flight_batches)
         } else {
             None
         }

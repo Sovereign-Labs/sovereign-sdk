@@ -139,7 +139,7 @@ max_number_of_aggregated_proofs_in_memory = 5
 # This value is counted between sequencer receiving receipt from DA about inclusion till node has processed this blob.
 blob_processing_timeout_secs = 600
 max_batch_size_bytes = 1048576
-max_concurrent_blobs = 128
+max_concurrent_batch_blobs = 128
 max_allowed_node_distance_behind = 10
 rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
 [sequencer.preferred]

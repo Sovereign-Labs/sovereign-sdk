@@ -42,11 +42,24 @@ impl<Da: DaSpec> Metric for InFlightBlobInfo<Da> {
     }
 }
 
-pub fn track_num_of_in_flight_blobs(count: u64) {
-    sov_metrics::track_metrics(|tracker| {
-        tracker.submit_inline(
-            "sov_rollup_num_of_in_flight_blobs",
-            format!("num_of_in_flight_blobs={count}i"),
-        );
-    });
+#[derive(Debug, Clone, Copy)]
+pub struct InFlightBlobsCount {
+    pub batch: u64,
+    pub proof: u64,
+}
+
+impl Metric for InFlightBlobsCount {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_num_of_in_flight_blobs"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} num_of_in_flight_batch_blobs={}i,num_of_in_flight_proof_blobs={}i",
+            self.measurement_name(),
+            self.batch,
+            self.proof,
+        )
+    }
 }

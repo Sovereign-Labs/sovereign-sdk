@@ -285,7 +285,7 @@ pub async fn start_test_rollup(
     )
     .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 16777216;
+        c.max_concurrent_batch_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
         c.aggregated_proof_block_jump = 5;
