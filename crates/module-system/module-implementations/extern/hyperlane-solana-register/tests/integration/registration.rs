@@ -5,29 +5,13 @@ use sov_hyperlane_register_module::{
     CallMessage as RegistrationCallMessage, SolanaDeployment, SolanaRegistration,
 };
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{
-    Base58Address, CredentialId, CryptoSpec, HexString, PrivateKey, PublicKey, SafeVec, Spec,
-};
+use sov_modules_api::{Base58Address, CredentialId, HexString, SafeVec, Spec};
 use sov_test_utils::{AsUser, TransactionTestCase};
 
 use crate::setup::{
     make_invalid_message, make_valid_message, register_basic_warp_route, setup, Mailbox,
     SetupParams, TestRuntimeEvent, RT, S, SOLANA_PROGRAM_ID,
 };
-
-/// Deterministically derives an embedded credential from a fixed seed.
-///
-/// Using a derived value (rather than an arbitrary `[u8; 32]`) gives us a
-/// credential we can prove is ours and unlocks future tests that exercise
-/// the embedded → payer signing path end-to-end once V1 `target_address`
-/// (PR #2771) lands.
-fn embedded_credential_from_seed(seed: [u8; 32]) -> ([u8; 32], CredentialId) {
-    let private_key = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::try_from(seed.to_vec())
-        .expect("32-byte seed is a valid private key");
-    let credential = private_key.pub_key().credential_id();
-    let bytes = credential.0 .0;
-    (bytes, credential)
-}
 
 #[test]
 fn test_user_is_registered_correctly() {
@@ -41,7 +25,8 @@ fn test_user_is_registered_correctly() {
 
     let payer = [1u8; 32];
     let payer_addr = <S as Spec>::Address::from(payer);
-    let (embedded, credential) = embedded_credential_from_seed([42u8; 32]);
+    let embedded = [2u8; 32];
+    let credential = CredentialId::from(embedded);
     let body = [payer, embedded].concat();
     let valid_message = make_valid_message(0, route_id, HexString::new(body));
     let message = HexString::new(SafeVec::try_from(valid_message.encode().0).unwrap());
@@ -109,7 +94,8 @@ fn test_two_payers_registering_same_embedded_both_succeed() {
     let payer_a_addr = <S as Spec>::Address::from(payer_a);
     let payer_b = [3u8; 32];
     let payer_b_addr = <S as Spec>::Address::from(payer_b);
-    let (embedded, credential) = embedded_credential_from_seed([42u8; 32]);
+    let embedded = [2u8; 32];
+    let credential = CredentialId::from(embedded);
 
     // First registration: (payer_a, embedded).
     let body_a = [payer_a, embedded].concat();
